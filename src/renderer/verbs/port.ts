@@ -25,7 +25,10 @@ import {
 
 // What the verb context holds of one click: how it arrived, its session's
 // context, and its turn's effects.
-export type ClickFacts = Pick<VerbContext, "arrival" | "context" | "effects">;
+export type ClickFacts = Pick<
+  VerbContext,
+  "arrival" | "context" | "effects" | "record"
+>;
 
 // The daemon's verb context, less what each click brings.
 export type DaemonVerbContext = Omit<VerbContext, keyof ClickFacts>;

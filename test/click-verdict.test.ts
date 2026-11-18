@@ -5,7 +5,6 @@
 import { handleRequest, type HandledRequest } from "../src/daemon/reply";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
 import { RuntimeStats } from "../src/daemon/stats";
-import { ProbeArrivals } from "../src/doctor/handler-probe";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_COPY } from "../src/click/wire";
 import { URL_FRAME_VERSION } from "../src/daemon/foundations/protocol";
@@ -51,7 +50,6 @@ function host(
     clock: systemTimekeeper,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
-    handlerProbes: new ProbeArrivals(),
     log: (_level: string, line: string) => events.push(line),
     ...clickParts(verbCtx, undefined, world),
   } as unknown as DaemonParts;

@@ -68,7 +68,7 @@ export function collected(
           () => ({ kind: "event", event, at: instantAt(systemTimekeeper) }),
           [],
         );
-      if (event.kind === "world-state") worldStates.take(event.worldState);
+      if (event.kind === "world-state") worldStates.take(event.worldState, []);
       else retireSession({ renderCache: cache(), worldStates }, event.session);
       await Promise.resolve();
       collector.subscribed(cache().subscriptions());
@@ -86,7 +86,7 @@ export function collected(
       routed = host;
     },
     config: (facts, hold) => {
-      worldStates.take(collector.requested(facts, TEST_ENVIRONMENT));
+      worldStates.take(collector.requested(facts, TEST_ENVIRONMENT), []);
       const held = hold();
       collector.subscribed(cache().subscriptions());
       return held;

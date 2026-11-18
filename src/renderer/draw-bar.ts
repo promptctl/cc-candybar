@@ -371,7 +371,7 @@ export function takeContext(
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
-    parts.worldStates.take(worldState);
+    parts.worldStates.take(worldState, facts);
     parts.worldStates.heard(req);
   });
 }

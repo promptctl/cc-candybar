@@ -47,10 +47,8 @@ export const LAUNCH_CATEGORIES = [
   // (`gh auth token`), asked on every doctor click — so, like
   // `doctor.daemons`, no rate limit.
   "doctor.forge",
-  // `cc-candybar doctor`'s URL-handler probe (src/doctor/handler-probe.ts), in
-  // the CLI's own process: the link it opens, and — only for a link that did
-  // not come back — the Launch Services lookup.
-  "doctor.open",
+  // The app Launch Services opens `cc-candybar://` with (src/doctor/edge.ts),
+  // asked by a doctor run that no link reached.
   "doctor.launch-services",
   // Typing a slash command into a session's Claude Code pane
   // (src/claude-input/edge.ts): `read` captures the pane to decide whether it

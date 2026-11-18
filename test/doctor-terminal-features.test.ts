@@ -9,16 +9,8 @@ import {
   type TmuxFacts,
 } from "../src/doctor/checks";
 import { terminalFeatureFields } from "../src/doctor/report";
-import { parseWidthSightings } from "../src/doctor/daemon-answer";
-import { widthOf } from "../src/doctor/cli";
-import { scopeOf } from "../src/doctor/sightings";
-import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
-
-const S1 = sessionIdOf("s1");
-const S2 = sessionIdOf("s2");
 
 const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
 
@@ -156,65 +148,5 @@ describe("terminalFeatureFields", () => {
     expect(terminalFeatureFields({ kind: "unreported" }, here(80))).toBe(
       "cols=80 widthOf=command clientUtf8=-",
     );
-  });
-});
-
-// brandon-doctor-v62x.1z2: which width the command judges.
-describe("widthOf", () => {
-  const sightings = {
-    kind: "ok",
-    value: [
-      { sessionId: S1, ago: 1, role: "frames", termCols: 60 },
-      { sessionId: S1, ago: 1, role: "statusline", termCols: 148 },
-      { sessionId: S2, ago: 1, role: "statusline", termCols: null },
-    ],
-  } as const;
-
-  test("outside a session, the command's own measurement", () => {
-    expect(widthOf(scopeOf(undefined), sightings, 90)).toEqual(here(90));
-    expect(widthOf(scopeOf(""), sightings, null)).toEqual(here(null));
-  });
-
-  test("in a session, its statusline client's width, whatever the shell measured", () => {
-    expect(widthOf(scopeOf("s1"), sightings, 90)).toEqual(inSession(148));
-    expect(widthOf(scopeOf("s2"), sightings, 90)).toEqual({
-      kind: "ok",
-      value: { columns: null, of: { kind: "session", sessionId: "s2" } },
-    });
-  });
-
-  test("in a session the daemon did not answer for, that failure", () => {
-    expect(
-      widthOf(scopeOf("s1"), { kind: "failed", reason: "no daemon" }, 90),
-    ).toEqual({
-      kind: "failed",
-      reason: "no daemon",
-    });
-    expect(widthOf(scopeOf("s3"), sightings, 90)).toMatchObject({
-      kind: "failed",
-    });
-  });
-});
-
-describe("parseWidthSightings", () => {
-  const stats = (clients: unknown[]) =>
-    ({ version: "9.9.9", clients }) as unknown as StatsSnapshot;
-
-  test("reads whose each render was and the width it measured", () => {
-    const value = [
-      { sessionId: "s1", ago: 1, role: "statusline", termCols: null },
-    ];
-    expect(parseWidthSightings(stats(value))).toEqual({ kind: "ok", value });
-  });
-
-  test("a daemon from before widths are recorded fails, saying to restart it", () => {
-    expect(
-      parseWidthSightings(stats([{ role: "statusline", ago: 1 }])),
-    ).toEqual({
-      kind: "failed",
-      reason: expect.stringMatching(
-        /^the running daemon \(9\.9\.9\) reported its renders without whose they were or the width they measured — restart it on this build/,
-      ),
-    });
   });
 });

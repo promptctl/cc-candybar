@@ -15,11 +15,11 @@ import { perSetting } from "../../src/config/setting-projections";
 import {
   CHECK_HINTS,
   CHECK_HOME,
-  checkDaemonFacts,
   checkDay,
   checkHook,
   checkLanes,
 } from "../../src/check-fixture";
+import { commandDaemonFacts } from "../../src/daemon/local-bar";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
   composePayload,
@@ -64,7 +64,7 @@ export function checkPayload(
     undefined,
     CHECK_SESSION,
     readings,
-    checkDaemonFacts(at),
+    commandDaemonFacts(at),
     at,
   );
   const { term: _term, ...payload } = composePayload(

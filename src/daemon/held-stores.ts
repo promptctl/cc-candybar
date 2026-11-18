@@ -61,11 +61,6 @@ export class HeldStores {
     };
   }
 
-  // The doctor's documents as the host holds them, which daemon-stats answers.
-  documents(): StoresRead {
-    return this.doctor;
-  }
-
   // A turn's stored writes, in the order it made them.
   // [LAW:no-silent-failure] Every write is held, and what its file refused
   // throws once all are, so the host's taking says it on every bar. The

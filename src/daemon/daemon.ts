@@ -38,7 +38,6 @@ import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
 import type { DoctorMachineEdge } from "../doctor/ports";
-import { ProbeArrivals } from "../doctor/handler-probe";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
 import { FrameFeeds } from "./frame-feed.js";
@@ -72,7 +71,7 @@ import {
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { DoctorSource } from "./cache/doctor.js";
+import { DoctorSource, daemonSighted } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -122,8 +121,12 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  // The doctor's reads of the machine.
-  readonly doctorEdge: (launcher: Launcher, host: Host) => DoctorMachineEdge;
+  // The doctor's reads of the machine, under the daemon's state directory.
+  readonly doctorEdge: (
+    launcher: Launcher,
+    host: Host,
+    stateDir: string,
+  ) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   // What the daemon asks the machine about a pid: whether a process is there, and
   // when it started.
@@ -389,7 +392,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // by when the link below exists.
     renderer: () => link.process(),
   });
-  const handlerProbes = new ProbeArrivals();
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
   // render in this daemon, built by the one constructor every renderer uses
@@ -419,10 +421,15 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       inputs.doctorEdge(
         { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
         host,
+        paths.state,
       ),
-    sightings: (sessionId, now) => renderSightings.ofSession(sessionId, now),
-    serving: () => limits.serving(),
-    bundle: bundle.path,
+    sighted: (sessionId, now) =>
+      daemonSighted(
+        sessionId,
+        renderSightings.ofSession(sessionId, now),
+        limits.serving(),
+        bundle.path,
+      ),
     clock,
     logger: log,
     ledger: refreshLedger,
@@ -737,10 +744,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     clock,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
-    stores,
     sessionBook,
     stats,
-    handlerProbes,
     linkSigner,
     renderSightings,
     watcherRegistry,

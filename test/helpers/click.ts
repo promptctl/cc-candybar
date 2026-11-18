@@ -357,6 +357,7 @@ export function testVerbContext(
       holdClickError(sessionState, session, reason, instantOf(new Date())),
     ),
     effects: [],
+    record: [],
     gates: bareGates(),
     locations: locations(host),
     sessionState,

@@ -33,7 +33,7 @@ import {
   type TranscriptSaid,
 } from "../daemon/foundations/sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
-import type { Delivery, SightingScope } from "./sightings.js";
+import type { ClickArrival, Delivery } from "./sightings.js";
 import {
   approachingLimit,
   chargeWords,
@@ -120,24 +120,40 @@ export interface HandlerApp {
   readonly forwarder: boolean;
 }
 
-// [LAW:types-are-the-program] What became of a `cc-candybar://` link. The one
-// proof that the URL handler works is a link coming back through it, so that
-// is the discriminator: `arrived` carries who delivered it — a forwarder
-// cannot go stale, so it is proof enough; the CLI means the retired applet is
-// still registered; `lost` carries what the system says about why — only a
-// lost link is diagnosed, an arrived one needs no explanation. `unsupported`
-// is a platform with no handler (clicks are macOS-only), `unprobed` a probe
-// that could not be attempted.
+// [LAW:types-are-the-program] What a run knows of the URL handler. The one
+// proof that it works is a link coming back through it, so that is the
+// discriminator: `arrived` carries who delivered the click that asked the run
+// — a forwarder cannot go stale, so it is proof enough; the CLI means the
+// retired applet is still registered. A run asked some other way (a tmux
+// status-line click, which tmux runs, or the command) has no link to prove
+// it, so it is judged by what is `registered` for the scheme: the app Launch
+// Services opens it with. `unsupported` is a platform with no handler (clicks
+// are macOS-only).
 export type UrlHandlerFacts =
   | { readonly kind: "unsupported" }
-  | { readonly kind: "unprobed"; readonly reason: string }
   | { readonly kind: "arrived"; readonly delivery: Delivery }
   | {
-      readonly kind: "lost";
-      // Why the link could not be opened at all, or null: it was opened.
-      readonly unopened: string | null;
+      readonly kind: "registered";
+      readonly via: Exclude<ClickArrival["via"], "link">;
       readonly opener: Asked<HandlerApp | null>;
     };
+
+// [LAW:types-are-the-program] A fact only the running daemon holds — what it
+// saw of the session's renders, its own memory — as a run reads it: held, or
+// not held by a run with no daemon behind it (`cc-candybar doctor`). A check
+// never stands anything in for a fact not held: it passes with a note that
+// the bar's 🩺 doctor judges it (`notJudged`).
+export type Held<T> =
+  | { readonly kind: "held"; readonly value: T }
+  | { readonly kind: "not-held" };
+
+export const NOT_HELD = { kind: "not-held" } as const;
+
+export const held = <T>(value: T): Held<T> => ({ kind: "held", value });
+
+// [LAW:one-source-of-truth] What a check says of a fact it was not handed.
+export const notJudged = (what: string): string =>
+  `${what} is not judged here: only the running daemon sees it — the bar's 🩺 doctor judges it`;
 
 // [LAW:types-are-the-program] The `statusLine` Claude Code runs, as the
 // settings chain resolves it, and the file it comes from. Absent is its own
@@ -378,8 +394,8 @@ export interface DaemonInstall {
   } | null;
 }
 
-// What the install check reasons over, or why the daemon could not be asked
-// (the CLI's one way to see the clients the bar runs). `nativeShipped`: a
+// What the install check reasons over, or why the daemon's bundle could not
+// be resolved. `nativeShipped`: a
 // native client ships for this platform. Either it does, or the daemon runs
 // from a checkout, where `just install-rust` builds one on any platform cargo
 // targets; then the Node fallback is a choice the install made rather than
@@ -407,11 +423,13 @@ export interface PostMortemsRead {
 
 // The daemon row's facts (brandon-doctor-v62x.5mq): the daemon that serves
 // this bar, as it reports itself (src/daemon/limits.ts `serving`); every
-// daemon process running; and the newest post-mortem the user filed as read
-// (src/doctor/post-mortems-read.ts).
+// daemon process running; the post-mortems the daemons' breaches left
+// (src/daemon/limits.ts `listPostMortems`); and the newest one the user filed
+// as read (src/doctor/post-mortems-read.ts).
 export interface DaemonFacts {
-  readonly serving: Asked<ServingDaemon>;
+  readonly serving: Held<ServingDaemon>;
   readonly processes: Asked<readonly DaemonProcess[]>;
+  readonly postMortems: Asked<readonly PostMortem[]>;
   readonly read: Asked<PostMortemsRead>;
 }
 
@@ -442,8 +460,8 @@ export interface SegmentDataFacts {
   // null: the session's checkout names no forge (or is no checkout) — a PR
   // lookup has nothing to ask, so there is nothing to have.
   readonly pullRequests: DataNeed<Asked<ForgeLogin | null>>;
-  // What each recent render's payload said of the rate-limit windows.
-  readonly rateLimits: DataNeed<Asked<readonly RateLimitsSeen[]>>;
+  // What each of the session's renders said of the rate-limit windows.
+  readonly rateLimits: DataNeed<Held<readonly RateLimitsSeen[]>>;
 }
 
 // The last TRANSCRIPT_WINDOW_BYTES of a transcript, read as the bar's parse
@@ -481,6 +499,13 @@ const whoseWidth = (of: Width["of"]): string =>
     ? `session ${of.sessionId}'s statusline client`
     : "this command's terminal";
 
+// Why a width measured none: a session's client sends its width to the
+// daemon, which may refuse it; the command measures its own terminal.
+const whyNoWidth = (of: Width["of"]): string =>
+  of.kind === "session"
+    ? "no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's diagnostics name"
+    : "no COLUMNS, and no terminal to ask";
+
 export interface DoctorFacts {
   readonly tmux: TmuxFacts;
   // Failed: no render of the session says.
@@ -488,10 +513,9 @@ export interface DoctorFacts {
   readonly terminal: TerminalIdentity;
   readonly config: ConfigFacts;
   readonly urlHandler: UrlHandlerFacts;
-  // The clients that drew the bar and the install the daemon runs from: the
-  // click's own render, or — for the CLI — every session's latest render this
-  // daemon process served (src/daemon/render-sightings.ts).
-  readonly install: InstallFacts;
+  // The clients that drew the session's bar and the install the daemon runs
+  // from (src/daemon/render-sightings.ts).
+  readonly install: Held<InstallFacts>;
   readonly daemon: DaemonFacts;
   readonly nerdFont: NerdFontFacts;
   // The user's marks, or why the book could not be read; a check honours
@@ -501,27 +525,15 @@ export interface DoctorFacts {
   // (`sightingOf`), or why they could not be read
   // (src/doctor/clicked-terminals.ts).
   readonly clicked: Asked<readonly string[]>;
-  // Whose bars the sightings below are, and so what asked for this run
-  // (src/doctor/sightings.ts): a click on the bar's 🩺 doctor, the
-  // `cc-candybar doctor` command in a session's shell, or the command
-  // anywhere else, judging every session that drew a bar recently.
-  readonly sighted: SightingScope;
-  // Whether the daemon answered what the bars drew (brandon-doctor-v62x.tgp);
-  // the bars themselves sit in `claudeSettings`, beside the settings chain
-  // that redraws each one.
-  readonly frames:
-    | { readonly kind: "read" }
-    | { readonly kind: "failed"; readonly reason: string };
   // The outside data the session's placed segments read
   // (brandon-doctor-v62x.onf).
   readonly data: SegmentDataFacts;
-  // The transcripts the recent renders named, each read (brandon-doctor-v62x
-  // .p4l): the click's own session's, or every session `cc-candybar doctor`
-  // sees.
-  readonly transcripts: Asked<readonly TranscriptRead[]>;
+  // The transcripts the session's renders named, each read
+  // (brandon-doctor-v62x.p4l).
+  readonly transcripts: Held<readonly TranscriptRead[]>;
   // The Claude Code settings chains the run read, each once: its own
-  // location's (`origin`: the session's render origin for a click, the
-  // command's cwd), and every other location a bar's settings are read at
+  // location's (`origin`: the session's render origin), and every other
+  // location a bar's settings are read at
   // (brandon-doctor-v62x.y5d) — each holding the bars it redraws.
   readonly claudeSettings: {
     readonly origin: SettingsChain;
@@ -762,7 +774,7 @@ const termWidth: Check = {
           }
         : {
             ok: false,
-            reason: `${whoseWidth(width.value.of)} measured no width (no COLUMNS, and no terminal to ask — or the daemon refused the width sent, which the bar's diagnostics name), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
+            reason: `${whoseWidth(width.value.of)} measured no width (${whyNoWidth(width.value.of)}), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`,
           },
 };
 
@@ -856,9 +868,19 @@ function handlerAppProblems(opener: Asked<HandlerApp | null>): string[] {
       ];
 }
 
+// What a run asked without a link leaves unjudged of the handler.
+const UNDELIVERED: Readonly<
+  Record<Extract<UrlHandlerFacts, { kind: "registered" }>["via"], string>
+> = {
+  "tmux-status":
+    "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler, so whether a clicked link reaches the daemon is not judged — click 🩺 doctor in the bar itself to judge it",
+  command: notJudged("whether a clicked link reaches the daemon"),
+};
+
 // "The URL handler works" (brandon-doctor-v62x.a1z): a `cc-candybar://` link
 // comes back through the forwarder app. In the bar the doctor's own click is
-// that link; the CLI opens one and asks the daemon whether it arrived.
+// that link; a run asked without one judges what is registered for the
+// scheme, and says the delivery is not judged.
 const urlHandler: Check = {
   name: "urlHandler",
   label: "URL handler",
@@ -867,8 +889,15 @@ const urlHandler: Check = {
     switch (urlHandler.kind) {
       case "unsupported":
         return { ok: true };
-      case "unprobed":
-        return { ok: false, reason: urlHandler.reason };
+      case "registered": {
+        const verdict = problemsVerdict(handlerAppProblems(urlHandler.opener));
+        return verdict.ok
+          ? {
+              ok: true,
+              note: `the forwarder app opens cc-candybar://; ${UNDELIVERED[urlHandler.via]}`,
+            }
+          : verdict;
+      }
       case "arrived":
         if (urlHandler.delivery.kind === "forwarder") return { ok: true };
         return {
@@ -879,23 +908,9 @@ const urlHandler: Check = {
           // with is the opener's row to say (handlerAppProblems).
           reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app — ${REINSTALL}`,
         };
-      case "lost":
-        return problemsVerdict([
-          ...handlerAppProblems(urlHandler.opener),
-          urlHandler.unopened === null
-            ? "a cc-candybar:// link was opened and did not arrive at the daemon"
-            : `a cc-candybar:// link could not be opened — ${urlHandler.unopened}`,
-        ]);
     }
   },
 };
-
-// For the command, which sees every session's latest client: one that has
-// not rendered for this long is a session that stopped, not one the bar runs
-// — long enough to keep a session with no `refreshInterval`, which renders
-// only on events (src/doctor/cli.ts). A click judges its own bar however long
-// it has been idle: the click is the proof it is on screen.
-export const RECENT_CLIENT_S = 300;
 
 // [LAW:types-are-the-program] Where one reported client stands against the
 // daemon's install, each arm carrying what its finding names: whether its
@@ -1012,38 +1027,26 @@ function installProblems(
 // beside it. Judged on the clients that DREW the bar, not on the settings
 // file — managed settings, a project file or a launcher script may stand
 // between what it names and what runs.
-// [LAW:one-source-of-truth] Why a run judging one session's bar finds no
+// [LAW:one-source-of-truth] Why a run judging its session's bar finds no
 // sighting of it — the install, effect-refresh, segment-data and session-data
-// checks all say it. A click proves the bar was drawn, so only the daemon can
-// have lost it; a shell proves only that its session is alive.
-const noRenderOf = (
-  sighted: Exclude<SightingScope, { kind: "recent" }>,
-): string => {
-  const lost = `restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions`;
-  return sighted.kind === "clicked"
-    ? `this daemon holds no render of this bar (it ${lost})`
-    : `this daemon holds no render of session ${sighted.sessionId}'s bar (its statusLine does not run cc-candybar — a \`claude -p\` session draws none — or the daemon ${lost}; unset CLAUDE_CODE_SESSION_ID to judge every bar drawn recently)`;
-};
+// checks all say it. The click proves the bar was drawn, so only the daemon
+// can have lost it.
+const NO_RENDER = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
 
 const install: Check = {
   name: "install",
   label: "install",
   takesMark: false,
-  probe: ({ install, sighted }) => {
-    if (install.kind === "failed") {
-      return {
-        ok: false,
-        reason: `the daemon could not be asked which clients draw the bar: ${install.reason}`,
-      };
-    }
+  probe: ({ install: held }) => {
+    if (held.kind === "not-held")
+      return { ok: true, note: notJudged("which client draws the bar") };
+    const install = held.value;
+    if (install.kind === "failed") return { ok: false, reason: install.reason };
     const { daemon, nativeShipped, clients } = install.value;
     if (clients.length === 0) {
       return {
         ok: false,
-        reason:
-          sighted.kind !== "recent"
-            ? `${noRenderOf(sighted)}, so which client draws it is unknown — run the doctor again once the bar has redrawn`
-            : `no statusline client has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes — run the doctor again once the bar has redrawn; if it never does, the statusLine command does not run cc-candybar`,
+        reason: `${NO_RENDER}, so which client draws it is unknown — run the doctor again once the bar has redrawn`,
       };
     }
     // One line per distinct problem: sessions sharing a client share it.
@@ -1060,7 +1063,7 @@ const install: Check = {
 // while either list is unreadable. The probe reports them; the doctor's event
 // counts them (src/doctor/report.ts).
 export function unreadPostMortems(
-  { postMortems }: ServingDaemon,
+  postMortems: Asked<readonly PostMortem[]>,
   read: Asked<PostMortemsRead>,
 ): readonly PostMortem[] {
   return postMortems.kind === "ok" && read.kind === "ok"
@@ -1073,45 +1076,29 @@ export function unreadPostMortems(
 }
 
 // [LAW:one-source-of-truth] The daemons beside the one serving the bar:
-// every one but it — every one at all when none answered. The probe names
-// them; the doctor's event lists them (src/doctor/report.ts).
+// every one but it. The probe names them; the doctor's event lists them
+// (src/doctor/report.ts).
 export function otherDaemons(
-  serving: Asked<ServingDaemon>,
+  serving: ServingDaemon,
   processes: readonly DaemonProcess[],
 ): readonly DaemonProcess[] {
-  return serving.kind === "failed"
-    ? processes
-    : processes.filter((p) => p.pid !== serving.value.pid);
+  return processes.filter((p) => p.pid !== serving.pid);
 }
 
-// "The daemon is healthy" (brandon-doctor-v62x.5mq): exactly one daemon runs,
-// it holds well under its memory budget, and it has died of memory no time
-// the user has not been told of. A post-mortem leads when there is one: it is
-// the one problem with a fix, and a verdict carries its lead's.
-const daemon: Check = {
-  name: "daemon",
-  label: "daemon",
-  takesMark: false,
-  probe: ({ daemon: { serving, processes, read } }) => {
-    // The process table is its own problem whether or not a daemon answered.
-    const unreadable =
-      processes.kind === "failed"
-        ? [`the process table could not be read: ${processes.reason}`]
-        : [];
-    const others =
-      processes.kind === "ok" ? otherDaemons(serving, processes.value) : [];
-    if (serving.kind === "failed") {
-      // The reason says what went wrong in its own words: no daemon, or one
-      // of another build that answered without saying what it holds.
-      const running =
-        others.length > 0
-          ? ` — daemon ${others.map((p) => p.pid).join(", ")} running`
-          : "";
-      return problemsVerdict([`${serving.reason}${running}`, ...unreadable]);
-    }
-    const { pid, memory, limit, postMortems } = serving.value;
-    const unread = unreadPostMortems(serving.value, read);
-    const verdict = problemsVerdict([
+const daemonLine = (p: DaemonProcess): string =>
+  `daemon ${p.pid} (started ${p.started}, rss ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`})`;
+
+// What a run judges of the daemons whatever serves it: the process table and
+// the post-mortems the daemons' breaches left, each newer than the one filed
+// read. A post-mortem leads: it is the one problem with a fix.
+function daemonsProblems({ processes, postMortems, read }: DaemonFacts): {
+  readonly unread: readonly PostMortem[];
+  readonly problems: readonly string[];
+} {
+  const unread = unreadPostMortems(postMortems, read);
+  return {
+    unread,
+    problems: [
       ...unread.map(
         (m) =>
           `the daemon ran out of memory and restarted (${m.identity}) — post-mortem: ${Object.values(m.artifacts).join(", ")}`,
@@ -1126,43 +1113,93 @@ const daemon: Check = {
       !(postMortems.kind === "ok" && postMortems.value.length === 0)
         ? [`which post-mortems were read could not be read: ${read.reason}`]
         : []),
-      ...unreadable,
-      ...others.map(
-        (p) =>
-          `daemon ${p.pid} (started ${p.started}, rss ${mb(p.rss)} MB${p.ppid === 1 ? "" : `, child of ${p.ppid}`}) runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
-      ),
-      // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-      // the limit judging an estimate — or, with no gap yet read, what macOS
-      // has already reclaimed, the very misjudgment the charge exists to end —
-      // so it is a finding, near the limit or not.
-      ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
-        ? [
-            `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${
-              memory.charge.gap !== 0
-                ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate`
-                : "RSS, which counts pages macOS has reclaimed"
-            }`,
-          ]
+      ...(processes.kind === "failed"
+        ? [`the process table could not be read: ${processes.reason}`]
         : []),
-      ...(memory.kind === "measured" &&
-      approachingLimit(memory.charge.bytes, limit)
-        ? [
-            `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit — at the limit it records a post-mortem and restarts`,
-          ]
-        : []),
+    ],
+  };
+}
+
+// What the daemon that serves the bar says of itself: the daemons beside it,
+// and its memory against its limit.
+function servingProblems(
+  serving: ServingDaemon,
+  processes: DaemonFacts["processes"],
+): readonly string[] {
+  const { pid, memory, limit } = serving;
+  return [
+    ...(processes.kind === "ok"
+      ? otherDaemons(serving, processes.value)
+      : []
+    ).map(
+      (p) =>
+        `${daemonLine(p)} runs beside the one serving the bar (${pid}) — \`kill ${p.pid}\``,
+    ),
+    // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+    // the limit judging an estimate — or, with no gap yet read, what macOS
+    // has already reclaimed, the very misjudgment the charge exists to end —
+    // so it is a finding, near the limit or not.
+    ...(memory.kind === "measured" && memory.charge.kind === "stand-in"
+      ? [
+          `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${
+            memory.charge.gap !== 0
+              ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate`
+              : "RSS, which counts pages macOS has reclaimed"
+          }`,
+        ]
+      : []),
+    ...(memory.kind === "measured" &&
+    approachingLimit(memory.charge.bytes, limit)
+      ? [
+          `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit — at the limit it records a post-mortem and restarts`,
+        ]
+      : []),
+  ];
+}
+
+// With no daemon behind the run, only one daemon may run at all: which of
+// several serves the bar is the daemon's to say.
+function unservedProblems(processes: DaemonFacts["processes"]): string[] {
+  if (processes.kind === "failed" || processes.value.length < 2) return [];
+  return [
+    `${processes.value.length} daemons run at once, and only one serves the bar — stop all but one: ${processes.value.map(daemonLine).join("; ")}`,
+  ];
+}
+
+// "The daemon is healthy" (brandon-doctor-v62x.5mq): exactly one daemon runs,
+// it holds well under its memory budget, and it has died of memory no time
+// the user has not been told of. A post-mortem leads when there is one: it is
+// the one problem with a fix, and a verdict carries its lead's. A run with no
+// daemon behind it judges the process table and the post-mortems, and says
+// the memory is not judged.
+const daemon: Check = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: facts }) => {
+    const { serving, processes } = facts;
+    const { unread, problems } = daemonsProblems(facts);
+    const verdict = problemsVerdict([
+      ...problems,
+      ...(serving.kind === "held"
+        ? servingProblems(serving.value, processes)
+        : unservedProblems(processes)),
     ]);
+    const newest = unread[0];
+    if (!verdict.ok)
+      return newest === undefined
+        ? verdict
+        : {
+            ...verdict,
+            fix: { kind: "post-mortems-read", through: newest.identity },
+          };
     // [LAW:no-silent-failure] A pass that judged no memory says so, rather
     // than reading like one that judged it and found it well under.
-    if (verdict.ok && memory.kind === "unmeasured") {
-      return { ok: true, note: "the daemon has not measured its memory yet" };
-    }
-    const newest = unread[0];
-    return verdict.ok || newest === undefined
-      ? verdict
-      : {
-          ...verdict,
-          fix: { kind: "post-mortems-read", through: newest.identity },
-        };
+    if (serving.kind === "not-held")
+      return { ok: true, note: notJudged("the daemon's memory") };
+    return serving.value.memory.kind === "unmeasured"
+      ? { ok: true, note: "the daemon has not measured its memory yet" }
+      : verdict;
   },
 };
 
@@ -1258,9 +1295,8 @@ const links: Check = {
   name: "links",
   label: "links",
   takesMark: false,
-  probe: ({ sighted, terminal, clicked }) => {
-    if (sighted.kind === "clicked" && sighted.via === "link")
-      return { ok: true };
+  probe: ({ urlHandler, terminal, clicked }) => {
+    if (urlHandler.kind === "arrived") return { ok: true };
     switch (terminal.kind) {
       case "unreported":
         return {
@@ -1305,7 +1341,7 @@ const effectRefresh: Check = {
   name: "effectRefresh",
   label: "effect refresh",
   takesMark: false,
-  probe: ({ frames, claudeSettings: { origin, elsewhere }, sighted }) => {
+  probe: ({ claudeSettings: { origin, elsewhere } }) => {
     // [LAW:one-source-of-truth] Each bar is judged against the chain that
     // redraws it (brandon-doctor-v62x.y5d). The run's own chain first; the
     // first failure leads the others', which follow as `more`, and the fix
@@ -1314,15 +1350,8 @@ const effectRefresh: Check = {
       ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? [],
     );
     const [first] = verdicts;
-    if (first === undefined) {
-      // No chain redraws every second, and none holds a bar.
-      if (frames.kind === "failed") return { ok: false, reason: frames.reason };
-      return unknownMotion(
-        sighted.kind !== "recent"
-          ? noRenderOf(sighted)
-          : `no session has drawn a statusline for this daemon in the last ${RECENT_CLIENT_S / 60} minutes`,
-      );
-    }
+    // No chain redraws every second, and none holds a bar.
+    if (first === undefined) return unknownMotion(NO_RENDER);
     const [lead, ...others] = verdicts.flatMap((v) => (v.ok ? [] : [v]));
     if (lead === undefined) return first;
     const more = [...new Set(others.map((f) => f.reason))].filter(
@@ -1651,25 +1680,19 @@ function pullRequestProblems(need: SegmentDataFacts["pullRequests"]): string[] {
 }
 
 function rateLimitProblems(
-  need: SegmentDataFacts["rateLimits"],
-  sighted: SightingScope,
+  seen: readonly RateLimitsSeen[],
+  segments: readonly [string, ...string[]],
 ): string[] {
-  if (need.kind === "unneeded") return [];
-  const { segments, fact } = need;
-  if (fact.kind === "failed") return [`${named(segments)}: ${fact.reason}`];
-  if (fact.value.length === 0) {
+  if (seen.length === 0) {
     return [
-      sighted.kind !== "recent"
-        ? `${named(segments)}: ${noRenderOf(sighted)}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`
-        : `${named(segments)}: no session of this Claude Code has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so whether it sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
+      `${named(segments)}: ${NO_RENDER}, so whether Claude Code sends rate_limits is unseen — run the doctor again once the bar has redrawn`,
     ];
   }
   // The windows are the account's a session bills, which its environment
   // can change (an API key, another endpoint): one session of another
   // account says nothing of whether this Claude Code sends them, so only a
-  // response no render carried them after is a finding — for a click, its
-  // own session's.
-  return fact.value.includes("missing") && !fact.value.includes("carried")
+  // response no render of the session carried them after is a finding.
+  return seen.includes("missing") && !seen.includes("carried")
     ? [
         `${named(segments)}: Claude Code sent no rate_limits — it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`,
       ]
@@ -1683,11 +1706,24 @@ const segmentData: Check = {
   name: "segmentData",
   label: "segment data",
   takesMark: false,
-  probe: ({ data, sighted }) =>
-    problemsVerdict([
-      ...pullRequestProblems(data.pullRequests),
-      ...rateLimitProblems(data.rateLimits, sighted),
-    ]),
+  probe: ({ data: { pullRequests, rateLimits } }) => {
+    const verdict = problemsVerdict([
+      ...pullRequestProblems(pullRequests),
+      ...(rateLimits.kind === "needed" && rateLimits.fact.kind === "held"
+        ? rateLimitProblems(rateLimits.fact.value, rateLimits.segments)
+        : []),
+    ]);
+    return verdict.ok &&
+      rateLimits.kind === "needed" &&
+      rateLimits.fact.kind === "not-held"
+      ? {
+          ok: true,
+          note: notJudged(
+            `whether Claude Code sends rate_limits (read by ${named(rateLimits.segments)})`,
+          ),
+        }
+      : verdict;
+  },
 };
 
 function transcriptProblems({
@@ -1723,17 +1759,13 @@ const sessionData: Check = {
   name: "sessionData",
   label: "session data",
   takesMark: false,
-  probe: ({ transcripts, sighted }) => {
-    if (transcripts.kind === "failed") {
-      return { ok: false, reason: transcripts.reason };
-    }
+  probe: ({ transcripts }) => {
+    if (transcripts.kind === "not-held")
+      return { ok: true, note: notJudged("which transcript the bar reads") };
     if (transcripts.value.length === 0) {
       return {
         ok: false,
-        reason:
-          sighted.kind !== "recent"
-            ? `${noRenderOf(sighted)}, so which transcript it reads is unknown — run the doctor again once the bar has redrawn`
-            : `no session has drawn a bar for this daemon in the last ${RECENT_CLIENT_S / 60} minutes, so no transcript was named — run the doctor again once the bar has redrawn`,
+        reason: `${NO_RENDER}, so which transcript it reads is unknown — run the doctor again once the bar has redrawn`,
       };
     }
     return problemsVerdict(transcripts.value.flatMap(transcriptProblems));

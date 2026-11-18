@@ -26,7 +26,6 @@ import type { GitInfo } from "./segments/git.js";
 import type { TranscriptUsage } from "./segments/session.js";
 import type { MetricsFold } from "./segments/metrics.js";
 import type { AutoCompactWindow } from "./segments/autocompact.js";
-import { IDLE, type DaemonFacts } from "./facts/world-state.js";
 import type { Instant } from "./utils/instant.js";
 import { ABSENT, ok } from "./utils/outcome.js";
 import { settledLane } from "./utils/reading.js";
@@ -163,18 +162,6 @@ export function checkLanes(at: Instant) {
 // day as the daemon's draw does.
 export function checkDay(at: Instant): DaySums {
   return { roots: [], sums: oneDay(at, 12.5, 3_400_000) };
-}
-
-// The daemon's own facts as a command holds them: no update offered, no
-// file-events, launcher, renderer or act fault.
-export function checkDaemonFacts(at: Instant): DaemonFacts {
-  return {
-    update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
-    fileEvents: [],
-    launcher: [],
-    rendererEnded: null,
-    actFailed: null,
-  };
 }
 
 // [LAW:types-are-the-program] The owners of the fixture's session, typed as

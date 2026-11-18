@@ -26,15 +26,13 @@ export interface PostMortem {
 }
 
 // The daemon as the doctor judges it (brandon-doctor-v62x.5mq): which process
-// it is, how much of its budget it holds, and the post-mortems its directory
-// keeps — or why they could not be listed.
+// it is and how much of its budget it holds. Its post-mortems are files any
+// process reads (src/daemon/limits.ts `listPostMortems`), so they are no part
+// of what only the running daemon can say of itself.
 export interface ServingDaemon {
   readonly pid: number;
   readonly memory: MemoryReading;
   readonly limit: number;
-  readonly postMortems:
-    | { readonly kind: "ok"; readonly value: readonly PostMortem[] }
-    | { readonly kind: "failed"; readonly reason: string };
 }
 
 // [LAW:single-enforcer] THE judgment of "near the limit": the restart

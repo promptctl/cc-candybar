@@ -15,8 +15,6 @@ import type {
   FeedStats,
   FileEventsStats,
   SourceRunsStats,
-  ProbeArrival,
-  StoresRead,
   SourceSnapshots,
   StatsSnapshot,
 } from "./foundations/stats-snapshot.js";
@@ -303,7 +301,6 @@ export class RuntimeStats {
       tmuxStatus: { sessions: 0, layouts: 0, writes: 0, failedWrites: 0 },
       watchersActive: 0,
       dirWatchesActive: 0,
-      handlerProbes: [],
       clients: [],
       bundle: "/",
       sourceDigest: null,
@@ -311,12 +308,6 @@ export class RuntimeStats {
         pid: 0,
         memory: { kind: "unmeasured" },
         limit: 0,
-        postMortems: { kind: "ok", value: [] },
-      },
-      doctorStores: {
-        marks: { kind: "ok", value: {} },
-        clicked: { kind: "ok", value: [] },
-        postMortemsRead: { kind: "ok", value: { through: null } },
       },
     });
   }
@@ -340,12 +331,10 @@ export class RuntimeStats {
     watchersActive: number;
     dirWatchesActive: number;
     nextRestartReason?: string | null;
-    handlerProbes: readonly ProbeArrival[];
     clients: readonly RenderSighting[];
     bundle: string;
     sourceDigest: string | null;
     daemon: ServingDaemon;
-    doctorStores: StoresRead;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -399,11 +388,9 @@ export class RuntimeStats {
       },
       subprocesses: this.snapshotSubprocesses(),
       nextRestartReason: extras.nextRestartReason ?? null,
-      handlerProbes: extras.handlerProbes,
       clients: extras.clients,
       bundle: extras.bundle,
       daemon: extras.daemon,
-      doctorStores: extras.doctorStores,
     };
   }
 }

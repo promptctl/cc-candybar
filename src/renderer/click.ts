@@ -5,6 +5,7 @@
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import type { Effect, Event } from "../renderer-interface/interface.js";
 import type { MainRendererParts } from "./verbs/port.js";
+import type { RequestFacts } from "../daemon/foundations/request-event.js";
 
 type ClickEvent = Extract<Event, { kind: "click" }>;
 
@@ -15,12 +16,13 @@ type ClickEvent = Extract<Event, { kind: "click" }>;
 export function clickTurn(
   { verbs }: Pick<MainRendererParts, "verbs">,
   { verb, value, arrival, context }: ClickEvent,
-  // Where the click's config changes go, kept by the turn even when the
-  // handler throws.
+  // Where the click's config changes go, and what its turn's record notes,
+  // kept by the turn even when the handler throws.
   effects: Effect[],
+  record: RequestFacts,
 ): void {
   const handler = verbs.handler(verb);
   if (handler === undefined)
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  handler(value, { arrival, context, effects });
+  handler(value, { arrival, context, effects, record });
 }

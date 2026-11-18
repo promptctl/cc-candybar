@@ -1,10 +1,11 @@
 import { HOST } from "./host";
-import type {
-  Asked,
-  DaemonProcess,
-  DoctorFacts,
-  MarkBook,
-  PostMortemsRead,
+import {
+  held,
+  type Asked,
+  type DaemonProcess,
+  type DoctorFacts,
+  type MarkBook,
+  type PostMortemsRead,
 } from "../../src/doctor/checks";
 import type {
   FrameSeen,
@@ -19,13 +20,10 @@ import {
   type InstallEdge,
 } from "../../src/doctor/ports";
 import { type StoresRead } from "../../src/daemon/foundations/stats-snapshot";
-import type { DaemonAnswer } from "../../src/doctor/daemon-answer";
 import type { ServingDaemon } from "../../src/daemon/foundations/memory-limit";
 import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
-import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-
-const S1 = sessionIdOf("s1");
+import type { Sighted } from "../../src/doctor/read";
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";
@@ -69,7 +67,6 @@ export const HEALTHY_SERVING: ServingDaemon = {
     ],
   },
   limit: 512 * 1024 * 1024,
-  postMortems: { kind: "ok", value: [] },
 };
 
 export const HEALTHY_PROCESS: DaemonProcess = {
@@ -79,9 +76,18 @@ export const HEALTHY_PROCESS: DaemonProcess = {
   started: "Mon Oct 19 17:59:51 2026",
 };
 
-// The edge's reads of that daemon: the one process.
-export const healthyDaemonEdge = (): Pick<DoctorEdge, "daemons"> => ({
+// The edge's reads of that daemon: the one process, and no post-mortem.
+export const healthyDaemonEdge = (): Pick<
+  DoctorEdge,
+  "daemons" | "postMortems"
+> => ({
   daemons: async () => ({ kind: "ok", value: [HEALTHY_PROCESS] }),
+  postMortems: () => ({ kind: "ok", value: [] }),
+});
+
+// The edge's read of the URL handler on a platform that has none.
+export const noUrlHandlerEdge = (): Pick<DoctorEdge, "handler"> => ({
+  handler: async () => ({ kind: "unsupported" }),
 });
 
 // The doctor's stores on a machine it has never filed anything on.
@@ -101,7 +107,7 @@ export const HEALTHY_TRANSCRIPT = {
 } as const;
 
 // That transcript, as the renders named it.
-export const NAMED = { kind: "ok", value: [HEALTHY_TRANSCRIPT] } as const;
+export const NAMED = held([HEALTHY_TRANSCRIPT]);
 
 // What a render request said, by the client that sent it: a payload that
 // carried the rate-limit windows, from a session of `projectDir` running with
@@ -136,27 +142,24 @@ export const onOrigin = (
   bars: readonly FrameSighting[],
   sources: Asked<readonly SettingsSource[]> = { kind: "ok", value: [] },
   at: DoctorFacts["claudeSettings"]["origin"]["at"] = ORIGIN_AT,
-): Pick<DoctorFacts, "frames" | "claudeSettings"> => ({
-  frames: { kind: "read" },
+): Pick<DoctorFacts, "claudeSettings"> => ({
   claudeSettings: { origin: { at, sources, bars }, elsewhere: [] },
 });
 
-// Bars as the daemon reports them to `gatherFacts`: each session's settings
+// Bars as the host reports them to `gatherFacts`: each session's settings
 // read in `projectDir`, under the Claude Code directory `claudeConfigDir`.
 export const sightedIn = (
   projectDir: string,
   claudeConfigDir: string,
   bars: readonly FrameSighting[],
-): Asked<readonly SightedBar[]> => ({
-  kind: "ok",
-  value: bars.map((bar) => ({ ...bar, projectDir, claudeConfigDir })),
-});
+): readonly SightedBar[] =>
+  bars.map((bar) => ({ ...bar, projectDir, claudeConfigDir }));
 
 // A bar whose frame holds still, as a session's renders drew it.
 export const STILL = drew("still");
 
 // The rate-limit windows, as a session's renders carried them.
-export const CARRIED = { kind: "ok", value: ["carried"] } as const;
+export const CARRIED = held(["carried" as const]);
 
 // The edge's reads of the outside data segments need and of the session's
 // transcript: the checkout's gh logged in, the transcript all JSON.
@@ -184,65 +187,22 @@ export const healthyDataEdge = (): Pick<
   }),
 });
 
-// One session's statusline frame as daemon-stats reports it: session
-// `sessionId` of the project `projectDir`, drawn a second ago.
-export const reportedFrame = (
-  frame: FrameSeen,
+// What the daemon tells a read of one healthy session: itself, its bundle and
+// the native client beside it, a render that carried the rate-limit windows
+// and named a transcript, and `bars`, read in `projectDir` under
+// `claudeConfigDir`.
+export const healthySighted = (
+  projectDir: string,
   claudeConfigDir: string,
-  projectDir = "/p",
-  sessionId = "s1",
-) => ({
-  role: "statusline" as const,
-  frame,
-  claudeConfigDir,
-  projectDir,
-  ago: 1,
-  sessionId: sessionIdOf(sessionId),
+  bars: readonly FrameSighting[] = STILL,
+): Sighted => ({
+  serving: held(HEALTHY_SERVING),
+  rateLimits: CARRIED,
+  transcripts: NAMED,
+  clients: held({ bundle: HEALTHY_BUNDLE, clients: [healthyClient()] }),
+  bars: sightedIn(projectDir, claudeConfigDir, bars),
+  width: { kind: "ok", value: { columns: 148, of: { kind: "command" } } },
 });
-
-// That daemon, as `cc-candybar doctor` asks it: one session drawn a second
-// ago by the native client beside it, whose payload carried the rate-limit
-// windows — a session running with `claudeConfigDir`.
-export const healthyDaemonIn =
-  (claudeConfigDir: string): (() => Promise<DaemonAnswer>) =>
-  () =>
-    Promise.resolve({
-      rateLimits: {
-        kind: "ok",
-        value: [
-          { rateLimits: "carried", claudeConfigDir, sessionId: S1, ago: 1 },
-        ],
-      },
-      transcripts: {
-        kind: "ok",
-        value: [{ transcript: HEALTHY_TRANSCRIPT, sessionId: S1, ago: 1 }],
-      },
-      frames: {
-        kind: "ok",
-        value: [reportedFrame("still", claudeConfigDir)],
-      },
-      widths: {
-        kind: "ok",
-        value: [{ sessionId: S1, ago: 1, role: "statusline", termCols: 148 }],
-      },
-      clients: {
-        kind: "ok",
-        value: {
-          bundle: HEALTHY_BUNDLE,
-          clients: [
-            {
-              client: { kind: "native", bundle: HEALTHY_BUNDLE, source: null },
-              sessionId: S1,
-              ago: 1,
-            },
-          ],
-        },
-      },
-      serving: { kind: "ok", value: HEALTHY_SERVING },
-      stores: EMPTY_STORES,
-    });
-
-export const HEALTHY_DAEMON = healthyDaemonIn("/claude");
 
 // A setup every check passes, asked for by the command: the base a doctor
 // test spreads the facts it is about over.
@@ -264,23 +224,19 @@ export const HEALTHY_FACTS: DoctorFacts = {
     warnings: [],
     unused: [],
   },
-  sighted: { kind: "recent" },
   ...onOrigin(STILL),
   data: {
     pullRequests: { kind: "unneeded" },
     rateLimits: { kind: "unneeded" },
   },
-  transcripts: {
-    kind: "ok",
-    value: [
-      {
-        ...HEALTHY_TRANSCRIPT,
-        read: { kind: "ok", value: { lines: 3, unparsed: 0, whole: true } },
-      },
-    ],
-  },
+  transcripts: held([
+    {
+      ...HEALTHY_TRANSCRIPT,
+      read: { kind: "ok", value: { lines: 3, unparsed: 0, whole: true } },
+    },
+  ]),
   urlHandler: { kind: "unsupported" },
-  install: {
+  install: held({
     kind: "ok",
     value: {
       daemon: { bundle: HEALTHY_BUNDLE, checkout: null },
@@ -294,10 +250,11 @@ export const HEALTHY_FACTS: DoctorFacts = {
         },
       ],
     },
-  },
+  }),
   daemon: {
-    serving: { kind: "ok", value: HEALTHY_SERVING },
+    serving: held(HEALTHY_SERVING),
     processes: { kind: "ok", value: [HEALTHY_PROCESS] },
+    postMortems: { kind: "ok", value: [] },
     read: { kind: "ok", value: { through: null } },
   },
   nerdFont: { kind: "none" },

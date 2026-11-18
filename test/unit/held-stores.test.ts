@@ -57,7 +57,7 @@ test("a document its file refuses throws, and the copy is still held", () => {
   expect(() => stores.take([{ store: "clicked", value: ["Ghostty"] }])).toThrow(
     "clicked not filed: EROFS: read-only",
   );
-  expect(stores.documents().clicked).toEqual({
+  expect(stores.current().doctor.clicked).toEqual({
     kind: "ok",
     value: ["Ghostty"],
   });

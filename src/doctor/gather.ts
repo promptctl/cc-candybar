@@ -6,7 +6,8 @@
 // compose one set of facts the same way.
 //
 // [LAW:effects-at-boundaries] Nothing here reads the machine: the host reads
-// it for an ask (src/daemon/cache/doctor.ts), the CLI over its own edge.
+// it for an ask (src/daemon/cache/doctor.ts), in the daemon and in
+// `cc-candybar doctor` alike.
 
 import { projectLocalSettingsFile } from "../claude-settings.js";
 import { dataNeeds, type DataNeeds } from "./data-needs.js";
@@ -18,14 +19,14 @@ import type {
   DaemonFacts,
   DoctorFacts,
   Fix,
+  Held,
   InstallFacts,
   PostMortemsRead,
   SettingsChain,
-  UrlHandlerFacts,
 } from "./checks.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import type { ConfigTarget } from "../config-hint.js";
-import type { SightingScope } from "./sightings.js";
+import type { ClickArrival } from "./sightings.js";
 import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
 import type { DoctorDocuments, ConfigLoad } from "./ports.js";
 import {
@@ -56,14 +57,14 @@ export const readStores = (stores: DoctorDocuments): StoresRead => ({
 
 // [LAW:types-are-the-program] What a run asks of the machine, decided by the
 // config it judges: the glyphs to ask the terminal's font about (none, "",
-// asks nothing) and the outside data a placed segment needs. `sighted` is
-// whose bars the run judges. `run` names the run, so a new run is a new ask,
-// read again.
+// asks nothing) and the outside data a placed segment needs. `arrival` is how
+// the click that asked it came, which is what the run knows of the URL
+// handler. `run` names the run, so a new run is a new ask, read again.
 export interface DoctorAsk {
   readonly run: number;
   readonly glyphs: string;
   readonly needs: DataNeeds;
-  readonly sighted: SightingScope;
+  readonly arrival: ClickArrival;
 }
 
 // Where the session runs: the checkout a forge is asked about, and the
@@ -75,11 +76,11 @@ export interface DoctorOrigin {
   readonly projectDir: string;
 }
 
-// What the host reads for an ask: every fact but the config's, the stores'
-// and the URL handler's, which are the renderer's or the click's.
+// What the host reads for an ask: every fact but the config's and the
+// stores', which are the renderer's.
 export type MachineFacts = Omit<
   DoctorFacts,
-  "config" | "marks" | "clicked" | "urlHandler" | "install" | "daemon"
+  "config" | "marks" | "clicked" | "install" | "daemon"
 > & { readonly daemon: Omit<DaemonFacts, "read"> };
 
 // [LAW:types-are-the-program] One run's reading, as a world state carries it:
@@ -91,7 +92,7 @@ export type DoctorReading = { readonly run: number } & (
   | {
       readonly kind: "read";
       readonly machine: MachineFacts;
-      readonly install: InstallFacts;
+      readonly install: Held<InstallFacts>;
     }
   | { readonly kind: "failed"; readonly reason: string }
 );
@@ -107,7 +108,7 @@ export function doctorAsk(
   run: number,
   load: ConfigLoad,
   sessionPick: (key: string) => string | null,
-  sighted: SightingScope,
+  arrival: ClickArrival,
 ): DoctorAsk {
   const globals = resolveEffectiveGlobals(
     load.config,
@@ -123,7 +124,7 @@ export function doctorAsk(
       ]),
     ].join(""),
     needs: dataNeeds(load.config, globals.preset),
-    sighted,
+    arrival,
   };
 }
 
@@ -145,15 +146,12 @@ function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
 }
 
 // [LAW:single-enforcer] The one composition of a run's facts: the machine as
-// read, the load the ask was made for, the stores as they stand, and how the
-// run's click arrived (or the CLI's own probe of the URL handler).
+// read, the load the ask was made for, and the stores as they stand.
 export function doctorFacts(
-  machine: MachineFacts,
-  install: InstallFacts,
+  { machine, install }: DoctorRead,
   load: ConfigLoad,
   target: ConfigTarget,
   stores: StoresRead,
-  urlHandler: UrlHandlerFacts,
 ): DoctorFacts {
   return {
     ...machine,
@@ -161,7 +159,6 @@ export function doctorFacts(
     marks: stores.marks,
     clicked: stores.clicked,
     daemon: { ...machine.daemon, read: stores.postMortemsRead },
-    urlHandler,
     install,
   };
 }

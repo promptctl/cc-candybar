@@ -29,6 +29,7 @@ import {
   type ConfigFacts,
   type DaemonFacts,
   type DoctorFacts,
+  type Held,
   type InstallFacts,
   type MarkBook,
   type NerdFontFacts,
@@ -39,7 +40,8 @@ import {
 import type { SettingsSource } from "../claude-settings.js";
 import { SETTINGS_NS } from "../config/reserved-names.js";
 import { mb, measureOf } from "../daemon/foundations/memory-limit.js";
-import { valueOf } from "../utils/logfmt.js";
+import { eventLine, fieldsOf, valueOf, type Field } from "../utils/logfmt.js";
+import type { NotedReport } from "../renderer-interface/noted-doctor.js";
 import {
   FRAMES_SEEN,
   type FrameSeen,
@@ -122,11 +124,13 @@ export function terminalFeatureFields(
 // field: each client it judged as `<kind>/<bundle>/<source>` — its kind
 // (`unreported` for one too old to say), and its standing (clientStanding):
 // its bundle `same`/`other`/`unresolved`, its build `same`/`other`/
-// `unstamped`/`unreadable`, `-` where it is not compared. `unasked` when the daemon could
-// not be asked, `-` when no client was.
-export function installFields(install: InstallFacts): string {
-  if (install.kind === "failed") return "clients=unasked";
-  const { daemon, clients } = install.value;
+// `unstamped`/`unreadable`, `-` where it is not compared. `failed` when the
+// daemon's own install could not be read, `unheld` where the host holds no
+// clients (only a daemon does), `-` when no client was.
+export function installFields(install: Held<InstallFacts>): string {
+  if (install.kind === "not-held") return "clients=unheld";
+  if (install.value.kind === "failed") return "clients=failed";
+  const { daemon, clients } = install.value.value;
   const described = clients.map((c) => {
     if (c.kind === "unreported") return "unreported/-/-";
     const { bundle, source } = clientStanding(daemon, c);
@@ -142,30 +146,32 @@ const signedMb = (bytes: number): string =>
 // how many daemons run and which besides the serving one, the serving one's
 // memory against its limit (RSS standing in carrying, signed, what its gap
 // moved it by: `rss-stand-in(-150)`, or `(+5)` where the footprint ran over
-// RSS), and its post-mortems as
-// `<unread>/<total>` — `unread` where a list could not be read, `unasked`
-// where no daemon answered.
+// RSS), and the post-mortems in the state directory as `<unread>/<total>` —
+// `unread` where a list could not be read. `others` and `memory` are
+// `unheld` where the host is not the serving daemon.
 export function daemonFields({
   serving,
   processes,
+  postMortems,
   read,
 }: DaemonFacts): string {
-  const running =
-    processes.kind === "failed"
-      ? "daemons=unread others=-"
-      : `daemons=${processes.value.length} others=${
-          otherDaemons(serving, processes.value)
+  const others =
+    serving.kind === "not-held"
+      ? "unheld"
+      : processes.kind === "failed"
+        ? "-"
+        : otherDaemons(serving.value, processes.value)
             .map((p) => p.pid)
-            .join(",") || "-"
-        }`;
-  if (serving.kind === "failed") {
-    return `${running} memory=unasked postMortems=unasked`;
-  }
-  const { memory, limit, postMortems } = serving.value;
+            .join(",") || "-";
+  const running = `daemons=${processes.kind === "failed" ? "unread" : processes.value.length} others=${others}`;
   const told =
     postMortems.kind === "failed" || read.kind === "failed"
       ? "unread"
-      : `${unreadPostMortems(serving.value, read).length}/${postMortems.value.length}`;
+      : `${unreadPostMortems(postMortems, read).length}/${postMortems.value.length}`;
+  if (serving.kind === "not-held") {
+    return `${running} memory=unheld postMortems=${told}`;
+  }
+  const { memory, limit } = serving.value;
   const held =
     memory.kind === "unmeasured"
       ? "unmeasured"
@@ -191,7 +197,7 @@ export function daemonFields({
 // logfmt field: per source, what was found — `-` where no segment needs it.
 // `pr`: ready, missing, logged-out, no-forge (the checkout names none) or
 // failed; `rateLimits`: the renders that carried / lacked / had no response
-// yet.
+// yet, `unheld` where the host saw no session's renders.
 export function dataFields(data: SegmentDataFacts): string {
   const pr = (): string => {
     if (data.pullRequests.kind === "unneeded") return "-";
@@ -204,7 +210,7 @@ export function dataFields(data: SegmentDataFacts): string {
   const rateLimits = (): string => {
     if (data.rateLimits.kind === "unneeded") return "-";
     const fact = data.rateLimits.fact;
-    if (fact.kind === "failed") return "failed";
+    if (fact.kind === "not-held") return "unheld";
     const count = (seen: string) => fact.value.filter((v) => v === seen).length;
     return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
   };
@@ -213,21 +219,16 @@ export function dataFields(data: SegmentDataFacts): string {
 
 // [LAW:nothing-unseen] What the effect-refresh check reasoned over, as two
 // logfmt fields: the frames the statusline renders drew, counted per
-// `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing
-// (brandon-doctor-v62x.tgp); `failed` when the renders could not be asked.
-// Then each settings chain read, the run's own first
-// (brandon-doctor-v62x.y5d): the scope its statusLine comes from and the
+// `FRAMES_SEEN` member in its order — moves/can-move/still/failed/drawing.
+// Then each settings chain read, the run's own first: the scope its statusLine comes from and the
 // refresh interval it holds (`-` for none), `absent` when no file sets one,
 // `not-an-object`, or `failed` when the chain could not be read.
-export function frameFields(
-  frames: DoctorFacts["frames"],
-  { origin, elsewhere }: DoctorFacts["claudeSettings"],
-): string {
+export function frameFields({
+  origin,
+  elsewhere,
+}: DoctorFacts["claudeSettings"]): string {
   const chains = [origin, ...elsewhere];
   const lines = chains.map(({ sources }) => statusLineValue(sources)).join(",");
-  if (frames.kind === "failed") {
-    return `frames=failed chains=${valueOf(lines)}`;
-  }
   const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
   const count = (seen: FrameSeen) =>
     drawn.filter((f) => f.frame === seen).length;
@@ -266,11 +267,11 @@ export function truecolorEnvFields(
 // [LAW:nothing-unseen] What the session-data check reasoned over, as one
 // logfmt field: the transcripts read, absent (no file — a finding only once
 // Claude Code has answered) and unreadable, then the lines that were not JSON
-// objects across them; `failed` when the renders could not be asked.
+// objects across them; `unheld` where the host saw no session's renders.
 export function transcriptFields(
-  transcripts: Asked<readonly TranscriptRead[]>,
+  transcripts: Held<readonly TranscriptRead[]>,
 ): string {
-  if (transcripts.kind === "failed") return "transcripts=failed";
+  if (transcripts.kind === "not-held") return "transcripts=unheld";
   const count = (kind: TranscriptRead["read"]["kind"]) =>
     transcripts.value.filter((t) => t.read.kind === kind).length;
   const unparsed = transcripts.value.reduce(
@@ -286,7 +287,8 @@ export function transcriptFields(
 // from finding one), the font it read and the mark it honoured, the one made
 // on the sighting it shows (`unread` when the mark book could not be read) —
 // every field `-` where there was nothing to find.
-// A value a terminal or font chose is a JSON string, since it may hold a space.
+// A value holding what a terminal or font chose is written as one logfmt
+// value, quoted where that may hold a space.
 export function nerdFontFields(
   facts: NerdFontFacts,
   marks: Asked<MarkBook>,
@@ -300,9 +302,9 @@ export function nerdFontFields(
       case "unasked":
         return terminal.kind;
       case "unknown":
-        return `unknown:${JSON.stringify(terminal.called)}`;
+        return valueOf(`unknown:${terminal.called}`);
       case "unnamed":
-        return `unnamed:${JSON.stringify(terminal.term)}`;
+        return valueOf(`unnamed:${terminal.term}`);
       case "bundling":
       case "unread":
       case "configured":
@@ -313,7 +315,9 @@ export function nerdFontFields(
     if (terminal.kind !== "configured") return "-";
     if (terminal.font.kind === "failed") return "failed";
     const { font: name, lacks } = terminal.font.value;
-    return `${JSON.stringify(name)}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
+    return valueOf(
+      `${name}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`,
+    );
   })();
   const sighting = glyphSighting(facts);
   const mark =
@@ -324,6 +328,53 @@ export function nerdFontFields(
         : (marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-");
   return `glyphs=${codes.join(",")} terminal=${found} font=${font} mark=${mark}`;
 }
+
+// [LAW:nothing-unseen] Everything a run reasoned over, as the fields its
+// turn's record carries.
+export function doctorFields(facts: DoctorFacts): readonly Field[] {
+  const line = [
+    configFields(facts.config),
+    nerdFontFields(facts.nerdFont, facts.marks),
+    linkFields(facts.terminal, facts.clicked),
+    terminalFeatureFields(facts.terminal, facts.width),
+    installFields(facts.install),
+    daemonFields(facts.daemon),
+    dataFields(facts.data),
+    transcriptFields(facts.transcripts),
+    frameFields(facts.claudeSettings),
+    truecolorEnvFields(facts.claudeSettings.origin.sources),
+  ].join(" ");
+  const fields = [...fieldsOf(line)];
+  // [LAW:no-silent-failure] Each field is one logfmt value under its own key,
+  // so the record says all of it: a value spelled as more than one, or a key
+  // written twice, would be read short.
+  if (eventLine("doctor", fields) !== `doctor ${line}`)
+    throw new Error(`the doctor's fields do not read back whole: ${line}`);
+  return fields;
+}
+
+// [LAW:single-enforcer] The reports as a turn's record notes them.
+export const notedReports = (
+  reports: readonly CheckReport[],
+): readonly NotedReport[] =>
+  reports.map(({ check, verdict }) => ({
+    name: check.name,
+    label: check.label,
+    verdict: verdict.ok
+      ? {
+          ok: true,
+          ...(verdict.note === undefined ? {} : { note: verdict.note }),
+        }
+      : {
+          ok: false,
+          reason: verdict.reason,
+          more: verdict.more ?? [],
+          fixable: verdict.fix !== undefined,
+          ...(verdict.sighting === undefined
+            ? {}
+            : { look: verdict.sighting.glyphs }),
+        },
+  }));
 
 // The bar's row has room for one problem: it names the first and counts the
 // rest, pointing at the surface that lists them.

@@ -14,23 +14,16 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   checkByName,
+  held,
+  NOT_HELD,
+  notJudged,
   type DoctorFacts,
   type SegmentDataFacts,
 } from "../src/doctor/checks";
 import { forgeLogin, forgeLoginOf } from "../src/doctor/edge";
 import { dataFields } from "../src/doctor/report";
-import { rateLimitsOf } from "../src/doctor/cli";
-import { parseRateLimitSightings } from "../src/doctor/daemon-answer";
 import { rateLimitsSeen } from "../src/daemon/render-sightings";
-import { RuntimeStats } from "../src/daemon/stats";
-import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
-
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
-
-const S1 = sessionIdOf("s1");
-const S2 = sessionIdOf("s2");
-const S3 = sessionIdOf("s3");
 
 const segmentData = checkByName("segmentData")!;
 
@@ -68,7 +61,7 @@ describe("segment data row", () => {
     expect(
       verdict({
         pullRequests: login("ready"),
-        rateLimits: rateNeed({ kind: "ok", value: ["carried", "unanswered"] }),
+        rateLimits: rateNeed(held(["carried", "unanswered"])),
       }),
     ).toEqual({ ok: true });
   });
@@ -117,7 +110,7 @@ describe("segment data row", () => {
   test("one session carrying the windows is this Claude Code sending them", async () => {
     expect(
       verdict({
-        rateLimits: rateNeed({ kind: "ok", value: ["carried", "missing"] }),
+        rateLimits: rateNeed(held(["carried", "missing"])),
       }),
     ).toEqual({ ok: true });
   });
@@ -125,7 +118,7 @@ describe("segment data row", () => {
   test("a response with no render carrying rate_limits fails", async () => {
     expect(
       verdict({
-        rateLimits: rateNeed({ kind: "ok", value: ["missing", "unanswered"] }),
+        rateLimits: rateNeed(held(["missing", "unanswered"])),
       }),
     ).toMatchObject({
       ok: false,
@@ -135,29 +128,13 @@ describe("segment data row", () => {
   });
 
   test("renders before any response say nothing either way", async () => {
-    expect(
-      verdict({ rateLimits: rateNeed({ kind: "ok", value: ["unanswered"] }) }),
-    ).toEqual({ ok: true });
-  });
-
-  test("no render seen is a failure saying so, not a pass", async () => {
-    expect(
-      verdict({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-    ).toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(
-        /^block, weekly: no session of this Claude Code has drawn a bar/,
-      ),
+    expect(verdict({ rateLimits: rateNeed(held(["unanswered"])) })).toEqual({
+      ok: true,
     });
   });
 
-  test("a click from a bar this daemon never served says the daemon restarted", async () => {
-    expect(
-      segmentData.probe({
-        ...withData({ rateLimits: rateNeed({ kind: "ok", value: [] }) }),
-        sighted: { kind: "clicked", sessionId: "s1", via: "link" },
-      }),
-    ).toMatchObject({
+  test("no render seen is a failure saying the daemon holds none, not a pass", async () => {
+    expect(verdict({ rateLimits: rateNeed(held([])) })).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^block, weekly: this daemon holds no render of this bar \(it restarted since the bar was drawn, or has served 64 newer sessions\)/,
@@ -165,10 +142,28 @@ describe("segment data row", () => {
     });
   });
 
+  test("a host that saw no session's renders does not judge the windows, and says so", async () => {
+    expect(verdict({ rateLimits: rateNeed(NOT_HELD) })).toEqual({
+      ok: true,
+      note: notJudged(
+        "whether Claude Code sends rate_limits (read by block, weekly)",
+      ),
+    });
+  });
+
+  test("a problem beside windows not judged here is still a failure", async () => {
+    expect(
+      verdict({
+        pullRequests: login("missing"),
+        rateLimits: rateNeed(NOT_HELD),
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
   test("several problems lead with one and list the rest", async () => {
     const v = verdict({
       pullRequests: login("missing"),
-      rateLimits: rateNeed({ kind: "failed", reason: "EACCES" }),
+      rateLimits: rateNeed(held(["missing"])),
     });
     expect(v.ok).toBe(false);
     expect(!v.ok && v.more).toHaveLength(1);
@@ -181,18 +176,17 @@ describe("the doctor's event field", () => {
     expect(
       dataFields({
         pullRequests: login({ loggedOut: "x" }),
-        rateLimits: rateNeed({
-          kind: "ok",
-          value: ["carried", "missing", "unanswered", "carried"],
-        }),
+        rateLimits: rateNeed(
+          held(["carried", "missing", "unanswered", "carried"]),
+        ),
       }),
     ).toBe("data=pr:logged-out,rateLimits:2/1/1");
     expect(
       dataFields({
         pullRequests: forgeNeed({ kind: "ok", value: null }),
-        rateLimits: rateNeed({ kind: "failed", reason: "r" }),
+        rateLimits: rateNeed(NOT_HELD),
       }),
-    ).toBe("data=pr:no-forge,rateLimits:failed");
+    ).toBe("data=pr:no-forge,rateLimits:unheld");
   });
 });
 
@@ -240,89 +234,6 @@ describe("what a hook payload says of the rate-limit windows", () => {
   });
   test("a Claude Code too old to send a context window sends no windows: missing", async () => {
     expect(rateLimitsSeen({})).toBe("missing");
-  });
-});
-
-describe("the command's rate-limit sightings", () => {
-  const sightings = {
-    kind: "ok",
-    value: [
-      { rateLimits: "carried", claudeConfigDir: "/a", sessionId: S1, ago: 1 },
-      { rateLimits: "missing", claudeConfigDir: "/zai", sessionId: S2, ago: 1 },
-      {
-        rateLimits: "missing",
-        claudeConfigDir: "/a",
-        sessionId: S3,
-        ago: 100000,
-      },
-    ],
-  } as const;
-
-  test("only recent renders of sessions in its own Claude Code directory", async () => {
-    expect(rateLimitsOf({ kind: "recent" }, sightings, "/a")).toEqual({
-      kind: "ok",
-      value: ["carried"],
-    });
-  });
-
-  // Run in a session's shell, its own renders alone, however long ago
-  // (brandon-doctor-v62x.y5d).
-  test("in a session, that session's renders alone", async () => {
-    expect(
-      rateLimitsOf({ kind: "shell", sessionId: S3 }, sightings, "/a"),
-    ).toEqual({ kind: "ok", value: ["missing"] });
-  });
-
-  test("a daemon that could not be asked stays failed", async () => {
-    expect(
-      rateLimitsOf(
-        { kind: "recent" },
-        { kind: "failed", reason: "down" },
-        "/a",
-      ),
-    ).toEqual({
-      kind: "failed",
-      reason: "down",
-    });
-  });
-
-  test("the daemon's stats are read, and an older daemon's are refused by name", async () => {
-    const stats = (clients: unknown[]): StatsSnapshot =>
-      ({
-        ...RuntimeStats.referenceSnapshot(),
-        version: "9.9.9",
-        clients,
-      }) as unknown as StatsSnapshot;
-    expect(
-      parseRateLimitSightings(
-        stats([
-          {
-            client: null,
-            rateLimits: "unanswered",
-            claudeConfigDir: "/a",
-            sessionId: "s1",
-            ago: 3,
-          },
-        ]),
-      ),
-    ).toEqual({
-      kind: "ok",
-      value: [
-        {
-          client: null,
-          rateLimits: "unanswered",
-          claudeConfigDir: "/a",
-          sessionId: "s1",
-          ago: 3,
-        },
-      ],
-    });
-    expect(parseRateLimitSightings(stats([{ client: null, ago: 3 }]))).toEqual({
-      kind: "failed",
-      reason: expect.stringMatching(
-        /^the running daemon \(9\.9\.9\) reported its renders without the rate-limit windows/,
-      ),
-    });
   });
 });
 

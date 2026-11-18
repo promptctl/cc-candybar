@@ -30,10 +30,11 @@ import type {
   DoctorOrigin,
   DoctorReading,
 } from "../../doctor/gather";
-import { readDoctor } from "../../doctor/read";
+import { readDoctor, type Sighted } from "../../doctor/read";
 import type { DoctorMachineEdge } from "../../doctor/ports";
-import { barsOf, sessionWidth } from "../../doctor/sightings";
+import { sessionWidth } from "../../doctor/sightings";
 import { installFacts } from "../../doctor/edge";
+import { held } from "../../doctor/checks";
 
 // What one session's doctor subscription is read with: the session, the
 // hints and the origin its newest request reported, and its renderer's ask.
@@ -49,17 +50,10 @@ export interface DoctorSourceDeps {
   // launches end with it: a read the source abandoned (a run replaced, a
   // session retired) leaves no probe running.
   readonly edge: (signal: AbortSignal) => DoctorMachineEdge;
-  // What the sessions' renders said, which the reading judges the session's
-  // own bars by, as this process saw them.
-  readonly sightings: (
-    session: SessionId,
-    now: Instant,
-  ) => readonly RenderSighting[];
-  // This daemon as the doctor's daemon row judges it (src/daemon/limits.ts).
-  readonly serving: () => ServingDaemon;
-  // The bundle this daemon runs, which the install check judges the clients
-  // against.
-  readonly bundle: string;
+  // [LAW:single-enforcer] What the host tells a session's read of its bars
+  // at `now`, as this process saw them: the daemon its sightings and itself
+  // (`daemonSighted`), `cc-candybar doctor` the bar it drew.
+  readonly sighted: (session: SessionId, now: Instant) => Sighted;
   readonly clock: Pick<Timekeeper, "monotonic" | "after" | "now">;
   readonly logger: DaemonLogger;
   readonly ledger: RefreshLedger;
@@ -103,33 +97,56 @@ export class DoctorSource {
 // shows on the session's bar; no report is made of facts the doctor did not
 // see.
 export async function readDoctorRun(
-  deps: Pick<DoctorSourceDeps, "sightings" | "serving" | "bundle" | "clock"> & {
+  deps: Pick<DoctorSourceDeps, "sighted" | "clock"> & {
     readonly edge: DoctorMachineEdge;
   },
   { session, hints, origin, ask }: DoctorReadInput,
 ): Promise<Outcome<DoctorReading>> {
   try {
-    const said = deps.sightings(session, instantAt(deps.clock));
-    const machine = await readDoctor(deps.edge, hints, ask, origin, {
-      serving: { kind: "ok", value: deps.serving() },
-      rateLimits: { kind: "ok", value: said.map((s) => s.rateLimits) },
-      transcripts: { kind: "ok", value: said.map((s) => s.transcript) },
-      bars: { kind: "ok", value: barsOf(ask.sighted, said) },
-      width: sessionWidth(session, said),
-    });
+    const sighted = deps.sighted(session, instantAt(deps.clock));
+    const machine = await readDoctor(deps.edge, hints, ask, origin, sighted);
+    const { clients } = sighted;
     return ok({
       run: ask.run,
       kind: "read",
       machine,
       // The clients that drew the session's bars, and the daemon the run
-      // reached — this process.
-      install: installFacts(
-        deps.edge.install,
-        deps.bundle,
-        said.map((s) => s.client),
-      ),
+      // reached.
+      install:
+        clients.kind === "held"
+          ? held(
+              installFacts(
+                deps.edge.install,
+                clients.value.bundle,
+                clients.value.clients,
+              ),
+            )
+          : clients,
     });
   } catch (e) {
     return failed(e instanceof Error ? e.message : String(e), "read");
   }
+}
+
+// What the daemon tells a session's read: its own render sightings of the
+// session, and itself as it reports itself, with the bundle it runs.
+export function daemonSighted(
+  session: SessionId,
+  said: readonly RenderSighting[],
+  serving: ServingDaemon,
+  bundle: string,
+): Sighted {
+  return {
+    serving: held(serving),
+    rateLimits: held(said.map((s) => s.rateLimits)),
+    transcripts: held(said.map((s) => s.transcript)),
+    clients: held({ bundle, clients: said.map((s) => s.client) }),
+    bars: said.map(({ role, frame, projectDir, claudeConfigDir }) => ({
+      role,
+      frame,
+      projectDir,
+      claudeConfigDir,
+    })),
+    width: sessionWidth(session, said),
+  };
 }

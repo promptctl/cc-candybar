@@ -10,7 +10,6 @@ import type { ServingDaemon } from "./memory-limit";
 
 import type { KeyedSourceStats } from "../../utils/keyed-source";
 
-import type { Delivery as ClickDelivery } from "../../doctor/sightings";
 import type { MarkBook, PostMortemsRead } from "../../doctor/checks";
 import type { Asked } from "../../utils/outcome";
 
@@ -180,22 +179,14 @@ export interface StatsSnapshot {
     durations: Record<string, Durations>;
   };
   nextRestartReason: string | null;
-  // The `doctor-probe` links that reached this daemon, newest last — what
-  // `cc-candybar doctor` reads to learn whether the link it opened arrived.
-  handlerProbes: readonly ProbeArrival[];
   // Each session's latest client, as this daemon process saw its last render
   // request (src/daemon/render-sightings.ts), and the bundle this daemon
-  // runs — what `cc-candybar doctor` judges the install by.
+  // runs.
   clients: readonly RenderSighting[];
   bundle: string;
-  // This daemon as `cc-candybar doctor` judges it: its memory against its
-  // budget and its post-mortems (src/daemon/limits.ts `serving`).
+  // This daemon's memory against its budget (src/daemon/limits.ts
+  // `serving`).
   daemon: ServingDaemon;
-  // What the doctor's stores hold, read by the daemon that files them
-  // (src/doctor/ports.ts `DoctorStores`): `cc-candybar doctor` reads the
-  // marks, the terminals clicked from and the post-mortems read here, never
-  // under its own shell's state directory.
-  doctorStores: StoresRead;
 }
 
 export interface CollectorStats {
@@ -309,15 +300,10 @@ export interface MailboxStats {
   readonly queued: number;
 }
 
-export interface ProbeArrival {
-  readonly nonce: string;
-  readonly delivery: ClickDelivery;
-}
-
 // [LAW:one-source-of-truth] The documents the doctor keeps under the daemon's
 // state directory, by what each holds: the stores that file them
-// (src/doctor/edge.ts) and what the daemon's answer says of them both map over
-// this one list.
+// (src/doctor/edge.ts) and what a run reads of them both map over this one
+// list.
 export interface DoctorStoreValues {
   // The marks the user has made on what the doctor showed them, kept for
   // good (src/doctor/mark-book.ts).

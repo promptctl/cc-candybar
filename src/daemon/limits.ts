@@ -28,6 +28,7 @@ import {
 import type { Launcher } from "../proc/launcher";
 import type { RendererProcess } from "./renderer-process";
 import type { Timekeeper } from "../time";
+import type { Asked } from "../utils/outcome";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
 // Only the memory trigger remains — idle and age limits were removed because they
@@ -366,13 +367,7 @@ export function makeLimits(deps: LimitsDeps & RendererMemory): LimitsHandle {
   }
 
   function serving(): ServingDaemon {
-    let postMortems: ServingDaemon["postMortems"];
-    try {
-      postMortems = { kind: "ok", value: postMortemsOf(deps.listArtifacts()) };
-    } catch (e) {
-      postMortems = { kind: "failed", reason: (e as Error).message };
-    }
-    return { pid: deps.pid, memory: latest, limit, postMortems };
+    return { pid: deps.pid, memory: latest, limit };
   }
 
   // [LAW:no-ambient-temporal-coupling] A reading at once, then each next one
@@ -460,6 +455,33 @@ async function attempt(
 // writes. A file no breach wrote is not ours, so it is no post-mortem.
 // [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
 // doctor reads it whole.
+// [LAW:no-silent-failure] Every artifact a breach left in `dir`: a directory
+// not yet made holds no breaches; one that cannot be read throws, never read
+// as "none".
+function breachArtifacts(dir: string): string[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw e;
+  }
+  return names
+    .filter((f) => breachArtifactOf(f) !== null)
+    .map((f) => path.join(dir, f));
+}
+
+// [LAW:one-source-of-truth] The post-mortems the daemons' breaches left in
+// the state directory, read as rotation reads them: what the doctor judges,
+// whichever process reads it.
+export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
+  try {
+    return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };
+  } catch (e) {
+    return { kind: "failed", reason: (e as Error).message };
+  }
+}
+
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
   const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
   for (const file of files) {
@@ -527,20 +549,7 @@ export function realLimitsDeps(
       fs.writeFileSync(file, text, { mode: 0o600 }),
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
     writeLogNow: owner.writeLogNow,
-    // [LAW:no-silent-failure] A directory not yet made holds no breaches;
-    // one that cannot be read is said so — never read as "none".
-    listArtifacts: () => {
-      let names: string[];
-      try {
-        names = fs.readdirSync(dir);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-        throw e;
-      }
-      return names
-        .filter((f) => breachArtifactOf(f) !== null)
-        .map((f) => path.join(dir, f));
-    },
+    listArtifacts: () => breachArtifacts(dir),
     removeFile: (file) => fs.unlinkSync(file),
     shutdown,
     startedAtMs,

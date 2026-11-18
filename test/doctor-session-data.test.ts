@@ -9,26 +9,23 @@ import path from "node:path";
 
 import {
   checkByName,
-  RECENT_CLIENT_S,
+  held,
+  NOT_HELD,
+  notJudged,
   TRANSCRIPT_WINDOW_BYTES,
   type DoctorFacts,
   type TranscriptRead,
   type TranscriptWindow,
 } from "../src/doctor/checks";
 import { readTranscriptWindow, transcriptWindow } from "../src/doctor/edge";
-import { parseTranscriptSightings } from "../src/doctor/daemon-answer";
-import { transcriptsOf } from "../src/doctor/cli";
 import { transcriptFields } from "../src/doctor/report";
 import { transcriptSaid } from "../src/daemon/render-sightings";
-import type { StatsSnapshot } from "../src/daemon/foundations/stats-snapshot";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 
 const sessionData = checkByName("sessionData")!;
 
-const probe = (
-  transcripts: DoctorFacts["transcripts"],
-  sighted: DoctorFacts["sighted"] = { kind: "recent" },
-) => sessionData.probe({ ...HEALTHY_FACTS, transcripts, sighted });
+const probe = (transcripts: DoctorFacts["transcripts"]) =>
+  sessionData.probe({ ...HEALTHY_FACTS, transcripts });
 
 const read = (
   answered: boolean,
@@ -148,25 +145,18 @@ describe("readTranscriptWindow", () => {
 describe("the session data row", () => {
   test("a transcript that reads as JSON lines is ok", () => {
     expect(
-      probe({
-        kind: "ok",
-        value: [read(true, window({ lines: 9, unparsed: 0, whole: true }))],
-      }),
+      probe(held([read(true, window({ lines: 9, unparsed: 0, whole: true }))])),
     ).toEqual({ ok: true });
   });
 
   test("no transcript before Claude Code has answered is no finding", () => {
-    expect(
-      probe({ kind: "ok", value: [read(false, { kind: "absent" })] }),
-    ).toEqual({
+    expect(probe(held([read(false, { kind: "absent" })]))).toEqual({
       ok: true,
     });
   });
 
   test("no transcript once Claude Code has answered fails, naming it", () => {
-    expect(
-      probe({ kind: "ok", value: [read(true, { kind: "absent" })] }),
-    ).toEqual({
+    expect(probe(held([read(true, { kind: "absent" })]))).toEqual({
       ok: false,
       reason:
         "the transcript /t/s.jsonl does not exist, though Claude Code has answered in its session — the bar's session cost, metrics and activity read nothing",
@@ -176,16 +166,15 @@ describe("the session data row", () => {
 
   test("a transcript that cannot be read fails with the reason", () => {
     expect(
-      probe({
-        kind: "ok",
-        value: [
+      probe(
+        held([
           read(false, {
             kind: "failed",
             reason: "EACCES: permission denied",
             failedAt: "read",
           }),
-        ],
-      }),
+        ]),
+      ),
     ).toEqual({
       ok: false,
       reason:
@@ -196,17 +185,16 @@ describe("the session data row", () => {
 
   test("lines that are not JSON objects fail, counted over the window read", () => {
     expect(
-      probe({
-        kind: "ok",
-        value: [
+      probe(
+        held([
           read(true, window({ lines: 9, unparsed: 2, whole: true })),
           read(
             true,
             window({ lines: 9, unparsed: 1, whole: false }),
             "/t/b.jsonl",
           ),
-        ],
-      }),
+        ]),
+      ),
     ).toEqual({
       ok: false,
       reason:
@@ -217,28 +205,19 @@ describe("the session data row", () => {
     });
   });
 
-  test("no render to name a transcript fails, worded for what asked", () => {
-    const none = { kind: "ok", value: [] } as const;
-    expect(
-      probe(none, { kind: "clicked", sessionId: "s1", via: "link" }),
-    ).toMatchObject({
+  test("no render to name a transcript fails", () => {
+    expect(probe(held([]))).toMatchObject({
       ok: false,
       reason: expect.stringMatching(
         /^this daemon holds no render of this bar .*so which transcript it reads is unknown/,
       ),
     });
-    expect(probe(none, { kind: "recent" })).toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(
-        /^no session has drawn a bar for this daemon in the last 5 minutes/,
-      ),
-    });
   });
 
-  test("renders that could not be asked fail with the reason", () => {
-    expect(probe({ kind: "failed", reason: "no daemon" })).toEqual({
-      ok: false,
-      reason: "no daemon",
+  test("a host that saw no session's renders does not judge it, and says so", () => {
+    expect(probe(NOT_HELD)).toEqual({
+      ok: true,
+      note: notJudged("which transcript the bar reads"),
     });
   });
 });
@@ -273,67 +252,16 @@ test("a Claude Code that leaves no mark has not shown it answered", () => {
   });
 });
 
-describe("the CLI's transcripts", () => {
-  const stats = (clients: unknown[]) =>
-    ({ version: "9.9.9", clients }) as unknown as StatsSnapshot;
-  const t = { path: "/t/s.jsonl", answered: true };
-
-  test("a daemon from before transcripts are recorded fails, saying to restart it", () => {
-    expect(
-      parseTranscriptSightings(
-        stats([
-          {
-            client: null,
-            rateLimits: "carried",
-            claudeConfigDir: "/c",
-            ago: 1,
-          },
-        ]),
-      ),
-    ).toEqual({
-      kind: "failed",
-      reason: expect.stringMatching(
-        /^the running daemon \(9\.9\.9\) reported its renders without their transcripts — restart it on this build/,
-      ),
-    });
-  });
-
-  test("only the sessions that drew a bar recently are judged", () => {
-    const parsed = parseTranscriptSightings(
-      stats([
-        { transcript: t, sessionId: "s1", ago: 1 },
-        {
-          transcript: { path: "/old.jsonl", answered: true },
-          sessionId: "s2",
-          ago: RECENT_CLIENT_S + 1,
-        },
-      ]),
-    );
-    expect(transcriptsOf({ kind: "recent" }, parsed)).toEqual({
-      kind: "ok",
-      value: [t],
-    });
-    // In a session's shell, that session's alone, however long ago.
-    expect(transcriptsOf({ kind: "shell", sessionId: "s2" }, parsed)).toEqual({
-      kind: "ok",
-      value: [{ path: "/old.jsonl", answered: true }],
-    });
-  });
-});
-
 test("the doctor's event counts the transcripts by what reading found", () => {
   expect(
-    transcriptFields({
-      kind: "ok",
-      value: [
+    transcriptFields(
+      held([
         read(true, window({ lines: 9, unparsed: 2, whole: true })),
         read(true, window({ lines: 9, unparsed: 1, whole: false })),
         read(false, { kind: "absent" }),
         read(true, { kind: "failed", reason: "EIO", failedAt: "read" }),
-      ],
-    }),
+      ]),
+    ),
   ).toBe("transcripts=2/1/1 unparsed=3");
-  expect(transcriptFields({ kind: "failed", reason: "x" })).toBe(
-    "transcripts=failed",
-  );
+  expect(transcriptFields(NOT_HELD)).toBe("transcripts=unheld");
 });

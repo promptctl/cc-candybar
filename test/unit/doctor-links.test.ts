@@ -53,10 +53,10 @@ const verdict = (
   probe({
     ...HEALTHY_FACTS,
     terminal,
-    sighted:
+    urlHandler:
       askedBy === "click"
-        ? { kind: "clicked", sessionId: "s1", via: "link" }
-        : { kind: "recent" },
+        ? { kind: "arrived", delivery: { kind: "forwarder", urlV: 1 } }
+        : HEALTHY_FACTS.urlHandler,
     clicked,
   });
 

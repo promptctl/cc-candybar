@@ -56,7 +56,15 @@ import { shipsNative } from "../install/platforms.js";
 import { fileMarkBook } from "./mark-book.js";
 import { fileClickedTerminals } from "./clicked-terminals.js";
 import { filePostMortemsRead } from "./post-mortems-read.js";
-import type { InstallEdge, DoctorStores, DoctorMachineEdge } from "./ports";
+import type {
+  InstallEdge,
+  DoctorStores,
+  DoctorMachineEdge,
+  HandlerRegistration,
+} from "./ports";
+import { URL_SCHEME } from "../click/wire.js";
+import { forwarderExecutable } from "../install/index.js";
+import { listPostMortems } from "../daemon/limits.js";
 import { asked } from "./gather.js";
 
 export const productionInstallEdge: InstallEdge = {
@@ -303,11 +311,56 @@ async function probeTmux(
   return parseTmuxClient(run.stdout);
 }
 
+// NSWorkspace's own answer to "which app opens this URL" — the lookup `open`
+// performs. Prints the app's path, or nothing when no app claims the scheme.
+const OPENER_SCRIPT =
+  'ObjC.import("AppKit");' +
+  `var u = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL($.NSURL.URLWithString("${URL_SCHEME}://probe"));` +
+  'u.isNil() ? "" : u.path.js';
+
+// [LAW:effects-at-boundaries] What Launch Services registers for the scheme,
+// and whether that app is the forwarder. Launched, never spawned in step, so
+// the daemon's loop never waits on the window server.
+async function handlerRegistration(
+  launcher: Launcher,
+): Promise<HandlerRegistration> {
+  if (process.platform !== "darwin") return { kind: "unsupported" };
+  const run = await launcher.launch({
+    bin: "/usr/bin/osascript",
+    args: ["-l", "JavaScript", "-e", OPENER_SCRIPT],
+    // No window server to ask (as over SSH) answers nothing; that is told.
+    timeoutMs: 5000,
+    category: "doctor.launch-services",
+  });
+  if (!run.ok) {
+    return {
+      kind: "read",
+      opener: { kind: "failed", reason: failureText(run) },
+    };
+  }
+  const app = run.stdout.trim();
+  return {
+    kind: "read",
+    opener: {
+      kind: "ok",
+      value:
+        app === ""
+          ? null
+          : { app, forwarder: fs.existsSync(forwarderExecutable(app)) },
+    },
+  };
+}
+
+// `stateDir` is the state directory the daemons' breaches write their
+// post-mortems to.
 export function productionMachineEdge(
   launcher: Launcher,
   host: Host,
+  stateDir: string,
 ): DoctorMachineEdge {
   return {
+    handler: () => handlerRegistration(launcher),
+    postMortems: () => listPostMortems(stateDir),
     probeTmux: (hint) => probeTmux(launcher, hint),
     remoteLogin: (pid) => remoteLogin(launcher, pid),
     fontInUse: (terminal, env, glyphs) =>

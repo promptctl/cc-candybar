@@ -11,6 +11,7 @@ import type {
   DaemonProcess,
   FontInUse,
   ForgeLogin,
+  HandlerApp,
   TranscriptWindow,
   TmuxClient,
 } from "./checks.js";
@@ -18,6 +19,7 @@ import type { TerminalEnvHint } from "../terminal-hint.js";
 import type { ConfiguredTerminal } from "./terminal.js";
 import type { StateFile } from "./state-file.js";
 import type { DoctorStoreValues } from "../daemon/foundations/stats-snapshot";
+import type { PostMortem } from "../daemon/foundations/memory-limit.js";
 
 // [LAW:effects-at-boundaries] The install check's reads of the machine: a
 // path resolved through every link, the checkout a bundle was built in, a
@@ -30,9 +32,9 @@ export interface InstallEdge {
 }
 
 // The documents the doctor keeps under the daemon's state directory
-// (src/doctor/state-file.ts). [LAW:one-source-of-truth] The daemon is their
-// one owner: its click files them, and `cc-candybar doctor` reads what they
-// hold in the daemon's own answer (`StoresRead`, src/doctor/daemon-answer.ts).
+// (src/doctor/state-file.ts). [LAW:one-source-of-truth] The host is their one
+// owner (src/daemon/held-stores.ts): the renderer's click files them through
+// it, and `cc-candybar doctor` reads them with the same reader.
 export type DoctorStores = {
   readonly [K in keyof DoctorStoreValues]: StateFile<DoctorStoreValues[K]>;
 };
@@ -78,7 +80,19 @@ export interface DoctorEdge {
   // The tail of a session's transcript, read as the bar reads it — absent
   // when no file is at the path (`readTranscriptWindow`).
   readonly transcript: (path: string) => Promise<Outcome<TranscriptWindow>>;
+  // The app Launch Services opens `cc-candybar://` with, and whether it is
+  // the forwarder; none on a platform with no URL handler.
+  readonly handler: () => Promise<HandlerRegistration>;
+  // The post-mortems the daemons' breaches left in the state directory
+  // (`listPostMortems`).
+  readonly postMortems: () => Asked<readonly PostMortem[]>;
 }
+
+// [LAW:types-are-the-program] What is registered for the scheme: nothing to
+// ask on a platform with no URL handler, else Launch Services' answer.
+export type HandlerRegistration =
+  | { readonly kind: "unsupported" }
+  | { readonly kind: "read"; readonly opener: Asked<HandlerApp | null> };
 
 // [LAW:effects-at-boundaries] The doctor's reads of the machine: what the
 // read asks through its edge, and the install check's reads.

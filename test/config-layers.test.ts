@@ -33,7 +33,6 @@ import { answerRepo } from "./helpers/repo-approval";
 import { applyLayoutOp } from "../src/renderer/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
-import { loadConfigOnce } from "../src/doctor/cli";
 import { textOf, type Frame } from "../src/render/frame";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { EDITS_IN_PLACE, layerNow } from "./helpers/history-step";
@@ -692,12 +691,23 @@ describe("a project layer inserting into the user's row", () => {
         insert: [{ seg: "theirs", after: "mine" }],
       }`,
     );
-    const { unused } = loadConfigOnce(world, {
-      projectDir: project,
-      cwd: project,
-      target: { source: "search" },
+    // The load the doctor's config check judges: the bar's own.
+    const loaded = loadDiscovered(project, project, undefined, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      sessionState: new SessionState(),
+      signer: TEST_SIGNER,
+      gates: bareGates(),
     });
-    expect(unused.map((u) => `${u.kind} ${u.name}`)).toEqual(["segment spare"]);
+    try {
+      expect(loaded.kind).toBe("built");
+      expect(
+        loaded.state?.unused.map((u) => `${u.kind} ${u.name}`),
+      ).toEqual(["segment spare"]);
+    } finally {
+      loaded.state?.registry.dispose();
+    }
   });
 
   test("an entry whose anchor no tree holds is one warning naming every tree it missed", async () => {

@@ -53,13 +53,13 @@ import {
 } from "./renderer-interface/noted-faults.js";
 import { columnsReserving } from "./utils/terminal-width.js";
 import {
+  commandDaemonFacts,
   localBar,
   type LocalDraw,
   type RendererBuilder,
 } from "./daemon/local-bar.js";
 import {
   CHECK_HINTS,
-  checkDaemonFacts,
   CHECK_HOME,
   checkHook,
   checkLocate,
@@ -497,7 +497,7 @@ async function drawnVerdict(
       ),
     },
     owners: (sourceRuns, log) => checkOwners(at, sourceRuns, log),
-    daemon: () => checkDaemonFacts(at),
+    daemon: () => commandDaemonFacts(at),
     build,
   });
   const read: PassReading[] = [];
