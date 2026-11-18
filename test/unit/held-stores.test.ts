@@ -39,8 +39,8 @@ test("a history its file refuses throws, and the step is still held", () => {
       { store: "session-state", key: S1, value: { pick: "a" } },
     ]),
   ).toThrow("ENOSPC: no space left on device");
-  expect(stores.current().history[S1]).toEqual(STEP);
-  expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
+  expect(new Map(stores.current().history).get(S1)).toEqual(STEP);
+  expect(new Map(stores.current().sessions).get(S1)).toEqual({ pick: "a" });
 });
 
 test("a document its file refuses throws, and the copy is still held", () => {
@@ -107,5 +107,5 @@ test("writes taken after the close are held, and none is written", async () => {
   await stores.close();
   stores.take([{ store: "settings-history", key: S1, value: STEP }]);
   expect(saves).toBe(0);
-  expect(stores.current().history[S1]).toEqual(STEP);
+  expect(new Map(stores.current().history).get(S1)).toEqual(STEP);
 });

@@ -4,7 +4,10 @@
 
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
-import { type SessionId } from "../daemon/foundations/session-id";
+import {
+  type SessionEntries,
+  type SessionId,
+} from "../daemon/foundations/session-id";
 import type { LayerRole } from "../config/layer-role";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
@@ -57,7 +60,7 @@ export interface Savepoint {
   readonly below: readonly Step[];
 }
 
-export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
+export type HistoryState = SessionEntries<SessionHistory>;
 
 // What a storage loads: each session's history, keyed by a session id the
 // storage has already checked.

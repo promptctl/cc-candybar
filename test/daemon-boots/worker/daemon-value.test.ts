@@ -420,7 +420,11 @@ describe("the daemon is a value", () => {
     const closedWith = readFileSync(sessionFile, "utf8");
     // The click's write, still inside its debounce, is on disk once the close
     // has resolved.
-    expect(JSON.parse(closedWith)["value-close"]).toMatchObject({
+    expect(
+      new Map(JSON.parse(closedWith) as Array<[string, unknown]>).get(
+        "value-close",
+      ),
+    ).toMatchObject({
       [setting]: String(on),
     });
 

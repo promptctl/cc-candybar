@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { asError, publishByRenameAsync } from "../utils/atomic-write";
-import { sessionKeyed, type SessionId } from "./foundations/session-id";
+import {
+  sessionEntriesOf,
+  type SessionEntries,
+  type SessionId,
+} from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
@@ -16,9 +20,10 @@ export interface SessionFileKind<V> {
 
 // [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
 // file, or nowhere. Its owner holds them, and persistence is the storage's.
+// Both directions are oldest first, the order the owner's bound drops in.
 export interface SessionFileStorage<V> {
   load(): ReadonlyMap<SessionId, V>;
-  save(snapshot: Readonly<Record<SessionId, V>>): void;
+  save(snapshot: SessionEntries<V>): void;
   flush(): Promise<void>;
 }
 
@@ -46,9 +51,6 @@ export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
       : null,
 };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
 // What one write came to, its error kept whole. Nothing pending is landed:
 // an earlier write landed it.
 type Landed =
@@ -64,7 +66,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   private clearTimer: (() => void) | null = null;
   // [LAW:one-source-of-truth] State not yet written: cleared only once its
   // write lands, so a disk that refuses leaves it for the next write.
-  private pending: Readonly<Record<SessionId, V>> | null = null;
+  private pending: SessionEntries<V> | null = null;
   // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
   // chain, so writes land in the order they began and none overtakes
   // another: older state still on its way never lands over newer.
@@ -105,35 +107,9 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       }
       return loaded;
     }
+    let parsed: unknown;
     try {
-      const parsed: unknown = JSON.parse(raw);
-      if (isRecord(parsed)) {
-        // [LAW:no-silent-failure] A key the session id checkpoint refuses, or
-        // a value of the wrong shape, is reported and dropped, and the
-        // sessions beside it load whole: the store never hydrates from a
-        // half-written or hand-edited entry.
-        const keyed = sessionKeyed(parsed, (key, problem) =>
-          this.logger(
-            "warn",
-            `${this.kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-          ),
-        );
-        for (const [id, value] of keyed) {
-          const held = this.kind.parse(value);
-          if (held !== null) loaded.set(id, held);
-          else
-            this.logger(
-              "warn",
-              `${this.kind.name} load: dropped session ${JSON.stringify(id)}: its value has the wrong shape`,
-            );
-        }
-        return loaded;
-      }
-      this.logger(
-        "warn",
-        `${this.kind.name} load: unexpected shape, starting empty`,
-      );
-      return loaded;
+      parsed = JSON.parse(raw);
     } catch {
       this.logger(
         "warn",
@@ -141,9 +117,36 @@ export class SessionFile<V> implements SessionFileStorage<V> {
       );
       return loaded;
     }
+    if (!Array.isArray(parsed)) {
+      // [LAW:no-silent-failure] A file keyed by session id has lost its
+      // order on parse: loaded, it would drop the wrong sessions at the
+      // bound, so it is refused whole.
+      this.logger(
+        "warn",
+        `${this.kind.name} load: ${parsed !== null && typeof parsed === "object" ? "a record keyed by session id, which keeps no recency order" : "unexpected shape"}, starting empty`,
+      );
+      return loaded;
+    }
+    // [LAW:no-silent-failure] An entry the checkpoint refuses, or a value of
+    // the wrong shape, is reported and dropped, and the sessions beside it
+    // load whole: the store never hydrates from a half-written or hand-edited
+    // entry.
+    const entries = sessionEntriesOf(parsed, (problem) =>
+      this.logger("warn", `${this.kind.name} load: dropped ${problem}`),
+    );
+    for (const [id, value] of entries) {
+      const held = this.kind.parse(value);
+      if (held !== null) loaded.set(id, held);
+      else
+        this.logger(
+          "warn",
+          `${this.kind.name} load: dropped session ${JSON.stringify(id)}: its value has the wrong shape`,
+        );
+    }
+    return loaded;
   }
 
-  save(snapshot: Readonly<Record<SessionId, V>>): void {
+  save(snapshot: SessionEntries<V>): void {
     this.pending = snapshot;
     this.schedule();
   }
@@ -182,14 +185,9 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     return this.waiting;
   }
 
-  private body(snapshot: Readonly<Record<SessionId, V>>): string {
+  private body(snapshot: SessionEntries<V>): string {
     return JSON.stringify(
-      Object.fromEntries(
-        Object.entries(snapshot).map(([id, value]) => [
-          id,
-          this.kind.record(value as V),
-        ]),
-      ),
+      snapshot.map(([id, value]) => [id, this.kind.record(value)]),
     );
   }
 
@@ -244,13 +242,13 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   // it took, and how much of that it held the daemon's one thread.
   private saved(
     body: string,
-    snapshot: Readonly<Record<SessionId, V>>,
+    snapshot: SessionEntries<V>,
     started: Monotonic,
     heldMs: number,
   ): void {
     this.logger(
       "info",
-      `${this.kind.name} saved bytes=${Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
+      `${this.kind.name} saved bytes=${Buffer.byteLength(body)} sessions=${snapshot.length} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
     );
   }
 }

@@ -34,7 +34,7 @@ afterAll(() => {
 const breaksUnderB: RendererBuilder = (inputs, host) => {
   const renderer = mainRendererOf(inputs, host);
   const picksB = new Set(
-    Object.entries(inputs.stored.sessions).flatMap(([session, picks]) =>
+    inputs.stored.sessions.flatMap(([session, picks]) =>
       picks.preset === "b" ? [session] : [],
     ),
   );

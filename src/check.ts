@@ -487,10 +487,8 @@ async function drawnVerdict(
     snapshot,
     stored: {
       ...EMPTY_STORED_STATE,
-      sessions: Object.fromEntries(
-        passes.flatMap((p) =>
-          p.pick === null ? [] : [[p.session, { preset: p.pick }]],
-        ),
+      sessions: passes.flatMap((p) =>
+        p.pick === null ? [] : [[p.session, { preset: p.pick }] as const],
       ),
     },
     owners: (sourceRuns, log) => checkOwners(at, sourceRuns, log),

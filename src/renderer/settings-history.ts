@@ -156,11 +156,9 @@ export class SettingsHistory {
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
-    loaded: StoredState["history"] = {},
+    loaded: StoredState["history"] = [],
   ) {
-    this.adopt(
-      new Map(Object.entries(loaded) as Array<[SessionId, SessionHistory]>),
-    );
+    this.adopt(new Map(loaded));
   }
 
   // What the host has not yet been told: each session whose history moved, as

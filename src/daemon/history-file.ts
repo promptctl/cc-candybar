@@ -6,13 +6,12 @@ import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { writeAtomic } from "../utils/atomic-write.js";
 import { layerRoleOf } from "../config/layer-role";
-import { sessionKeyed, type SessionId } from "./foundations/session-id";
+import { sessionEntriesOf, type SessionId } from "./foundations/session-id";
 import {
   type Change,
   type Step,
   type SessionHistory,
   type Savepoint,
-  type HistoryState,
   type HistoryStorage,
   isSettingKey,
 } from "../renderer-interface/history-storage";
@@ -119,35 +118,42 @@ export function fileHistoryStorage(
         }
         return loaded;
       }
+      let parsed: unknown;
       try {
-        const parsed: unknown = JSON.parse(raw);
-        if (
-          parsed !== null &&
-          typeof parsed === "object" &&
-          !Array.isArray(parsed) &&
-          Object.values(parsed).every(isSessionHistory)
-        ) {
-          const retired = new Set<string>();
-          const keyed = sessionKeyed(parsed as HistoryState, (key, problem) =>
-            logger(
-              "warn",
-              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-            ),
-          );
-          for (const [id, history] of keyed)
-            loaded.set(id, withoutRetiredKeys(history, retired));
-          if (retired.size > 0) {
-            logger(
-              "warn",
-              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
-            );
-          }
-          return loaded;
-        }
+        parsed = JSON.parse(raw);
       } catch {
-        // reported below
+        parsed = undefined;
       }
-      logger("warn", "settings-history load: unexpected shape, starting empty");
+      if (!Array.isArray(parsed)) {
+        // [LAW:no-silent-failure] A file keyed by session id has lost its
+        // order on parse: loaded, the bounds would drop the wrong sessions,
+        // so it is refused whole.
+        logger(
+          "warn",
+          `settings-history load: ${parsed !== null && typeof parsed === "object" ? "a record keyed by session id, which keeps no recency order" : "unexpected shape"}, starting empty`,
+        );
+        return loaded;
+      }
+      const entries = sessionEntriesOf(parsed, (problem) =>
+        logger("warn", `settings-history load: dropped ${problem}`),
+      );
+      const retired = new Set<string>();
+      for (const [id, history] of entries) {
+        if (!isSessionHistory(history)) {
+          logger(
+            "warn",
+            "settings-history load: unexpected shape, starting empty",
+          );
+          return new Map();
+        }
+        loaded.set(id, withoutRetiredKeys(history, retired));
+      }
+      if (retired.size > 0) {
+        logger(
+          "warn",
+          `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`,
+        );
+      }
       return loaded;
     },
     save: (state) => {

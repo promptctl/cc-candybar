@@ -102,15 +102,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   // `loaded` is what the profile holds, oldest first, as the host handed it in.
   constructor(
-    loaded: StoredState["sessions"] = {},
+    loaded: StoredState["sessions"] = [],
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
     this.sessions = new Map(
-      (
-        Object.entries(loaded) as Array<
-          [SessionId, Readonly<Record<string, string>>]
-        >
-      ).map(([id, kv]): [SessionId, Session] => [
+      loaded.map(([id, kv]): [SessionId, Session] => [
         id,
         { values: new Map(Object.entries(kv)), revision: ++this.head },
       ]),

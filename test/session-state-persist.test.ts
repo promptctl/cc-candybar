@@ -66,6 +66,8 @@ describe("the session state's file", () => {
   const storage = (log?: (level: string, line: string) => void) =>
     new SessionFile(SESSION_STATE_FILE, file, systemTimekeeper, 0, log);
   const onDisk = () => JSON.parse(readFileSync(file, "utf8"));
+  // The sessions the file holds, oldest first.
+  const order = () => (onDisk() as Array<[string, unknown]>).map(([id]) => id);
 
   // A daemon started after one closed reads what it closed with: flushed so
   // no debounced write outlives the temp dir.
@@ -83,11 +85,13 @@ describe("the session state's file", () => {
     turn((s) => s.set(S1, "theme", "nord"));
     await stores.close();
     const closedWith = readFileSync(file, "utf8");
-    expect(JSON.parse(closedWith)).toEqual({ s1: { theme: "nord" } });
+    expect(JSON.parse(closedWith)).toEqual([["s1", { theme: "nord" }]]);
 
     turn((s) => s.set(S1, "theme", "dracula"));
     expect(state.get(S1, "theme")).toBe("dracula");
-    expect(stores.current().sessions[S1]).toEqual({ theme: "dracula" });
+    expect(new Map(stores.current().sessions).get(S1)).toEqual({
+      theme: "dracula",
+    });
     await session.flush();
     expect(readFileSync(file, "utf8")).toBe(closedWith);
   });
@@ -97,7 +101,7 @@ describe("the session state's file", () => {
   it("each flush logs the bytes and sessions it wrote and how long it took", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
-    session.save({ [S1]: { theme: "dracula" } });
+    session.save([[S1, { theme: "dracula" }]]);
     await session.flush();
     const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
     expect(logged.at(-1)).toMatch(
@@ -113,7 +117,10 @@ describe("the session state's file", () => {
   it("a stored key the session id checkpoint refuses is reported and not loaded", async () => {
     writeFileSync(
       file,
-      JSON.stringify({ "a/b": { theme: "nord" }, [S1]: { theme: "dracula" } }),
+      JSON.stringify([
+        ["a/b", { theme: "nord" }],
+        [S1, { theme: "dracula" }],
+      ]),
     );
     const logged: string[] = [];
     const loaded = storage((_level, line) => logged.push(line)).load();
@@ -135,15 +142,15 @@ describe("the session state's file", () => {
   // called, and the file still lands whole, owner-only.
   it("a debounced save lands on disk by itself and says so", async () => {
     const logged: string[] = [];
-    storage((_level, line) => logged.push(line)).save({
-      [S1]: { theme: "nord" },
-    });
+    storage((_level, line) => logged.push(line)).save([
+      [S1, { theme: "nord" }],
+    ]);
     await settled(() =>
       logged.some((l) => l.startsWith("session-state saved")),
     );
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "nord" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "nord" }],
+    ]);
     expect(statSync(file).mode & 0o777).toBe(0o600);
   });
 
@@ -166,18 +173,18 @@ describe("the session state's file", () => {
       });
     let flushed: Promise<void>;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save([[S1, { theme: "old" }]]);
       await settled(() => spy.mock.calls.length === 1);
-      session.save({ [S1]: { theme: "new" } });
+      session.save([[S1, { theme: "new" }]]);
       flushed = session.flush();
       release();
       await flushed;
     } finally {
       spy.mockRestore();
     }
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "new" }],
+    ]);
     expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
@@ -194,7 +201,7 @@ describe("the session state's file", () => {
         Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
       );
     try {
-      session.save({ [S1]: { theme: "nord" } });
+      session.save([[S1, { theme: "nord" }]]);
       await expect(session.flush()).rejects.toThrow(
         expect.objectContaining({ code: "ENOSPC" }),
       );
@@ -204,9 +211,9 @@ describe("the session state's file", () => {
     expect(existsSync(file)).toBe(false);
     expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
     await session.flush();
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "nord" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "nord" }],
+    ]);
   });
 
   // The write in flight lands; the newer flush the disk refuses rejects and
@@ -227,14 +234,14 @@ describe("the session state's file", () => {
     let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
       null;
     try {
-      session.save({ [S1]: { theme: "old" } });
+      session.save([[S1, { theme: "old" }]]);
       await until(() => renameSpy.mock.calls.length === 1, "the held rename");
       writeSpy = jest
         .spyOn(fs.promises, "writeFile")
         .mockRejectedValueOnce(
           Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
         );
-      session.save({ [S1]: { theme: "new" } });
+      session.save([[S1, { theme: "new" }]]);
       const flushed = session.flush();
       release();
       await expect(flushed).rejects.toThrow(/ENOSPC/);
@@ -242,13 +249,13 @@ describe("the session state's file", () => {
       writeSpy?.mockRestore();
       renameSpy.mockRestore();
     }
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "old" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "old" }],
+    ]);
     await session.flush();
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "new" }],
+    ]);
     expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
   });
 
@@ -270,13 +277,13 @@ describe("the session state's file", () => {
       0,
       (_level, line) => logged.push(line),
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save([[S1, { theme: "nord" }]]);
     await expect(session.flush()).rejects.toThrow("not encodable");
     encodable = true;
     await session.flush();
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "nord" },
-    });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual([
+      ["s1", { theme: "nord" }],
+    ]);
   });
 
   // A disk that refuses a write is retried by the next save or shutdown's
@@ -291,7 +298,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
       (_level, line) => logged.push(line),
-    ).save({ [S1]: { theme: "nord" } });
+    ).save([[S1, { theme: "nord" }]]);
     await settled(() => logged.some((l) => l.includes("save failed")));
     await throughout(
       () => logged.filter((l) => l.includes("save failed")).length === 1,
@@ -320,7 +327,7 @@ describe("the session state's file", () => {
     await first.stores.close();
 
     expect((await restarted()).get(S1, "endcaps")).toBeNull();
-    expect(onDisk()).toEqual({});
+    expect(onDisk()).toEqual([]);
   });
 
   // [LAW:types-are-the-program] Both copies are ordered by write, so the
@@ -331,7 +338,7 @@ describe("the session state's file", () => {
     first.turn((s) => s.set(B, "t", "2"));
     first.turn((s) => s.set(A_2, "t", "3"));
     await first.stores.close();
-    expect(Object.keys(onDisk())).toEqual(["b", "a"]);
+    expect(order()).toEqual(["b", "a"]);
 
     const reborn = await restarted(2);
     reborn.set(C, "t", "4");
@@ -348,8 +355,8 @@ describe("the session state's file", () => {
         systemTimekeeper,
         500,
       );
-      session.save({ [S1]: { theme: "nord" } });
-      session.save({ [S1]: { theme: "nord", style: "muted" } });
+      session.save([[S1, { theme: "nord" }]]);
+      session.save([[S1, { theme: "nord", style: "muted" }]]);
       jest.advanceTimersByTime(499);
       expect(existsSync(file)).toBe(false);
 
@@ -373,7 +380,7 @@ describe("the session state's file", () => {
   });
 
   it("wrong-shape file hydrates to empty state", async () => {
-    writeFileSync(file, JSON.stringify({ s1: { theme: 42 } }));
+    writeFileSync(file, JSON.stringify([["s1", { theme: 42 }]]));
     const ss = await restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
@@ -408,7 +415,11 @@ describe("the session state's file", () => {
   it("over-cap file is trimmed on hydrate and the trim is persisted to disk", async () => {
     writeFileSync(
       file,
-      JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
+      JSON.stringify([
+        ["a", { t: "1" }],
+        ["b", { t: "2" }],
+        ["c", { t: "3" }],
+      ]),
     );
     const { state, turn, stores } = daemonOver(storage(), 2);
     // Oldest (first-in-file) dropped; the two most-recent survive — and the
@@ -416,7 +427,7 @@ describe("the session state's file", () => {
     expect(state.get(A_2, "t")).toBeNull();
     turn(() => {});
     await stores.close();
-    expect(Object.keys(onDisk())).toEqual(["b", "c"]);
+    expect(order()).toEqual(["b", "c"]);
   });
 
   it("clear() of the last key removes the session entirely (no empty husk)", async () => {
@@ -426,7 +437,7 @@ describe("the session state's file", () => {
       s.clear(S1, "endcaps");
     });
     await stores.close();
-    expect(onDisk()).toEqual({});
+    expect(onDisk()).toEqual([]);
   });
 
   it("clear() promotes a surviving session so it isn't evicted early", async () => {
@@ -451,7 +462,7 @@ describe("the session state's file", () => {
       systemTimekeeper,
       0,
     );
-    session.save({ [S1]: { theme: "nord" } });
+    session.save([[S1, { theme: "nord" }]]);
     // The write fails; the snapshot must NOT be dropped.
     await expect(session.flush()).rejects.toThrow(/EEXIST/);
     expect(existsSync(badPath)).toBe(false);
@@ -459,12 +470,12 @@ describe("the session state's file", () => {
     rmSync(blocker);
     await session.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
-    expect(onDisk.s1.theme).toBe("nord");
+    expect(onDisk).toEqual([["s1", { theme: "nord" }]]);
   });
 
   it("writes the state file with owner-only (no group/other) permissions", async () => {
     const session = storage();
-    session.save({ [S1]: { theme: "nord" } });
+    session.save([[S1, { theme: "nord" }]]);
     await session.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });

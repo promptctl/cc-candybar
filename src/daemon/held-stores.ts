@@ -55,8 +55,8 @@ export class HeldStores {
   // What a renderer built now is built from.
   current(): StoredState {
     return {
-      sessions: Object.fromEntries(this.sessions),
-      history: Object.fromEntries(this.history),
+      sessions: [...this.sessions],
+      history: [...this.history],
       doctor: this.doctor,
     };
   }
@@ -88,13 +88,9 @@ export class HeldStores {
           break;
       }
     if (sessions && !this.closed)
-      steps.push(() =>
-        this.storage.session.save(Object.fromEntries(this.sessions)),
-      );
+      steps.push(() => this.storage.session.save([...this.sessions]));
     if (history && !this.closed)
-      steps.push(() =>
-        this.storage.history.save(Object.fromEntries(this.history)),
-      );
+      steps.push(() => this.storage.history.save([...this.history]));
     runEach(steps);
   }
 

@@ -146,8 +146,12 @@ describe("daemon shutdown contract", () => {
       );
       await killAndWait(daemon, "SIGTERM");
 
-      const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
-      expect(saved[sessionId]).toMatchObject({ padding: "4" });
+      const saved = new Map(
+        JSON.parse(
+          readFileSync(sessionStatePath(hostOf(env)), "utf8"),
+        ) as Array<[string, unknown]>,
+      );
+      expect(saved.get(sessionId)).toMatchObject({ padding: "4" });
     } finally {
       daemon?.killTree();
       removeTmpDirs();

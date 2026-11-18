@@ -57,7 +57,7 @@ function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
   const logged: string[] = [];
   const r = mainRendererOf(
     {
-      stored: { ...EMPTY_STORED_STATE, sessions: Object.fromEntries(recorded) },
+      stored: { ...EMPTY_STORED_STATE, sessions: [...recorded] },
       linkSigner: TEST_SIGNER,
       locations: {
         home: "/nowhere/home",

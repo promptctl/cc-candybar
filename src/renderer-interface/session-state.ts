@@ -30,7 +30,3 @@ export interface SessionStateRW extends SessionStateReader {
   ): void;
   clear(sessionId: SessionId, key: string): void;
 }
-
-// Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
-// on-disk representation and the save currency between store and storage.
-export type SessionSnapshot = Record<string, Record<string, string>>;

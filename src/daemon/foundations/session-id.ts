@@ -37,20 +37,38 @@ export function parseSessionId(raw: unknown): ParsedSessionId {
     : { ok: false, problem };
 }
 
-// [LAW:single-enforcer] A stored record keyed by session id, as its file
-// spelled it: each key crosses the checkpoint, and one it refuses is named to
-// `refused` and dropped, so the keys that remain come back branded.
-export function sessionKeyed<V>(
-  record: Readonly<Record<string, V>>,
-  refused: (key: string, problem: string) => void,
-): Map<SessionId, V> {
-  const keyed = new Map<SessionId, V>();
-  for (const [key, value] of Object.entries(record)) {
+// [LAW:types-are-the-program] Sessions in recency order, oldest first, as a
+// per-session file and a renderer's boot carry them: the order is position,
+// so no spelling of an id can move it. A record keyed by id cannot carry it,
+// because an integer-like key ("7") enumerates before every other key,
+// whatever order it was set in.
+export type SessionEntries<V> = ReadonlyArray<readonly [SessionId, V]>;
+
+// [LAW:single-enforcer] Stored entries as their file spelled them: each must be
+// an [id, value] pair whose id crosses the checkpoint and appears once. One
+// that does not is named to `refused` and dropped, so the entries that remain
+// come back branded, in the file's order.
+export function sessionEntriesOf(
+  list: readonly unknown[],
+  refused: (problem: string) => void,
+): Map<SessionId, unknown> {
+  const entries = new Map<SessionId, unknown>();
+  for (const entry of list) {
+    if (!Array.isArray(entry) || entry.length !== 2) {
+      refused(
+        `entry ${JSON.stringify(entry)} is not a [session id, value] pair`,
+      );
+      continue;
+    }
+    const [key, value] = entry as [unknown, unknown];
     const id = parseSessionId(key);
-    if (id.ok) keyed.set(id.id, value);
-    else refused(key, id.problem);
+    if (!id.ok)
+      refused(`session key ${JSON.stringify(key)}: session id ${id.problem}`);
+    else if (entries.has(id.id))
+      refused(`session key ${JSON.stringify(key)}: session id appears twice`);
+    else entries.set(id.id, value);
   }
-  return keyed;
+  return entries;
 }
 
 // A session id the program spells itself (check's, a bench's), parsed by the

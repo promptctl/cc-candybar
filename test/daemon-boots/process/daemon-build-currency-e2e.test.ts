@@ -9,7 +9,6 @@ import path from "node:path";
 
 import { DIAGNOSTICS_VIEWING } from "../../../src/config/door";
 import { sessionStatePath } from "../../../src/daemon/paths";
-import type { SessionSnapshot } from "../../../src/renderer-interface/session-state";
 import { sourceDigest } from "../../../src/source-digest";
 import { effectsUrl, VERB_APPLY_UPDATE } from "../../../src/click/wire";
 import { click, killAndWait, drawnLink } from "../../helpers/daemon-e2e";
@@ -49,9 +48,11 @@ async function viewerClosedOnDisk(
   // that is there is whole.
   const closed = (): boolean =>
     fs.existsSync(file) &&
-    (JSON.parse(fs.readFileSync(file, "utf8")) as SessionSnapshot)[sid]?.[
-      DIAGNOSTICS_VIEWING
-    ] === "0";
+    new Map(
+      JSON.parse(fs.readFileSync(file, "utf8")) as Array<
+        [string, Record<string, string>]
+      >,
+    ).get(sid)?.[DIAGNOSTICS_VIEWING] === "0";
   await until(closed, () => `the viewer's close saved in ${file}`, 5_000);
 }
 

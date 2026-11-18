@@ -3,7 +3,10 @@
 // as the renderer is built, and which changes only by the writes the
 // renderer's turns return.
 
-import type { SessionId } from "../daemon/foundations/session-id";
+import type {
+  SessionEntries,
+  SessionId,
+} from "../daemon/foundations/session-id";
 import type {
   DoctorStoreValues,
   StoresRead,
@@ -16,9 +19,7 @@ import type { HistoryState, SessionHistory } from "./history-storage";
 // and the doctor's documents, each as it read, so one that did not read is
 // handed in as that failure and nothing is filed over it.
 export interface StoredState {
-  readonly sessions: Readonly<
-    Record<SessionId, Readonly<Record<string, string>>>
-  >;
+  readonly sessions: SessionEntries<Readonly<Record<string, string>>>;
   readonly history: HistoryState;
   readonly doctor: StoresRead;
 }
@@ -33,8 +34,8 @@ export const DOCTOR_EMPTIES: DoctorStoreValues = {
 
 // The profile's stores, empty: a profile nothing was ever stored under.
 export const EMPTY_STORED_STATE: StoredState = {
-  sessions: {},
-  history: {},
+  sessions: [],
+  history: [],
   doctor: {
     marks: { kind: "ok", value: DOCTOR_EMPTIES.marks },
     clicked: { kind: "ok", value: DOCTOR_EMPTIES.clicked },

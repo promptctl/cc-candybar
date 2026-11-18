@@ -92,7 +92,7 @@ export class SessionBook {
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
     this.phase = "open";
-    this.storage.save(Object.fromEntries(this.book));
+    this.storage.save([...this.book]);
   }
 
   // The session's newest request: what it says the session is, saved when
@@ -106,7 +106,7 @@ export class SessionBook {
     this.book.set(session, durable);
     this.bound();
     if (held !== undefined && sameDurable(held, durable)) return;
-    if (this.phase === "open") this.storage.save(Object.fromEntries(this.book));
+    if (this.phase === "open") this.storage.save([...this.book]);
   }
 
   // [LAW:one-source-of-truth] The session as a click finds it: live from the

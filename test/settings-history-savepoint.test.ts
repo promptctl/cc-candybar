@@ -355,7 +355,7 @@ describe("the savepoint survives a restart", () => {
     const historyFile = path.join(dir, "history.json");
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({ [SID]: { past: [], future: [], savepoint: 3 } }),
+      JSON.stringify([[SID, { past: [], future: [], savepoint: 3 }]]),
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) =>
@@ -385,22 +385,25 @@ describe("the savepoint survives a restart", () => {
     };
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({
-        [SID]: {
-          past: [
-            [change("look")],
-            [change("style"), change("progression")],
-            [file],
-          ],
-          future: [[change("look")]],
-          savepoint: {
-            at: 2,
-            net: [change("look"), file],
-            below: [[change("look")]],
+      JSON.stringify([
+        [
+          SID,
+          {
+            past: [
+              [change("look")],
+              [change("style"), change("progression")],
+              [file],
+            ],
+            future: [[change("look")]],
+            savepoint: {
+              at: 2,
+              net: [change("look"), file],
+              below: [[change("look")]],
+            },
           },
-        },
-        other: { past: [[file]], future: [] },
-      }),
+        ],
+        ["other", { past: [[file]], future: [] }],
+      ]),
     );
     const logs: string[] = [];
     const storage = fileHistoryStorage(historyFile, (_level, m) =>
@@ -423,12 +426,17 @@ describe("the savepoint survives a restart", () => {
     const historyFile = path.join(dir, "history.json");
     fs.writeFileSync(
       historyFile,
-      JSON.stringify({
-        [SID]: {
-          past: [[{ kind: "session", key: "theme", before: null, after: "x" }]],
-          future: [],
-        },
-      }),
+      JSON.stringify([
+        [
+          SID,
+          {
+            past: [
+              [{ kind: "session", key: "theme", before: null, after: "x" }],
+            ],
+            future: [],
+          },
+        ],
+      ]),
     );
     const history = restoredFrom(historyFile);
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
