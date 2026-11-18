@@ -4,15 +4,22 @@
     {
       "version": "pr-792",
       "ref": "refs/pull/792/merge",
-      "sha": "dfb7bed422bc7b8c7585f5b544652a7acc201b6b",
-      "timestamp": "2026-11-18T01:45:09.456Z",
+      "sha": "73403e2cfed035bb02ea54e2cf708d3c27b0fa34",
+      "timestamp": "2026-11-18T02:08:28.292Z",
       "commits": [
         {
-          "sha": "dfb7bed422bc7b8c7585f5b544652a7acc201b6b",
+          "sha": "73403e2cfed035bb02ea54e2cf708d3c27b0fa34",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T01:44:04Z",
-          "message": "Merge 6e3e144172e82aa194f545b65e6a40d146cb5cf5 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+          "timestamp": "2026-11-18T02:07:26Z",
+          "message": "Merge d53650835385ee94ea7391274cdf094fdddba70f into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+        },
+        {
+          "sha": "d53650835385ee94ea7391274cdf094fdddba70f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T19:07:09-07:00",
+          "message": "fix(daemon): a session's reported variables pass through but its Claude Code directory, and one own-key reader serves them (bco)\n\n- TMUX and TMUX_PANE pass through again. The frame feeds hold a session's\n  pane hint under the same bound and lifetime as its environment, so a strip\n  list guarded nothing the hint does not already carry, and it silently hid\n  names a config declares.\n- The Rust client decodes a non-UTF-8 byte as U+FFFD, as the Node client\n  does: one bad PATH entry costs that entry, not the whole PATH.\n- One ENV_NAME rule for shell and run `env`; variableOf and a shell run's\n  values read through ownValue.\n- The registry keeps its env subscriptions observed, as it keeps its runs.\n- The base-set and subscriptions comments say what the code does.\n"
         },
         {
           "sha": "6e3e144172e82aa194f545b65e6a40d146cb5cf5",

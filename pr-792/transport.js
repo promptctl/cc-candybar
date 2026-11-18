@@ -28302,6 +28302,68 @@ var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?
 var projectLocalSettingsFile = (projectDir) => import_node_path.default.join(projectDir, ".claude", "settings.local.json");
 var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
+// src/utils/plain.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i2 = 0; i2 < text4.length; i2++) h = Math.imul(h ^ text4.charCodeAt(i2), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i2) => byte === b[i2]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
 // src/daemon/foundations/session-env.ts
 function plainEnvironment(env2) {
   return Object.fromEntries(
@@ -28311,24 +28373,17 @@ function plainEnvironment(env2) {
   );
 }
 function variableOf(env2, name) {
-  return Object.hasOwn(env2, name) ? ok(env2[name]) : ABSENT;
+  const value = ownValue(env2, name);
+  return value === void 0 ? ABSENT : ok(value);
 }
 var NOT_HEARD = {
   kind: "failed",
   reason: "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps"
 };
-var NOT_PASSED_ON = [
-  CLAUDE_CONFIG_DIR_ENV,
-  "TMUX",
-  "TMUX_PANE"
-];
 function sessionEnvironment(reported, facts) {
+  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported;
   return {
-    ...Object.fromEntries(
-      Object.entries(reported).filter(
-        ([name]) => !NOT_PASSED_ON.includes(name)
-      )
-    ),
+    ...rest2,
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...facts.claudeConfigDir !== void 0 && {
@@ -29701,7 +29756,7 @@ init_globals();
 
 // site/shims/child_process.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
+var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
 var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
@@ -29713,7 +29768,7 @@ var Stream = class extends import_events2.EventEmitter {
     return this;
   }
   chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -29841,50 +29896,6 @@ init_globals();
 
 // src/click/link-signer.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i2 = 0; i2 < text4.length; i2++) h = Math.imul(h ^ text4.charCodeAt(i2), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i2) => byte === b[i2]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => import_buffer3.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/click/link-signer.ts
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
@@ -35879,24 +35890,6 @@ function attempt(read2) {
   }
 }
 
-// src/utils/plain.ts
-init_globals();
-function ownValue(record2, key) {
-  return Object.hasOwn(record2, key) ? record2[key] : void 0;
-}
-function digestOf(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
 // src/utils/refresh-ledger.ts
 init_globals();
 var REFRESH_TRIGGERS = [
@@ -36266,9 +36259,10 @@ function sessionRunOf(judged, environment) {
     return { kind: "failed", reason: `not run: ${environment.reason}` };
   const session = environment.value;
   const env2 = Object.fromEntries(
-    read2.env.flatMap(
-      (name) => Object.hasOwn(session, name) ? [[name, session[name]]] : []
-    )
+    read2.env.flatMap((name) => {
+      const value = ownValue(session, name);
+      return value === void 0 ? [] : [[name, value]];
+    })
   );
   return {
     kind: "ok",
@@ -69543,7 +69537,6 @@ function slashArm(ctx, path46, raw) {
   return { slash: parsed2.line };
 }
 var RUN_KEYS = ["run", "env", "refreshes"];
-var ENV_NAME2 = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function runArm(home) {
   return (ctx, path46, raw) => {
     for (const k of Object.keys(raw)) {
@@ -69565,7 +69558,7 @@ function runArm(home) {
     }
     const env2 = raw.env ?? {};
     if (!isPlainObject2(env2) || Object.entries(env2).some(
-      ([name, value]) => !ENV_NAME2.test(name) || typeof value !== "string"
+      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
     )) {
       issue2(
         ctx,
@@ -69603,7 +69596,7 @@ var RUN_ARM_JSON = {
     run: { type: "array", items: { type: "string" }, minItems: 1 },
     env: {
       type: "object",
-      propertyNames: { pattern: ENV_NAME2.source },
+      propertyNames: { pattern: ENV_NAME.source },
       additionalProperties: { type: "string" }
     },
     refreshes: { type: "array", items: { type: "string", minLength: 1 } }
@@ -76762,6 +76755,8 @@ var SourceRegistry = class _SourceRegistry {
     this.parent = parent;
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {
+    }));
+    this.cleanups.push(observe(this.envNow, () => {
     }));
   }
   store;
@@ -90789,8 +90784,9 @@ var RenderCache = class {
     if (view !== void 0) this.retireView(view, "idle");
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their storage folders, and
-  // the runs its `shell` and `file` sources name. Read
+  // plugin sources its config declares, at their storage folders, the runs
+  // its `shell` and `file` sources name, and the variables of the session's
+  // environment its `env` sources read. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's
