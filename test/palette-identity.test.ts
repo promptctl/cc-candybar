@@ -5,7 +5,8 @@
 // open inside a tab — so both sides of every seam are colours the theme names.
 // At 256 colours and ansi each is that colour rounded once, by the writer.
 // candybar-joiners-e5r4.i30: the open door's ✖, text on the segment that
-// opened the menu, is a red its palette names for its error role.
+// opened the menu, is red as the depth draws it: the theme's own error red
+// wherever one reads, the terminal's red where none does.
 // Driven through the real loader, `resolveEffectiveGlobals` and `drawDsl`,
 // under every bundled theme.
 
@@ -13,6 +14,8 @@ import {
   ColorDepth,
   ColorSpec,
   type ColorRgba,
+  contrastFor,
+  contrastRatio,
   drawnColour,
   getThemePalette,
   listThemePalettes,
@@ -26,7 +29,9 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
-import { ERROR_REDS, doorClose } from "./helpers/door-close";
+import { doorClose } from "./helpers/door-close";
+import { readsRed, TERMINAL_REDS } from "../src/render/segment-color";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { POWERLINE } from "./helpers/powerline";
 import { LADDER } from "./helpers/decor-vocabulary";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
@@ -119,22 +124,47 @@ describe("every background the bar draws is a colour its palette names", () => {
   });
 });
 
-describe("the open door's ✖ is a red its palette names for its error role", () => {
-  test("under every bundled theme and every dial position, at truecolor", () => {
-    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+const DARKER = ["error-darken-1", "error-darken-2", "error-darken-3"];
+const LIGHTER = ["error-lighten-1", "error-lighten-2", "error-lighten-3"];
+
+describe("the open door's ✖ is red as each depth draws it, the theme's own wherever one reads", () => {
+  test.each([
+    ["truecolor", "truecolor", ColorDepth.TRUECOLOR],
+    ["256 colours", "256", ColorDepth.EIGHT_BIT],
+    ["ansi", "ansi", ColorDepth.STANDARD],
+  ] as const)("under every bundled theme and every dial position, at %s", (_name, compatibility, depth) => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
     const wrong: string[] = [];
     let measured = 0;
     try {
       for (const theme of THEMES) {
         const palette = getThemePalette(theme)!;
-        const reds = new Map(ERROR_REDS.map((name) => [drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR).hex, name]));
         bar.pick("theme", theme);
         for (const shade of SHADE_NAMES) {
           bar.pick("shade", shade);
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-          const { ink } = doorClose(bar.render(AT).frame);
+          const { ink, ground } = doorClose(bar.render(AT).frame);
           measured++;
-          if (!reds.has(ink.hex)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
+          // The order and the floor rule are restated here, apart from the
+          // code that picks: the error text colour, the role, its rungs out
+          // toward the ground's far pole nearest first, then back, and last
+          // the terminal's reds; of those drawn red, the first to clear the
+          // text floor, or else whichever stands farthest off. What reads as
+          // red, and which reds the terminal holds, are shared with the code
+          // and pinned in test/unit/segment-colors.test.ts.
+          const out = contrastFor(ground).hex === "#000000" ? DARKER : LIGHTER;
+          const order = ["text-error", "error", ...out, ...(out === DARKER ? LIGHTER : DARKER)];
+          const reds = [...order.map((name) => palette.get(name)!), ...TERMINAL_REDS]
+            .map((c) => drawnColour(c, depth))
+            .filter(readsRed);
+          const ratio = contrastRatio(ink, ground);
+          const where = `${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`;
+          const clearing = reds.find((c) => contrastRatio(c, ground) >= TEXT_MIN_CONTRAST);
+          const farthest = Math.max(...reds.map((c) => contrastRatio(c, ground)));
+          if (clearing !== undefined && ink.hex !== clearing.hex)
+            wrong.push(`${where} where ${clearing.hex} is the first red to clear the text floor`);
+          else if (clearing === undefined && ratio !== farthest)
+            wrong.push(`${where} at ${ratio.toFixed(2)} where a red stands ${farthest.toFixed(2)}`);
         }
       }
     } finally {

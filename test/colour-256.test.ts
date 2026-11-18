@@ -11,6 +11,8 @@
 // ANSI 0–15 (its RGB is the terminal theme's, so no ratio exists), must keep
 // the highest floor it cleared in truecolor, and an arrow must stay the
 // colour of the cell it continues and stand visibly off the cell it enters.
+// The open door's ✖ alone is left out: it keeps its hue over its contrast,
+// and palette-identity.test.ts holds it to that.
 // At ansi no ratio exists, and the one floor that does is measured instead:
 // nothing is drawn on its own ground's index. At every depth an arrow's ink is
 // the cell it leaves wherever that cell's ground stands off the next one's as
@@ -19,6 +21,7 @@
 
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
+import { withoutDoorClose } from "./helpers/door-close";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { drawnChars, same, seams } from "./helpers/seams";
 import {
@@ -174,8 +177,11 @@ async function forEachStage(
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) await rig.click(url);
+      // [LAW:verifiable-goals] exception: the door's ✖ keeps its hue over
+      // its contrast, and is held to that by the door's own tests
+      // (palette-identity.test.ts).
       measure(stage, (colorCompatibility) =>
-        drawnChars(render(colorCompatibility)),
+        drawnChars(withoutDoorClose(render(colorCompatibility))),
       );
     }
   } finally {
