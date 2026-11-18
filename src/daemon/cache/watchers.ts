@@ -84,12 +84,10 @@ type DirState =
     }
   | { readonly kind: "deaf"; readonly deafness: Deafness };
 
-// [LAW:single-enforcer] One OS watch per directory and shape (every child, or
-// the tree), shared by every slot that targets it.
+// [LAW:single-enforcer] One OS watch per directory, shared by every slot that
+// targets it.
 interface DirWatch {
-  readonly id: string;
   readonly path: string;
-  readonly recursive: boolean;
   state: DirState;
   readonly listeners: Set<Listener>;
 }
@@ -177,9 +175,6 @@ const heldBy = (
   handle: fs.FSWatcher,
 ): state is Extract<DirState, { kind: "listening" }> =>
   state.kind === "listening" && state.handle === handle;
-
-const dirId = (target: DirTarget): string =>
-  `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 
 // [LAW:one-source-of-truth] What a read of a polled path compares: what is at
 // the path now, or the error reading it gave. Any difference is a change, as
@@ -312,20 +307,17 @@ export class WatcherRegistry {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   private dirFor(target: DirTarget): DirWatch {
-    const id = dirId(target);
-    const existing = this.dirs.get(id);
+    const existing = this.dirs.get(target.path);
     if (existing !== undefined) {
       this.judged(existing, "acquire");
       return existing;
     }
-    const where = { path: target.path, recursive: target.recursive === true };
     const dir: DirWatch = {
-      id,
-      ...where,
+      path: target.path,
       listeners: new Set(),
-      state: this.open(where, () => dir, "acquire", null),
+      state: this.open(target, () => dir, "acquire", null),
     };
-    this.dirs.set(id, dir);
+    this.dirs.set(dir.path, dir);
     return dir;
   }
 
@@ -383,7 +375,7 @@ export class WatcherRegistry {
   // `dirOf` names the watch the handle belongs to; its callbacks run only
   // after the open returns, once the watch holds the state returned here.
   private open(
-    where: { readonly path: string; readonly recursive: boolean },
+    where: { readonly path: string },
     dirOf: () => DirWatch,
     cause: string,
     was: DirState | null,
@@ -391,17 +383,13 @@ export class WatcherRegistry {
     const at = where.path;
     const bound = boundKey(boundOf(at));
     try {
-      // [LAW:no-silent-failure] A directory the daemon cannot open is
-      // refused. fs.watch refuses it itself, except Linux's recursive watch
-      // on Node 20 and 22 (Node's own walk), which swallows the error and
-      // returns a watch that never fires.
-      // [LAW:dataflow-not-control-flow] So every open opens the directory
-      // first, recursive or not, and its error is the refusal's reason.
+      // [LAW:no-silent-failure] A target the daemon cannot open as a
+      // directory is refused: fs.watch watches a file as readily as a
+      // directory and listens on it forever, so every open opens the
+      // directory first, and its error is the refusal's reason.
       fs.opendirSync(at).closeSync();
-      const handle = fs.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed),
+      const handle = fs.watch(at, { persistent: false }, (_event, changed) =>
+        this.heard(dirOf(), handle, changed),
       );
       // [LAW:no-silent-failure] An error after open reaches every slot on
       // the directory and the stats, not only the log: the handle behind it
@@ -535,7 +523,7 @@ export class WatcherRegistry {
       if (dir.listeners.size > 0) continue;
       if (dir.state.kind === "listening")
         this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
+      this.dirs.delete(dir.path);
     }
     for (const record of slot.polled) {
       record.slots.delete(slot);

@@ -268,6 +268,9 @@ export interface GitCacheStats {
   misses: number;
   changes: number;
   watchers: number;
+  // Branch ref directories the repos' watches could not list, so hear
+  // nothing below.
+  unlisted: number;
 }
 
 export interface ManagedStorageStats extends KeyedSourceStats {

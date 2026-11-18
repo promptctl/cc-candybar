@@ -231,6 +231,7 @@ export class RuntimeStats {
         misses: 0,
         changes: 0,
         watchers: 0,
+        unlisted: 0,
       },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       sources: {

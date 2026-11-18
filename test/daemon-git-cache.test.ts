@@ -1180,7 +1180,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
+      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1 unlisted=0",
       "git refresh threw (/repo): Error: logger bug",
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
@@ -1502,9 +1502,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
   // A pass's first act derives the watch's key by stat'ing each directory. A
   // directory that cannot be stat'd (a symlink loop here; an unreadable one in
   // the field) must not throw the pass, which would leave every value pending
-  // and drop what the pass was asked: its failure is its key, the OS refuses
-  // the watch, and the pass reads as any other.
-  test("a git directory that cannot be stat'd is read by the pass and refused by the watch, never thrown", async () => {
+  // and drop what the pass was asked: its failure is its key, the branch refs
+  // under it are named as unlisted, and the pass reads as any other.
+  test("a git directory that cannot be stat'd is read by the pass and named by the watch, never thrown", async () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-eloop-"));
     const loop = path.join(repo, ".git");
     fs.symlinkSync(loop, loop);
@@ -1517,16 +1517,22 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       await until(() => passes(logs).length >= 2, "a period pass landed");
       expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
-      // The refs tree under it is refused, on every platform.
+      // The branch refs under it cannot be listed, on every platform: named,
+      // and only HEAD and the index are watched.
+      expect(logs).toContainEqual(
+        expect.stringMatching(
+          /^git watch unlisted root=\S+ dir=\S*refs\/heads reason=.*ELOOP/,
+        ),
+      );
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs= polled=\S* deaf=0 unlisted=1$/.test(l),
         ),
       ).toBe(true);
       expect(counters).toEqual({
-        watchersOpened: 0,
+        watchersOpened: 1,
         watchersClosed: 0,
-        watchRefusals: 1,
+        watchRefusals: 0,
         watchErrors: 0,
         dirWatchesOpened: 0,
         dirWatchesClosed: 0,

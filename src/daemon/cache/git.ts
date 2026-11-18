@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   gitInfoFailures,
@@ -18,6 +19,7 @@ import { WatcherRegistry } from "./watchers";
 import {
   specOf,
   type HeldWatch,
+  type Refusal,
   type WatchMove,
   type WatchSpec,
 } from "../foundations/watch-targets";
@@ -180,8 +182,10 @@ interface RepoState {
   // (a period tick) shares the pass in flight, which already answers it.
   readonly refresh: TrailingEdge;
   // The watch the registry holds for the repo, under the key `watchSpec`
-  // derived when it was bound.
+  // derived when it was bound, and the branch ref directories that derive
+  // could not list.
   watch: HeldWatch;
+  unlisted: readonly Refusal[];
   readonly period: Period;
   readonly value: GitValue;
   readonly pr: PrSource;
@@ -215,21 +219,30 @@ function holdKey(root: string): string {
 // `commonDir` is the git directory the refs live in (`resolveCommonGitDir`):
 // the gitDir itself for a main checkout, the main repo's for a linked
 // worktree, whose own metadata dir holds no refs at all. The branch refs are
-// watched as a tree, because a branch name's slashes are directories
-// (`refs/heads/fix/thing`) and a watch one level deep never hears a ref move
-// below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
-// nothing staged — rewrites nothing but its ref.
+// watched as each of their directories, because a branch name's slashes are
+// directories (`refs/heads/fix/thing`) and a watch one level deep never hears
+// a ref move below them. A ref-only move — `reset --soft`, `update-ref`, an
+// amend with nothing staged — rewrites nothing but its ref.
 //
-// The tree is `refs/heads`, not `refs`: on Linux a recursive watch is Node's
-// own walk, one inotify watch and one stat per entry and a re-read of a
-// directory on every event in it, so its cost is the tree's size. Local
-// branches are tens to hundreds; remote refs and tags are the remote's to
-// grow, and a fetch rewriting thousands of them would re-walk the directory
+// [LAW:single-enforcer] The walk owns "every directory below `refs/heads` is
+// watched": it lists each one, never through a link, and each it lists is a
+// plain directory target. No recursive watch: on Linux under Node 20 and 22
+// that is Node's own walk, which stops at an entry it cannot open and still
+// reads as listening. A directory the walk cannot list (a reftable repo's
+// `refs/heads` is a file; EACCES; EMFILE) is not a target but a refusal by
+// name, in the key, so its start, end or change of reason rebinds. One gone
+// at its listing stays a target and leaves the spec unbound, as any gone
+// directory does, so `follow` keeps the held watch until the next pass. A new prefix directory is an event on its parent, then a pass, then a
+// new key: the rebind opens it, and walk, open, read catches a write before
+// the open.
+//
+// The refs are `refs/heads`, not `refs`: remote refs and tags are the
+// remote's to grow, and a fetch rewriting thousands of them would be heard
 // per ref. Those still reach the bar on the period.
 // [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
 // each directory names it for the key and decides nothing, and the stat
-// cannot throw. A tree that cannot be opened is a refusal the registry logs
-// and counts, and the period is what refreshes a repo whose watch is refused.
+// cannot throw. A directory the OS refuses is a refusal the registry logs and
+// counts, and the period is what refreshes a repo whose watch is refused.
 //
 // HEAD and the index are polled, so a git directory deleted and recreated at
 // its path (`worktree remove` then `worktree add` of the same name, `rm -rf`
@@ -240,11 +253,51 @@ function holdKey(root: string): string {
 // so a recreated repo is heard within one period, and a layout change at the
 // same path (a clone replaced by a worktree) is the same case.
 // [LAW:one-source-of-truth] The key and `unbound` are the shared derivation's.
-function watchSpec(gitDir: string, commonDir: string): WatchSpec {
-  return specOf({
-    dirs: [{ path: path.join(commonDir, "refs", "heads"), recursive: true }],
+function watchSpec(gitDir: string, commonDir: string): GitWatchSpec {
+  const refs = refsDirs(path.join(commonDir, "refs", "heads"));
+  const spec = specOf({
+    dirs: refs.dirs.map((d) => ({ path: d })),
     polled: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
   });
+  return {
+    ...spec,
+    key: JSON.stringify([spec.key, refs.unlisted]),
+    unlisted: refs.unlisted,
+  };
+}
+
+// A repo's watch, and the directories under its branch refs it could not
+// list.
+interface GitWatchSpec extends WatchSpec {
+  readonly unlisted: readonly Refusal[];
+}
+
+// Every directory at and below `root`, sorted so equal trees spell equal
+// keys, and each it could not list, with why. One gone at its listing stays a
+// target, which binds nothing, so the spec is unbound as for any gone
+// directory.
+function refsDirs(root: string): {
+  readonly dirs: readonly string[];
+  readonly unlisted: readonly Refusal[];
+} {
+  const dirs: string[] = [];
+  const unlisted: Refusal[] = [];
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") dirs.push(dir);
+      else unlisted.push({ path: dir, reason: (e as Error).message });
+      return;
+    }
+    dirs.push(dir);
+    // A Dirent is its entry's own kind, so a link is never descended.
+    for (const entry of entries)
+      if (entry.isDirectory()) walk(path.join(dir, entry.name));
+  };
+  walk(root);
+  return { dirs: dirs.sort(), unlisted };
 }
 
 // [LAW:one-source-of-truth] The branch one pass read — never the stored one,
@@ -368,7 +421,11 @@ export class GitDataProvider {
 
   getStats(): GitCacheStats {
     let held = 0;
-    for (const state of this.repos.values()) if (state.holders > 0) held++;
+    let unlisted = 0;
+    for (const state of this.repos.values()) {
+      if (state.holders > 0) held++;
+      unlisted += state.unlisted.length;
+    }
     return {
       size: this.repos.size,
       held,
@@ -376,6 +433,7 @@ export class GitDataProvider {
       misses: this.misses,
       changes: this.changes,
       watchers: this.watchers.size(),
+      unlisted,
     };
   }
 
@@ -516,7 +574,7 @@ export class GitDataProvider {
     const state: RepoState = {
       root,
       refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null).watch,
+      ...this.followWatch(root, null),
       period: new Period(() => {
         void state.refresh.share(PASS, () => this.refreshPass(state));
       }, this.clock),
@@ -536,7 +594,11 @@ export class GitDataProvider {
   private followWatch(
     root: string,
     held: HeldWatch | null,
-  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+  ): {
+    readonly watch: HeldWatch;
+    readonly move: WatchMove;
+    readonly unlisted: readonly Refusal[];
+  } {
     const gitDir = this.inner.resolveGitDir(root);
     const spec = watchSpec(gitDir, this.inner.resolveCommonGitDir(gitDir));
     // A pass between a worktree's removal and its re-add keeps the watch it
@@ -547,13 +609,20 @@ export class GitDataProvider {
     // [LAW:nothing-unseen] A rebind is the fact that the directories moved,
     // and which the repo hears now: a change that fires nothing is read
     // against this line, as the config cache's bind line.
+    // A directory the walk could not list is logged on the bind that carries
+    // it, so once per start or change of it, as the registry logs a refusal.
     if (followed.move === "rebound") {
+      for (const u of spec.unlisted)
+        this.logger(
+          "warn",
+          `git watch unlisted root=${root} dir=${u.path} reason=${JSON.stringify(u.reason)}`,
+        );
       this.logger(
         "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} polled=${spec.targets.polled.join(",")} deaf=${followed.watch.handle.deaf.length}`,
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} polled=${spec.targets.polled.join(",")} deaf=${followed.watch.handle.deaf.length} unlisted=${spec.unlisted.length}`,
       );
     }
-    return followed;
+    return { ...followed, unlisted: spec.unlisted };
   }
 
   private changedPass(state: RepoState, reason: PassReason): void {
@@ -644,6 +713,7 @@ export class GitDataProvider {
     state.asked.clear();
     const followed = this.followWatch(state.root, state.watch);
     state.watch = followed.watch;
+    state.unlisted = followed.unlisted;
     const [outcome, remote] = await Promise.all([
       this.inner.getGitInfo(state.root).catch(threw("git fetch")),
       this.remoteOf(state),

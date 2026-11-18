@@ -7,13 +7,10 @@ import { walkLinks } from "../../utils/atomic-write";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import { canonicalDirectory } from "../../utils/watch-target";
 
-// An absolute directory the OS watches: every child, or the whole tree (git's
-// refs: a branch name's slashes are directories).
-// [LAW:types-are-the-program] Recursive or not, one spelling each, so one OS
-// watch is one spec key.
+// An absolute directory the OS watches: every child. A consumer that needs a
+// tree lists its directories (git's refs).
 export interface DirTarget {
   readonly path: string;
-  readonly recursive?: true;
 }
 
 // [LAW:types-are-the-program] The two ways a target is heard, one field each.
