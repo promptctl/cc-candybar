@@ -79434,42 +79434,33 @@ function segmentColorFuncs(ref) {
   };
   return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
-var DARKENINGS = ["darken-1", "darken-2", "darken-3"];
-var LIGHTENINGS = ["lighten-1", "lighten-2", "lighten-3"];
-var TERMINAL_REDS = [1, 9].map((index) => STANDARD_TABLE.get(index));
-var RED_HUE = { from: -20, to: 40, chroma: 0.06 };
+var RUNGS_OUT = {
+  black: ["darken-1", "darken-2", "darken-3"],
+  white: ["lighten-1", "lighten-2", "lighten-3"]
+};
+var TERMINAL_REDS = [1, 9].map(
+  (index) => STANDARD_TABLE.get(index)
+);
+var RED_HUE = { from: -20, to: 38, chroma: 0.06 };
 function readsRed(colour) {
   const { h, c } = Oklch.fromRgba(colour);
   const hue = h > 180 ? h - 360 : h;
   return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
 }
-function errorRedCandidates(palette, farPoleBlack) {
-  const [out, back2] = farPoleBlack ? [DARKENINGS, LIGHTENINGS] : [LIGHTENINGS, DARKENINGS];
-  return [
-    "text-error",
-    "error",
-    ...[...out, ...back2].map((r) => `error-${r}`)
-  ].map((name) => resolveColorRef(palette, name));
-}
 function errorRed(palette, ground, depth) {
   const shown = drawnColour(ground, depth);
-  const measured3 = (colours) => colours.map((colour) => {
-    const drawn = drawnColour(colour, depth);
-    return {
-      colour,
-      red: readsRed(drawn),
-      ratio: contrastRatio(drawn, shown)
-    };
-  }).filter(({ red }) => red);
-  const themed = measured3(
-    errorRedCandidates(palette, contrastFor(shown).hex === "#000000")
-  );
-  const kept = themed.length > 0 ? themed : measured3(TERMINAL_REDS);
-  const tier = (ratio) => ratio >= TEXT_MIN_CONTRAST ? 0 : ratio >= QUIET_MIN_CONTRAST ? 1 : 2;
-  return kept.reduce((best, c) => {
-    const [tb, tc] = [tier(best.ratio), tier(c.ratio)];
-    return tc < tb || tc === 2 && tb === 2 && c.ratio > best.ratio ? c : best;
-  }).colour;
+  const far = contrastFor(shown).hex === "#000000" ? "black" : "white";
+  const back2 = far === "black" ? "white" : "black";
+  const themed = [
+    "text-error",
+    "error",
+    ...[...RUNGS_OUT[far], ...RUNGS_OUT[back2]].map((rung) => `error-${rung}`)
+  ].map((name) => resolveColorRef(palette, name));
+  const kept = [...themed, ...TERMINAL_REDS].filter((colour) => readsRed(drawnColour(colour, depth))).map((colour) => ({
+    colour,
+    ratio: contrastRatio(drawnColour(colour, depth), shown)
+  }));
+  return (kept.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? kept.reduce((best, c) => c.ratio > best.ratio ? c : best)).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {

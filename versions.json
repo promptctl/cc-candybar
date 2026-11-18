@@ -4,15 +4,22 @@
     {
       "version": "pr-803",
       "ref": "refs/pull/803/merge",
-      "sha": "cecec9ac4fe46c770b40fc4799120800f344fc22",
-      "timestamp": "2026-11-18T14:03:18.300Z",
+      "sha": "ed7f5f7e601e4eeb6676436f3733016a6a74a518",
+      "timestamp": "2026-11-18T14:17:05.776Z",
       "commits": [
         {
-          "sha": "cecec9ac4fe46c770b40fc4799120800f344fc22",
+          "sha": "ed7f5f7e601e4eeb6676436f3733016a6a74a518",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:02:13-07:00",
-          "message": "Merge b5f7c2ee26510af8c242973daeb83ae79299b5b0 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+          "timestamp": "2026-11-18T14:15:56Z",
+          "message": "Merge 092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:15:42-07:00",
+          "message": "fix(colour): the door's ✖ takes the first red to clear the text floor, else the farthest (87n6)\n"
         },
         {
           "sha": "b5f7c2ee26510af8c242973daeb83ae79299b5b0",
@@ -20,28 +27,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T07:02:01-07:00",
           "message": "fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-802",
-      "ref": "refs/pull/802/merge",
-      "sha": "f93a8d6a32f2e43bd1ef6bfc4ecd4c68e65f8426",
-      "timestamp": "2026-11-18T13:56:09.277Z",
-      "commits": [
-        {
-          "sha": "f93a8d6a32f2e43bd1ef6bfc4ecd4c68e65f8426",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:55:11-07:00",
-          "message": "Merge bb5416b2f1808daf6666940d0cc0582df58307ad into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "bb5416b2f1808daf6666940d0cc0582df58307ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:55:00-07:00",
-          "message": "test(daemon): the close case counts only the resources its own work creates (6f3)\n"
         }
       ]
     },
