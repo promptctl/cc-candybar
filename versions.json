@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-798",
+      "ref": "refs/pull/798/merge",
+      "sha": "48807b5a66a39e89b1657221bbb65e862aab0f36",
+      "timestamp": "2026-11-18T12:43:45.802Z",
+      "commits": [
+        {
+          "sha": "48807b5a66a39e89b1657221bbb65e862aab0f36",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:42:46Z",
+          "message": "Merge 488f7a29186717e773c4245715d8d7909c2edaef into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "488f7a29186717e773c4245715d8d7909c2edaef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:42:35-07:00",
+          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
+        },
+        {
+          "sha": "749f31c1c8e6f620e702d5f27bad1e04d4cc6266",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:25:40-07:00",
+          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-797",
       "ref": "refs/pull/797/merge",
       "sha": "e6326912bcab8aeae7261efe2b300ddfb69dcf90",
@@ -34,28 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:12:48-07:00",
           "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-798",
-      "ref": "refs/pull/798/merge",
-      "sha": "cf933be2f773452a29f2fefbee53e6000f4c986c",
-      "timestamp": "2026-11-18T12:27:02.629Z",
-      "commits": [
-        {
-          "sha": "cf933be2f773452a29f2fefbee53e6000f4c986c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:25:50-07:00",
-          "message": "Merge 749f31c1c8e6f620e702d5f27bad1e04d4cc6266 into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "749f31c1c8e6f620e702d5f27bad1e04d4cc6266",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:25:40-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
         }
       ]
     },

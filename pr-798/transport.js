@@ -28537,9 +28537,9 @@ var KINDS = [
   [RendererDown, "down"]
 ];
 var CrossedFailure = class extends Error {
-  constructor(failure) {
-    super(failure.message);
-    this.failure = failure;
+  constructor(failure2) {
+    super(failure2.message);
+    this.failure = failure2;
     this.name = "CrossedFailure";
   }
   failure;
@@ -28937,39 +28937,53 @@ var import_node_path2 = __toESM(require_path_browserify(), 1);
 function publishByRename(file, bytes, mode) {
   const staged = stagedName(file);
   try {
-    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode });
+    if (mode !== void 0) fs_default.chmodSync(staged, mode);
     fs_default.renameSync(staged, file);
   } catch (e) {
-    throw leftBehind(e, staged);
+    throw noted(
+      e,
+      staged,
+      failure(() => fs_default.rmSync(staged, { force: true }))
+    );
   }
 }
 async function publishByRenameAsync(file, bytes, mode) {
   const staged = stagedName(file);
   try {
-    await fs_default.promises.writeFile(staged, bytes, {
-      flag: "wx",
-      mode,
-      flush: true
-    });
+    await fs_default.promises.writeFile(staged, bytes, { flag: "wx", mode });
+    if (mode !== void 0) await fs_default.promises.chmod(staged, mode);
     await fs_default.promises.rename(staged, file);
   } catch (e) {
-    throw leftBehind(e, staged);
+    const removal = await fs_default.promises.rm(staged, { force: true }).then(
+      () => null,
+      (c) => c
+    );
+    throw noted(e, staged, removal);
   }
 }
 function publishByLink(file, bytes, mode) {
   const staged = stagedName(file);
   let linked;
   try {
-    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode });
+    if (mode !== void 0) fs_default.chmodSync(staged, mode);
     linked = taken(() => fs_default.linkSync(staged, file));
   } catch (e) {
-    throw leftBehind(e, staged);
+    throw noted(
+      e,
+      staged,
+      failure(() => fs_default.rmSync(staged, { force: true }))
+    );
   }
-  try {
-    fs_default.rmSync(staged);
-  } catch (e) {
-    throw new Error(
-      `${file}: ${linked}, but the staged file ${staged} was left behind: ${e.message}`
+  const removal = failure(() => fs_default.rmSync(staged, { force: true }));
+  if (removal !== null) {
+    throw noted(
+      Object.assign(new Error(`${file}: ${linked}`), {
+        code: removal.code
+      }),
+      staged,
+      removal
     );
   }
   return linked;
@@ -28986,13 +29000,22 @@ function taken(link) {
 function stagedName(file) {
   return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
 }
-function leftBehind(e, staged) {
+function failure(step4) {
   try {
-    fs_default.rmSync(staged, { force: true });
-  } catch (c) {
-    e.message += `; the staged file ${staged} was left behind: ${c.message}`;
+    step4();
+    return null;
+  } catch (e) {
+    return e;
   }
-  return e;
+}
+function noted(e, staged, removal) {
+  if (removal === null) return e;
+  const note = `; the staged file ${staged} was left behind: ${String(removal.message ?? removal)}`;
+  if (e instanceof Error) {
+    e.message += note;
+    return e;
+  }
+  return new Error(`${String(e)}${note}`);
 }
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
@@ -35997,11 +36020,11 @@ var Refreshes = class {
     this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
     this.tally.lastMs = ms;
     if (outcome.kind === "failed") this.tally.failures++;
-    const failure = outcome.kind === "failed";
-    if (!failure && !this.lines.has(by)) return;
-    const why2 = failure ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    const failure2 = outcome.kind === "failed";
+    if (!failure2 && !this.lines.has(by)) return;
+    const why2 = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
-      failure ? "warn" : "info",
+      failure2 ? "warn" : "info",
       `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
     );
   }
@@ -44302,11 +44325,11 @@ function nearMiss(word, words2) {
   const names = scored.filter((s) => s.distance === nearest).map((s) => `"${s.name}"`).sort();
   return names.length === 0 ? "" : ` (did you mean ${names.join(" or ")}?)`;
 }
-function parseStyleColor(token, failure, words2) {
+function parseStyleColor(token, failure2, words2) {
   try {
     return ColorSpec.parse(token);
   } catch (cause) {
-    throw new StyleSyntaxError(`${failure} "${token}"${nearMiss(token, words2)}: ${String(cause)}`, {
+    throw new StyleSyntaxError(`${failure2} "${token}"${nearMiss(token, words2)}: ${String(cause)}`, {
       cause
     });
   }
@@ -49003,8 +49026,8 @@ var failedWith = (message2) => ({
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
-var renderFailure = (failure) => ({
-  ...failure,
+var renderFailure = (failure2) => ({
+  ...failure2,
   kind: "threw"
 });
 var RENDER_ANSWERS = {
@@ -49065,10 +49088,10 @@ function drawEvent(kind, facts, outcome) {
 // src/daemon/statusline-answer.ts
 var NOTHING_TO_SETTLE = (_delivered) => {
 };
-function failed2(host, failure, doing = "") {
+function failed2(host, failure2, doing = "") {
   return {
-    outcome: renderFailure(failure),
-    resp: failedWith(`renderer ${host.name}: ${doing}${failure.message}`),
+    outcome: renderFailure(failure2),
+    resp: failedWith(`renderer ${host.name}: ${doing}${failure2.message}`),
     seen: "failed",
     settled: NOTHING_TO_SETTLE
   };
@@ -49183,9 +49206,9 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
   try {
     resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
   } catch (e) {
-    const failure = failureOf(e);
-    done(presented, `encoding its frame threw: ${failure.message}`);
-    return failed2(host, failure, "its frame could not be encoded: ");
+    const failure2 = failureOf(e);
+    done(presented, `encoding its frame threw: ${failure2.message}`);
+    return failed2(host, failure2, "its frame could not be encoded: ");
   }
   noteFacts(facts, { encoded: `${elapsedMs(clock, encodeFrom)}ms` });
   return {
@@ -50305,10 +50328,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       // [LAW:no-silent-failure] The driver hands every turn's failure back
       // as a value; a throw here is its own bug, answered as any throw is.
       (error) => {
-        const failure = renderFailure(failureOf(error));
+        const failure2 = renderFailure(failureOf(error));
         return {
-          outcome: failure,
-          resp: failedWith(failure.message),
+          outcome: failure2,
+          resp: failedWith(failure2.message),
           seen: "failed",
           settled: NOTHING_TO_SETTLE
         };
@@ -63234,7 +63257,7 @@ function updateNotice(update, act2, ctx) {
     text: text4,
     copy: text4
   });
-  const failure = act2.kind === "failed" && act2.identity === identity2 ? [failedText(`${words2.act} failed: ${act2.reason}`)] : [];
+  const failure2 = act2.kind === "failed" && act2.identity === identity2 ? [failedText(`${words2.act} failed: ${act2.reason}`)] : [];
   const actSpan = act2.kind === "running" ? diagnosticSpan(`[${words2.busy}]`, null) : diagnosticSpan(
     `[${words2.act}]`,
     effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
@@ -63276,7 +63299,7 @@ function updateNotice(update, act2, ctx) {
         lines: [first2]
       }
     ],
-    failure
+    failure: failure2
   };
 }
 
@@ -66642,8 +66665,8 @@ var SessionUsageStore = class {
   usageOf(sessionId2) {
     const slot = this.sessions.get(sessionId2);
     if (slot === void 0) return pendingOf("unread");
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
+    const failure2 = slot.failure.get();
+    if (failure2 !== null) return failed(failure2, "read");
     return ok(slot.record?.usage ?? EMPTY_USAGE);
   }
   // A refresh's ingest of its session, whose outcome the session's slot keeps
@@ -66709,8 +66732,8 @@ var SessionUsageStore = class {
   daysOutside(sessionId2, roots) {
     const slot = this.sessions.get(sessionId2);
     if (slot === void 0) return ABSENT;
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
+    const failure2 = slot.failure.get();
+    if (failure2 !== null) return failed(failure2, "read");
     const record2 = slot.record;
     if (record2 === void 0 || under(record2.transcriptPath, roots)) {
       return ABSENT;
@@ -72905,11 +72928,11 @@ var Collector = class {
       daemon3,
       instantAt(this.deps.clock)
     );
-    const failure = next === prior ? null : stampFailureOf(next);
-    if (failure !== null)
+    const failure2 = next === prior ? null : stampFailureOf(next);
+    if (failure2 !== null)
       this.deps.log(
         "error",
-        `world state sid=${JSON.stringify(session)}: ${failure}`
+        `world state sid=${JSON.stringify(session)}: ${failure2}`
       );
     stamped.document = next;
     stamped.from = moved2;
@@ -73046,8 +73069,8 @@ var FrameFeeds = class {
   // The latest request of every session someone watches.
   watchedRequests() {
     return [...this.watched.keys()].flatMap((sessionId2) => {
-      const noted = this.requests.get(sessionId2);
-      return noted === void 0 ? [] : [noted.req];
+      const noted2 = this.requests.get(sessionId2);
+      return noted2 === void 0 ? [] : [noted2.req];
     });
   }
   // [LAW:one-source-of-truth] Who watches each session now, whole, as the
@@ -73189,8 +73212,8 @@ var FrameFeeds = class {
     this.announce();
   }
   shown(sessionId2) {
-    const noted = this.requests.get(sessionId2);
-    return noted === void 0 || this.deps.shown(noted.req);
+    const noted2 = this.requests.get(sessionId2);
+    return noted2 === void 0 || this.deps.shown(noted2.req);
   }
   // The last frame's answer for `sub`'s lane, unless it was sent that already.
   send(watched, sub2) {
@@ -73568,7 +73591,7 @@ var INSTALL_QUERIES = (session) => [
   show(session, PRIOR_OPTION),
   show(session, WROTE_OPTION)
 ];
-function leftBehind2(prior, wrote, owner) {
+function leftBehind(prior, wrote, owner) {
   let parsed2;
   let status;
   try {
@@ -73590,7 +73613,7 @@ function installPlan(session, answers, owner) {
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind2(prior, wrote, owner);
+  if (prior !== "") return leftBehind(prior, wrote, owner);
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i2 = 0; i2 < base; i2++) {
@@ -73957,7 +73980,7 @@ var TmuxStatusLines = class {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
-        const found2 = leftBehind2(prior, wrote, this.deps.owner);
+        const found2 = leftBehind(prior, wrote, this.deps.owner);
         if (found2.kind === "ours")
           server.layouts.set(session, {
             prior: found2.prior,
@@ -74752,14 +74775,14 @@ var Acts = class {
     try {
       return await this.performers[act2.kind](act2);
     } catch (thrown2) {
-      const failure = failureOf(thrown2);
-      switch (failure.kind) {
+      const failure2 = failureOf(thrown2);
+      switch (failure2.kind) {
         case "bad-request":
-          return not({ kind: "refused", reason: failure.message });
+          return not({ kind: "refused", reason: failure2.message });
         case "closing":
-          return not({ kind: "closing", reason: failure.message });
+          return not({ kind: "closing", reason: failure2.message });
         default:
-          return not({ kind: "failed", reason: failure.message });
+          return not({ kind: "failed", reason: failure2.message });
       }
     }
   }
@@ -75435,10 +75458,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       at
     );
   };
-  const unanswered = (failure, queuedMs) => ({
+  const unanswered = (failure2, queuedMs) => ({
     turn: {
       kind: "threw",
-      failure,
+      failure: failure2,
       record: [],
       effects: [],
       queuedMs,
@@ -75709,8 +75732,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return output.reply;
   };
   const tell = (push) => void ask2(push).catch((thrown2) => {
-    const failure = failureOf(thrown2);
-    if (failure.kind !== "down") log("error", failure.detail);
+    const failure2 = failureOf(thrown2);
+    if (failure2.kind !== "down") log("error", failure2.detail);
   });
   const moved2 = (origins) => {
     for (const origin of origins)
@@ -85944,7 +85967,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   const idleSince = menuIdle.since(sessionId2, readings);
   const payload = view.source.payload();
   const effective = view.source.effective();
-  const failure = view.source.failure();
+  const failure2 = view.source.failure();
   const document = view.source.facts();
   const lanes = laneSwitches(effective, payload.tmux !== void 0);
   noteFacts(facts, {
@@ -86010,10 +86033,10 @@ function drawRender(parts, setup, drawing2, feeds) {
     })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
-    ...failure === null ? [] : [
+    ...failure2 === null ? [] : [
       {
         kind: "facts",
-        message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure}`
+        message: `the bar is drawn from the last facts that were read; the next could not be stamped: ${failure2}`
       }
     ]
   ];
@@ -89266,13 +89289,13 @@ function foldEffects(steps2, sid, ctx) {
     try {
       leaf(value, ctx);
     } catch (e) {
-      const failure = failureOf(e);
-      if (failure.kind !== "bad-request" && failure.kind !== "threw") {
+      const failure2 = failureOf(e);
+      if (failure2.kind !== "bad-request" && failure2.kind !== "threw") {
         if (errors2.length > 0) ctx.log("warn", `click: ${errors2.join("; ")}`);
         throw e;
       }
-      if (failure.kind === "threw") operational = true;
-      errors2.push(`${verb}: ${failure.message}`);
+      if (failure2.kind === "threw") operational = true;
+      errors2.push(`${verb}: ${failure2.message}`);
     }
   }
   if (errors2.length > 0) {
@@ -91736,10 +91759,10 @@ function closeIdleMenus2(parts, effects) {
         effects
       );
     } catch (thrown2) {
-      const failure = failureOf(thrown2);
+      const failure2 = failureOf(thrown2);
       parts.log(
-        failure.kind === "closing" ? "info" : "error",
-        `menu-idle: close failed (session=${session}): ${failure.detail}`
+        failure2.kind === "closing" ? "info" : "error",
+        `menu-idle: close failed (session=${session}): ${failure2.detail}`
       );
     }
   }
@@ -95033,6 +95056,7 @@ var SESSION_STATE_FILE = {
   parse: (kv) => kv !== null && typeof kv === "object" && !Array.isArray(kv) && Object.values(kv).every((leaf) => typeof leaf === "string") ? kv : null
 };
 var isRecord3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var LANDED = { ok: true };
 var SessionFile = class {
   constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
     this.kind = kind;
@@ -95055,6 +95079,8 @@ var SessionFile = class {
   // chain, so writes land in the order they began and none overtakes
   // another: older state still on its way never lands over newer.
   written = Promise.resolve();
+  // The write queued behind the one in flight and not yet begun.
+  waiting = null;
   // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
   // *defined* recovery, not a hidden fallback to different data: an empty
   // store re-rolls random picks exactly as a first-ever boot would.
@@ -95124,11 +95150,20 @@ var SessionFile = class {
       { unref: true }
     );
   }
-  // Joins a write of what is pending to the chain, settling once it lands or
-  // fails.
+  // Joins a write of what is pending to the chain. At most one write waits
+  // behind the one in flight, since it writes whatever is pending when it
+  // begins: a stalled disk queues one write, not one per window.
   write() {
-    this.written = this.written.then(() => this.land());
-    return this.written;
+    if (this.waiting === null) {
+      const waiting = this.written.then(() => {
+        this.waiting = null;
+        return this.land();
+      });
+      this.waiting = waiting;
+      this.written = waiting.then(() => {
+      });
+    }
+    return this.waiting;
   }
   body(snapshot) {
     return JSON.stringify(
@@ -95141,38 +95176,42 @@ var SessionFile = class {
     );
   }
   // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
-  // off the daemon's one thread: the bytes are written and synced through the
-  // thread pool, and so is the rename that publishes them. A rename is a
-  // journaled metadata op, and on a busy disk it waits on the journal like
-  // any write: run synchronously here it held every bar and click for 180 ms
-  // on a CI runner, past every client's reply budget.
+  // off the daemon's one thread: the bytes are written through the thread
+  // pool, and so is the rename that publishes them. A rename is a journaled
+  // metadata op, and on a busy disk it waits on the journal like any write:
+  // run synchronously here it held every bar and click for 180 ms on a CI
+  // runner, past every client's reply budget.
+  // [LAW:no-silent-failure] Nothing it does can reject the chain: a write
+  // that fails says so, and the next write still runs.
   async land() {
     const snapshot = this.pending;
-    if (snapshot === null) return;
+    if (snapshot === null) return LANDED;
     const started2 = this.clock.monotonic();
-    const body = this.body(snapshot);
-    const heldMs = elapsedMs(this.clock, started2);
     try {
+      const body = this.body(snapshot);
+      const heldMs = elapsedMs(this.clock, started2);
       await fs_default.promises.mkdir(import_node_path49.default.dirname(this.filePath), { recursive: true });
       await publishByRenameAsync(this.filePath, body, 384);
       this.saved(body, snapshot, started2, heldMs);
       if (this.pending === snapshot) this.pending = null;
+      return LANDED;
     } catch (e) {
-      this.logger(
-        "warn",
-        `${this.kind.name} save failed: ${e.message}`
-      );
+      const reason = `${this.kind.name} save failed: ${e.message}`;
+      this.logger("warn", reason);
+      return { ok: false, reason };
     }
   }
   // For shutdown and for callers that read the file back: what is pending
-  // lands now, behind any write already on its way.
-  flush() {
+  // lands now, behind any write already on its way. [LAW:no-silent-failure]
+  // A write that fails rejects, so a shutdown that lost state says so.
+  async flush() {
     this.clearTimer?.();
     this.clearTimer = null;
-    return this.write();
+    const landed = await this.write();
+    if (!landed.ok) throw new Error(landed.reason);
   }
-  // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
-  // how much of that it held the daemon's one thread.
+  // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
+  // it took, and how much of that it held the daemon's one thread.
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
