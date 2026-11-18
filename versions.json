@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-819",
+      "ref": "refs/pull/819/merge",
+      "sha": "bb37c35c95ee56cf11eb218a05fab7ba19e5a1cd",
+      "timestamp": "2026-11-18T18:00:55.925Z",
+      "commits": [
+        {
+          "sha": "bb37c35c95ee56cf11eb218a05fab7ba19e5a1cd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:59:52-07:00",
+          "message": "Merge 016e26a637774a98f9d6e6d670763604bfd25034 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "016e26a637774a98f9d6e6d670763604bfd25034",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:59:23-07:00",
+          "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-818",
       "ref": "refs/pull/818/merge",
       "sha": "c03f18c195478c80a5f2eefa865e832387e749c8",
