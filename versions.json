@@ -4,15 +4,22 @@
     {
       "version": "pr-824",
       "ref": "refs/pull/824/merge",
-      "sha": "71cf9728d75c51ac3caf9bc1596046e7e5051741",
-      "timestamp": "2026-11-18T19:19:43.989Z",
+      "sha": "5269e31cb74bc4444839fd30a98ae79432b14ffe",
+      "timestamp": "2026-11-18T19:29:51.905Z",
       "commits": [
         {
-          "sha": "71cf9728d75c51ac3caf9bc1596046e7e5051741",
+          "sha": "5269e31cb74bc4444839fd30a98ae79432b14ffe",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T19:18:36Z",
-          "message": "Merge 4686eaee4499617cfd24b8f0592dcdb08d1ef548 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+          "timestamp": "2026-11-18T19:28:48Z",
+          "message": "Merge 919849741847218724cea427024d8a7a4f5388e1 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "919849741847218724cea427024d8a7a4f5388e1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:28:29-07:00",
+          "message": "fix(watchers): a tree directory gone from its path leaves without a refusal (cimv)\n"
         },
         {
           "sha": "4686eaee4499617cfd24b8f0592dcdb08d1ef548",
@@ -77,86 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:59:23-07:00",
           "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-826",
-      "ref": "refs/pull/826/merge",
-      "sha": "9aa536aa3161fd9fcf0569aecb617827b1b6115e",
-      "timestamp": "2026-11-18T19:13:12.711Z",
-      "commits": [
-        {
-          "sha": "9aa536aa3161fd9fcf0569aecb617827b1b6115e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:12:06-07:00",
-          "message": "Merge a1032c9e34e3602ac2fa9503dfd18064d4732d1a into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "a1032c9e34e3602ac2fa9503dfd18064d4732d1a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:11:55-07:00",
-          "message": "fix(daemon): a lane reads Claude Code's input through the daemon's one claude-input edge, so an override reaches it (izc.ubq)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-823",
-      "ref": "refs/pull/823/merge",
-      "sha": "fc6789f55cf4d54a76d6c2c508b80c6e655bb883",
-      "timestamp": "2026-11-18T19:08:25.009Z",
-      "commits": [
-        {
-          "sha": "fc6789f55cf4d54a76d6c2c508b80c6e655bb883",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T19:07:19Z",
-          "message": "Merge a21566da2575d4db40c8750f5ce610101cab453d into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "a21566da2575d4db40c8750f5ce610101cab453d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:06:51-07:00",
-          "message": "fix(watchers): an acquire reads each polled path once, a marked path is not read again, and an unchanged follow is pinned silent (ggyk)\n"
-        },
-        {
-          "sha": "a3f81589f4dfad67ce29bcda571ab5d70f090c15",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:52:05-07:00",
-          "message": "fix(watchers): the unseen mark is its own symbol, one acquire marks its records, and the record says what a poll cannot see (ggyk)\n"
-        },
-        {
-          "sha": "f0047f591a4d45071817a0aaf16163f4e5e10cfb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:37:23-07:00",
-          "message": "fix(watchers): an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-825",
-      "ref": "refs/pull/825/merge",
-      "sha": "f124d90a08dabd0a7ebe4f217a46df6a1900722d",
-      "timestamp": "2026-11-18T19:01:07.660Z",
-      "commits": [
-        {
-          "sha": "f124d90a08dabd0a7ebe4f217a46df6a1900722d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:00:03-07:00",
-          "message": "Merge f3ea210f7eb8d9722b7af6a203c4bd76c6299654 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "f3ea210f7eb8d9722b7af6a203c4bd76c6299654",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:59:46-07:00",
-          "message": "fix(edit): a config turn that ends a placement releases its library, configure key and drafts in every session drawn from it (ce4m)\n"
         }
       ]
     },

@@ -35047,7 +35047,9 @@ function dirsBelow(at, held2, trusted, unlisted) {
   let entries;
   try {
     entries = fs_default.readdirSync(at, { withFileTypes: true });
-  } catch {
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
     unlisted.push(at);
     return [...held2].filter((p2) => isBelow(p2, at));
   }
