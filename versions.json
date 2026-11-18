@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-827",
+      "ref": "refs/pull/827/merge",
+      "sha": "539df983552f75a90c0b67f484ee0695cf52af6a",
+      "timestamp": "2026-11-18T21:54:54.459Z",
+      "commits": [
+        {
+          "sha": "539df983552f75a90c0b67f484ee0695cf52af6a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T21:53:54Z",
+          "message": "Merge 83f7872cc707f01a6ad6e4cfe642c3736184cbab into 6d3c06faf1789732872268f46aba7d8531c992ce\n"
+        },
+        {
+          "sha": "83f7872cc707f01a6ad6e4cfe642c3736184cbab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:38:33-07:00",
+          "message": "refactor(acts): a slash line is typed only in its pane's turn (clno)\n"
+        },
+        {
+          "sha": "b0faf63fba5030da3b5052cc0308b8f59f9b6505",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:30:45-07:00",
+          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
+        },
+        {
+          "sha": "280dd713b6170508dbb1bcd1cf327c4a6761b251",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:27:06-07:00",
+          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "6d3c06faf1789732872268f46aba7d8531c992ce",
@@ -13,42 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T14:53:29-07:00",
           "message": "fix(config): each load builds its installed-plugin layer, and nothing keeps one past it (70xn) (#830)\n\n* fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n\n* fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n\n* fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n\n* fix(config): the installed layer's comments claim only what the load and the install do (70xn)"
-        }
-      ]
-    },
-    {
-      "version": "pr-827",
-      "ref": "refs/pull/827/merge",
-      "sha": "67a78b8741da071035a59200a409e7cb60386941",
-      "timestamp": "2026-11-18T19:43:07.677Z",
-      "commits": [
-        {
-          "sha": "67a78b8741da071035a59200a409e7cb60386941",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T19:41:24Z",
-          "message": "Merge b1ffca92b1d98d8dcec9c3da4e060ce0cb69916e into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
-        },
-        {
-          "sha": "b1ffca92b1d98d8dcec9c3da4e060ce0cb69916e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:38:33-07:00",
-          "message": "refactor(acts): a slash line is typed only in its pane's turn (clno)\n"
-        },
-        {
-          "sha": "fe92e1b55c8a7bffbb5c12ad70718e03d646cab0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:30:45-07:00",
-          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
-        },
-        {
-          "sha": "3474f5692f01d03bbb82551e9e3bbd961cf5d325",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:27:06-07:00",
-          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
         }
       ]
     },
