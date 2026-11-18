@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-822",
+      "ref": "refs/pull/822/merge",
+      "sha": "091788933b02dd6c6b0dbf49bf844bcaa2d6f45e",
+      "timestamp": "2026-11-18T18:35:02.519Z",
+      "commits": [
+        {
+          "sha": "091788933b02dd6c6b0dbf49bf844bcaa2d6f45e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:34:01-07:00",
+          "message": "Merge e5c0b5a36d17828d764f390d58d538f3767dec45 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "e5c0b5a36d17828d764f390d58d538f3767dec45",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:33:46-07:00",
+          "message": "fix(watchers): where a recursive watch is Node's walk, a directory below its root that will not open refuses the watch, naming it (eipv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-820",
       "ref": "refs/pull/820/merge",
       "sha": "c2efd2f9a2f05c279468a163bee7e9f9461ff0b8",
@@ -56,35 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T11:24:55-07:00",
           "message": "fix(watchers): each holder of a polled path keeps its own baseline, set by its acquire and follow, and only the sweep fires (9bj6)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-816",
-      "ref": "refs/pull/816/merge",
-      "sha": "a2dc324d8296b168943b0f73533497d2009c5a80",
-      "timestamp": "2026-11-18T18:22:01.570Z",
-      "commits": [
-        {
-          "sha": "a2dc324d8296b168943b0f73533497d2009c5a80",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T18:20:58Z",
-          "message": "Merge de8b75f26cbfa63d33ce746111ec6e719158062e into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "de8b75f26cbfa63d33ce746111ec6e719158062e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:20:47-07:00",
-          "message": "fix(git): a link in refs/heads is walked when it leads to a folder and is no target otherwise (pkcy)\n"
-        },
-        {
-          "sha": "855d3bd53391b53da8c38c5ee186960a4410ff82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:39:28-07:00",
-          "message": "fix(watchers): each branch refs directory is its own watch, and one that cannot be opened is the registry's refusal (pkcy)\n\nOn Linux under Node 20 and 22 a recursive fs.watch is Node's own\nwalk, which stops at an entry it cannot open and still reads as\nlistening. The git watch now names refs/heads and every directory\nbelow it, and each link there, as a plain directory target on every\npass. A directory the listing cannot open is still named, so the\nregistry refuses it, logs and counts it, and retries it each period.\nThe registry loses its recursive arm.\n"
         }
       ]
     },

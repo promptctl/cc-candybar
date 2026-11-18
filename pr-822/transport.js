@@ -35026,6 +35026,24 @@ function followWatch(held2, spec, acquire) {
 var defaultLogger = (_level, message2) => debug(message2);
 var DEBOUNCE_MS = 50;
 var POLL_MS = 1e3;
+function openTree(at) {
+  for (const entry of fs_default.readdirSync(at, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      openTree(import_node_path6.default.join(at, entry.name));
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+    }
+  }
+}
+function opensBelow(at) {
+  try {
+    openTree(at);
+    return true;
+  } catch {
+    return false;
+  }
+}
 function folded(window2, next) {
   if (next.kind === "failed") return next;
   if (window2.kind !== "changed") return window2;
@@ -35040,6 +35058,7 @@ var failedOf = (d) => ({
   reason: `${d.path}: ${d.reason}`
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 function entryAt(at) {
   try {
     const s = fs_default.lstatSync(at, { bigint: true });
@@ -35059,10 +35078,12 @@ var WatcherRegistry = class {
   logger;
   clock;
   closed = false;
+  walksTrees;
   constructor(opts) {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.walksTrees = opts.walksTrees ?? process.platform === "linux";
   }
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
@@ -35131,17 +35152,20 @@ var WatcherRegistry = class {
   // The directory watch a new slot's target joins: the one already open
   // there, judged, or a new one.
   dirFor(target) {
-    const existing = this.dirs.get(target.path);
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
     if (existing !== void 0) {
       this.judged(existing, "acquire");
       return existing;
     }
+    const where = { path: target.path, recursive: target.recursive === true };
     const dir = {
-      path: target.path,
+      id: id2,
+      ...where,
       listeners: /* @__PURE__ */ new Set(),
-      state: this.open(target, () => dir, "acquire", null)
+      state: this.open(where, () => dir, "acquire", null)
     };
-    this.dirs.set(target.path, dir);
+    this.dirs.set(id2, dir);
     return dir;
   }
   // [LAW:single-enforcer] The one rule that a directory watch names the
@@ -35162,6 +35186,11 @@ var WatcherRegistry = class {
     const now2 = boundOf(dir.path);
     if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
       this.reopen(dir, "another folder is at its path");
+    else if (this.walked(dir) && !opensBelow(dir.path))
+      this.reopen(dir, "a directory below it cannot be opened");
+  }
+  walked(where) {
+    return where.recursive && this.walksTrees;
   }
   // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
   // the disk, on the period the file-event delivery owner keeps (the daemon
@@ -35196,9 +35225,10 @@ var WatcherRegistry = class {
     const bound = boundKey(boundOf(at));
     try {
       fs_default.opendirSync(at).closeSync();
+      if (this.walked(where)) openTree(at);
       const handle = fs_default.watch(
         at,
-        { persistent: false },
+        { persistent: false, recursive: where.recursive },
         (_event, changed) => this.heard(dirOf(), handle, changed)
       );
       handle.on("error", (e) => {
@@ -35315,7 +35345,7 @@ var WatcherRegistry = class {
       if (dir.listeners.size > 0) continue;
       if (dir.state.kind === "listening")
         this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.path);
+      this.dirs.delete(dir.id);
     }
     for (const record2 of slot.polled) {
       record2.slots.delete(slot);
@@ -64854,42 +64884,9 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: refsDirs(import_node_path23.default.join(commonDir, "refs", "heads")).map((dir) => ({
-      path: dir
-    })),
+    dirs: [{ path: import_node_path23.default.join(commonDir, "refs", "heads"), recursive: true }],
     polled: [import_node_path23.default.join(gitDir, "HEAD"), import_node_path23.default.join(gitDir, "index")]
   });
-}
-function refsDirs(root) {
-  const dirs = [];
-  const walked = /* @__PURE__ */ new Set();
-  const walk3 = (dir) => {
-    dirs.push(dir);
-    let entries;
-    try {
-      const { dev, ino } = fs_default.statSync(dir);
-      const id2 = `${dev}:${ino}`;
-      if (walked.has(id2)) return;
-      walked.add(id2);
-      entries = fs_default.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const child = import_node_path23.default.join(dir, entry.name);
-      if (entry.isDirectory() || entry.isSymbolicLink() && isFolder(child))
-        walk3(child);
-    }
-  };
-  walk3(root);
-  return dirs.sort();
-}
-function isFolder(at) {
-  try {
-    return fs_default.statSync(at).isDirectory();
-  } catch {
-    return false;
-  }
 }
 function branchOf(outcome) {
   return outcome.kind === "ok" ? outcome.value.branch : void 0;
@@ -93887,10 +93884,10 @@ var REPO_PLUGIN_DIR = import_node_path42.default.join(".cc-candybar", "plugins")
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    const isFolder2 = (e) => e.isDirectory() || isDirectoryLink(root, e);
+    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
     return {
-      folders: entries.filter(isFolder2).map((e) => e.name),
-      files: entries.filter((e) => !isFolder2(e)).map((e) => e.name)
+      folders: entries.filter(isFolder).map((e) => e.name),
+      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
     };
   } catch (e) {
     return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
