@@ -18,6 +18,11 @@ describe("a git read under a shell's GIT_DIR", () => {
   let a: string;
   let b: string;
   let shell: NodeJS.ProcessEnv;
+  // The fixture's own git runs with none of git's variables, so a run from a
+  // hook builds its repos here and never in the hook's.
+  const clean = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")),
+  );
 
   beforeAll(() => {
     root = realpathSync(mkdtempSync(join(tmpdir(), "candybar-git-env-")));
@@ -28,10 +33,10 @@ describe("a git read under a shell's GIT_DIR", () => {
       [b, "beta"],
     ] as const) {
       mkdirSync(repo);
-      git(repo, process.env, "init", "-q", "-b", branch);
+      git(repo, clean, "init", "-q", "-b", branch);
       git(
         repo,
-        process.env,
+        clean,
         "-c",
         "user.email=t@t.t",
         "-c",
@@ -43,7 +48,7 @@ describe("a git read under a shell's GIT_DIR", () => {
         "init",
       );
     }
-    shell = { ...process.env, GIT_DIR: join(a, ".git") };
+    shell = { ...clean, GIT_DIR: join(a, ".git") };
   });
 
   afterAll(() => rmSync(root, { recursive: true, force: true }));

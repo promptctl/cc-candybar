@@ -57,11 +57,11 @@ test("the overlay unsets exactly the names git gave", () => {
   expect(localEnvUnset("")).toEqual({});
 });
 
-test("a read carries the asked names unset under its own overlay, and the second read asks nothing", async () => {
+test("a read carries the asked names unset over its own overlay, and the second read asks nothing", async () => {
   const l = recording([okRun(NAMES)]);
   const launch = repoLaunch(l);
   expect(await launch(READ)).toEqual(okRun("read"));
-  await launch({ ...READ, envOverlay: { GIT_DIR: "/kept" } });
+  await launch({ ...READ, envOverlay: { GIT_DIR: "/elsewhere" } });
   expect(l.launched.filter(isAsk)).toHaveLength(1);
   expect(l.launched.filter((o) => !isAsk(o)).map((o) => o.envOverlay)).toEqual([
     {
@@ -70,7 +70,7 @@ test("a read carries the asked names unset under its own overlay, and the second
       GIT_CONFIG_PARAMETERS: null,
       GIT_OPTIONAL_LOCKS: "0",
     },
-    { GIT_DIR: "/kept", GIT_WORK_TREE: null, GIT_CONFIG_PARAMETERS: null },
+    { GIT_DIR: null, GIT_WORK_TREE: null, GIT_CONFIG_PARAMETERS: null },
   ]);
 });
 
@@ -81,17 +81,36 @@ test("concurrent first reads share one ask", async () => {
   expect(l.launched.filter(isAsk)).toHaveLength(1);
 });
 
-test.each(["non-zero", "spawn-error", "timeout"] as const)(
-  "an ask that fails (%s) is the read's result, the read never runs, and the next read asks again",
+test("the ask runs in the read's own directory", async () => {
+  const l = recording([okRun(NAMES)]);
+  await repoLaunch(l)(READ);
+  expect(l.launched.find(isAsk)?.cwd).toBe("/repo");
+});
+
+test.each(["non-zero", "timeout"] as const)(
+  "an ask that fails (%s) is a read that never started, naming the ask, and the next read asks again",
   async (reason) => {
     const l = recording([failedRun(reason), okRun(NAMES)]);
     const launch = repoLaunch(l);
-    expect(await launch(READ)).toEqual(failedRun(reason));
+    expect(await launch(READ)).toEqual({
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: expect.stringMatching(/^git rev-parse --local-env-vars: /),
+    });
     expect(l.launched.filter((o) => !isAsk(o))).toEqual([]);
     expect(await launch(READ)).toEqual(okRun("read"));
     expect(l.launched.filter(isAsk)).toHaveLength(2);
   },
 );
+
+test("git that will not spawn is the read's result as it stands", async () => {
+  const l = recording([failedRun("spawn-error")]);
+  expect(await repoLaunch(l)(READ)).toEqual(failedRun("spawn-error"));
+});
 
 // The forge CLIs run git themselves, so their launch carries the same unset.
 test("a PR lookup launches its forge CLI with git's repository variables unset", async () => {
@@ -104,6 +123,7 @@ test("a PR lookup launches its forge CLI with git's repository variables unset",
     expect.objectContaining({
       bin: "gh",
       envOverlay: {
+        GH_REPO: null,
         GIT_DIR: null,
         GIT_WORK_TREE: null,
         GIT_CONFIG_PARAMETERS: null,

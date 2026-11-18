@@ -1,4 +1,9 @@
-import type { AsyncLaunchOpts, Launcher, LaunchResult } from "./launcher";
+import {
+  failureText,
+  type AsyncLaunchOpts,
+  type Launcher,
+  type LaunchResult,
+} from "./launcher";
 
 // The overlay that unsets each variable `git rev-parse --local-env-vars`
 // names: those that locate a repository (`GIT_DIR`, `GIT_WORK_TREE`, the
@@ -14,31 +19,62 @@ export const localEnvUnset = (stdout: string): Record<string, null> =>
 // A launch for a directory's repository.
 export type RepoLaunch = (opts: AsyncLaunchOpts) => Promise<LaunchResult>;
 
+// What asking git for the names answered: the overlay that unsets them, or
+// the result the read stands in for, since the read never starts.
+type Asked =
+  | { readonly kind: "unset"; readonly overlay: Record<string, null> }
+  | { readonly kind: "failed"; readonly result: LaunchResult };
+
+// [LAW:no-silent-failure] An ask that failed is a read that never started
+// (`spawn-error`), naming the ask, so no read's own "there is none" exit can
+// take it for an answer. git that would not spawn is the read's own fault as
+// it stands.
+function askedOf(answer: LaunchResult): Asked {
+  if (answer.ok)
+    return { kind: "unset", overlay: localEnvUnset(answer.stdout) };
+  if (answer.reason === "spawn-error")
+    return { kind: "failed", result: answer };
+  return {
+    kind: "failed",
+    result: {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `git rev-parse --local-env-vars: ${failureText(answer)}`,
+    },
+  };
+}
+
 // [LAW:single-enforcer] The one way a git or forge read is launched for a
 // directory: with none of git's repository variables, since the env it
-// inherits is whichever shell started this process, never the session's.
-// [LAW:one-source-of-truth] git names them, asked once for the asker's life;
-// concurrent first launches share the ask. [LAW:no-silent-failure] An ask
-// that fails is the launch's result, a git launch that failed, so the read
-// fails naming why instead of reading another repository. It is not kept:
-// the next launch asks again.
+// inherits is whichever shell started this process, never the session's. The
+// unset is laid over the caller's overlay, so no call site can put one back.
+// [LAW:one-source-of-truth] git names them, asked once for the asker's life,
+// in the first read's own directory; concurrent first launches share the ask.
+// An ask that fails is not kept: the next launch asks again.
 export function repoLaunch(launcher: Pick<Launcher, "launch">): RepoLaunch {
-  let asked: Promise<LaunchResult> | null = null;
+  let asked: Promise<Asked> | null = null;
   return async (opts) => {
-    const ask = (asked ??= launcher.launch({
-      bin: "git",
-      args: ["rev-parse", "--local-env-vars"],
-      timeoutMs: 2000,
-      category: "git",
-    }));
+    const ask = (asked ??= launcher
+      .launch({
+        bin: "git",
+        args: ["rev-parse", "--local-env-vars"],
+        cwd: opts.cwd,
+        timeoutMs: 2000,
+        category: "git",
+      })
+      .then(askedOf));
     const answer = await ask;
-    if (!answer.ok) {
+    if (answer.kind === "failed") {
       if (asked === ask) asked = null;
-      return answer;
+      return answer.result;
     }
     return launcher.launch({
       ...opts,
-      envOverlay: { ...localEnvUnset(answer.stdout), ...opts.envOverlay },
+      envOverlay: { ...opts.envOverlay, ...answer.overlay },
     });
   };
 }

@@ -627,6 +627,9 @@ export class GitService {
       bin,
       args: [...args],
       cwd: options.cwd,
+      // `gh` takes the repository from GH_REPO over its directory, and the
+      // daemon's is the spawning shell's.
+      envOverlay: { GH_REPO: null },
       timeoutMs: options.timeout,
       category: "forge",
     });
