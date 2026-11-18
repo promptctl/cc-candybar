@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-798",
+      "ref": "refs/pull/798/merge",
+      "sha": "2110d13b75802b5d0f38a1127a437e3a4a500915",
+      "timestamp": "2026-11-18T15:11:10.871Z",
+      "commits": [
+        {
+          "sha": "2110d13b75802b5d0f38a1127a437e3a4a500915",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:10:00-07:00",
+          "message": "Merge fcbdf4dfa79435fbe57b815600955f859236888f into 414ac46b373d30c9a48f0b105345462e9a64bd0f\n"
+        },
+        {
+          "sha": "fcbdf4dfa79435fbe57b815600955f859236888f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:02:07-07:00",
+          "message": "fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole.\n"
+        },
+        {
+          "sha": "57947f2cdae560c7573d6305b880cdf3bf3c8937",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:42:35-07:00",
+          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
+        },
+        {
+          "sha": "21f7dc276ba5539db629150fc7f6b1741e9b8fb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:25:40-07:00",
+          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "414ac46b373d30c9a48f0b105345462e9a64bd0f",
@@ -49,42 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:48:16-07:00",
           "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-798",
-      "ref": "refs/pull/798/merge",
-      "sha": "8ed61b2f3fcac1777eed69d286003cea25ee451e",
-      "timestamp": "2026-11-18T13:27:25.903Z",
-      "commits": [
-        {
-          "sha": "8ed61b2f3fcac1777eed69d286003cea25ee451e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:26:26Z",
-          "message": "Merge 4e05df1d0573ad895daf3f34ca41145762bde64d into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "4e05df1d0573ad895daf3f34ca41145762bde64d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:02:07-07:00",
-          "message": "fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole.\n"
-        },
-        {
-          "sha": "e9d7cb5d919cbd6d97331be519716b9f623de9c5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:42:35-07:00",
-          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
-        },
-        {
-          "sha": "2f40edd86f12f7e66cae622bd4e13e4493ae7121",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:25:40-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
         }
       ]
     }

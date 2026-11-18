@@ -28404,7 +28404,6 @@ var DISCLOSURE_GLYPH_CLOSED = "\u25B8";
 var DISCLOSURE_GLYPH_OPEN = "\u25BE";
 var DISCLOSURE_GLYPH_CLOSE = "\u2715";
 var DISCLOSURE_CLOSE_ROLE = "warning";
-var DOOR_CLOSE_ROLE = "error";
 var DOOR_GLYPH = "\u{1F36B}";
 var DOOR_CLOSE_GLYPH = "\u2716";
 function cycleDisplayIssue(subject, count, members) {
@@ -38274,6 +38273,9 @@ function hexColor(input, lead, digits, lengths) {
   const byte = (at) => parseInt(digits.slice(at, at + 2), 16);
   return new ColorRgba(byte(0), byte(2), byte(4), digits.length === 8 ? byte(6) / 255 : 1);
 }
+function parseRgbHex(hex3) {
+  return hexColor(hex3, "", hex3, [6]);
+}
 function parseHexColor(literal) {
   return hexColor(literal, "#", literal.startsWith("#") ? literal.slice(1) : "", [6, 8]);
 }
@@ -39085,15 +39087,6 @@ function ensureContrast(fg, bg, minRatio = 4.5, drawnAt = ColorDepth.TRUECOLOR, 
   if (contrastRatio(shownAs(table, chosen), shownBg) >= minRatio)
     return chosen;
   return table.written.get(table.shown.matchReadable(fg.compositeOver(ground), shownBg, minRatio));
-}
-function ensureDrawn(chosen, drawnAt, accept, substrate = SURFACE_BLACK, terminal) {
-  const opaque = drawnBackground(chosen, substrate);
-  const table = drawnTable(drawnAt, terminal);
-  const drawn = (c) => shownAs(table, drawnBackground(c, substrate));
-  if (accept(drawn(opaque), drawn))
-    return opaque;
-  const index = table?.shown.matchWhere(opaque, (entry) => accept(entry, drawn));
-  return index === void 0 ? void 0 : table.written.get(index);
 }
 function drawnColour(colour, drawnAt, substrate = SURFACE_BLACK, terminal) {
   return shownAs(drawnTable(drawnAt, terminal), drawnBackground(colour, substrate));
@@ -62200,17 +62193,13 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
+      // the ✖ is red as this depth draws it on the pressed state, the
+      // theme's own error red wherever one reads (`errorRedOn`). It never
+      // slides lightness: a slid red stops reading as red, and the ✖ must be
+      // red on every theme. Closed,
+      // the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
       [FPS_SEG]: { template: FRAME_RATE },
       [TOOLBAR_SEG]: { template: TOOLBAR.template },
@@ -79477,39 +79466,12 @@ function segmentColorFuncs(ref) {
     arity: { kind: "exact" },
     returnType: "string"
   };
-  const roleTextOn = {
-    fn: ((role, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return namedRoleText(palette2, role, resolveColorRef(palette2, bgRef)).hex;
+  const errorRedOn = {
+    fn: ((bgRef) => {
+      const { palette: palette2 } = requireActiveSegment(ref, "{{ errorRedOn }}");
+      return errorRed(palette2, resolveColorRef(palette2, bgRef), ref.drawnAt()).hex;
     }),
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const keptOn = {
-    fn: ((fgRef, bgRef) => {
-      const { palette: palette2 } = requireActiveSegment(ref, "{{ keptOn }}");
-      const fg = resolveColorRef(palette2, fgRef);
-      const bg = resolveColorRef(palette2, bgRef);
-      const held2 = contrastRatio(
-        drawnColour(fg, ColorDepth.TRUECOLOR),
-        drawnColour(bg, ColorDepth.TRUECOLOR)
-      );
-      const floor3 = Math.min(TEXT_MIN_CONTRAST, held2);
-      const depth = ref.drawnAt();
-      const kept = ensureDrawn(
-        fg,
-        depth,
-        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor3
-      );
-      if (kept === void 0) {
-        throw new Error(
-          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ${floor3.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`
-        );
-      }
-      return kept.hex;
-    }),
-    argTypes: ["string", "string"],
+    argTypes: ["string"],
     arity: { kind: "exact" },
     returnType: "string"
   };
@@ -79539,40 +79501,40 @@ function segmentColorFuncs(ref) {
     arity: { kind: "variadic" },
     returnType: "T"
   };
-  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+  return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
-var RUNGS_OUT = {
-  "#000000": ["darken-1", "darken-2", "darken-3"],
-  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
-};
-var RUNGS = Object.values(RUNGS_OUT).flat();
-function namedRoleText(palette, role, ground) {
-  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
-  const named3 = (name) => {
-    const colour = resolveColorRef(palette, name);
-    return {
-      colour,
-      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown)
-    };
-  };
-  const pole = contrastFor(shown).hex;
-  const out = RUNGS_OUT[pole];
-  if (out === void 0) {
-    throw new Error(
-      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
-    );
+var POLES = [
+  { pole: parseRgbHex("000000"), rungs: ["darken-1", "darken-2", "darken-3"] },
+  {
+    pole: parseRgbHex("ffffff"),
+    rungs: ["lighten-1", "lighten-2", "lighten-3"]
   }
-  const text4 = `text-${role}`;
-  const rung = (step4) => `${role}-${step4}`;
-  const colours = new Map(
-    [text4, role, ...RUNGS.map(rung)].map((name) => [name, named3(name)])
+];
+var TERMINAL_REDS = [
+  ANSI_COLOR_NAMES.red,
+  ANSI_COLOR_NAMES.bright_red
+].map((index) => STANDARD_TABLE.get(index));
+var RED_HUE = { from: -20, to: 38, chroma: 0.06 };
+function readsRed(colour) {
+  const { h, c } = Oklch.fromRgba(colour);
+  const hue = h > 180 ? h - 360 : h;
+  return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
+}
+function errorRed(palette, ground, depth) {
+  const shown = drawnColour(ground, depth);
+  const [farther, nearer] = [...POLES].sort(
+    (x, y) => contrastRatio(y.pole, shown) - contrastRatio(x.pole, shown)
   );
-  const preferred = [text4, role, ...out.map(rung)].map(
-    (name) => colours.get(name)
-  );
-  return (preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? [...colours.values()].reduce(
-    (farthest, colour) => colour.ratio > farthest.ratio ? colour : farthest
-  )).colour;
+  const themed = [
+    "text-error",
+    "error",
+    ...[...farther.rungs, ...nearer.rungs].map((rung) => `error-${rung}`)
+  ].map((name) => resolveColorRef(palette, name));
+  const counted2 = (ratio) => Math.min(ratio, TEXT_MIN_CONTRAST);
+  return [...themed, ...TERMINAL_REDS].map((colour) => {
+    const drawn = drawnColour(colour, depth);
+    return { colour, drawn, ratio: counted2(contrastRatio(drawn, shown)) };
+  }).filter(({ drawn }) => readsRed(drawn)).reduce((best, c) => c.ratio > best.ratio ? c : best).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {
