@@ -125,28 +125,36 @@ export interface RegistryEntry {
 export function listRegistryFiles(dir: string): string[] {
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith(".json"))
+    .filter((f) => f.endsWith(ENTRY_SUFFIX))
     .map((f) => path.join(dir, f));
 }
 
 // [LAW:one-source-of-truth] An entry's pid is its name, the only name
 // admission writes; its content adds the start time that tells the pid's
 // process from a later one given the same pid.
-const ENTRY_NAME = /^pid-([1-9]\d*)\.json$/;
+const ENTRY_PREFIX = "pid-";
+const ENTRY_SUFFIX = ".json";
 const entryPath = (dir: string, pid: number): string =>
-  path.join(dir, `pid-${pid}.json`);
+  path.join(dir, `${ENTRY_PREFIX}${pid}${ENTRY_SUFFIX}`);
+// The pid an entry's name spells, in the one form `entryPath` writes, or null.
+function pidNamed(name: string): number | null {
+  if (!name.startsWith(ENTRY_PREFIX) || !name.endsWith(ENTRY_SUFFIX))
+    return null;
+  const digits = name.slice(ENTRY_PREFIX.length, -ENTRY_SUFFIX.length);
+  return /^[1-9]\d*$/.test(digits) ? Number(digits) : null;
+}
 
 // [LAW:no-silent-failure] Null is no entry: a name admission never writes, or
 // a file removed since the listing (its daemon released it). A start time
 // that cannot be read, from content unreadable or not an identity, leaves the
 // entry judged by its pid alone (kill(pid, 0)). That can count a recycled pid
 // as live and never a live one as dead, so the count can come out high, which
-// refuses, and never short. The content keeps its pid for readers that take
-// it from there.
+// refuses, and never short. The content keeps its pid because a daemon of an
+// earlier release reads the pid from there, and counts an entry without one
+// as no entry.
 export function readRegistryEntry(filePath: string): ProcessIdentity | null {
-  const named = ENTRY_NAME.exec(path.basename(filePath));
-  if (named === null) return null;
-  const pid = Number(named[1]);
+  const pid = pidNamed(path.basename(filePath));
+  if (pid === null) return null;
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf8");
@@ -268,11 +276,12 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
   return { decision, registryPath };
 }
 
-// Self-cleanup on shutdown. The entry is named by our own pid, which no other
-// live process holds, so it is ours while we run. Gone already is released.
-// [LAW:no-silent-failure] Any other failure throws to the shutdown step, which
-// logs it; the next boot's sweep reclaims the entry.
-export function releaseRegistration(
+// [LAW:single-enforcer] The one removal of a registry entry: our own at
+// shutdown (named by our own pid, which no other live process holds, so it is
+// ours while we run), and a dead one the sweep finds. Gone already is removed.
+// [LAW:no-silent-failure] Any other failure throws: the shutdown step logs it,
+// and the sweep warns and goes on, since a dead entry left behind is uncounted.
+export function removeEntry(
   registryPath: string,
   removeFile: (filePath: string) => void,
 ): void {
@@ -292,6 +301,7 @@ export function realBreakerDeps(
   { host, launcher }: World,
   myStartTime: string | null,
   registryDir: string,
+  warn: (message: string) => void,
   overrides: Partial<BreakerDeps> = {},
 ): BreakerDeps {
   return {
@@ -306,9 +316,11 @@ export function realBreakerDeps(
     readEntry: readRegistryEntry,
     removeFile: (filePath) => {
       try {
-        fs.unlinkSync(filePath);
-      } catch {
-        // best-effort
+        removeEntry(filePath, fs.unlinkSync);
+      } catch (e) {
+        warn(
+          `fork-bomb breaker: a dead entry could not be removed: ${(e as Error).message}`,
+        );
       }
     },
     // [LAW:single-enforcer] Published by rename (src/utils/atomic-write.ts): a

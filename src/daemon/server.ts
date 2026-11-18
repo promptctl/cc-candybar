@@ -26,11 +26,7 @@ import {
   sameLiveProcess,
   systemProbe,
 } from "./process-fingerprint";
-import {
-  admitDaemon,
-  realBreakerDeps,
-  releaseRegistration,
-} from "./fork-bomb-breaker";
+import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
@@ -179,7 +175,9 @@ async function boot(): Promise<void> {
     systemProbe(world.launcher).startTime,
   );
   const admission = await admitDaemon(
-    realBreakerDeps(world, myStartTime, paths.registry),
+    realBreakerDeps(world, myStartTime, paths.registry, (message) =>
+      serverLog("warn", message),
+    ),
   );
   if (!admission.decision.allow) {
     serverLog(
@@ -523,13 +521,14 @@ async function closeThenExit(code: number): Promise<void> {
       "lease removal",
       () => removeLeaseIfOwned(daemonProcess().paths.lease, process.pid),
     ],
-    // A slot this daemon never claimed (exempt production, or refused before
+    // [LAW:single-enforcer] The registry's one removal (removeEntry). A slot
+    // this daemon never claimed (exempt production, or refused before
     // claiming one) is null and skipped.
     [
       "registry release",
       () =>
         breakerRegistryPath !== null &&
-        releaseRegistration(breakerRegistryPath, (p) => fs.unlinkSync(p)),
+        removeEntry(breakerRegistryPath, (p) => fs.unlinkSync(p)),
     ],
   ];
   for (const [step, run] of steps) {

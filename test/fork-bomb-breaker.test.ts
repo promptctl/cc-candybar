@@ -12,7 +12,7 @@ import {
   listRegistryFiles,
   readRegistryEntry,
   realBreakerDeps,
-  releaseRegistration,
+  removeEntry,
   type BreakerDeps,
   type RegistryEntry,
 } from "../src/daemon/fork-bomb-breaker";
@@ -258,7 +258,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(link, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(
+        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
           registryDir,
         ),
       ).toThrow(/symlink/);
@@ -274,7 +274,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(
+        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
           registryDir,
         ),
       ).not.toThrow();
@@ -291,7 +291,7 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
       expect(() =>
-        realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir),
+        realBreakerDeps(registryWorld(dir), null, dir, () => {}).ensureDirSafe(dir),
       ).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -317,12 +317,40 @@ describe("realBreakerDeps writeEntry (no staged file left)", () => {
     const identity = { pid: 123, startTime: "st" };
     try {
       expect(() =>
-        realBreakerDeps(WORLD, null, dir).writeEntry(filePath, identity),
+        realBreakerDeps(WORLD, null, dir, () => {}).writeEntry(filePath, identity),
       ).toThrow();
       expect(fs.readdirSync(dir)).toEqual(["pid-123.json"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("realBreakerDeps removeFile (the sweep's removal)", () => {
+  test("a dead entry it cannot remove is warned of, and the sweep goes on", () => {
+    const dir = freshDir();
+    const filePath = path.join(dir, "pid-123.json");
+    fs.mkdirSync(path.join(filePath, "occupied"), { recursive: true });
+    const warned: string[] = [];
+    try {
+      realBreakerDeps(WORLD, null, dir, (m) => warned.push(m)).removeFile(
+        filePath,
+      );
+      expect(warned).toEqual([
+        expect.stringContaining("a dead entry could not be removed"),
+      ]);
+      expect(warned[0]).toContain(filePath);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an entry gone already is removed, with nothing said", () => {
+    const warned: string[] = [];
+    realBreakerDeps(WORLD, null, freshDir(), (m) => warned.push(m)).removeFile(
+      path.join(freshDir(), "pid-123.json"),
+    );
+    expect(warned).toEqual([]);
   });
 });
 
@@ -462,18 +490,18 @@ describe("admitDaemon", () => {
   });
 });
 
-// ─── releaseRegistration: only remove if it still names us ─────────────────
+// ─── removeEntry: gone is removed, any other failure is said ───────────────
 
-describe("releaseRegistration", () => {
+describe("removeEntry", () => {
   test("removes our entry", async () => {
     const removeFile = jest.fn();
-    releaseRegistration("/fake/pid-42.json", removeFile);
+    removeEntry("/fake/pid-42.json", removeFile);
     expect(removeFile).toHaveBeenCalledWith("/fake/pid-42.json");
   });
 
   test("an entry gone already is released", async () => {
     expect(() =>
-      releaseRegistration("/fake/pid-42.json", () => {
+      removeEntry("/fake/pid-42.json", () => {
         throw Object.assign(new Error("ENOENT: no such file or directory"), {
           code: "ENOENT",
         });
@@ -484,7 +512,7 @@ describe("releaseRegistration", () => {
   // The shutdown step logs it (server.ts).
   test("a removal that fails throws its error", async () => {
     expect(() =>
-      releaseRegistration("/fake/pid-42.json", () => {
+      removeEntry("/fake/pid-42.json", () => {
         throw new Error("EACCES: permission denied, unlink");
       }),
     ).toThrow(/EACCES/);
