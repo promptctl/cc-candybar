@@ -134,9 +134,10 @@ function checkRateLimit(
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 
-// [LAW:one-source-of-truth] The environment a child gets is the owner's
-// inherited one (`LaunchScope.inherited`, handed in by the process main or the
-// daemon's root) under the launch's overlay, resolved here for every spawn
+// [LAW:one-source-of-truth] The environment a child gets is the launch's own
+// (a session's) or else the owner's inherited one (`LaunchScope.inherited`,
+// handed in by the process main or the daemon's root), under the launch's
+// overlay, resolved here for every spawn
 // site. Passing `undefined` lets node read the host process's environment
 // directly, which is a second clock: under a realm boundary (Jest's sandbox
 // copies `process.env` per test file) the two diverge, and a PATH the test set
@@ -144,7 +145,7 @@ function checkRateLimit(
 // (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
 // null removes that variable: node's spawn skips undefined values.
 function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...scope.inherited };
+  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
   return env;

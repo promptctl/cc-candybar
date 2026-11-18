@@ -64,7 +64,7 @@ import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererPort } from "./renderer-process.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
-import { bootEnv } from "../renderer-interface/wire.js";
+import { plainEnvironment } from "./foundations/session-env.js";
 import {
   answeredBy,
   joinedEvent,
@@ -78,6 +78,7 @@ import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { followingOf } from "../renderer-interface/interface.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -133,6 +134,7 @@ export interface DaemonAdapters {
     following: (sessionId: SessionId) => ReadonlySet<Lane>,
     closing: AbortSignal,
     probe: ProcessProbe,
+    environmentOf: (session: SessionId) => SessionEnvironment,
   ) => LaneEdge;
   // [LAW:one-source-of-truth] The link key, asked for at each use: every
   // click is opened with it and every renderer draws with it.
@@ -349,7 +351,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           stored: stores.current(),
           linkSigner,
           locations: locs,
-          env: host.env,
           home: host.home,
           gates,
           memoryLimitBytes,
@@ -362,7 +363,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       return {
         stored: stores.current(),
         digest: bundle.digest,
-        host: { ...host, env: bootEnv(host.env) },
+        host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes,
         linkKey:
           key.kind === "ok"
@@ -443,6 +444,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     supersede: (folder, sessionId) =>
       managedStorage.supersede(folder, sessionId),
     launch: launcher.launch,
+    environmentOf: (session) => sessionBook.environmentOf(session),
     clock,
   });
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's
@@ -460,6 +462,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         (sessionId) => followingOf(frameFeeds.viewersOf(sessionId)),
         closing.signal,
         probe,
+        (session) => sessionBook.environmentOf(session),
       ),
       // A bar pane runs this bundle under the node running it now, with the
       // flags it runs with (tsx's loader, under the test harness).

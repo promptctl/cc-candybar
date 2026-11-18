@@ -356,6 +356,21 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     if let Some(ms) = deadline_epoch_ms {
         request["deadline"] = serde_json::Value::from(ms);
     }
+    // The environment Claude Code gave this client, which the daemon runs the
+    // session's programs in (src/daemon/foundations/session-env.ts). JSON
+    // carries only UTF-8, so a byte that is not reads as U+FFFD, as it does in
+    // the Node client: one bad entry of a PATH costs that entry, where
+    // dropping the variable would cost the whole PATH.
+    request["env"] = serde_json::Value::Object(
+        env::vars_os()
+            .map(|(name, value)| {
+                (
+                    name.to_string_lossy().into_owned(),
+                    serde_json::Value::String(value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect(),
+    );
     client_hints(&mut request, std::path::Path::new(&cwd));
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,

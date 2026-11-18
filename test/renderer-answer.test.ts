@@ -9,6 +9,8 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { TEST_ENV } from "./helpers/session-environment";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
@@ -152,6 +154,7 @@ function checked(pane?: string): CheckedRenderRequest {
       args: ["cc-candybar", "--config", configFile, "--bogus"],
       cwd: PROJECT,
       encoding: "frame",
+      env: TEST_ENV,
       ...(pane === undefined
         ? {}
         : { tmux: { socket: "/tmp/tmux.sock", pane, truecolor: null } }),
@@ -181,7 +184,7 @@ const contextTurn = (
     event: {
       kind: "context",
       context,
-      worldState: rig.served.collector.requested(context),
+      worldState: rig.served.collector.requested(context, TEST_ENVIRONMENT),
     },
   });
 
@@ -307,7 +310,7 @@ describe("a statusline request", () => {
         viewers: {},
         sessions: [mine, theirs].map((context) => ({
           context,
-          worldState: rig.served.collector.requested(context),
+          worldState: rig.served.collector.requested(context, TEST_ENVIRONMENT),
         })),
       },
     });
@@ -718,6 +721,7 @@ describe("the session's config, ahead of its request", () => {
       new AbortController().signal,
       () => {},
       checked(),
+      TEST_ENVIRONMENT,
       REQUEST,
       systemTimekeeper.monotonic() + 5000,
       facts as never,
@@ -844,6 +848,7 @@ describe("two requests of one session at different keys", () => {
         new AbortController().signal,
         () => {},
         checked(pane),
+        TEST_ENVIRONMENT,
         id as RequestId,
         systemTimekeeper.monotonic() + 10_000,
         [],

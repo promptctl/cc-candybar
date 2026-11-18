@@ -26,6 +26,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
 const S_A = sessionIdOf("s-a");
@@ -63,7 +64,7 @@ const runsOf = (view: SessionView): CheckRuns => {
     held = new CheckRuns(
       holding.sourceRuns,
       view.registry,
-      instantOf(new Date()),
+      instantOf(new Date()), TEST_ENV
     );
     holding.held.set(view, held);
   }
@@ -96,7 +97,6 @@ function makeCache(
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -186,7 +186,7 @@ const drawn = (
       },
       undefined,
       undefined,
-      (digest) => runsOf(view).run(digest),
+      runsOf(view).readings,
     ).frame,
   );
 

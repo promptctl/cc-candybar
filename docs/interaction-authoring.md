@@ -1078,20 +1078,21 @@ Your own config may declare one too. It names a source by its full name:
   link naming a run the session's config does not declare runs nothing, and
   the refusal shows in the bar. So does a link drawn before you edited its
   action: it ran what the old declaration promised.
-- **The program gets the session's environment.** It is the daemon's own
-  environment with every variable that states a session fact replaced:
-  `CLAUDE_CODE_SESSION_ID` is the clicked session's id,
-  `CLAUDE_PROJECT_DIR` its project directory, and `CLAUDE_CONFIG_DIR` its
-  Claude Code directory (unset when that is the default). The daemon was
-  started by some other session's shell, so its own values of these never
-  reach the program. `TMUX` and `TMUX_PANE` are unset. `env` is laid over
-  the result.
+- **The program gets the session's environment.** It is the environment
+  Claude Code gave the clicked session's statusline, with every variable
+  that states a session fact set from the session: `CLAUDE_CODE_SESSION_ID`
+  is its id, `CLAUDE_PROJECT_DIR` its project directory, and
+  `CLAUDE_CONFIG_DIR` its Claude Code directory (unset when that is the
+  default). The daemon was started by some other session's shell, so none of
+  its own environment reaches the program. `env` is laid over the result. A
+  session the daemon has not heard from since it started has no environment
+  it knows, so its click runs nothing and the bar says why; its next
+  statusline request brings it.
 - **It runs in the directory of the file that declares it**: the plugin's
   folder, or your config file's directory. A relative program (`./limit`)
-  resolves there, and a bare name (`limit`) is looked up on the daemon's
-  `PATH`, which is whatever shell started the daemon had. So a plugin names
-  its program relative to its folder or by absolute path. The session's
-  directories reach the program only through its environment.
+  resolves there, and a bare name (`limit`) is looked up on the session's
+  `PATH`. The session's directories reach the program only through its
+  environment.
 - **It runs after the click returns, for at most 10 seconds.** A non-zero
   exit, a timeout, or a program that cannot start puts its stderr, trimmed —
   or the reason, when it printed nothing — in the bar where a refused click's

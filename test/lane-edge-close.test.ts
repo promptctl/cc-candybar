@@ -3,6 +3,7 @@
 // no signal is sent from a daemon that is gone.
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
+import { NOT_HEARD } from "../src/daemon/foundations/session-env";
 import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
@@ -12,7 +13,7 @@ const S = sessionIdOf("s");
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe);
+    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, () => NOT_HEARD);
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

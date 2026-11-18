@@ -69,8 +69,8 @@
     },
 
     // ── 3. env ──────────────────────────────────────────────────────────────
-    // Reads a process environment variable. Re-read each time the render-cache
-    // entry is rebuilt; not watched for mid-session changes.
+    // Reads a variable of the session's environment, the one Claude Code gave
+    // the statusline, as its newest render request reported it.
     "demo.editor": { kind: "env", name: "EDITOR", default: "(none)" },
     "demo.user":   { kind: "env", name: "USER",   default: "?" },
     "demo.shell":  { kind: "env", name: "SHELL",  default: "" },

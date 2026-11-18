@@ -27,6 +27,11 @@ import {
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { shellEnvOf } from "../src/config/shell-env";
+import {
+  plainEnvironment,
+  type Environment,
+} from "../src/daemon/foundations/session-env";
 import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
 import { instantOf } from "../src/utils/instant";
@@ -65,6 +70,9 @@ const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
 
 // The parse step every shell/file declaration names: the identity, the
 // identity with a fallback, or a group-1 slice (with an optional fallback).
+// The variables every shell source here runs in: the base set a declaration
+// naming none gets.
+const SHELL_ENV = shellEnvOf();
 const TEXT: SourceParse = { kind: "text", default: undefined };
 const text = (dflt: string): SourceParse => ({ kind: "text", default: dflt });
 const regex = (pattern: string, dflt?: string): SourceParse => ({
@@ -103,15 +111,26 @@ const heldOf = (registry: SourceRegistry) => {
 };
 // Its runs held, and its inputs bound as an unbound registry's are, its runs
 // answered by the holder.
-function hold(registry: SourceRegistry, runs: SourceRuns): void {
-  const held = new CheckRuns(runs, registry, instantOf(new Date()));
+// Its runs launch in `environment`, which its `env` sources read too: the
+// test process's own unless the test states one.
+function hold(
+  registry: SourceRegistry,
+  runs: SourceRuns,
+  environment: Environment = plainEnvironment(process.env),
+): void {
+  const held = new CheckRuns(
+    runs,
+    registry,
+    instantOf(new Date()),
+    environment,
+  );
   holders.set(registry, { held, runs });
   registry.bindInputs({
     session: () => {
       throw new PendingValueError("session_id", "no view source is bound");
     },
     read: () => pendingOf("unread"),
-    run: (digest) => held.run(digest),
+    ...held.readings,
     drawnAt: () => {
       throw new PendingValueError(
         "colorCompatibility.effective",
@@ -127,7 +146,7 @@ function feedInputs(
   drawnAt?: ColorDepth,
 ): void {
   const { held } = heldOf(registry);
-  feedPayload(registry, payload, drawnAt, (digest) => held.run(digest));
+  feedPayload(registry, payload, drawnAt, held.readings);
 }
 // A session's view of `home`, its runs held over home's owner.
 function viewOf(home: SourceRegistry): SourceRegistry {
@@ -161,7 +180,7 @@ function registryOver(
   defaultEmptyValue?: VarValue,
   sessionState?: SessionState,
   parent?: SourceRegistry | null,
-  env?: NodeJS.ProcessEnv,
+  env?: Environment,
   runs: SourceRuns = runsOver(),
 ): SourceRegistry {
   const registry = new SourceRegistry(
@@ -169,17 +188,16 @@ function registryOver(
     defaultEmptyValue,
     sessionState,
     parent,
-    env,
   );
   live.add(registry);
-  hold(registry, runs);
+  hold(registry, runs, env);
   return registry;
 }
 
 // Helper: fresh pair so tests are fully isolated.
-// `env` is the environment an `env` source reads: stated by the test that means
-// one, otherwise empty (every variable unset).
-function make(defaultEmptyValue?: string, env: NodeJS.ProcessEnv = {}) {
+// `env` is the environment its sources read and run in: stated by the test
+// that means one, otherwise the test process's own.
+function make(defaultEmptyValue?: string, env?: Environment) {
   const store = new VariableStore(systemTimekeeper);
   return {
     store,
@@ -607,6 +625,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "hello world"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -618,6 +637,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("val", 'printf "a\\nb\\nc"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -629,11 +649,13 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("crlf", 'printf "a\\r\\nb\\rc\\r\\n"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
     registry.declareShell("gap", 'printf "a\\r\\nb"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: regex("a(\\s*)b"),
       cache: { kind: "never" },
     });
@@ -646,6 +668,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "load: 0.52 0.48 0.45"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: regex("load:\\s*([0-9.]+)"),
       cache: { kind: "never" },
     });
@@ -657,6 +680,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("val", "exit 1", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: text("fallback"),
       cache: { kind: "never" },
     });
@@ -669,6 +693,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { registry } = make();
     registry.declareShell("val", "exit 2", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -683,6 +708,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { registry } = make();
     registry.declareShell("val", "trap 'exit 0' TERM; yes", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -710,6 +736,7 @@ describe("SourceRegistry — shell: basic", () => {
     );
     registry.declareShell("val", "echo x", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -731,26 +758,31 @@ describe("SourceRegistry — shell: basic", () => {
     try {
       registry.declareShell("inA", "pwd -P", {
         cwd: a,
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
       registry.declareShell("inB", "pwd -P", {
         cwd: b,
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
       registry.declareShell("bad", "exit 4", {
         cwd: b,
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
       registry.declareShell("miss", "echo x", {
         cwd: b,
+        env: SHELL_ENV,
         parse: { kind: "regex", pattern: "(y)", default: undefined },
         cache: { kind: "never" },
       });
       registry.declareShell("gone", "echo x", {
         cwd: gone,
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
@@ -778,6 +810,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make("(none)");
     registry.declareShell("val", "exit 1", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -789,6 +822,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "nothing here"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: regex("([0-9]+)", "—"),
       cache: { kind: "never" },
     });
@@ -800,6 +834,7 @@ describe("SourceRegistry — shell: basic", () => {
     const { registry } = make();
     registry.declareShell("val", 'echo "no digits"', {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: regex("([0-9]+)"),
       cache: { kind: "never" },
     });
@@ -820,6 +855,7 @@ describe("SourceRegistry — shell: basic", () => {
       // First: failing command
       registry.declareShell("val", `grep nonexistent ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
@@ -831,6 +867,7 @@ describe("SourceRegistry — shell: basic", () => {
       // Command that succeeds
       registry2.declareShell("val", `echo "ok"`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
@@ -856,6 +893,7 @@ describe("SourceRegistry — shell: TTL floor", () => {
       const { store, registry } = make();
       registry.declareShell("val", `touch ${marker}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: text("fallback"),
         cache: { kind: "ttl", durationMs: 50 },
       });
@@ -895,6 +933,7 @@ describe("SourceRegistry — shell: read timeout", () => {
     const periodMs = SHELL_READ_TIMEOUT_MS * 2;
     registry.declareShell("val", "sleep 99", {
       cwd: "/work",
+      env: SHELL_ENV,
       parse: { kind: "json", default: undefined },
       cache: { kind: "ttl", durationMs: periodMs },
     });
@@ -949,6 +988,7 @@ describe("SourceRegistry — shell: read timeout", () => {
     );
     registry.declareShell("val", "sleep 99", {
       cwd: "/work",
+      env: SHELL_ENV,
       parse: { kind: "json", default: undefined },
       cache: { kind: "ttl", durationMs: SHELL_READ_TIMEOUT_MS * 2 },
     });
@@ -998,6 +1038,7 @@ describe("SourceRegistry — shell: a failed read carries stderr", () => {
     );
     registry.declareShell("val", command, {
       cwd: "/work",
+      env: SHELL_ENV,
       parse: { kind: "json", default: undefined },
       cache: { kind: "ttl", durationMs: SHELL_READ_TIMEOUT_MS * 2 },
     });
@@ -1068,6 +1109,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       // Tests use that exact value and wait MIN_SHELL_TTL_MS+buffer for a tick.
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
@@ -1105,6 +1147,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       );
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
@@ -1153,11 +1196,13 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const { store, registry } = make();
       registry.declareShell("v1", `cat ${f1}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
       registry.declareShell("v2", `cat ${f2}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
@@ -1186,6 +1231,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const { store, registry } = make();
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
@@ -1220,6 +1266,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       const { store, registry } = make();
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
@@ -1251,6 +1298,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       const { store, registry } = make();
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedDir },
       });
@@ -1390,11 +1438,13 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       const { store, registry } = make();
       registry.declareShell("v1", `cat ${f1}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
       registry.declareShell("v2", `cat ${f2}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
@@ -1447,6 +1497,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
         );
         registry.declareShell("val", `echo run >> ${runs}; echo ran`, {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache,
         });
@@ -1481,6 +1532,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
@@ -1510,6 +1562,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
@@ -1540,6 +1593,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.defineBox("trigger", "string", "bad");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: {
           kind: "key",
@@ -1613,6 +1667,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       store.defineBox("trigger", "string", "ok");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: {
           kind: "key",
@@ -1661,6 +1716,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       for (const [name, template] of Object.entries(keys))
         registry.declareShell(name, "echo v", {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "key", template },
         });
@@ -1686,6 +1742,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const registry = registryOver(store);
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "key", template: "{{ .later }}" },
       });
@@ -1982,6 +2039,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         registry.declareFile("file", data, { parse: TEXT, cache });
         registry.declareShell("shell", `cat ${data}`, {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache,
         });
@@ -2278,6 +2336,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const { registry } = make();
         registry.declareShell("val", "echo hi", {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "watch_file", path: x },
         });
@@ -2453,6 +2512,7 @@ describe("SourceRegistry — dispose", () => {
       const { store, registry } = make();
       registry.declareShell("val", `cat ${f}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
@@ -2670,6 +2730,7 @@ describe("SourceRegistry — template: basic", () => {
       expect(() =>
         registry.declareShell("val", `cat ${dataFile}`, {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "depends_on", varNames: ["broken"] },
         }),
@@ -2784,6 +2845,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
@@ -2826,6 +2888,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
         `cat ${dataFile}; touch ${readMark}; ${go.hold}`,
         {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "depends_on", varNames: ["trigger"] },
         },
@@ -2858,6 +2921,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
@@ -2888,6 +2952,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       store.defineBox("b", "string", "y");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["a", "b"] },
       });
@@ -2916,6 +2981,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
@@ -3052,7 +3118,12 @@ describe("SourceRegistry — parse seam", () => {
       registry.declareShell(
         "doc",
         `echo >> ${counter}; echo '{"a": 1, "b": "x", "c": true, "nest": {"d": [1, 2]}}'`,
-        { cwd: process.cwd(), parse: json(), cache: { kind: "never" } },
+        {
+          cwd: process.cwd(),
+          env: SHELL_ENV,
+          parse: json(),
+          cache: { kind: "never" },
+        },
       );
       registry.declareTemplate(
         "t",
@@ -3079,6 +3150,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `echo '{"a": 1}'`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json(),
       cache: { kind: "never" },
     });
@@ -3092,6 +3164,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `echo '{not json'`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json(),
       cache: { kind: "never" },
     });
@@ -3107,6 +3180,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `echo '{not json'`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json({ spent: 0, label: "?" }),
       cache: { kind: "never" },
     });
@@ -3164,6 +3238,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `printf '  \\n'`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json({ state: "none" }),
       cache: { kind: "never" },
     });
@@ -3175,6 +3250,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `exit 3`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json({ spent: 0 }),
       cache: { kind: "never" },
     });
@@ -3187,6 +3263,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `exit 3`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json(),
       cache: { kind: "never" },
     });
@@ -3200,6 +3277,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("doc", `sleep 0.3; echo '{"a": 1}'`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: json(),
       cache: { kind: "never" },
     });
@@ -3219,11 +3297,13 @@ describe("SourceRegistry — parse seam", () => {
       const { store, registry } = make();
       registry.declareShell("slow", `${gate.hold}; echo x`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
       registry.declareShell("fast", `echo y`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
@@ -3325,6 +3405,7 @@ describe("SourceRegistry — parse seam", () => {
     const { store, registry } = make();
     registry.declareShell("val", `echo "prefix:"`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: regex("prefix:(.*)", "fallback"),
       cache: { kind: "never" },
     });
@@ -3348,6 +3429,7 @@ describe("SourceRegistry — in-flight runs", () => {
       // a re-snapshot of inFlight after A's publish can await.
       registry.declareShell("A", "sleep 0.5; echo a", {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "never" },
       });
@@ -3356,6 +3438,7 @@ describe("SourceRegistry — in-flight runs", () => {
         `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`,
         {
           cwd: process.cwd(),
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "depends_on", varNames: ["A"] },
         },
@@ -3381,11 +3464,13 @@ describe("SourceRegistry — in-flight runs", () => {
         `echo x >> ${spawns}; ${gate.hold}; echo ${out}`;
       home.declareShell("dir", counted("d"), {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: period,
       });
       view.declareShell("own", counted("o"), {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: period,
       });
@@ -3422,6 +3507,7 @@ describe("SourceRegistry — in-flight runs", () => {
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `${gate.hold}; echo v`, {
         cwd: process.cwd(),
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
@@ -3440,6 +3526,7 @@ describe("SourceRegistry — in-flight runs", () => {
     const { registry } = make();
     registry.declareShell("stuck", "sleep 30", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });
@@ -3460,6 +3547,7 @@ describe("SourceRegistry — in-flight runs", () => {
     const { store, registry } = make();
     registry.declareShell("s", `${nap}; echo ${marker}`, {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: text("pending"),
       cache: { kind: "never" },
     });
@@ -3484,6 +3572,7 @@ describe("SourceRegistry — the runs it needs", () => {
     live.add(registry);
     registry.declareShell("val", "echo hi", {
       cwd: process.cwd(),
+      env: SHELL_ENV,
       parse: TEXT,
       cache: { kind: "never" },
     });

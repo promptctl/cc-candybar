@@ -150,14 +150,15 @@ describe("another program's plugin, as such a program ships it, on a daemon", ()
     removeTmpDirs();
   });
 
-  // The session's request: its hook JSON, and the Claude Code directory its
-  // client reports.
+  // The session's request: its hook JSON, the Claude Code directory its
+  // client reports, and its environment, a session outside tmux.
   const renderRaw = (): Promise<Frame> =>
     frameRequest(daemon, {
       hookData: hookData(SESSION, projectDir),
       args: ["cc-candybar", "--config", config],
       cwd: projectDir,
       claudeConfigDir: claudeDir,
+      env: { PATH: process.env.PATH! },
     });
 
   const renderUntil = async (shows: (bar: string) => boolean, what: string): Promise<Frame> => {

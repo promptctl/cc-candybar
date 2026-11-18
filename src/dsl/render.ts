@@ -34,6 +34,7 @@ import type { EffectiveGlobals } from "../config/effective-globals.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
+import { shellEnvOf } from "../config/shell-env.js";
 import type { Derivation, VariableStore } from "../var-system/store.js";
 import {
   type SourceRegistry,
@@ -91,7 +92,6 @@ import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { RunFact } from "../facts/world-state.js";
 import { pickerFuncs } from "../render/picker.js";
 import { carouselFuncs } from "../render/carousel.js";
 import { themePreviewFuncs } from "../render/theme-preview.js";
@@ -118,7 +118,11 @@ import {
   type SlotState,
   type ViewParts,
 } from "./parts.js";
-import { fixedSource, type Selections } from "./view-source.js";
+import {
+  fixedSource,
+  type HostReadings,
+  type Selections,
+} from "./view-source.js";
 import { declaredVariables } from "../config/loader/refs.js";
 import {
   authoredRules,
@@ -340,6 +344,7 @@ function declareOne(
     case "shell":
       registry.declareShell(name, decl.command, {
         cwd,
+        env: shellEnvOf(decl.env),
         cache: toCachePolicy(decl.cache),
         parse: toSourceParse(decl.parse, decl.default),
       });
@@ -1312,7 +1317,7 @@ export function bindPayload(
   opts: BuildLineOptions,
   selection: RenderSelection,
   session: SessionId,
-  run: (digest: string) => RunFact,
+  readings: HostReadings,
 ): unknown {
   const drawn = {
     ...(payload as object),
@@ -1323,7 +1328,7 @@ export function bindPayload(
     compiled,
     store,
     registry,
-    fixedSource(drawn, selection, session, run),
+    fixedSource(drawn, selection, session, readings),
   );
   return drawn;
 }

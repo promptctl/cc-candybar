@@ -9,7 +9,7 @@ import {
 import { runOf, type SourceIdentity } from "../../src/facts/source-identity";
 
 const shell: SourceIdentity = {
-  read: { kind: "shell", command: "echo hi", cwd: "/work" },
+  read: { kind: "shell", command: "echo hi", cwd: "/work", env: [] },
   parse: { kind: "text" },
   refresh: { kind: "never" },
 };

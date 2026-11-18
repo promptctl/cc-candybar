@@ -18,6 +18,8 @@ import { UNREAD_RUN } from "../../src/facts/world-state";
 import type { Launcher } from "../../src/proc/launcher";
 import { systemTimekeeper } from "../../src/time";
 import { instantOf } from "../../src/utils/instant";
+import { pendingOf } from "../../src/utils/outcome";
+import { TEST_ENV } from "./session-environment";
 
 export interface HeldRuns {
   readonly source: SourceOf<ViewSource>;
@@ -41,12 +43,15 @@ export function heldRuns(
     source: (view) => ({
       ...SOURCES_NOTHING(view),
       run: (digest) => holders.get(view.sessionId)?.run(digest) ?? UNREAD_RUN,
+      env: (name) =>
+        holders.get(view.sessionId)?.env(name) ?? pendingOf("unread"),
     }),
     hold: (view) => {
       const held = new CheckRuns(
         sourceRuns,
         view.registry,
         instantOf(new Date()),
+        TEST_ENV,
       );
       const prior = holders.get(view.sessionId);
       runInAction(() => holders.set(view.sessionId, held));

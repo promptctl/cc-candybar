@@ -811,7 +811,6 @@ test("a layer that could not be read fails the load naming it", () => {
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),
-    env: host.env,
     sessionState: new SessionState(),
     signer: TEST_SIGNER,
     gates: bareGates(),

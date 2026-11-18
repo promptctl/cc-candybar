@@ -50,12 +50,15 @@ import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
-import { fixedSource, type ViewSource } from "../dsl/view-source.js";
+import {
+  fixedSource,
+  NOTHING_READ,
+  type ViewSource,
+} from "../dsl/view-source.js";
 import { bindView } from "../dsl/parts.js";
 import { unusedDeclarations, type UnusedDecl } from "../config/unused.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
-import { UNREAD_RUN } from "../facts/world-state.js";
 import type { VarScope } from "../dsl/variable-scope.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
@@ -144,8 +147,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // Where the user's home is, which a `~` in a plugin's data path names
   // (StateDeps).
   locations: Locations;
-  // What an `env` source reads (StateDeps).
-  env: Readonly<Record<string, string | undefined>>;
   sessionState: SessionStateRW;
   // The host's storage owner, which holds the folders each served state's
   // latest load named (`holdFolders`), from its first load to its reclaim.
@@ -170,8 +171,6 @@ export interface StateDeps {
   readonly clock: TurnClock;
   // Where the user's home is: a `~` in a plugin's data path names it.
   readonly locations: Locations;
-  // The environment an `env` source reads: the daemon's host.
-  readonly env: Readonly<Record<string, string | undefined>>;
   readonly sessionState: SessionStateRW;
   // What signs the `run` links a compile draws.
   readonly signer: LinkSigner;
@@ -745,7 +744,6 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     config.globals.default_empty_value ?? "",
     deps.sessionState,
     null,
-    deps.env,
   );
 
   let registration: Registration;
@@ -1042,7 +1040,7 @@ export const SOURCES_NOTHING: SourceOf<ViewSource> = ({ sessionId, state }) =>
       (preset) => state.authoredRoots.has(preset),
     ),
     sessionId,
-    () => UNREAD_RUN,
+    NOTHING_READ,
   );
 
 // What a view draws from, and whom it tells that what it draws from moved.
@@ -1141,7 +1139,8 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
 }
 
 // What a view needs read: each plugin source its config declares, at its
-// storage folder, then each run its registry names, in digest order.
+// storage folder, then each run its registry names, in digest order, then each
+// variable of the session's environment its `env` sources read, sorted.
 const subscriptionsOf = ({
   state,
   registry,
@@ -1152,6 +1151,9 @@ const subscriptionsOf = ({
   ...registry
     .subscriptions()
     .map((run): Subscription => ({ kind: "run", run })),
+  ...registry
+    .envSubscriptions()
+    .map((name): Subscription => ({ kind: "env", name })),
 ];
 
 export class RenderCache<
@@ -1564,8 +1566,9 @@ export class RenderCache<
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their storage folders, and
-  // the runs its `shell` and `file` sources name. Read
+  // plugin sources its config declares, at their storage folders, the runs
+  // its `shell` and `file` sources name, and the variables of the session's
+  // environment its `env` sources read. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's

@@ -72,6 +72,7 @@ import { configHost, originOf, type ConfigHost } from "./helpers/config-host";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { shellEnvOf } from "../src/config/shell-env";
 const S1 = sessionIdOf("s1");
 const S2 = sessionIdOf("s2");
 
@@ -127,7 +128,6 @@ function makeCache(
     {
       clock: systemTimekeeper,
       locations: locations(host),
-      env: host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -295,10 +295,10 @@ describe("RenderCache", () => {
           .map(({ identity }) => identity.read);
       };
       expect(cwdOf(a, "s-a")).toEqual([
-        { kind: "shell", command: "pwd -P", cwd: a },
+        { kind: "shell", command: "pwd -P", cwd: a, env: shellEnvOf() },
       ]);
       expect(cwdOf(b, "s-b")).toEqual([
-        { kind: "shell", command: "pwd -P", cwd: b },
+        { kind: "shell", command: "pwd -P", cwd: b, env: shellEnvOf() },
       ]);
     } finally {
       for (const fn of cleanups) fn();
@@ -1460,7 +1460,6 @@ describe("RenderCache close", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1516,7 +1515,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1635,7 +1633,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1707,7 +1704,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),

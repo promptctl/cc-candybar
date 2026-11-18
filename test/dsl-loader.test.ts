@@ -701,7 +701,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       {
         path: "variables.x.readMode",
         message:
-          'Unknown shell variable key "readMode". Expected one of: kind, command, parse, cache, default',
+          'Unknown shell variable key "readMode". Expected one of: kind, command, env, parse, cache, default',
       },
     );
   });
@@ -732,7 +732,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       {
         path: "variables.x.path",
         message:
-          'Unknown shell variable key "path". Expected one of: kind, command, parse, cache, default',
+          'Unknown shell variable key "path". Expected one of: kind, command, env, parse, cache, default',
       },
     );
     // …and the same key IS legal on the arm that owns it.

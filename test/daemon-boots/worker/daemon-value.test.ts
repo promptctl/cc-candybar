@@ -45,6 +45,7 @@ import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
+import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
 
 const VALUE_REFUSED = sessionIdOf("value-refused");
 const VALUE_CLOSE = sessionIdOf("value-close");
@@ -148,6 +149,9 @@ describe("the daemon is a value", () => {
     termCols: 200,
     termRows: 40,
     deadline: Date.now() + deadlineMs,
+    // The environment it runs in now, as a client started by Claude Code
+    // reports its own.
+    env: plainEnvironment(process.env),
   });
 
   const reply = async (

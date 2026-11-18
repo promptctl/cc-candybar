@@ -21,7 +21,7 @@ import type { FrameRecord } from "../../src/render/frame-memory";
 import type { RenderedLine } from "../../src/dsl/node-registry";
 import { globalsFor } from "./selection";
 import { sessionOfPayload } from "./payload-session";
-import { UNREAD_RUN, type RunFact } from "../../src/facts/world-state";
+import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
 
 export function drawPayload(
   config: ValidatedConfig,
@@ -37,7 +37,7 @@ export function drawPayload(
   // declaring globals.preset or globals.style draws the preset, theme and look
   // the bar does.
   selection: RenderSelection = globalsFor(config),
-  run: (digest: string) => RunFact = () => UNREAD_RUN,
+  readings: HostReadings = NOTHING_READ,
 ): DrawnFrame {
   const drawn = bindPayload(
     compiled,
@@ -47,7 +47,7 @@ export function drawPayload(
     opts,
     selection,
     sessionOfPayload(payload),
-    run,
+    readings,
   );
   const frame = drawDsl(
     config,

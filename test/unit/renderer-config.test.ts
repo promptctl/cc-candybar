@@ -4,6 +4,7 @@
 // a config, plugin or `.git` file would fail at that call. Built as the
 // renderer's process builds it (`loadMainRenderer`), over in-memory storage.
 
+import { TEST_ENV } from "../helpers/session-environment";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import type { RenderOrigin } from "../../src/config-hint";
 import { linksOf } from "../../src/click/read";
@@ -64,7 +65,6 @@ function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
         dataHome: "/nowhere/data",
         dataDirs: [],
       },
-      env: {},
       home: "/nowhere/home",
       gates: bareGates(),
       memoryLimitBytes: 1024 * 1024 * 1024,
@@ -89,6 +89,7 @@ function contextOf(session: string): CheckedRenderRequest {
       args: ["cc-candybar"],
       cwd: PROJECT,
       encoding: "frame",
+      env: TEST_ENV,
     },
     { firstSightOfUnknownHookField: () => false },
     () => {},
@@ -122,6 +123,7 @@ function worldStateOf(session: SessionId): WorldState {
     },
     sources: {},
     runs: {},
+    env: {},
     doctor: pendingOf("unread"),
     daemon: daemonFactsOf(),
     diagnostics: [],

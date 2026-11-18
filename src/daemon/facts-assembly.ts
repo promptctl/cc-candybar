@@ -1,5 +1,6 @@
 import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
+import { ownValue } from "../utils/plain";
 import type {
   BuiltinFacts,
   DaemonFacts,
@@ -112,9 +113,16 @@ export function assembleFacts(
     }),
   );
 
+  const env: Record<string, Fact<string>> = Object.fromEntries(
+    [...lanes.env].map(([name, reading]) => [
+      name,
+      stamp(prior && ownValue(prior.env, name), reading),
+    ]),
+  );
+
   const doctor = stamp(prior?.doctor, lanes.doctor);
   const diagnostics = readings.faults;
-  const parts = { builtins, sources, runs, doctor, daemon, diagnostics };
+  const parts = { builtins, sources, runs, env, doctor, daemon, diagnostics };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins, sources and runs are
@@ -126,6 +134,7 @@ export function assembleFacts(
     sameFacts(builtins, prior.builtins) &&
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
+    sameFacts(env, prior.env) &&
     doctor === prior.doctor &&
     compareStructural(
       { daemon, diagnostics },

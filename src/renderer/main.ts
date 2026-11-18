@@ -429,8 +429,6 @@ export interface MainRendererInputs {
   readonly linkSigner: LinkSigner;
   // Where the user's config and installed plugins live.
   readonly locations: Locations;
-  // The environment an `env` source reads: the daemon's host.
-  readonly env: Readonly<Record<string, string | undefined>>;
   readonly home: string;
   // What this daemon's clicks may write: the gates its root built.
   readonly gates: Gates;
@@ -506,7 +504,6 @@ export function mainRendererOf(
     {
       clock: time.clock,
       locations: inputs.locations,
-      env: inputs.env,
       sessionState,
       log,
       storage: host.storage,

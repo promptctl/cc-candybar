@@ -14,6 +14,7 @@
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
+import { readingsIn } from "./helpers/session-environment";
 import { SessionState } from "../src/renderer/session-state";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import {
@@ -96,7 +97,12 @@ function buildPopulatedState(): DaemonDslState {
     cwd: process.cwd(),
   });
   // Apply a known payload so the 'session.id' input has a value.
-  feedInputs(registry, { session_id: "abc-123-def" });
+  feedInputs(
+    registry,
+    { session_id: "abc-123-def" },
+    undefined,
+    readingsIn({}),
+  );
   return {
     store,
     registry,

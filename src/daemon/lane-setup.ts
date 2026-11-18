@@ -31,7 +31,6 @@ import path from "node:path";
 import { CLAUDE_CONFIG_DIR_ENV } from "../claude-settings.js";
 import { CONFIG_ENV } from "../config-hint.js";
 import { LANES, type Lane } from "../config/lanes.js";
-import type { SessionFacts } from "./foundations/session-env.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import {
   typeSlash,
@@ -110,11 +109,11 @@ export interface LaneEdge {
     env: Readonly<Record<string, string>>,
   ) => Promise<string>;
   readonly closePane: (tmux: TmuxHint, pane: string) => Promise<void>;
-  // Run the `claude` CLI in the session's process environment; rejects with
-  // its own words when it fails.
+  // Run the `claude` CLI in the session's environment; rejects with its own
+  // words when it fails, or with why the host holds no environment for it.
   readonly claude: (
     args: readonly string[],
-    session: SessionFacts,
+    session: SessionId,
   ) => Promise<void>;
   readonly fileExists: (file: string) => boolean;
   readonly presence: (file: string) => Presence;
@@ -264,13 +263,11 @@ async function installBand(
   checkout: string,
   edge: LaneEdge,
 ): Promise<string> {
-  const facts: SessionFacts = {
-    sessionId: session.sessionId,
-    projectDir: session.projectDir,
-    claudeConfigDir: session.claudeConfigDir ?? undefined,
-  };
-  await edge.claude(["plugin", "marketplace", "add", checkout], facts);
-  await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
+  await edge.claude(
+    ["plugin", "marketplace", "add", checkout],
+    session.sessionId,
+  );
+  await edge.claude(["plugin", "install", BAND_PLUGIN], session.sessionId);
   const typed = await typeSlash(type, pane, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(

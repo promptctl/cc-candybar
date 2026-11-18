@@ -24,7 +24,7 @@ import {
 import { lineage, processTable } from "../proc/process-table.js";
 import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
-import { sessionEnv } from "./foundations/session-env.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 import { canonical, executableOn, regularFileWith } from "../path-search.js";
 import { launcherNode } from "../attach-preload.js";
 import { type LaneEdge, type PaneClaude } from "./lane-setup.js";
@@ -267,6 +267,8 @@ export function productionLaneEdge(
   closing: AbortSignal,
   clock: Timekeeper,
   probe: Pick<ProcessProbe, "alive">,
+  // [LAW:one-source-of-truth] The session book's.
+  environmentOf: (session: SessionId) => SessionEnvironment,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
@@ -305,20 +307,25 @@ export function productionLaneEdge(
       ).trim(),
     closePane: async (hint, pane) =>
       void (await tmux(launcher, hint, ["kill-pane", "-t", pane])),
-    // [LAW:single-enforcer] The session's process environment: the
-    // session's facts, never those of whichever shell spawned this detached
-    // daemon.
-    claude: async (args, session) =>
+    // [LAW:single-enforcer] The session's environment, never that of
+    // whichever shell spawned this detached daemon.
+    claude: async (args, session) => {
+      const environment = environmentOf(session);
+      if (environment.kind === "failed")
+        throw new Error(
+          `claude ${args.join(" ")} not run: ${environment.reason}`,
+        );
       void ran(
         `claude ${args.join(" ")}`,
         await launcher.launch({
           bin: "claude",
           args: [...args],
-          envOverlay: sessionEnv(session),
+          environment: environment.value,
           timeoutMs: 30_000,
           category: "lane.claude",
         }),
-      ),
+      );
+    },
     fileExists: (file) => fs.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),

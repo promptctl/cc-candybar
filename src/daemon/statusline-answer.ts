@@ -31,6 +31,7 @@ import type { Response } from "./foundations/protocol";
 import { parseFrame } from "../render/frame.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { HostTurn, Made, RendererHost } from "./renderer-host.js";
 import {
   noteFacts,
@@ -100,6 +101,7 @@ export async function answerStatusline(
   closing: AbortSignal,
   log: DaemonLogger,
   arrived: CheckedRenderRequest,
+  environment: SessionEnvironment,
   id: RequestId,
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
@@ -130,7 +132,7 @@ export async function answerStatusline(
     closing.aborted
       ? failureOf(new DaemonClosing("render"))
       : { kind: "event", event };
-  const worldState = collector.requested(req);
+  const worldState = collector.requested(req, environment);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // context to its answer, wait included, so no sweep retires it between.
   const release = collector.holding(session);

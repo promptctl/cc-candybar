@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { TEST_ENVIRONMENT } from "../helpers/session-environment";
 import {
   eventRenderer,
   hearingEvents,
@@ -192,6 +193,7 @@ async function answer(
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
     REQ,
+    TEST_ENVIRONMENT,
     REQUEST,
     meets.waitEndsAt ?? 0,
     facts,
@@ -544,6 +546,7 @@ describe("the request's wait, between its context and its request", () => {
       NOT_CLOSING,
       () => {},
       REQ,
+      TEST_ENVIRONMENT,
       REQUEST,
       5000,
       [],

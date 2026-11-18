@@ -650,6 +650,39 @@ export function optionalStringSpec(): FieldSpec<string> {
   };
 }
 
+// [LAW:one-source-of-truth] An environment variable's name as a shell
+// spells one.
+export const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// [LAW:parse-dont-validate] An optional list of environment variable names:
+// what a shell source's command reads, beyond the base set. Present-and-wrong
+// reports one issue and omits, as the other optional specs do.
+export function optionalEnvNamesSpec(): FieldSpec<readonly string[]> {
+  return {
+    required: false,
+    json: {
+      type: "array",
+      items: { type: "string", pattern: ENV_NAME.source },
+    },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      if (
+        !Array.isArray(v) ||
+        !v.every((name) => typeof name === "string" && ENV_NAME.test(name))
+      ) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field]),
+        });
+        return undefined;
+      }
+      return v as readonly string[];
+    },
+  };
+}
+
 // [LAW:dataflow-not-control-flow] An optional boolean field: present-and-valid
 // is included, present-and-wrong reports an issue and omits, absent omits
 // silently — the boolean twin of `optionalStringSpec`.

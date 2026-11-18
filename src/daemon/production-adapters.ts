@@ -41,8 +41,15 @@ export function productionAdapters(
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe) =>
-      productionLaneEdge(launcher, following, closing, machine, probe),
+    laneEdge: (launcher, following, closing, probe, environmentOf) =>
+      productionLaneEdge(
+        launcher,
+        following,
+        closing,
+        machine,
+        probe,
+        environmentOf,
+      ),
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,

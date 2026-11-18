@@ -428,6 +428,7 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
           workspace: { project_dir: "/tmp" },
           model: { id: "x", display_name: "X" },
         } as never,
+        env: {},
         args: ["cc-candybar"],
         cwd: "/tmp",
         deadline,

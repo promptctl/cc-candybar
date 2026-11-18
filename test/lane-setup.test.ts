@@ -4,7 +4,6 @@
 // through fakes of every effect, and the pure readers the production edge
 // folds tmux's and ps's answers with (src/daemon/lane-edge.ts).
 
-import { sessionEnv } from "../src/daemon/foundations/session-env";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -111,7 +110,7 @@ function fakeEdge(over: Partial<LaneEdge> = {}): {
     closePane: async (_hint, pane) => void did.push(`close ${pane}`),
     claude: async (args, session) =>
       void did.push(
-        `claude ${args.join(" ")} [${session.claudeConfigDir ?? "-"}]`,
+        `claude ${args.join(" ")} [${session}]`,
       ),
     fileExists: () => true,
     presence: () => "present",
@@ -186,8 +185,8 @@ describe("lane A, band", () => {
       `installed ${BAND_PLUGIN} from ${root}`,
     );
     expect(did).toEqual([
-      `claude plugin marketplace add ${root} [/home/u/.claude]`,
-      `claude plugin install ${BAND_PLUGIN} [/home/u/.claude]`,
+      `claude plugin marketplace add ${root} [${SID}]`,
+      `claude plugin install ${BAND_PLUGIN} [${SID}]`,
       "type /reload-plugins",
     ]);
   });
@@ -201,8 +200,8 @@ describe("lane A, band", () => {
       /installed, but \/reload-plugins was not typed: .*not running inside tmux.*type \/reload-plugins yourself/,
     );
     expect(did).toEqual([
-      `claude plugin marketplace add ${root} [-]`,
-      `claude plugin install ${BAND_PLUGIN} [-]`,
+      `claude plugin marketplace add ${root} [${SID}]`,
+      `claude plugin install ${BAND_PLUGIN} [${SID}]`,
     ]);
   });
 
@@ -870,22 +869,6 @@ describe("the production edge's readers", () => {
     expect(runsAttached("  20 10 /bin/zsh\n  10 1 cc-attach", 20, 20)).toBe(
       false,
     );
-  });
-
-  test("the claude CLI runs under the session's directory, never the daemon's", async () => {
-    // The session's process environment (src/daemon/foundations/session-env.ts) the
-    // edge's `claude` spawns with.
-    const facts = { sessionId: sessionIdOf("s1"), projectDir: "/p" };
-    // Unset in the overlay, so the daemon's own (whichever shell spawned it)
-    // is removed from what the child inherits.
-    expect(sessionEnv({ ...facts, claudeConfigDir: undefined })).toHaveProperty(
-      "CLAUDE_CONFIG_DIR",
-      null,
-    );
-    expect(
-      sessionEnv({ ...facts, claudeConfigDir: "/u/.claude.zai" })
-        .CLAUDE_CONFIG_DIR,
-    ).toBe("/u/.claude.zai");
   });
 });
 

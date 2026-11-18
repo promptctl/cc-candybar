@@ -15,8 +15,13 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
 import { runOf, type SourceIdentity } from "../src/facts/source-identity";
 import { instantOf } from "../src/utils/instant";
+import { shellEnvOf } from "../src/config/shell-env";
+import type { Environment } from "../src/daemon/foundations/session-env";
 
 const TEXT: SourceParse = { kind: "text", default: undefined };
+// The variables a shell source here runs in: the base set a declaration
+// naming none gets.
+const SHELL_ENV = shellEnvOf();
 const digestOf = (identity: SourceIdentity): string => runOf(identity).digest;
 
 interface Held {
@@ -34,16 +39,17 @@ function rig() {
   const { launcher, spawner, started } = fakeLauncher(clock);
   const runs = new SourceRuns({ launcher, clock });
   const opened: Held[] = [];
-  const registry = (): Held => {
+  // A session's registry, its programs run in `environment`.
+  const registry = (environment: Environment = {}): Held => {
     const store = new VariableStore(clock);
     const r = new SourceRegistry(store, "");
-    const held = new CheckRuns(runs, r, instantOf(new Date(0)));
+    const held = new CheckRuns(runs, r, instantOf(new Date(0)), environment);
     r.bindInputs({
       session: () => {
         throw new Error("no session is read");
       },
       read: () => ({ kind: "pending", why: "unread" }),
-      run: (digest) => held.run(digest),
+      ...held.readings,
       drawnAt: () => {
         throw new Error("no depth is read");
       },
@@ -78,7 +84,7 @@ async function settledAll(
 
 describe("runOf", () => {
   const base: SourceIdentity = {
-    read: { kind: "shell", command: "uptime", cwd: "/work" },
+    read: { kind: "shell", command: "uptime", cwd: "/work", env: ["PATH"] },
     parse: { kind: "text" },
     refresh: { kind: "never" },
   };
@@ -87,12 +93,22 @@ describe("runOf", () => {
     const reordered = {
       refresh: { kind: "never" },
       parse: { kind: "text" },
-      read: { cwd: "/work", command: "uptime", kind: "shell" },
+      read: { env: ["PATH"], cwd: "/work", command: "uptime", kind: "shell" },
     } as SourceIdentity;
     expect(digestOf(reordered)).toBe(digestOf(base));
     const others: SourceIdentity[] = [
-      { ...base, read: { kind: "shell", command: "uptime", cwd: "/other" } },
-      { ...base, read: { kind: "shell", command: "w", cwd: "/work" } },
+      {
+        ...base,
+        read: { kind: "shell", command: "uptime", cwd: "/other", env: ["PATH"] },
+      },
+      {
+        ...base,
+        read: { kind: "shell", command: "uptime", cwd: "/work", env: ["HOME"] },
+      },
+      {
+        ...base,
+        read: { kind: "shell", command: "w", cwd: "/work", env: ["PATH"] },
+      },
       { ...base, parse: { kind: "json" } },
       { ...base, parse: { kind: "regex", pattern: "(.*)" } },
       { ...base, refresh: { kind: "ttl", durationMs: 1000 } },
@@ -119,6 +135,7 @@ describe("SourceRuns — one digest is one run", () => {
       for (const { registry } of [a, b])
         registry.declareShell("up", "uptime", {
           cwd: "/work",
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "never" },
         });
@@ -141,16 +158,19 @@ describe("SourceRuns — one digest is one run", () => {
       const c = r.registry();
       a.registry.declareShell("v", "exit 3", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: { kind: "text", default: "a's default" },
         cache: { kind: "never" },
       });
       b.registry.declareShell("v", "exit 3", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: { kind: "text", default: "b's default" },
         cache: { kind: "never" },
       });
       c.registry.declareShell("v", "exit 3", {
         cwd: "/elsewhere",
+        env: SHELL_ENV,
         parse: { kind: "text", default: "c's default" },
         cache: { kind: "never" },
       });
@@ -183,6 +203,7 @@ describe("SourceRuns — one digest is one run", () => {
       for (const name of ["first", "second"])
         registry.declareShell(name, "date", {
           cwd: "/work",
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "never" },
         });
@@ -191,6 +212,68 @@ describe("SourceRuns — one digest is one run", () => {
       expect(store.read("first")).toBe("noon");
       expect(store.read("second")).toBe("noon");
       expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 1 });
+    } finally {
+      r.close();
+    }
+  });
+});
+
+describe("SourceRuns — a shell runs in the variables it names, from its session", () => {
+  const ENV = shellEnvOf(["API_HOST"]);
+  const declare = (h: Held): void =>
+    h.registry.declareShell("api", "echo $API_HOST", {
+      cwd: "/work",
+      env: ENV,
+      parse: TEXT,
+      cache: { kind: "never" },
+    });
+
+  it("two sessions in one directory with the same named values start one program", async () => {
+    const r = rig();
+    try {
+      r.spawner.program(shell("echo $API_HOST"), exits(0, "prod\n"));
+      // They differ only in a variable neither names.
+      const a = r.registry({ API_HOST: "prod", PATH: "/bin", TOKEN: "a" });
+      const b = r.registry({ API_HOST: "prod", PATH: "/bin", TOKEN: "b" });
+      declare(a);
+      declare(b);
+      await settledAll(r.clock, a, b);
+      expect(r.started()).toHaveLength(1);
+      expect(a.store.read("api")).toBe("prod");
+      expect(b.store.read("api")).toBe("prod");
+    } finally {
+      r.close();
+    }
+  });
+
+  it("a session whose named variable differs gets its own run", async () => {
+    const r = rig();
+    try {
+      r.spawner.program(shell("echo $API_HOST"), exits(0, "up\n"));
+      const a = r.registry({ API_HOST: "prod" });
+      const b = r.registry({ API_HOST: "staging" });
+      declare(a);
+      declare(b);
+      await settledAll(r.clock, a, b);
+      expect(r.started().map((s) => s.options.env?.API_HOST)).toEqual([
+        "prod",
+        "staging",
+      ]);
+    } finally {
+      r.close();
+    }
+  });
+
+  it("the program's environment is the named variables the session has set, and no others", async () => {
+    const r = rig();
+    try {
+      r.spawner.program(shell("echo $API_HOST"), exits(0, "prod\n"));
+      const h = r.registry({ API_HOST: "prod", PATH: "/bin", TOKEN: "secret" });
+      declare(h);
+      await settledAll(r.clock, h);
+      const [run] = r.started();
+      expect(run!.options.env).toMatchObject({ API_HOST: "prod", PATH: "/bin" });
+      expect(run!.options.env).not.toHaveProperty("TOKEN");
     } finally {
       r.close();
     }
@@ -207,6 +290,7 @@ describe("SourceRuns — a moved key is a new identity, the old value standing",
       store.defineBox("head", "string", "A");
       registry.declareShell("branch", "git branch --show-current", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "key", template: "{{ .head }}" },
       });
@@ -263,6 +347,7 @@ describe("SourceRuns — a moved key is a new identity, the old value standing",
       store.defineBox("head", "string", "A");
       registry.declareShell("doc", "cat state.json", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: { kind: "json", default: undefined },
         cache: { kind: "key", template: "{{ .head }}" },
       });
@@ -308,6 +393,7 @@ describe("SourceRuns — an entry is kept while held, and dropped with its last 
       for (const { registry } of [a, b])
         registry.declareShell("slow", "sleep 1", {
           cwd: "/work",
+          env: SHELL_ENV,
           parse: TEXT,
           cache: { kind: "ttl", durationMs: 60_000 },
         });
@@ -341,6 +427,7 @@ describe("SourceRuns — an entry is kept while held, and dropped with its last 
       const a = r.registry();
       a.registry.declareShell("v", "slow", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: 60_000 },
       });
@@ -350,6 +437,7 @@ describe("SourceRuns — an entry is kept while held, and dropped with its last 
       const b = r.registry();
       b.registry.declareShell("v", "slow", {
         cwd: "/work",
+        env: SHELL_ENV,
         parse: TEXT,
         cache: { kind: "ttl", durationMs: 60_000 },
       });

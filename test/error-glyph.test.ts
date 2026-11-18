@@ -182,6 +182,7 @@ describe("VERSION_MISMATCH wire → permanent outcome → glyph", () => {
           workspace: { project_dir: "/tmp" },
           model: { id: "x", display_name: "X" },
         } as never,
+        env: {},
         args: ["cc-candybar"],
         cwd: "/tmp",
         deadline,

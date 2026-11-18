@@ -167,7 +167,6 @@ export function sessionRig(
       clock: systemTimekeeper,
       stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
       locations: locs(),
-      env: {},
       sessionState,
       watchers,
       storage: NO_PLUGIN_STORAGE,

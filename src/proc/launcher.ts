@@ -122,7 +122,10 @@ export interface LaunchOpts {
   bin: string;
   args?: string[];
   cwd?: string;
-  // Set over the launcher's inherited environment; null unsets.
+  // The environment the child starts from in place of the launcher's
+  // inherited one: a session's, for a program the host runs for a session.
+  environment?: Readonly<Record<string, string>>;
+  // Set over the environment the child starts from; null unsets.
   envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
   stdinInput?: string | Buffer;

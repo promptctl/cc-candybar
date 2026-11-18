@@ -35,6 +35,7 @@ import {
   optionalTypedDefault,
   reject,
   requireStringSpec,
+  optionalEnvNamesSpec,
   optionalEnumSpec,
   taggedUnion,
   taggedUnionJson,
@@ -292,6 +293,7 @@ const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
 };
 const SHELL_FIELDS: FieldSpecMap<Omit<ShellVarDecl, "kind">> = {
   command: requireStringSpec(),
+  env: optionalEnvNamesSpec(),
   parse: parseSpec(),
   cache: requireCacheSpec("shell"),
   default: sourceDefaultSpec(),

@@ -212,7 +212,6 @@ test("the config load line names the load's projections", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),

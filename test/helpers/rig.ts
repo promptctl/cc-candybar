@@ -53,6 +53,7 @@ import {
   recordRender,
   testVerbContext,
 } from "./click";
+import { readingsIn } from "./session-environment";
 import { drawPayload } from "./draw-payload";
 import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
@@ -84,7 +85,7 @@ export interface RigInit {
   readonly palettes?: ReadonlySet<string>;
   /** The directory `shell` sources run in; the session's project directory. */
   readonly cwd?: string;
-  /** The environment an `env` source reads. */
+  /** The session's environment, which an `env` source reads; empty unless stated. */
   readonly env?: Readonly<Record<string, string>>;
   /** The session the rig draws and clicks as, and its state (a test sharing one across rigs hands it in). */
   readonly sessionId?: SessionId;
@@ -214,7 +215,8 @@ export function buildRig(init: RigInit = {}): Rig {
   );
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState, null, init.env);
+  const registry = new SourceRegistry(store, "", sessionState, null);
+  const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(
     config,
     registry,
@@ -255,6 +257,7 @@ export function buildRig(init: RigInit = {}): Rig {
         draw.observers,
         draw.selection ??
           selectionFor(config, {}, (key) => sessionState.get(sessionId, key)),
+        readings,
       ),
     click: (url) => clickUrl(url, ctx),
     dispose: () => registry.dispose(),

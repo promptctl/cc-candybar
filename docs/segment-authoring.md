@@ -89,8 +89,13 @@ printf '%s\n' '{"period": "September", "spent": 42.5, "limit": 120, "spentPct": 
 
 The command runs under `/bin/sh -c` in the directory Claude Code started the
 statusline in — the directory the bar's git facts are read in — so a command that
-asks about "this repo" answers for the session's repo. It runs with the daemon's environment, so the script
-is either on the daemon's `PATH` or spelled as an absolute path. A command the
+asks about "this repo" answers for the session's repo. It runs in the
+session's environment, the one Claude Code gave the statusline, so a script on
+that `PATH` is found. It sees only the variables it needs: `HOME`, `LANG`,
+`LC_ALL`, `LC_CTYPE`, `LOGNAME`, `PATH`, `SHELL`, `TMPDIR`, `USER`,
+the XDG base directories (`XDG_CONFIG_HOME` and the rest), and any more it
+names in `env` (Step 2), such as `SSH_AUTH_SOCK` for a command that reaches a
+remote over ssh. A command the
 shell cannot find fails its run with `exited with code 127`, followed by
 what the shell wrote to stderr, and
 what that failure renders as depends on the `default` you declare (Step 2).
@@ -138,16 +143,19 @@ The complete shape of a `shell` variable:
 |---|---|
 | `kind` | `"shell"` |
 | `command` | the command line, run by `/bin/sh -c`. A run is ended after 10 s and fails as `timed out after 10 s`; a cell is a glance, and a program that takes longer belongs in a file another process writes, one started outside the command: the run's whole process group ends with it, so a helper the command backgrounds is ended too |
+| `env` | optional — the names of variables the command reads beyond the base set above, such as `["AWS_PROFILE", "KUBECONFIG"]`. Each is read from the session's environment; one the session has not set stays unset. |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
 | `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why, and `cc-candybar check` fails on it), `{ watch_file: "/abs/path" }` (re-run when that file changes, or a symlink on the way to it is re-pointed; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A run's identity is what it needs: the command (or the path and read mode),
-the directory it runs in, the parser, the cache policy and the value its
-`key` or `depends_on` answered. Every declaration with that identity — in one
-config or many, from one session or many — shares one run; `default` is not
-part of it, so two declarations differing only in their default read one
-program's output. A source that reads no session's value therefore runs once
+the directory it runs in, the values of the variables it runs with, the
+parser, the cache policy and the value its `key` or `depends_on` answered.
+Every declaration with that identity — in one config or many, from one
+session or many — shares one run; `default` is not part of it, so two
+declarations differing only in their default read one program's output. Two
+sessions whose `PATH` differs run a shell source once each, and sessions that
+differ only in a variable the source does not see share its run. A source that reads no session's value therefore runs once
 for its directory. One whose `key` or `depends_on` reads a session's value —
 an `input` such as `session.id`, a `state` or a `template` variable — runs
 once per distinct value: sessions whose values agree share the run, and a
@@ -1247,7 +1255,7 @@ dropping it:
 ```
 
 ```error
-Unknown shell variable key "readMode". Expected one of: kind, command, parse, cache, default
+Unknown shell variable key "readMode". Expected one of: kind, command, env, parse, cache, default
 ```
 
 ### A `shell` or `file` source with no `cache:`

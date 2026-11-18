@@ -15,6 +15,7 @@
 // did with it. `frame` is a reader's lookup between samples, asking for what no
 // client asks for, so no series measures it.
 
+import { plainEnvironment } from "../../src/daemon/foundations/session-env.js";
 import { spawn } from "node:child_process";
 import { processWorld } from "../../src/host.js";
 import fs from "node:fs";
@@ -355,6 +356,7 @@ export async function startWorld(
         (deadline) => ({
           kind: "render",
           encoding: "frame",
+          env: plainEnvironment(client.host.env),
           hookData: hookDataOf(session, n),
           args: [BUNDLE],
           cwd: session.cwd,
