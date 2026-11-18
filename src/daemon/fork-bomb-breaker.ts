@@ -82,10 +82,10 @@ export function daemonCeiling(env: Readonly<NodeJS.ProcessEnv>): number {
 //                                        epic requires never happens)
 //   isolated=true,  count <  ceiling  → allow (below the backstop)
 //   isolated=true,  count >= ceiling  → deny (the fork-bomb condition)
-// [LAW:no-silent-failure] "Fails safe" is achieved by construction here, not by
-// a guard clause: an unreadable/uncountable population reads as count=0 (see
-// countLiveEntries), which always falls in the `allow` branch — the failure
-// direction is never "refuse to boot", it is "undercount and allow".
+// [LAW:no-silent-failure] The count is exact or there is none: a registry or
+// entry that cannot be read throws, and the boot refuses on the throw, naming
+// it. A backstop that admits what it could not count is no backstop, and the
+// count is short exactly when the machine is (a fork storm's spent descriptors).
 export function decideBoot(
   isolated: boolean,
   liveSiblingCount: number,
@@ -120,30 +120,28 @@ export interface RegistryEntry {
   identity: ProcessIdentity;
 }
 
-// [LAW:no-silent-failure] Never throws: a directory that doesn't exist yet (no
-// isolated daemon has ever registered) or is transiently unreadable both mean
-// "no known siblings", which is the fail-open direction decideBoot expects.
+// [LAW:no-silent-failure] Throws when the directory cannot be listed: the
+// admission makes it just before it lists it, so no answer of the disk means
+// an empty registry.
 export function listRegistryFiles(dir: string): string[] {
-  try {
-    return fs
-      .readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => path.join(dir, f));
-  } catch {
-    return [];
-  }
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => path.join(dir, f));
 }
 
 // Mirrors readSlot (test/helpers/daemon-pool.ts) / readLease's pid validation
-// (socket-lease.ts): a corrupt or unreadable file is excluded from the count
-// rather than treated as a special decision branch — see the module header for
-// why undercounting, never overcounting, is the safe direction here.
+// (socket-lease.ts). [LAW:no-silent-failure] Null is an entry that is not
+// there: removed since the listing (its daemon released it), or content that
+// names no process. Any other read failure throws, since the daemon it would
+// name may be live (see decideBoot).
 export function readRegistryEntry(filePath: string): ProcessIdentity | null {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
   }
   try {
     const parsed = JSON.parse(raw) as Partial<ProcessIdentity> | null;

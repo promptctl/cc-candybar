@@ -166,8 +166,15 @@ describe("readRegistryEntry", () => {
     expect(readRegistryEntry(p)).toEqual({ pid: 123, startTime: null });
   });
 
-  test("missing file → null", async () => {
+  test("missing file → null (its daemon released it since the listing)", async () => {
     expect(readRegistryEntry(path.join(dir, "nope.json"))).toBeNull();
+  });
+
+  // A folder at the entry's path reads EISDIR for any user, root included.
+  test("an entry that cannot be read throws, naming the error, never reads as absent", async () => {
+    const p = path.join(dir, "pid-123.json");
+    fs.mkdirSync(p);
+    expect(() => readRegistryEntry(p)).toThrow(/EISDIR/);
   });
 
   test("corrupt JSON → null", async () => {
@@ -204,8 +211,10 @@ describe("listRegistryFiles", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("nonexistent dir → empty list, never throws", async () => {
-    expect(listRegistryFiles(dir)).toEqual([]);
+  // A file at the registry's path reads ENOTDIR for any user, root included.
+  test("a registry that cannot be listed throws, naming the error, never reads as empty", async () => {
+    fs.writeFileSync(dir, "not a folder");
+    expect(() => listRegistryFiles(dir)).toThrow(/ENOTDIR/);
   });
 
   test("lists only .json files, full paths", async () => {
@@ -378,12 +387,12 @@ describe("admitDaemon", () => {
     expect(writeEntry).not.toHaveBeenCalled();
   });
 
-  test("isolated, corrupt/unreadable entries excluded (fail-open undercount)", async () => {
+  test("isolated, entries that name no process are excluded", async () => {
     const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/corrupt.json"],
-        readEntry: () => null, // unreadable — excluded from the count entirely
+        readEntry: () => null, // corrupt or gone — excluded from the count
         isSameLiveProcess: async () => true,
       }),
     );
@@ -391,6 +400,36 @@ describe("admitDaemon", () => {
     // has room for us.
     expect(result.decision.allow).toBe(true);
   });
+
+  // The boot refuses on the throw (server.ts), naming it.
+  test.each([
+    [
+      "registry",
+      {
+        listFiles: () => {
+          throw new Error("EMFILE: too many open files, scandir");
+        },
+      },
+    ],
+    [
+      "entry",
+      {
+        listFiles: () => ["/fake/registry/pid-1.json"],
+        readEntry: () => {
+          throw new Error("EMFILE: too many open files, open");
+        },
+      },
+    ],
+  ] as const)(
+    "isolated, a %s that cannot be read rejects the admission with its error and registers nothing",
+    async (_what, overrides) => {
+      const writeEntry = jest.fn();
+      await expect(
+        admitDaemon(baseDeps({ ...overrides, writeEntry })),
+      ).rejects.toThrow(/EMFILE/);
+      expect(writeEntry).not.toHaveBeenCalled();
+    },
+  );
 
   test("isolated, dead sibling entries are swept and don't count against the ceiling", async () => {
     const removeFile = jest.fn();
