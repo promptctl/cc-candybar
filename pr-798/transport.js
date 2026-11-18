@@ -28955,20 +28955,17 @@ async function publishByRenameAsync(file, bytes, mode) {
     if (mode !== void 0) await fs_default.promises.chmod(staged, mode);
     await fs_default.promises.rename(staged, file);
   } catch (e) {
-    const removal = await fs_default.promises.rm(staged, { force: true }).then(
-      () => null,
-      (c) => c
-    );
+    const removal = await fs_default.promises.rm(staged, { force: true }).then(() => null, asError);
     throw noted(e, staged, removal);
   }
 }
 function publishByLink(file, bytes, mode) {
   const staged = stagedName(file);
-  let linked;
+  let outcome;
   try {
     fs_default.writeFileSync(staged, bytes, { flag: "wx", mode });
     if (mode !== void 0) fs_default.chmodSync(staged, mode);
-    linked = taken(() => fs_default.linkSync(staged, file));
+    outcome = taken(() => fs_default.linkSync(staged, file));
   } catch (e) {
     throw noted(
       e,
@@ -28977,16 +28974,10 @@ function publishByLink(file, bytes, mode) {
     );
   }
   const removal = failure(() => fs_default.rmSync(staged, { force: true }));
-  if (removal !== null) {
-    throw noted(
-      Object.assign(new Error(`${file}: ${linked}`), {
-        code: removal.code
-      }),
-      staged,
-      removal
-    );
-  }
-  return linked;
+  return {
+    outcome,
+    leftover: removal === null ? null : `${staged} was left behind: ${removal.message}`
+  };
 }
 function taken(link) {
   try {
@@ -29005,25 +28996,26 @@ function failure(step4) {
     step4();
     return null;
   } catch (e) {
-    return e;
+    return asError(e);
   }
 }
+function asError(thrown2) {
+  return types.isNativeError(thrown2) ? thrown2 : new Error(String(thrown2));
+}
 function noted(e, staged, removal) {
-  if (removal === null) return e;
-  const note = `; the staged file ${staged} was left behind: ${String(removal.message ?? removal)}`;
-  if (e instanceof Error) {
-    e.message += note;
-    return e;
-  }
-  return new Error(`${String(e)}${note}`);
+  const error = asError(e);
+  if (removal !== null)
+    error.message += `; the staged file ${staged} was left behind: ${removal.message}`;
+  return error;
 }
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
   fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
+  const kept = fs_default.statSync(file, { throwIfNoEntry: false })?.mode;
   publishByRename(
     file,
     text4,
-    mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode
+    mode ?? (kept === void 0 ? void 0 : kept & 511)
   );
 }
 function readConfigText(file) {
@@ -29792,16 +29784,17 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  let stands;
+  let linked;
   try {
-    stands = publishByLink(status, `${formatJobEnd(end)}
-`) === "published";
+    linked = publishByLink(status, `${formatJobEnd(end)}
+`);
   } catch (err) {
     if (err.code === "ENOENT") {
-      return { stands: false, signalled: false };
+      return { stands: false, signalled: false, leftover: null };
     }
     throw err;
   }
+  const stands = linked.outcome === "published";
   const signalled = spawner.signalJob(pid2, "SIGTERM");
   if (signalled) {
     clock.after(
@@ -29812,7 +29805,7 @@ function endJob(spawner, clock, pid2, status, end) {
       }
     );
   }
-  return { stands, signalled };
+  return { stands, signalled, leftover: linked.leftover };
 }
 function createLauncher(owner, clock, spawner) {
   return launcherWithState(owner, clock, spawner).launcher;
@@ -30260,10 +30253,11 @@ var SessionBook = class {
   book = /* @__PURE__ */ new Map();
   // The environment of each session heard since the daemon started.
   environments = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] The file is written only while open:
-  // before the load, a save would land over the book the daemon before it
-  // flushed, unread; after the close, over the file a next daemon has taken
-  // up. What is heard outside it stays in memory.
+  // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
+  // and the close flushes what the open phase saved: before the load, a save
+  // would land over the book the daemon before it flushed, unread; after the
+  // close, over the file a next daemon has taken up. What is heard outside
+  // it stays in memory.
   phase = "unread";
   // Read once the daemon serves. A session heard before it is newer than
   // anything the file holds of it, so it stays, and the file's come first.
@@ -63475,10 +63469,15 @@ function makeUpdateWatch(opts) {
   }
   function endIfOverdue(facts) {
     if (!facts?.alive || clock.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
+    const { stands, signalled, leftover } = endOverdue(
+      actsDir2,
+      facts,
+      launcher
+    );
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+    if (leftover !== null) log("warn", `apply-update: ${leftover}`);
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
@@ -65223,7 +65222,7 @@ var CacheManager = class {
         timestamp: cacheTimestamp
       };
       const cacheContent = JSON.stringify(cacheEntry);
-      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
+      await publishByRenameAsync(cachePath, cacheContent);
       debug(`[CACHE-SET] ${cacheType} disk cache stored`);
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);
@@ -95072,8 +95071,8 @@ var SessionFile = class {
   logger;
   // What clears the debounce timer while one is armed.
   clearTimer = null;
-  // [LAW:one-source-of-truth] State not yet durably written: cleared only once
-  // its write lands, so a disk that refuses leaves it for the next write.
+  // [LAW:one-source-of-truth] State not yet written: cleared only once its
+  // write lands, so a disk that refuses leaves it for the next write.
   pending = null;
   // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
   // chain, so writes land in the order they began and none overtakes
@@ -95160,8 +95159,12 @@ var SessionFile = class {
         return this.land();
       });
       this.waiting = waiting;
-      this.written = waiting.then(() => {
-      });
+      this.written = waiting.then(
+        () => {
+        },
+        () => {
+        }
+      );
     }
     return this.waiting;
   }
@@ -95181,25 +95184,27 @@ var SessionFile = class {
   // metadata op, and on a busy disk it waits on the journal like any write:
   // run synchronously here it held every bar and click for 180 ms on a CI
   // runner, past every client's reply budget.
-  // [LAW:no-silent-failure] Nothing it does can reject the chain: a write
-  // that fails says so, and the next write still runs.
+  // [LAW:no-silent-failure] A write that fails says so and is a value; the
+  // next write still runs.
   async land() {
     const snapshot = this.pending;
     if (snapshot === null) return LANDED;
     const started2 = this.clock.monotonic();
+    let body;
+    let heldMs;
     try {
-      const body = this.body(snapshot);
-      const heldMs = elapsedMs(this.clock, started2);
+      body = this.body(snapshot);
+      heldMs = elapsedMs(this.clock, started2);
       await fs_default.promises.mkdir(import_node_path49.default.dirname(this.filePath), { recursive: true });
       await publishByRenameAsync(this.filePath, body, 384);
-      this.saved(body, snapshot, started2, heldMs);
-      if (this.pending === snapshot) this.pending = null;
-      return LANDED;
     } catch (e) {
-      const reason = `${this.kind.name} save failed: ${e.message}`;
-      this.logger("warn", reason);
-      return { ok: false, reason };
+      const error = asError(e);
+      this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
+      return { ok: false, error };
     }
+    if (this.pending === snapshot) this.pending = null;
+    this.saved(body, snapshot, started2, heldMs);
+    return LANDED;
   }
   // For shutdown and for callers that read the file back: what is pending
   // lands now, behind any write already on its way. [LAW:no-silent-failure]
@@ -95208,7 +95213,7 @@ var SessionFile = class {
     this.clearTimer?.();
     this.clearTimer = null;
     const landed = await this.write();
-    if (!landed.ok) throw new Error(landed.reason);
+    if (!landed.ok) throw landed.error;
   }
   // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
   // it took, and how much of that it held the daemon's one thread.
@@ -95774,24 +95779,24 @@ var import_node_path53 = __toESM(require_path_browserify(), 1);
 function linkKeyFile(dir) {
   return import_node_path53.default.join(dir, "link.key");
 }
-function linkKeyFromFile(file) {
+function linkKeyFromFile(file, log = quietLogger) {
   let key;
   return () => {
     try {
-      key ??= readOrCreate(file);
+      key ??= readOrCreate(file, log);
       return { kind: "ok", value: key };
     } catch (e) {
       return { kind: "failed", reason: e.message };
     }
   };
 }
-function readOrCreate(file) {
+function readOrCreate(file, log) {
   let key;
   try {
     key = fs_default.readFileSync(file);
   } catch (e) {
     if (e.code !== "ENOENT") throw e;
-    create(file);
+    create(file, log);
     key = fs_default.readFileSync(file);
   }
   if (key.length !== LINK_KEY_BYTES) {
@@ -95801,9 +95806,10 @@ function readOrCreate(file) {
   }
   return key;
 }
-function create(file) {
+function create(file, log) {
   fs_default.mkdirSync(import_node_path53.default.dirname(file), { recursive: true });
-  publishByLink(file, randomBytes(LINK_KEY_BYTES), 384);
+  const { leftover } = publishByLink(file, randomBytes(LINK_KEY_BYTES), 384);
+  if (leftover !== null) log("warn", `link key: ${leftover}`);
 }
 
 // src/daemon/renderer-process.ts
@@ -95874,7 +95880,7 @@ function productionAdapters(paths2, daemonLog, machine) {
     launcher: (own2) => systemLauncher(own2, machine),
     profile: (name, log) => fileStorage(profilePaths(paths2, name), log, machine),
     sessionBook: (log) => new SessionFile(SESSION_BOOK_FILE, paths2.sessionBook, machine, 500, log),
-    linkKey: linkKeyFromFile(linkKeyFile(paths2.state)),
+    linkKey: linkKeyFromFile(linkKeyFile(paths2.state), daemonLog.log),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,

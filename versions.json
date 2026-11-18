@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-798",
+      "ref": "refs/pull/798/merge",
+      "sha": "6837d417ae1578741dd984e588449676f3d3112a",
+      "timestamp": "2026-11-18T13:03:23.569Z",
+      "commits": [
+        {
+          "sha": "6837d417ae1578741dd984e588449676f3d3112a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:02:29Z",
+          "message": "Merge 5e2eeea40525864a89d2f907ba46937f71b084d4 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "5e2eeea40525864a89d2f907ba46937f71b084d4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:02:07-07:00",
+          "message": "fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole.\n"
+        },
+        {
+          "sha": "488f7a29186717e773c4245715d8d7909c2edaef",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:42:35-07:00",
+          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
+        },
+        {
+          "sha": "749f31c1c8e6f620e702d5f27bad1e04d4cc6266",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:25:40-07:00",
+          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-800",
       "ref": "refs/pull/800/merge",
       "sha": "5913ef05b80b2b7603ea8383349680f8b0f1700c",
@@ -42,71 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:48:16-07:00",
           "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-798",
-      "ref": "refs/pull/798/merge",
-      "sha": "48807b5a66a39e89b1657221bbb65e862aab0f36",
-      "timestamp": "2026-11-18T12:43:45.802Z",
-      "commits": [
-        {
-          "sha": "48807b5a66a39e89b1657221bbb65e862aab0f36",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:42:46Z",
-          "message": "Merge 488f7a29186717e773c4245715d8d7909c2edaef into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "488f7a29186717e773c4245715d8d7909c2edaef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:42:35-07:00",
-          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
-        },
-        {
-          "sha": "749f31c1c8e6f620e702d5f27bad1e04d4cc6266",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:25:40-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-797",
-      "ref": "refs/pull/797/merge",
-      "sha": "e6326912bcab8aeae7261efe2b300ddfb69dcf90",
-      "timestamp": "2026-11-18T12:36:51.569Z",
-      "commits": [
-        {
-          "sha": "e6326912bcab8aeae7261efe2b300ddfb69dcf90",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:35:58Z",
-          "message": "Merge 198882e9d271c129b0820007ae9f37901660d3d0 into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "198882e9d271c129b0820007ae9f37901660d3d0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:35:47-07:00",
-          "message": "fix(update): one job's watch is one value, and a look's wait excludes its read (9eu3)\n\nA look is tagged first, spent or unwatched, and the watch logs from that.\nThe job's ended mark lives in the same value and is set only once the end\nhas run. The wait runs from one look's end to the next look's start, so a\nslow read under load is never taken for a sleep. The act record's parse\nnarrows with type guards. A claim's fault and a throwing look go back to\ntheir own paths, which already show them.\n"
-        },
-        {
-          "sha": "c01cd14eece70f044ae2e77548a47ac83f93be06",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:30:38-07:00",
-          "message": "fix(update): the act budget follows its job on the span clock, and says what it did not spend (9eu3)\n\nThe spend is keyed by the job, not the act number a later claim can reuse,\nand measured on the monotonic clock. Spans past the longest look are kept as\nunwatched and logged, and a timeout says both figures. A job is ended once.\nThe act record is parsed where it is read, a claim's fault reaches the act\nfiles' one edge, and a look that throws no longer stops the watch. Comments\nstate the real bound: ten minutes watched by one daemon.\n"
-        },
-        {
-          "sha": "f9a8c7b0a8c08ba45499619b1eb9803be4ff0a75",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:12:48-07:00",
-          "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n"
         }
       ]
     },
