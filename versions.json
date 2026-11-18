@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-815",
+      "ref": "refs/pull/815/merge",
+      "sha": "f84a926f3c43001530a9d979500b005f8f2b9cbd",
+      "timestamp": "2026-11-18T17:34:51.958Z",
+      "commits": [
+        {
+          "sha": "f84a926f3c43001530a9d979500b005f8f2b9cbd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:33:51-07:00",
+          "message": "Merge bc5c9bc699fa9f2f5b8153a423b49cc1df80aaf4 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "bc5c9bc699fa9f2f5b8153a423b49cc1df80aaf4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:33:34-07:00",
+          "message": "fix(storage): a plugin storage folder's fault clears when the OS or the disk answers again (oiyf)\n\nA refused or erroring watch, a failed stat, or a folder that cannot be\nmade each stands only while that answer does: the registry's period\nreopens the watch, every judgment stats again, and every hold, period\nand catch-up makes the folder again. A folder that cannot be made holds\nno watch. Each fault source is logged and counted on its own moves, and\na generation that closes logs the faults it ended with.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "fd629edab3c2116a266ec18501d1ce208592daaf",
