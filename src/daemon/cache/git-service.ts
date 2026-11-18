@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { LaunchResult, Launcher } from "../../proc/launcher";
+import { repoLaunch, type RepoLaunch } from "../../proc/git-local-env";
 import { ABSENT, failed, ok, orElse, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import {
@@ -101,7 +102,11 @@ function configIdentity(configPath: string): ConfigIdentity | null {
 export class GitService {
   // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
   // close refuses the next read of a pass under way.
-  constructor(private readonly launcher: Launcher) {}
+  private readonly launch: RepoLaunch;
+
+  constructor(launcher: Launcher) {
+    this.launch = repoLaunch(launcher);
+  }
 
   private isGitRepo(workingDir: string): boolean {
     return holdsGit(workingDir);
@@ -121,7 +126,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return this.launcher.launch({
+    return this.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -183,9 +188,10 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: every git read here
+  // launches with git's repository variables unset (`repoLaunch`), since the
+  // daemon's environment describes whichever shell spawned it rather than the
+  // session being rendered.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -617,7 +623,7 @@ export class GitService {
     args: readonly string[],
     options: { cwd: string; timeout: number },
   ): Promise<LaunchResult> {
-    return this.launcher.launch({
+    return this.launch({
       bin,
       args: [...args],
       cwd: options.cwd,

@@ -33,6 +33,7 @@ import {
   type ForgeName,
 } from "../segments/git.js";
 import { gitRootOf } from "../utils/git-root.js";
+import { repoLaunch } from "../proc/git-local-env.js";
 import { ok, type Outcome } from "../utils/outcome.js";
 import { jsonLine } from "../utils/claude.js";
 import { readTailSync } from "../utils/transcript-fs.js";
@@ -450,8 +451,9 @@ export async function forgeLogin(
   cwd: string,
 ): Promise<Asked<ForgeLogin | null>> {
   if (gitRootOf(cwd) === undefined) return { kind: "ok", value: null };
+  const launch = repoLaunch(launcher);
   const remotes = remotesOf(
-    await launcher.launch({
+    await launch({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd,
@@ -469,7 +471,7 @@ export async function forgeLogin(
   const probe = FORGE_PROBE[forge];
   // [LAW:no-defensive-null-guards] detectForge names a forge only by a host.
   const host = probe.loginHost(remoteHost(url)!);
-  const run = await launcher.launch({
+  const run = await launch({
     bin: cli,
     args: [...probe.args(host)],
     cwd,

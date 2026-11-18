@@ -4,6 +4,7 @@
 // `.cc-candybar/plugins/` (REPO_PLUGIN_DIR), each holding a plugin.json5.
 
 import fs from "node:fs";
+import { localEnvUnset } from "./proc/git-local-env.js";
 import path from "node:path";
 
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
@@ -117,8 +118,7 @@ function cloneRepo(
   // Overlay: terminal prompts off, and the variables that locate a repository
   // (named by the tool itself) unset.
   const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = null;
+  Object.assign(env, localEnvUnset(git(env, "rev-parse", "--local-env-vars")));
   git(
     env,
     "clone",
