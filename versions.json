@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-824",
+      "ref": "refs/pull/824/merge",
+      "sha": "c10d1f1f28660afb915c2f588019a3fa580f9149",
+      "timestamp": "2026-11-18T19:06:06.425Z",
+      "commits": [
+        {
+          "sha": "c10d1f1f28660afb915c2f588019a3fa580f9149",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T19:05:02Z",
+          "message": "Merge ef4d9d6a6c98369962a63d719ef890b00706c592 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "ef4d9d6a6c98369962a63d719ef890b00706c592",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:04:42-07:00",
+          "message": "fix(watchers): an event looks again only at the path it names, a tree that cannot be listed keeps its watches, and a directory refused as it joins reaches its holders (cimv)\n"
+        },
+        {
+          "sha": "627a9501141d72e6e9a5d9d4a67bc435f71deac6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:49:43-07:00",
+          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-825",
       "ref": "refs/pull/825/merge",
       "sha": "f124d90a08dabd0a7ebe4f217a46df6a1900722d",
@@ -49,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T11:37:23-07:00",
           "message": "fix(watchers): an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-824",
-      "ref": "refs/pull/824/merge",
-      "sha": "a4682ae4edde933199a42ddbcb63977508dda5aa",
-      "timestamp": "2026-11-18T18:50:57.199Z",
-      "commits": [
-        {
-          "sha": "a4682ae4edde933199a42ddbcb63977508dda5aa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:50:01-07:00",
-          "message": "Merge 627a9501141d72e6e9a5d9d4a67bc435f71deac6 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "627a9501141d72e6e9a5d9d4a67bc435f71deac6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:49:43-07:00",
-          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n"
         }
       ]
     },
