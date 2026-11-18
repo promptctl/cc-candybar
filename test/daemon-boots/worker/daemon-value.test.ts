@@ -7,7 +7,7 @@ import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
-import { createHook } from "node:async_hooks";
+import { AsyncLocalStorage, createHook } from "node:async_hooks";
 import {
   chmodSync,
   existsSync,
@@ -63,13 +63,19 @@ const WATCHED = new Set([
   "PIPEWRAP",
 ]);
 const live = new Map<number, Error>();
+// A case that reads `live` runs its body in this scope, and only what its
+// own async work creates is recorded. The hook sees every resource in the
+// jest worker, so without it a timer another file left armed fails this
+// file's count and names the wrong culprit.
+const scope = new AsyncLocalStorage<true>();
+const scoped = (body: () => Promise<void>) => () => scope.run(true, body);
 // From a close's return on: `init` and `before` run as the timer is armed and
 // as it fires, where `destroy` lands some turns later. Null until then.
 let baseline = new Set<number>();
 let afterClose: { armed: Error[]; fired: Error[] } | null = null;
 const resources = createHook({
   init: (id, type) => {
-    if (!WATCHED.has(type)) return;
+    if (!WATCHED.has(type) || scope.getStore() !== true) return;
     const origin = new Error(type);
     live.set(id, origin);
     if (type === "Timeout") afterClose?.armed.push(origin);
@@ -276,7 +282,9 @@ describe("the daemon is a value", () => {
     await close(second);
   });
 
-  test("a build that throws stands in the way of no next build", async () => {
+  test(
+    "a build that throws stands in the way of no next build",
+    scoped(async () => {
     writeConfig(PADDED);
     const unreadable = (): never => {
       throw new Error("the profile cannot be opened");
@@ -290,7 +298,7 @@ describe("the daemon is a value", () => {
     const daemon = construct();
     await answer(daemon, renderRequest("value-rebuilt"));
     await close(daemon);
-  });
+  }));
 
   test("a render and a click go through the socket's own request handling", async () => {
     writeConfig(PADDED);
@@ -337,7 +345,9 @@ describe("the daemon is a value", () => {
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
-  test("close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight", async () => {
+  test(
+    "close ends everything running: an armed daemon, a feed, a render mid-wait and a child in flight",
+    scoped(async () => {
     // A `claude` first on PATH that says it started and blocks: the band's
     // setup launches it with no signal of its own, so only the daemon's close
     // can end it.
@@ -413,6 +423,13 @@ describe("the daemon is a value", () => {
       () => false,
     );
 
+    // Non-vacuous: the case's own timers and child reached the record, so an
+    // empty leftover below is the close's doing, not a scope that saw nothing.
+    const recorded = [...live]
+      .filter(([id]) => !settled.includes(id))
+      .map(([, held]) => held.message);
+    expect(recorded).toEqual(expect.arrayContaining(["Timeout", "PROCESSWRAP"]));
+
     const sessionFile = sessionStatePath(hostNow());
     const { settled: closing } = await daemon.close();
     open = null;
@@ -453,5 +470,5 @@ describe("the daemon is a value", () => {
         category: "user-shell",
       }),
     ).toMatchObject({ ok: false, reason: "aborted" });
-  });
+  }));
 });
