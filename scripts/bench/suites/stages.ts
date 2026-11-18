@@ -16,7 +16,6 @@ import path from "node:path";
 import {
   NO_REPO,
   prepareConfig,
-  renderEffective,
   type PreparedConfig,
 } from "../../../test/helpers/prepared-config.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
@@ -85,7 +84,7 @@ async function prepared(
 // reports these rather than throwing, which is why a sample cannot vouch for
 // itself.
 function drawnClean(
-  drew: Awaited<ReturnType<typeof renderEffective>>,
+  drew: Awaited<ReturnType<PreparedConfig["render"]>>,
   what: string,
 ): number {
   const bytes = ansiOf(drew.rendered).length;
@@ -124,7 +123,7 @@ async function drawing(
       const ms = await repeat(samples, async (i) => {
         const at = instantOf(new Date(start + (i + 4) * 1000));
         bytes = drawnClean(
-          await renderEffective(config, effective, draw.width, at),
+          await config.render(effective, draw.width, at),
           what,
         );
       });
@@ -217,8 +216,7 @@ export const STAGES: readonly Benchmark[] = [
               () => false,
             );
             const started = performance.now();
-            const drew = await renderEffective(
-              config,
+            const drew = await config.render(
               effective,
               DRAW_WIDTH,
               instantOf(new Date()),

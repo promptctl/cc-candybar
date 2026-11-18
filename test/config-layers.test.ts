@@ -93,7 +93,7 @@ test("a project file that places one segment renders over the user's whole confi
   ]);
   expect(textOf(outcome.rendered)).toContain("USERSEG");
   expect(textOf(outcome.rendered)).toContain("PROJSEG");
-  const prepared = await prepareConfig(
+  using prepared = await prepareConfig(
     world,
     outcome.layers,
     NO_REPO,
@@ -101,11 +101,7 @@ test("a project file that places one segment renders over the user's whole confi
     [],
     instantOf(new Date()),
   );
-  try {
-    expect(prepared.config.globals.menuGlyph).toBe("U");
-  } finally {
-    prepared[Symbol.dispose]();
-  }
+  expect(prepared.config.globals.menuGlyph).toBe("U");
 });
 
 test("a layer that does not load fails naming its own file", async () => {
@@ -345,7 +341,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(
       await checkConfig(world, daemonGates(), undefined, project),
     );
-    const prepared = await prepareConfig(
+    using prepared = await prepareConfig(
       world,
       outcome.layers,
       NO_REPO,
@@ -353,13 +349,9 @@ describe("a project layer inserting into the user's row", () => {
       [],
       instantOf(new Date()),
     );
-    try {
-      return [
-        ...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!)),
-      ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
-    } finally {
-      prepared[Symbol.dispose]();
-    }
+    return [
+      ...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!)),
+    ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
   };
 
   test("a preset that already places the cell loads and draws it once", async () => {
@@ -549,7 +541,7 @@ describe("a project layer inserting into the user's row", () => {
     const outcome = clean(
       await checkConfig(world, daemonGates(), undefined, project),
     );
-    const prepared = await prepareConfig(
+    using prepared = await prepareConfig(
       world,
       outcome.layers,
       NO_REPO,
@@ -557,46 +549,42 @@ describe("a project layer inserting into the user's row", () => {
       [],
       instantOf(new Date()),
     );
-    try {
-      const { config } = prepared;
-      const nodes = [
-        ...walkNodes(fragmentNode(config.presets.default!.root!)),
-      ].flatMap((n) => (n.kind === "segment" ? [n] : []));
-      const acts = Object.values(config.actions) as unknown as Array<
-        Record<string, unknown>
-      >;
-      // Nothing removes, anchors on or configures the inserted placement;
-      // the user's cells keep theirs.
-      expect(acts.filter((a) => a.removeSegment === "theirs")).toEqual([]);
-      expect(acts.filter((a) => a.anchor === "theirs")).toEqual([]);
-      expect(acts.filter((a) => a.removeSegment === "mine")).toHaveLength(1);
-      // The leading `+` sits before the first cell the user's file holds.
-      expect(
-        acts.filter((a) => a.anchor === "mine" && a.relation === "before"),
-      ).toHaveLength(1);
-      const cell = nodes.find((n) => n.name === "theirs")!;
-      expect(cell.lead).toBeUndefined();
-      expect(cell.trail).toBeUndefined();
-      expect(cell.drafts).toBeUndefined();
-      const label = nodes.find(
-        (n) => n.name === "edit.label:theirs/default:theirs",
-      )!;
-      expect(label.opens).toBeUndefined();
-      expect(config.segments[label.name]!.template).toBe(
-        `{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`,
-      );
-      // A layout op aimed at the inserted id writes nothing.
-      const before = fs.readFileSync(userFile, "utf8");
-      expect(() =>
-        applyLayoutOp(EDITS_IN_PLACE, projectLayer(), "presets.default.root", {
-          op: "remove",
-          target: "theirs",
-        }),
-      ).toThrow();
-      expect(fs.readFileSync(userFile, "utf8")).toBe(before);
-    } finally {
-      prepared[Symbol.dispose]();
-    }
+    const { config } = prepared;
+    const nodes = [
+      ...walkNodes(fragmentNode(config.presets.default!.root!)),
+    ].flatMap((n) => (n.kind === "segment" ? [n] : []));
+    const acts = Object.values(config.actions) as unknown as Array<
+      Record<string, unknown>
+    >;
+    // Nothing removes, anchors on or configures the inserted placement;
+    // the user's cells keep theirs.
+    expect(acts.filter((a) => a.removeSegment === "theirs")).toEqual([]);
+    expect(acts.filter((a) => a.anchor === "theirs")).toEqual([]);
+    expect(acts.filter((a) => a.removeSegment === "mine")).toHaveLength(1);
+    // The leading `+` sits before the first cell the user's file holds.
+    expect(
+      acts.filter((a) => a.anchor === "mine" && a.relation === "before"),
+    ).toHaveLength(1);
+    const cell = nodes.find((n) => n.name === "theirs")!;
+    expect(cell.lead).toBeUndefined();
+    expect(cell.trail).toBeUndefined();
+    expect(cell.drafts).toBeUndefined();
+    const label = nodes.find(
+      (n) => n.name === "edit.label:theirs/default:theirs",
+    )!;
+    expect(label.opens).toBeUndefined();
+    expect(config.segments[label.name]!.template).toBe(
+      `{{ "theirs · ${path.basename(project)}/.cc-candybar.json5 insert.0" }}`,
+    );
+    // A layout op aimed at the inserted id writes nothing.
+    const before = fs.readFileSync(userFile, "utf8");
+    expect(() =>
+      applyLayoutOp(EDITS_IN_PLACE, projectLayer(), "presets.default.root", {
+        op: "remove",
+        target: "theirs",
+      }),
+    ).toThrow();
+    expect(fs.readFileSync(userFile, "utf8")).toBe(before);
   });
   // The bar's own load of the chain: what it draws, and what it dropped.
   const barLoad = () => {
