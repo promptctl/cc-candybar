@@ -353,7 +353,10 @@ describe("the savepoint survives a restart", () => {
 
   test("a savepoint of the wrong shape drops its session alone, by name", () => {
     const historyFile = path.join(dir, "history.json");
-    const kept = { past: [], future: [] };
+    const kept = {
+      past: [[{ kind: "session", key: "theme", before: null, after: "nord" }]],
+      future: [],
+    };
     fs.writeFileSync(
       historyFile,
       JSON.stringify({
@@ -367,7 +370,8 @@ describe("the savepoint survives a restart", () => {
     );
     expect(Object.fromEntries(storage.load())).toEqual({ other: kept });
     expect(logs).toEqual([
-      `settings-history load: dropped session "${SID}": its value has the wrong shape`,
+      `settings-history load: dropped session "${SID}": its value has a 'savepoint' that is not a savepoint`,
+      "settings-history loaded sessions=1 dropped=1",
     ]);
   });
 
@@ -421,6 +425,7 @@ describe("the savepoint survives a restart", () => {
       other: { past: [[file]], future: [] },
     });
     expect(logs).toEqual([
+      "settings-history loaded sessions=2 dropped=0",
       'settings-history load: dropped the changes to "look", "progression", no longer a setting',
     ]);
   });

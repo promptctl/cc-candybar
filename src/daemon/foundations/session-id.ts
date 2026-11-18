@@ -5,11 +5,14 @@
 
 declare const SESSION_ID: unique symbol;
 
-// [LAW:types-are-the-program] Non-empty, a safe file name, and never an array
-// index. `<id>.json` is a legal name in any folder, so a path built from one
-// needs no check of its own. A record lists its array-index keys first, and
-// every other key in the order it was set, so a record keyed by session ids
-// keeps the order the bounded stores evict by through every save and load.
+// [LAW:types-are-the-program] Non-empty, a safe file name, never an array
+// index and never `__proto__`. `<id>.json` is a legal name in any folder, so a
+// path built from one needs no check of its own. A record lists its
+// array-index keys first, and every other key in the order it was set, so a
+// record keyed by session ids keeps the order the bounded stores evict by
+// through every save and load. An assignment of `__proto__` into a record
+// sets its prototype and adds no entry; every other name an object inherits
+// (`constructor`, `toString`) is an ordinary own key once set.
 // Claude Code's session ids are UUIDs, so no real id is refused.
 export type SessionId = string & { readonly [SESSION_ID]: true };
 
@@ -32,11 +35,13 @@ export function parseSessionId(raw: unknown): ParsedSessionId {
           ? `is ${JSON.stringify(raw)}, which names a folder, not a session`
           : isArrayIndex(raw)
             ? `is ${JSON.stringify(raw)}, an array index, which is never a session id`
-            : /[/\\\0]/.test(raw)
-              ? `contains a path separator or NUL: ${JSON.stringify(raw)}`
-              : Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES
-                ? `is longer than ${SESSION_ID_MAX_BYTES} bytes`
-                : null;
+            : raw === "__proto__"
+              ? `is "__proto__", which is never a session id`
+              : /[/\\\0]/.test(raw)
+                ? `contains a path separator or NUL: ${JSON.stringify(raw)}`
+                : Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES
+                  ? `is longer than ${SESSION_ID_MAX_BYTES} bytes`
+                  : null;
   return problem === null
     ? { ok: true, id: raw as SessionId }
     : { ok: false, problem };

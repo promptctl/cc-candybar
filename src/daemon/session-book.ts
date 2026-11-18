@@ -40,7 +40,8 @@ export const SESSION_BOOK_FILE: SessionFileKind<DurableContext> = {
   // request it came from was.
   parse: (value) => {
     const origin = originOfRecord(value);
-    if (origin === null) return null;
+    if (origin === null)
+      return { ok: false, problem: "is not the origin of a render" };
     const { claudeConfigDir } = value as { claudeConfigDir?: unknown };
     if (
       !isAbsolute(origin.projectDir) ||
@@ -49,10 +50,13 @@ export const SESSION_BOOK_FILE: SessionFileKind<DurableContext> = {
       (claudeConfigDir !== undefined &&
         (typeof claudeConfigDir !== "string" || !isAbsolute(claudeConfigDir)))
     )
-      return null;
+      return { ok: false, problem: "holds a path that is not absolute" };
     return {
-      origin,
-      ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+      ok: true,
+      value: {
+        origin,
+        ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+      },
     };
   },
 };

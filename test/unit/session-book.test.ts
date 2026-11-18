@@ -75,7 +75,7 @@ function loaded(kept: SessionFileStorage<DurableContext>): SessionBook {
 }
 
 // What a load of the file's text gives back.
-const roundTrip = (value: DurableContext): DurableContext | null =>
+const roundTrip = (value: DurableContext) =>
   SESSION_BOOK_FILE.parse(
     JSON.parse(JSON.stringify(SESSION_BOOK_FILE.record(value))),
   );
@@ -99,7 +99,7 @@ describe("the book's file", () => {
       claudeConfigDir: "/u/.claude-x",
     },
   ])("%j reads back as it was kept", (value) => {
-    expect(roundTrip(value)).toEqual(value);
+    expect(roundTrip(value)).toEqual({ ok: true, value });
   });
 
   test("a newer build's source beside a file leaves the file, its source unknown", () => {
@@ -111,18 +111,29 @@ describe("the book's file", () => {
         source: "workspace",
       }),
     ).toEqual({
-      origin: {
-        projectDir: "/p",
-        cwd: "/p",
-        target: { source: "unknown", path: "/x.json5" },
+      ok: true,
+      value: {
+        origin: {
+          projectDir: "/p",
+          cwd: "/p",
+          target: { source: "unknown", path: "/x.json5" },
+        },
       },
     });
   });
 
   test.each([
-    ["no record", null],
-    ["no configFile", { projectDir: "/p", cwd: "/p", source: "search" }],
-    ["a relative project", { projectDir: "p", cwd: "/p", configFile: null }],
+    ["no record", null, "is not the origin of a render"],
+    [
+      "no configFile",
+      { projectDir: "/p", cwd: "/p", source: "search" },
+      "is not the origin of a render",
+    ],
+    [
+      "a relative project",
+      { projectDir: "p", cwd: "/p", configFile: null },
+      "holds a path that is not absolute",
+    ],
     [
       "a relative config file",
       {
@@ -131,13 +142,15 @@ describe("the book's file", () => {
         configFile: "x.json5",
         source: "argument",
       },
+      "holds a path that is not absolute",
     ],
     [
       "a relative Claude Code directory",
       { projectDir: "/p", cwd: "/p", configFile: null, claudeConfigDir: "c" },
+      "holds a path that is not absolute",
     ],
-  ])("%s is refused", (_name, value) => {
-    expect(SESSION_BOOK_FILE.parse(value)).toBeNull();
+  ])("%s is refused", (_name, value, problem) => {
+    expect(SESSION_BOOK_FILE.parse(value)).toEqual({ ok: false, problem });
   });
 
   test("what a client reports now is never kept", () => {

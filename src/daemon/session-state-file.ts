@@ -5,13 +5,19 @@ import { asError, publishByRenameAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
+// [LAW:parse-dont-validate] What a load makes of one session's value: the
+// value it holds, or what is wrong with it, read after "its value".
+export type ParsedEntry<V> =
+  | { readonly ok: true; readonly value: V }
+  | { readonly ok: false; readonly problem: string };
+
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
 // log lines say, each session's value as the file keeps it, and as a load
-// parses it back, null for one of the wrong shape.
+// parses it back.
 export interface SessionFileKind<V> {
   readonly name: string;
   readonly record: (value: V) => unknown;
-  readonly parse: (value: unknown) => V | null;
+  readonly parse: (value: unknown) => ParsedEntry<V>;
 }
 
 // [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
@@ -38,16 +44,21 @@ export type SessionPicks = Readonly<Record<string, string>>;
 export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
-  parse: (kv) =>
-    kv !== null &&
-    typeof kv === "object" &&
-    !Array.isArray(kv) &&
-    Object.values(kv).every((leaf) => typeof leaf === "string")
-      ? (kv as SessionPicks)
-      : null,
+  parse: (kv) => {
+    if (!isRecord(kv)) return { ok: false, problem: "is not an object" };
+    const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
+    return bad === undefined
+      ? { ok: true, value: kv as SessionPicks }
+      : {
+          ok: false,
+          problem: `has a ${JSON.stringify(bad)} that is not a string`,
+        };
+  },
 };
 
-const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
+export const isRecord = (
+  value: unknown,
+): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
 // [LAW:single-enforcer] The load of every per-session file, keyed by session
@@ -55,56 +66,65 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 // parse, and an entry either refuses is named and dropped alone.
 // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
 // *defined* recovery, not a hidden fallback to different data: an empty
-// store re-rolls random picks exactly as a first-ever boot would.
+// store re-rolls random picks exactly as a first-ever boot would. Only the
+// read and the JSON parse are caught: a throw past them is a bug, and stays one.
+// [LAW:nothing-unseen] Every load says what it found: no file, a file it
+// could not use, or how many sessions it loaded and dropped.
 export function loadSessionFile<V>(
   kind: Pick<SessionFileKind<V>, "name" | "parse">,
   filePath: string,
   logger: DaemonLogger,
 ): Map<SessionId, V> {
   const loaded = new Map<SessionId, V>();
-  let raw: string;
+  let text: string;
   try {
-    raw = fs.readFileSync(filePath, "utf8");
+    text = fs.readFileSync(filePath, "utf8");
   } catch (e) {
-    // [LAW:no-silent-failure] A missing file is the expected first-boot
-    // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
-    // anomaly worth surfacing before recovering to empty.
     const code = (e as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") {
-      logger("warn", `${kind.name} read failed (${code}); starting empty`);
-    }
+    if (code === "ENOENT")
+      logger("info", `${kind.name} load: no file, starting empty`);
+    else logger("warn", `${kind.name} read failed (${code}); starting empty`);
     return loaded;
   }
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (isRecord(parsed)) {
-      // [LAW:no-silent-failure] A key the session id checkpoint refuses, or
-      // a value of the wrong shape, is reported and dropped, and the
-      // sessions beside it load whole: the store never hydrates from a
-      // half-written or hand-edited entry.
-      const keyed = sessionKeyed(parsed, (key, problem) =>
-        logger(
-          "warn",
-          `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
-        ),
-      );
-      for (const [id, value] of keyed) {
-        const held = kind.parse(value);
-        if (held !== null) loaded.set(id, held);
-        else
-          logger(
-            "warn",
-            `${kind.name} load: dropped session ${JSON.stringify(id)}: its value has the wrong shape`,
-          );
-      }
-      return loaded;
-    }
-    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
-    return loaded;
+    parsed = JSON.parse(text);
   } catch {
     logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
     return loaded;
   }
+  if (!isRecord(parsed)) {
+    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
+    return loaded;
+  }
+  // [LAW:no-silent-failure] A key the session id checkpoint refuses, or a
+  // value its kind refuses, is reported and dropped, and the sessions beside
+  // it load whole: the store never hydrates from a half-written or
+  // hand-edited entry.
+  let dropped = 0;
+  const keyed = sessionKeyed(parsed, (key, problem) => {
+    dropped += 1;
+    logger(
+      "warn",
+      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`,
+    );
+  });
+  for (const [id, value] of keyed) {
+    const entry = kind.parse(value);
+    if (entry.ok) loaded.set(id, entry.value);
+    else {
+      dropped += 1;
+      logger(
+        "warn",
+        `${kind.name} load: dropped session ${JSON.stringify(id)}: its value ${entry.problem}`,
+      );
+    }
+  }
+  logger(
+    "info",
+    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`,
+  );
+  return loaded;
 }
 
 // What one write came to, its error kept whole. Nothing pending is landed:

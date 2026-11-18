@@ -28,6 +28,14 @@ describe("the session-id checkpoint", () => {
   });
 
   // A record keeps these in the order they were set, as it does a UUID.
+  // An inherited name is an own key once set, as any other id is.
+  test.each(["constructor", "toString", "hasOwnProperty"])(
+    "passes %j, a name an object inherits",
+    (raw) => {
+      expect(parseSessionId(raw)).toEqual({ ok: true, id: raw });
+    },
+  );
+
   test.each(["07", "1e3", "4294967295", "-1", "-0", "1.5", "0x7", " 7"])(
     "passes %j, which looks numeric and is no array index",
     (raw) => {

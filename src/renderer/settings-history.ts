@@ -41,6 +41,7 @@ import {
   type Step,
   type SessionHistory,
   type Savepoint,
+  holdsNothing,
   isSettingKey,
 } from "../renderer-interface/history-storage";
 import {
@@ -430,13 +431,7 @@ export class SettingsHistory {
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
     next.delete(sessionId);
-    if (
-      history.past.length > 0 ||
-      history.future.length > 0 ||
-      history.savepoint !== undefined
-    ) {
-      next.set(sessionId, history);
-    }
+    if (!holdsNothing(history)) next.set(sessionId, history);
     // A history that moved to the end is told even when it holds what it
     // held, so the host's order is this one's.
     this.moved.delete(sessionId);

@@ -53,6 +53,10 @@ export class HeldStores {
   }
 
   // What a renderer built now is built from.
+  // [LAW:locality-or-seam] The boot crosses to the renderer as JSON, so each
+  // store goes as a record, and the renderer reads recency off its key order.
+  // That order holds only because the session-id parse refuses an id that a
+  // record would reorder (an array index) or not hold (`__proto__`).
   current(): StoredState {
     return {
       sessions: Object.fromEntries(this.sessions),

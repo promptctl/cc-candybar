@@ -29,7 +29,6 @@ const S2 = sessionIdOf("s2");
 const A_2 = sessionIdOf("a");
 const B = sessionIdOf("b");
 const C = sessionIdOf("c");
-const __PROTO__ = sessionIdOf("__proto__");
 
 describe("the session state's file", () => {
   let dir: string;
@@ -469,14 +468,58 @@ describe("the session state's file", () => {
     expect(statSync(file).mode & 0o077).toBe(0);
   });
 
-  it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", async () => {
-    const first = daemonOver(storage());
-    first.turn((s) => s.set(__PROTO__, "theme", "evil"));
-    await first.stores.close();
-    // Object.prototype untouched — no pollution.
+  // [LAW:behavior-not-structure] No save writes a `__proto__` key, so this
+  // file is written by hand.
+  it("a __proto__ key is dropped by name and pollutes nothing", async () => {
+    writeFileSync(
+      file,
+      '{"__proto__": {"theme": "evil"}, "s1": {"theme": "nord"}}',
+    );
+    const logged: string[] = [];
+    const loaded = storage((_level, line) => logged.push(line)).load();
+    expect([...loaded]).toEqual([[S1, { theme: "nord" }]]);
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
-    // The malicious key survives as ordinary stored data.
-    const reborn = await restarted();
-    expect(reborn.get(__PROTO__, "theme")).toBe("evil");
+    expect(logged).toContainEqual(
+      'session-state load: dropped session key "__proto__": session id is "__proto__", which is never a session id',
+    );
+  });
+
+  // [LAW:nothing-unseen] Every load says what it found, so a missing file
+  // and a full one are told apart.
+  it("each load says whether there was a file, and what it loaded and dropped", () => {
+    const logged: string[] = [];
+    const log = (_level: string, line: string): void => void logged.push(line);
+    storage(log).load();
+    writeFileSync(
+      file,
+      JSON.stringify({ s1: { theme: "nord" }, s2: { theme: 42 } }),
+    );
+    storage(log).load();
+    expect(logged).toEqual([
+      "session-state load: no file, starting empty",
+      'session-state load: dropped session "s2": its value has a "theme" that is not a string',
+      "session-state loaded sessions=1 dropped=1",
+    ]);
+  });
+
+  // [LAW:no-silent-failure] Only the file's JSON is read as corrupt: a throw
+  // past it is a bug, and reaches the caller.
+  it("a throw past the JSON parse is thrown, never read as a corrupt file", () => {
+    writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
+    const logged: string[] = [];
+    const throwing = new SessionFile(
+      {
+        ...SESSION_STATE_FILE,
+        parse: () => {
+          throw new Error("a bug in the parse");
+        },
+      },
+      file,
+      systemTimekeeper,
+      0,
+      (_level, line) => logged.push(line),
+    );
+    expect(() => throwing.load()).toThrow("a bug in the parse");
+    expect(logged.join("\n")).not.toMatch(/corrupt JSON/);
   });
 });

@@ -8,7 +8,6 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import {
   sessionIdOf,
   type SessionId,
@@ -35,12 +34,23 @@ import { emptyStores } from "./helpers/doctor-facts";
 import { NO_LAYERS } from "./helpers/history-step";
 import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 
-// `count` ids in the order they are written: the number-like ids that are no
-// array index interleaved with UUIDs from the start, so the oldest is one.
+// The sessions in the order they are written, oldest first: number-like ids
+// that are no array index among UUIDs, then as many more as a bound needs.
+const WRITTEN = [
+  "07",
+  "6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1e01",
+  "1e3",
+  "6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1e02",
+  "4294967295",
+  "6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1e03",
+];
 const idsOf = (count: number): SessionId[] =>
-  Array.from({ length: count }, (_, i) =>
-    sessionIdOf(["07", "1e3", "4294967295"][i / 2] ?? randomUUID()),
-  );
+  [
+    ...WRITTEN,
+    ...Array.from({ length: count - WRITTEN.length }, (_, i) => `session-${i}`),
+  ].map(sessionIdOf);
+// The session written after the file is read back.
+const NEWEST = sessionIdOf("6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1eff");
 
 let dir: string;
 let file: string;
@@ -123,7 +133,7 @@ describe("the session book's file", () => {
     await first.close();
 
     const second = bookOver();
-    second.heard(request(sessionIdOf(randomUUID())), TEST_ENVIRONMENT);
+    second.heard(request(NEWEST), TEST_ENVIRONMENT);
     expect(known(second, ids[0]!)).toBe(false);
     for (const id of ids.slice(1)) expect(known(second, id)).toBe(true);
     await second.close();
@@ -173,7 +183,7 @@ describe("the session state's file", () => {
     await first.stores.close();
 
     const second = daemonOver(6);
-    second.write(sessionIdOf(randomUUID()), "new");
+    second.write(NEWEST, "new");
     expect(second.state.get(ids[0]!, "theme")).toBeNull();
     ids
       .slice(1)
@@ -218,11 +228,40 @@ describe("the settings history's file", () => {
     await first.stores.close();
 
     const second = daemonOver();
-    second.pick(sessionIdOf(randomUUID()), "new");
+    second.pick(NEWEST, "new");
     expect(second.history.depth(ids[0]!).undo).toBe(0);
     for (const id of ids.slice(1))
       expect(second.history.depth(id).undo).toBe(1);
     await second.stores.close();
+  });
+
+  // [LAW:behavior-not-structure] No save writes a retired key, so this file
+  // is written by hand, as an older build left it.
+  test("a history holding only retired changes takes no place in the bound", () => {
+    const change = (key: string) => ({
+      kind: "session",
+      key,
+      before: null,
+      after: "x",
+    });
+    const real = sessionIdOf("6a1f9a52-3c1e-4d7b-9e0a-2f4b8c6d1e00");
+    writtenByHand({
+      [real]: { past: [[change("theme")]], future: [] },
+      ...Object.fromEntries(
+        Array.from({ length: 32 }, (_, i) => [
+          `retired-${i}`,
+          { past: [[change("look")]], future: [] },
+        ]),
+      ),
+    });
+    const { history } = daemonOver();
+    expect(history.depth(real).undo).toBe(1);
+    expect(logged).toContainEqual(
+      `settings-history load: dropped session "retired-0": its value holds only changes to "look", no longer a setting`,
+    );
+    expect(logged).toContainEqual(
+      "settings-history loaded sessions=1 dropped=32",
+    );
   });
 
   test("a key that is an array index is dropped by name", () => {

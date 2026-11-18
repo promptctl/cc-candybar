@@ -14,5 +14,6 @@ export const REFUSED: ReadonlyArray<readonly [string, string, RegExp]> = [
   ["the array index 0", "0", /is "0", an array index/],
   ["the array index 7", "7", /is "7", an array index/],
   ["the highest array index", "4294967294", /is "4294967294", an array index/],
+  ["__proto__", "__proto__", /is "__proto__", which is never a session id/],
   ["too long", "x".repeat(SESSION_ID_MAX_BYTES + 1), /longer than 250 bytes/],
 ];
