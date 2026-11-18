@@ -1,3 +1,9 @@
+## [1.232.10](https://github.com/promptctl/cc-candybar/compare/v1.232.9...v1.232.10) (2026-11-18)
+
+### Bug Fixes
+
+* **daemon:** a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq) ([#832](https://github.com/promptctl/cc-candybar/issues/832)) ([cd50aea](https://github.com/promptctl/cc-candybar/commit/cd50aea5c94fd0ade68b7e1781ec29d6b93ca2e0))
+
 ## [1.232.9](https://github.com/promptctl/cc-candybar/compare/v1.232.8...v1.232.9) (2026-11-18)
 
 ### Bug Fixes
