@@ -10,6 +10,7 @@ import {
   type HeldEvent,
 } from "../utils/event-hold";
 import type { Instant } from "../utils/instant";
+import type { Linked } from "../utils/atomic-write";
 
 // Closed list of subprocess categories. Adding a new spawn site requires
 // adding its category here, which forces a code review of the new launch
@@ -362,12 +363,14 @@ export type JobLaunch =
       readonly error: string;
     };
 
-// What `endJob` did: whether the launcher's verdict is the one that stands, and
+// What `endJob` did: whether the launcher's verdict was published, or one that
+// landed first was taken in its place, or none could land, its directory gone;
+// and
 // whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
 // since an id that answered nothing may no longer be the job's by the grace's end.
 // `leftover` is the verdict's staged file that would not go, for the log.
 export interface JobEnding {
-  readonly stands: boolean;
+  readonly verdict: Linked["outcome"] | "gone";
   readonly signalled: boolean;
   readonly leftover: string | null;
 }
@@ -387,7 +390,9 @@ export interface Launcher {
   // on its own does not read as an ended job.
   jobGroupAlive(pid: number): boolean;
   // Ends a job's group with the timeout's own escalation, and gives it a verdict
-  // of the launcher's unless its own landed first (see `endJob`).
+  // of the launcher's unless its own landed first or its status directory is
+  // gone. A signal is sent in every case, a refused verdict included: the
+  // caller proved the group the job's (see `endJob`).
   endJob(pid: number, status: string, end: JobEnd): JobEnding;
   // What the launcher stands behind now (`launcherWarningsAt` judges it).
   standing(): LauncherFact[];

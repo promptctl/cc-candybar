@@ -15,7 +15,7 @@ import {
   PACKAGE_NAME,
   type Currency,
 } from "../install/currency";
-import type { LaunchOpts, Launcher } from "../proc/launcher";
+import type { JobEnding, LaunchOpts, Launcher } from "../proc/launcher";
 import {
   formatVersion,
   IDLE,
@@ -355,7 +355,8 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   }
 
   // Ends the act once this daemon has watched its group alive past the
-  // budget, with a timeout verdict unless the job's own landed first. Every
+  // budget, with a timeout verdict unless one landed first or its files are
+  // gone, and its group signalled in every case. Every
   // daemon on the bundle watches, so the first to spend the budget ends it,
   // and it ends a job once: the end's own escalation takes it from there.
   let watched: Watched | null = null;
@@ -385,13 +386,19 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       );
     }
     if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
-    const { stands, signalled, leftover } = endOverdue(
+    const { verdict, signalled, leftover } = endOverdue(
       actsDir,
       facts,
       launcher,
     );
     watched = { ...watched, ended: true };
-    const why = stands ? "timed out" : "outlived its verdict";
+    const why = (
+      {
+        published: "timed out",
+        taken: "outlived its verdict",
+        gone: "outlived its act's files",
+      } satisfies Record<JobEnding["verdict"], string>
+    )[verdict];
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
       "error",

@@ -17,6 +17,7 @@ import {
 import {
   actsDir,
   claimAct,
+  endOverdue,
   INERT_DEADLINE,
   isRecordedJob,
   judgeAct,
@@ -223,8 +224,8 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     await until(() => readJobEnd(exited.status) !== null, "the job's verdict");
     expect(
       processLauncher.endJob(quick.pid, exited.status, { kind: "timeout" })
-        .stands,
-    ).toBe(false);
+        .verdict,
+    ).toBe("taken");
     expect(readJobEnd(exited.status)).toEqual({ kind: "exit", code: 0 });
 
     const ended = {
@@ -239,8 +240,8 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     slow.release();
     expect(
       processLauncher.endJob(slow.pid, ended.status, { kind: "timeout" })
-        .stands,
-    ).toBe(true);
+        .verdict,
+    ).toBe("published");
     await until(() => !groupAlive(slow.pid), "the ended job's group to go");
     expect(readJobEnd(ended.status)).toEqual({ kind: "timeout" });
   });
@@ -260,8 +261,9 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     await until(() => readJobEnd(files.status) !== null, "the job's verdict");
     expect(groupAlive(job.pid)).toBe(true);
     expect(
-      processLauncher.endJob(job.pid, files.status, { kind: "timeout" }).stands,
-    ).toBe(false);
+      processLauncher.endJob(job.pid, files.status, { kind: "timeout" })
+        .verdict,
+    ).toBe("taken");
     await until(() => !groupAlive(job.pid), "the left-behind child to end");
     expect(readJobEnd(files.status)).toEqual({ kind: "exit", code: 0 });
   });
@@ -276,7 +278,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
       expect(
         processLauncher.endJob(424242, files.status, { kind: "timeout" }),
       ).toEqual({
-        stands: true,
+        verdict: "published",
         signalled: false,
         leftover: null,
       });
@@ -299,7 +301,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
       expect(
         processLauncher.endJob(424242, files.status, { kind: "timeout" }),
       ).toEqual({
-        stands: true,
+        verdict: "published",
         signalled: true,
         leftover: null,
       });
@@ -311,15 +313,52 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     }
   });
 
-  test("ending a job whose files are gone is a no-op, not an error", async () => {
+  // A verdict the disk refuses is thrown, loudly, and the group the caller
+  // proved is ended all the same.
+  test("ending a job whose verdict cannot be written throws, and still ends its group", async () => {
+    const locked = path.join(scratch, "locked");
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0o500);
+    const kill = jest.spyOn(process, "kill").mockImplementation(() => true);
+    jest.useFakeTimers();
+    try {
+      expect(() =>
+        processLauncher.endJob(424242, path.join(locked, "status"), {
+          kind: "timeout",
+        }),
+      ).toThrow(/EACCES/);
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGTERM");
+      jest.runOnlyPendingTimers();
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+      fs.chmodSync(locked, 0o700);
+    }
+  });
+
+  // The caller proved the group the job's, so it is ended whatever became of
+  // its files, and no verdict lands where no directory is left to hold one.
+  test("ending a job whose status directory is gone still ends its group, and lands no verdict", async () => {
     const status = path.join(scratch, "gone", "status");
-    expect(
-      processLauncher.endJob(process.pid, status, { kind: "timeout" }),
-    ).toEqual({
-      stands: false,
-      signalled: false,
-      leftover: null,
-    });
+    const kill = jest.spyOn(process, "kill").mockImplementation(() => true);
+    jest.useFakeTimers();
+    try {
+      expect(
+        processLauncher.endJob(424242, status, { kind: "timeout" }),
+      ).toEqual({
+        verdict: "gone",
+        signalled: true,
+        leftover: null,
+      });
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGTERM");
+      jest.runOnlyPendingTimers();
+      expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
+      expect(fs.existsSync(path.dirname(status))).toBe(false);
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
   });
 
   test("a status this module did not write is an error, not an end", async () => {
@@ -354,6 +393,82 @@ describe("claimAct: one act per bundle", () => {
         process.kill(-pid, "SIGKILL");
       } catch {}
     }
+  });
+
+  // The read proved the group the recorded job's, and the act's files went
+  // before the end, as a newer act's claim prunes them: the group still runs,
+  // so the end takes it, with no verdict left to land.
+  test("an overdue act whose files are gone after its read still has its group ended", async () => {
+    const dir = dirOf();
+    const claim = await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      Date.now(),
+      sameLeader,
+    );
+    if (!claim.ok) throw new Error(claim.reason);
+    const facts = (await makeActReader(
+      dir,
+      sameLeader,
+      processLauncher,
+      systemTimekeeper,
+    ).read())!;
+    ended.push(facts.record.pid);
+    expect(facts.alive).toBe(true);
+    fs.rmSync(path.join(dir, String(facts.act)), { recursive: true });
+
+    expect(endOverdue(dir, facts, processLauncher)).toEqual({
+      verdict: "gone",
+      signalled: true,
+      leftover: null,
+    });
+    await until(
+      () => !groupAlive(facts.record.pid),
+      "the pruned act's group to go",
+    );
+  });
+
+  // The prune lands inside the read, after the read proved the group alive:
+  // the proof stands, so the overdue end still reaches the group.
+  test("an act pruned while its read proves its group alive reads alive, and its overdue end still ends the group", async () => {
+    const dir = dirOf();
+    const claim = await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      Date.now(),
+      sameLeader,
+    );
+    if (!claim.ok) throw new Error(claim.reason);
+    const pruning = {
+      ...processLauncher,
+      jobGroupAlive: (pid: number) => {
+        fs.rmSync(path.join(dir, "1"), { recursive: true, force: true });
+        return processLauncher.jobGroupAlive(pid);
+      },
+    };
+    const facts = (await makeActReader(
+      dir,
+      sameLeader,
+      pruning,
+      systemTimekeeper,
+    ).read())!;
+    ended.push(facts.record.pid);
+    expect(facts).toMatchObject({ act: 1, alive: true, end: null });
+    expect(endOverdue(dir, facts, processLauncher)).toEqual({
+      verdict: "gone",
+      signalled: true,
+      leftover: null,
+    });
+    await until(
+      () => !groupAlive(facts.record.pid),
+      "the pruned act's group to go",
+    );
   });
 
   test("a claim starts the job, and every daemon reading the bundle sees it running, then its verdict", async () => {
@@ -394,7 +509,7 @@ describe("claimAct: one act per bundle", () => {
           kind: "timeout",
         },
       ),
-    ).toMatchObject({ stands: true, signalled: true });
+    ).toMatchObject({ verdict: "published", signalled: true });
     await until(
       async () => judgeAct(await reader.read()).kind === "failed",
       "the timeout verdict",
@@ -588,7 +703,7 @@ describe("claimAct: one act per bundle", () => {
       if (String(file).endsWith(path.join("1", "record.json"))) {
         spy.mockRestore();
         write(2, "exit 1\n");
-        fs.rmSync(path.join(dir, "1"), { recursive: true });
+        fs.rmSync(path.join(dir, "1"), { recursive: true, force: true });
       }
       return real(file, ...rest);
     }) as typeof fs.readFileSync);
