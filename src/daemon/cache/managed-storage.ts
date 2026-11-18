@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { compareStructural } from "mobx";
 import path from "node:path";
 import type { SessionId } from "../foundations/session-id";
 import { elapsedMs, type Timekeeper } from "../../time";
@@ -96,8 +97,9 @@ type Found =
 
 // [LAW:types-are-the-program] What has become of one generation's folder.
 // `watching`: its folder is the one its watch opened on. `lost`: its folder is
-// gone or replaced. `unusable`: its folder could not be made, which only the
-// next generation's mkdir retries. `closed`: its folder's last hold released
+// gone or replaced. `unusable`: its folder could not be made, and each period
+// makes it again, opening the next generation once it is there. `closed`: its
+// folder's last hold released
 // it, or its next generation opened. `lost`, `unusable` and `closed` end the
 // generation: nothing moves it on, so each is counted once. A watch the OS is
 // not listening to, or a folder a judgment could not stat, ends nothing: the
@@ -123,14 +125,23 @@ interface Watched {
   readonly handle: WatcherHandle;
   readonly stopSweep: () => void;
   health: Health;
-  // [LAW:no-ambient-temporal-coupling] The handle's first deafness as of the
-  // last window or the open, the moments the registry tells a move of it: a
-  // period can land between a reopen and its handle's next error, and reading
-  // the handle there would report a recovery that never held.
+  // [LAW:one-source-of-truth] exception: the handle's deafness as of the last
+  // window or the open, the moments the registry tells a move of it, not read
+  // live. [LAW:no-ambient-temporal-coupling] A period can land between a
+  // reopen and its handle's next error, and reading the handle there would
+  // report a recovery that never held. The slot watches its one folder, so
+  // the first deafness is the folder's.
   deafness: Deafness | null;
   // Why the last judgment could not stat the folder, until the next one can.
   statFailure: string | null;
 }
+
+// [LAW:types-are-the-program] The cause a deafness counts under, for every
+// kind the registry reports.
+const CAUSE_OF: Record<Deafness["kind"], FaultCause> = {
+  refused: "refused",
+  failed: "error",
+};
 
 // [LAW:one-source-of-truth] A generation's one fault, in the order its
 // sources read it: a folder that could not be made, a watch the OS is not
@@ -140,13 +151,10 @@ function faultOf(watched: Watched): Fault | null {
   if (health.kind === "unusable")
     return {
       cause: "unusable",
-      text: `${key.folder} ${health.reason}; retried when the config next loads or file events catch up`,
+      text: `${key.folder} ${health.reason}`,
     };
   if (deafness !== null)
-    return {
-      cause: deafness.kind === "refused" ? "refused" : "error",
-      text: deafnessLine(deafness),
-    };
+    return { cause: CAUSE_OF[deafness.kind], text: deafnessLine(deafness) };
   if (statFailure !== null)
     return { cause: "error", text: `${key.folder} ${statFailure}` };
   return null;
@@ -259,9 +267,8 @@ export class ManagedStorage {
   // another folder now, opens its new generation's watch before any old one
   // closes, and its held files are re-read, since what they read before came
   // from the path unwatched.
-  private kept(folder: string): void {
+  private kept(folder: string, found: Found = this.found(folder)): void {
     const was = this.watched.get(folder);
-    const found = this.found(folder);
     if (was !== undefined && current(was, found)) return;
     const generation = this.generations++;
     if (was !== undefined)
@@ -462,27 +469,28 @@ export class ManagedStorage {
     const was = faultOf(watched);
     update();
     const now = faultOf(watched);
-    if (was?.cause === now?.cause && was?.text === now?.text) return;
+    if (compareStructural(was, now)) return;
     const { key } = watched;
     const at = `folder=${valueOf(key.folder)} generation=${key.generation}`;
-    if (now === null)
-      this.logger(
-        "info",
-        `plugin storage fault cleared ${at} cause=${was!.cause}`,
-      );
-    else {
+    if (now !== null) {
       this.faultCounts[now.cause]++;
       this.logger(
         "warn",
         `plugin storage fault ${at} cause=${now.cause} reason=${JSON.stringify(now.text)}`,
       );
-    }
+    } else if (was !== null)
+      this.logger(
+        "info",
+        `plugin storage fault cleared ${at} cause=${was.cause}`,
+      );
     this.sessions.changed((f) => f.folder === key.folder);
   }
 
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period opens the next generation of every folder lost before
-  // it, and judges every watched one against the disk: the event naming a
+  // it, makes again every folder that could not be made and opens its next
+  // generation once it is there, and judges every watched one against the
+  // disk: the event naming a
   // removed folder can drop without a stall. Every change of delivery and
   // every catch-up re-reads every held file, so no lane keeps a stall after
   // delivery moves on, and a file written during a span lands; a catch-up
@@ -491,9 +499,14 @@ export class ManagedStorage {
   private noticed(notice: DeliveryNotice): void {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind === "lost") this.kept(watched.key.folder);
-          else this.judged(watched, () => {});
+        for (const watched of [...this.watched.values()]) {
+          const { folder } = watched.key;
+          if (watched.health.kind === "lost") this.kept(folder);
+          else if (watched.health.kind === "unusable") {
+            const found = this.found(folder);
+            if (found.kind === "found") this.kept(folder, found);
+          } else this.judged(watched, () => {});
+        }
         return;
       case "caught-up":
         for (const watched of [...this.watched.values()])
@@ -516,7 +529,7 @@ export class ManagedStorage {
   // be checked.
   private standing(folder: string): string | null {
     const watched = this.watched.get(folder);
-    if (watched === undefined || watched.health.kind === "closed") return null;
+    if (watched === undefined) return null;
     const fault = faultOf(watched);
     if (fault !== null) return `cannot refresh: ${fault.text}`;
     const stall = stallReason(this.fileEvents.delivery());

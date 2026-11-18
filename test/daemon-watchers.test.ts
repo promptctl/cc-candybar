@@ -180,9 +180,8 @@ describe("WatcherRegistry", () => {
 
     test("rides no event stream, open or closed, and a folder watched whole does", () => {
       const f = path.join(dir, "f");
-      expect(
-        reg.acquire("p", { dirs: [], polled: [f] }, () => {}).ridesStream,
-      ).toBe(false);
+      expect(reg.acquire("p", { dirs: [], polled: [f] }, () => {}).ridesStream)
+        .toBe(false);
       expect(
         reg.acquire("d", { dirs: [{ path: dir }], polled: [] }, () => {})
           .ridesStream,
@@ -308,9 +307,7 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-names-"));
     const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
-    reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) =>
-      seen.push(inv),
-    );
+    reg.acquire(dir, { dirs: [{ path: dir }], polled: [] }, (inv) => seen.push(inv));
     // FSEvents may also report the folder's own creation late, under its
     // name: the paths are what fired, whatever else did.
     const paths = () =>
@@ -336,10 +333,8 @@ describe("WatcherRegistry", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
     const reg = new WatcherRegistry({ clock: systemTimekeeper });
     const seen: Invalidation[] = [];
-    reg.acquire(
-      dir,
-      { dirs: [{ path: dir, recursive: true }], polled: [] },
-      (inv) => seen.push(inv),
+    reg.acquire(dir, { dirs: [{ path: dir, recursive: true }], polled: [] }, (inv) =>
+      seen.push(inv),
     );
     const paths = () =>
       seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
@@ -375,11 +370,7 @@ describe("WatcherRegistry", () => {
       logger: () => {},
     });
     const missing = path.join(os.tmpdir(), "watch-refused-no-such-folder");
-    const handle = reg.acquire(
-      "k",
-      { dirs: [{ path: missing }], polled: [] },
-      () => {},
-    );
+    const handle = reg.acquire("k", { dirs: [{ path: missing }], polled: [] }, () => {});
     expect(handle.deaf).toEqual([
       {
         kind: "refused",
@@ -388,9 +379,7 @@ describe("WatcherRegistry", () => {
       },
     ]);
     // A second holder of the slot is told the same.
-    expect(reg.acquire("k", { dirs: [], polled: [] }, () => {}).deaf).toEqual(
-      handle.deaf,
-    );
+    expect(reg.acquire("k", { dirs: [], polled: [] }, () => {}).deaf).toEqual(handle.deaf);
     expect(counters).toEqual({
       watchersOpened: 0,
       watchersClosed: 0,
@@ -425,8 +414,7 @@ describe("WatcherRegistry", () => {
           reason: expect.stringContaining("EACCES"),
         };
         expect(
-          reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {})
-            .deaf,
+          reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {}).deaf,
         ).toEqual([refusal]);
         expect(
           reg.acquire(
@@ -456,10 +444,8 @@ describe("WatcherRegistry", () => {
       });
       const heard: Invalidation[] = [];
       try {
-        const handle = reg.acquire(
-          "k",
-          { dirs: [{ path: dir }], polled: [] },
-          (h) => heard.push(h),
+        const handle = reg.acquire("k", { dirs: [{ path: dir }], polled: [] }, (h) =>
+          heard.push(h),
         );
         expect(handle.deaf[0]?.reason).toContain("ENOENT");
         fs.mkdirSync(dir);
@@ -488,9 +474,7 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
-        seen.push(inv),
-      );
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => seen.push(inv));
       fake
         .opensOf("/w")[0]!
         .handle.emit("error", new Error("EMFILE: too many open files"));
@@ -650,12 +634,8 @@ describe("WatcherRegistry", () => {
       });
       const first: Invalidation[] = [];
       const second: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
-        first.push(inv),
-      );
-      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) =>
-        second.push(inv),
-      );
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => first.push(inv));
+      reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, (inv) => second.push(inv));
       expect(fake.opened).toHaveLength(1);
       fake.opensOf("/w")[0]!.listener("rename", "a");
       await until(
@@ -757,8 +737,10 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      reg.acquire("k", { dirs: [{ path: conf }], polled: [] }, (inv) =>
-        seen.push(inv),
+      reg.acquire(
+        "k",
+        { dirs: [{ path: conf }], polled: [] },
+        (inv) => seen.push(inv),
       );
       reg.judge();
       fs.renameSync(path.join(root, "proj"), path.join(root, "old"));
@@ -875,8 +857,10 @@ describe("WatcherRegistry", () => {
         logger: () => {},
       });
       const seen: Invalidation[] = [];
-      const a = reg.acquire("a", { dirs: [{ path: dir }], polled: [] }, (inv) =>
-        seen.push(inv),
+      const a = reg.acquire(
+        "a",
+        { dirs: [{ path: dir }], polled: [] },
+        (inv) => seen.push(inv),
       );
       fs.rmSync(dir, { recursive: true });
       fs.mkdirSync(dir);
@@ -907,20 +891,12 @@ describe("WatcherRegistry", () => {
         clock: systemTimekeeper,
         logger: () => {},
       });
-      const first = reg.acquire(
-        "k",
-        { dirs: [{ path: "/w" }], polled: [] },
-        () => {},
-      );
+      const first = reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, () => {});
       fake
         .opensOf("/w")[0]!
         .handle.emit("error", new Error("EMFILE: too many open files"));
       expect(first.deaf).toHaveLength(1);
-      const second = reg.acquire(
-        "k",
-        { dirs: [{ path: "/w" }], polled: [] },
-        () => {},
-      );
+      const second = reg.acquire("k", { dirs: [{ path: "/w" }], polled: [] }, () => {});
       expect(fake.opensOf("/w")).toHaveLength(2);
       expect(second.deaf).toEqual([]);
       expect(first.deaf).toEqual([]);

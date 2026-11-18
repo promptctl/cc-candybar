@@ -444,6 +444,25 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual(ABSENT);
   });
 
+  test("a folder that cannot be made is made again on the next period once it can be, as the next generation", async () => {
+    const r = rig();
+    fs.rmdirSync(path.dirname(r.folder));
+    fs.writeFileSync(path.dirname(r.folder), "");
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toMatchObject({ kind: "failed" });
+    r.fileEvents.notify({ kind: "period" });
+    expect(r.generation()).toBe(0);
+    expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
+    fs.rmSync(path.dirname(r.folder));
+    fs.mkdirSync(path.dirname(r.folder));
+    r.fileEvents.notify({ kind: "period" });
+    expect(r.generation()).toBe(1);
+    r.write(A, '"a"');
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("a"));
+  });
+
   test("a folder that cannot be created is a standing fault of its sources, not a throw; the next load's hold tries again", async () => {
     const r = rig();
     // A file where the folder's parent should be: mkdir fails ENOTDIR.
@@ -456,7 +475,7 @@ describe("ManagedStorage watches", () => {
       failedAt: "read",
       reason: expect.stringMatching(
         new RegExp(
-          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; retried when the config next loads or file events catch up$`,
+          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*$`,
         ),
       ),
     });
@@ -484,7 +503,7 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder; retried when the config next loads or file events catch up`,
+      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder`,
     });
     expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
   });
