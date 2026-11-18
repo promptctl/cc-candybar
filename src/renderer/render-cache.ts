@@ -27,7 +27,6 @@ import {
   ConfigError,
   type DroppedFileError,
   type ConfigLayer,
-  installedBase,
 } from "../config/dsl-loader.js";
 import type { LayerRole } from "../config/layer-role.js";
 import type {
@@ -686,7 +685,8 @@ export function resolveLoad(
   try {
     const loaded = loadSnapshot(
       chain.snapshot,
-      installedBase(chain.snapshot, chain.locs.home, DEFAULT_DSL_CONFIG),
+      chain.locs.home,
+      DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
     );
     const inputs = {

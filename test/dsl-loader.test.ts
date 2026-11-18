@@ -16,7 +16,6 @@ import {
   parseDslConfig,
   mergeWithDefault,
   validateRenderable,
-  installedBase,
   loadSnapshot,
 } from "../src/config/dsl-loader";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
@@ -2713,11 +2712,9 @@ describe("a snapshot's listed definitions", () => {
     };
     let caught: unknown;
     try {
-      loadSnapshot(
-        snapshot,
-        installedBase(snapshot, "/home/u", DEFAULT_DSL_CONFIG),
-        { warned: () => {} },
-      );
+      loadSnapshot(snapshot, "/home/u", DEFAULT_DSL_CONFIG, {
+        warned: () => {},
+      });
     } catch (e) {
       caught = e;
     }

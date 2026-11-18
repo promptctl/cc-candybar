@@ -268,7 +268,6 @@ export function loadConfigSource(
 
 // [LAW:single-enforcer] The one way plugins are laid over a base: each is
 // validated over the layer it joins, so one that would not load drops alone.
-// `label` names the layer in a refusal's error; a drop's reason is its issues.
 function layPlugins(
   files: readonly PluginFile[],
   ctx: PluginContext,
@@ -281,33 +280,23 @@ function layPlugins(
   );
 }
 
-// [LAW:no-shared-mutable-globals] The installed plugins laid over the bundled
-// default for one checkout: what every load of a snapshot with these plugins
-// merges its chain over. Whoever holds the snapshot builds it and lends it to
-// that snapshot's loads, so a click's loads share one. A store of these
-// beside the render cache's entries outlives the checkouts they serve, since
-// an entry's checkout changes on a reload without the entry leaving.
-export interface InstalledBase {
-  readonly ctx: PluginContext;
-  readonly layer: PluginLayer;
-}
-
-export function installedBase(
-  snapshot: Pick<ConfigSnapshot, "plugins" | "checkout">,
-  home: string,
+// [LAW:no-shared-mutable-globals] The installed layer is built by every load
+// that merges over it and kept by none: a store of layers beside the render
+// cache's entries outlives the checkouts they serve, since an entry's checkout
+// changes on a reload without the entry leaving.
+function installedLayer(
+  files: readonly PluginFile[],
+  ctx: PluginContext,
   dflt: DslConfig,
-): InstalledBase {
-  const ctx: PluginContext = { checkout: snapshot.checkout, home };
-  return {
+  allowedPalettes: ReadonlySet<string> | undefined,
+): PluginLayer {
+  return layPlugins(
+    files,
     ctx,
-    layer: layPlugins(
-      snapshot.plugins,
-      ctx,
-      { config: dflt, rendering: new Map() },
-      "<installed plugins>",
-      undefined,
-    ),
-  };
+    { config: dflt, rendering: new Map() },
+    "<installed plugins>",
+    allowedPalettes,
+  );
 }
 
 /**
@@ -324,7 +313,7 @@ export function definitionProblems(
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
-  return installedBase({ plugins: definitions, checkout }, home, dflt).layer
+  return installedLayer(definitions, { checkout, home }, dflt, undefined)
     .dropped;
 }
 
@@ -363,11 +352,19 @@ function strayDrop({ path: file, scope }: Stray): DroppedPlugin {
  */
 export function loadSnapshot(
   snapshot: ConfigSnapshot,
-  installed: InstalledBase,
+  home: string,
+  dflt: DslConfig,
   trace: ChainTrace,
+  allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
-  const { ctx, plugins, base, layers } = mergeChain(snapshot, installed, trace);
-  return validateChain(ctx, plugins, base, layers, trace, undefined);
+  const { ctx, plugins, base, layers } = mergeChain(
+    snapshot,
+    home,
+    dflt,
+    trace,
+    allowedPalettes,
+  );
+  return validateChain(ctx, plugins, base, layers, trace, allowedPalettes);
 }
 
 /**
@@ -380,9 +377,10 @@ export function loadSnapshot(
  */
 export function inheritedConfig(
   snapshot: ConfigSnapshot,
-  installed: InstalledBase,
+  home: string,
+  dflt: DslConfig,
 ): DslConfig {
-  const { base, layers } = mergeChain(snapshot, installed, {
+  const { base, layers } = mergeChain(snapshot, home, dflt, {
     warned: () => {},
   });
   return layers.at(-1)?.config ?? base;
@@ -392,15 +390,17 @@ type MergedLayers = Array<LoadedFile & { path: string; config: DslConfig }>;
 
 function mergeChain(
   snapshot: ConfigSnapshot,
-  installed: InstalledBase,
+  home: string,
+  dflt: DslConfig,
   trace: ChainTrace,
+  allowedPalettes?: ReadonlySet<string>,
 ) {
-  const { ctx } = installed;
+  const ctx: PluginContext = { checkout: snapshot.checkout, home };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const merged = installed.layer;
+  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
   const plugins = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)],
@@ -437,7 +437,7 @@ function mergeChain(
           rendering: below?.rendering ?? plugins.rendering,
         },
       },
-      undefined,
+      allowedPalettes,
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
