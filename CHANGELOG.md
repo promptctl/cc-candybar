@@ -1,3 +1,15 @@
+## [1.232.0](https://github.com/promptctl/cc-candybar/compare/v1.231.0...v1.232.0) (2026-11-18)
+
+### Features
+
+* check and the doctor CLI draw through Renderer.answer, with no daemon running (9a7) ([#793](https://github.com/promptctl/cc-candybar/issues/793)) ([e33675a](https://github.com/promptctl/cc-candybar/commit/e33675a193dfc48790988daa17ac05641e602a19))
+
+### Bug Fixes
+
+* an update act's budget is spent in time a daemon watched it run, not wall time ([#797](https://github.com/promptctl/cc-candybar/issues/797)) ([5d66d50](https://github.com/promptctl/cc-candybar/commit/5d66d500b01f137d9d9a6bdbec6d0664ede19584))
+* **colour:** the door's ✖ is red as each depth draws it, the theme's own wherever one reads (87n6) ([#803](https://github.com/promptctl/cc-candybar/issues/803)) ([da23aa8](https://github.com/promptctl/cc-candybar/commit/da23aa8eef006c7d3ab59ca80d78ed17d712ef01))
+* **test:** a registry's teardown ends the runs held over it (y1ff) ([#804](https://github.com/promptctl/cc-candybar/issues/804)) ([414ac46](https://github.com/promptctl/cc-candybar/commit/414ac46b373d30c9a48f0b105345462e9a64bd0f))
+
 ## [1.231.0](https://github.com/promptctl/cc-candybar/compare/v1.230.1...v1.231.0) (2026-11-18)
 
 ### Features
