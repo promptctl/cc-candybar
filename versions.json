@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-805",
+      "ref": "refs/pull/805/merge",
+      "sha": "ca26458194eb21f7dc48911d300e2450c6a34a59",
+      "timestamp": "2026-11-18T15:25:53.526Z",
+      "commits": [
+        {
+          "sha": "ca26458194eb21f7dc48911d300e2450c6a34a59",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:24:42-07:00",
+          "message": "Merge 06fe5118482059951754e159bcd2ac2028716ba8 into f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017\n"
+        },
+        {
+          "sha": "06fe5118482059951754e159bcd2ac2028716ba8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:24:10-07:00",
+          "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017",
