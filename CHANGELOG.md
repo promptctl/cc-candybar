@@ -1,3 +1,9 @@
+## [1.230.0](https://github.com/promptctl/cc-candybar/compare/v1.229.0...v1.230.0) (2026-11-18)
+
+### Features
+
+* **daemon:** the host holds a renderer's stored state under its profile, and the renderer is built from it (uh4) ([#791](https://github.com/promptctl/cc-candybar/issues/791)) ([4c03e28](https://github.com/promptctl/cc-candybar/commit/4c03e2890e6217e713cd16adf26aff393aa289e1))
+
 ## [1.229.0](https://github.com/promptctl/cc-candybar/compare/v1.228.0...v1.229.0) (2026-11-17)
 
 ### Features
