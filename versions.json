@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-808",
+      "ref": "refs/pull/808/merge",
+      "sha": "455cc368e8e9d41add350caf5bf66202cd15a11f",
+      "timestamp": "2026-11-18T23:03:14.884Z",
+      "commits": [
+        {
+          "sha": "455cc368e8e9d41add350caf5bf66202cd15a11f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T23:01:58Z",
+          "message": "Merge 648ffbb8c75666f2a9c4f4ebd3ead87dd1f5af28 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "648ffbb8c75666f2a9c4f4ebd3ead87dd1f5af28",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:59:07-07:00",
+          "message": "fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)\n"
+        },
+        {
+          "sha": "69e2c41f6b26e7c0f07fc57e649b5bd30d272c34",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:27:22-07:00",
+          "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
+        },
+        {
+          "sha": "bc3bcd5bbf8007ceb68ff2537bf864733d318ac6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:05:22-07:00",
+          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-810",
       "ref": "refs/pull/810/merge",
       "sha": "e6fd974c68baecadf517e005da424469fb3fef7e",
@@ -163,35 +199,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:35:58-07:00",
           "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-808",
-      "ref": "refs/pull/808/merge",
-      "sha": "9187c64a31d7678e5391997f73ef0f8636dad37d",
-      "timestamp": "2026-11-18T22:30:56.723Z",
-      "commits": [
-        {
-          "sha": "9187c64a31d7678e5391997f73ef0f8636dad37d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:29:55Z",
-          "message": "Merge 69e2c41f6b26e7c0f07fc57e649b5bd30d272c34 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "69e2c41f6b26e7c0f07fc57e649b5bd30d272c34",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:27:22-07:00",
-          "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
-        },
-        {
-          "sha": "bc3bcd5bbf8007ceb68ff2537bf864733d318ac6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:05:22-07:00",
-          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
         }
       ]
     },
