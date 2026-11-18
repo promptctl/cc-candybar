@@ -273,8 +273,13 @@ export class WatcherRegistry {
     // [LAW:single-enforcer] Every acquire names its directories as they are
     // now: joining a slot judges its directories as opening one does.
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    // The records the acquire joins. A path no slot polls yet has none: its
+    // new record reads the disk itself.
+    this.sighted(
+      shared?.polled ??
+        targets.polled.flatMap((at) => this.polled.get(at) ?? []),
+    );
     const slot = shared ?? this.opened(key, targets);
-    this.sighted(slot.polled);
     const holder: Holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -289,7 +294,8 @@ export class WatcherRegistry {
     const followed = followWatch(held, spec, (key, targets) =>
       this.acquire(key, targets, onInvalidate),
     );
-    // A rebound acquired, which sighted; a closed registry holds no slot.
+    // A rebound acquired, which sighted. A kept watch whose slot is gone (the
+    // registry closed, or the holder released it) polls nothing to sight.
     if (followed.move === "kept")
       this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
     return followed;
@@ -302,9 +308,13 @@ export class WatcherRegistry {
   // heard. Only the sweep fires, so the work a path drives stays once a
   // period; a change undone before the holder acquired or followed is one no
   // poll sees.
+  // [LAW:escape-local-minima] exception: seeing a change undone before the
+  // holder looks needs the entry the holder read, which polled consumers do
+  // not yet hand over.
   private sighted(records: readonly PolledPath[]): void {
     for (const record of records)
-      if (entryAt(record.path) !== record.entry) record.entry = UNSEEN;
+      if (record.entry !== UNSEEN && entryAt(record.path) !== record.entry)
+        record.entry = UNSEEN;
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
