@@ -51107,7 +51107,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.8";
+var PACKAGE_VERSION = "1.232.9";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -54292,6 +54292,10 @@ var GLOBAL_FIELDS = {
   // The settings menu's door glyph (🍫 by default, synthesized by the menu).
   menuGlyph: text2(menuGlyphSpec)
 };
+function settingNameOf(field) {
+  const row2 = GLOBAL_FIELDS[field];
+  return row2.kind === "selection" ? row2.sessionKey : field;
+}
 var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
   ([, row2]) => row2.kind === "session" || row2.kind === "config"
@@ -54318,13 +54322,9 @@ function wireKindOf(field) {
 
 // src/config/setting-projections.ts
 var effectiveVarOf = (name) => `${name}.effective`;
-var nameOf = (field) => {
-  const row2 = GLOBAL_FIELDS[field];
-  return row2.kind === "selection" ? row2.sessionKey : field;
-};
 var SETTINGS = Object.fromEntries(
   CONTROLLED_FIELDS.map((field) => {
-    const name = nameOf(field);
+    const name = settingNameOf(field);
     return [
       name,
       {
@@ -61966,10 +61966,10 @@ function confirms(key, disarm, fires) {
   const gates = [...new Set(fires.map((f) => f.when))].filter(
     (g) => g !== "true"
   );
-  const nameOf3 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
+  const nameOf2 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
   const actions = {};
   for (let held2 = 0; held2 < 2 ** gates.length; held2++)
-    actions[nameOf3(held2)] = {
+    actions[nameOf2(held2)] = {
       do: [
         disarm,
         ...fires.filter(
@@ -61977,7 +61977,7 @@ function confirms(key, disarm, fires) {
         ).map((f) => f.action)
       ]
     };
-  const link = (i2, held2) => i2 === gates.length ? `"${nameOf3(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
+  const link = (i2, held2) => i2 === gates.length ? `"${nameOf2(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
   return { link: link(0, 0), actions };
 }
 function confirmStep(key, labels, fires) {
@@ -72826,7 +72826,7 @@ function resolveValued(field, staged, sessionPick, globals) {
   const row2 = valuedRow(field);
   return effectiveGlobal(
     staged[field],
-    row2.kind === "session" ? sessionPick(field) : null,
+    row2.kind === "session" ? sessionPick(settingNameOf(field)) : null,
     globals[field],
     row2.floor,
     row2.parse
@@ -72834,7 +72834,9 @@ function resolveValued(field, staged, sessionPick, globals) {
 }
 function presetOf(config2, sessionPick) {
   return effectivePresetName(
-    sessionPick("preset"),
+    // [LAW:one-source-of-truth] Read under the key a preset pick is written
+    // under.
+    sessionPick(settingNameOf("preset")),
     config2.globals.preset,
     config2.presets
   );
@@ -72845,7 +72847,7 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config2.editGlobals : {};
   const theme24 = resolveThemeSelection(
     staged.palette,
-    sessionPick("theme"),
+    sessionPick(settingNameOf("palette")),
     declared.palette
   );
   const globals = underThemeDefault(
@@ -72864,13 +72866,13 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
     theme: theme24,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick("style"),
+      sessionPick(settingNameOf("style")),
       globals.style,
       config2.styles
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick("effect"),
+      sessionPick(settingNameOf("effect")),
       globals.effect
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
@@ -75100,7 +75102,7 @@ var OUTLIVES = {
   surface: true
 };
 var outlives = (act2) => OUTLIVES[act2.kind];
-function nameOf2(act2) {
+function nameOf(act2) {
   switch (act2.kind) {
     case "copy":
     case "open":
@@ -75236,9 +75238,9 @@ var Acts = class {
     const { outcome, said: said2 } = this.deps.closing() ? not({ kind: "closing", reason: "the daemon is closing" }) : await this.performed(act2);
     this.deps.log(
       outcome.kind === "ok" || outcome.kind === "closing" ? "info" : "warn",
-      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf2(act2)}: ${said2}`
+      `act kind=${act2.kind} sid=${valueOf(act2.session ?? "-")} id=${act2.id} outcome=${outcome.kind} \u2014 ${nameOf(act2)}: ${said2}`
     );
-    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf2(act2)}: ${outcome.reason}` };
+    return outcome.kind === "ok" ? outcome : { ...outcome, reason: `${nameOf(act2)}: ${outcome.reason}` };
   }
   async performed(act2) {
     try {
@@ -87213,11 +87215,7 @@ function landingKey(config2, preset, field) {
   return field in (presetByName(config2.presets, preset).globals ?? {}) ? presetGlobalsKey(preset, field) : field;
 }
 function durableLanding(config2, sessionPick, key) {
-  const preset = effectivePresetName(
-    sessionPick(SETTINGS.preset.sessionKey),
-    config2.globals.preset,
-    config2.presets
-  );
+  const preset = presetOf(config2, sessionPick);
   const target = parsePersistTarget(key);
   return {
     key: target?.scope === "globals" ? landingKey(config2, preset, target.field) : key,
