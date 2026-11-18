@@ -18,13 +18,10 @@ import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERBS } from "../src/renderer/verbs";
-import {
-  configureMember,
-  EDIT_MODE_KEY,
-} from "../src/config/loader/edit-mode";
+import { configureMember, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -113,7 +110,8 @@ describe("block's thresholds are settings configure mode steps", () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
     configurePlacement(rt.sessionState, SID, "default", "block");
     // 80 → 50 in six clicks: equal thresholds are a hard edge, and allowed.
-    for (let i = 0; i < 6; i++) await rt.click(rt.stepper("block", "errorAt", -5));
+    for (let i = 0; i < 6; i++)
+      await rt.click(rt.stepper("block", "errorAt", -5));
     expect(rt.pick("block", "errorAt")).toBe("50");
     const down = rt.stepper("block", "errorAt", -5);
     const reason =
@@ -124,7 +122,9 @@ describe("block's thresholds are settings configure mode steps", () => {
     expect(lastClickError(rt.sessionState, SID)?.text ?? null).toMatch(reason);
     // The other way round is the same relation: warnAt may not climb past it.
     const up = rt.stepper("block", "warnAt", 5);
-    await expect(rt.click(up)).rejects.toThrow(/"errorAt" \(50\) is below "warnAt" \(55\)/);
+    await expect(rt.click(up)).rejects.toThrow(
+      /"errorAt" \(50\) is below "warnAt" \(55\)/,
+    );
     expect(rt.pick("block", "warnAt")).toBeNull();
   });
 
@@ -132,10 +132,11 @@ describe("block's thresholds are settings configure mode steps", () => {
     const rt = thresholdBar(BLOCK_ONLY, 10);
     const warn = placementDraftKey("default", "block", "warnAt");
     const error = placementDraftKey("default", "block", "errorAt");
-    const setState = VERBS.get("set-state")!;
+    const setState = CLICK_VERBS.get("set-state")!;
     const ctx = { ...rt.ctx, configFor: () => load(BLOCK_ONLY) };
-    expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx),
-    ).toThrow(/"errorAt" \(60\) is below "warnAt" \(70\)/);
+    expect(() => setState(`${SID}/${warn}/70/${error}/60`, ctx)).toThrow(
+      /"errorAt" \(60\) is below "warnAt" \(70\)/,
+    );
     expect(rt.pick("block", "warnAt")).toBeNull();
     // Raising both together is one write that stands.
     await setState(`${SID}/${warn}/85/${error}/90`, ctx);
@@ -217,7 +218,6 @@ describe("the loader holds the file to the same order", () => {
     );
   });
 
-
   test("a placement whose thresholds descend fails to load", () => {
     expect(() =>
       load(
@@ -225,7 +225,9 @@ describe("the loader holds the file to the same order", () => {
           "{ v: [ { h: [ { seg: 'block', settings: { warnAt: 60, errorAt: 55 } } ] } ] }",
         ),
       ),
-    ).toThrow(/placement "block" of segment "block": "errorAt" \(55\) is below "warnAt" \(60\)/);
+    ).toThrow(
+      /placement "block" of segment "block": "errorAt" \(55\) is below "warnAt" \(60\)/,
+    );
   });
 
   test("burnrate's minutes run the other way: errorWithin may not pass warnWithin", () => {

@@ -44,7 +44,12 @@ import { GROUP_NS } from "../src/config/reserved-names";
 import type { RichText } from "@promptctl/rich-js";
 import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
-import { recordRender, testVerbContext, effectsOf } from "./helpers/click";
+import {
+  recordRender,
+  testVerbContext,
+  effectsOf,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
@@ -69,7 +74,11 @@ const PAYLOAD = {
   tmux: { pane: "%0" },
   cwd: "/tmp/proj",
   model: { id: "claude-opus-4-7", display_name: "Opus" },
-  workspace: { current_dir: "/tmp/proj", project_dir: "/tmp/proj", added_dirs: [] },
+  workspace: {
+    current_dir: "/tmp/proj",
+    project_dir: "/tmp/proj",
+    added_dirs: [],
+  },
   theme: { effective: THEME },
   style: { effective: "none" },
   endcaps: { effective: "powerline" },
@@ -102,7 +111,8 @@ function expectBodyLedBy(
   const [head, ...rest] = rows;
   if (head === undefined) throw new Error("no body rows");
   const first = rowLinks(head)[0];
-  if (first === undefined) throw new Error(`no link on: ${JSON.stringify(head)}`);
+  if (first === undefined)
+    throw new Error(`no link on: ${JSON.stringify(head)}`);
   expect(first.text).toBe(glyph);
   expect(closes(first, key)).toBe(true);
   const closing = rows
@@ -127,16 +137,28 @@ function build(src: string, withDefault: boolean) {
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+  const compiled = registerDslConfig(config, registry, {
+    signer: TEST_SIGNER,
+    cwd: "/tmp/proj",
+  });
   recordRender(sessionState, SID);
   const ctx: VerbContext = testVerbContext(sessionState, undefined, config);
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (): readonly Row[] => {
     const errors: string[] = [];
-    const drawn = drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS, {
-      onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
-    });
+    const drawn = drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      OPTS,
+      {
+        onSegmentError: (name, message) => errors.push(`${name}: ${message}`),
+      },
+    );
     latest = drawn.segments;
     if (errors.length > 0) throw new Error(errors.join("\n"));
     return drawn.frame.rows;
@@ -148,13 +170,17 @@ function build(src: string, withDefault: boolean) {
     const effects =
       verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
     for (const e of effects) {
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, ctx);
     }
   };
   // Click the first link on any rendered line that writes `key` = `value`.
-  const clickWriting = async (lines: readonly Row[], key: string, value: string): Promise<void> => {
+  const clickWriting = async (
+    lines: readonly Row[],
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const link = lines
       .flatMap(rowLinks)
       .find((l) =>
@@ -174,8 +200,7 @@ function build(src: string, withDefault: boolean) {
 
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
-describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain", () => {
-});
+describe("brandon-disclosure-43z — the bundled 🍫 → tab → picker chain", () => {});
 
 // Two accordion groups on one shared key; the open one has a VERTICAL body of
 // three rows, one of them a nested horizontal row.
@@ -197,7 +222,9 @@ describe("brandon-disclosure-43z — a group body", () => {
     let lines = rt.render();
     // Closed: the two toggles on their own rows, no body, no ✕ anywhere.
     expect(lines).toHaveLength(3);
-    expect(lines.flatMap(rowLinks).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+    expect(
+      lines.flatMap(rowLinks).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE),
+    ).toEqual([]);
 
     await rt.clickWriting(lines, "acc", "one");
     lines = rt.render();
@@ -205,10 +232,14 @@ describe("brandon-disclosure-43z — a group body", () => {
     expect(lines).toHaveLength(6);
     expectBodyLedBy(lines.slice(2, 5), "acc");
     // The first row is led once — by the container, not per cell.
-    expect(rowLinks(lines[2]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toHaveLength(1);
+    expect(
+      rowLinks(lines[2]!).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE),
+    ).toHaveLength(1);
     // Rows outside the body carry none.
     for (const row of [lines[0]!, lines[1]!, lines[5]!]) {
-      expect(rowLinks(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE)).toEqual([]);
+      expect(
+        rowLinks(row).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE),
+      ).toEqual([]);
     }
 
     await rt.click(rowLinks(lines[2]!)[0]!.url);
@@ -266,7 +297,10 @@ describe("brandon-disclosure-43z — lines dropped below a body's horizontal row
       expect(closeLinks(row)).toEqual([]);
     }
     // The trigger sinks the one ✕ it led its body with beside its own cells.
-    const leads = rt.segments().get(key)!.filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
+    const leads = rt
+      .segments()
+      .get(key)!
+      .filter((c) => c.plain === DISCLOSURE_GLYPH_CLOSE);
     expect(leads).toHaveLength(1);
     rt.dispose();
   });

@@ -4,7 +4,9 @@
 // the test hands in its own. A test that builds its daemon parts by hand spreads
 // these in.
 
-import { holdable, hostHeld, NO_PUSHES } from "./renderers";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
+import { holdable, hostHeld, NO_PUSHES, NOTHING_STORED } from "./renderers";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
 import type { Collector } from "../../src/daemon/collector";
@@ -21,7 +23,9 @@ import {
   type MainRendererParts,
 } from "../../src/renderer/verbs/port";
 import { NO_CONFIGS } from "./renderers";
-import { discoveryNow } from "./click";
+import { bookedContext, discoveryNow } from "./click";
+import type { SessionBook } from "../../src/daemon/session-book";
+import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { HOST } from "./host";
 import { stateDir } from "../../src/daemon/paths";
 
@@ -45,6 +49,7 @@ export function clickParts(
   },
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
+  sessionBook: Pick<SessionBook, "heard" | "contextOf">;
   // Another turn, held in the renderer's mailbox until `open`: every input
   // sent after it waits there, in flight.
   park: () => { readonly open: () => void; readonly holding: Promise<unknown> };
@@ -74,9 +79,13 @@ export function clickParts(
       holdsConfig: () => true,
       prune: () => {},
     },
-    // No session renders here: no world state is held, and an origin a click
-    // reads is the one the verb context recorded.
-    worldStates: { sessions: () => [] },
+    // No session renders here: no world state is held, and a session's
+    // context is the one the rig's book holds.
+    worldStates: {
+      sessions: () => [],
+      contextOf: (session: SessionId) =>
+        bookedContext(verbCtx.sessionState, session),
+    },
     sessionState: verbCtx.sessionState,
     // The renderer says what it does on the log its verbs write to.
     log: verbCtx.log,
@@ -95,14 +104,18 @@ export function clickParts(
   // The teardown's journal step, answered as the main renderer answers it, in
   // its place in the mailbox: no other push is a click's.
   const held = holdable(
-    mainRenderer(parts, (push) => {
-      if (push.kind !== "close-journal") return NO_PUSHES();
-      verbCtx.configWrites.close();
-      return { kind: "close-journal" };
-    }),
+    mainRenderer(
+      parts,
+      (push) => {
+        if (push.kind !== "close-journal") return NO_PUSHES();
+        verbCtx.configWrites.close();
+        return { kind: "close-journal" };
+      },
+      NOTHING_STORED,
+    ),
   );
   const renderer = rendererHost(
-    "main",
+    MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(held.renderer),
     () => {},
@@ -110,6 +123,7 @@ export function clickParts(
       subscribed: () => {},
       frames: () => {},
       holding: collector.holding,
+      stored: () => {},
       writableSettings: () => [],
     },
     world,
@@ -117,6 +131,15 @@ export function clickParts(
   return {
     renderer,
     collector,
+    // The host's book of the rig's sessions: what the test's book holds of
+    // each, live once the host has heard the session's request.
+    sessionBook: {
+      heard: () => {},
+      contextOf: (session, live) =>
+        live === null
+          ? bookedContext(verbCtx.sessionState, session)
+          : heardContextOf(live),
+    },
     linkSigner: TEST_SIGNER,
     menuIdle,
     park: () => {

@@ -1,3 +1,4 @@
+import type { SessionBook } from "./session-book.js";
 import type { Collector } from "./collector.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Timekeeper } from "../time.js";
@@ -13,7 +14,7 @@ import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
 import type { UpdateWatch } from "./update-notice";
-import type { DoctorStores } from "../doctor/ports";
+import type { HeldStores } from "./held-stores";
 import type { RendererHost } from "./renderer-host.js";
 import type { ProbeArrivals } from "../doctor/handler-probe";
 import type { RefreshLedger } from "../utils/refresh-ledger";
@@ -33,7 +34,10 @@ export interface DaemonParts {
   readonly log: DaemonLogger;
   readonly bundle: string;
   readonly sourceDigest: string | null;
-  readonly doctorStores: DoctorStores;
+  // The renderer's stored state as the host holds it, whose doctor documents
+  // daemon-stats answers.
+  readonly stores: HeldStores;
+  readonly sessionBook: SessionBook;
   readonly stats: RuntimeStats;
   readonly handlerProbes: ProbeArrivals;
   // What every click is opened with before any renderer sees it.

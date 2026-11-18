@@ -7,6 +7,11 @@ import path from "node:path";
 import { DaemonLog, logLines } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
+import {
+  MAIN_RENDERER,
+  rendererNameOf,
+} from "../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { systemTimekeeper } from "../src/time";
 
 // [LAW:effects-at-boundaries] A daemon is aimed by the paths value it is built
@@ -57,6 +62,32 @@ describe("a daemon aimed by its paths value", () => {
     ).toEqual([]);
   });
 
+  // [LAW:one-source-of-truth] A renderer's profile is a function of its name:
+  // the main one keeps the state directory's own files, and any other writes
+  // under its own directory and nowhere else.
+  test("a profile under a second name writes only under its own directory", () => {
+    const aimed = daemonPaths(hostOf(aimedEnv()));
+    const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
+    const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+    const second = adapters.profile(rendererNameOf("second"), () => {});
+    second.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
+    second.session.flush();
+    second.history.save({});
+    second.doctor.clicked.update((seen) => [...seen, "kitty"]);
+
+    const own = path.join(aimed.state, "renderers", "second", "state");
+    expect(tree(aimed.state).filter((f) => !f.startsWith("renderers"))).toEqual(
+      [],
+    );
+    expect(tree(own).sort()).toEqual(
+      [
+        path.basename(aimed.sessionState),
+        path.basename(aimed.settingsHistory),
+        expect.stringMatching(/clicked/),
+      ].sort(),
+    );
+  });
+
   test("what its adapters write lands under the value, and the environment's directories stay empty", async () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     // The fixture is sound: the ambient layout is the one the directories were made for.
@@ -72,11 +103,11 @@ describe("a daemon aimed by its paths value", () => {
       daemonLog.log("info", "a line");
       await daemonLog.drained();
 
-      const storage = adapters.storage(() => {});
-      storage.session.save({ s1: { theme: "x" } });
+      const storage = adapters.profile(MAIN_RENDERER, () => {});
+      storage.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
       storage.session.flush();
       storage.history.save({});
-      adapters.doctorStores.clicked.update((seen) => [...seen, "kitty"]);
+      storage.doctor.clicked.update((seen) => [...seen, "kitty"]);
       adapters.linkKey();
       const limits = adapters.limits({
         startedAtMs: 0,

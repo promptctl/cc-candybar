@@ -23,7 +23,7 @@ import {
   type DoctorAsk,
   type DoctorRead,
 } from "../doctor/gather";
-import type { ConfigLoad, DoctorStores } from "../doctor/ports";
+import type { ConfigLoad, DoctorDocuments } from "../doctor/ports";
 import { CHECKS, runDoctor, type DoctorFacts } from "../doctor/checks";
 import { clickArrived, type ClickArrival } from "../doctor/sightings";
 import { sightingOf } from "../doctor/terminal";
@@ -82,7 +82,7 @@ export interface RunRequest {
 export interface DoctorRunsDeps {
   // Where a reading's report is written as it arrives, outside any click.
   readonly sessionState: SessionStateRW;
-  readonly stores: DoctorStores;
+  readonly stores: DoctorDocuments;
   readonly log: Log;
   // [LAW:no-silent-failure] A run whose reading failed shows why on its
   // session's bar, as a click's own failure does.

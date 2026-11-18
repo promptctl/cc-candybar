@@ -143,7 +143,7 @@ Other points:
 - Whether sources restart at the reload itself or at the first draw afterwards.
 - Whether `renderCache.hold` creates an entry; `getOrCreate` does by name.
 - Whether a `step-state` click can reach a lane switch; the keys come from each config's gate, so I can't list them statically.
-- What exactly the `500` passed to `FileSessionStorage` does.
+- What exactly the `500` passed to `SessionFile` does.
 
 ## Key files
 

@@ -46,11 +46,6 @@ import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
 import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
 import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../src/daemon/foundations/render-origin";
-import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
@@ -60,6 +55,7 @@ import {
   effectsOf,
   testVerbContext,
   verbContextWith,
+  recordRender,
 } from "./helpers/click";
 import { TEST_LINK_KEY, TEST_SIGNER } from "./helpers/link-signer";
 import { viewFacts } from "./helpers/view-facts";
@@ -382,20 +378,9 @@ function clickContext(
   view: SessionView<SessionSource>,
   over: Partial<VerbContext> = {},
 ): VerbContext {
-  r.sessionState.set(
-    SID,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: dir,
-      cwd: dir,
-      target: { source: "search" },
-    }),
-  );
-  r.sessionState.set(
-    SID,
-    SESSION_CLIENT_HINTS_KEY,
-    JSON.stringify({ claudeConfigDir: "/u/.claude-x" }),
-  );
+  recordRender(r.sessionState, SID, dir, {
+    claudeConfigDir: "/u/.claude-x",
+  });
   return verbContextWith(
     testVerbContext(r.sessionState, undefined, view.state.config),
     {
@@ -675,15 +660,7 @@ describe("a click on a run link", () => {
       const ctx = clickContext(r, view);
       // Another session that has rendered: what its link must prove is the
       // signature.
-      r.sessionState.set(
-        S2,
-        SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({
-          projectDir: dir,
-          cwd: dir,
-          target: { source: "search" },
-        }),
-      );
+      recordRender(r.sessionState, S2, dir);
       await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(
         BadVerbArgs,
       );

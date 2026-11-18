@@ -30,7 +30,7 @@ import { deriveActionValidators } from "../src/daemon/foundations/state-validato
 import { bareGates, stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { effectsOf } from "./helpers/click";
+import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import {
@@ -54,7 +54,6 @@ function ownUrls(rendered: Frame): string[] {
   // subject is what a TEMPLATE'S OWN actions click, so they are filtered out.
   return ownLinks(urls);
 }
-
 
 interface SideEffect {
   readonly verb: string;
@@ -83,7 +82,7 @@ function actionBar(src: string) {
         sideEffects.push({ verb: e.verb, args: [decodeURIComponent(e.value)] });
         continue;
       }
-      const handler = VERBS.get(e.verb);
+      const handler = CLICK_VERBS.get(e.verb);
       if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
       await handler(e.value, rig.ctx); // real set-state / step-state through the gate
     }
@@ -137,7 +136,10 @@ describe("2de.12 — literal set action", () => {
 
   test("a display is drawn content: one its author made bold stays bold while the region is not active", () => {
     const { render } = actionBar(
-      SRC.replace(`{{ action "pick" "🍫" }}`, `{{ action "pick" (bold "🍫") }}`),
+      SRC.replace(
+        `{{ action "pick" "🍫" }}`,
+        `{{ action "pick" (bold "🍫") }}`,
+      ),
     );
     expect(boldUrls(render()).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: ["s1", "flavor", "chocolate"] }],

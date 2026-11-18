@@ -40,8 +40,18 @@ import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { LaneEdge, LaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
-import { SESSION_RENDER_ORIGIN_KEY } from "../../src/daemon/foundations/session-keys";
-import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
+import {
+  heardContextOf,
+  type CheckedRenderRequest,
+  type SessionContext,
+} from "../../src/renderer-interface/request-context";
+import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import {
+  PROTOCOL_VERSION,
+  type RenderRequest,
+} from "../../src/daemon/foundations/protocol";
+import type { ConfigTarget } from "../../src/config-hint";
+import { clickSessionOf } from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -61,22 +71,99 @@ const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
 ) as LaneSwitches;
 
-// The record a session's render leaves behind, which a click resolves its
-// config from: a session only clicks links its own render drew.
+// [LAW:one-source-of-truth] A rig's host book: each session's context, kept
+// beside the rig's session state, which a click reads its own session's from
+// as the host's does (src/daemon/session-book.ts).
+const BOOKS = new WeakMap<SessionStateRW, Map<SessionId, SessionContext>>();
+
+const bookOf = (
+  sessionState: SessionStateRW,
+): Map<SessionId, SessionContext> => {
+  const book = BOOKS.get(sessionState) ?? new Map();
+  BOOKS.set(sessionState, book);
+  return book;
+};
+
+// What the host's book holds of a session that rendered from `dir` before
+// the daemon started, which a click resolves its config from: a session only
+// clicks links its own render drew. Its client's facts are not known until
+// its next request.
 export function recordRender(
   sessionState: SessionStateRW,
   sessionId: SessionId,
   dir = "/tmp/proj",
+  {
+    target = { source: "search" },
+    claudeConfigDir,
+  }: {
+    readonly target?: ConfigTarget;
+    readonly claudeConfigDir?: string;
+  } = {},
 ): void {
-  sessionState.set(
-    sessionId,
-    SESSION_RENDER_ORIGIN_KEY,
-    encodeRenderOrigin({
-      projectDir: dir,
+  bookOf(sessionState).set(sessionId, {
+    session: sessionId,
+    durable: {
+      origin: { projectDir: dir, cwd: dir, target },
+      ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+    },
+    live: null,
+  });
+}
+
+// What the host's book holds of a session once it has heard `req`.
+export function hearRender(
+  sessionState: SessionStateRW,
+  req: CheckedRenderRequest,
+): void {
+  bookOf(sessionState).set(req.hookData.session_id, heardContextOf(req));
+}
+
+// A statusline request of `sessionId` from `dir`, its client reporting
+// `hints`, across the host's checkpoint.
+export function heardRequest(
+  sessionId: string,
+  dir = "/tmp/proj",
+  hints: Partial<RenderRequest> = {},
+): CheckedRenderRequest {
+  const checked = checkRenderRequest(
+    {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      hookData: {
+        hook_event_name: "Status",
+        session_id: sessionId,
+        transcript_path: `${dir}/transcript.jsonl`,
+        cwd: dir,
+        model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+        workspace: { current_dir: dir, project_dir: dir, added_dirs: [] },
+      },
+      args: ["cc-candybar"],
       cwd: dir,
-      target: { source: "search" },
-    }),
+      ...hints,
+    },
+    { firstSightOfUnknownHookField: () => false },
+    () => {},
+    "/nowhere/home",
   );
+  if (!checked.ok) throw new Error(checked.problems.join("; "));
+  return checked.req;
+}
+
+// What the rig's book holds of `sessionId`, as a click of it finds it.
+export const bookedContext = (
+  sessionState: SessionStateRW,
+  sessionId: SessionId,
+): SessionContext | null => BOOKS.get(sessionState)?.get(sessionId) ?? null;
+
+// The context the host hands a click of `verb value`: its session's, as the
+// rig's book holds it.
+function clickContextOf(
+  sessionState: SessionStateRW,
+  verb: string,
+  value: string,
+): SessionContext | null {
+  const session = clickSessionOf(verb, value);
+  return session?.ok ? bookedContext(sessionState, session.id) : null;
 }
 
 // [LAW:locality-or-seam] The host's config discovery for a rig with no render
@@ -273,7 +360,7 @@ export function testVerbContext(
     sessionState,
     history,
     navigation: new NavigationHistory(),
-    latest: null,
+    context: null,
     clickLanded: () => {},
     log: () => {},
     now: () => instantOf(new Date()),
@@ -334,9 +421,27 @@ export const linkClick = clickOf;
 // Drive a rendered click URL through the real parse → dispatch path.
 export async function clickUrl(url: string, ctx: VerbContext): Promise<void> {
   const { verb, value } = linkClick(url);
-  const handler = VERBS.get(verb);
+  clickVerb(verb, value, ctx);
+}
+
+// [LAW:one-source-of-truth] Each verb as a click of it runs: handed its
+// session's context from the rig's book, as the host hands it.
+export const CLICK_VERBS: typeof VERBS = new Map(
+  [...VERBS].map(([verb, handler]) => [
+    verb,
+    (value: string, ctx: VerbContext) =>
+      handler(value, {
+        ...ctx,
+        context: clickContextOf(ctx.sessionState, verb, value),
+      }),
+  ]),
+);
+
+// A click of `verb value` as the host hands it to the renderer.
+export function clickVerb(verb: string, value: string, ctx: VerbContext): void {
+  const handler = CLICK_VERBS.get(verb);
   if (!handler) throw new Error(`no handler for verb "${verb}"`);
-  await handler(value, ctx);
+  handler(value, ctx);
 }
 
 // The host's act performer over `deps`; a part the test does not hand in

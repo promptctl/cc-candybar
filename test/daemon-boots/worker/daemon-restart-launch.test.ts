@@ -199,7 +199,7 @@ esac
       throw new Error("the daemon handed its storage no log");
     };
     const first = start({
-      storage: (log) => {
+      profile: (log) => {
         storageLog = log;
         return {};
       },

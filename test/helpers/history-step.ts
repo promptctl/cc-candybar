@@ -12,7 +12,7 @@ import {
 } from "../../src/renderer/config-file-store";
 import type { Host } from "../../src/host";
 import type { RenderOrigin } from "../../src/config-hint";
-import type { LayerRole } from "../../src/config/layer-role";
+import { LAYER_ROLES, type LayerRole } from "../../src/config/layer-role";
 import { locations } from "../../src/daemon/paths";
 import { discoveryNow } from "./click";
 import { readConfigText } from "../../src/utils/atomic-write";
@@ -24,14 +24,31 @@ import type {
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
 
-// A history's files with no click around it: read from and written to the
-// disk at once, with no home to prove a step's text against.
-export const WRITES_IN_PLACE: ConfigFiles = {
-  read: readConfigText,
-  land: (file, _before, after) =>
-    after === null ? rmSync(file, { force: true }) : writeFileSync(file, after),
-  prove: () => {},
-};
+// A history's files with no click around it: the chain's layers at the paths
+// `layers` names, read from and written to the disk at once, with no home to
+// prove a step's text against.
+export function inPlace(
+  layers: Partial<Record<LayerRole, string>>,
+): ConfigFiles {
+  return {
+    read: readConfigText,
+    land: (file, _before, after) =>
+      after === null
+        ? rmSync(file, { force: true })
+        : writeFileSync(file, after),
+    prove: () => {},
+    roleOf: (file) => {
+      const role = LAYER_ROLES.find((r) => layers[r] === file);
+      if (role === undefined)
+        throw new Error(`${file} is no layer of this history's chain`);
+      return role;
+    },
+    pathOf: (role) => layers[role] ?? null,
+  };
+}
+
+// A click of a session whose chain has no layer: its steps are session picks.
+export const NO_LAYERS: ConfigFiles = inPlace({});
 
 // A config writer's store with no click around it: it reads the disk, and
 // what it records lands at once.
@@ -82,9 +99,10 @@ export function layerNow(
 // One click's journal over `history`: what `act` does, then the commit.
 export function clickOf<T>(
   history: SettingsHistory,
+  files: ConfigFiles,
   act: (journal: Journal) => T,
 ): T {
-  const journal = history.begin(WRITES_IN_PLACE);
+  const journal = history.begin(files);
   // A click commits whatever its handler threw, as the click path does: a
   // refused step's forgetting is part of what it did.
   try {
@@ -94,11 +112,20 @@ export function clickOf<T>(
   }
 }
 
-export const undoOf = (history: SettingsHistory, sid: SessionId): Step =>
-  clickOf(history, (journal) => journal.undo(sid));
+export const undoOf = (
+  history: SettingsHistory,
+  sid: SessionId,
+  files: ConfigFiles,
+): Step => clickOf(history, files, (journal) => journal.undo(sid));
 
-export const redoOf = (history: SettingsHistory, sid: SessionId): Step =>
-  clickOf(history, (journal) => journal.redo(sid));
+export const redoOf = (
+  history: SettingsHistory,
+  sid: SessionId,
+  files: ConfigFiles,
+): Step => clickOf(history, files, (journal) => journal.redo(sid));
 
-export const rewindOf = (history: SettingsHistory, sid: SessionId): Step =>
-  clickOf(history, (journal) => journal.rewind(sid));
+export const rewindOf = (
+  history: SettingsHistory,
+  sid: SessionId,
+  files: ConfigFiles,
+): Step => clickOf(history, files, (journal) => journal.rewind(sid));

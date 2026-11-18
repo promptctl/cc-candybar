@@ -10,7 +10,13 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { LANES, type Lane, type LaneSwitches } from "../src/config/lanes";
 import type { VerbContext } from "../src/renderer/verbs";
-import { clickUrl, recordRender, testVerbContext } from "./helpers/click";
+import {
+  clickUrl,
+  hearRender,
+  heardRequest,
+  recordRender,
+  testVerbContext,
+} from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
 
@@ -25,23 +31,25 @@ const CONFIG = parseAndValidate(
 
 interface Clicked {
   readonly sessionId: string;
-  readonly latest: CheckedRenderRequest | null;
+  readonly live: CheckedRenderRequest | null;
   readonly before: LaneSwitches;
   readonly after: LaneSwitches;
 }
 
-function rig(latest: CheckedRenderRequest | null = null) {
+// A session the host has heard since it started is `live`; one it read back
+// from its book has none.
+function rig(live: CheckedRenderRequest | null = null) {
   const sessionState = new SessionState();
-  recordRender(sessionState, SID);
+  if (live === null) recordRender(sessionState, SID);
+  else hearRender(sessionState, live);
   const base = testVerbContext(sessionState, undefined, CONFIG);
   const clicked: Clicked[] = [];
   const ctx: VerbContext = {
     ...base,
-    latest,
     lanes: {
       ...base.lanes,
-      clicked: (sessionId, latest, before, after) =>
-        clicked.push({ sessionId, latest, before, after }),
+      clicked: (sessionId, live, before, after) =>
+        clicked.push({ sessionId, live, before, after }),
     },
   };
   const toggle = async (sid: string, ...lanes: Lane[]): Promise<void> =>
@@ -75,7 +83,7 @@ test("a toggle's click hands over the switches before it and after its commit", 
   expect(clicked).toEqual([
     {
       sessionId: SID,
-      latest: null,
+      live: null,
       before: switches({}),
       after: switches({ pane: true }),
     },
@@ -83,11 +91,10 @@ test("a toggle's click hands over the switches before it and after its commit", 
 });
 
 test("a click hands over its session's newest request the host holds, whose hints name the pane a lane follows", async () => {
-  // Only its identity is read here.
-  const latest = { hints: {} } as CheckedRenderRequest;
-  const { clicked, toggle } = rig(latest);
+  const live = heardRequest(SID);
+  const { clicked, toggle } = rig(live);
   await toggle(SID, "pane");
-  expect(clicked.map((c) => c.latest)).toEqual([latest]);
+  expect(clicked.map((c) => c.live)).toEqual([live]);
 });
 
 test("a click of two lane toggles is one click: measured once, both lanes moved", async () => {
@@ -96,7 +103,7 @@ test("a click of two lane toggles is one click: measured once, both lanes moved"
   expect(clicked).toEqual([
     {
       sessionId: SID,
-      latest: null,
+      live: null,
       before: switches({}),
       after: switches({ pane: true, tmuxStatus: true }),
     },

@@ -5,11 +5,16 @@
 import { SETTING_PROJECTIONS } from "../config/setting-projections";
 import { PLACEMENT_DRAFT_NS } from "../config/loader/edit-mode";
 import { type SessionId } from "../daemon/foundations/session-id";
+import type { LayerRole } from "../config/layer-role";
 
 // [LAW:types-are-the-program] What a change touched and the two states it
 // stepped between. `null` is absence on both kinds: an unset session key, a
 // config file that does not exist (a first-ever write created it). Undo writes
 // `before`, redo writes `after` — the same write either way.
+// [LAW:single-enforcer] A config layer is named by its role in the session's
+// chain and a digest of the file that role resolved to, never by its path
+// (spec I-10): a step reaches only a file the chain still names, and only the
+// one it was made on.
 export type Change =
   | {
       readonly kind: "session";
@@ -18,8 +23,9 @@ export type Change =
       readonly after: string | null;
     }
   | {
-      readonly kind: "file";
-      readonly file: string;
+      readonly kind: "layer";
+      readonly role: LayerRole;
+      readonly digest: string;
       readonly before: string | null;
       readonly after: string | null;
     };
@@ -51,15 +57,14 @@ export interface Savepoint {
   readonly below: readonly Step[];
 }
 
-export type HistoryState = Readonly<Record<string, SessionHistory>>;
+export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
 
 // What a storage loads: each session's history, keyed by a session id the
 // storage has already checked.
 export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
 
-// [LAW:locality-or-seam] Persistence is the storage's property, as with
-// SessionStorage: the daemon binds a file, everything else keeps the ephemeral
-// default and never touches disk.
+// [LAW:locality-or-seam] Persistence is the storage's property: the host
+// binds a file, or keeps nothing.
 export interface HistoryStorage {
   load(): LoadedHistory;
   save(state: HistoryState): void;

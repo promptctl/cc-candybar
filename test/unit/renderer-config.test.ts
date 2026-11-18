@@ -11,15 +11,10 @@ import { encodeSegments, VERB_SET_CONFIG } from "../../src/click/wire";
 import { DOOR_GLYPH } from "../../src/config/disclosure";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
-import { encodeRenderOrigin } from "../../src/daemon/foundations/render-origin";
 import {
   sessionIdOf,
   type SessionId,
 } from "../../src/daemon/foundations/session-id";
-import {
-  SESSION_CLIENT_HINTS_KEY,
-  SESSION_RENDER_ORIGIN_KEY,
-} from "../../src/daemon/foundations/session-keys";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
 import type { WorldState } from "../../src/facts/world-state";
 import { textOf, type Frame } from "../../src/render/frame";
@@ -32,13 +27,12 @@ import type {
   RequestId,
 } from "../../src/renderer-interface/interface";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
-import { loadMainRenderer } from "../../src/renderer/main";
-import { EPHEMERAL_HISTORY_STORAGE } from "../../src/renderer/settings-history";
+import { mainRendererOf } from "../../src/renderer/main";
+import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { emptyStores } from "../helpers/doctor-facts";
 import { bareGates } from "../helpers/gates";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
@@ -56,32 +50,31 @@ const CONFIG = `{
   root: { h: ["said"] },
 }`;
 
-// The renderer over storage that holds `recorded` and writes nowhere, and
-// every line it hands the host's log.
+// The renderer built from a profile whose sessions hold `recorded`, and every
+// line it hands the host's log.
 function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
   const logged: string[] = [];
-  const r = loadMainRenderer({
-    storage: {
-      session: { load: () => recorded, save: () => {}, flush: () => {} },
-      history: EPHEMERAL_HISTORY_STORAGE,
-      doctor: emptyStores(),
-    },
-    linkSigner: TEST_SIGNER,
-    locations: {
+  const r = mainRendererOf(
+    {
+      stored: { ...EMPTY_STORED_STATE, sessions: Object.fromEntries(recorded) },
+      linkSigner: TEST_SIGNER,
+      locations: {
+        home: "/nowhere/home",
+        configHome: "/nowhere/config",
+        dataHome: "/nowhere/data",
+        dataDirs: [],
+      },
+      env: {},
       home: "/nowhere/home",
-      configHome: "/nowhere/config",
-      dataHome: "/nowhere/data",
-      dataDirs: [],
+      gates: bareGates(),
+      memoryLimitBytes: 1024 * 1024 * 1024,
     },
-    env: {},
-    home: "/nowhere/home",
-    gates: bareGates(),
-    memoryLimitBytes: 1024 * 1024 * 1024,
-  }).start({
-    log: (level, message) => void logged.push(`${level} ${message}`),
-    eventAnswered: () => {},
-    storage: NO_PLUGIN_STORAGE,
-  });
+    {
+      log: (level, message) => void logged.push(`${level} ${message}`),
+      eventAnswered: () => {},
+      storage: NO_PLUGIN_STORAGE,
+    },
+  );
   return { r, logged };
 }
 
@@ -243,20 +236,10 @@ test("a config turn whose text moved only by a comment keeps the state it serves
   ]);
 });
 
-test("a click on a session with no live context waits for its recorded origin's config, and runs in that config's turn", async () => {
+test("a click on a session with no live context waits for the config of the origin the host's book holds, and runs in that config's turn", async () => {
   const session = sessionIdOf("idle-one");
   const origin = contextOf("idle-one").requested;
-  const { r } = renderer(
-    new Map([
-      [
-        session,
-        {
-          [SESSION_RENDER_ORIGIN_KEY]: encodeRenderOrigin(origin),
-          [SESSION_CLIENT_HINTS_KEY]: "{}",
-        },
-      ],
-    ]),
-  );
+  const { r } = renderer(new Map());
   answered(await handIn(r, { kind: "start", viewers: {}, sessions: [] }));
   const palette = [...listResolvablePaletteNames()][0]!;
   const parked = answered(
@@ -266,7 +249,8 @@ test("a click on a session with no live context waits for its recorded origin's 
       value: encodeSegments([session, "user", "palette", palette]),
       session: { ok: true, id: session },
       arrival: { via: "link", delivery: { kind: "cli" } },
-      latest: null,
+      // Read back from the book after a restart: no live part.
+      context: { session, durable: { origin }, live: null },
     }),
   );
   expect(parked.effects).toEqual([]);

@@ -37,8 +37,6 @@ import { type SessionStateRW } from "../renderer-interface/session-state";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import { type SessionId } from "../daemon/foundations/session-id";
 import {
-  type HistoryStorage,
-  type LoadedHistory,
   type Change,
   type Step,
   type SessionHistory,
@@ -51,6 +49,11 @@ import {
   diffChanges,
 } from "../config/config-changes.js";
 import type { ConfigWrites } from "./config-writes.js";
+import type {
+  StoredState,
+  StoreWrite,
+} from "../renderer-interface/stored-state.js";
+import { digestOf } from "../utils/plain.js";
 
 // What the settings menu shows: how many steps undo and redo can take.
 export interface HistoryDepth {
@@ -65,11 +68,6 @@ export const EMPTY_HISTORY_DEPTH: HistoryDepth = {
   undo: 0,
   redo: 0,
   sinceEdit: 0,
-};
-
-export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
-  load: () => new Map(),
-  save: () => {},
 };
 
 // [LAW:carrying-cost] A file change holds two whole-file snapshots, so what a
@@ -88,7 +86,11 @@ const EMPTY: SessionHistory = { past: [], future: [] };
 // [LAW:single-enforcer] `prove` is the gate every click's write passes: the
 // text loads as the file it is written to, between the files as `read` gives
 // them, or the click is refused.
-export type ConfigFiles = Pick<ConfigWrites, "land" | "read"> & {
+// `roleOf` and `pathOf` name a file of the click's chain by its role and back.
+export type ConfigFiles = Pick<
+  ConfigWrites,
+  "land" | "read" | "roleOf" | "pathOf"
+> & {
   readonly prove: (
     file: string,
     text: string | null,
@@ -126,7 +128,7 @@ export interface Journal {
 type Pending = Map<SessionId, Map<string, Change>>;
 
 const identity = (c: Change): string =>
-  c.kind === "session" ? `session:${c.key}` : `file:${c.file}`;
+  c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
 
 export class SettingsHistory {
   // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
@@ -145,14 +147,34 @@ export class SettingsHistory {
     runInAction(() => this.held.replace(next));
   }
 
-  // `loaded` is what the storage held, read before the renderer starts.
+  // [LAW:one-source-of-truth] The sessions whose history moved since the
+  // host was last told, in the order they last moved (`drain`).
+  private readonly moved = new Set<SessionId>();
+
+  // `loaded` is what the profile holds, oldest first, as the host handed it
+  // in: held to the same bounds as every step that lands.
   constructor(
     private readonly sessionState: SessionStateRW,
     private readonly logger: DaemonLogger,
-    private readonly storage: HistoryStorage = EPHEMERAL_HISTORY_STORAGE,
-    loaded: LoadedHistory = storage.load(),
+    loaded: StoredState["history"] = {},
   ) {
-    this.state = new Map(loaded);
+    this.adopt(
+      new Map(Object.entries(loaded) as Array<[SessionId, SessionHistory]>),
+    );
+  }
+
+  // What the host has not yet been told: each session whose history moved, as
+  // it now stands, null for one gone, in the order they last moved.
+  drain(): StoreWrite[] {
+    const writes = [...this.moved].map(
+      (key): StoreWrite => ({
+        store: "settings-history",
+        key,
+        value: this.state.get(key) ?? null,
+      }),
+    );
+    this.moved.clear();
+    return writes;
   }
 
   depth(sessionId: SessionId): HistoryDepth {
@@ -246,7 +268,13 @@ export class SettingsHistory {
     return {
       sessionState,
       file: (sessionId, file, before, after) => {
-        note(sessionId, { kind: "file", file, before, after });
+        note(sessionId, {
+          kind: "layer",
+          role: files.roleOf(file),
+          digest: digestOf(file),
+          before,
+          after,
+        });
         files.land(file, before, after);
       },
       wrote: () => {
@@ -267,13 +295,8 @@ export class SettingsHistory {
       },
       commit: () => {
         step();
-        // Handed off before it is saved, so a save that fails is reported by
-        // this commit alone and never recorded again by a later one.
         const moved = new Map(working);
         working.clear();
-        // [LAW:no-ambient-temporal-coupling] The step is saved before the
-        // session's writes are applied: the save is what can fail, and a
-        // click whose step was not saved applies none of its session writes.
         for (const [sessionId, history] of moved) this.put(sessionId, history);
         held.flush();
       },
@@ -403,8 +426,7 @@ export class SettingsHistory {
   }
 
   // Move-to-end keeps insertion order as recency, so the bounds drop the
-  // session that changed least recently. The new state is adopted only once
-  // it is saved, so memory never holds a step the file could not.
+  // session that changed least recently.
   private put(sessionId: SessionId, history: SessionHistory): void {
     const next = new Map(this.state);
     next.delete(sessionId);
@@ -415,6 +437,28 @@ export class SettingsHistory {
     ) {
       next.set(sessionId, history);
     }
+    // A history that moved to the end is told even when it holds what it
+    // held, so the host's order is this one's.
+    this.moved.delete(sessionId);
+    this.moved.add(sessionId);
+    this.adopt(next);
+  }
+
+  // [LAW:single-enforcer] The one enforcer of the bounds, over what the
+  // profile handed in and over every step: each session the bounds trim or
+  // drop is told.
+  private adopt(next: Map<SessionId, SessionHistory>): void {
+    const before = new Map(next);
+    this.bound(next);
+    for (const [sessionId, history] of before)
+      if (next.get(sessionId) !== history) {
+        this.moved.delete(sessionId);
+        this.moved.add(sessionId);
+      }
+    this.state = next;
+  }
+
+  private bound(next: Map<SessionId, SessionHistory>): void {
     while (next.size > MAX_SESSIONS || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value!;
       if (next.size > 1) next.delete(oldest);
@@ -430,8 +474,6 @@ export class SettingsHistory {
         next.delete(oldest);
       }
     }
-    this.storage.save(Object.fromEntries(next));
-    this.state = next;
   }
 }
 
@@ -601,7 +643,7 @@ export function describeStep(step: Step): string {
 function describe(change: Change): string {
   return change.kind === "session"
     ? `session setting "${change.key}"`
-    : change.file;
+    : `the ${change.role} layer`;
 }
 
 // ─── A click ─────────────────────────────────────────────────────────────────
@@ -647,16 +689,26 @@ function stepOf(
           target: identity(change),
           what: `session setting "${change.key}"`,
         };
+  // [LAW:no-silent-failure] A role the chain no longer holds, or one that now
+  // resolves to another file, is a target that moved: the file the step was
+  // made on is no file this click may write.
+  const file = click.files.pathOf(change.role);
+  if (file === null || digestOf(file) !== change.digest)
+    return {
+      kind: "moved",
+      target: identity(change),
+      what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`,
+    };
   const applied = applyChanges(
-    click.files.read(change.file),
+    click.files.read(file),
     diffChanges(change[from], change[to]),
   );
   return applied.kind === "applied"
-    ? { kind: "file", file: change.file, text: applied.text }
+    ? { kind: "file", file, text: applied.text }
     : {
         kind: "moved",
         target: identity(change),
-        what: `${addressText(applied.at)} in ${change.file}`,
+        what: `${addressText(applied.at)} in the ${change.role} layer`,
       };
 }
 

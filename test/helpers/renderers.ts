@@ -31,6 +31,7 @@ export const unfollowedCollector = (
   holding: collector.holding.bind(collector),
   writableSettings: collector.writableSettings.bind(collector),
   frames: () => {},
+  stored: () => {},
 });
 
 // A renderer whose events `answered` answers, and which no push reaches.
@@ -56,6 +57,10 @@ export function pushRenderer(
     adapter: replied,
   });
 }
+
+// The stored writes of a rig whose host holds no store: its renderer's turns
+// tell it none.
+export const NOTHING_STORED = (): readonly [] => [];
 
 // The pushes of a rig that hands its renderer none: one would be the rig's
 // bug, said.

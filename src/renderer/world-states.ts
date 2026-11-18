@@ -5,6 +5,11 @@
 // (src/renderer/session-source.ts), so the renderer stamps nothing.
 
 import { compareStructural, observable, runInAction } from "mobx";
+import {
+  heardContextOf,
+  type CheckedRenderRequest,
+  type SessionContext,
+} from "../renderer-interface/request-context";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { WorldState } from "../facts/world-state";
 
@@ -12,6 +17,8 @@ export class WorldStates {
   // [LAW:single-enforcer] Told every document taken: each one carries the
   // daemon-wide facts, which the update gate follows.
   constructor(private readonly took: (document: WorldState) => void) {}
+
+  private readonly contexts = new Map<SessionId, SessionContext>();
 
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
   private readonly documents = observable.map<SessionId, WorldState>(
@@ -57,7 +64,21 @@ export class WorldStates {
     return [...this.documents.keys()];
   }
 
+  // A session's context, as its `context` handed it in: kept beside its
+  // document, for as long as it, so a live session's context is always the
+  // one its document was read at.
+  heard(req: CheckedRenderRequest): void {
+    this.contexts.set(req.hookData.session_id, heardContextOf(req));
+  }
+
+  // The newest context of a live session, or null for one the renderer does
+  // not hold.
+  contextOf(session: SessionId): SessionContext | null {
+    return this.contexts.get(session) ?? null;
+  }
+
   drop(session: SessionId): void {
+    this.contexts.delete(session);
     runInAction(() => this.documents.delete(session));
   }
 }

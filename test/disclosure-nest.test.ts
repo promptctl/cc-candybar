@@ -7,12 +7,15 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -30,11 +33,18 @@ const PAYLOAD = {
 };
 
 function nestBar(src: string) {
-  const rig = buildRig({ source: src, label: "<user>", base: DEFAULT_DSL_CONFIG });
+  const rig = buildRig({
+    source: src,
+    label: "<user>",
+    base: DEFAULT_DSL_CONFIG,
+  });
   const { config, sessionState } = rig;
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const logged: string[] = [];
-  const ctx: VerbContext = { ...rig.ctx, log: (_level, line) => logged.push(line) };
+  const ctx: VerbContext = {
+    ...rig.ctx,
+    log: (_level, line) => logged.push(line),
+  };
   // One click is one verb call, as the daemon runs it.
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   // Click the affordance whose URL writes `value` to a key `key` names
@@ -60,8 +70,16 @@ const openDoor = async (rt: ReturnType<typeof nestBar>): Promise<void> =>
 
 describe("case 1: a tab's lists and submenus close with the tab", () => {
   test.each([
-    ["its trigger", async (rt: ReturnType<typeof nestBar>) => await rt.clickWriting(TAB, DISCLOSURE_CLOSED)],
-    ["opening another tab", async (rt: ReturnType<typeof nestBar>) => await rt.clickWriting(TAB, "config")],
+    [
+      "its trigger",
+      async (rt: ReturnType<typeof nestBar>) =>
+        await rt.clickWriting(TAB, DISCLOSURE_CLOSED),
+    ],
+    [
+      "opening another tab",
+      async (rt: ReturnType<typeof nestBar>) =>
+        await rt.clickWriting(TAB, "config"),
+    ],
   ])("the effect list, closing 🎨 look by %s", async (_how, close) => {
     const rt = nestBar(BUNDLED);
     await openDoor(rt);
@@ -125,7 +143,10 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
   test("case 4: a ✚'s segment library", async () => {
     const rt = nestBar(BUNDLED);
     await arrange(rt);
-    await rt.clickWriting("menus.edit_default_insertSeg_0.*", "edit.default.insert.0");
+    await rt.clickWriting(
+      "menus.edit_default_insertSeg_0.*",
+      "edit.default.insert.0",
+    );
     const key = "menus.edit_default_insertSeg_0.edit_default_insert_0";
     expect(rt.held(key)).toBe("edit.default.insert.0");
     await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
@@ -153,7 +174,6 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
   });
 });
 
-
 test("◁ back over a closed door restores the menu with what was open in it", async () => {
   const rt = nestBar(BUNDLED);
   await openDoor(rt);
@@ -161,7 +181,7 @@ test("◁ back over a closed door restores the menu with what was open in it", a
   await rt.clickWriting(PICKERS, "candybar.apply.effect");
   await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
   expect(rt.held(PICKERS)).toBe(DISCLOSURE_CLOSED);
-  await VERBS.get("back")!(SID, rt.ctx);
+  await CLICK_VERBS.get("back")!(SID, rt.ctx);
   expect(rt.held(SETTINGS_ANCHOR)).toBe("open");
   expect(rt.held(TAB)).toBe("look");
   expect(rt.held(PICKERS)).toBe("candybar.apply.effect");

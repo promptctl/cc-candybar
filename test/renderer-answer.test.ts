@@ -10,6 +10,7 @@
 // parts its side still reaches; no daemon is built.
 
 import { daemonFactsOf } from "./helpers/daemon-facts";
+import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import {
   sessionIdOf,
   type SessionId,
@@ -39,7 +40,11 @@ import {
 import { renderFailedFrame } from "../src/render/frame";
 import { ANSWERING, MOVING_FPS, UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { NO_VERBS, rendererParts } from "./helpers/renderer-parts";
-import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
+import {
+  heardContextOf,
+  type CheckedRenderRequest,
+  type SessionContext,
+} from "../src/renderer-interface/request-context";
 import { systemTimekeeper } from "../src/time";
 import type { Instant, Tick } from "../src/utils/instant";
 import {
@@ -65,9 +70,9 @@ import {
   hostHeld,
   NO_ACTS,
   NO_PUSHES,
+  NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
-import { SESSION_RENDER_ORIGIN_KEY } from "../src/daemon/foundations/session-keys";
 
 let dir: string;
 let cleanups: Array<() => void>;
@@ -122,7 +127,7 @@ function renderer(
     record(sessionId, by, copies);
   };
   return {
-    r: mainRenderer(parts, NO_PUSHES),
+    r: mainRenderer(parts, NO_PUSHES, NOTHING_STORED),
     parts,
     recorded,
     changed,
@@ -698,7 +703,7 @@ describe("the session's config, ahead of its request", () => {
     }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       systemTimekeeper,
       hostHeld(hearingEvents(t.r, (input) => kinds.push(input.event.kind))),
       () => {},
@@ -744,19 +749,6 @@ describe("the session's config, ahead of its request", () => {
     expect(threw(answering).failure.message).toMatch(
       new RegExp(`no world state for session "${SESSION}"`),
     );
-  });
-
-  test("one whose opening throws has still recorded the config inputs it named, so a durable click resolves the chain it was for", async () => {
-    const t = renderer();
-    t.rig.cache.holdSession = (() => {
-      throw new Error("the opening broke");
-    }) as never;
-    expect(threw(await configure(t, checked())).failure.message).toBe(
-      "the opening broke",
-    );
-    expect(
-      t.rig.sessionState.get(SESSION, SESSION_RENDER_ORIGIN_KEY),
-    ).toContain(path.join(dir, "config.json5"));
   });
 });
 
@@ -831,7 +823,7 @@ describe("two requests of one session at different keys", () => {
     t.rig.providers.tmuxService.declare = tmux.declare as never;
     const requests: WorldState[] = [];
     const host = rendererHost(
-      "main",
+      MAIN_RENDERER,
       systemTimekeeper,
       hostHeld(
         hearingEvents(t.r, (input) => {
@@ -891,14 +883,14 @@ describe("a click", () => {
   // A click on the rig's session's link, delivered by the CLI.
   const click = (
     verb: string,
-    latest: CheckedRenderRequest | null = null,
+    live: CheckedRenderRequest | null = null,
   ): Event => ({
     kind: "click",
     verb,
     value: "",
     session: { ok: true, id: SESSION },
     arrival: { via: "link", delivery: { kind: "cli" } },
-    latest,
+    context: live === null ? null : heardContextOf(live),
   });
 
   test("answers with what the open views read once its handler has run", async () => {
@@ -945,13 +937,13 @@ describe("a click", () => {
   });
 
   test("hands its act the host's newest request of its session, though the session has retired", async () => {
-    let seen: CheckedRenderRequest | null | undefined;
+    let seen: SessionContext | null | undefined;
     const t = renderer({
       ...NO_VERBS,
       handler: (verb) =>
         verb === "act"
           ? (_value, facts) => {
-              seen = facts.latest;
+              seen = facts.context;
             }
           : undefined,
       closeIdle: () => {
@@ -964,7 +956,7 @@ describe("a click", () => {
     // The entry its request loaded still names the origin, so the click's
     // config is held and it runs in its own turn.
     answered(await handIn(t.r, click("act", latest)));
-    expect(seen).toBe(latest);
+    expect(seen).toEqual(heardContextOf(latest));
   });
 
   test("of a verb the renderer does not have is its bad request", async () => {

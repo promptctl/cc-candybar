@@ -17,11 +17,13 @@
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type {
-  SessionSnapshot,
   SessionStateReader,
   SessionStateRW,
-  SessionStorage,
 } from "../renderer-interface/session-state";
+import type {
+  StoredState,
+  StoreWrite,
+} from "../renderer-interface/stored-state";
 
 // [LAW:one-source-of-truth] A view of `store` that reports, once a write has
 // landed, each key it touched that `records` admits — its value before the
@@ -67,15 +69,6 @@ export function recordingView(
   };
 }
 
-// [LAW:dataflow-not-control-flow] Null-object so the store always calls
-// save()/flush() — no "am I persisting?" branch. The ephemeral case is data
-// (a storage that discards), not a special control path.
-export const EPHEMERAL_SESSION_STORAGE: SessionStorage = {
-  load: () => new Map(),
-  save: () => {},
-  flush: () => {},
-};
-
 // One session's state, and the store's revision when it last changed.
 // [LAW:one-source-of-truth] The revision lives on the entry it describes, so a
 // session the store drops takes its revision with it.
@@ -85,16 +78,20 @@ interface Session {
 }
 
 // Generous headroom over realistic concurrent-session counts; matches the
-// render cache's LRU bound. Active sessions stay hot via get-promotion, so only
-// genuinely-idle sessions are ever evicted — eviction *is* "drop dead sessions".
+// render cache's LRU bound. Only a session no click has written to for longest
+// is ever evicted — eviction *is* "drop dead sessions".
 const DEFAULT_MAX_SESSIONS = 256;
 
 export class SessionState implements SessionStateReader, SessionStateRW {
-  // [LAW:types-are-the-program] Insertion order is recency order: the store
-  // cannot hold more than maxSessions, so "bounded on disk" is structural, not
-  // dependent on an external prune caller.
-  private sessions: Map<SessionId, Session>;
-  private storage: SessionStorage;
+  // [LAW:types-are-the-program] Insertion order is recency order, the order
+  // of writes: the store cannot hold more than maxSessions, so the bound is
+  // structural, not dependent on an external prune caller. A read moves
+  // nothing, so the host's copy, which hears only writes, keeps the same order.
+  private readonly sessions: Map<SessionId, Session>;
+  // [LAW:one-source-of-truth] The sessions whose state moved since the host
+  // was last told, in the order they last moved: what the turn's stored
+  // writes carry (`drain`).
+  private readonly moved = new Set<SessionId>();
   // [LAW:single-enforcer] The store's revision: counts every change any
   // writer makes, so it never repeats while the store lives.
   private head = 0;
@@ -103,40 +100,31 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // session-state's load — mutations are rare and computeds are cheap.
   private readonly atom: IAtom = createAtom("SessionState");
 
+  // `loaded` is what the profile holds, oldest first, as the host handed it in.
   constructor(
-    storage: SessionStorage = EPHEMERAL_SESSION_STORAGE,
+    loaded: StoredState["sessions"] = {},
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
-    this.storage = storage;
-    this.sessions = new Map();
-    this.hydrateFromStorage();
-  }
-
-  private hydrateFromStorage(): void {
     this.sessions = new Map(
-      Array.from(this.storage.load(), ([id, kv]): [SessionId, Session] => [
+      (
+        Object.entries(loaded) as Array<
+          [SessionId, Readonly<Record<string, string>>]
+        >
+      ).map(([id, kv]): [SessionId, Session] => [
         id,
         { values: new Map(Object.entries(kv)), revision: ++this.head },
       ]),
     );
+    // A profile over the bound loses its oldest at once, and the host hears
+    // it with the first turn's writes.
     this.evictOldest();
-    // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
-    // in-memory state. An over-cap file trimmed by evictOldest is written back
-    // here, so the on-disk bound holds even if no mutation ever follows.
-    this.persist();
   }
 
   get(sessionId: SessionId, key: string): string | null {
     // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
     // outside a tracking context (the common direct-read case) it is a no-op.
     this.atom.reportObserved();
-    const session = this.sessions.get(sessionId);
-    if (!session) return null;
-    // [LAW:dataflow-not-control-flow] A read promotes recency but never
-    // triggers a disk write itself; the reordered insertion order only reaches
-    // disk if a later mutation persists.
-    this.touch(sessionId, session);
-    return session.values.get(key) ?? null;
+    return this.sessions.get(sessionId)?.values.get(key) ?? null;
   }
 
   revision(sessionId: SessionId): number {
@@ -169,82 +157,85 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
-  // setBatch — one write path through the store. The previous shape (a
-  // standalone set body) split the write semantics across two routes
-  // once setBatch was introduced; collapsing keeps mutation, persistence,
-  // and notification in exactly one place.
+  // setBatch — one write path through the store.
   set(sessionId: SessionId, key: string, value: string): void {
     this.setBatch(sessionId, [{ key, value }]);
   }
 
-  // [LAW:no-silent-failure] Atomic commit of N pairs: every write
-  // lands BEFORE the single reportChanged() that scheduler-visibly
-  // marks the transaction complete. Observers cannot see an
-  // intermediate "half-applied" snapshot — `runInAction` defers
-  // reaction scheduling until the outermost call exits, and we hold
-  // ALL writes inside this one block. Previously, the verb's "loop and
-  // call set N times" pattern fired reportChanged() N times, which
-  // scheduled autoruns between pairs (visible to consumers as the menu
-  // value changing while another key of the batch was still old). The batch
-  // method is the structural fix: there is no way to get half-applied
-  // state because there is no intermediate scheduler tick.
-  //
-  // [LAW:dataflow-not-control-flow] An empty pairs array is no-work-
-  // to-do, returned without firing reportChanged or persisting. The
-  // verb body validates that pairs is non-empty before calling, so
-  // this is the public-API safety net rather than the hot path.
+  // [LAW:no-silent-failure] Atomic commit of N pairs: every write lands
+  // BEFORE the single reportChanged() that marks the transaction complete, so
+  // no observer sees half of it. A batch that writes only values already held
+  // changes nothing, and moves no session in the recency order.
   setBatch(
     sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
-    if (pairs.length === 0) return;
+    const held = this.sessions.get(sessionId);
+    if (!pairs.some(({ key, value }) => held?.values.get(key) !== value))
+      return;
     runInAction(() => {
-      const session = this.sessions.get(sessionId) ?? {
+      const session = held ?? {
         values: new Map<string, string>(),
         revision: 0,
       };
-      if (pairs.some(({ key, value }) => session.values.get(key) !== value))
-        session.revision = ++this.head;
       for (const { key, value } of pairs) session.values.set(key, value);
-      this.touch(sessionId, session);
+      this.changed(sessionId, session);
       this.evictOldest();
-      this.persist();
       this.atom.reportChanged();
     });
   }
 
   clear(sessionId: SessionId, key: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined || !session.values.has(key)) return;
     runInAction(() => {
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        if (session.values.delete(key)) session.revision = ++this.head;
-        // An emptied session is a non-state — drop it so it neither occupies a
-        // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
-        // A surviving session is promoted: every interaction is a recency signal,
-        // uniform with get()/set(). [LAW:one-type-per-behavior]
-        if (session.values.size === 0) this.sessions.delete(sessionId);
-        else this.touch(sessionId, session);
-      }
-      this.persist();
+      session.values.delete(key);
+      // An emptied session is a non-state — drop it so it neither occupies a
+      // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
+      if (session.values.size === 0) this.dropped(sessionId);
+      else this.changed(sessionId, session);
       this.atom.reportChanged();
     });
   }
 
-  // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
-  prune(activeSessionIds: ReadonlySet<SessionId>): void {
-    runInAction(() => {
-      for (const id of this.sessions.keys()) {
-        if (!activeSessionIds.has(id)) this.sessions.delete(id);
-      }
-      this.persist();
-      this.atom.reportChanged();
-    });
+  // What the host has not yet been told: each session that moved, as it now
+  // stands, null for one dropped, in the order they last moved, so the host's
+  // copy keeps this store's recency order.
+  drain(): StoreWrite[] {
+    const writes = [...this.moved].map(
+      (key): StoreWrite => ({
+        store: "session-state",
+        key,
+        value: this.valuesOf(key),
+      }),
+    );
+    this.moved.clear();
+    return writes;
   }
 
-  // Move-to-end: re-inserting at the tail makes this the most-recently-used.
-  private touch(sessionId: SessionId, session: Session): void {
+  private valuesOf(sessionId: SessionId): Record<string, string> | null {
+    const session = this.sessions.get(sessionId);
+    return session === undefined ? null : Object.fromEntries(session.values);
+  }
+
+  // Move-to-end: re-inserting at the tail makes this the most recently
+  // written, here and in what the host is told.
+  private changed(sessionId: SessionId, session: Session): void {
+    session.revision = ++this.head;
     this.sessions.delete(sessionId);
     this.sessions.set(sessionId, session);
+    this.told(sessionId);
+  }
+
+  private dropped(sessionId: SessionId): void {
+    this.head++;
+    this.sessions.delete(sessionId);
+    this.told(sessionId);
+  }
+
+  private told(sessionId: SessionId): void {
+    this.moved.delete(sessionId);
+    this.moved.add(sessionId);
   }
 
   private evictOldest(): void {
@@ -254,39 +245,8 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // number of evictions, not the total loaded set — deleting an already-
     // yielded key mid-iteration is well-defined for a Map.
     for (const id of this.sessions.keys()) {
-      this.sessions.delete(id);
+      this.dropped(id);
       if (--overflow === 0) break;
     }
-  }
-
-  // Synchronous write of any debounced-pending snapshot. Called on daemon
-  // shutdown so a pending pick isn't lost when the process exits.
-  flush(): void {
-    this.storage.flush();
-  }
-
-  // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
-  // lands, and anything that lands later (a render that was awaiting, a run
-  // settling) stays in memory, so it can never write over the file a next
-  // daemon has taken up.
-  close(): void {
-    this.flush();
-    this.storage = EPHEMERAL_SESSION_STORAGE;
-  }
-
-  private persist(): void {
-    this.storage.save(this.serialize());
-  }
-
-  private serialize(): SessionSnapshot {
-    // [LAW:types-are-the-program] sessionIds are external (hook JSON / click
-    // URLs). A null-prototype root makes "__proto__"/"constructor" ordinary
-    // own keys instead of prototype-mutation vectors — pollution is
-    // unrepresentable rather than guarded against.
-    const snapshot = Object.create(null) as SessionSnapshot;
-    for (const [sessionId, { values }] of this.sessions) {
-      snapshot[sessionId] = Object.fromEntries(values);
-    }
-    return snapshot;
   }
 }

@@ -10,7 +10,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { clickUrl, effectsOf, bookedContext } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
@@ -212,7 +212,13 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeDefined();
-    await closeIdleMenus(SID, null, IDLE, rt.ctx, rt.ctx.effects);
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
     expect(rt.held(EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
     expect(rt.ctx.history.history(SID).savepoint).toBeUndefined();
   });
@@ -227,7 +233,13 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     await rt.clickWriting(library, "edit.default.insert.0");
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBeGreaterThan(0);
-    await closeIdleMenus(SID, null, IDLE, rt.ctx, rt.ctx.effects);
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
     expect(rt.held(library)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_MODE_KEY)).toBe(EDIT_MODE_ARRANGE);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
@@ -241,7 +253,13 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
     await rt.clickWriting(SETTINGS_ANCHOR, SETTINGS_OPEN);
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
     await rt.clickWriting(EDIT_LIVE_KEY, "open");
-    await closeIdleMenus(SID, null, IDLE, rt.ctx, rt.ctx.effects);
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.held(EDIT_LIVE_KEY)).toBe("open");
   });
@@ -252,14 +270,26 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       'directory',
     ] } }`);
     expect(rt.held("groups.more")).toBe("more");
-    await closeIdleMenus(SID, null, IDLE, rt.ctx, rt.ctx.effects);
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
     expect(rt.held("groups.more")).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBe(0);
   });
 
   test("with nothing open it writes nothing, and says so", async () => {
     const rt = idleBar(BUNDLED);
-    await closeIdleMenus(SID, null, IDLE, rt.ctx, rt.ctx.effects);
+    await closeIdleMenus(
+      SID,
+      bookedContext(rt.ctx.sessionState, SID),
+      IDLE,
+      rt.ctx,
+      rt.ctx.effects,
+    );
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(rt.logged).toContain(
       `menu-idle: closed=- idle=30.0s timeout=30s (session=${SID})`,

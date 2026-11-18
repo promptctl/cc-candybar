@@ -5,6 +5,7 @@
 // failing no turn that answered.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import {
   failureOf,
   type Failure,
@@ -38,7 +39,8 @@ const clockAt = (read: { wall: number; mono: number }) => ({
 
 // A host over a renderer that answers every push with `output`; `said`
 // settles with the first line it logs.
-// A push's end, without the subscriptions every push answers with.
+// A push's end, without the subscriptions and stored writes every push
+// answers with.
 type Ended =
   | { readonly kind: "replied"; readonly reply: AdapterReply }
   | { readonly kind: "threw"; readonly failure: Failure };
@@ -48,13 +50,14 @@ function hostOver(output: Ended) {
   const said = new Promise<string>((resolve) => (say = resolve));
   const taken: Subscriptions[] = [];
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       pushRenderer(
         async (): Promise<AdapterOutput> => ({
           ...output,
           subscriptions: NONE,
+          stored: [],
         }),
       ),
     ),
@@ -62,6 +65,7 @@ function hostOver(output: Ended) {
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
+      stored: () => {},
       writableSettings: () => {
         throw new Error("a push lands no change");
       },
@@ -127,6 +131,7 @@ const settled = async (): Promise<void> => {
 
 const answered = (): RendererOutput => ({
   kind: "answered",
+  stored: [],
   effects: [],
   subscriptions: NONE,
   record: [],
@@ -138,7 +143,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
@@ -151,6 +156,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
           await opened;
           return {
             kind: "replied",
+            stored: [],
             reply: { kind: "close-journal" },
             subscriptions: NONE,
           };
@@ -161,6 +167,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     {
       subscribed: () => {},
       frames: () => {},
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
@@ -189,7 +196,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt(read),
     held(
       rendererOf({
@@ -207,6 +214,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     {
       subscribed: () => {},
       frames: () => {},
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
@@ -236,7 +244,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   const unheard: string[] = [];
   const frames: number[] = [];
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
@@ -261,6 +269,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
         throw new Error("the collector broke");
       },
       frames: (taken) => void frames.push(taken.length),
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
@@ -284,7 +293,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
   const heard: string[] = [];
   const read = { wall: 0, mono: 0 };
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {
@@ -313,6 +322,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
     {
       subscribed: () => {},
       frames: () => {},
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
@@ -344,7 +354,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
   let finish = (): void => {};
   const acted = new Promise<void>((resolve) => (finish = resolve));
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {
@@ -371,6 +381,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
     {
       subscribed: () => {},
       frames: () => {},
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
@@ -404,7 +415,7 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
   const named = (event: { kind: string; session?: unknown }): string =>
     event.kind === "retire" ? `retire:${String(event.session)}` : event.kind;
   const host = rendererHost(
-    "main",
+    MAIN_RENDERER,
     {
       ...clockAt(read),
       after: (_ms: number, run: () => void) => {
@@ -435,6 +446,7 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
     {
       subscribed: () => {},
       frames: () => {},
+      stored: () => {},
       writableSettings: () => [],
       holding: () => () => {},
     },
