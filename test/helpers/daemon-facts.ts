@@ -21,6 +21,7 @@ export const daemonFactsOf = (
   launcher: [],
   rendererEnded: null,
   actFailed: null,
+  gitEnv: { kind: "asked", names: [] },
 });
 
 // The host's feeds of a daemon where nothing follows any session.

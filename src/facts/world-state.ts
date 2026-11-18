@@ -2,6 +2,7 @@ import type { SessionId } from "../daemon/foundations/session-id";
 import type { ActivityInfo } from "../segments/activity";
 import type { AutoCompactWindow } from "../segments/autocompact";
 import type { GitRead, PullRequest } from "../segments/git";
+import type { GitEnvAsk } from "../segments/git-env";
 import type { MetricsFold } from "../segments/metrics";
 import type { TranscriptUsage } from "../segments/session";
 import type { JsonValue } from "../var-system/types";
@@ -80,6 +81,7 @@ export interface DaemonFacts {
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;
+  readonly gitEnv: GitEnvAsk;
 }
 
 // [LAW:types-are-the-program] `session`, `context` and `metrics` are the

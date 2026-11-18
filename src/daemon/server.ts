@@ -34,6 +34,7 @@ import {
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
+import { gitEnvFailedMessage, type GitEnvAsk } from "../segments/git-env.js";
 import type { LogLevel } from "../utils/logger";
 import type { World } from "../host";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
@@ -80,6 +81,7 @@ interface DaemonProcess {
   readonly world: World;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
+  readonly gitEnv: GitEnvAsk;
 }
 let thisProcess: DaemonProcess | null = null;
 
@@ -120,9 +122,16 @@ function processEntry(): string {
   return entry;
 }
 
-export function runDaemon(world: World): void {
+// `gitEnv` is how the daemon's ask for the variables that locate a repository
+// came out: its world is already without the names it found.
+export function runDaemon(world: World, gitEnv: GitEnvAsk): void {
   const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
+  thisProcess = {
+    world,
+    paths,
+    log: new DaemonLog(paths.log, world.clock),
+    gitEnv,
+  };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -164,7 +173,7 @@ async function boot(): Promise<void> {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const { world, paths, log: daemonLog } = daemonProcess();
+  const { world, paths, log: daemonLog, gitEnv } = daemonProcess();
   const { host } = world;
   const memoryLimit = memoryLimitBytes(host.env);
 
@@ -224,9 +233,12 @@ async function boot(): Promise<void> {
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,
     gates: daemonGates(),
+    gitEnv,
     exit: shutdown,
   });
   serving = daemon;
+  if (gitEnv.kind === "failed")
+    serverLog("warn", `git env: ${gitEnvFailedMessage(gitEnv.reason)}`);
   // [LAW:single-enforcer] Same death funnel as the signals and the memory backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only

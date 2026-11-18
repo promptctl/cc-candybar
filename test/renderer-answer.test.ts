@@ -396,6 +396,18 @@ describe("a statusline request", () => {
     expect(t.pipesAnswered).toEqual([event]);
   });
 
+  test.each([
+    [{ kind: "failed", reason: "timed out after 2 s" } as const, "git-env"],
+    [{ kind: "asked", names: ["GIT_DIR"] } as const, "-"],
+  ])(
+    "draws a daemon whose ask for the repository variables came out %o with warnings %s",
+    async (gitEnv, warn) => {
+      const t = renderer(undefined, () => ({ ...daemonFactsOf(), gitEnv }));
+      const { record } = answered(await request(t));
+      expect(new Map(record).get("warn")).toBe(warn);
+    },
+  );
+
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
     const { r, recorded, rig } = renderer();
     const { effects } = answered(await request({ r, rig }));

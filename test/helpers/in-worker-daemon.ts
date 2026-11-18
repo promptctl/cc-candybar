@@ -104,6 +104,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
         throw new Error(`a daemon under test asked to exit ${code}`);
       },
       rendererName: MAIN_RENDERER,
+      gitEnv: { kind: "asked", names: [] },
       ...overrides,
       paths,
       daemonLog,

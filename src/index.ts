@@ -6,7 +6,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { json } from "node:stream/consumers";
 import { debug, setDebug } from "./utils/logger";
-import { processWorld } from "./host";
+import { daemonWorld, processWorld } from "./host";
+import { askGitEnv } from "./proc/git-env-ask";
 import {
   runInstall,
   runInstallUrlHandler,
@@ -93,9 +94,14 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   "url-handle": async (args) => {
     await runUrlHandle(args[0], world);
   },
-  // The daemon owns its own lifecycle.
+  // The daemon owns its own lifecycle. It asks git once, as it starts, which
+  // variables locate a repository, and runs without them.
   daemon: async () => {
-    runDaemon(world);
+    const gitEnv = askGitEnv(world.launcher);
+    runDaemon(
+      daemonWorld(world, gitEnv.kind === "asked" ? gitEnv.names : []),
+      gitEnv,
+    );
   },
   // A renderer's own process, which its daemon starts and talks to over its
   // stdio; it ends when its stdin does.

@@ -74,6 +74,7 @@ import { checkoutLocation } from "../utils/git-root.js";
 import { DoctorSource, daemonSighted } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
+import type { GitEnvAsk } from "../segments/git-env.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
 import { followingOf } from "../renderer-interface/interface.js";
@@ -174,6 +175,9 @@ export interface DaemonInputs extends DaemonAdapters {
   // aimed at a temporary directory writes nowhere else.
   readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
   readonly memoryLimitBytes: number;
+  // How the process's ask for the variables that locate a repository came
+  // out, fixed for the daemon's life: a failed one stands on every bar.
+  readonly gitEnv: GitEnvAsk;
   readonly registryUrl: string;
   // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
   // requests by, and every timer its pieces set. A test holds it by hand.
@@ -643,6 +647,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     daemon: () => ({
       update: { newer: updateFact.get(), ...updateWatch.acts() },
       ...daemonFaults.get(),
+      gitEnv: inputs.gitEnv,
     }),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),

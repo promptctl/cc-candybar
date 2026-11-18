@@ -1,6 +1,7 @@
 // One render of a session, a request's or a frame's, and what it records.
 
 import { inTmux } from "../tmux-hint.js";
+import { gitEnvFailedMessage } from "../segments/git-env.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -655,6 +656,17 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
+    // [LAW:no-silent-failure] A daemon that could not ask which variables
+    // locate a repository runs with the spawning shell's, so its git reads may
+    // answer for another repo: every bar says so.
+    ...(daemon.gitEnv.kind === "failed"
+      ? [
+          {
+            kind: "git-env" as const,
+            message: gitEnvFailedMessage(daemon.gitEnv.reason),
+          },
+        ]
+      : []),
     ...entry.lastWarnings.map((message) => ({
       kind: "load" as const,
       message,
@@ -839,6 +851,7 @@ export function drawRender(
       case "load":
       case "facts":
       case "config-watch":
+      case "git-env":
       case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
@@ -1058,6 +1071,12 @@ interface ConfigWatchWarning {
   readonly message: string;
 }
 
+// The daemon runs with the spawning shell's repository variables.
+interface GitEnvWarning {
+  readonly kind: "git-env";
+  readonly message: string;
+}
+
 // The facts the bar is drawn from are behind: the latest turn could not be
 // stamped.
 interface FactsWarning {
@@ -1093,6 +1112,7 @@ type StandingWarning =
   | LauncherWarning
   | DaemonEventWarning
   | ConfigWatchWarning
+  | GitEnvWarning
   | LoadWarning
   | FactsWarning;
 

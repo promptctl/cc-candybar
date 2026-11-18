@@ -369,6 +369,7 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
       case "renderer-ended":
       case "act-failed":
       case "config-watch":
+      case "git-env":
       case "update-failed":
         advisories.push(fault.message);
         return;

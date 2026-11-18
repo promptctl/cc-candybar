@@ -3,6 +3,7 @@ import type { OneShotLauncher } from "./proc/launch.js";
 import { systemOneShotLauncher } from "./proc/system-launcher.js";
 import { systemTimekeeper, type Timekeeper } from "./time.js";
 import type { Host } from "./host-facts.js";
+import { withoutNames } from "./segments/git-env.js";
 
 // [LAW:effects-at-boundaries] The machine's facts (src/host-facts.ts), read
 // once below by a process main and handed down as a value.
@@ -21,8 +22,9 @@ export interface World {
 // [LAW:single-enforcer] The one place src reads the process's environment, home
 // and temporary directory (besides the preload's own main, which runs apart
 // from the rest). The eslint config keeps every other file from naming them.
-// The launcher holds the live `process.env`, not a copy, so a variable the
-// process sets after this still reaches the children it launches. This is also
+// Every subcommand's launcher holds the live `process.env`, not a copy, so a
+// variable the process sets after this still reaches the children it launches;
+// the daemon's world is the copy below, taken once as it starts. This is also
 // the one file that names the real clock (src/time.ts): everything else is
 // handed the world's.
 export function processWorld(): World {
@@ -36,5 +38,19 @@ export function processWorld(): World {
     host,
     launcher: systemOneShotLauncher({ inherited: process.env }, clock),
     clock,
+  };
+}
+
+// [LAW:single-enforcer] The daemon's world: the process's, less the variables
+// `dropped` names, so the daemon and every child it launches share the one
+// environment that holds none of them. The daemon is detached, and its own
+// environment is the shell's that spawned it: a variable that locates a
+// repository there would make every session's git read answer for that repo.
+export function daemonWorld(world: World, dropped: readonly string[]): World {
+  const env = withoutNames(world.host.env, dropped);
+  return {
+    host: { ...world.host, env },
+    launcher: systemOneShotLauncher({ inherited: env }, world.clock),
+    clock: world.clock,
   };
 }

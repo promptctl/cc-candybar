@@ -183,9 +183,10 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // A session's `GIT_DIR`/`GIT_WORK_TREE` never reach here: the daemon's
+  // environment describes whichever shell spawned it, so the daemon drops
+  // every variable git names as locating a repository as it starts
+  // (src/segments/git-env.ts), and each read answers for its directory.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed

@@ -87,6 +87,7 @@ const pageDaemon = createDaemon({
     targets: [],
   },
   rendererName: MAIN_RENDERER,
+  gitEnv: { kind: "asked", names: [] },
   // Its picks and history live only as long as the page; the doctor files
   // its documents on the simulated machine, as a daemon's profile does.
   profile: (name, log) => ({

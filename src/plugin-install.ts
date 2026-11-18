@@ -18,6 +18,7 @@ import { readDefinition } from "./daemon/config-discovery/discover.js";
 import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { type OneShotLauncher } from "./proc/launch.js";
+import { askGitEnv } from "./proc/git-env-ask.js";
 import { failureText } from "./proc/launcher.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
@@ -116,9 +117,13 @@ function cloneRepo(
   };
   // Overlay: terminal prompts off, and the variables that locate a repository
   // (named by the tool itself) unset.
-  const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = null;
+  const ask = askGitEnv(launcher);
+  if (ask.kind === "failed")
+    throw new Error(`git rev-parse --local-env-vars failed (${ask.reason})`);
+  const env: Record<string, string | null> = {
+    GIT_TERMINAL_PROMPT: "0",
+    ...Object.fromEntries(ask.names.map((name) => [name, null])),
+  };
   git(
     env,
     "clone",
