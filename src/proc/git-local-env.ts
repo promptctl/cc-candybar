@@ -25,15 +25,14 @@ type Asked =
   | { readonly kind: "unset"; readonly overlay: Record<string, null> }
   | { readonly kind: "failed"; readonly result: LaunchResult };
 
-// [LAW:no-silent-failure] An ask that failed is a read that never started
-// (`spawn-error`), naming the ask, so no read's own "there is none" exit can
-// take it for an answer. git that would not spawn is the read's own fault as
-// it stands.
+// [LAW:no-silent-failure] An ask that failed is the read's result: the read
+// never starts. Every reason stands as it is but an exit, which a read can
+// spell as "there is none"; that one is a read that never started
+// (`spawn-error`), naming the ask, so no read takes it for an answer.
 function askedOf(answer: LaunchResult): Asked {
   if (answer.ok)
     return { kind: "unset", overlay: localEnvUnset(answer.stdout) };
-  if (answer.reason === "spawn-error")
-    return { kind: "failed", result: answer };
+  if (answer.reason !== "non-zero") return { kind: "failed", result: answer };
   return {
     kind: "failed",
     result: {
@@ -48,8 +47,8 @@ function askedOf(answer: LaunchResult): Asked {
   };
 }
 
-// [LAW:single-enforcer] The one way a git or forge read is launched for a
-// directory: with none of git's repository variables, since the env it
+// [LAW:single-enforcer] The one way the git service and the doctor's forge
+// probe launch a read for a directory: with none of git's repository variables, since the env it
 // inherits is whichever shell started this process, never the session's. The
 // unset is laid over the caller's overlay, so no call site can put one back.
 // [LAW:one-source-of-truth] git names them, asked once for the asker's life,

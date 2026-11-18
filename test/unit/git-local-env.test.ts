@@ -87,10 +87,9 @@ test("the ask runs in the read's own directory", async () => {
   expect(l.launched.find(isAsk)?.cwd).toBe("/repo");
 });
 
-test.each(["non-zero", "timeout"] as const)(
-  "an ask that fails (%s) is a read that never started, naming the ask, and the next read asks again",
-  async (reason) => {
-    const l = recording([failedRun(reason), okRun(NAMES)]);
+test("an ask that exits non-zero is a read that never started, naming the ask, and the next read asks again", async () => {
+  {
+    const l = recording([failedRun("non-zero"), okRun(NAMES)]);
     const launch = repoLaunch(l);
     expect(await launch(READ)).toEqual({
       ok: false,
@@ -104,13 +103,16 @@ test.each(["non-zero", "timeout"] as const)(
     expect(l.launched.filter((o) => !isAsk(o))).toEqual([]);
     expect(await launch(READ)).toEqual(okRun("read"));
     expect(l.launched.filter(isAsk)).toHaveLength(2);
+  }
+});
+
+test.each(["spawn-error", "timeout"] as const)(
+  "an ask that fails (%s) otherwise is the read's result as it stands",
+  async (reason) => {
+    const l = recording([failedRun(reason)]);
+    expect(await repoLaunch(l)(READ)).toEqual(failedRun(reason));
   },
 );
-
-test("git that will not spawn is the read's result as it stands", async () => {
-  const l = recording([failedRun("spawn-error")]);
-  expect(await repoLaunch(l)(READ)).toEqual(failedRun("spawn-error"));
-});
 
 // The forge CLIs run git themselves, so their launch carries the same unset.
 test("a PR lookup launches its forge CLI with git's repository variables unset", async () => {
