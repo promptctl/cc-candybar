@@ -29,9 +29,8 @@ import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { bareGates } from "../helpers/gates";
-import { TEST_SIGNER } from "../helpers/link-signer";
-import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
+import { BARE_HELD_KEYS } from "../helpers/gates";
+import { TEST_LINK_KEY_TEXT } from "../helpers/link-signer";
 import { viewFacts } from "../helpers/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -45,26 +44,19 @@ const CONFIG = `{
 }`;
 
 const rendererOf = (): Renderer =>
-  mainRendererOf(
-    {
-      stored: EMPTY_STORED_STATE,
-      linkSigner: TEST_SIGNER,
-      locations: {
-        home: "/nowhere/home",
-        configHome: "/nowhere/config",
-        dataHome: "/nowhere/data",
-        dataDirs: [],
-      },
+  mainRendererOf({
+    stored: EMPTY_STORED_STATE,
+    linkKey: TEST_LINK_KEY_TEXT,
+    locations: {
       home: "/nowhere/home",
-      gates: bareGates(),
-      memoryLimitBytes: 1024 * 1024 * 1024,
+      configHome: "/nowhere/config",
+      dataHome: "/nowhere/data",
+      dataDirs: [],
     },
-    {
-      log: () => {},
-      eventAnswered: () => {},
-      storage: NO_PLUGIN_STORAGE,
-    },
-  );
+    home: "/nowhere/home",
+    gates: BARE_HELD_KEYS,
+    memoryLimitBytes: 1024 * 1024 * 1024,
+  });
 
 function contextOf(session: string): CheckedRenderRequest {
   const checked = checkRenderRequest(
@@ -210,7 +202,11 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
       value,
       session: { ok: true, id: session },
       arrival: { via: "link", delivery: { kind: "cli" } },
-      context: { session, durable: { origin: context.requested }, live: context },
+      context: {
+        session,
+        durable: { origin: context.requested },
+        live: context,
+      },
     }),
   );
   const viewed = textOf(presentOf((await request()).effects).frame);

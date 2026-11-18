@@ -4,7 +4,7 @@
 
 import type { Globals } from "../../config/dsl-types";
 import { SETTINGS } from "../../config/setting-projections";
-import { createGates, type Gates } from "./gates";
+import { createGates, type Gates, type HeldKeys } from "./gates";
 
 // [LAW:one-source-of-truth] The session key a dismissal writes and the
 // config field a disable writes, spelled once. The field is checked against
@@ -23,12 +23,14 @@ export const UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
 // [LAW:single-enforcer] The one place a daemon's gates are said to hold them:
 // the daemon and `cc-candybar check` both build theirs here, so `check` refuses
 // what the daemon's load refuses.
+export const DAEMON_HELD_KEYS: HeldKeys = {
+  config: [{ key: UPDATE_NOTICE_FIELD, allowed: ["false"] }],
+  state: [
+    { key: UPDATE_NOTICE_SESSION_KEY, allowed: ["false"] },
+    { key: UPDATE_DISMISSED_KEY, allowed: [] },
+  ],
+};
+
 export function daemonGates(): Gates {
-  return createGates({
-    config: [{ key: UPDATE_NOTICE_FIELD, allowed: ["false"] }],
-    state: [
-      { key: UPDATE_NOTICE_SESSION_KEY, allowed: ["false"] },
-      { key: UPDATE_DISMISSED_KEY, allowed: [] },
-    ],
-  });
+  return createGates(DAEMON_HELD_KEYS);
 }

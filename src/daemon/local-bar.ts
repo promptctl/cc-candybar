@@ -11,14 +11,13 @@
 import type { World } from "../host.js";
 import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import type { Gates } from "./foundations/gates.js";
+import type { HeldKeys } from "./foundations/gates.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import type {
   Event,
   Renderer,
   RequestId,
 } from "../renderer-interface/interface.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { StoredState } from "../renderer-interface/stored-state.js";
 import { IDLE, type DaemonFacts } from "../facts/world-state.js";
@@ -43,21 +42,18 @@ import {
 } from "./statusline-answer.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RequestFacts } from "./foundations/request-event.js";
-import type { LinkSigner } from "../click/link-signer.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
 // What builds the renderer: the main renderer, unless a test wraps it.
-export type RendererBuilder = (
-  inputs: MainRendererInputs,
-  host: AdapterToHost,
-) => Renderer;
+export type RendererBuilder = (inputs: MainRendererInputs) => Renderer;
 
 export interface LocalBarInputs {
   readonly world: World;
-  // The gates the daemon holds, so what the bar refuses is what the
+  // The keys the daemon's gates hold, so what the bar refuses is what the
   // daemon's load refuses.
-  readonly gates: Gates;
-  readonly linkSigner: LinkSigner;
+  readonly gates: HeldKeys;
+  // The key its links are signed with, in base64.
+  readonly linkKey: string;
   // The trust book's directory.
   readonly stateDir: string;
   // The home every session's payload abbreviates its paths under, and
@@ -153,29 +149,17 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     },
     log,
   });
-  const reaches: AdapterToHost = {
-    log,
-    // A command's bar holds no daemon-wide event.
-    eventAnswered: () => {},
-    // A command's sessions read no plugin's storage (their owners answer
-    // it), so there is no folder to hold.
-    storage: { hold: () => {}, release: () => {} },
-  };
   const link = inProcessRenderer(
     MAIN_RENDERER,
-    (adapter) =>
-      build(
-        {
-          stored: inputs.stored,
-          linkSigner: inputs.linkSigner,
-          locations: locations(world.host),
-          home: inputs.home,
-          gates: inputs.gates,
-          memoryLimitBytes: memoryLimitBytes(world.host.env),
-        },
-        adapter,
-      ),
-    reaches,
+    () =>
+      build({
+        stored: inputs.stored,
+        linkKey: inputs.linkKey,
+        locations: locations(world.host),
+        home: inputs.home,
+        gates: inputs.gates,
+        memoryLimitBytes: memoryLimitBytes(world.host.env),
+      }),
     world.clock,
   );
   link.serve();
@@ -200,6 +184,8 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     link.renderer,
     log,
     {
+      // A command's sessions read no plugin's storage (their owners answer
+      // it), so the folders its loads name are held by nothing.
       subscribed: (subscriptions) => collector.subscribed(subscriptions),
       // No feed draws a command's sessions, so its frames go nowhere.
       frames: () => {},
@@ -260,6 +246,8 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
         ++id as RequestId,
         waitEndsAt,
         facts,
+        // A command's bar holds no daemon-wide event.
+        () => {},
       );
       // A command takes its answer as it is drawn.
       answer.settled(true);
@@ -291,10 +279,10 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     close: async () => {
       for (const waits of waiting.values()) waits.forEach((done) => done(null));
       answering.closeWake();
-      await answering.ask({ kind: "close-journal" });
+      await answering.closeStep("closing");
       closing = true;
       collector.close();
-      await answering.ask({ kind: "close-views" });
+      await answering.closeStep("close");
       sourceRuns.close();
     },
   };

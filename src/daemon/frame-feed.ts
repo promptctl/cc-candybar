@@ -19,7 +19,7 @@ import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
 import type { FeedStats } from "./foundations/stats-snapshot";
-import type { Level } from "../renderer-interface/adapter";
+import type { LogLevel as Level } from "../utils/logger";
 import type {
   Answers,
   LaneViewers,

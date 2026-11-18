@@ -1,16 +1,15 @@
 // Renderers a test builds around its own answer to events: one that answers
-// events alone, and one that hears each event on its way into a real
-// renderer. A push reaches neither test's answer.
+// them itself, and one that hears each event on its way into a real
+// renderer.
 
 import type {
-  AdapterInput,
-  AdapterOutput,
-  EventInput,
   Renderer,
+  RendererInput,
   RendererOutput,
   TimedRenderer,
 } from "../../src/renderer-interface/interface";
-import { rendererOf, timed } from "../../src/renderer-interface/interface";
+import { timed } from "../../src/renderer-interface/interface";
+import type { OwnTurns } from "../../src/renderer/main";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
@@ -35,38 +34,29 @@ export const unfollowedCollector = (
   recorded: () => {},
 });
 
-// A renderer whose events `answered` answers, and which no push reaches.
+// A renderer whose events `answered` answers.
 export function eventRenderer(
-  answered: (input: EventInput) => Promise<RendererOutput>,
+  answered: (input: RendererInput) => Promise<RendererOutput>,
 ): Renderer {
-  return rendererOf({
-    event: answered,
-    adapter: async (input) => {
-      throw new Error(`this renderer takes no push (${input.push.kind})`);
-    },
-  });
-}
-
-// A renderer whose pushes `replied` answers, and which no event reaches.
-export function pushRenderer(
-  replied: (input: AdapterInput) => Promise<AdapterOutput>,
-): Renderer {
-  return rendererOf({
-    event: async (input) => {
-      throw new Error(`this renderer takes no event (${input.event.kind})`);
-    },
-    adapter: replied,
-  });
+  return { answer: answered };
 }
 
 // The stored writes of a rig whose host holds no store: its renderer's turns
 // tell it none.
 export const NOTHING_STORED = (): readonly [] => [];
 
-// The pushes of a rig that hands its renderer none: one would be the rig's
-// bug, said.
-export const NO_PUSHES = (): never => {
-  throw new Error("this rig hands the renderer no push");
+// The lines of a rig that reads none of what its renderer logged.
+export const NOTHING_SAID = (): readonly [] => [];
+
+// The renderer's own turns in a rig that hands it no inspect and no close:
+// one would be the rig's bug, said.
+const noTurn = (what: string) => (): never => {
+  throw new Error(`this rig hands the renderer no ${what}`);
+};
+export const NO_OWN_TURNS: OwnTurns = {
+  inspect: noTurn("inspect"),
+  closing: noTurn("close"),
+  close: noTurn("close"),
 };
 
 // The config discovery of a rig whose renderer names no origin: one it
@@ -103,15 +93,14 @@ export const NO_ACTS: HostWorld = {
 // `renderer`, with `heard` told each event before it answers.
 export function hearingEvents(
   renderer: Renderer,
-  heard: (input: EventInput) => void,
+  heard: (input: RendererInput) => void,
 ): Renderer {
-  return rendererOf({
-    event: (input) => {
+  return {
+    answer: (input) => {
       heard(input);
       return renderer.answer(input);
     },
-    adapter: (input) => renderer.answer(input),
-  });
+  };
 }
 
 // `renderer`, with a turn a test holds: `hold` keeps the next input's turn
@@ -122,16 +111,14 @@ export function holdable(renderer: Renderer): {
   readonly hold: () => () => void;
 } {
   let held: Promise<void> = Promise.resolve();
-  const turn = <T>(answer: () => Promise<T>): Promise<T> => {
-    const waiting = held;
-    held = Promise.resolve();
-    return waiting.then(answer);
-  };
   return {
-    renderer: rendererOf({
-      event: (input) => turn(() => renderer.answer(input)),
-      adapter: (input) => turn(() => renderer.answer(input)),
-    }),
+    renderer: {
+      answer: (input) => {
+        const waiting = held;
+        held = Promise.resolve();
+        return waiting.then(() => renderer.answer(input));
+      },
+    },
     hold: () => {
       let open = (): void => {};
       held = new Promise<void>((resolve) => (open = resolve));

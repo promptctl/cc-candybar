@@ -39,7 +39,7 @@ import type { World } from "../host";
 import { createDaemon, type Daemon, type RunningBundle } from "./daemon.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
-import { daemonGates } from "./foundations/update-keys.js";
+import { DAEMON_HELD_KEYS } from "./foundations/update-keys.js";
 import { handleConnection } from "./connection.js";
 import { REGISTRY_URL } from "../install/currency";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
@@ -223,7 +223,7 @@ async function boot(): Promise<void> {
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
     clock: world.clock,
-    gates: daemonGates(),
+    gates: DAEMON_HELD_KEYS,
     exit: shutdown,
   });
   serving = daemon;

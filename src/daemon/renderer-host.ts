@@ -3,9 +3,10 @@
 // with how the turn failed: a turn's throw comes back as a value, never as a
 // rejection. Every turn's subscriptions are taken here, in the order the turns
 // answered, its config changes landed, and its acts performed once they have;
-// a present a turn that answers no request returned is refused. A caller whose
-// own event records the turn takes it by `answer`; every other input is taken
-// by `deliver`, which writes the turn's own line.
+// a present a turn that answers no request returned is refused, as is a report
+// one that answers no inspect returned. A caller whose own event records the
+// turn takes it by `answer`; every other input is taken by `deliver`, which
+// writes the turn's own line.
 //
 // [LAW:no-ambient-temporal-coupling] The mailbox is the one owner of a
 // renderer's turns: it sends the renderer its next input only once the last
@@ -27,11 +28,13 @@
 
 import {
   type ConfigChange,
-  type Effect,
   type EffectOutcome,
   type Event,
-  type EventInput,
+  type Inspect,
   type PushedFrame,
+  type Reading,
+  type RendererInput,
+  type Settled,
   type TimedRenderer,
   type TurnOutcome,
   type Subscriptions,
@@ -40,7 +43,6 @@ import {
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
-import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
@@ -116,12 +118,13 @@ export interface RendererHost {
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
   start(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, answered by its reply. A push that threw or rejected, or one
-  // answered by another push's reply, rejects with an Error naming the
-  // renderer and the push: the caller that awaits it owns the failure.
-  ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
-  // One push nobody awaits: its failure is logged here.
-  tell(push: AdapterPush): void;
+  // One inspect, answered by its turn's report. A turn that threw, or one
+  // that returned no report of the ask's kind, rejects with an Error naming
+  // the renderer and the ask: the caller that awaits it owns the failure.
+  inspect<A extends Inspect>(ask: A): Promise<ReadingOf<A["kind"]>>;
+  // One of the daemon's teardown steps, recorded on its own line: a turn
+  // that threw rejects, naming the renderer and the step.
+  closeStep(step: "closing" | "close"): Promise<void>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
   moved(origins: readonly RenderOrigin[]): void;
@@ -132,6 +135,12 @@ export interface RendererHost {
   // wait behind it.
   stats(): MailboxStats;
 }
+
+// The reading an inspect of kind `K` answers.
+export type ReadingOf<K extends Inspect["kind"]> = Extract<
+  Reading,
+  { readonly kind: K }
+>;
 
 // [LAW:types-are-the-program] A turn's failure as the outcome of what waited
 // on it: a bad request is refused, a close is a close, anything else failed.
@@ -227,6 +236,7 @@ export function rendererHost(
       kind: "threw",
       failure,
       record: [],
+      logged: [],
       effects: [],
       queuedMs,
       turnMs: null,
@@ -241,7 +251,7 @@ export function rendererHost(
   // renderer that rejected, or an output the host could not take, is the
   // turn's failure.
   const inSlot = async (
-    input: EventInput,
+    input: RendererInput,
     queuedMs: number,
   ): Promise<Slotted> => {
     const session = sessionOf(input.event);
@@ -262,6 +272,9 @@ export function rendererHost(
         turnMs,
         hopMs: elapsedMs(clock, sentAt) - turnMs,
       };
+      // [LAW:single-enforcer] The renderer's lines reach the host's one log
+      // here, in the order it said them, ahead of its turn's own line.
+      for (const { level, line } of turn.logged) log(level, line);
       collector.recorded(turn.record);
       // [LAW:single-enforcer] A turn's changes land here, together with its
       // answers to the trust book, in the order the turns answered, before
@@ -337,6 +350,14 @@ export function rendererHost(
                 })
               ).settled,
             );
+        } else if (effect.kind === "report") {
+          // [LAW:no-silent-failure] A report answers the inspect whose turn
+          // returned it, which takes it; any other turn's is a renderer bug.
+          if (input.event.kind !== "inspect") {
+            const text = `renderer ${name}: a ${input.event.kind} turn returned a report`;
+            log("error", text);
+            world.unheard(text);
+          }
         } else if (effect.kind === "change" || effect.kind === "approve-repo")
           owed.push((await settleInSlot(effect, landed)).settled);
         else acts.push(effect);
@@ -465,7 +486,7 @@ export function rendererHost(
   // session's bar can hold — one with no session, or one whose renderer has
   // ended — is the daemon's, on every bar. The trust book's answer lands with
   // the turn's changes, and its failure is theirs.
-  const doneOf = (effect: Effect, outcome: EffectOutcome): MadeEvent => ({
+  const doneOf = (effect: Settled, outcome: EffectOutcome): MadeEvent => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -500,7 +521,7 @@ export function rendererHost(
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
   const settleInSlot = async (
-    effect: Effect,
+    effect: Settled,
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
     const input = stamped(doneOf(effect, outcome));
@@ -587,7 +608,7 @@ export function rendererHost(
   // here, as it was made in its slot.
   const recorded =
     (at: Place) =>
-    async (make: () => Made, about: TurnRecord): Promise<TurnOutcome> => {
+    async (make: () => Made, about: TurnRecord): Promise<HostTurn> => {
       const { event, turn } = await taken(make, at);
       record(event, about, turn);
       return turn;
@@ -601,61 +622,42 @@ export function rendererHost(
       log("error", text);
       world.unheard(text);
     });
-  // [LAW:single-enforcer] The one place a push's output is judged: a push is
-  // answered by the reply of its own kind, or it failed.
-  const ask = async <P extends AdapterPush>(
-    push: P,
-  ): Promise<ReplyTo<P["kind"]>> => {
-    // A renderer that rejected fails the push as one whose turn threw, so
-    // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox(async (_queuedMs, holds) => {
-      holds(`push:${push.kind}`);
-      try {
-        const { subscriptions, stored, ...answered } = await renderer.answer({
-          kind: "adapter",
-          push,
-          ...readingsAt(clock),
-        });
-        // A push answers in no slot of a turn: each origin it newly names
-        // gets its `config` turn behind it.
-        for (const origin of took(subscriptions, [], stored))
-          unawaited(
-            "config",
-            deliver(configMade(origin), [["why", "config-subscribed"]]),
-          );
-        return answered;
-      } catch (thrown) {
-        return {
-          kind: "threw",
-          failure: failureOf(thrown),
-          turnMs: null,
-        } as const;
-      }
+  // [LAW:no-silent-failure] A turn that threw fails its caller, naming the
+  // renderer, what the turn was and how long it ran; the failure keeps its
+  // kind, so one no renderer took reads as one.
+  const threw = (what: string, turn: HostTurn): void => {
+    if (turn.kind !== "threw") return;
+    const took = turn.turnMs === null ? "" : ` took=${turn.turnMs}ms`;
+    throw new CrossedFailure({
+      ...turn.failure,
+      message: `renderer ${name} ${what} threw: ${turn.failure.message}`,
+      detail: `renderer ${name} ${what} threw${took}: ${turn.failure.detail}`,
     });
-    // The failure keeps its kind, so a push no renderer took reads as one.
-    if (output.kind === "threw") {
-      const took = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
-      throw new CrossedFailure({
-        ...output.failure,
-        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took}: ${output.failure.detail}`,
-      });
-    }
-    if (output.reply.kind !== push.kind)
+  };
+  // [LAW:single-enforcer] The one place an inspect's answer is judged: its
+  // turn's report, of the ask's own kind.
+  const inspect = async <A extends Inspect>(
+    ask: A,
+  ): Promise<ReadingOf<A["kind"]>> => {
+    const turn = await answer(() => ({
+      kind: "event",
+      event: { kind: "inspect", ask },
+    }));
+    threw(`inspect ${ask.kind}`, turn);
+    const report = turn.effects.find((effect) => effect.kind === "report");
+    if (report?.reading.kind !== ask.kind)
       throw new Error(
-        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
+        `renderer ${name} answered inspect ${ask.kind} with ${report === undefined ? "no report" : `a ${report.reading.kind} report`}`,
       );
     // [LAW:types-are-the-program] exception: the kinds were just compared,
-    // which the compiler cannot carry from the reply's kind to its type.
-    return output.reply as ReplyTo<P["kind"]>;
+    // which the compiler cannot carry from the reading's kind to its type.
+    return report.reading as ReadingOf<A["kind"]>;
   };
-  const tell = (push: AdapterPush): void =>
-    void ask(push).catch((thrown: unknown) => {
-      const failure = failureOf(thrown);
-      // [LAW:single-enforcer] A push no renderer was live to take is the
-      // supervisor's to say.
-      if (failure.kind !== "down") log("error", failure.detail);
-    });
+  const closeStep = async (step: "closing" | "close"): Promise<void> =>
+    threw(
+      `close step ${step}`,
+      await deliver(() => ({ kind: "event", event: { kind: step } }), []),
+    );
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
       unawaited(
@@ -707,8 +709,8 @@ export function rendererHost(
     answer,
     deliver,
     start: recorded("first"),
-    ask,
-    tell,
+    inspect,
+    closeStep,
     moved,
     stats,
     closeWake: () => wake.close(),
@@ -720,7 +722,7 @@ export function rendererHost(
 // [LAW:no-ambient-temporal-coupling] `stamped` is called only in a slot.
 const stampedOf =
   (clock: Pick<Timekeeper, "now" | "monotonic">) =>
-  (made: MadeEvent): EventInput => ({
+  (made: MadeEvent): RendererInput => ({
     kind: "event",
     event: made.event,
     ...readingsAt(clock),
@@ -750,6 +752,9 @@ function sessionOf(event: Event): SessionId | null {
     // Every watched session's, or the renderer's own.
     case "viewers":
     case "due":
+    case "inspect":
+    case "closing":
+    case "close":
       return null;
   }
 }

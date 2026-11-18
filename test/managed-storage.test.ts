@@ -9,7 +9,6 @@ import {
   STORAGE_SWEEP_EVERY_MS,
 } from "../src/daemon/cache/managed-storage";
 import type { Delivery } from "../src/daemon/foundations/stats-snapshot";
-import type { StorageHoldId } from "../src/renderer-interface/adapter";
 import {
   statIdentity,
   type FolderIdentity,
@@ -43,9 +42,9 @@ interface Rig {
   readonly counters: WatcherCounters;
   readonly lines: string[];
   write(sessionId: string, text: string): void;
-  // A render state's load naming the rig's folder, under `id`; the returned
-  // release is its reclaim.
-  hold(id?: number): () => void;
+  // The renderer's subscriptions naming the rig's folder; the returned
+  // release is the subscriptions that name none.
+  hold(): () => void;
   // The folder's generation, as the owner's last event about it said.
   generation(): number;
 }
@@ -82,6 +81,7 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     fileEvents,
     identityOf: opts.identityOf,
   });
+  let loads = 0;
   const made: Rig = {
     root,
     folder,
@@ -95,9 +95,10 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
       fs.writeFileSync(tmp, text);
       fs.renameSync(tmp, path.join(folder, `${sessionId}.json`));
     },
-    hold(id = 1) {
-      storage.hold(id as StorageHoldId, [folder]);
-      return () => storage.release(id as StorageHoldId);
+    // Each hold is a load: the renderer's subscriptions count it.
+    hold() {
+      storage.held({ folders: [folder], loads: ++loads });
+      return () => storage.held({ folders: [], loads });
     },
     generation() {
       const moved = lines.filter((l) =>
@@ -330,31 +331,34 @@ describe("ManagedStorage reads", () => {
 });
 
 describe("ManagedStorage watches", () => {
-  test("N states holding one folder, loads again, and views coming and going, open exactly one watch", async () => {
+  test("subscriptions naming one folder turn after turn, and views coming and going, open exactly one watch", async () => {
     const r = rig();
-    const releases = Array.from({ length: 5 }, (_, i) => r.hold(i + 1));
+    const release = r.hold();
     for (let i = 0; i < 5; i++) {
       const view = new Holds();
       await answered(r.storage.declare(view, r.folder, sessionIdOf(`s${i}`)));
       view.close();
-      r.hold(i + 1);
+      r.hold();
     }
     expect(r.generation()).toBe(0);
     expect(r.counters.watchersOpened).toBe(1);
     expect(r.storage.stats().folders).toBe(1);
-    for (const release of releases.slice(1)) release();
     expect(r.counters.watchersClosed).toBe(0);
-    releases[0]!();
+    release();
     expect(r.counters.watchersClosed).toBe(1);
     expect(r.storage.stats().folders).toBe(0);
   });
 
-  test("a load that no longer names a folder closes its watch", () => {
+  test("subscriptions that name a second folder keep the first one's watch open", () => {
     const r = rig();
     r.hold();
-    r.storage.hold(1 as StorageHoldId, []);
+    const other = path.join(r.root, "other");
+    r.storage.held({ folders: [r.folder, other].sort(), loads: 1 });
+    expect(r.counters.watchersOpened).toBe(2);
+    expect(r.counters.watchersClosed).toBe(0);
+    r.storage.held({ folders: [other], loads: 1 });
     expect(r.counters.watchersClosed).toBe(1);
-    expect(r.storage.stats().folders).toBe(0);
+    expect(r.storage.stats().folders).toBe(1);
   });
 
   test("chmod, utimes and xattr on the folder leave its sources reading and open no watch", async () => {

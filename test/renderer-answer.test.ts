@@ -27,6 +27,7 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
   Present,
+  Settled,
   Event,
   Renderer,
   RendererOutput,
@@ -72,7 +73,8 @@ import {
   hearingEvents,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
+  NO_OWN_TURNS,
+  NOTHING_SAID,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -102,26 +104,21 @@ function renderer(
   // Each session whose view told the cache its data moved, in order.
   readonly changed: string[];
   readonly logged: string[];
-  readonly pipesAnswered: HeldEvent[];
   readonly rig: SessionRig;
 } {
   const logged: string[] = [];
   const changed: string[] = [];
-  const pipesAnswered: HeldEvent[] = [];
   const rig = sessionRig(dir, cleanups, {
     log: (level, message) => logged.push(`${level} ${message}`),
     observers: { onViewChanged: (sessionId) => changed.push(sessionId) },
     ...(daemon === undefined ? {} : { daemon }),
   });
-  const parts: MainRendererParts = {
-    ...rendererParts({
-      cache: rig.cache,
-      sessionState: rig.sessionState,
-      worldStates: rig.served.worldStates,
-      verbs,
-    }),
-    eventAnswered: (event) => pipesAnswered.push(event),
-  };
+  const parts: MainRendererParts = rendererParts({
+    cache: rig.cache,
+    sessionState: rig.sessionState,
+    worldStates: rig.served.worldStates,
+    verbs,
+  });
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
   const record = rig.cache.delivered.bind(rig.cache);
@@ -130,12 +127,11 @@ function renderer(
     record(sessionId, by, copies);
   };
   return {
-    r: mainRenderer(parts, NO_PUSHES, NOTHING_STORED),
+    r: mainRenderer(parts, NO_OWN_TURNS, NOTHING_STORED, NOTHING_SAID),
     parts,
     recorded,
     changed,
     logged,
-    pipesAnswered,
     rig,
   };
 }
@@ -246,7 +242,7 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, { session, id: of }: Effect, ok: boolean) =>
+const done = (r: Renderer, { session, id: of }: Settled, ok: boolean) =>
   r.answer({
     kind: "event",
     ...READ,
@@ -354,7 +350,7 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)?.facts()).toBe(context);
   });
 
-  test("draws the daemon's own faults its world state carries, and an answer that carried the pipe event tells the host once it arrived", async () => {
+  test("draws the daemon's own faults its world state carries, and its present names the pipe event it shows", async () => {
     const event = {
       text: "a launched program's pipe outlived its launch",
       ...READ,
@@ -374,12 +370,10 @@ describe("a statusline request", () => {
     const facts = new Map(record);
     expect(facts.get("warn")).toBe("lifeline,launch-pipes");
     expect(facts.get("pipeEvent")).toBe("held");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).shows).toEqual([event]);
   });
 
-  test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
+  test("draws an act's failure no session's bar held as the daemon's warning, and its present names the failure it shows", async () => {
     const event = {
       text: "copy: pbcopy failed: exit 1",
       ...READ,
@@ -391,9 +385,7 @@ describe("a statusline request", () => {
     }));
     const { effects, record } = answered(await request(t));
     expect(new Map(record).get("warn")).toBe("act-failed");
-    expect(t.pipesAnswered).toEqual([]);
-    answered(await done(t.r, presentOf(effects), true));
-    expect(t.pipesAnswered).toEqual([event]);
+    expect(presentOf(effects).shows).toEqual([event]);
   });
 
   test("records what its frame showed only once the present's effect-done says it arrived", async () => {
@@ -727,6 +719,7 @@ describe("the session's config, ahead of its request", () => {
       REQUEST,
       systemTimekeeper.monotonic() + 5000,
       facts as never,
+      () => {},
     );
     expect(kinds).toEqual(["context", "config"]);
     expect(answered.resp).toMatchObject({
@@ -855,6 +848,7 @@ describe("two requests of one session at different keys", () => {
         id as RequestId,
         systemTimekeeper.monotonic() + 10_000,
         [],
+        () => {},
       );
 
     let firstAnswered = false;

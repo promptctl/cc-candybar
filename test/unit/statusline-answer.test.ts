@@ -40,6 +40,8 @@ import {
 import type { WorldState } from "../../src/facts/world-state";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import type { Monotonic } from "../../src/time";
+import type { HeldEvent } from "../../src/utils/event-hold";
+import type { Instant } from "../../src/utils/instant";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
@@ -57,6 +59,7 @@ const NO_SUBSCRIPTIONS: Subscriptions = {
   sources: {},
   lanes: {},
   configs: [],
+  storage: { folders: [], loads: 0 },
   wake: null,
 };
 // The request's deadline is a timer the case fires itself (`deadlines`).
@@ -78,7 +81,14 @@ const present = (id: number, request = REQUEST): Present => ({
   surface: "statusline",
   request,
   frame: FRAME,
+  shows: [],
 });
+// A daemon-wide event a frame shows.
+const PIPES: HeldEvent = {
+  text: "a pipe outlived its launch",
+  at: 1 as Instant,
+  answered: false,
+};
 
 // A turn's output with no subscriptions.
 const output = (
@@ -87,6 +97,7 @@ const output = (
 ): RendererOutput => ({
   kind: "answered",
   stored: [],
+  logged: [],
   effects,
   subscriptions: NO_SUBSCRIPTIONS,
   record,
@@ -101,6 +112,7 @@ const threwWith = (
 ): RendererOutput => ({
   kind: "threw",
   stored: [],
+  logged: [],
   failure: failureOf(new Error(message)),
   effects: [],
   subscriptions,
@@ -148,6 +160,7 @@ interface Meets {
   readonly settled?: (session: unknown, signal: AbortSignal) => Promise<void>;
   readonly waitEndsAt?: number;
   readonly closing?: AbortSignal;
+  readonly eventsAnswered?: (events: readonly HeldEvent[]) => void;
 }
 
 async function answer(
@@ -200,6 +213,7 @@ async function answer(
     REQUEST,
     meets.waitEndsAt ?? 0,
     facts,
+    meets.eventsAnswered ?? (() => {}),
   );
   return { answered, facts: new Map(facts) };
 }
@@ -237,10 +251,27 @@ test("the client's sighting is the presented frame's motion: a handoff line's, n
   expect(answered.seen).toBe("can-move");
 });
 
-test("a present its client never took settles failed", async () => {
-  const { renderer, heard } = scripted(output([present(1)]));
-  const { answered } = await answer(renderer);
+test("the events a present shows are answered once its client took it, and not before", async () => {
+  const { renderer } = scripted(output([{ ...present(1), shows: [PIPES] }]));
+  const answeredEvents: HeldEvent[] = [];
+  const { answered } = await answer(renderer, [], [], undefined, {
+    eventsAnswered: (events) => void answeredEvents.push(...events),
+  });
+  expect(answeredEvents).toEqual([]);
+  answered.settled(true);
+  expect(answeredEvents).toEqual([PIPES]);
+});
+
+test("a present its client never took settles failed, and answers none of the events it shows", async () => {
+  const { renderer, heard } = scripted(
+    output([{ ...present(1), shows: [PIPES] }]),
+  );
+  const answeredEvents: HeldEvent[] = [];
+  const { answered } = await answer(renderer, [], [], undefined, {
+    eventsAnswered: (events) => void answeredEvents.push(...events),
+  });
   answered.settled(false);
+  expect(answeredEvents).toEqual([]);
   await drained();
   expect(heard).toMatchObject([
     {
@@ -323,6 +354,7 @@ test("a render turn that throws a bad argument is still the daemon's failure, as
   const { renderer } = scripted({
     kind: "threw",
     stored: [],
+    logged: [],
     failure: failureOf(new BadVerbArgs("no such row")),
     effects: [],
     subscriptions: NO_SUBSCRIPTIONS,
@@ -361,6 +393,7 @@ test("a turn that throws still hands the host what its open views read", async (
     sources: { [SESSION]: [] },
     lanes: {},
     configs: [],
+    storage: { folders: [], loads: 0 },
     wake: null,
   };
   const subscribed: Subscriptions[] = [];
@@ -391,12 +424,14 @@ test("the session's context reaches the renderer first, with the world state rea
     sources: { [SESSION]: [] },
     lanes: {},
     configs: [],
+    storage: { folders: [], loads: 0 },
     wake: null,
   };
   const drawn: Subscriptions = {
     sources: {},
     lanes: {},
     configs: [],
+    storage: { folders: [], loads: 0 },
     wake: null,
   };
   const subscribed: Subscriptions[] = [];
@@ -555,6 +590,7 @@ describe("the request's wait, between its context and its request", () => {
       REQUEST,
       5000,
       [],
+      () => {},
     );
     await drained();
     await host.deliver(

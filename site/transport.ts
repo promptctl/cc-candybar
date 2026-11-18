@@ -12,7 +12,7 @@ import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../src/daemon/foundations/update-keys";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
@@ -76,7 +76,7 @@ const paths = daemonPaths(HOST);
 const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 const pageDaemon = createDaemon({
   ...adapters,
-  gates: daemonGates(),
+  gates: DAEMON_HELD_KEYS,
   paths,
   host: HOST,
   bundle: {

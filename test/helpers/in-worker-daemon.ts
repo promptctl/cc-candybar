@@ -36,7 +36,7 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
-import { daemonGates } from "../../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../../src/daemon/foundations/update-keys";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -97,7 +97,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
-      gates: daemonGates(),
+      gates: DAEMON_HELD_KEYS,
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {

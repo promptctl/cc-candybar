@@ -35,7 +35,7 @@ import {
   type SessionViewers,
   type Viewers,
 } from "../renderer-interface/interface.js";
-import type { Level } from "../renderer-interface/adapter.js";
+import type { LogLevel as Level } from "../utils/logger.js";
 import {
   earliestOf,
   type Instant,

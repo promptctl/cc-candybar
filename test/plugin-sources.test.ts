@@ -13,7 +13,8 @@ import {
   eventRenderer,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
+  NO_OWN_TURNS,
+  NOTHING_SAID,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -79,7 +80,7 @@ import {
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
@@ -93,6 +94,7 @@ import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
 import type {
   RequestId,
+  StorageNamed,
   TurnOutcome,
 } from "../src/renderer-interface/interface";
 import type { RequestFacts } from "../src/daemon/foundations/request-event";
@@ -176,9 +178,14 @@ interface Rig {
   readonly updateFact: UpdateFact;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
-  // The cache's storage notices, in the order sent: `hold <id>` or
-  // `release <id>`.
-  readonly storageCalls: string[];
+  // The storage folders each turn's subscriptions named, in the order sent.
+  readonly storageCalls: (readonly string[])[];
+  // The end of a turn that opened no view, such as the config turn a reload
+  // runs in: its subscriptions handed back.
+  ended(): void;
+  // Where the storage folders a turn's subscriptions name go, as the
+  // daemon's go to its ManagedStorage.
+  held(named: StorageNamed): void;
   readonly collector: Collector;
   readonly worldStates: WorldStates;
   // A request's turn as the main renderer takes one: the world state the
@@ -238,12 +245,17 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
-  const storageCalls: string[] = [];
+  const storageCalls: (readonly string[])[] = [];
+  const held = (named: StorageNamed): void => {
+    storageCalls.push(named.folders);
+    providers.managedStorage.held(named);
+  };
   const served = collected(
     {
       owners: providers,
       daemon: () => daemonFactsOf(updateFact.get()),
       log,
+      held,
     },
     cleanups,
   );
@@ -252,16 +264,6 @@ function rig(): Rig {
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,
-      storage: {
-        hold: (id, folders) => {
-          storageCalls.push(`hold ${id}`);
-          providers.managedStorage.hold(id, folders);
-        },
-        release: (id) => {
-          storageCalls.push(`release ${id}`);
-          providers.managedStorage.release(id);
-        },
-      },
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -301,6 +303,8 @@ function rig(): Rig {
     reloads,
     lines,
     storageCalls,
+    ended: served.ended,
+    held,
     collector: served.collector,
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
@@ -429,10 +433,12 @@ describe("a source's declaration", () => {
       expect([...loaded.state!.sources]).toEqual([
         [STATUS, path.join(dir, "p", "session")],
       ]);
-      // A build holds no folder; the cache's hold on the state it serves
-      // makes it, so the program has somewhere to write.
+      // A build holds no folder; the state the cache serves names it in the
+      // turn's subscriptions, and the host's keeping makes it, so the
+      // program has somewhere to write.
       expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
       r.cache.getOrCreate(r.configs.at(dir, dir, p));
+      r.ended();
       expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
         true,
       );
@@ -483,7 +489,7 @@ describe("a source's declaration", () => {
       const message = fatal(
         await checkConfig(
           world,
-          daemonGates(),
+          DAEMON_HELD_KEYS,
           listing(`{ status: ${source} }`),
           dir,
         ),
@@ -570,7 +576,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        DAEMON_HELD_KEYS,
         listing(`{ "a.b": ${SOURCE} }`),
         dir,
       ),
@@ -582,7 +588,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        DAEMON_HELD_KEYS,
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -601,7 +607,7 @@ describe("a source's declaration", () => {
     const message = fatal(
       await checkConfig(
         world,
-        daemonGates(),
+        DAEMON_HELD_KEYS,
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -624,7 +630,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
-    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, DAEMON_HELD_KEYS, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
     );
@@ -645,7 +651,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(world, daemonGates(), p, dir));
+    const message = fatal(await checkConfig(world, DAEMON_HELD_KEYS, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
     );
@@ -690,7 +696,7 @@ describe("`cc-candybar check` on a source", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
     const outcome = await checkConfig(
       world,
-      daemonGates(),
+      DAEMON_HELD_KEYS,
       config(["mine", "plugins.p.gated"]),
       dir,
     );
@@ -703,7 +709,7 @@ describe("`cc-candybar check` on a source", () => {
   test("the same read unguarded exits fatal, naming the missing field", async () => {
     const outcome = await checkConfig(
       world,
-      daemonGates(),
+      DAEMON_HELD_KEYS,
       config(["mine", "plugins.p.bare"]),
       dir,
     );
@@ -853,8 +859,9 @@ function statusline(r: Rig, configFile: string) {
       sessionState: r.sessionState,
       worldStates: r.worldStates,
     }),
-    NO_PUSHES,
+    NO_OWN_TURNS,
     NOTHING_STORED,
+    NOTHING_SAID,
   );
   const rendered = rendererHost(
     MAIN_RENDERER,
@@ -870,7 +877,13 @@ function statusline(r: Rig, configFile: string) {
       }),
     ),
     () => {},
-    unfollowedCollector(r.collector),
+    {
+      ...unfollowedCollector(r.collector),
+      subscribed: (subscriptions) => {
+        r.collector.subscribed(subscriptions);
+        r.held(subscriptions.storage);
+      },
+    },
     { ...NO_ACTS, configs: r.configs.discovery },
   );
   // [LAW:no-ambient-temporal-coupling] An ask returns once every turn its
@@ -916,6 +929,7 @@ function statusline(r: Rig, configFile: string) {
       ++id as RequestId,
       systemTimekeeper.monotonic() + 5000,
       facts,
+      () => {},
     );
     answered.settled(true);
     expect(answered.outcome).toEqual({ kind: "ok" });
@@ -1218,7 +1232,7 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("a built reload holds its successor's folders before it releases its predecessor's; a kept one holds again under the same id", async () => {
+  test("a kept and a built reload each leave the subscriptions naming the state's folder, so its watch stays open", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
     // No render holds the state through the reload: a held one's release
@@ -1227,15 +1241,22 @@ describe("a storage folder's watch", () => {
     await answered(held.view);
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
-    expect(r.storageCalls).toEqual(["hold 1"]);
+    const folder = r.storageCalls.at(-1)!;
+    expect(folder).toHaveLength(1);
+    const opened = r.counters.watchersOpened;
+    const closed = r.counters.watchersClosed;
     fs.appendFileSync(file, "\n// a comment keeps the state\n");
     r.configs.again();
-    expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
+    r.ended();
+    expect(r.storageCalls.at(-1)).toEqual(folder);
     const edited = fs
       .readFileSync(file, "utf8")
       .replace(`template: "mine"`, `template: "mine, edited"`);
     await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
-    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
+    r.ended();
+    expect(r.storageCalls.at(-1)).toEqual(folder);
+    expect(r.counters.watchersOpened).toBe(opened);
+    expect(r.counters.watchersClosed).toBe(closed);
   });
 
   test("a refused watch's fault clears at the config's reload", async () => {
@@ -1251,6 +1272,7 @@ describe("a storage folder's watch", () => {
     jest.restoreAllMocks();
     fs.appendFileSync(file, "\n// a comment keeps the state\n");
     r.configs.again();
+    r.ended();
     await writeUntilShown(
       () => programWrites(storage, "s1", { home: "/recovered" }),
       () => draw(view).text.includes("home=/recovered"),
@@ -1390,6 +1412,7 @@ describe("an installed plugin's storage", () => {
     const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     const folder = path.join(root(), "p");
     await r.reloads.afterRemoving(entry, folder, () => plugin("", folder));
+    r.ended();
     expect(
       Object.keys(entry.state.config.variables).filter((n) =>
         n.startsWith("plugins.p."),

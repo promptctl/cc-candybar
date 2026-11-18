@@ -21,7 +21,17 @@ import type { WireFrame } from "../render/frame";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
-import type { AdapterPush, AdapterReply } from "./adapter";
+import type {
+  MenuIdleStats,
+  RenderCacheStats,
+  StatsSnapshot,
+} from "../daemon/foundations/stats-snapshot";
+import type {
+  DebugSnapshot,
+  DebugWhat,
+} from "../daemon/foundations/debug-types";
+import type { HeldEvent } from "../utils/event-hold";
+import type { LogLevel } from "../utils/logger";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Change } from "../config/config-changes";
@@ -46,15 +56,14 @@ declare const EFFECT_ID: unique symbol;
 export type EffectId = number & { readonly [EFFECT_ID]: true };
 
 // [LAW:one-type-per-behavior] One interface over every transport: in process,
-// or lines to the renderer's own process. Each kind of input answers with its
-// own output, so an input pays only for what it is.
-export interface Answering<E, A> {
-  answer(input: EventInput): Promise<E>;
-  answer(input: AdapterInput): Promise<A>;
+// or lines to the renderer's own process. Every input is an event, answered
+// by its turn's output.
+export interface Answering<O> {
+  answer(input: RendererInput): Promise<O>;
 }
 
 // What a renderer implements: every input answered by its output.
-export type Renderer = Answering<RendererOutput, AdapterOutput>;
+export type Renderer = Answering<RendererOutput>;
 
 // An output as its transport hands it to the host, with how long the turn
 // took, measured around `answer` on the clock of the process it ran in: the
@@ -62,28 +71,7 @@ export type Renderer = Answering<RendererOutput, AdapterOutput>;
 export type Timed<O> = O & { readonly turnMs: number };
 
 // What the host holds of a renderer: its answers, each timed by its transport.
-export type TimedRenderer = Answering<
-  Timed<RendererOutput>,
-  Timed<AdapterOutput>
->;
-
-export type RendererInput = EventInput | AdapterInput;
-
-// [LAW:single-enforcer] The one dispatch from an input to the answer of its
-// kind, which every renderer and every transport is built by. Each arm is
-// typed by its own input and output, so an arm answering the other kind's
-// output fails the build, which an overload's body does not.
-export function rendererOf<E, A>(arms: {
-  readonly event: (input: EventInput) => Promise<E>;
-  readonly adapter: (input: AdapterInput) => Promise<A>;
-}): Answering<E, A> {
-  function answer(input: EventInput): Promise<E>;
-  function answer(input: AdapterInput): Promise<A>;
-  function answer(input: RendererInput): Promise<E | A> {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
-  }
-  return { answer };
-}
+export type TimedRenderer = Answering<Timed<RendererOutput>>;
 
 // [LAW:single-enforcer] The one measure of a turn, around the renderer's
 // `answer`, on the monotonic clock of the process it runs in.
@@ -91,21 +79,19 @@ export function timed(
   renderer: Renderer,
   monotonic: () => number,
 ): TimedRenderer {
-  const time = async <O>(answer: () => Promise<O>): Promise<Timed<O>> => {
-    const from = monotonic();
-    const output = await answer();
-    return { ...output, turnMs: Math.round(monotonic() - from) };
+  return {
+    answer: async (input) => {
+      const from = monotonic();
+      const output = await renderer.answer(input);
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    },
   };
-  return rendererOf({
-    event: (input) => time(() => renderer.answer(input)),
-    adapter: (input) => time(() => renderer.answer(input)),
-  });
 }
 
 // [LAW:effects-at-boundaries] Every input carries the host's two readings,
 // made as its slot in the mailbox comes (`Readings`): the renderer reads no
 // clock.
-export interface EventInput extends Readings {
+export interface RendererInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
 }
@@ -117,32 +103,10 @@ export interface SessionConfig {
   readonly worldState: WorldState;
 }
 
-// [LAW:effects-at-boundaries] exception: a reach of the host's into the
-// renderer that is not yet an event, listed in the adapter
-// (src/renderer-interface/adapter.ts). A push opens no view and names no
-// session's subscriptions, so it carries none of an event's turn: its output
-// is its reply alone.
-export interface AdapterInput extends Readings {
-  readonly kind: "adapter";
-  readonly push: AdapterPush;
-}
-
-// [LAW:no-silent-failure] A push's turn answers its reply, of its push's own
-// kind, or how it threw, as data; and either way what the renderer needs read
-// and when it next wants a turn, as they stand after it: a push moves state
-// too (a close ends the views).
-export type AdapterOutput = (
-  | { readonly kind: "replied"; readonly reply: AdapterReply }
-  | { readonly kind: "threw"; readonly failure: Failure }
-) & {
-  readonly subscriptions: Subscriptions;
-  readonly stored: readonly StoreWrite[];
-};
-
 // [LAW:types-are-the-program] Every input and output of a turn is plain data:
 // the build fails on one a process could not carry.
 export const INPUTS_CROSS: Crosses<RendererInput> = true;
-export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
+export const OUTPUTS_CROSS: Crosses<RendererOutput> = true;
 
 export type Event =
   | {
@@ -236,7 +200,38 @@ export type Event =
       // The tick the renderer last declared (`Subscriptions.wake`) has
       // come: what is due by the turn's tick runs in it.
       readonly kind: "due";
-    };
+    }
+  | {
+      // A reading of the renderer's own state, which its turn answers with
+      // a `report`, as a request's answers with a `present`.
+      readonly kind: "inspect";
+      readonly ask: Inspect;
+    }
+  // The daemon's teardown, in its two renderer steps: from `closing` no
+  // config write begins, and `close` ends the views and their feeds.
+  | { readonly kind: "closing" }
+  | { readonly kind: "close" };
+
+// What an `inspect` reads: the stats reply's counts of the renderer's state,
+// or the debug reply's projection of the most recently drawn view.
+export type Inspect =
+  | { readonly kind: "stats" }
+  | { readonly kind: "debug"; readonly what: DebugWhat };
+
+// What the stats reply reads of the renderer's state.
+export interface RendererStats {
+  readonly renderCache: RenderCacheStats;
+  readonly effectCache: StatsSnapshot["effectCache"];
+  readonly sessionState: StatsSnapshot["sessionState"];
+  readonly menuIdle: MenuIdleStats;
+  // Frames the renderer's feeds drew.
+  readonly framesDrawn: number;
+}
+
+// What an `inspect` read, of its ask's own kind.
+export type Reading =
+  | { readonly kind: "stats"; readonly stats: RendererStats }
+  | { readonly kind: "debug"; readonly snapshot: DebugSnapshot };
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
 // derives it from its own sources: each lane's subscribers and whether any of
@@ -294,6 +289,18 @@ export interface Present {
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
+  // The daemon-wide held events the frame shows: the host marks each
+  // answered once it has delivered the frame to its client
+  // (src/utils/event-hold.ts).
+  readonly shows: readonly HeldEvent[];
+}
+
+// [LAW:one-type-per-behavior] An inspect's answer, as a present is a
+// request's: what it read, which the host hands the client that asked. It is
+// performed by being taken, so no `effect-done` comes back.
+export interface Report {
+  readonly kind: "report";
+  readonly reading: Reading;
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes
@@ -434,11 +441,21 @@ export type Act = { readonly id: EffectId } & (
 export type ActRequest = Unnamed<Act>;
 type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 
-export type Effect = Present | ConfigChange | Act;
+export type Effect = Present | ConfigChange | Act | Report;
+
+// An effect the host settles with an `effect-done`.
+export type Settled = Exclude<Effect, Report>;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
 export type TurnRecord = readonly Field[];
+
+// [LAW:effects-at-boundaries] A line for the host's one log, which the turn
+// returns: the renderer writes no log.
+export interface LoggedLine {
+  readonly level: LogLevel;
+  readonly line: string;
+}
 
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
@@ -464,6 +481,17 @@ export type Subscription =
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
 // and a record, so it crosses a process as it is: a session absent is a key
 // absent, never one holding `undefined`, which JSON does not carry.
+// The storage folders a renderer's states name, and how many config loads it
+// has run. A load is when a folder is kept again, as it was when it was
+// first named: a watch refused or lost is tried again then. So the host keeps
+// every folder again when either moves, and otherwise, as on most turns, does
+// nothing.
+export interface StorageNamed {
+  // Each folder once, sorted.
+  readonly folders: readonly string[];
+  readonly loads: number;
+}
+
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
   // The lanes each session with an open view switches on, as it draws them:
@@ -476,6 +504,11 @@ export interface Subscriptions {
   // first named, follows its files while it is named, and lets it go when it
   // is not.
   readonly configs: readonly RenderOrigin[];
+  // [LAW:no-ambient-temporal-coupling] The plugin storage folders the latest
+  // load of each render state names, from its first load to its reclaim: the
+  // host's storage owner keeps each one, so a folder's watch lives as long as
+  // a build names it, never as long as a view.
+  readonly storage: StorageNamed;
   // [LAW:no-ambient-temporal-coupling] The tick the renderer next wants a
   // turn at, derived from its own state as each turn ends: the host keeps one
   // timer to it and hands it in as a `due`. Null while nothing is due.
@@ -508,6 +541,8 @@ export interface PushedFrame {
 // what it wrote.
 export type TurnOutcome = {
   readonly record: TurnRecord;
+  // What the turn logged, a turn that threw included.
+  readonly logged: readonly LoggedLine[];
   readonly effects: readonly Effect[];
 } & (
   | { readonly kind: "answered" }

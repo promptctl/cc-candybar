@@ -6,13 +6,10 @@ import type {
   ViewFacts,
 } from "../renderer-interface/request-context.js";
 import type {
+  StorageNamed,
   Subscription,
   Subscriptions,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
@@ -148,9 +145,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // (StateDeps).
   locations: Locations;
   sessionState: SessionStateRW;
-  // The host's storage owner, which holds the folders each served state's
-  // latest load named (`holdFolders`), from its first load to its reclaim.
-  storage: AdapterToHost["storage"];
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
@@ -464,8 +458,6 @@ export interface CacheEntry {
 // render — which otherwise resumed on a disposed store, every chained read
 // recomputed untracked.
 interface StateHold {
-  // The id the state's storage folders are held under at the host.
-  readonly id: StorageHoldId;
   holders: number;
   retired: Teardown | null;
 }
@@ -1182,8 +1174,8 @@ export class RenderCache<
   }
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
-  // The last storage hold id minted.
-  private storageHolds = 0;
+  // The config loads run, of every origin (`storage`).
+  private loads = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
@@ -1326,17 +1318,15 @@ export class RenderCache<
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
     this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
+    // [LAW:single-enforcer] Insert, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
     // and dispose, so a throwing observer cannot strand a registry outside
     // it, and a reentrant getOrCreate for this key finds the entry rather
-    // than building a duplicate. The hold precedes the bound: an eviction
-    // there releases another state's folders, which this one may name too.
-    // The bound is a fact about the MAP, complete at insertion: nothing later
-    // (including an observer throwing) can skip it.
+    // than building a duplicate. The bound is a fact about the MAP, complete
+    // at insertion: nothing later (including an observer throwing) can skip
+    // it.
     // [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -1623,6 +1613,9 @@ export class RenderCache<
     served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
+    // [LAW:dataflow-not-control-flow] Every load counts, built, kept or
+    // failed: each is when the host keeps the folders again.
+    this.loads++;
     return loadOrigin(cwd, snapshot, this.deps, served);
   }
 
@@ -1727,11 +1720,7 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    this.holds.set(state, {
-      id: ++this.storageHolds as StorageHoldId,
-      holders: 0,
-      retired: null,
-    });
+    this.holds.set(state, { holders: 0, retired: null });
     this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
@@ -1740,11 +1729,16 @@ export class RenderCache<
       );
   }
 
-  // The host holds the storage folders a served state's latest load named.
-  private holdFolders(state: DslRenderState): void {
-    // [LAW:single-enforcer] The host keys each folder once, however many
-    // sources name it.
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
+  // [LAW:one-source-of-truth] The storage folders every state not yet
+  // reclaimed names, read as a turn ends: a reload's successor and its
+  // predecessor are both held within the turn, so a folder both name is
+  // never closed and reopened. Each folder once, however many sources name
+  // it, in one order, so the host tells an unchanged set at a glance.
+  storage(): StorageNamed {
+    const folders = new Set<string>();
+    for (const state of this.holds.keys())
+      for (const folder of state.sources.values()) folders.add(folder);
+    return { folders: [...folders].sort(), loads: this.loads };
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -1800,7 +1794,6 @@ export class RenderCache<
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
-    this.deps.storage.release(hold.id);
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
     // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
     // so a compile no state left there carries has no render to draw it.
@@ -1853,13 +1846,8 @@ export class RenderCache<
     if (loaded.kind === "built") {
       entry.state = loaded.state;
       this.serve(loaded.state);
-    }
-    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
-    // The successor's hold precedes its predecessor's release, so a folder
-    // both name is never closed and reopened.
-    this.holdFolders(entry.state);
-    if (loaded.kind === "built")
       this.retire(served, "reload", { entry, state: loaded.state });
+    }
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);

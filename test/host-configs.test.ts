@@ -18,7 +18,7 @@ import type {
   Effect,
   EffectId,
   Event,
-  EventInput,
+  RendererInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
@@ -62,8 +62,15 @@ const output = (
 ): RendererOutput => ({
   kind: "answered",
   stored: [],
+  logged: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs, wake: null },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    configs,
+    storage: { folders: [], loads: 0 },
+    wake: null,
+  },
   record: [],
   frames: [],
 });
@@ -97,7 +104,7 @@ function hostOver(
     MAIN_RENDERER,
     CLOCK,
     hostHeld(
-      eventRenderer(async ({ event }: EventInput) => {
+      eventRenderer(async ({ event }: RendererInput) => {
         heard.push(
           event.kind === "effect-done"
             ? `effect-done ${event.outcome.kind}`
@@ -227,6 +234,7 @@ describe("a turn settles as the config turns it named", () => {
             ...output([], [ORIGIN]),
             kind: "threw",
             stored: [],
+            logged: [],
             failure: {
               kind: "threw",
               message: "the reload broke",
@@ -250,6 +258,7 @@ describe("a turn settles as the config turns it named", () => {
             ...output([], [ORIGIN]),
             kind: "threw",
             stored: [],
+            logged: [],
             failure: {
               kind: "threw",
               message: "the waiting click broke",

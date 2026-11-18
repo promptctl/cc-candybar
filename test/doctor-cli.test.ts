@@ -29,10 +29,7 @@ import { notJudged } from "../src/doctor/checks";
 import type { DoctorMachineEdge } from "../src/doctor/ports";
 import { mainRendererOf } from "../src/renderer/main";
 import type { RendererBuilder } from "../src/daemon/local-bar";
-import {
-  rendererOf,
-  type TurnRecord,
-} from "../src/renderer-interface/interface";
+import type { TurnRecord } from "../src/renderer-interface/interface";
 import { DOCTOR_NOTE } from "../src/renderer-interface/noted-doctor";
 import { notedReportsOf } from "./helpers/doctor-note";
 
@@ -89,16 +86,15 @@ const worldIn = (env: Record<string, string> = {}): World => ({
 // The main renderer, with every turn's record it answers kept.
 const recording =
   (records: TurnRecord[]): RendererBuilder =>
-  (inputs, host) => {
-    const renderer = mainRendererOf(inputs, host);
-    return rendererOf({
-      event: async (input) => {
+  (inputs) => {
+    const renderer = mainRendererOf(inputs);
+    return {
+      answer: async (input) => {
         const output = await renderer.answer(input);
         records.push(output.record);
         return output;
       },
-      adapter: (input) => renderer.answer(input),
-    });
+    };
   };
 
 const plan = (inputs: Partial<DoctorPlanInputs> = {}) =>
@@ -240,16 +236,15 @@ describe("doctorPlan with no daemon", () => {
 
   test("an error the bar logged on a run that reported is the command's failure, said beside the report", async () => {
     const out = await plan({
-      build: (inputs, host) => {
-        const renderer = mainRendererOf(inputs, host);
-        return rendererOf({
-          event: async (input) => {
+      build: (inputs) => {
+        const renderer = mainRendererOf(inputs);
+        return {
+          answer: async (input) => {
             if (input.event.kind === "effect-done")
               throw new Error("the outcome would not land");
             return renderer.answer(input);
           },
-          adapter: (input) => renderer.answer(input),
-        });
+        };
       },
     });
     expect(out.stdout).toMatch(/^✓ config/);
@@ -259,16 +254,15 @@ describe("doctorPlan with no daemon", () => {
 
   test("a close that fails is the command's failure, said after the report, and the rest still close", async () => {
     const out = await plan({
-      build: (inputs, host) => {
-        const renderer = mainRendererOf(inputs, host);
-        return rendererOf({
-          event: (input) => renderer.answer(input),
-          adapter: (input) => {
-            if (input.push.kind === "close-journal")
+      build: (inputs) => {
+        const renderer = mainRendererOf(inputs);
+        return {
+          answer: (input) => {
+            if (input.event.kind === "closing")
               throw new Error("the journal would not close");
             return renderer.answer(input);
           },
-        });
+        };
       },
     });
     expect(out.code).toBe(2);

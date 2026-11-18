@@ -1,8 +1,8 @@
-// The host's one path to a renderer (src/daemon/renderer-host.ts): `ask` hands
-// back the reply of the push's own kind or rejects, and `tell` says a failure
-// on the log, since nothing awaits it; a start heads the mailbox; every input
-// carries the slot's readings; and an output is taken whole, a taker's throw
-// failing no turn that answered.
+// The host's one path to a renderer (src/daemon/renderer-host.ts): an
+// inspect is handed back the reading its turn reported or rejects, and a
+// close step rejects with its turn's failure; a start heads the mailbox; every
+// input carries the slot's readings; and an output is taken whole, a taker's
+// throw failing no turn that answered.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
@@ -10,22 +10,27 @@ import {
   failureOf,
   type Failure,
 } from "../../src/daemon/foundations/verb-error";
-import {
-  rendererOf,
-  type AdapterOutput,
-  type RendererOutput,
-  type Subscriptions,
+import type {
+  Effect,
+  Reading,
+  RendererOutput,
+  Subscriptions,
 } from "../../src/renderer-interface/interface";
-import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
-import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
+import { eventRenderer, hostHeld, NO_ACTS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
-const NONE: Subscriptions = { sources: {}, lanes: {}, configs: [], wake: null };
+const NONE: Subscriptions = {
+  sources: {},
+  lanes: {},
+  configs: [],
+  storage: { folders: [], loads: 0 },
+  wake: null,
+};
 
 // A clock that reads `wall` and `mono` as they stand, and sets no timer: no
 // output here declares a wake.
@@ -37,27 +42,35 @@ const clockAt = (read: { wall: number; mono: number }) => ({
   },
 });
 
-// A host over a renderer that answers every push with `output`; `said`
-// settles with the first line it logs.
-// A push's end, without the subscriptions and stored writes every push
+// A stats reading, as an inspect of the stats reports one.
+const STATS: Reading = { kind: "stats", stats: { framesDrawn: 3 } as never };
+
+// A turn's end, without the subscriptions and stored writes every turn
 // answers with.
 type Ended =
-  | { readonly kind: "replied"; readonly reply: AdapterReply }
+  | { readonly kind: "answered"; readonly effects: readonly Effect[] }
   | { readonly kind: "threw"; readonly failure: Failure };
 
+// A host over a renderer that answers every turn with `output`; `said`
+// settles with the first line the host logs, and `unheard` holds what it
+// said no bar would.
 function hostOver(output: Ended) {
   let say: (line: string) => void = () => {};
   const said = new Promise<string>((resolve) => (say = resolve));
   const taken: Subscriptions[] = [];
+  const unheard: string[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      pushRenderer(
-        async (): Promise<AdapterOutput> => ({
-          ...output,
+      eventRenderer(
+        async (): Promise<RendererOutput> => ({
+          ...(output.kind === "answered" ? output : { ...output, effects: [] }),
           subscriptions: NONE,
           stored: [],
+          logged: [],
+          record: [],
+          frames: [],
         }),
       ),
     ),
@@ -67,61 +80,74 @@ function hostOver(output: Ended) {
       frames: () => {},
       stored: () => {},
       writableSettings: () => {
-        throw new Error("a push lands no change");
+        throw new Error("this rig lands no change");
       },
       recorded: () => {},
       holding: () => {
-        throw new Error("a push holds no session");
+        throw new Error("this rig holds no session");
       },
     },
-    NO_ACTS,
+    { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
   );
-  return { host, said, taken };
+  return { host, said, taken, unheard };
 }
 
-test("an ask is handed the reply of its push's own kind, and its subscriptions are taken", async () => {
+test("an inspect is handed the reading its turn reported, and its subscriptions are taken", async () => {
   const { host, taken } = hostOver({
-    kind: "replied",
-    reply: { kind: "close-journal" },
+    kind: "answered",
+    effects: [{ kind: "report", reading: STATS }],
   });
-  expect(await host.ask({ kind: "close-journal" })).toEqual({
-    kind: "close-journal",
-  });
+  expect(await host.inspect({ kind: "stats" })).toEqual(STATS);
   expect(taken).toEqual([NONE]);
 });
 
-test("an ask answered with another push's reply rejects, naming both", async () => {
+test("an inspect answered with another kind's report, or none, rejects naming both", async () => {
   const { host } = hostOver({
-    kind: "replied",
-    reply: { kind: "close-views" },
+    kind: "answered",
+    effects: [{ kind: "report", reading: STATS }],
   });
-  await expect(host.ask({ kind: "close-journal" })).rejects.toThrow(
-    "renderer main answered push close-journal with a close-views reply",
+  await expect(
+    host.inspect({ kind: "debug", what: { kind: "all" } as never }),
+  ).rejects.toThrow("renderer main answered inspect debug with a stats report");
+  const none = hostOver({ kind: "answered", effects: [] });
+  await expect(none.host.inspect({ kind: "stats" })).rejects.toThrow(
+    "renderer main answered inspect stats with no report",
   );
 });
 
-test("an ask whose push threw rejects with the renderer's failure and the turn's time", async () => {
+test("an inspect whose turn threw rejects with the renderer's failure and the turn's time", async () => {
   const { host } = hostOver({
     kind: "threw",
     failure: failureOf(new Error("the view broke")),
   });
-  await expect(host.ask({ kind: "stats" })).rejects.toThrow(
-    /renderer main push stats threw: .*the view broke/,
+  await expect(host.inspect({ kind: "stats" })).rejects.toThrow(
+    /renderer main inspect stats threw: .*the view broke/,
   );
-  await expect(host.ask({ kind: "stats" })).rejects.toMatchObject({
+  await expect(host.inspect({ kind: "stats" })).rejects.toMatchObject({
     failure: { detail: expect.stringMatching(/ took=\d+ms: /) },
   });
 });
 
-test("a tell that fails is said on the log, and nothing rejects", async () => {
-  const { host, said } = hostOver({
+test("a close step whose turn threw rejects, naming the step", async () => {
+  const { host } = hostOver({
     kind: "threw",
     failure: failureOf(new Error("no such session")),
   });
-  expect(host.tell({ kind: "close-views" })).toBe(undefined);
-  expect(await said).toMatch(
-    /^error renderer main push close-views threw.*: .*no such session/,
+  await expect(host.closeStep("close")).rejects.toThrow(
+    /renderer main close step close threw: .*no such session/,
   );
+});
+
+test("a report from a turn that is no inspect is said, as no bar would show it", async () => {
+  const { host, said, unheard } = hostOver({
+    kind: "answered",
+    effects: [{ kind: "report", reading: STATS }],
+  });
+  await host.closeStep("closing");
+  expect(await said).toBe(
+    "error renderer main: a closing turn returned a report",
+  );
+  expect(unheard).toEqual(["renderer main: a closing turn returned a report"]);
 });
 
 // Every promise chain a turn starts settles on microtasks alone: these
@@ -133,6 +159,7 @@ const settled = async (): Promise<void> => {
 const answered = (): RendererOutput => ({
   kind: "answered",
   stored: [],
+  logged: [],
   effects: [],
   subscriptions: NONE,
   record: [],
@@ -147,21 +174,10 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async (input) => {
-          heard.push(input.event.kind);
-          return answered();
-        },
-        adapter: async (input) => {
-          heard.push(`push:${input.push.kind}`);
-          await opened;
-          return {
-            kind: "replied",
-            stored: [],
-            reply: { kind: "close-journal" },
-            subscriptions: NONE,
-          };
-        },
+      eventRenderer(async (input) => {
+        heard.push(input.event.kind);
+        if (input.event.kind === "closing") await opened;
+        return answered();
       }),
     ),
     () => {},
@@ -175,7 +191,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     },
     NO_ACTS,
   );
-  const asked = host.ask({ kind: "close-journal" });
+  const asked = host.closeStep("closing");
   const waiting = host.deliver(
     () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
     [],
@@ -189,7 +205,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   );
   open();
   await Promise.all([asked, waiting, started]);
-  expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+  expect(heard).toEqual(["closing", "start", "retire"]);
 });
 
 test("every turn's record reaches `recorded`, whatever input it took and however it was asked", async () => {
@@ -198,15 +214,10 @@ test("every turn's record reaches `recorded`, whatever input it took and however
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async (input) => ({
-          ...answered(),
-          record: [["took", input.event.kind]],
-        }),
-        adapter: async () => {
-          throw new Error("this rig sends no push");
-        },
-      }),
+      eventRenderer(async (input) => ({
+        ...answered(),
+        record: [["took", input.event.kind]],
+      })),
     ),
     () => {},
     {
@@ -247,15 +258,10 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     MAIN_RENDERER,
     clockAt(read),
     held(
-      rendererOf({
-        event: async (input) => {
-          readings.push({ at: input.at, tick: input.tick });
-          if (input.event.kind === "due") await opened;
-          return answered();
-        },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
+      eventRenderer(async (input) => {
+        readings.push({ at: input.at, tick: input.tick });
+        if (input.event.kind === "due") await opened;
+        return answered();
       }),
     ),
     () => {},
@@ -296,21 +302,16 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async () => ({
-          ...answered(),
-          frames: [
-            {
-              session: "s" as never,
-              bar: { rows: [] } as never,
-              answers: { resp: "r", statusline: "s" },
-            },
-          ],
-        }),
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      eventRenderer(async () => ({
+        ...answered(),
+        frames: [
+          {
+            session: "s" as never,
+            bar: { rows: [] } as never,
+            answers: { resp: "r", statusline: "s" },
+          },
+        ],
+      })),
     ),
     () => {},
     {
@@ -352,20 +353,15 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
       },
     },
     held(
-      rendererOf({
-        event: async (input) => {
-          heard.push(input.event.kind);
-          return {
-            ...answered(),
-            subscriptions: {
-              ...NONE,
-              wake: input.event.kind === "due" ? null : (1 as Tick),
-            },
-          };
-        },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
+      eventRenderer(async (input) => {
+        heard.push(input.event.kind);
+        return {
+          ...answered(),
+          subscriptions: {
+            ...NONE,
+            wake: input.event.kind === "due" ? null : (1 as Tick),
+          },
+        };
       }),
     ),
     () => {},
@@ -414,19 +410,14 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
       },
     },
     held(
-      rendererOf({
-        event: async (input) => ({
-          ...answered(),
-          effects:
-            input.event.kind === "due"
-              ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
-              : [],
-          subscriptions: { ...NONE, wake: (read.mono / 1000 + 1) as Tick },
-        }),
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      eventRenderer(async (input) => ({
+        ...answered(),
+        effects:
+          input.event.kind === "due"
+            ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
+            : [],
+        subscriptions: { ...NONE, wake: (read.mono / 1000 + 1) as Tick },
+      })),
     ),
     () => {},
     {
@@ -476,22 +467,17 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
       },
     },
     held(
-      rendererOf({
-        event: async (input) => {
-          heard.push(named(input.event));
-          // The long turn the `due` waits behind.
-          if (named(input.event) === "retire:long") await opened;
-          return {
-            ...answered(),
-            subscriptions: {
-              ...NONE,
-              wake: input.event.kind === "due" ? null : (1 as Tick),
-            },
-          };
-        },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
+      eventRenderer(async (input) => {
+        heard.push(named(input.event));
+        // The long turn the `due` waits behind.
+        if (named(input.event) === "retire:long") await opened;
+        return {
+          ...answered(),
+          subscriptions: {
+            ...NONE,
+            wake: input.event.kind === "due" ? null : (1 as Tick),
+          },
+        };
       }),
     ),
     () => {},

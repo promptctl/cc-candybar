@@ -20,7 +20,7 @@
 // passes" and "the daemon renders" cannot diverge. Each request turn's record
 // notes every fault its frame met, which is what the verdict reads.
 
-import { previewSigner } from "./click/link-signer.js";
+import { previewLinkKey } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
 import { discover, readShared } from "./daemon/config-discovery/discover.js";
@@ -34,8 +34,8 @@ import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import type { World } from "./host";
 import { ansiOf, parseFrame, type Frame } from "./render/frame.js";
 import type { TurnRecord } from "./renderer-interface/interface.js";
-import type { Gates } from "./daemon/foundations/gates.js";
-import { daemonGates } from "./daemon/foundations/update-keys.js";
+import type { HeldKeys } from "./daemon/foundations/gates.js";
+import { DAEMON_HELD_KEYS } from "./daemon/foundations/update-keys.js";
 import { instantOf } from "./utils/instant.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
@@ -138,9 +138,9 @@ export type CheckOutcome =
 // read.)
 export async function checkConfig(
   world: World,
-  // The gates the daemon holds (`daemonGates`), so what `check` refuses is
-  // what the daemon's load refuses.
-  gates: Gates,
+  // The keys the daemon's gates hold (`DAEMON_HELD_KEYS`), so what `check`
+  // refuses is what the daemon's load refuses.
+  gates: HeldKeys,
   target: string | undefined,
   cwd: string = process.cwd(),
   // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
@@ -427,7 +427,7 @@ type Verdict =
 // a fresh session draws.
 async function drawnVerdict(
   world: World,
-  gates: Gates,
+  gates: HeldKeys,
   snapshot: ConfigSnapshot,
   {
     cwd,
@@ -479,7 +479,7 @@ async function drawnVerdict(
     gates,
     // [LAW:single-enforcer] check draws `run` links as the daemon does, and
     // signs them as the preview it is: it opens no key file.
-    linkSigner: previewSigner(),
+    linkKey: previewLinkKey().toString("base64"),
     stateDir: stateDir(world.host),
     home: CHECK_HOME,
     locate: checkLocate,
@@ -685,7 +685,7 @@ export async function checkCommandPlan(
         // resolution, the seam for its direct callers, passes it through.
         await checkConfig(
           world,
-          daemonGates(),
+          DAEMON_HELD_KEYS,
           cliConfigTarget(parsed.target, world.host, cwd).path,
           cwd,
         ),

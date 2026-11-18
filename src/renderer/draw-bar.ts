@@ -63,13 +63,13 @@ import {
   type LaneFeeds,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { type AdapterToHost } from "../renderer-interface/adapter.js";
+import type { DaemonLogger } from "../utils/logger.js";
 import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
 import type { LaneActs } from "./lane-acts.js";
-import type { Effect } from "../renderer-interface/interface.js";
+import type { Settled } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -107,11 +107,12 @@ import {
   RENDER_ANSWERS,
 } from "../daemon/foundations/render-answers";
 
-// The renderer's parts: its own state, and what it reaches in the host
-// (`AdapterToHost`, src/renderer-interface/adapter.ts), each by the methods it
-// calls. `worldStates` holds the world states the host handed in, which its
-// views read.
-export interface RendererState {
+// The renderer's parts, each by the methods it calls. `worldStates` holds the
+// world states the host handed in, which its views read.
+export interface RendererParts {
+  // [LAW:effects-at-boundaries] The renderer's log, whose lines leave with
+  // its turns (src/renderer/turn-log.ts).
+  readonly log: DaemonLogger;
   // The turn's time, handed in by the host: no draw reads a clock.
   readonly time: TurnTime;
   readonly sessionState: SessionState;
@@ -132,8 +133,6 @@ export interface RendererState {
   // answer hands the bar to and shows the rate of.
   readonly feeds: Pick<Feeds, "following" | "feedsOf">;
 }
-
-export type RendererParts = RendererState & AdapterToHost;
 
 // One frame of a subscribed session, drawn from its latest request at this
 // instant, by the render a request gets. The response is what that request
@@ -198,7 +197,6 @@ export function renderFrame(
       by: "feed",
       copies,
       clickShown: null,
-      eventsShown: [],
     });
     return {
       bar,
@@ -1111,6 +1109,8 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
+  // The daemon-wide held events the frame shows, which its present names.
+  readonly eventsShown: readonly HeldEvent[];
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -1121,7 +1121,7 @@ export function answerRequest(
   facts: RequestFacts,
   // The request's turn's effects, which the setups its session's clicks owe
   // join.
-  effects: Effect[],
+  effects: Settled[],
 ): RequestAnswer {
   const { time, feeds } = parts;
   using setup = setUpRender(
@@ -1164,38 +1164,34 @@ export function answerRequest(
   });
   return {
     frame,
+    eventsShown,
     delivery: {
       session: sessionId,
       by: ANSWERING.by,
       copies,
       clickShown,
-      eventsShown,
     },
   };
 }
 
 // What a frame that reached its client showed, which its delivery records:
-// what its copy clicks copy, and the click error and the held events it
-// carried.
+// what its copy clicks copy, and the click error it carried. The daemon-wide
+// held events it carried are the host's, which its present names.
 export interface Delivery {
   readonly session: SessionId;
   readonly by: Drawing["by"];
   readonly copies: ReadonlyMap<string, string>;
   readonly clickShown: ClickErrorRecord | null;
-  readonly eventsShown: readonly HeldEvent[];
 }
 
 // [LAW:single-enforcer] The one record of a delivery. An answer carrying the
-// click error or a daemon-wide held event that reaches its client is the one
-// that delivered it (src/utils/event-hold.ts).
+// click error that reaches its client is the one that delivered it
+// (src/utils/event-hold.ts).
 export function deliver(parts: RendererParts, delivery: Delivery): void {
-  const { session, by, copies, clickShown, eventsShown } = delivery;
+  const { session, by, copies, clickShown } = delivery;
   parts.renderCache.delivered(session, by, copies);
   if (clickShown !== null)
     answeredClickError(parts.sessionState, session, clickShown);
-  // Daemon-wide: one session's answer having shown the event is what makes
-  // it not silent.
-  for (const event of eventsShown) parts.eventAnswered(event);
 }
 
 // What Claude Code's statusline shows of `drawn`: the bar, or — while lanes

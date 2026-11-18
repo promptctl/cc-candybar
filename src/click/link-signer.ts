@@ -200,9 +200,12 @@ export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
 // the bench, the doctor's config draw): a key of its own, made once
 // per process and held nowhere, so a preview opens no key file and its links,
 // clicked, are refused loudly and prove nothing a real bar draws.
-let preview: LinkSigner | undefined;
+let preview: Buffer | undefined;
+export function previewLinkKey(): Buffer {
+  return (preview ??= randomBytes(LINK_KEY_BYTES));
+}
 export function previewSigner(): LinkSigner {
-  return (preview ??= linkSigner(randomBytes(LINK_KEY_BYTES)));
+  return linkSigner(previewLinkKey());
 }
 
 // The frames one draw hands out, each bar link signed.

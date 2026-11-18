@@ -14,7 +14,6 @@ import {
   inProcessPort,
   type RendererPort,
 } from "../../../src/daemon/renderer-process";
-import { rendererOf } from "../../../src/renderer-interface/interface";
 import { configFlag, render } from "../../helpers/daemon-e2e";
 import type { DaemonEndpoint } from "../../helpers/daemon-wire";
 import { hostOf } from "../../helpers/host";
@@ -32,13 +31,12 @@ const heldOnClose =
       start: (own) => {
         const link = port.start(own);
         const inner = link.renderer;
-        const renderer = rendererOf({
-          event: (input) => inner.answer(input),
-          adapter: async (input) => {
-            if (input.push.kind === "close-journal") await released;
+        const renderer: typeof inner = {
+          answer: async (input) => {
+            if (input.event.kind === "closing") await released;
             return inner.answer(input);
           },
-        });
+        };
         return { ...link, renderer };
       },
     };
@@ -102,7 +100,9 @@ const heldOnClose =
       expect(closed).toBe(false);
     } finally {
       release();
-      await (await (closing ?? daemon.close())).settled;
+      await (
+        await (closing ?? daemon.close())
+      ).settled;
       await daemonLog.drained();
       daemonLog.dispose();
       tmux.kill();

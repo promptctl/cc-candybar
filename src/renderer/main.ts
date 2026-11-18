@@ -44,20 +44,18 @@ import type {
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
 import { HeldDocuments } from "./doctor-documents.js";
-import type { LinkSigner } from "../click/link-signer.js";
+import { linkSigner } from "../click/link-signer.js";
 import type { Locations } from "../config/loader/chain-places.js";
-import type { Gates } from "../daemon/foundations/gates.js";
+import { createGates, type HeldKeys } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import type {
-  AdapterPush,
-  AdapterReply,
-  AdapterToHost,
-} from "../renderer-interface/adapter.js";
 import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
+import type { Crosses } from "../renderer-interface/crosses.js";
+import type { RendererBoot } from "../renderer-interface/wire.js";
+import { TurnLog } from "./turn-log.js";
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EffectSessions } from "../render/effect.js";
@@ -85,15 +83,18 @@ import {
 } from "./debug.js";
 import { earliestOf } from "../utils/instant.js";
 import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
-import {
-  rendererOf,
-  type Effect,
-  type EffectId,
-  type Event,
-  type PushedFrame,
-  type Renderer,
-  type Subscription,
-  type Subscriptions,
+import type {
+  EffectId,
+  Event,
+  Inspect,
+  LoggedLine,
+  PushedFrame,
+  Reading,
+  Renderer,
+  Report,
+  Settled,
+  Subscription,
+  Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
 import { reaction } from "mobx";
@@ -104,13 +105,21 @@ type Ended<T> =
   | { readonly kind: "answered"; readonly value: T }
   | { readonly kind: "threw"; readonly failure: Failure };
 
+// What the renderer's own state answers beyond its parts: an inspect's
+// reading, and the daemon's two teardown steps.
+export interface OwnTurns {
+  readonly inspect: (ask: Inspect) => Reading;
+  readonly closing: () => void;
+  readonly close: () => void;
+}
+
 export function mainRenderer(
   parts: MainRendererParts,
-  // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
-  // in its own turn, synchronously.
-  pushed: (push: AdapterPush) => AdapterReply,
+  own: OwnTurns,
   // What the stores moved since the last turn ended.
   drained: () => readonly StoreWrite[],
+  // What the renderer logged since the last turn ended.
+  said: () => readonly LoggedLine[],
 ): Renderer {
   const { time, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -123,6 +132,7 @@ export function mainRenderer(
     sources: {},
     lanes: {},
     configs: [],
+    storage: { folders: [], loads: 0 },
     wake: null,
   };
   // [LAW:no-ambient-temporal-coupling] Each event that needs its origin's
@@ -156,9 +166,9 @@ export function mainRenderer(
   const turn = (
     event: Event,
     record: RequestFacts,
-    effects: Effect[],
+    effects: Settled[],
     frames: PushedFrame[],
-  ): void => {
+  ): Report | void => {
     switch (event.kind) {
       case "start":
         // The feeds first: a watched session's feed pins its view before
@@ -209,7 +219,7 @@ export function mainRenderer(
         return;
       }
       case "request": {
-        const { frame, delivery } = answerRequest(
+        const { frame, eventsShown, delivery } = answerRequest(
           parts,
           event.context,
           record,
@@ -224,6 +234,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          shows: eventsShown,
         });
         return;
       }
@@ -281,6 +292,17 @@ export function mainRenderer(
           () => feeds.drawDue({ at: time.at, tick: time.tick }, frames),
         ]);
         return;
+      // An inspect's reading is the turn's own answer: no other turn has one.
+      case "inspect":
+        return { kind: "report", reading: own.inspect(event.ask) };
+      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+      // runs whole, so none is in flight.
+      case "closing":
+        own.closing();
+        return;
+      case "close":
+        own.close();
+        return;
     }
   };
 
@@ -322,6 +344,7 @@ export function mainRenderer(
       sources: Object.fromEntries(merged) as Subscriptions["sources"],
       lanes,
       configs: [...configs.values()],
+      storage: parts.renderCache.storage(),
       // [LAW:one-source-of-truth] The tick the renderer next wants a turn
       // at: the earliest any owner of a tick holds.
       wake: earliestOf([time.next(), menuIdle.next(), feeds.next()]),
@@ -330,11 +353,11 @@ export function mainRenderer(
 
   // What the turn that ended last moved of the stores.
   let stored: readonly StoreWrite[] = [];
-  // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
-  // what the renderer needs read, when it next wants a turn, and what it
-  // moved of its stores are read as they stand when it ends, however it
-  // ended: a write before a throw is real. Read as part of the turn, so a
-  // read that throws fails it, and the subscriptions last returned stand.
+  // [LAW:single-enforcer] Every turn ends here: what the renderer needs
+  // read, when it next wants a turn, and what it moved of its stores are read
+  // as they stand when it ends, however it ended: a write before a throw is
+  // real. Read as part of the turn, so a read that throws fails it, and the
+  // subscriptions last returned stand.
   const ending = <T>(run: () => T): Ended<T> => {
     try {
       let value: T;
@@ -357,38 +380,30 @@ export function mainRenderer(
     }
   };
 
-  return rendererOf({
-    // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
-    // after it lands after its writes.
-    adapter: async (input) =>
-      time.during(input, () => {
-        const ended = ending(() => pushed(input.push));
-        return {
-          ...(ended.kind === "answered"
-            ? { kind: "replied" as const, reply: ended.value }
-            : ended),
-          subscriptions,
-          stored,
-        };
-      }),
-    event: async (input) =>
+  return {
+    answer: async (input) =>
       time.during(input, () => {
         const record: RequestFacts = [];
-        const effects: Effect[] = [];
+        const effects: Settled[] = [];
         const frames: PushedFrame[] = [];
         const ended = ending(() => turn(input.event, record, effects, frames));
         return {
           ...(ended.kind === "answered"
             ? { kind: "answered" as const }
             : ended),
-          effects,
+          effects:
+            ended.kind === "answered" && ended.value
+              ? [...effects, ended.value]
+              : effects,
           record,
+          // Drained last, so every line the turn's ending said leaves with it.
+          logged: said(),
           subscriptions,
           frames,
           stored,
         };
       }),
-  });
+  };
 }
 
 // The sessions whose idle period has run out by the turn's tick, their menus
@@ -396,7 +411,7 @@ export function mainRenderer(
 // [LAW:no-silent-failure] A close that throws is said with its session, and
 // the others close all the same: the session's period begins again
 // (`MenuIdle.due`), so its close is tried a timeout later, never at once.
-function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
+function closeIdleMenus(parts: MainRendererParts, effects: Settled[]): void {
   for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
     try {
       parts.verbs.closeIdle(
@@ -416,40 +431,62 @@ function closeIdleMenus(parts: MainRendererParts, effects: Effect[]): void {
   }
 }
 
-// What the main renderer is built from besides the host's parts: its
-// profile's stored state as the host holds it, the signer its links are drawn
-// with, and the facts of the machine its loads resolve under. No clock: every
+// What the main renderer is built from: its profile's stored state as the
+// host holds it, the key its links are signed with, the keys its gates hold,
+// and the facts of the machine its loads resolve under. No clock: every
 // input carries the host's readings.
 export interface MainRendererInputs {
   // [LAW:one-source-of-truth] A renderer is built from its stored state, so
   // none exists without it: every write it makes leaves as a turn's stored
   // writes, and the next renderer is built from what the host then holds.
   readonly stored: StoredState;
-  // [LAW:single-enforcer] The signer over the state directory's key.
-  readonly linkSigner: LinkSigner;
+  // [LAW:single-enforcer] The state directory's link key, in base64, which
+  // the host verifies every click against.
+  readonly linkKey: string;
   // Where the user's config and installed plugins live.
   readonly locations: Locations;
   readonly home: string;
-  // What this daemon's clicks may write: the gates its root built.
-  readonly gates: Gates;
+  // What this renderer's clicks may write beyond what configs derive.
+  readonly gates: HeldKeys;
   // The memory limit the render cache's budget is a share of.
   readonly memoryLimitBytes: number;
 }
 
-// [LAW:single-enforcer] The main renderer, built over the host's parts it
-// reaches and the stored state it is handed.
-export function mainRendererOf(
-  inputs: MainRendererInputs,
-  host: AdapterToHost,
-): Renderer {
-  const { gates, linkSigner } = inputs;
+// [LAW:one-way-deps] [LAW:types-are-the-program] A renderer is handed data
+// alone, so no host part reaches it: one handed a function, a host part's
+// method among them, fails the build here.
+export const MAIN_RENDERER_INPUTS_CROSS: Crosses<MainRendererInputs> = true;
+
+// [LAW:single-enforcer] What a boot builds the main renderer from, in either
+// process.
+// [LAW:no-silent-failure] A key the host could not read refuses the build
+// with its reason, on the bar's ⚠; the host's next start reads it again.
+export function inputsOfBoot(boot: RendererBoot): MainRendererInputs {
+  if (boot.linkKey.kind === "failed")
+    throw new Error(`the link key could not be read: ${boot.linkKey.reason}`);
+  return {
+    stored: boot.stored,
+    linkKey: boot.linkKey.value,
+    locations: boot.locations,
+    home: boot.home,
+    gates: boot.gates,
+    memoryLimitBytes: boot.memoryLimitBytes,
+  };
+}
+
+// [LAW:single-enforcer] The main renderer, built from what it is handed: its
+// parts are its own.
+export function mainRendererOf(inputs: MainRendererInputs): Renderer {
+  const gates = createGates(inputs.gates);
+  const signer = linkSigner(Buffer.from(inputs.linkKey, "base64"));
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
   const now = () => time.at;
   const menuIdle = new MenuIdle();
-  // [LAW:single-enforcer] The renderer's lines go to the host's one log.
-  const { log } = host;
+  // [LAW:effects-at-boundaries] The renderer's lines leave with its turns.
+  const turnLog = new TurnLog();
+  const { log } = turnLog;
   const sessionState = new SessionState(inputs.stored.sessions);
   const settingsHistory = new SettingsHistory(
     sessionState,
@@ -506,8 +543,7 @@ export function mainRendererOf(
       locations: inputs.locations,
       sessionState,
       log,
-      storage: host.storage,
-      signer: linkSigner,
+      signer,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -574,9 +610,9 @@ export function mainRendererOf(
     periods: FEED_PERIODS,
   });
   const parts: RendererParts = {
-    ...host,
+    log,
     time,
-    linkSigner,
+    linkSigner: signer,
     sessionState,
     renderCache,
     worldStates,
@@ -618,7 +654,7 @@ export function mainRendererOf(
     configFor: (origin) => renderCache.getOrCreate(origin).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
-    links: linkSigner,
+    links: signer,
     lanes: {
       of: (origin, sessionId, latest) =>
         lanesAt(parts, origin, sessionId, latest),
@@ -628,41 +664,39 @@ export function mainRendererOf(
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  // [LAW:types-are-the-program] Exhaustive over the pushes: a new arm is a
+  // [LAW:types-are-the-program] Exhaustive over the asks: a new arm is a
   // compile error here until the renderer answers it.
-  const pushed = (push: AdapterPush): AdapterReply => {
-    switch (push.kind) {
-      case "stats":
-        return {
-          kind: "stats",
-          stats: {
-            renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
-            sessionState: {
-              sessions: sessionState.size(),
-              observers: sessionState.observers(),
-              revision: sessionState.latestRevision(),
+  const own: OwnTurns = {
+    inspect: (ask) => {
+      switch (ask.kind) {
+        case "stats":
+          return {
+            kind: "stats",
+            stats: {
+              renderCache: renderCache.stats,
+              effectCache: effectSessions.getStats(),
+              sessionState: {
+                sessions: sessionState.size(),
+                observers: sessionState.observers(),
+                revision: sessionState.latestRevision(),
+              },
+              menuIdle: menuIdle.stats(),
+              framesDrawn: feeds.drawn(),
             },
-            menuIdle: menuIdle.stats(),
-            framesDrawn: feeds.drawn(),
-          },
-        };
-      case "debug":
-        return {
-          kind: "debug",
-          snapshot: debugOf(renderCache.latestView(), push.what),
-        };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
-      // runs whole, so none is in flight.
-      case "close-journal":
-        configWrites.close();
-        return { kind: "close-journal" };
-      case "close-views":
-        // The feeds first: each releases its pin on a view the close ends.
-        feeds.closeAll(time.tick);
-        renderCache.close();
-        return { kind: "close-views" };
-    }
+          };
+        case "debug":
+          return {
+            kind: "debug",
+            snapshot: debugOf(renderCache.latestView(), ask.what),
+          };
+      }
+    },
+    closing: () => configWrites.close(),
+    close: () => {
+      // The feeds first: each releases its pin on a view the close ends.
+      feeds.closeAll(time.tick);
+      renderCache.close();
+    },
   };
   return mainRenderer(
     {
@@ -674,8 +708,9 @@ export function mainRendererOf(
       acts,
       doctorRuns,
     },
-    pushed,
+    own,
     drained,
+    () => turnLog.drain(),
   );
 }
 

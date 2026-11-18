@@ -70,7 +70,7 @@ import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { pendingOf } from "../src/utils/outcome";
 import { SourceRuns } from "../src/daemon/source-runs";
@@ -232,7 +232,14 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     doctor: NO_DOCTOR,
   });
   const sessionState = new SessionState();
-  const served = collected({ owners: providers, log }, cleanups);
+  const served = collected(
+    {
+      owners: providers,
+      log,
+      held: (named) => providers.managedStorage.held(named),
+    },
+    cleanups,
+  );
   const cache = new DiscoveringCache<SessionSource>(
     {
       clock: systemTimekeeper,
@@ -240,7 +247,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       locations: locs(),
       sessionState,
       watchers,
-      storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -494,7 +500,9 @@ describe("a run's declaration", () => {
         "config.json5",
         `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
       );
-      const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
+      const message = fatal(
+        await checkConfig(WORLD, DAEMON_HELD_KEYS, file, dir),
+      );
       expect(message).toContain(
         `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
       );
@@ -508,7 +516,9 @@ describe("a run's declaration", () => {
       "config.json5",
       `{ actions: { mine: { run: ["true"], refreshes: ["status"] } }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
+    const message = fatal(
+      await checkConfig(WORLD, DAEMON_HELD_KEYS, file, dir),
+    );
     expect(message).toContain(
       `actions.mine refreshes "status", which is not declared`,
     );
@@ -552,7 +562,9 @@ describe("a run's declaration", () => {
         "config.json5",
         `{ actions: { mine: ${decl} }, segments: { mine: { template: '{{ action "mine" "m" }}' } }, root: { h: ["mine"] } }`,
       );
-      const message = fatal(await checkConfig(WORLD, daemonGates(), file, dir));
+      const message = fatal(
+        await checkConfig(WORLD, DAEMON_HELD_KEYS, file, dir),
+      );
       expect(message).toContain(field);
       expect(message).toContain(said);
     },

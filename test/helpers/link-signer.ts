@@ -4,6 +4,8 @@ import { linkSigner } from "../../src/click/link-signer";
 // with its key file's.
 export const TEST_LINK_KEY = Buffer.alloc(32, 7);
 export const TEST_SIGNER = linkSigner(TEST_LINK_KEY);
+// The key as a renderer is handed it.
+export const TEST_LINK_KEY_TEXT = TEST_LINK_KEY.toString("base64");
 
 // A click request for `verb` and its still-encoded `value`, over the link a
 // bar signed with the test key would carry.

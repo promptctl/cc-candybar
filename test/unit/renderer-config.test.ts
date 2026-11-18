@@ -34,9 +34,8 @@ import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { bareGates } from "../helpers/gates";
-import { TEST_SIGNER } from "../helpers/link-signer";
-import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
+import { BARE_HELD_KEYS } from "../helpers/gates";
+import { TEST_LINK_KEY_TEXT } from "../helpers/link-signer";
 import { viewFacts } from "../helpers/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -55,26 +54,28 @@ const CONFIG = `{
 // line it hands the host's log.
 function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
   const logged: string[] = [];
-  const r = mainRendererOf(
-    {
-      stored: { ...EMPTY_STORED_STATE, sessions: Object.fromEntries(recorded) },
-      linkSigner: TEST_SIGNER,
-      locations: {
-        home: "/nowhere/home",
-        configHome: "/nowhere/config",
-        dataHome: "/nowhere/data",
-        dataDirs: [],
-      },
+  const main = mainRendererOf({
+    stored: { ...EMPTY_STORED_STATE, sessions: Object.fromEntries(recorded) },
+    linkKey: TEST_LINK_KEY_TEXT,
+    locations: {
       home: "/nowhere/home",
-      gates: bareGates(),
-      memoryLimitBytes: 1024 * 1024 * 1024,
+      configHome: "/nowhere/config",
+      dataHome: "/nowhere/data",
+      dataDirs: [],
     },
-    {
-      log: (level, message) => void logged.push(`${level} ${message}`),
-      eventAnswered: () => {},
-      storage: NO_PLUGIN_STORAGE,
+    home: "/nowhere/home",
+    gates: BARE_HELD_KEYS,
+    memoryLimitBytes: 1024 * 1024 * 1024,
+  });
+  // What the renderer logged, as each turn's output carries it to the host.
+  const r: Renderer = {
+    answer: async (input) => {
+      const output = await main.answer(input);
+      for (const { level, line } of output.logged)
+        logged.push(`${level} ${line}`);
+      return output;
     },
-  );
+  };
   return { r, logged };
 }
 

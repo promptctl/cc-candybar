@@ -5,7 +5,13 @@
 // these in.
 
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { holdable, hostHeld, NO_PUSHES, NOTHING_STORED } from "./renderers";
+import {
+  holdable,
+  hostHeld,
+  NO_OWN_TURNS,
+  NOTHING_SAID,
+  NOTHING_STORED,
+} from "./renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -74,6 +80,8 @@ export function clickParts(
     // every origin is held here, and none is let go.
     renderCache: {
       subscriptions: () => ({ sources: {} }),
+      // No config loads here, so no state names a storage folder.
+      storage: () => ({ folders: [], loads: 0 }),
       origins: () => [],
       holdView: () => null,
       holdsConfig: () => true,
@@ -102,16 +110,14 @@ export function clickParts(
     doctorRuns: verbCtx.doctorRuns,
   } as unknown as MainRendererParts;
   // The teardown's journal step, answered as the main renderer answers it, in
-  // its place in the mailbox: no other push is a click's.
+  // its place in the mailbox: no other of the renderer's own turns is a
+  // click's.
   const held = holdable(
     mainRenderer(
       parts,
-      (push) => {
-        if (push.kind !== "close-journal") return NO_PUSHES();
-        verbCtx.configWrites.close();
-        return { kind: "close-journal" };
-      },
+      { ...NO_OWN_TURNS, closing: () => verbCtx.configWrites.close() },
       NOTHING_STORED,
+      NOTHING_SAID,
     ),
   );
   const renderer = rendererHost(

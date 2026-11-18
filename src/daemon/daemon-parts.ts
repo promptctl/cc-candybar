@@ -18,6 +18,7 @@ import type { RendererHost } from "./renderer-host.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
 import type { Launcher } from "../proc/launcher";
+import type { HeldEvent } from "../utils/event-hold";
 
 // [LAW:one-source-of-truth] What one daemon holds, built once by `createDaemon`
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
@@ -57,4 +58,7 @@ export interface DaemonParts {
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
   readonly collector: Collector;
+  // [LAW:single-enforcer] The daemon-wide held events a delivered frame
+  // showed, each answered from then on (src/utils/event-hold.ts).
+  readonly eventsAnswered: (events: readonly HeldEvent[]) => void;
 }

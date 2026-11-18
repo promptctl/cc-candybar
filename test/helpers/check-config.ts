@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { checkConfig, checkPlan, type CheckOutcome } from "../../src/check";
 import { textOf } from "../../src/render/frame";
-import { daemonGates } from "../../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../../src/daemon/foundations/update-keys";
 
 // Run `fn` against a real temp config file holding `text`. The file outlives
 // the whole of `fn` (checkConfig is async: it awaits its sources' first run).
@@ -52,6 +52,6 @@ export function checkText(
   text: string,
 ): Promise<Extract<CheckOutcome, { kind: "clean" }>> {
   return withTempConfig(text, async (p) =>
-    expectClean(label, await checkConfig(WORLD, daemonGates(), p)),
+    expectClean(label, await checkConfig(WORLD, DAEMON_HELD_KEYS, p)),
   );
 }

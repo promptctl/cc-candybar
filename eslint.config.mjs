@@ -190,11 +190,7 @@ const OWNED_IMPORTS = {
   // handed down. The daemon process reads it once, in server.ts.
   daemonPaths: {
     group: PATHS,
-    owners: [
-      "src/daemon/server.ts",
-      "src/renderer-process.ts",
-      "src/doctor/cli.ts",
-    ],
+    owners: ["src/daemon/server.ts", "src/doctor/cli.ts"],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   stateDir: {
@@ -284,8 +280,10 @@ const HOST_NAMED_IMPORTS = [
 
 // [LAW:one-way-deps] Every module of src sits in a zone, and a zone may import
 // only the zones it lists. The renderer is the code a renderer's process is
-// built from, so it reaches the host only through the adapter in the shared
-// contract, and the host reaches it only through its start. Shared code loads
+// built from, so it names no host part: what it knows of the host is the
+// renderer interface in the shared contract, whose inputs are its only reads
+// and whose outputs its only acts. The host reaches it only through its start,
+// which is handed data alone (`MAIN_RENDERER_INPUTS_CROSS`). Shared code loads
 // in both processes and imports neither side. The longest prefix wins, and an
 // unlisted file is rest, so a new module is the host's until it is placed.
 // The roots may import any zone: the entry, because it dispatches to every
@@ -352,9 +350,9 @@ const ZONE_IMPORTS = {
 };
 const ZONE_MESSAGE = {
   renderer:
-    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
+    "The renderer names no host part: what it reads arrives in its inputs, and what it does leaves in its outputs (src/renderer-interface/).",
   start:
-    "The renderer reaches the host only through its adapter (src/renderer-interface/).",
+    "The renderer names no host part: what it reads arrives in its inputs, and what it does leaves in its outputs (src/renderer-interface/).",
   shared: "Shared code loads in both processes and imports neither side.",
   rest: "The host reaches the renderer only through its start (src/renderer/main.ts).",
 };

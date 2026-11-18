@@ -16,10 +16,10 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { diffChanges } from "../src/config/config-changes";
 import type {
   Act,
-  Effect,
+  Settled,
   EffectId,
   EffectOutcome,
-  EventInput,
+  RendererInput,
   RendererOutput,
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
@@ -46,11 +46,18 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-const output = (effects: readonly Effect[]): RendererOutput => ({
+const output = (effects: readonly Settled[]): RendererOutput => ({
   kind: "answered",
   stored: [],
+  logged: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+  subscriptions: {
+    sources: {},
+    lanes: {},
+    configs: [],
+    storage: { folders: [], loads: 0 },
+    wake: null,
+  },
   record: [],
   frames: [],
 });
@@ -73,7 +80,7 @@ const run = (): Act => ({
   cwd: "/",
   refreshes: [],
 });
-const change = (before: string, after: string): Effect => ({
+const change = (before: string, after: string): Settled => ({
   kind: "change",
   id: ++ids as EffectId,
   session: S,
@@ -89,9 +96,10 @@ const change = (before: string, after: string): Effect => ({
 // each `effect-done` as `done` answers it. Every act is performed by
 // `perform`, and what happened is in `did`, in order.
 function hostOver(
-  effects: readonly Effect[],
+  effects: readonly Settled[],
   over: Partial<HostWorld> = {},
-  done: (input: EventInput) => Promise<RendererOutput> = async () => output([]),
+  done: (input: RendererInput) => Promise<RendererOutput> = async () =>
+    output([]),
 ) {
   const did: string[] = [];
   const unheard: string[] = [];

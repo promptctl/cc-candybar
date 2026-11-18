@@ -1,28 +1,23 @@
 // A renderer's own process: the main renderer, built from the boot line its
 // host sends on stdin, answering every later line as the renderer interface
 // over lines (src/renderer-interface/wire.ts) says. It opens no file and
-// writes nothing of its own: its log lines are notices into the host's one
-// log, and what it stores leaves as its turns' stored writes.
+// writes nothing of its own: its log lines and what it stores leave with its
+// turns' outputs.
 //
 // [LAW:one-way-deps] exception: the renderer process's composition root, the
-// counterpart of the daemon's (src/daemon/server.ts): it reads where the
-// user's config and plugins live from the host's `Host`.
+// counterpart of the daemon's (src/daemon/server.ts): it reads the digest its
+// own build was baked with.
 
 import { once } from "node:events";
 import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
-import { locations } from "./daemon/paths.js";
-import { linkSigner } from "./click/link-signer.js";
-import { daemonGates } from "./daemon/foundations/update-keys.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
-import { mainRendererOf } from "./renderer/main.js";
+import { inputsOfBoot, mainRendererOf } from "./renderer/main.js";
 import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
-import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import { bakedDigest } from "./daemon/build-currency.js";
 import {
-  hostOverLines,
   lineSplitter,
   serveRenderer,
   type HostLine,
@@ -34,7 +29,6 @@ export function runRenderer(world: World): void {
   const send = (line: RendererLine): void => {
     process.stdout.write(`${JSON.stringify(line)}\n`);
   };
-  const host = hostOverLines(send);
   // [LAW:single-enforcer] One way out, taken once, whichever end came first:
   // the host holds everything this process stored, so nothing is left to
   // save.
@@ -70,7 +64,7 @@ export function runRenderer(world: World): void {
     if (line.kind !== "boot") throw new Error(`a ${line.kind} before the boot`);
     let renderer: TimedRenderer;
     try {
-      renderer = booted(world, line.boot, host);
+      renderer = booted(world, line.boot);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
       leave(1);
@@ -106,34 +100,14 @@ export function runRenderer(world: World): void {
   });
 }
 
-function booted(
-  world: World,
-  boot: RendererBoot,
-  reaches: AdapterToHost,
-): TimedRenderer {
+function booted(world: World, boot: RendererBoot): TimedRenderer {
   const own = bakedDigest();
   if (boot.digest !== own)
     throw new Error(
       `the host was built from source ${boot.digest ?? "of no digest"}; this renderer from ${own ?? "source of no digest"}, which the next daemon runs`,
     );
-  // [LAW:no-silent-failure] A key the host could not read refuses this boot
-  // with its reason, on the bar's ⚠; the host's next start reads it again.
-  if (boot.linkKey.kind === "failed")
-    throw new Error(`the link key could not be read: ${boot.linkKey.reason}`);
-  const { host } = boot;
   const { clock } = world;
   // [LAW:single-enforcer] Each turn timed in this process, around its
   // answer: the host tells the hop from the turn.
-  const renderer = mainRendererOf(
-    {
-      stored: boot.stored,
-      linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
-      locations: locations(host),
-      home: host.home,
-      gates: daemonGates(),
-      memoryLimitBytes: boot.memoryLimitBytes,
-    },
-    reaches,
-  );
-  return timed(renderer, () => clock.monotonic());
+  return timed(mainRendererOf(inputsOfBoot(boot)), () => clock.monotonic());
 }

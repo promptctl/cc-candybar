@@ -4,34 +4,29 @@
 // code runs over a pipe in a test as over a process's stdio.
 //
 // [LAW:one-type-per-behavior] One transport over the one interface: the host
-// holds a `TimedRenderer` and the renderer holds an `AdapterToHost` whichever
-// side of a process they are on. A turn is timed in the renderer's process,
-// around its answer, and its time crosses with its output.
+// holds a `TimedRenderer` whichever side of a process the renderer is on. A
+// turn is timed in the renderer's process, around its answer, and its time
+// crosses with its output.
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
-import type { Host } from "../host-facts.js";
 import type { Asked } from "../utils/outcome.js";
-import type { AdapterToHost } from "./adapter.js";
+import type { Locations } from "../config/loader/chain-places.js";
+import type { HeldKeys } from "../daemon/foundations/gates.js";
 import type { StoredState } from "./stored-state.js";
 import type { Crosses } from "./crosses.js";
-import {
-  rendererOf,
-  type AdapterInput,
-  type AdapterOutput,
-  type RendererInput,
-  type RendererOutput,
-  type EventInput,
-  type Timed,
-  type TimedRenderer,
+import type {
+  RendererInput,
+  RendererOutput,
+  Timed,
+  TimedRenderer,
 } from "./interface.js";
 
-// What a renderer process builds itself from: the host's view of its machine
-// (its environment, home and temporary directory, from which the renderer
-// finds the user's config and plugins as the host does), the one memory limit
-// its cache's budget is a share of, and its profile's stored state as the host
-// holds it as the renderer spawns.
+// What a renderer builds itself from, in its own process or the host's: where
+// the user's config and plugins live as the host found them, the one memory
+// limit its cache's budget is a share of, the keys its gates hold, and its
+// profile's stored state as the host holds it as the renderer starts.
 export interface RendererBoot {
   readonly stored: StoredState;
   // [LAW:one-source-of-truth] The digest of the source the host was built
@@ -39,21 +34,15 @@ export interface RendererBoot {
   // from the entry on disk, which an install can rewrite under a running
   // host, and two builds agree on these lines only by being one build.
   readonly digest: string | null;
-  // [LAW:one-source-of-truth] The host's own `Host`, its environment's unset
-  // variables left out as JSON leaves them, which a process environment
-  // reads the same as absent.
-  readonly host: Omit<Host, "env"> & {
-    readonly env: Readonly<Record<string, string>>;
-  };
+  readonly locations: Locations;
+  readonly home: string;
+  readonly gates: HeldKeys;
   readonly memoryLimitBytes: number;
   // The host's link key in base64, read as this renderer spawned, which it
   // signs every link with; or why it could not be read, which the renderer
   // refuses its boot with.
   readonly linkKey: Asked<string>;
 }
-
-// A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
-export type ReachPath = string;
 
 export type HostLine =
   | { readonly kind: "boot"; readonly boot: RendererBoot }
@@ -75,16 +64,11 @@ export type RendererLine =
   | {
       readonly kind: "output";
       readonly n: number;
-      readonly output: Timed<RendererOutput | AdapterOutput>;
+      readonly output: Timed<RendererOutput>;
     }
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
   | { readonly kind: "rejected"; readonly n: number; readonly failure: Failure }
-  | {
-      readonly kind: "notice";
-      readonly reach: ReachPath;
-      readonly args: readonly unknown[];
-    }
   | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
   // [LAW:effects-at-boundaries] A heap snapshot's next piece of text, which
   // the host writes: the renderer process opens no file.
@@ -98,56 +82,9 @@ export type RendererLine =
         | { readonly kind: "failed"; readonly failure: Failure };
     };
 
-// [LAW:types-are-the-program] Every line is plain data. A reach's arguments
-// are checked where they are spelled (`REACHES_CROSS`).
+// [LAW:types-are-the-program] Every line is plain data.
 export const HOST_LINES_CROSS: Crosses<HostLine> = true;
-export const RENDERER_LINES_CROSS: Crosses<
-  Exclude<RendererLine, { kind: "notice" }>
-> = true;
-
-// [LAW:types-are-the-program] Every reach `AdapterToHost` spells, each a
-// notice (`REACHES_CROSS`): a reach added there fails the build here until it
-// is listed.
-type ReachKinds<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: never[]) => unknown
-    ? "notice"
-    : ReachKinds<T[K]>;
-};
-
-export const REACH_KINDS: ReachKinds<AdapterToHost> = {
-  log: "notice",
-  eventAnswered: "notice",
-  storage: { hold: "notice", release: "notice" },
-};
-
-type Reach = (...args: readonly unknown[]) => unknown;
-
-// [LAW:single-enforcer] The one walk of the table: each reach's path and
-// kind, in the table's order.
-function reachesOf(table: object, prefix = ""): readonly ReachPath[] {
-  return Object.entries(table).flatMap(([key, value]) =>
-    typeof value === "string"
-      ? [`${prefix}${key}`]
-      : reachesOf(value as object, `${prefix}${key}.`),
-  );
-}
-
-const REACHES = reachesOf(REACH_KINDS);
-
-// The host's side of a reach: the function at its path in the host's parts.
-function reachAt(host: AdapterToHost, path: ReachPath): Reach {
-  const found = path
-    .split(".")
-    .reduce<unknown>(
-      (at, key) => (at as Record<string, unknown> | undefined)?.[key],
-      host,
-    );
-  // [LAW:no-silent-failure] A path the table does not hold is a renderer of
-  // another build's; it is said, never dropped.
-  if (typeof found !== "function")
-    throw new Error(`the renderer reached ${path}, which the host has not`);
-  return found as Reach;
-}
+export const RENDERER_LINES_CROSS: Crosses<RendererLine> = true;
 
 // [LAW:single-enforcer] One splitter for a stream of lines: each chunk is
 // scanned once, and a last line with no newline is heard at the end.
@@ -193,12 +130,10 @@ export interface RendererOverLines {
 
 export function rendererOverLines(deps: {
   readonly send: (line: HostLine) => void;
-  // The host's parts each reach is performed on.
-  readonly host: AdapterToHost;
-  // A notice that threw, or a line the host could not take.
+  // A line the host could not take.
   readonly fault: (message: string) => void;
 }): RendererOverLines {
-  const { send, host } = deps;
+  const { send } = deps;
   // What each line sent is owed, by its number: what was asked, and how its
   // answer settles it.
   const owed = new Map<
@@ -236,36 +171,24 @@ export function rendererOverLines(deps: {
       });
       send(line(n));
     });
-  const answer = (input: RendererInput) =>
-    owe<Timed<RendererOutput | AdapterOutput>>(
-      input.kind === "event"
-        ? `${input.event.kind} input`
-        : `${input.push.kind} push`,
-      (n) => ({ kind: "input", n, input }),
-      (heard, resolve, reject) => {
-        if (heard.kind === "output") resolve(heard.output);
-        else if (heard.kind === "rejected")
-          reject(new CrossedFailure(heard.failure));
-        else return false;
-        return true;
-      },
-    );
-  const renderer = rendererOf({
-    // [LAW:types-are-the-program] exception: the renderer answers each input
-    // with the output of its kind, which the line cannot carry to its type.
-    event: (input: EventInput) =>
-      answer(input) as Promise<Timed<RendererOutput>>,
-    adapter: (input: AdapterInput) =>
-      answer(input) as Promise<Timed<AdapterOutput>>,
-  });
-  // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
-  // arrives, so the notices land in the order sent.
-  const reached = (path: ReachPath, args: readonly unknown[]): unknown =>
-    reachAt(host, path)(...args);
+  const renderer: TimedRenderer = {
+    answer: (input: RendererInput) =>
+      owe<Timed<RendererOutput>>(
+        `${input.event.kind} input`,
+        (n) => ({ kind: "input", n, input }),
+        (heard, resolve, reject) => {
+          if (heard.kind === "output") resolve(heard.output);
+          else if (heard.kind === "rejected")
+            reject(new CrossedFailure(heard.failure));
+          else return false;
+          return true;
+        },
+      ),
+  };
   const heard = (line: RendererLine): void => {
     // [LAW:no-silent-failure] A line a renderer said as it ended (its pipes
-    // can close after its end) reaches nothing: what it would hold has no
-    // owner left to release it, and what it answers was failed already.
+    // can close after its end) reaches nothing: what it answers was failed
+    // already.
     if (gone !== null) {
       deps.fault(`renderer said ${line.kind} after its end (${gone.message})`);
       return;
@@ -280,15 +203,6 @@ export function rendererOverLines(deps: {
         write(line.chunk);
         return;
       }
-      case "notice":
-        try {
-          reached(line.reach, line.args);
-        } catch (thrown) {
-          deps.fault(
-            `renderer notice ${line.reach} threw: ${failureOf(thrown).detail}`,
-          );
-        }
-        return;
       case "output":
       case "rejected":
       case "ping":
@@ -353,26 +267,6 @@ export function rendererOverLines(deps: {
   };
 }
 
-// The host as a renderer in another process holds it: each reach a line.
-export function hostOverLines(
-  send: (line: RendererLine) => void,
-): AdapterToHost {
-  const host: Record<string, unknown> = {};
-  for (const path of REACHES) {
-    const keys = path.split(".");
-    const leaf = keys.pop() as string;
-    const group = keys.reduce<Record<string, unknown>>(
-      (at, key) => (at[key] ??= {}) as Record<string, unknown>,
-      host,
-    );
-    group[leaf] = (...args: readonly unknown[]) =>
-      send({ kind: "notice", reach: path, args });
-  }
-  // [LAW:types-are-the-program] exception: built from `REACH_KINDS`, whose
-  // type is `AdapterToHost`'s own shape, so every reach is here.
-  return host as unknown as AdapterToHost;
-}
-
 // The renderer's side of the lines past its boot: each input answered by
 // its output, and the host's reads of the process answered here, outside any
 // turn.
@@ -389,11 +283,7 @@ export function serveRenderer(deps: {
       case "input":
         // [LAW:no-silent-failure] An input whose answer rejected is answered
         // as that input's failure, never left to end the process.
-        void (
-          renderer.answer as (
-            i: RendererInput,
-          ) => Promise<Timed<RendererOutput | AdapterOutput>>
-        )(line.input).then(
+        void renderer.answer(line.input).then(
           (output) => send({ kind: "output", n: line.n, output }),
           (thrown: unknown) =>
             send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),

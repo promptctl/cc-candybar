@@ -3,11 +3,9 @@
 // each `@ts-expect-error` fails the typecheck if the check stops refusing what
 // it names, so the check cannot pass vacuously.
 
-import type { Crosses, Reaches } from "../../src/renderer-interface/crosses";
-import type {
-  AdapterPush,
-  AdapterToHost,
-} from "../../src/renderer-interface/adapter";
+import type { Crosses } from "../../src/renderer-interface/crosses";
+import type { Event } from "../../src/renderer-interface/interface";
+import type { MainRendererInputs } from "../../src/renderer/main";
 
 // @ts-expect-error a closure does not cross
 const closure: Crosses<{ readonly done: () => void }> = true;
@@ -19,8 +17,12 @@ const holes: Crosses<readonly (string | undefined)[]> = true;
 const deep: Crosses<{ a: { b: { c: { d: () => void } } } }> = true;
 // @ts-expect-error an `any` holds whatever it was handed, read or not
 const anything: Crosses<{ readonly parsed: any }> = true;
-// @ts-expect-error a push that held a closure would not cross
-const push: Crosses<AdapterPush | { kind: "x"; run: () => void }> = true;
+// @ts-expect-error an event that held a closure would not cross
+const event: Crosses<Event | { kind: "x"; run: () => void }> = true;
+// @ts-expect-error a renderer handed a host part's method would not cross
+const handed: Crosses<
+  MainRendererInputs & { readonly log: (line: string) => void }
+> = true;
 // @ts-expect-error a record's undefined is a key JSON drops
 const unset: Crosses<Readonly<Record<string, string | undefined>>> = true;
 // @ts-expect-error a number-keyed record's undefined is a key JSON drops
@@ -36,26 +38,6 @@ const plain: Crosses<{
   readonly none: null;
 }> = true;
 
-// @ts-expect-error a reach answering a value in place does not cross
-const inPlace: Reaches<{ readonly read: () => boolean }> = true;
-// @ts-expect-error an argument that holds a closure does not cross
-const handed: Reaches<{ readonly on: (heard: () => void) => void }> = true;
-// @ts-expect-error an argument list's undefined arrives as null
-const hole: Reaches<{ readonly see: (tmux: string | undefined) => void }> =
-  true;
-// @ts-expect-error an awaited answer does not cross: a turn never waits
-const held: Reaches<{ readonly ask: () => Promise<number> }> = true;
-// @ts-expect-error a reach group that grew one in-place reach is found
-const grown: Reaches<AdapterToHost & { readonly x: { y: () => number } }> =
-  true;
-// @ts-expect-error an answer of `any` holds whatever it was handed
-const untyped: Reaches<{ readonly read: () => any }> = true;
-// Notices, in a group, cross.
-const reaches: Reaches<{
-  readonly told: (line: string) => void;
-  readonly heard: { readonly at: (at: number | null) => void };
-}> = true;
-
 describe("Crosses", () => {
   it("is a check the typecheck runs", () => {
     expect([
@@ -64,19 +46,12 @@ describe("Crosses", () => {
       holes,
       deep,
       anything,
-      push,
+      event,
+      handed,
       unset,
       numbered,
       templated,
       plain,
-    ]).toHaveLength(10);
-  });
-});
-
-describe("Reaches", () => {
-  it("is a check the typecheck runs", () => {
-    expect([inPlace, handed, hole, held, grown, untyped, reaches]).toHaveLength(
-      7,
-    );
+    ]).toHaveLength(11);
   });
 });

@@ -24,14 +24,14 @@ import type { LayerRole } from "../config/layer-role.js";
 import type {
   Act,
   ConfigChange,
-  Effect,
+  Settled,
   EffectId,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
 
 // What a click's consequence is applied in: the turn its changes landed in,
 // whose effects what it asks joins.
-export type Consequence = (effects: Effect[]) => void;
+export type Consequence = (effects: Settled[]) => void;
 
 // A click whose changes are on their way: the session it clicked, the files
 // they change, and its consequence.
@@ -169,7 +169,7 @@ export class ConfigWrites {
   // effects, and its consequence waits for them; a click that changed no file
   // and answered nothing has its consequence now.
   seal(
-    effects: Effect[],
+    effects: Settled[],
     session: SessionId | null,
     consequence: Consequence,
   ): void {

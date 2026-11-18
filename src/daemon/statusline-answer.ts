@@ -5,12 +5,12 @@
 
 import path from "node:path";
 import type {
-  Effect,
   Event,
   Present,
   RequestId,
   TurnOutcome,
 } from "../renderer-interface/interface.js";
+import type { HeldEvent } from "../utils/event-hold.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import { inspect } from "node:util";
 import { elapsedMs, type Timekeeper } from "../time.js";
@@ -114,12 +114,16 @@ export async function answerStatusline(
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
+  // [LAW:single-enforcer] Where the daemon-wide held events a frame showed
+  // go once it reached its client: one answer having carried an event is
+  // what makes it not silent (src/utils/event-hold.ts).
+  eventsAnswered: (events: readonly HeldEvent[]) => void,
 ): Promise<StatuslineAnswer> {
   const req = located(arrived, locate);
   const session = req.hookData.session_id;
   // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
   // the host's one path to the renderer.
-  const done = (effect: Effect, reason: string | null): void =>
+  const done = (effect: Present, reason: string | null): void =>
     void host.deliver(
       () => ({
         kind: "event",
@@ -269,7 +273,9 @@ export async function answerStatusline(
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
-    settled: (took) =>
-      done(presented, took ? null : "the client did not take the answer"),
+    settled: (took) => {
+      if (took) eventsAnswered(presented.shows);
+      done(presented, took ? null : "the client did not take the answer");
+    },
   };
 }

@@ -31,7 +31,6 @@ import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
 import { locs } from "./host";
 import { TEST_SIGNER } from "./link-signer";
-import { NO_PLUGIN_STORAGE } from "./plugin-storage";
 import {
   absentOwners,
   withTranscriptLanes,
@@ -169,7 +168,6 @@ export function sessionRig(
       locations: locs(),
       sessionState,
       watchers,
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,

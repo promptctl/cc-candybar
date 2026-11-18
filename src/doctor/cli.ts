@@ -24,14 +24,14 @@ import type { CliPlan } from "../cli-plan.js";
 import { DOOR_GLYPH } from "../config/disclosure.js";
 import { detectClientHints } from "../client-hints.js";
 import { claudeConfigDir } from "../claude-settings.js";
-import { previewSigner } from "../click/link-signer.js";
+import { previewLinkKey } from "../click/link-signer.js";
 import {
   clickSessionOf,
   encodeSegments,
   VERB_DOCTOR_RUN,
 } from "../click/wire.js";
 import { discover, readShared } from "../daemon/config-discovery/discover.js";
-import { daemonGates } from "../daemon/foundations/update-keys.js";
+import { DAEMON_HELD_KEYS } from "../daemon/foundations/update-keys.js";
 import { PROTOCOL_VERSION } from "../daemon/foundations/protocol.js";
 import { plainEnvironment } from "../daemon/foundations/session-env.js";
 import { MAIN_RENDERER } from "../daemon/foundations/renderer-name.js";
@@ -257,8 +257,8 @@ async function doctorRun(
   const at = instantAt(clock);
   const bar = localBar({
     world,
-    gates: daemonGates(),
-    linkSigner: previewSigner(),
+    gates: DAEMON_HELD_KEYS,
+    linkKey: previewLinkKey().toString("base64"),
     stateDir: stateDir(host),
     home: host.home,
     locate: checkoutLocation,

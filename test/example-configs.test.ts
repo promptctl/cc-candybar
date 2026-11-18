@@ -27,7 +27,7 @@ import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
 import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { DAEMON_HELD_KEYS } from "../src/daemon/foundations/update-keys";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -39,7 +39,7 @@ const exampleFiles = fs
 // Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
 async function renderExample(file: string): Promise<Frame> {
-  return expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)))
+  return expectClean(file, await checkConfig(WORLD, DAEMON_HELD_KEYS, path.join(examplesDir, file)))
     .rendered;
 }
 
@@ -59,7 +59,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   test.each(exampleFiles)(
     "%s is clean under `cc-candybar check` (exit 0) and renders",
     async (file) => {
-      expectClean(file, await checkConfig(WORLD, daemonGates(), path.join(examplesDir, file)));
+      expectClean(file, await checkConfig(WORLD, DAEMON_HELD_KEYS, path.join(examplesDir, file)));
     },
   );
 
@@ -96,7 +96,7 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
     'a config picking preset "%s" is clean under check (exit 0) and renders',
     async (preset) => {
       await withPresetConfig(preset, async (p) =>
-        expectClean(`preset "${preset}"`, await checkConfig(WORLD, daemonGates(), p)),
+        expectClean(`preset "${preset}"`, await checkConfig(WORLD, DAEMON_HELD_KEYS, p)),
       );
     },
   );

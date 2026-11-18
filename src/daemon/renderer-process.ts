@@ -17,21 +17,14 @@ import type { DaemonLogger } from "../utils/logger.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
-  rendererOf,
-  type AdapterInput,
-  type AdapterOutput,
   type EffectId,
-  type EventInput,
   type Renderer,
+  type RendererInput,
   type Timed,
   type TimedRenderer,
   timed,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
@@ -75,13 +68,13 @@ export interface RendererProcess {
 
 // Where a daemon's renderer runs, in two steps of the daemon's build: the
 // port is handed how to build the renderer and its boot as the daemon's build
-// begins, and its `start` the host's reaches once the host's parts exist.
+// begins, and its `start` the host's start once the host's parts exist.
 export type RendererPort = (prepared: {
   // The renderer's name, which every line its link says carries.
   readonly name: RendererName;
-  // The renderer in this process, built over the host's reaches from the
-  // stored state the host holds as it is called.
-  readonly build: (reaches: AdapterToHost) => Renderer;
+  // The renderer in this process, built from the stored state the host holds
+  // as it is called.
+  readonly build: () => Renderer;
   // Read for each spawn: a boot carries the link key and the stored state
   // as they are then.
   readonly boot: () => RendererBoot;
@@ -92,7 +85,7 @@ export type RendererPort = (prepared: {
 // [LAW:one-type-per-behavior] The renderer in this process: what a test's
 // daemon and the page run.
 export const inProcessPort: RendererPort = ({ name, build }) => ({
-  start: (own) => inProcessRenderer(name, build, own.reaches, own.clock),
+  start: (own) => inProcessRenderer(name, build, own.clock),
 });
 
 // The renderer in a process of its own, built there from its boot.
@@ -106,8 +99,7 @@ export function processPort(
 
 export function inProcessRenderer(
   name: RendererName,
-  build: (reaches: AdapterToHost) => Renderer,
-  reaches: AdapterToHost,
+  build: () => Renderer,
   clock: Pick<Timekeeper, "monotonic">,
 ): RendererLink {
   // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
@@ -124,22 +116,18 @@ export function inProcessRenderer(
   // runs both: a turn begun there would leave its views' reactions to run as
   // the host's action ends, after the turn, with no time to read.
   const crossed = async (): Promise<void> => {};
-  const renderer: TimedRenderer = rendererOf({
-    event: async (input) => {
+  const renderer: TimedRenderer = {
+    answer: async (input) => {
       await crossed();
       return live().answer(input);
     },
-    adapter: async (input) => {
-      await crossed();
-      return live().answer(input);
-    },
-  });
+  };
   return {
     renderer,
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's
     // clock, which the renderer's process is.
     serve: () => {
-      built ??= timed(build(reaches), () => clock.monotonic());
+      built ??= timed(build(), () => clock.monotonic());
     },
     arm: () => {},
     // Nothing restarts in process.
@@ -149,8 +137,7 @@ export function inProcessRenderer(
   };
 }
 
-// What the daemon hands a link as it starts it: the host's reaches; the
-// host's complete start, which delivers each live session's `context` and who
+// What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
 // watches each session through the host's one path to the renderer,
 // resolving once its turn has answered; and who holds each end as an event,
 // which every session's world state carries for the bar's ⚠.
@@ -158,7 +145,6 @@ export function inProcessRenderer(
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
 export interface LinkOwner {
-  readonly reaches: AdapterToHost;
   readonly log: DaemonLogger;
   readonly clock: Timekeeper;
   readonly start: () => Promise<void>;
@@ -235,10 +221,6 @@ interface Link {
   hung: boolean;
   // Why it refused its boot, which its end says.
   refusal: string | null;
-  // That it started and answered its start: from then the next renderer is
-  // handed what it holds.
-  tookOver: boolean;
-  readonly held: Held;
   usage: MemorySizes | null;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
@@ -268,16 +250,10 @@ type Phase =
 // steps, and any other is closed.
 type Begun = Extract<Phase, { kind: "closing" | "closed" }>;
 
-// [LAW:one-source-of-truth] What one renderer holds in the host, each of its
-// own ids to the host's, released once the next renderer has answered its
-// start, or at close: the owner every id the host minted for it names.
-interface Held {
-  readonly holds: Map<StorageHoldId, StorageHoldId>;
-}
-
-// A renderer's own id, as the host minted its own for it.
+// A renderer's own id, as the host minted its own for it: what it names
+// goes when the renderer that minted it ends.
 interface Minted<T> {
-  readonly by: Held;
+  readonly by: Link;
   readonly id: T;
 }
 
@@ -289,8 +265,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   let young = 0;
   // Inputs refused while none was live, said once the next one is.
   let refused = 0;
-  // Links that ended, whose holds the next start releases.
-  const gone: Link[] = [];
   // [LAW:one-source-of-truth] The host's ids for what renderers mint: an id
   // the host sees is its own, never repeated across renderers, and names the
   // link and the renderer's own id.
@@ -313,36 +287,15 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           : `renderer ${name} has not started`,
     );
 
-  // The host's reaches as one renderer reaches them: the ids it mints for
-  // storage holds become the host's, held by its link.
-  const reachesFor = (held: Held): AdapterToHost => ({
-    ...own.reaches,
-    storage: {
-      // Every load of a state holds its folders again, under the same id.
-      hold: (id, folders) => {
-        const host = held.holds.get(id) ?? mint<StorageHoldId>();
-        held.holds.set(id, host);
-        own.reaches.storage.hold(host, folders);
-      },
-      release: (id) => {
-        const host = hostIdOf(name, held.holds, id);
-        held.holds.delete(id);
-        own.reaches.storage.release(host);
-      },
-    },
-  });
-
-  const release = ({ held }: Link): void => {
-    for (const host of held.holds.values()) own.reaches.storage.release(host);
+  // [LAW:no-ambient-temporal-coupling] What an ended renderer's subscriptions
+  // named stays held until the next one's start answers with its own, since
+  // the host holds the last subscriptions taken: a storage folder both name
+  // is never closed and reopened, as a directory watch leaks on macOS when it
+  // is. Only its effects' ids go with it.
+  const release = (link: Link): void => {
     for (const [host, effect] of effects)
-      if (effect.by === held) effects.delete(host);
+      if (effect.by === link) effects.delete(host);
   };
-  // [LAW:no-ambient-temporal-coupling] What an ended renderer that took over
-  // held stays held until the next one takes over, so a storage folder both hold is
-  // never closed and reopened: a directory watch leaks on macOS when it is. A
-  // renderer that never took over hands nothing on, so at most one waits. At
-  // close, everything goes.
-  const releaseGone = (): void => gone.splice(0).forEach(release);
 
   const write = (channel: Channel, line: HostLine): void =>
     channel.write(`${JSON.stringify(line)}\n`);
@@ -369,7 +322,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       signal: kill.signal,
       heard: { stdout: stdout.push, stderr: stderr.push },
     });
-    const held: Held = { holds: new Map() };
     const link: Link = {
       generation: generationOf,
       channel,
@@ -377,13 +329,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawnedAt: clock.monotonic(),
       hung: false,
       refusal: null,
-      tookOver: false,
-      held,
       usage: null,
       pingSentAt: null,
       lines: rendererOverLines({
         send: (line) => write(channel, line),
-        host: reachesFor(held),
         fault: (message) =>
           log("error", `renderer ${name}[${generationOf}]: ${message}`),
       }),
@@ -395,7 +344,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // this is queued behind the state it changes.
     // [LAW:no-silent-failure] A start that throws is said, and the renderer
     // serves what the inputs after it bring.
-    const start = own
+    void own
       .start()
       .catch((thrown: unknown) =>
         log(
@@ -403,7 +352,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           `renderer ${name}[${generationOf}] start failed: ${failureOf(thrown).detail}`,
         ),
       );
-    heardBy = (text) => heard(link, start, text);
+    heardBy = (text) => heard(link, text);
     void channel.ended.then((result) => {
       stdout.end();
       stderr.end();
@@ -420,7 +369,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     });
   };
 
-  const heard = (link: Link, start: Promise<void>, text: string): void => {
+  const heard = (link: Link, text: string): void => {
     let line: RendererLine;
     try {
       line = JSON.parse(text) as RendererLine;
@@ -431,7 +380,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     switch (line.kind) {
       case "started":
-        started(link, start);
+        started(link);
         return;
       // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log;
       // the stack is the log's alone.
@@ -447,7 +396,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
   };
 
-  const started = (link: Link, start: Promise<void>): void => {
+  const started = (link: Link): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
     const { queued } = phase;
     phase = { kind: "live", link };
@@ -458,21 +407,13 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     );
     refused = 0;
     for (const send of queued) send();
-    // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
-    // this one has started and taken its start, and stays if it ends first.
-    void start.then(() => {
-      if (current() !== link) return;
-      link.tookOver = true;
-      releaseGone();
-    });
     // Its memory is read at once, not a period after its boot.
     ping(link);
   };
 
   const ended = (link: Link, how: string): void => {
     link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
-    if (link.tookOver) gone.push(link);
-    else release(link);
+    release(link);
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
     // remaining steps would wait on its boot.
@@ -614,15 +555,15 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
+  const answer = (input: RendererInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
-      let toSend: EventInput = input;
+      let toSend: RendererInput = input;
       if (e.kind === "effect-done") {
         const effect = effects.get(e.of);
         // [LAW:no-silent-failure] The renderer that owed this one is gone, so
         // there is no one to tell.
-        if (effect === undefined || effect.by !== link.held)
+        if (effect === undefined || effect.by !== link)
           throw new RendererDown(
             `renderer ${name}: effect ${e.of} was returned by a renderer that has ended`,
           );
@@ -630,21 +571,21 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         toSend = { ...input, event: { ...e, of: effect.id } };
       }
       const output = await link.lines.renderer.answer(toSend);
-      // A turn that threw carries the effects its acts made too.
+      // A turn that threw carries the effects its acts made too. A report is
+      // taken as it is returned, so it names no id.
       return {
         ...output,
         effects: output.effects.map((effect) => {
+          if (effect.kind === "report") return effect;
           const host = mint<EffectId>();
-          effects.set(host, { by: link.held, id: effect.id });
+          effects.set(host, { by: link, id: effect.id });
           return { ...effect, id: host };
         }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
-    sent((link) => link.lines.renderer.answer(input));
 
   return {
-    renderer: rendererOf({ event, adapter }),
+    renderer: { answer },
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;
@@ -658,7 +599,6 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       phase = { kind: "closed", ended };
       stopPings();
       await ended;
-      releaseGone();
     },
     process: () => {
       const link = current();
@@ -681,15 +621,4 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           };
     },
   };
-}
-
-// [LAW:no-silent-failure] A renderer naming an id it never handed the host is
-// a renderer's bug, said.
-function hostIdOf<T>(name: RendererName, held: ReadonlyMap<T, T>, id: T): T {
-  const host = held.get(id);
-  if (host === undefined)
-    throw new Error(
-      `renderer ${name} named ${String(id)}, which it holds none of`,
-    );
-  return host;
 }

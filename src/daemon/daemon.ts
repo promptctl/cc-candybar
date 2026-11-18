@@ -21,7 +21,7 @@ import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
 import { actsDir } from "./update-act";
-import type { Gates } from "./foundations/gates";
+import type { HeldKeys } from "./foundations/gates";
 import { makeUpdateWatch } from "./update-notice";
 import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
@@ -58,12 +58,11 @@ import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost } from "./renderer-host.js";
-import { mainRendererOf } from "../renderer/main.js";
+import { inputsOfBoot, mainRendererOf } from "../renderer/main.js";
+import type { RendererBoot } from "../renderer-interface/wire.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 import type { RendererPort } from "./renderer-process.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
-import { plainEnvironment } from "./foundations/session-env.js";
 import {
   answeredBy,
   joinedEvent,
@@ -180,10 +179,10 @@ export interface DaemonInputs extends DaemonAdapters {
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
-  // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // value, built by the root with `daemonGates` (the update notice's links need
-  // the keys it holds), so two daemons in one process share none.
-  readonly gates: Gates;
+  // What this daemon's renderer's loads accept beyond what configs derive: the
+  // update notice's links need the keys it holds (`DAEMON_HELD_KEYS`). Each
+  // renderer builds its own gates from them, so two share none.
+  readonly gates: HeldKeys;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -347,34 +346,27 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // move it.
   const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
+  // [LAW:one-type-per-behavior] One boot, whichever process the renderer
+  // runs in. The key crosses in base64, so the boot crosses as a line.
+  const boot = (): RendererBoot => {
+    const key = inputs.linkKey();
+    return {
+      stored: stores.current(),
+      digest: bundle.digest,
+      locations: locs,
+      home: host.home,
+      gates,
+      memoryLimitBytes,
+      linkKey:
+        key.kind === "ok"
+          ? { kind: "ok", value: key.value.toString("base64") }
+          : key,
+    };
+  };
   const preparedRenderer = inputs.renderer({
     name: inputs.rendererName,
-    build: (reaches) =>
-      mainRendererOf(
-        {
-          stored: stores.current(),
-          linkSigner,
-          locations: locs,
-          home: host.home,
-          gates,
-          memoryLimitBytes,
-        },
-        reaches,
-      ),
-    // The key crosses in base64, so the boot crosses as a line.
-    boot: () => {
-      const key = inputs.linkKey();
-      return {
-        stored: stores.current(),
-        digest: bundle.digest,
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes,
-        linkKey:
-          key.kind === "ok"
-            ? { kind: "ok", value: key.value.toString("base64") }
-            : key,
-      };
-    },
+    build: () => mainRendererOf(inputsOfBoot(boot())),
+    boot,
     node: bundle.node,
   });
   // Building starts nothing: only the daemon that won the socket arms them, so
@@ -651,28 +643,20 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
   });
 
-  // [LAW:one-way-deps] The host's parts the main renderer reaches: the
-  // compiler checks each against its entry in `AdapterToHost` here, so no
-  // renderer file names a host type.
-  const reaches: AdapterToHost = {
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice.
-    log,
-    eventAnswered: (event) => {
+  // [LAW:single-enforcer] The held events a delivered frame showed: each is
+  // answered, so past its hold no request is owed it again.
+  const eventsAnswered = (events: readonly HeldEvent[]): void => {
+    if (events.length === 0) return;
+    for (const event of events) {
       launcher.answeredPipeEvent(event);
       if (rendererEnded !== null && answeredBy(rendererEnded, event))
         rendererEnded = { ...rendererEnded, answered: true };
       if (actFailed !== null && answeredBy(actFailed, event))
         actFailed = { ...actFailed, answered: true };
-      restateFaults();
-    },
-    storage: {
-      hold: (id, folders) => managedStorage.hold(id, folders),
-      release: (id) => managedStorage.release(id),
-    },
+    }
+    restateFaults();
   };
   const link = preparedRenderer.start({
-    reaches,
     log,
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
@@ -760,6 +744,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     updateWatch,
     limits,
     collector,
+    eventsAnswered,
     renderer: rendererHost(
       inputs.rendererName,
       clock,
@@ -768,6 +753,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
+          managedStorage.held(subscriptions.storage);
           frameFeeds.switched(subscriptions.lanes);
           // [LAW:one-source-of-truth] The rows held are the sessions whose
           // view switches the tmux status line on.
@@ -845,8 +831,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       // The renderer's steps of the teardown, each awaited where it
       // stands: the renderer takes them in the order they are sent.
       const rendererStep =
-        (kind: "close-journal" | "close-views") => (): Promise<unknown> =>
-          parts.renderer.ask({ kind });
+        (step: "closing" | "close") => (): Promise<unknown> =>
+          parts.renderer.closeStep(step);
       // The stores still flush after a close failed (runTeardown).
       const teardown: readonly TeardownStep[] = [
         // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
@@ -864,7 +850,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
         // every click ahead of it lands whole, and none behind it begins.
-        ["renderer journal close", rendererStep("close-journal")],
+        ["renderer journal close", rendererStep("closing")],
         // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
         // is in flight is terminated, whichever owner's work it was, and the
         // launcher's lifeline goes.
@@ -878,7 +864,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // Before the views close: a `config` made after it finds its origin
         // let go, and hands the closed cache nothing.
         ["configDiscovery close", () => configDiscovery.close()],
-        ["renderer views close", rendererStep("close-views")],
+        ["renderer views close", rendererStep("close")],
         ...payloadProviders.closes,
         ["runs close", () => runs.close()],
         // After the collector, which holds every session's runs: its close

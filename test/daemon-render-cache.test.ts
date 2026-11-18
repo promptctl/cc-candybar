@@ -60,7 +60,6 @@ import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/reserved-names";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import {
   repoConfigsDir,
@@ -128,7 +127,6 @@ function makeCache(
     {
       clock: systemTimekeeper,
       locations: locations(host),
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
@@ -1468,7 +1466,6 @@ describe("RenderCache close", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1523,7 +1520,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1641,7 +1637,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1712,7 +1707,6 @@ describe("RenderCache frames and pins", () => {
       {
         clock: systemTimekeeper,
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),

@@ -130,7 +130,7 @@ function setup(
     park: host.park,
     // The teardown's first renderer step, as the daemon sends it: it takes
     // its place in the mailbox behind every input that arrived before it.
-    closeJournal: () => host.renderer.ask({ kind: "close-journal" }),
+    closeJournal: () => host.renderer.closeStep("closing"),
     renderer: host.renderer,
     send,
     dispatch,
