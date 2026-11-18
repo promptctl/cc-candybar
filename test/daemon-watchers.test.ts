@@ -586,6 +586,68 @@ describe("WatcherRegistry", () => {
       fs.rmSync(feature, { recursive: true });
       await until(() => reg.dirWatches() === 1, "its watch closing");
     });
+
+    // [LAW:no-ambient-temporal-coupling] The period is the backstop for an
+    // event a filesystem drops, so it is driven here before any event lands.
+    (process.getuid?.() === 0 ? test.skip : test)(
+      "the period joins a directory no event told of, and one refused there reaches the holders",
+      async () => {
+        const seen: Invalidation[] = [];
+        const handle = acquired(seen);
+        fs.mkdirSync(path.join(root, "found"));
+        const locked = path.join(root, "locked");
+        fs.mkdirSync(locked, { mode: 0o000 });
+        try {
+          reg.judge();
+          expect(reg.dirWatches()).toBe(2);
+          expect(handle.deaf).toEqual([
+            expect.objectContaining({ kind: "refused", path: locked }),
+          ]);
+          await until(
+            () => seen.some((inv) => inv.kind === "failed"),
+            "the refusal's window",
+          );
+        } finally {
+          fs.chmodSync(locked, 0o700);
+        }
+      },
+    );
+
+    (process.getuid?.() === 0 ? test.skip : test)(
+      "a directory that cannot be listed keeps the watches below it",
+      () => {
+        const team = path.join(root, "team");
+        fs.mkdirSync(path.join(team, "x"), { recursive: true });
+        acquired([]);
+        expect(reg.dirWatches()).toBe(3);
+        fs.chmodSync(team, 0o300);
+        try {
+          reg.judge();
+          expect(reg.dirWatches()).toBe(3);
+        } finally {
+          fs.chmodSync(team, 0o700);
+        }
+      },
+    );
+
+    test("where the recursive watch is native, a tree is one watch", () => {
+      const native = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+        nodeWalksTrees: false,
+      });
+      try {
+        fs.mkdirSync(path.join(root, "a", "b"), { recursive: true });
+        native.acquire(
+          "tree",
+          { dirs: [{ path: root, recursive: true as const }], polled: [] },
+          () => {},
+        );
+        expect(native.dirWatches()).toBe(1);
+      } finally {
+        native.closeAll();
+      }
+    });
   });
 
   // Root ignores directory permissions, so the second refusal cannot be built.

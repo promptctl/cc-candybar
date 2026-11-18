@@ -220,12 +220,10 @@ function holdKey(root: string): string {
 // below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
 // nothing staged — rewrites nothing but its ref.
 //
-// The tree is `refs/heads`, not `refs`: on Linux the registry hears a tree as
-// one inotify watch per directory and lists the tree on every event in it, so
-// its cost is the tree's size. Local
-// branches are tens to hundreds; remote refs and tags are the remote's to
-// grow, and a fetch rewriting thousands of them would re-walk the directory
-// per ref. Those still reach the bar on the period.
+// The tree is `refs/heads`, not `refs`: on Linux a tree costs one inotify
+// watch per directory and a listing of the tree each period, so its cost is
+// the tree's size. Local branches are tens to hundreds; remote refs and tags
+// are the remote's to grow. Those still reach the bar on the period.
 // [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
 // each directory names it for the key and decides nothing, and the stat
 // cannot throw. A tree that cannot be opened is a refusal the registry logs
