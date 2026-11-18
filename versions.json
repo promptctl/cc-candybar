@@ -4,15 +4,22 @@
     {
       "version": "pr-791",
       "ref": "refs/pull/791/merge",
-      "sha": "68da87bfa6cbe3a0bfdd6efcda25e8b072af6433",
-      "timestamp": "2026-11-17T23:56:22.622Z",
+      "sha": "686bfe74e8ce289654312884619b40fcea4aff89",
+      "timestamp": "2026-11-18T00:10:44.140Z",
       "commits": [
         {
-          "sha": "68da87bfa6cbe3a0bfdd6efcda25e8b072af6433",
+          "sha": "686bfe74e8ce289654312884619b40fcea4aff89",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T23:55:26Z",
-          "message": "Merge de3e2c650cf75d536726e1cd9cdfa188fe3ed62f into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+          "timestamp": "2026-11-18T00:09:34Z",
+          "message": "Merge b192ba3fb075464e1cb839fb2230365960fd5380 into 6a80d602074487ee6985818c2347cc57b21d9e46\n"
+        },
+        {
+          "sha": "b192ba3fb075464e1cb839fb2230365960fd5380",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T17:09:12-07:00",
+          "message": "fix(daemon): the session book writes only once it has read its file, and drops the session heard longest ago (uh4)\n\nNothing heard before the load is saved, so no save lands over the book\nthe daemon before it flushed, unread. Every request moves its session to\nthe newest end, so the bound drops the session heard longest ago. A\nper-session file's storage is one type with one ephemeral instance,\nbeside the file it describes. A doctor document's drain holds the write\nit filed, so it has nothing to check and cannot throw. A breach's heap\nsnapshot that fails leaves no cut-off file. The page builds its profile\non the production one.\n"
         },
         {
           "sha": "de3e2c650cf75d536726e1cd9cdfa188fe3ed62f",

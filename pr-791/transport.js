@@ -30022,24 +30022,20 @@ var SESSION_BOOK_FILE = {
   }
 };
 var sameDurable = (a, b) => a.origin.projectDir === b.origin.projectDir && a.origin.cwd === b.origin.cwd && a.origin.target.path === b.origin.target.path && a.origin.target.source === b.origin.target.source && a.claudeConfigDir === b.claudeConfigDir;
-var EPHEMERAL_SESSION_BOOK = {
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  },
-  flush: () => {
-  }
-};
 var SessionBook = class {
   constructor(storage) {
     this.storage = storage;
   }
   storage;
-  // [LAW:types-are-the-program] Insertion order is the order each session's
-  // durable context last changed in, which the bound drops the oldest of.
+  // [LAW:types-are-the-program] Insertion order is the order each session
+  // was last heard in, which the bound drops the oldest of.
   book = /* @__PURE__ */ new Map();
-  closed = false;
-  // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, after
-  // the daemon before it flushed. A session heard before it is newer than
+  // [LAW:no-ambient-temporal-coupling] The file is written only while open:
+  // before the load, a save would land over the book the daemon before it
+  // flushed, unread; after the close, over the file a next daemon has taken
+  // up. What is heard outside it stays in memory.
+  phase = "unread";
+  // Read once the daemon serves. A session heard before it is newer than
   // anything the file holds of it, so it stays, and the file's come first.
   load() {
     const heard = this.book;
@@ -30048,19 +30044,20 @@ var SessionBook = class {
     );
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
+    this.phase = "open";
     this.storage.save(Object.fromEntries(this.book));
   }
-  // The session's newest request: what it says the session is, kept when it
-  // moved.
+  // The session's newest request: what it says the session is, saved when
+  // it moved.
   heard(req) {
     const session = req.hookData.session_id;
     const durable = durableOf(req);
     const held = this.book.get(session);
-    if (held !== void 0 && sameDurable(held, durable)) return;
     this.book.delete(session);
     this.book.set(session, durable);
     this.bound();
-    if (!this.closed) this.storage.save(Object.fromEntries(this.book));
+    if (held !== void 0 && sameDurable(held, durable)) return;
+    if (this.phase === "open") this.storage.save(Object.fromEntries(this.book));
   }
   // [LAW:one-source-of-truth] The session as a click finds it: live from the
   // request heard since the daemon started, else what the book kept of it,
@@ -30072,7 +30069,7 @@ var SessionBook = class {
   }
   close() {
     this.storage.flush();
-    this.closed = true;
+    this.phase = "closed";
   }
   bound() {
     for (const oldest of this.book.keys()) {
@@ -89122,9 +89119,10 @@ function verbsOver(ctx) {
 init_globals();
 var HeldDocuments = class {
   held;
-  // [LAW:one-source-of-truth] The documents filed since the host was last
-  // told (`drain`).
-  moved = /* @__PURE__ */ new Set();
+  // [LAW:types-are-the-program] Each document filed since the host was last
+  // told (`drain`), as its write: only a document that read is filed, so a
+  // write holds the value it filed, and a drain has nothing to check.
+  moved = /* @__PURE__ */ new Map();
   documents;
   constructor(loaded) {
     this.held = { ...loaded };
@@ -89136,15 +89134,9 @@ var HeldDocuments = class {
   }
   // What the host has not yet been told: each document filed, whole.
   drain() {
-    const writes = [...this.moved].map((name) => this.writeOf(name));
+    const writes = [...this.moved.values()];
     this.moved.clear();
     return writes;
-  }
-  writeOf(name) {
-    const held = this.held[name];
-    if (held.kind !== "ok")
-      throw new Error(`doctor document ${name} was filed over a failed read`);
-    return { store: name, value: held.value };
   }
   document(name) {
     return {
@@ -89156,7 +89148,7 @@ var HeldDocuments = class {
         if (value === held.value) return held;
         const filed = { kind: "ok", value };
         this.held[name] = filed;
-        this.moved.add(name);
+        this.moved.set(name, { store: name, value });
         return filed;
       }
     };
@@ -91440,9 +91432,9 @@ function mainRendererOf(inputs, host) {
   );
   const documents = new HeldDocuments(inputs.stored.doctor);
   const drained = () => [
-    ...documents.drain(),
     ...sessionState.drain(),
-    ...settingsHistory.drain()
+    ...settingsHistory.drain(),
+    ...documents.drain()
   ];
   let minted = 0;
   const mint = () => ++minted;
@@ -91649,13 +91641,6 @@ function debugOf(view, what) {
 
 // src/daemon/held-stores.ts
 init_globals();
-var EPHEMERAL_SESSION_STORAGE = {
-  load: () => /* @__PURE__ */ new Map(),
-  save: () => {
-  },
-  flush: () => {
-  }
-};
 var EPHEMERAL_HISTORY_STORAGE = {
   load: () => /* @__PURE__ */ new Map(),
   save: () => {
@@ -94684,6 +94669,13 @@ init_globals();
 // src/daemon/session-state-file.ts
 init_globals();
 var import_node_path49 = __toESM(require_path_browserify(), 1);
+var ephemeralSessionFile = () => ({
+  load: () => /* @__PURE__ */ new Map(),
+  save: () => {
+  },
+  flush: () => {
+  }
+});
 var SESSION_STATE_FILE = {
   name: "session-state",
   record: (kv) => kv,
@@ -95866,20 +95858,14 @@ var endedAt = null;
 var nowSec = () => Date.now() / 1e3;
 var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
-var onClock = ({
-  headAt,
-  ...rest2
-}) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
+var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
 var WORLD = processWorld();
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
+var adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 var pageDaemon = createDaemon({
-  ...productionAdapters(
-    paths,
-    new DaemonLog(paths.log, WORLD.clock),
-    WORLD.clock
-  ),
+  ...adapters,
   gates: daemonGates(),
   paths,
   host: HOST,
@@ -95892,14 +95878,14 @@ var pageDaemon = createDaemon({
   },
   rendererName: MAIN_RENDERER,
   // Its picks and history live only as long as the page; the doctor files
-  // its documents on the simulated machine.
-  profile: (name) => ({
-    session: EPHEMERAL_SESSION_STORAGE,
-    history: EPHEMERAL_HISTORY_STORAGE,
-    doctor: fileStores(profilePaths(paths, name).documents)
+  // its documents on the simulated machine, as a daemon's profile does.
+  profile: (name, log) => ({
+    ...adapters.profile(name, log),
+    session: ephemeralSessionFile(),
+    history: EPHEMERAL_HISTORY_STORAGE
   }),
   // Its sessions are the page's own, for as long as it is open.
-  sessionBook: () => EPHEMERAL_SESSION_BOOK,
+  sessionBook: () => ephemeralSessionFile(),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
   registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
@@ -95909,13 +95895,7 @@ var pageDaemon = createDaemon({
 });
 pageDaemon.serve();
 function lines(entry, at) {
-  const base = {
-    timestamp: new Date(clockAt(at) * 1e3).toISOString(),
-    sessionId,
-    cwd: REPO,
-    isSidechain: false,
-    uuid: id("u")
-  };
+  const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
     input_tokens: 4,
     output_tokens: output,
@@ -95926,77 +95906,33 @@ function lines(entry, at) {
     ...base,
     type: "assistant",
     requestId: id("req"),
-    message: {
-      id: id("msg"),
-      model: "claude-opus-4-8",
-      role: "assistant",
-      type: "message",
-      content,
-      usage: usage(output)
-    }
+    message: { id: id("msg"), model: "claude-opus-4-8", role: "assistant", type: "message", content, usage: usage(output) }
   });
   switch (entry.kind) {
     case "user":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: { role: "user", content: entry.text }
-        }
-      ];
+      return [{ ...base, type: "user", message: { role: "user", content: entry.text } }];
     case "command":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: `<command-name>${entry.name}</command-name>
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: `<command-name>${entry.name}</command-name>
 <command-message>${entry.name.slice(1)}</command-message>
 <command-args></command-args>`
-          }
-        }
-      ];
+      } }];
     case "tools":
-      return [
-        assistant(
-          entry.calls.map((c) => ({
-            type: "tool_use",
-            id: c.id,
-            name: c.name,
-            input: c.input ?? {}
-          })),
-          entry.output ?? 100
-        )
-      ];
+      return [assistant(entry.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.input ?? {} })), entry.output ?? 100)];
     case "results":
-      return [
-        {
-          ...base,
-          type: "user",
-          message: {
-            role: "user",
-            content: entry.ids.map((tool_use_id) => ({
-              type: "tool_result",
-              tool_use_id,
-              content: "ok"
-            }))
-          }
-        }
-      ];
+      return [{ ...base, type: "user", message: {
+        role: "user",
+        content: entry.ids.map((tool_use_id) => ({ type: "tool_result", tool_use_id, content: "ok" }))
+      } }];
     case "reply":
-      return [
-        assistant([{ type: "text", text: entry.text }], entry.output ?? 200)
-      ];
+      return [assistant([{ type: "text", text: entry.text }], entry.output ?? 200)];
   }
 }
 function happen(step4) {
   moment = { ...moment, ...step4.hook };
   if (step4.repo) updateRepo(onClock(step4.repo));
-  appendTranscript(
-    transcript,
-    (step4.transcript ?? []).flatMap((e) => lines(e, step4.at))
-  );
+  appendTranscript(transcript, (step4.transcript ?? []).flatMap((e) => lines(e, step4.at)));
 }
 function startAt(seconds) {
   endedAt = null;
@@ -96005,8 +95941,7 @@ function startAt(seconds) {
   applied2 = 0;
   t = seconds;
   updateRepo(onClock(INITIAL_REPO));
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
 }
 function hookData() {
   const now2 = Math.floor(nowSec());
@@ -96032,32 +95967,16 @@ function hookData() {
       context_window_size: CONTEXT_WINDOW,
       used_percentage: used,
       remaining_percentage: 100 - used,
-      current_usage: {
-        input_tokens: 2e3,
-        output_tokens: 400,
-        cache_creation_input_tokens: 4e3,
-        cache_read_input_tokens: moment.context - 6e3
-      }
+      current_usage: { input_tokens: 2e3, output_tokens: 400, cache_creation_input_tokens: 4e3, cache_read_input_tokens: moment.context - 6e3 }
     },
     rate_limits: {
-      five_hour: {
-        used_percentage: moment.fiveHour,
-        resets_at: now2 + 2 * 3600 + 17 * 60
-      },
-      seven_day: {
-        used_percentage: moment.sevenDay,
-        resets_at: now2 + 4 * 86400
-      }
+      five_hour: { used_percentage: moment.fiveHour, resets_at: now2 + 2 * 3600 + 17 * 60 },
+      seven_day: { used_percentage: moment.sevenDay, resets_at: now2 + 4 * 86400 }
     }
   };
 }
 async function daemon2(request2) {
-  const { resp, settled: settled3 } = await pageDaemon.reply(
-    request2,
-    () => false,
-    pageDaemon.stats.accept(),
-    () => false
-  );
+  const { resp, settled: settled3 } = await pageDaemon.reply(request2, () => false, pageDaemon.stats.accept(), () => false);
   settled3(true);
   if (!resp.ok) throw new Error(`${resp.error} (${resp.code})`);
   return resp;
@@ -96075,20 +95994,12 @@ async function frame(size) {
     ssh: false,
     claudeConfigDir: CLAUDE_DIR
   });
-  if (!("frame" in resp))
-    throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
+  if (!("frame" in resp)) throw new Error(`a render answered no frame: ${JSON.stringify(resp)}`);
   return parseFrame(resp.frame);
 }
 async function render2(size) {
   const drawn = await frame(size);
-  return {
-    ansi: composeBar(drawn),
-    links: linksOf(drawn).map((l) => ({
-      ...l,
-      does: describeLink(l, sessionId)
-    })),
-    refused: null
-  };
+  return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
 function copy2(text4) {
   let writing;
@@ -96120,11 +96031,7 @@ async function click2(url, size) {
 }
 var listeners = [];
 var notify = () => {
-  const state = {
-    index: Math.max(0, applied2 - 1),
-    playing,
-    progress: Math.min(1, t / DURATION)
-  };
+  const state = { index: Math.max(0, applied2 - 1), playing, progress: Math.min(1, t / DURATION) };
   for (const l of listeners) l(state);
 };
 var lastNotified = 0;
@@ -96139,8 +96046,7 @@ function advance(elapsed) {
   }
   t = Math.min(DURATION, t + elapsed * speed);
   const before = applied2;
-  while (applied2 < STEPS.length && STEPS[applied2].at <= t)
-    happen(STEPS[applied2++]);
+  while (applied2 < STEPS.length && STEPS[applied2].at <= t) happen(STEPS[applied2++]);
   return applied2 !== before;
 }
 setInterval(() => {
@@ -96170,11 +96076,7 @@ var transport = {
     return render2(size);
   },
   scenario: {
-    steps: STEPS.map((s) => ({
-      turn: s.turn,
-      caption: s.caption,
-      at: s.at / DURATION
-    })),
+    steps: STEPS.map((s) => ({ turn: s.turn, caption: s.caption, at: s.at / DURATION })),
     subscribe: (l) => {
       listeners.push(l);
       notify();
