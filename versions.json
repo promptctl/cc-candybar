@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-808",
+      "ref": "refs/pull/808/merge",
+      "sha": "68ba6961f05258b781e59881c7ccd19571d91c86",
+      "timestamp": "2026-11-18T16:40:42.379Z",
+      "commits": [
+        {
+          "sha": "68ba6961f05258b781e59881c7ccd19571d91c86",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:39:25Z",
+          "message": "Merge bec225e96177b812b1b5d2d609a5c2ad6cd2b7f8 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
+        },
+        {
+          "sha": "bec225e96177b812b1b5d2d609a5c2ad6cd2b7f8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:05:22-07:00",
+          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "556287991e7955f7a9fbfc4a12b9ded691a25344",
@@ -57,28 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:14:02-07:00",
           "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-808",
-      "ref": "refs/pull/808/merge",
-      "sha": "80324c6174fd974dee5eff58b05bbb0cedfbf719",
-      "timestamp": "2026-11-18T16:21:51.600Z",
-      "commits": [
-        {
-          "sha": "80324c6174fd974dee5eff58b05bbb0cedfbf719",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:20:40Z",
-          "message": "Merge 42a431fc6cacd500f3e223fe6a39814b2ffe137e into 727ff7b57655585b73a86cdb20adabe0fa145197\n"
-        },
-        {
-          "sha": "42a431fc6cacd500f3e223fe6a39814b2ffe137e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:05:22-07:00",
-          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
         }
       ]
     },
