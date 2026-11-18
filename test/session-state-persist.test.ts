@@ -184,9 +184,9 @@ describe("the session state's file", () => {
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
-  // A flush the disk refuses drops nothing: the snapshot stays pending, and
-  // the next flush lands it.
-  it("a flush the disk refuses leaves its snapshot for the next flush", async () => {
+  // A flush the disk refuses drops nothing: it rejects with the reason, the
+  // snapshot stays pending, and the next flush lands it.
+  it("a flush the disk refuses rejects and leaves its snapshot for the next flush", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
     const spy = jest
@@ -196,12 +196,84 @@ describe("the session state's file", () => {
       );
     try {
       session.save({ [S1]: { theme: "nord" } });
-      await session.flush();
+      await expect(session.flush()).rejects.toThrow(
+        "session-state save failed: ENOSPC: no space",
+      );
     } finally {
       spy.mockRestore();
     }
     expect(existsSync(file)).toBe(false);
     expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    await session.flush();
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "nord" },
+    });
+  });
+
+  // The write in flight lands; the newer flush the disk refuses rejects and
+  // leaves its state pending, so the older state stands until a flush lands.
+  it("a flush refused behind a write in flight leaves that write's state, and its own pending", async () => {
+    const session = storage();
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const renameSpy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementationOnce(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
+      null;
+    try {
+      session.save({ [S1]: { theme: "old" } });
+      await until(() => renameSpy.mock.calls.length === 1, "the held rename");
+      writeSpy = jest
+        .spyOn(fs.promises, "writeFile")
+        .mockRejectedValueOnce(
+          Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
+        );
+      session.save({ [S1]: { theme: "new" } });
+      const flushed = session.flush();
+      release();
+      await expect(flushed).rejects.toThrow(/ENOSPC/);
+    } finally {
+      writeSpy?.mockRestore();
+      renameSpy.mockRestore();
+    }
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "old" },
+    });
+    await session.flush();
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "new" },
+    });
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
+  });
+
+  // A snapshot its kind cannot encode fails that one write, and the next
+  // write still runs.
+  it("a snapshot that cannot be encoded fails its write, not every later one", async () => {
+    const logged: string[] = [];
+    let encodable = false;
+    const session = new SessionFile(
+      {
+        ...SESSION_STATE_FILE,
+        record: (kv) => {
+          if (!encodable) throw new Error("not encodable");
+          return kv;
+        },
+      },
+      file,
+      systemTimekeeper,
+      0,
+      (_level, line) => logged.push(line),
+    );
+    session.save({ [S1]: { theme: "nord" } });
+    await expect(session.flush()).rejects.toThrow("not encodable");
+    encodable = true;
     await session.flush();
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "nord" },
@@ -382,7 +454,8 @@ describe("the session state's file", () => {
       0,
     );
     session.save({ [S1]: { theme: "nord" } });
-    await session.flush(); // write fails; snapshot must NOT be dropped
+    // The write fails; the snapshot must NOT be dropped.
+    await expect(session.flush()).rejects.toThrow(/save failed/);
     expect(existsSync(badPath)).toBe(false);
     // Make the path writable, then flush again — the retained snapshot lands.
     rmSync(blocker);

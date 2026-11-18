@@ -49,6 +49,13 @@ export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+// What one write came to. Nothing pending is landed: an earlier write
+// landed it.
+type Landed =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: string };
+const LANDED: Landed = { ok: true };
+
 // [LAW:single-enforcer] The debounce + atomic write of every per-session
 // file. Its owner calls save() on every change; this coalesces the bursty
 // 22-session × 1 Hz write load into at most one disk write per window.
@@ -62,6 +69,8 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   // chain, so writes land in the order they began and none overtakes
   // another: older state still on its way never lands over newer.
   private written: Promise<void> = Promise.resolve();
+  // The write queued behind the one in flight and not yet begun.
+  private waiting: Promise<Landed> | null = null;
 
   constructor(
     private readonly kind: SessionFileKind<V>,
@@ -153,11 +162,19 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     );
   }
 
-  // Joins a write of what is pending to the chain, settling once it lands or
-  // fails.
-  private write(): Promise<void> {
-    this.written = this.written.then(() => this.land());
-    return this.written;
+  // Joins a write of what is pending to the chain. At most one write waits
+  // behind the one in flight, since it writes whatever is pending when it
+  // begins: a stalled disk queues one write, not one per window.
+  private write(): Promise<Landed> {
+    if (this.waiting === null) {
+      const waiting = this.written.then(() => {
+        this.waiting = null;
+        return this.land();
+      });
+      this.waiting = waiting;
+      this.written = waiting.then(() => {});
+    }
+    return this.waiting;
   }
 
   private body(snapshot: Readonly<Record<SessionId, V>>): string {
@@ -172,46 +189,50 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   }
 
   // [LAW:effects-at-boundaries] The debounced write takes all of its disk I/O
-  // off the daemon's one thread: the bytes are written and synced through the
-  // thread pool, and so is the rename that publishes them. A rename is a
-  // journaled metadata op, and on a busy disk it waits on the journal like
-  // any write: run synchronously here it held every bar and click for 180 ms
-  // on a CI runner, past every client's reply budget.
-  private async land(): Promise<void> {
+  // off the daemon's one thread: the bytes are written through the thread
+  // pool, and so is the rename that publishes them. A rename is a journaled
+  // metadata op, and on a busy disk it waits on the journal like any write:
+  // run synchronously here it held every bar and click for 180 ms on a CI
+  // runner, past every client's reply budget.
+  // [LAW:no-silent-failure] Nothing it does can reject the chain: a write
+  // that fails says so, and the next write still runs.
+  private async land(): Promise<Landed> {
     // An earlier write in the chain may have landed this snapshot already.
     const snapshot = this.pending;
-    if (snapshot === null) return;
+    if (snapshot === null) return LANDED;
     const started = this.clock.monotonic();
-    const body = this.body(snapshot);
-    // The thread is held until the first await.
-    const heldMs = elapsedMs(this.clock, started);
     try {
+      const body = this.body(snapshot);
+      // The thread is held until the first await.
+      const heldMs = elapsedMs(this.clock, started);
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       // [LAW:single-enforcer] Daemon runtime files are owner-only, like
       // pid/spawn.lock: a session file carries conversation identifiers.
       await publishByRenameAsync(this.filePath, body, 0o600);
       this.saved(body, snapshot, started, heldMs);
       if (this.pending === snapshot) this.pending = null;
+      return LANDED;
     } catch (e) {
       // A snapshot whose write failed waits for the next save or shutdown's
       // flush, so a disk that keeps refusing is not retried on a timer.
-      this.logger(
-        "warn",
-        `${this.kind.name} save failed: ${(e as Error).message}`,
-      );
+      const reason = `${this.kind.name} save failed: ${(e as Error).message}`;
+      this.logger("warn", reason);
+      return { ok: false, reason };
     }
   }
 
   // For shutdown and for callers that read the file back: what is pending
-  // lands now, behind any write already on its way.
-  flush(): Promise<void> {
+  // lands now, behind any write already on its way. [LAW:no-silent-failure]
+  // A write that fails rejects, so a shutdown that lost state says so.
+  async flush(): Promise<void> {
     this.clearTimer?.();
     this.clearTimer = null;
-    return this.write();
+    const landed = await this.write();
+    if (!landed.ok) throw new Error(landed.reason);
   }
 
-  // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
-  // how much of that it held the daemon's one thread.
+  // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
+  // it took, and how much of that it held the daemon's one thread.
   private saved(
     body: string,
     snapshot: Readonly<Record<SessionId, V>>,

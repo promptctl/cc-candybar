@@ -31,14 +31,21 @@ describe.each([
       publishByRename(file, bytes, mode),
     renameOf: (): jest.SpiedFunction<() => void> =>
       jest.spyOn(fs, "renameSync") as never,
+    removalOf: (): jest.SpiedFunction<() => void> =>
+      jest.spyOn(fs, "rmSync") as never,
+    fault: refused,
   },
   {
     form: "publishByRenameAsync",
     publish: publishByRenameAsync,
     renameOf: (): jest.SpiedFunction<() => void> =>
       jest.spyOn(fs.promises, "rename") as never,
+    removalOf: (): jest.SpiedFunction<() => void> =>
+      jest.spyOn(fs.promises, "rm") as never,
+    // A promise API refuses by rejecting.
+    fault: (code: string) => async () => refused(code)(),
   },
-])("$form", ({ publish, renameOf }) => {
+])("$form", ({ publish, renameOf, removalOf, fault }) => {
   test("the last write is the file, and nothing staged is left beside it", async () => {
     const file = path.join(dir, "state.json");
     await publish(file, "first");
@@ -48,25 +55,35 @@ describe.each([
     expect(fs.readdirSync(dir)).toEqual(["state.json"]);
   });
 
+  // A mode is the file's exactly: the umask strips nothing from it.
+  test("a mode is applied past the umask", async () => {
+    const file = path.join(dir, "shared.json");
+    const umask = process.umask(0o022);
+    try {
+      await publish(file, "bytes", 0o664);
+    } finally {
+      process.umask(umask);
+    }
+    expect(fs.statSync(file).mode & 0o777).toBe(0o664);
+  });
+
+  // A non-empty directory at the target refuses the rename on every platform.
   test("a refused publish throws its own error and removes what it staged", async () => {
     const file = path.join(dir, "state.json");
-    const spy = renameOf().mockImplementationOnce(refused("EIO"));
-    try {
-      await expect(publish(file, "bytes")).rejects.toMatchObject({
-        code: "EIO",
-      });
-    } finally {
-      spy.mockRestore();
-    }
-    expect(fs.readdirSync(dir)).toEqual([]);
+    fs.mkdirSync(file);
+    fs.writeFileSync(path.join(file, "occupied"), "");
+    await expect(publish(file, "bytes")).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|ENOTEMPTY|EEXIST)$/),
+    });
+    expect(fs.readdirSync(dir)).toEqual(["state.json"]);
   });
 
   // A cleanup that fails too is said in the write's own error, which keeps
   // its code for the caller to branch on.
   test("a staged file that will not go is added to the publish's error", async () => {
     const file = path.join(dir, "state.json");
-    const rename = renameOf().mockImplementationOnce(refused("EIO"));
-    const rm = jest.spyOn(fs, "rmSync").mockImplementationOnce(refused("EBUSY"));
+    const rename = renameOf().mockImplementationOnce(fault("EIO"));
+    const rm = removalOf().mockImplementationOnce(fault("EBUSY"));
     let thrown: unknown;
     try {
       await publish(file, "bytes").catch((e: unknown) => (thrown = e));
@@ -105,17 +122,25 @@ describe("publishByLink", () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
-  // The publish stands, so the error says it did, beside the staged path.
+  // The publish stands, so the error says how it came out, beside the staged
+  // path, with the removal's code.
   test("a staged file that will not go after the link is said with the outcome", () => {
     const file = path.join(dir, "key");
     const spy = jest.spyOn(fs, "rmSync").mockImplementationOnce(refused("EBUSY"));
+    let thrown: unknown;
     try {
-      expect(() => publishByLink(file, "bytes")).toThrow(
-        new RegExp(`^${file}: published, but the staged file ${file}\\..+\\.tmp was left behind: EBUSY: refused$`),
-      );
+      publishByLink(file, "bytes");
+    } catch (e) {
+      thrown = e;
     } finally {
       spy.mockRestore();
     }
+    expect(thrown).toMatchObject({
+      code: "EBUSY",
+      message: expect.stringMatching(
+        new RegExp(`^${file}: published; the staged file ${file}\\..+\\.tmp was left behind: EBUSY: refused$`),
+      ),
+    });
     expect(fs.readFileSync(file, "utf8")).toBe("bytes");
   });
 });

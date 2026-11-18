@@ -306,7 +306,7 @@ export function realBreakerDeps(
         // best-effort
       }
     },
-    // [LAW:single-enforcer] Published by rename, as every staged file is: a
+    // [LAW:single-enforcer] Published by rename (src/utils/atomic-write.ts): a
     // reader never sees a torn entry, and a failed write removes its staged
     // file or says in its error that it could not.
     writeEntry: (filePath, identity) =>

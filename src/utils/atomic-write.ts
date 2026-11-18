@@ -2,19 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
-// [LAW:single-enforcer] The one staging for every file another process may
-// read or write while this one writes it: the bytes are written whole under a
-// name of their own, synced, then published, and the staged file is gone
-// whatever happens short of a kill. A fault in any of it is fixed here for
-// every writer.
+// [LAW:single-enforcer] Writing a file whole beside its readers: the bytes
+// are written under a name of their own, then published by one rename or
+// link, so a reader never sees a torn file. A failed write removes what it
+// staged, or its error says it could not.
 //
 // [LAW:no-ambient-temporal-coupling] The staged name is unique to the call,
 // so writers of one file, in one process or many, never publish or remove
-// each other's bytes. The bytes are synced before the publish, since a
-// publish can reach the disk ahead of the bytes it names and a crash then
-// leaves an empty file under the published name; `flush` syncs before the
-// close, and on macOS libuv's sync is F_FULLFSYNC, which flushes the drive's
-// cache where a plain fsync stops short of it.
+// each other's bytes. Nothing is synced: these writes run on a click or at a
+// start, often on the daemon's one thread, and a sync there holds every bar
+// for a drive-cache flush.
+//
+// A `mode` is the file's mode exactly, past the umask; without one a new
+// file takes the umask's.
 
 // Publishes by rename: the last complete write wins.
 export function publishByRename(
@@ -24,16 +24,22 @@ export function publishByRename(
 ): void {
   const staged = stagedName(file);
   try {
-    fs.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    fs.writeFileSync(staged, bytes, { flag: "wx", mode });
+    if (mode !== undefined) fs.chmodSync(staged, mode);
     fs.renameSync(staged, file);
   } catch (e) {
-    throw leftBehind(e, staged);
+    throw noted(
+      e,
+      staged,
+      failure(() => fs.rmSync(staged, { force: true })),
+    );
   }
 }
 
 // [LAW:effects-at-boundaries] `publishByRename` on the thread pool, for a
-// writer on the daemon's one thread: a slow disk's write, sync or rename then
-// holds no bar and no click. One contract, held by one test suite over both.
+// writer on the daemon's one thread whose disk may be slow: its write,
+// rename and cleanup hold no bar and no click. One contract, held by one
+// test suite over both.
 export async function publishByRenameAsync(
   file: string,
   bytes: string | Uint8Array,
@@ -41,14 +47,15 @@ export async function publishByRenameAsync(
 ): Promise<void> {
   const staged = stagedName(file);
   try {
-    await fs.promises.writeFile(staged, bytes, {
-      flag: "wx",
-      mode,
-      flush: true,
-    });
+    await fs.promises.writeFile(staged, bytes, { flag: "wx", mode });
+    if (mode !== undefined) await fs.promises.chmod(staged, mode);
     await fs.promises.rename(staged, file);
   } catch (e) {
-    throw leftBehind(e, staged);
+    const removal = await fs.promises.rm(staged, { force: true }).then(
+      () => null,
+      (c: unknown) => c,
+    );
+    throw noted(e, staged, removal);
   }
 }
 
@@ -65,18 +72,27 @@ export function publishByLink(
   const staged = stagedName(file);
   let linked: Linked;
   try {
-    fs.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    fs.writeFileSync(staged, bytes, { flag: "wx", mode });
+    if (mode !== undefined) fs.chmodSync(staged, mode);
     linked = taken(() => fs.linkSync(staged, file));
   } catch (e) {
-    throw leftBehind(e, staged);
+    throw noted(
+      e,
+      staged,
+      failure(() => fs.rmSync(staged, { force: true })),
+    );
   }
-  // [LAW:no-silent-failure] The publish stands either way; a staged name
-  // that will not go is said, with the outcome it came after.
-  try {
-    fs.rmSync(staged);
-  } catch (e) {
-    throw new Error(
-      `${file}: ${linked}, but the staged file ${staged} was left behind: ${(e as Error).message}`,
+  // [LAW:no-silent-failure] A staged name that will not go is said, beside
+  // the outcome it came after. The publish stands, so a caller that asks
+  // again finds it.
+  const removal = failure(() => fs.rmSync(staged, { force: true }));
+  if (removal !== null) {
+    throw noted(
+      Object.assign(new Error(`${file}: ${linked}`), {
+        code: (removal as NodeJS.ErrnoException).code,
+      }),
+      staged,
+      removal,
     );
   }
   return linked;
@@ -98,24 +114,34 @@ function stagedName(file: string): string {
   return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
 }
 
-// [LAW:no-silent-failure] The write's own error is the error, since callers
-// branch on its `code`: the staged file is removed, and a removal that fails
-// too is added to that error's message, never put in its place.
-function leftBehind(e: unknown, staged: string): unknown {
+// What a step threw, or null when it ran.
+function failure(step: () => void): unknown {
   try {
-    fs.rmSync(staged, { force: true });
-  } catch (c) {
-    (e as Error).message +=
-      `; the staged file ${staged} was left behind: ${(c as Error).message}`;
+    step();
+    return null;
+  } catch (e) {
+    return e;
   }
-  return e;
 }
 
-// The tmp+rename for every file a user may be reading while we write it —
-// the config file, the settings history, and Claude Code's settings.json (the
-// doctor fix and `install`): a reader never sees a torn file. Without a
-// `mode` the existing file's mode survives (a hand-authored file keeps
-// whatever the user gave it) and a first-ever file takes the process umask.
+// [LAW:no-silent-failure] The write's own error is the error, since callers
+// branch on its `code`; a staged file its removal could not take is added to
+// that error's message, never put in its place.
+function noted(e: unknown, staged: string, removal: unknown): unknown {
+  if (removal === null) return e;
+  const note = `; the staged file ${staged} was left behind: ${String((removal as Error).message ?? removal)}`;
+  if (e instanceof Error) {
+    e.message += note;
+    return e;
+  }
+  return new Error(`${String(e)}${note}`);
+}
+
+// The write for every file a user may be reading while we write it — the
+// config file, the settings history, and Claude Code's settings.json (the
+// doctor fix and `install`): published by rename. Without a `mode` the
+// existing file's mode survives (a hand-authored file keeps whatever the user
+// gave it) and a first-ever file takes the process umask.
 // A symlinked file is written where it points — a dotfiles-managed
 // settings.json stays a link — since the rename replaces whatever sits at the
 // path it targets; the directory it is written in is created when missing, as
