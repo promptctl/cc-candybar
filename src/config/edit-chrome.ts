@@ -45,7 +45,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
-import { ident } from "./ident.js";
+import { exactIdent } from "./ident.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -269,23 +269,12 @@ function chromeCell(
   return { kind: "segment", name };
 }
 
-// [LAW:one-source-of-truth] Every name edit chrome mints for a placement is
-// spelled from the placement's id, the identity cross-ref holds unique per
-// tree, so an add, removal or move elsewhere hands none of its state (an open
-// `✚` library, its page, a configure list) to a neighbour. Each code point in
-// base 36, joined by `_`: injective where `ident` would merge `git-2` and
-// `git_2`, and already a fixed point of `ident`, so the menu keys derived
-// through it stay distinct.
-export function chromeIdent(id: string): string {
-  return Array.from(id, (c) => c.codePointAt(0)!.toString(36)).join("_");
-}
-
 // The `-` affordance (drawn `✖`) for one placement, addressed by its id: a
 // literal `removeSegment` action, and the `{{ action }}` that clicks it. It
 // is red TEXT on the cell's own ground, floored to stay legible on it, as the
 // `✚` beside it is green.
 function removeTerm(ctx: SpliceCtx, id: string): string {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${chromeIdent(id)}`;
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${exactIdent(id)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id,
@@ -367,7 +356,7 @@ function configureParts(
   decls: Readonly<Record<string, SettingDecl>>,
 ): ConfigureParts {
   const id = placementId(node);
-  const placement = chromeIdent(id);
+  const placement = exactIdent(id);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.presetIdent, id);
   ctx.configured.push(member);
@@ -535,8 +524,9 @@ function editableUnit(
   const after = insertTerm(ctx, id, "after");
   const remove = removeTerm(ctx, id);
   // Every placement has settings — `theme` at least (settingsOf) — so
-  // every placement configures. [LAW:no-defensive-null-guards] cross-ref
-  // proved every placed segment is declared.
+  // every placement configures. [LAW:no-defensive-null-guards] the loader
+  // drops every placement of an undeclared segment before chrome is spliced
+  // (loader/unplaced.ts).
   const decl = ctx.segments[child.name]!;
   const configure = configureParts(ctx, child, settingsOf(decl));
   // The buttons are drawn inside the cell of the placement they act on, in
@@ -673,9 +663,14 @@ function insertTerm(
   };
 }
 
-// The names of the `+` gap beside one placement: its insert action, the
-// segment that hosts its menu, and that menu's open state. A placement has at
-// most one gap before it and exactly one after it.
+// [LAW:one-source-of-truth] The names of the `+` gap beside one placement:
+// its insert action, the segment that hosts its menu, and that menu's open
+// state. Every name edit chrome mints for a placement or preset spells it
+// with `exactIdent`, so an add, removal or move elsewhere hands none of its
+// state (an open `✚` library, its page, a configure list) to a neighbour;
+// labels, the configure member and draft keys carry the raw id, which is
+// already unique per tree. An authored placement has a gap after it, and the
+// first of its row one before it too; an inserted cell has none.
 export function insertGap(
   presetIdent: string,
   anchor: string,
@@ -685,7 +680,7 @@ export function insertGap(
   readonly host: string;
   readonly stateKey: string;
 } {
-  const gap = `${relation}.${chromeIdent(anchor)}`;
+  const gap = `${relation}.${exactIdent(anchor)}`;
   const apply = `${EDIT_NS}${presetIdent}.insert.${gap}`;
   const host = `${EDIT_NS}${presetIdent}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
@@ -917,7 +912,7 @@ function spliceEditChromeForPreset(
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const ctx: SpliceCtx = {
-    presetIdent: ident(presetName),
+    presetIdent: exactIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config.segments,
     artifacts,

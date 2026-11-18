@@ -100,19 +100,16 @@ describe("presets block — loader validation", () => {
     );
   });
 
-  // brandon-layout-edit-2gc.5 PR review: two preset names that collapse to
-  // the SAME synthesis identifier would silently steal each other's
-  // synthesized reset action/segment at chrome-synthesis time (a plain
-  // object-key overwrite that never re-enters cross-ref checking) — caught
-  // here instead, at the structural pass every preset name already goes
-  // through.
-  test("two preset names that collapse to the same synthesis identifier are rejected at load", () => {
-    const msg = parseIssues(
-      `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
-    );
-    expect(msg).toContain('"quick-look"');
-    expect(msg).toContain('"quick_look"');
-    expect(msg).toContain("collapse to the same synthesis identifier");
+  // Edit chrome spells each preset name injectively, so two names that differ
+  // only in punctuation load, and neither steals the other's reset.
+  test("two preset names that differ only in punctuation both load", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
+        ALLOWED,
+      ),
+    ).not.toThrow();
   });
 
   test("preset names that don't collide are unaffected", () => {

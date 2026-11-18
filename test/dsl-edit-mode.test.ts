@@ -79,6 +79,7 @@ import {
   type RootFragment,
   type SegmentNode,
 } from "../src/config/dsl-types";
+import { templateActionRefs } from "../src/config/loader/refs";
 import { fragmentNode } from "../src/config/root";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { contrastRatio } from "@promptctl/rich-js";
@@ -643,7 +644,7 @@ describe("edit chrome names follow their placement, not the walk", () => {
       };
       const leading = named(at - 2).filter((n) => n.includes(".insertSeg."));
       const calls = [cell.lead, cell.trail].flatMap((t) =>
-        [...(t ?? "").matchAll(/action "([^"]+)"/g)].map((m) => m[1]!),
+        t === undefined ? [] : templateActionRefs(t, {}).map(({ name }) => name),
       );
       return [
         ...leading,
@@ -662,17 +663,18 @@ describe("edit chrome names follow their placement, not the walk", () => {
       `root: { v: ${rows} },`,
     );
 
-  test("an add in an earlier row renames no later placement's chrome", () => {
+  test.each([
+    ["in its row", "[ { h: ['directory', 'gitPr', 'git'] }, 'trigger' ]"],
+    ["in an earlier row", "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]"],
+  ])("an add %s renames no other placement's chrome", (_where, rows) => {
     const before = parseAndValidate("<test>", BASE, ALLOWED);
-    const after = parseAndValidate(
-      "<test>",
-      withRows("[ { h: ['directory', 'gitPr', 'git'] }, 'trigger' ]"),
-      ALLOWED,
-    );
+    const after = parseAndValidate("<test>", withRows(rows), ALLOWED);
     for (const id of ["git", "trigger", "directory"]) {
-      expect(chromeNamesOf(after, id)).toEqual(chromeNamesOf(before, id));
+      const kept = chromeNamesOf(before, id);
+      // Its unit's segments, its two actions and a draft variable at least.
+      expect(kept.length).toBeGreaterThan(3);
+      expect(chromeNamesOf(after, id)).toEqual(kept);
     }
-    expect(chromeNamesOf(before, "git").length).toBeGreaterThan(3);
   });
 
   test("a removal leaves the next placement's names, and gives it the leading gap", () => {
@@ -701,6 +703,8 @@ describe("edit chrome names follow their placement, not the walk", () => {
     );
     const dash = chromeNamesOf(config, "git-2");
     const under = chromeNamesOf(config, "git_2");
+    expect(dash.length).toBeGreaterThan(3);
+    expect(under.length).toBeGreaterThan(3);
     expect(dash.filter((n) => under.includes(n))).toEqual([]);
   });
 

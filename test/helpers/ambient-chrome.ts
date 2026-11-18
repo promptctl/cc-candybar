@@ -52,7 +52,7 @@ function isReservedChromeKey(key: string): boolean {
     // The settings menu's own pickers, hosted on `candybar.<setting>`.
     key.startsWith(`${MENU_NS}${ident(SETTINGS_NS)}`) ||
     // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
-    // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertTerm
+    // `edit.<preset>.insertSeg.<before|after>.<placement>` segment (insertGap
     // calls menuStateKey directly), and `ident()` collapses the dots — so a
     // bundled-default config really does derive 30+ keys under this prefix.
     key.startsWith(`${MENU_NS}edit_`) ||
@@ -169,7 +169,7 @@ export function ownLinks(urls: readonly string[]): string[] {
   // [LAW:one-source-of-truth] Reads the same reserved-key predicate the
   // validator filter does, rather than restating a prefix list that drifted
   // once already: matching `edit.` alone missed edit chrome's own insert-menu
-  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<n>.…`.
+  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<before|after>_<placement>.…`.
   //
   // Safe for a layout-edit test's own subject because `apply-layout-op` is not
   // a key-writing verb — `keysWrittenBy` reports nothing for it, so a `+`/`-`

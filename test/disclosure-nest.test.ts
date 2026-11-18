@@ -18,7 +18,6 @@ import {
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
 import { insertGap } from "../src/config/edit-chrome";
-import { ident } from "../src/config/ident";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -146,7 +145,7 @@ describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
     const rt = nestBar(BUNDLED);
     await arrange(rt);
     const gap = insertGap("default", "directory", "before");
-    await rt.clickWriting(`menus.${ident(gap.host)}.*`, gap.apply);
+    await rt.clickWriting(gap.stateKey, gap.apply);
     const key = gap.stateKey;
     expect(rt.held(key)).toBe(gap.apply);
     await rt.clickWriting(EDIT_MODE_KEY, DISCLOSURE_CLOSED);
