@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-830",
+      "ref": "refs/pull/830/merge",
+      "sha": "f76416375053a94344eab6027265a6beeb0410c0",
+      "timestamp": "2026-11-18T21:11:46.284Z",
+      "commits": [
+        {
+          "sha": "f76416375053a94344eab6027265a6beeb0410c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T21:10:47Z",
+          "message": "Merge c9f08fee3cafd3a35fb8a6f13c8176d1b556213f into faf3e3eb7acc2326880d6a32d25e68576a6f6cb9\n"
+        },
+        {
+          "sha": "c9f08fee3cafd3a35fb8a6f13c8176d1b556213f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:10:02-07:00",
+          "message": "fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n"
+        },
+        {
+          "sha": "ba7f51493d05693188f27d2eb11c56383db877be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:00:04-07:00",
+          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
+        },
+        {
+          "sha": "5386e0b1b4802cf94cdee087886beb7bd8b14b07",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:07:47-07:00",
+          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-824",
       "ref": "refs/pull/824/merge",
       "sha": "df3b87b2848db3495c6c2473c4759a95f27e2bfe",
@@ -56,35 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T14:08:06-07:00",
           "message": "fix(daemon): a fork-bomb registry that cannot be listed refuses an isolated boot, and no entry is left out of its count (v5fj) (#819)\n\n* fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n\n* fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n\n* fix(daemon): a fork-bomb registry release removes our own entry, and an empty start time names no process (v5fj)\n\n* fix(daemon): the registry has one removal, whose failure the sweep warns of, and its entry name one spelling (v5fj)"
-        }
-      ]
-    },
-    {
-      "version": "pr-830",
-      "ref": "refs/pull/830/merge",
-      "sha": "adc69d751d59ffd001142032f101aad83e48b37f",
-      "timestamp": "2026-11-18T21:01:23.719Z",
-      "commits": [
-        {
-          "sha": "adc69d751d59ffd001142032f101aad83e48b37f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:00:20Z",
-          "message": "Merge 66dea5c61e26678f0774ababeac95ab797f69bfc into c27a4e0e74255d340737ceb295fc044543bde560\n"
-        },
-        {
-          "sha": "66dea5c61e26678f0774ababeac95ab797f69bfc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:00:04-07:00",
-          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
-        },
-        {
-          "sha": "1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:07:47-07:00",
-          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
         }
       ]
     },
