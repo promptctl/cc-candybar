@@ -60,6 +60,7 @@ import {
 } from "../src/daemon/foundations/verb-error";
 import { until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
+import { heldClock } from "./helpers/held-clock";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -76,7 +77,7 @@ const RECORD: ActRecord = {
   pid: 1,
   startTime: "t",
   started: 0,
-  deadline: 0,
+
 };
 const facts = (over: Partial<ActFacts>): ActFacts => ({
   act: 3,
@@ -357,7 +358,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -404,7 +404,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -424,7 +423,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -451,7 +449,6 @@ describe("claimAct: one act per bundle", () => {
       2,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -470,7 +467,6 @@ describe("claimAct: one act per bundle", () => {
         null,
         "id-1",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         sameLeader,
       ),
@@ -492,7 +488,6 @@ describe("claimAct: one act per bundle", () => {
         1,
         "id-2",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         sameLeader,
       ),
@@ -517,7 +512,6 @@ describe("claimAct: one act per bundle", () => {
         null,
         "id-1",
         TOUCH(marker()),
-        60_000,
         Date.now(),
         unreadable,
       ),
@@ -544,7 +538,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -611,7 +604,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-1",
       TOUCH(marker()),
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -632,7 +624,6 @@ describe("claimAct: one act per bundle", () => {
       null,
       "id-2",
       SLEEP,
-      60_000,
       Date.now(),
       sameLeader,
     );
@@ -825,7 +816,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       null,
       "id-1",
       untilFile(stop),
-      60_000,
       Date.now(),
       read,
     );
@@ -839,6 +829,53 @@ describe("the update watch: one turn at a time on the act files", () => {
     jobs.push(pid);
     return pid;
   }
+
+  // The budget is time the watch saw the act run: a sleep far past it ends
+  // nothing on wake, and a wedged act on an awake machine is ended once ten
+  // watched minutes have gone by.
+  test("a sleep past the budget ends nothing; ten watched minutes end a wedged act", async () => {
+    const dir = actsDir(scratch, "/some/bundle/index.mjs");
+    const pid = await running(dir, marker("stop"));
+    const clock = heldClock(new Date());
+    const logged: string[] = [];
+    const watch = makeUpdateWatch({
+      fact: newUpdateFact(),
+      clock,
+      launcher: processLauncher,
+      // The leader reads as the one `running` recorded.
+      probe: { startTime: sameLeader },
+      digest: null,
+      entryUrl: "file:///some/bundle/index.mjs",
+      actsDir: dir,
+      intervalMs: 60 * 60_000,
+      releaseIntervalMs: 60 * 60_000,
+      registryUrl: "http://127.0.0.1:1",
+      fetchImpl: async () => Response.json({ latest: "999.0.0" }),
+      onApplied: () => {},
+      log: (_level, msg) => logged.push(msg),
+    });
+    closers.push(() => watch.close());
+    const ended = () => logged.filter((l) => l.includes("timed out"));
+    watch.arm();
+    await until(() => watch.acts().act.kind === "running", "the first look");
+
+    // The lid closes for an hour: no timer fires until the wake, whose look
+    // comes an hour after the last.
+    clock.burn(60 * 60_000);
+    await clock.settle(2_000);
+    expect(ended()).toEqual([]);
+    expect(processLauncher.jobGroupAlive(pid)).toBe(true);
+
+    // Awake, the looks every two seconds spend the budget.
+    await clock.settle(10 * 60_000 - 4_000);
+    expect(ended()).toEqual([]);
+    await clock.settle(4_000);
+    expect(ended()).toEqual([expect.stringContaining("act 1 timed out")]);
+    await until(
+      () => !processLauncher.jobGroupAlive(pid),
+      "the timed-out act to end",
+    );
+  });
 
   test("a read slower than the poll keeps one read in flight", async () => {
     const h = harness();
@@ -978,7 +1015,6 @@ describe("the update watch: one turn at a time on the act files", () => {
       1,
       "id-2",
       untilFile(stop2),
-      60_000,
       Date.now(),
       sameLeader,
     );

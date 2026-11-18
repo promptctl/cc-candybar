@@ -29,7 +29,9 @@ import {
   endOverdue,
   judgeAct,
   makeActReader,
+  watchedAt,
   type ActFacts,
+  type Watched,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
 import { compareStructural, observable, runInAction } from "mobx";
@@ -121,7 +123,7 @@ function releaseReading(release: Sampled<Currency>): Reading<Update> {
 export interface UpdateWatchOptions {
   // The fact the watch publishes each sample into.
   readonly fact: UpdateFact;
-  // The daemon's clock: the act's deadline and the watch's timers run on it.
+  // The daemon's clock: the looks that spend an act's budget and the watch's timers run on it.
   readonly clock: Timekeeper;
   // Who the act's job belongs to.
   readonly launcher: Launcher;
@@ -171,12 +173,15 @@ export interface UpdateWatch {
   running(): Promise<boolean>;
 }
 
-// A build or an install is a long child; ten minutes is generous for either
-// and bounds a wedged one.
+// A build or an install is a long child; ten watched minutes are generous for
+// either and bound a wedged one.
 const ACT_TIMEOUT_MS = 10 * 60 * 1000;
 // How often the act's record is looked at for an end: the notice's busy label
 // and the restart after a success trail an end by at most this.
 const ACT_POLL_MS = 2_000;
+// A gap between looks past five polls is a sleep or a stalled daemon, not
+// time anyone watched the act run.
+const LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 
 function describeBuild(b: BuildCurrency): [LogLevel, string] {
   switch (b.kind) {
@@ -349,10 +354,17 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     }
   }
 
-  // Ends the act if its group is alive past its deadline, with a timeout
-  // verdict unless the job's own landed first.
+  // Ends the act if this daemon has watched its group alive past the budget,
+  // with a timeout verdict unless the job's own landed first. Every daemon on
+  // the bundle watches, so the first to spend the budget ends it.
+  let watched: Watched | null = null;
   function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    if (!facts?.alive) {
+      watched = null;
+      return;
+    }
+    watched = watchedAt(watched, facts.act, clock.now(), LONGEST_LOOK_MS);
+    if (watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
@@ -452,7 +464,6 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           newest === null ? null : newest.act,
           updateIdentity(update),
           { ...command, category: "update.apply" },
-          ACT_TIMEOUT_MS,
           clock.now(),
           readStart,
         );

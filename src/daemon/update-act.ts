@@ -40,14 +40,48 @@ export function actsDir(stateDir: string, entryPath: string): string {
 // What `act()` started: the identity of the newer thing it applies (the
 // notice names a failure against it), the job's process identity (its start
 // time null where `ps` could not answer, as process-fingerprint.ts allows),
-// when it started, and when it is overdue.
+// and when it started.
 export interface ActRecord {
   readonly identity: string;
   readonly pid: number;
   readonly startTime: string | null;
   readonly started: number;
-  readonly deadline: number;
 }
+
+// How long one daemon has watched an act run. The budget that bounds a wedged
+// act is spent in this, not in wall time: wall time runs while the machine
+// sleeps, and an act ended on wake for a lid closed mid-build tears the
+// bundle it was writing. No Node clock counts awake time alone (on macOS
+// `process.hrtime` and `os.uptime` both count sleep), so it is observed: each
+// look spends the time since the look before it.
+export interface Watched {
+  readonly act: number;
+  readonly spentMs: number;
+  readonly lookedAt: number;
+}
+
+// [LAW:no-ambient-temporal-coupling] One look at a running act, at `now`. A
+// gap longer than `longestLookMs` is time nobody watched, a sleep or a stalled
+// daemon, and spends nothing, as a clock set back does: so a weekend of dark
+// wakes, each a look after a long gap, spends nothing. A new act starts
+// unspent, so a daemon that takes over from one that died grants at most one
+// more budget.
+export function watchedAt(
+  prev: Watched | null,
+  act: number,
+  now: number,
+  longestLookMs: number,
+): Watched {
+  const from = prev?.act === act ? prev : UNWATCHED;
+  const since = now - from.lookedAt;
+  return {
+    act,
+    spentMs: from.spentMs + (since >= 0 && since <= longestLookMs ? since : 0),
+    lookedAt: now,
+  };
+}
+
+const UNWATCHED = { spentMs: 0, lookedAt: -Infinity } as const;
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
 // verdict before its group ends, so "gone, then no verdict" is a job that
@@ -264,6 +298,13 @@ export function makeActReader(
   };
 }
 
+// [LAW:one-source-of-truth] exception: a daemon of an older release, still
+// running beside this one on the bundle, ends an act whose recorded
+// `deadline` its wall clock has passed, and reads a missing one as passed.
+// Written past any clock, it never passes, so the time this release watched
+// the act is the one bound. Nothing of this release reads it.
+const INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
+
 // [LAW:no-ambient-temporal-coupling] Synchronous, so no exit lands between the
 // staging directory and its removal: nothing sweeps a stranded one. False when
 // the act already exists.
@@ -271,7 +312,10 @@ function stakeClaim(dir: string, actDir: string, record: ActRecord): boolean {
   fs.mkdirSync(dir, { recursive: true });
   const staging = fs.mkdtempSync(path.join(dir, ".claim-"));
   try {
-    fs.writeFileSync(recordOf(staging), JSON.stringify(record));
+    fs.writeFileSync(
+      recordOf(staging),
+      JSON.stringify({ ...record, deadline: INERT_DEADLINE }),
+    );
     fs.renameSync(staging, actDir);
     return true;
   } catch (err) {
@@ -302,7 +346,6 @@ export async function claimAct(
   after: number | null,
   identity: string,
   command: LaunchOpts,
-  timeoutMs: number,
   now: number,
   read: (pid: number) => Promise<StartTimeRead>,
 ): Promise<Claim> {
@@ -321,7 +364,6 @@ export async function claimAct(
       pid: job.pid,
       startTime: start.kind === "start" ? start.token : null,
       started: now,
-      deadline: now + timeoutMs,
     };
     if (!stakeClaim(dir, actDir, record)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act)) {
@@ -344,7 +386,7 @@ const CLAIMED_FIRST: Claim = {
   reason: "another act claimed this bundle first",
 };
 
-// Ends an act whose group its reader saw alive past its deadline, with a
+// Ends an act whose group its reader watched alive past its budget, with a
 // `timeout` verdict unless the job's own landed first: a live read already
 // proved the group the recorded job.
 export function endOverdue(
