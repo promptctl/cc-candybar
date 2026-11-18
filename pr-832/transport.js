@@ -50781,50 +50781,29 @@ async function readStartTime(pid2, launch) {
     envOverlay: { LC_ALL: "C", TZ: "UTC" }
   });
   if (res.ok) {
-    const lstart = res.stdout.trim();
-    if (lstart.length > 0) return { kind: "start", token: `ps:${lstart}` };
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
     return { kind: "unavailable", detail: "ps produced no start-time" };
   }
   const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
   return { kind: "unavailable", detail };
 }
-var HOST_SOURCE = process.platform === "linux" ? "proc" : "ps";
 function systemProbe(launcher) {
   return {
     alive: (pid2) => {
       try {
         process.kill(pid2, 0);
         return true;
-      } catch (e) {
-        return e.code === "EPERM";
+      } catch {
+        return false;
       }
     },
-    startTime: HOST_SOURCE === "proc" ? readProcStartTime : (pid2) => readStartTime(pid2, launcher.launch)
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
   };
 }
-async function readProcStartTime(pid2) {
-  let bootId;
-  let stat3;
-  try {
-    bootId = (await fs_default.promises.readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
-    stat3 = await fs_default.promises.readFile(`/proc/${pid2}/stat`, "utf8");
-  } catch (e) {
-    return { kind: "unavailable", detail: e.message };
-  }
-  const ticks = procStatStartTime(stat3);
-  return ticks === null ? { kind: "unavailable", detail: `unparseable /proc/${pid2}/stat` } : { kind: "start", token: `proc:${bootId}:${ticks}` };
-}
-function procStatStartTime(stat3) {
-  const close = stat3.lastIndexOf(")");
-  if (close === -1) return null;
-  const ticks = stat3.slice(close + 1).trim().split(" ")[22 - 3];
-  return ticks !== void 0 && /^\d+$/.test(ticks) ? ticks : null;
-}
-var sourceOf = (token) => token.startsWith("proc:") ? "proc" : token.startsWith("ps:") ? "ps" : "untagged";
 function sameProcess(a, b) {
   if (a.pid !== b.pid) return "different";
   if (a.startTime === null || b.startTime === null) return "incomparable";
-  if (sourceOf(a.startTime) !== sourceOf(b.startTime)) return "incomparable";
   return a.startTime === b.startTime ? "same" : "different";
 }
 
@@ -50834,7 +50813,7 @@ function actsDir(stateDir2, entryPath) {
   return import_node_path14.default.join(stateDir2, "update-act", key);
 }
 function looked(prev, job, began, done, longestLookMs) {
-  if (prev === null || !sameJob(prev.job, job)) {
+  if (prev === null || !sameRecord(prev.job, job)) {
     return {
       kind: "first",
       watched: {
@@ -50944,15 +50923,16 @@ function parsedRecord(file, text4) {
   }
   throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
-var sameJob = (a, b) => sameProcess(a, b) !== "different";
+var sameRecord = (a, b) => a.identity === b.identity && a.pid === b.pid && a.startTime === b.startTime && a.started === b.started;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
-    if (known === null || !sameJob(known.record, record2)) {
+    if (known === null || known.act !== act2 || !sameRecord(known.record, record2)) {
       known = {
+        act: act2,
         record: record2,
         ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
@@ -90912,14 +90892,14 @@ function fallbackState(cwd2, snapshot, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { source: sourceOf2, changed, log }) {
+function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
   const sessionId2 = facts.hookData.session_id;
   const registry = state.registry.view();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const requested = observable.box(facts, { deep: false });
   let source;
   try {
-    source = sourceOf2({
+    source = sourceOf({
       sessionId: sessionId2,
       state,
       store: registry.variableStore,

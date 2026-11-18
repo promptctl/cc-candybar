@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-832",
+      "ref": "refs/pull/832/merge",
+      "sha": "746bd7ffa2f003b2b7dcebbad9ec7e71f60a5bde",
+      "timestamp": "2026-11-18T22:58:45.139Z",
+      "commits": [
+        {
+          "sha": "746bd7ffa2f003b2b7dcebbad9ec7e71f60a5bde",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:57:26Z",
+          "message": "Merge ad4a3b1b46358ea563d0244a4f7d2c156520f499 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "ad4a3b1b46358ea563d0244a4f7d2c156520f499",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:54:05-07:00",
+          "message": "test(daemon): the old-release rule reads ps itself, so a respelled token fails it (m5bq)\n"
+        },
+        {
+          "sha": "b5fd7d80c0d302e9136155a164e2590396728b03",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:53:34-07:00",
+          "message": "fix(daemon): start-time tokens keep the spelling every release reads, and a daemon that cannot name itself refuses to boot (m5bq)\n\nLeases, registry entries and act records are read by daemons of every\nrelease, which judge an owner by raw equality of the `ps -o lstart=` token.\nA token spelled any other way (a source tag, a /proc reading) reads to an\nolder daemon as a different process, so it reclaims a live newer daemon's\nsocket and its sweep deletes live entries. The token is `ps`'s again on\nevery host, unchanged, and tests hold a written lease and registry entry to\nthe old rule.\n\nA daemon refuses to boot when it cannot read its own start time, so every\nrecord it writes names it, and a lease's start time is non-null in its type;\nnull survives only in records older releases wrote, which compare as\nincomparable. kill(pid,0)'s EPERM is a pid of another user's and so no\nprocess of ours. Arbitration takes a lease naming our own pid as stale. The\nact reader knows an act by its number and its record field for field, never\nby the liveness-oriented identity comparison.\n"
+        },
+        {
+          "sha": "457a8ca22f939ef7e8fd031dadaf58d8e24a04c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:37:39-07:00",
+          "message": "fix(daemon): a start-time token names the source that read it, and tokens from two sources are never a mismatch (m5bq)\n\nEach token is tagged `proc:` or `ps:`, and the one identity comparison\nanswers same, different or incomparable: a pair read by two sources, or\nmissing a start time, is incomparable and judged by liveness alone. So a\nlive daemon from before the tags is never taken for a recycled pid by the\narbitration, the fork-bomb registry's sweep or the update act, which now\nasks the same comparison.\n\nThe host's source is settled once from the platform. The liveness fold\ncarries why it decided into the arbitration's line, so an owner spared\nbecause its start time could not be read says so. A stat line with no\ncommand-name paren reads as having no start time.\n"
+        },
+        {
+          "sha": "db333529acd298e7f3dcc775a47193cd25b91f23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:25:00-07:00",
+          "message": "fix(daemon): a process identity carries its start-time wherever the kernel keeps one, and a failed lease write refuses the boot (m5bq)\n\nA lease outliving its owner is judged by its owner's identity, so the\nidentity has to hold up: on Linux the start-time is read from /proc (the\nstat's start-time beside the boot id) with no subprocess, and ps stays for\nhosts without /proc. Liveness is asked first, so a dead pid is stale with\nno start-time read at all, which is the common case after a daemon's exit.\n\nThe ownership self-check and the arbitration compare identities through one\nfunction, pid and start-time alike. A lease write that fails refuses the\nboot with its reason, rather than serving until the self-check calls the\ndaemon displaced. The exit test is folded into the one that proves no\nremoval runs, and the reason the lease stays is kept once, at the write.\n"
+        },
+        {
+          "sha": "1a052a0374bec117cef9a2ba86c3b26c830bffb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:14:05-07:00",
+          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-835",
       "ref": "refs/pull/835/merge",
       "sha": "435a636bbbea07a8e13727dd1a1c35d64d6376bc",
@@ -113,42 +163,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:35:58-07:00",
           "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-832",
-      "ref": "refs/pull/832/merge",
-      "sha": "69cbef302ecfa4e684e2d676b933448abe90f20e",
-      "timestamp": "2026-11-18T22:39:59.849Z",
-      "commits": [
-        {
-          "sha": "69cbef302ecfa4e684e2d676b933448abe90f20e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:38:51Z",
-          "message": "Merge 457a8ca22f939ef7e8fd031dadaf58d8e24a04c2 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "457a8ca22f939ef7e8fd031dadaf58d8e24a04c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:37:39-07:00",
-          "message": "fix(daemon): a start-time token names the source that read it, and tokens from two sources are never a mismatch (m5bq)\n\nEach token is tagged `proc:` or `ps:`, and the one identity comparison\nanswers same, different or incomparable: a pair read by two sources, or\nmissing a start time, is incomparable and judged by liveness alone. So a\nlive daemon from before the tags is never taken for a recycled pid by the\narbitration, the fork-bomb registry's sweep or the update act, which now\nasks the same comparison.\n\nThe host's source is settled once from the platform. The liveness fold\ncarries why it decided into the arbitration's line, so an owner spared\nbecause its start time could not be read says so. A stat line with no\ncommand-name paren reads as having no start time.\n"
-        },
-        {
-          "sha": "db333529acd298e7f3dcc775a47193cd25b91f23",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:25:00-07:00",
-          "message": "fix(daemon): a process identity carries its start-time wherever the kernel keeps one, and a failed lease write refuses the boot (m5bq)\n\nA lease outliving its owner is judged by its owner's identity, so the\nidentity has to hold up: on Linux the start-time is read from /proc (the\nstat's start-time beside the boot id) with no subprocess, and ps stays for\nhosts without /proc. Liveness is asked first, so a dead pid is stale with\nno start-time read at all, which is the common case after a daemon's exit.\n\nThe ownership self-check and the arbitration compare identities through one\nfunction, pid and start-time alike. A lease write that fails refuses the\nboot with its reason, rather than serving until the self-check calls the\ndaemon displaced. The exit test is folded into the one that proves no\nremoval runs, and the reason the lease stays is kept once, at the write.\n"
-        },
-        {
-          "sha": "1a052a0374bec117cef9a2ba86c3b26c830bffb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:14:05-07:00",
-          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
         }
       ]
     },
