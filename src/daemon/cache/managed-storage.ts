@@ -86,7 +86,8 @@ function madeOnce(folder: string): void {
 // names, each state carrying only what is true of it. `unmade`: it could not
 // be made, so there is no folder to watch. `unreadable`: a folder is there,
 // with no identity to watch it by. `lost`: the folder its generation watched
-// is gone or replaced, and its owner makes it again at the next period.
+// is gone or replaced, and its owner makes it again at the next trigger that
+// asks, never on the event that found it gone.
 // `watching`: a generation. A generation that ends leaves this state, so no
 // fault outlives the folder it was about.
 type Folder =
@@ -163,6 +164,23 @@ const faultsOf = (folder: Folder | undefined): Faults => {
   }
 };
 
+// [LAW:one-source-of-truth] A folder's state is the same while it carries the
+// same facts: each trigger builds its answer afresh, and a fault that stands
+// re-reads nothing. A generation is the same only as itself.
+const sameFolder = (a: Folder | undefined, b: Folder | undefined): boolean => {
+  if (a === b) return true;
+  if (a === undefined || b === undefined || a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "watching":
+      return false;
+    case "lost":
+      return true;
+    case "unmade":
+    case "unreadable":
+      return a.reason === (b as typeof a).reason;
+  }
+};
+
 const sameFault = (a: Fault | null, b: Fault | null): boolean =>
   a === b || (a?.cause === b?.cause && a?.reason === b?.reason);
 
@@ -188,9 +206,9 @@ type Trigger = "hold" | "period" | "caught-up";
 // view: opening or closing a directory watch leaks on macOS. A folder gone or
 // replaced ends its generation. Every hold, period and catch-up asks again of
 // every held folder (`asked`), so a fault stands only while the OS or the disk
-// keeps giving its answer. A lost folder is made again at the next period, not
-// at once, so a plugin folder being removed is gone, and its hold released,
-// before the folder is made in it again.
+// keeps giving its answer. A lost folder is made again by the next trigger, not
+// by the event that found it gone, so a plugin folder being removed is gone,
+// and its hold released, before the folder is made in it again.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
@@ -430,15 +448,17 @@ export class ManagedStorage {
       was.stopSweep();
       was.handle.release();
     }
-    this.settle(folder);
-    if (was !== now) this.sessions.changed((f) => f.folder === folder);
+    // A folder no hold names leaves its faults untold: nothing asked the OS or
+    // the disk again, so none of them cleared.
+    if (now === undefined) this.told.delete(folder);
+    this.settle(folder, !sameFolder(was, now));
   }
 
   // [LAW:no-silent-failure] Each fault a folder stands on is logged and
   // counted as it starts and as its reason changes, and logged as it clears,
-  // once each; a source whose fault moved re-reads its files, which read the
-  // faults standing now.
-  private settle(folder: string): void {
+  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
+  // on a move of its state or its faults, which they read first.
+  private settle(folder: string, stateMoved = false): void {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now = faultsOf(this.folders.get(folder));
     let moved = false;
@@ -463,7 +483,7 @@ export class ManagedStorage {
     if (SOURCES.every((source) => now[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now);
-    if (moved) this.sessions.changed((f) => f.folder === folder);
+    if (moved || stateMoved) this.sessions.changed((f) => f.folder === folder);
   }
 
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the

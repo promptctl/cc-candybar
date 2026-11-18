@@ -482,6 +482,33 @@ describe("ManagedStorage watches", () => {
     expect(lane.current()).toEqual(ok("a"));
   });
 
+  test("a fault that stands across periods re-reads nothing and is told once", async () => {
+    const r = rig();
+    fs.rmdirSync(path.dirname(r.folder));
+    fs.writeFileSync(path.dirname(r.folder), "");
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    await answered(lane);
+    const reads = r.lines.filter((l) => l.includes("plugin storage refresh"));
+    for (let i = 0; i < 3; i++) r.fileEvents.notify({ kind: "period" });
+    r.hold();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(r.lines.filter((l) => l.includes("plugin storage refresh"))).toEqual(
+      reads,
+    );
+    expect(faultLines(r)).toEqual([started("unusable")]);
+  });
+
+  // Nothing asked the OS again, so nothing cleared.
+  test("a faulted folder no hold names any more leaves without a clear", () => {
+    const r = rig();
+    fakeWatches(new Set([r.folder]));
+    const release = r.hold();
+    release();
+    expect(faultLines(r)).toEqual([started("refused")]);
+    expect(r.storage.stats().folders).toBe(0);
+  });
+
   test("a file where the folder should be is a standing fault of its sources, never a folder", async () => {
     const r = rig();
     fs.writeFileSync(r.folder, "");
