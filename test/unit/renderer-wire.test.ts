@@ -91,7 +91,6 @@ function linesOver(
 const overLines = (): TimedRenderer => linesOver().renderer;
 
 const input = (event: RendererInput["event"]): RendererInput => ({
-  kind: "event",
   event,
   at: 0 as Instant,
   tick: 0 as Tick,

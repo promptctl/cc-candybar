@@ -4,9 +4,10 @@
 // stamp, and a late document carrying an older fact does not move it back.
 
 import {
-  daemonGates,
+  DAEMON_HELD_KEYS,
   UPDATE_DISMISSED_KEY,
 } from "../../src/daemon/foundations/update-keys";
+import { createGates } from "../../src/daemon/foundations/gates";
 import { UpdateGate } from "../../src/renderer/update-gate";
 import type { Fact } from "../../src/facts/fact";
 import type { Update } from "../../src/facts/world-state";
@@ -21,7 +22,7 @@ const release = (patch: number, at: number): Fact<Update> => ({
 });
 
 function gated() {
-  const gates = daemonGates();
+  const gates = createGates(DAEMON_HELD_KEYS);
   const gate = new UpdateGate(gates);
   const admits = (identity: string): boolean =>
     gates.state.gateFor(EMPTY_DEFAULT).validate(UPDATE_DISMISSED_KEY, identity)

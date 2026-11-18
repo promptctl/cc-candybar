@@ -164,7 +164,6 @@ const settled = async (): Promise<void> => {
 };
 
 const pin: RendererInput = {
-  kind: "event",
   event: { kind: "closing" },
   at: 0 as Instant,
   tick: 0 as Tick,
@@ -559,8 +558,9 @@ describe("a renderer process's close", () => {
     await settled();
     clock.advance(BACKOFF_MAX_MS);
     expect(children).toHaveLength(1);
+    // [LAW:nothing-unseen] Its end names the input it died under.
     expect(logs).toContain(
-      "renderer main[1] killed by SIGSEGV in the daemon's close",
+      `renderer main[1] killed by SIGSEGV in the daemon's close owed="a ping, closing input"`,
     );
     expect(ends).toEqual([]);
     await expect(link.renderer.answer(pin)).rejects.toThrow(
@@ -579,7 +579,7 @@ describe("a renderer process's close", () => {
     await settled();
     expect(early.levels.at(-1)).toBe("warn");
     expect(early.logs.at(-1)).toBe(
-      "renderer main[1] exited in the daemon's close",
+      `renderer main[1] exited in the daemon's close owed="a ping"`,
     );
     await early.link.close();
 
@@ -592,7 +592,7 @@ describe("a renderer process's close", () => {
     await closed;
     expect(asked.levels.at(-1)).toBe("info");
     expect(asked.logs.at(-1)).toBe(
-      "renderer main[1] exited in the daemon's close",
+      `renderer main[1] exited in the daemon's close owed="a ping"`,
     );
   });
 
@@ -644,7 +644,7 @@ describe("a renderer process's close", () => {
     expect(child.opts.signal?.aborted).toBe(true);
     expect(logs).toContainEqual(
       expect.stringMatching(
-        /^renderer main\[1\] stopped answering .* in the daemon's close$/,
+        /^renderer main\[1\] stopped answering .* in the daemon's close owed=/,
       ),
     );
     await link.close();

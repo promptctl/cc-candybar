@@ -22,7 +22,7 @@ import type { SessionId } from "../daemon/foundations/session-id.js";
 import { LANE_NAMES, type Lane, type LaneSwitches } from "../config/lanes.js";
 import type {
   ActRequest,
-  Settled,
+  OwedEffect,
   LaneSession,
 } from "../renderer-interface/interface.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -165,7 +165,7 @@ export class LaneActs {
 
   constructor(
     private readonly deps: {
-      readonly ask: (effects: Settled[], act: ActRequest) => void;
+      readonly ask: (effects: OwedEffect[], act: ActRequest) => void;
       // Holds a refused setup's reason on the session's bar.
       readonly refused: (session: SessionId, reason: string) => void;
       readonly log: (level: "info" | "warn", msg: string) => void;
@@ -180,7 +180,7 @@ export class LaneActs {
     latest: CheckedRenderRequest | null,
     before: LaneSwitches,
     after: LaneSwitches,
-    effects: Settled[],
+    effects: OwedEffect[],
   ): void {
     // [LAW:one-source-of-truth] The click's moves join what the session
     // already owes: a lane owed before keeps where it stood then.
@@ -225,7 +225,7 @@ export class LaneActs {
   noted(
     req: CheckedRenderRequest,
     switches: LaneSwitches,
-    effects: Settled[],
+    effects: OwedEffect[],
   ): void {
     // Nearly every request owes nothing.
     const owed = this.owed.get(req.hookData.session_id);
@@ -249,7 +249,7 @@ export class LaneActs {
     owed: ReadonlyMap<Lane, boolean>,
     now: LaneSwitches,
     byOf: (lane: Lane) => SetupCause,
-    effects: Settled[],
+    effects: OwedEffect[],
   ): void {
     for (const [lane, from] of owed) {
       const on = now[lane];

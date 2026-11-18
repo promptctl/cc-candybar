@@ -2,7 +2,8 @@
 // renderer's mailbox, and is one turn, which answers with the turn's output or
 // with how the turn failed: a turn's throw comes back as a value, never as a
 // rejection. Every turn's subscriptions are taken here, in the order the turns
-// answered, its config changes landed, and its acts performed once they have;
+// answered, and the storage folders its slot ended naming as the slot ends;
+// its config changes landed, and its acts performed once they have;
 // a present a turn that answers no request returned is refused, as is a report
 // one that answers no inspect returned. A caller whose own event records the
 // turn takes it by `answer`; every other input is taken by `deliver`, which
@@ -34,11 +35,13 @@ import {
   type PushedFrame,
   type Reading,
   type RendererInput,
-  type Settled,
+  type OwedEffect,
+  type StorageNamed,
   type TimedRenderer,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
+  NOTHING_NAMED,
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
@@ -122,8 +125,9 @@ export interface RendererHost {
   // that returned no report of the ask's kind, rejects with an Error naming
   // the renderer and the ask: the caller that awaits it owns the failure.
   inspect<A extends Inspect>(ask: A): Promise<ReadingOf<A["kind"]>>;
-  // One of the daemon's teardown steps, recorded on its own line: a turn
-  // that threw rejects, naming the renderer and the step.
+  // One of the daemon's teardown steps: a turn that threw rejects, naming
+  // the renderer and the step, and the caller that awaits it owns the
+  // failure.
   closeStep(step: "closing" | "close"): Promise<void>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
@@ -173,6 +177,12 @@ export function rendererHost(
     // [LAW:single-enforcer] Where every output's subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
+    // [LAW:no-ambient-temporal-coupling] Where the storage folders a slot
+    // ends naming go, once every turn in it has answered. A turn inside a slot
+    // is partial: a start answers before the configs it names load, and a
+    // folder a partial turn leaves out would be closed and opened again, which
+    // leaks a directory watch on macOS.
+    readonly storage: (named: StorageNamed) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
     // send each subscriber what changed for it.
     readonly frames: (frames: readonly PushedFrame[]) => void;
@@ -202,6 +212,8 @@ export function rendererHost(
   // live renderer was served: what its last output named. A `start` is a
   // renderer that holds none.
   let served = new Set<string>();
+  // The storage folders the latest output named, which its slot hands on.
+  let storage: StorageNamed = NOTHING_NAMED;
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -223,6 +235,7 @@ export function rendererHost(
           return await slot(queuedMs, (input) => void (held.input = input));
         } finally {
           holder = null;
+          taking("storage", () => collector.storage(storage));
         }
       },
       at,
@@ -403,13 +416,13 @@ export function rendererHost(
   // fails a turn that answered: its effects are still owed their
   // `effect-done`. Answers the origins the output names that the renderer
   // was not served, which discovery now follows.
-  // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
   const took = (
     subscriptions: Subscriptions,
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
   ): readonly RenderOrigin[] => {
     wake.declare(subscriptions.wake);
+    storage = subscriptions.storage;
     let named: readonly RenderOrigin[] = [];
     for (const [what, take] of [
       ["stored writes", () => collector.stored(stored)],
@@ -425,16 +438,19 @@ export function rendererHost(
           served = new Set(subscriptions.configs.map((o) => originKey(o)));
         },
       ],
-    ] as const) {
-      try {
-        take();
-      } catch (thrown) {
-        const text = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown).detail}`;
-        log("error", text);
-        world.unheard(text);
-      }
-    }
+    ] as const)
+      taking(what, take);
     return named;
+  };
+  // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
+  const taking = (what: string, take: () => void): void => {
+    try {
+      take();
+    } catch (thrown) {
+      const text = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown).detail}`;
+      log("error", text);
+      world.unheard(text);
+    }
   };
 
   // [LAW:one-source-of-truth] An origin's `config`, made from what discovery
@@ -486,7 +502,7 @@ export function rendererHost(
   // session's bar can hold — one with no session, or one whose renderer has
   // ended — is the daemon's, on every bar. The trust book's answer lands with
   // the turn's changes, and its failure is theirs.
-  const doneOf = (effect: Settled, outcome: EffectOutcome): MadeEvent => ({
+  const doneOf = (effect: OwedEffect, outcome: EffectOutcome): MadeEvent => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -521,7 +537,7 @@ export function rendererHost(
   // A change's or a refused present's, in the slot of the turn that
   // returned it: settled once that `effect-done` turn's own acts have.
   const settleInSlot = async (
-    effect: Settled,
+    effect: OwedEffect,
     outcome: EffectOutcome,
   ): Promise<{ readonly settled: Promise<EffectOutcome> }> => {
     const input = stamped(doneOf(effect, outcome));
@@ -653,10 +669,12 @@ export function rendererHost(
     // which the compiler cannot carry from the reading's kind to its type.
     return report.reading as ReadingOf<A["kind"]>;
   };
+  // [LAW:single-enforcer] A step's failure is its teardown's to say, so
+  // the turn writes no line of its own.
   const closeStep = async (step: "closing" | "close"): Promise<void> =>
     threw(
       `close step ${step}`,
-      await deliver(() => ({ kind: "event", event: { kind: step } }), []),
+      await answer(() => ({ kind: "event", event: { kind: step } })),
     );
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
@@ -723,7 +741,6 @@ export function rendererHost(
 const stampedOf =
   (clock: Pick<Timekeeper, "now" | "monotonic">) =>
   (made: MadeEvent): RendererInput => ({
-    kind: "event",
     event: made.event,
     ...readingsAt(clock),
   });

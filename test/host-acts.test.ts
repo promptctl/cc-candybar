@@ -16,7 +16,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { diffChanges } from "../src/config/config-changes";
 import type {
   Act,
-  Settled,
+  OwedEffect,
   EffectId,
   EffectOutcome,
   RendererInput,
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-const output = (effects: readonly Settled[]): RendererOutput => ({
+const output = (effects: readonly OwedEffect[]): RendererOutput => ({
   kind: "answered",
   stored: [],
   logged: [],
@@ -80,7 +80,7 @@ const run = (): Act => ({
   cwd: "/",
   refreshes: [],
 });
-const change = (before: string, after: string): Settled => ({
+const change = (before: string, after: string): OwedEffect => ({
   kind: "change",
   id: ++ids as EffectId,
   session: S,
@@ -96,7 +96,7 @@ const change = (before: string, after: string): Settled => ({
 // each `effect-done` as `done` answers it. Every act is performed by
 // `perform`, and what happened is in `did`, in order.
 function hostOver(
-  effects: readonly Settled[],
+  effects: readonly OwedEffect[],
   over: Partial<HostWorld> = {},
   done: (input: RendererInput) => Promise<RendererOutput> = async () =>
     output([]),
@@ -131,6 +131,7 @@ function hostOver(
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},

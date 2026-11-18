@@ -92,7 +92,6 @@ export function timed(
 // made as its slot in the mailbox comes (`Readings`): the renderer reads no
 // clock.
 export interface RendererInput extends Readings {
-  readonly kind: "event";
   readonly event: Event;
 }
 
@@ -444,7 +443,7 @@ type Unnamed<A> = A extends unknown ? Omit<A, "id"> : never;
 export type Effect = Present | ConfigChange | Act | Report;
 
 // An effect the host settles with an `effect-done`.
-export type Settled = Exclude<Effect, Report>;
+export type OwedEffect = Exclude<Effect, Report>;
 
 // [LAW:nothing-unseen] What a turn learned, in the order it learned it, which
 // the host writes beside the input's event.
@@ -473,14 +472,6 @@ export type Subscription =
   | { readonly kind: "env"; readonly name: string }
   | { readonly kind: "doctor"; readonly ask: DoctorAsk };
 
-// [LAW:one-source-of-truth] Whole, replacing the last: what every session the
-// renderer holds needs read, which lanes its settings switch on, and when the
-// renderer next wants a turn. The host diffs it; nothing is declared by
-// message, so nothing has to remember what it asked. A session absent from it
-// needs nothing read.
-// [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
-// and a record, so it crosses a process as it is: a session absent is a key
-// absent, never one holding `undefined`, which JSON does not carry.
 // The storage folders a renderer's states name, and how many config loads it
 // has run. A load is when a folder is kept again, as it was when it was
 // first named: a watch refused or lost is tried again then. So the host keeps
@@ -492,6 +483,17 @@ export interface StorageNamed {
   readonly loads: number;
 }
 
+// What a renderer names before its first load.
+export const NOTHING_NAMED: StorageNamed = { folders: [], loads: 0 };
+
+// [LAW:one-source-of-truth] Whole, replacing the last: what every session the
+// renderer holds needs read, which lanes its settings switch on, and when the
+// renderer next wants a turn. The host diffs it; nothing is declared by
+// message, so nothing has to remember what it asked. A session absent from it
+// needs nothing read.
+// [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
+// and a record, so it crosses a process as it is: a session absent is a key
+// absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
   // The lanes each session with an open view switches on, as it draws them:

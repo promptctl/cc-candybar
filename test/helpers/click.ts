@@ -32,7 +32,7 @@ import type { RenderOrigin } from "../../src/config-hint";
 import type {
   Act,
   ConfigChange,
-  Settled,
+  OwedEffect,
   EffectId,
   EffectOutcome,
 } from "../../src/renderer-interface/interface";
@@ -225,7 +225,7 @@ class LandingAtOnce extends ConfigWrites {
   // The landing leaves the click's effects; what its consequence asks joins
   // them, so a test reads every act its click asked for there.
   override seal(
-    effects: Settled[],
+    effects: OwedEffect[],
     session: SessionId | null,
     consequence: Consequence,
   ): void {

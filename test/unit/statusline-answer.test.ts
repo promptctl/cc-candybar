@@ -186,6 +186,7 @@ async function answer(
       hostHeld(renderer, CLOCK.monotonic),
       (_level, line) => logged.push(line),
       {
+        storage: () => {},
         subscribed: (subscriptions) => void subscribed.push(subscriptions),
         frames: () => {},
         stored: () => {},
@@ -565,6 +566,7 @@ describe("the request's wait, between its context and its request", () => {
       ),
       () => {},
       {
+        storage: () => {},
         subscribed: () => {},
         frames: () => {},
         stored: () => {},

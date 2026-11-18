@@ -76,6 +76,7 @@ function hostOver(output: Ended) {
     ),
     (level, line) => say(`${level} ${line}`),
     {
+      storage: () => {},
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
       stored: () => {},
@@ -182,6 +183,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
@@ -221,6 +223,7 @@ test("every turn's record reaches `recorded`, whatever input it took and however
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
@@ -266,6 +269,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
@@ -315,6 +319,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {
         throw new Error("the collector broke");
       },
@@ -366,6 +371,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
@@ -421,6 +427,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},
@@ -482,6 +489,7 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
     ),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       stored: () => {},

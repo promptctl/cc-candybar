@@ -9,7 +9,7 @@
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type {
   ActRequest,
-  Settled,
+  OwedEffect,
   EffectId,
   EffectOutcome,
 } from "../renderer-interface/interface.js";
@@ -24,7 +24,7 @@ export class ActsOnTheirWay {
   ) {}
 
   // `act` asked of the host, in the turn whose effects are `effects`.
-  ask(effects: Settled[], act: ActRequest): void {
+  ask(effects: OwedEffect[], act: ActRequest): void {
     const id = this.mint();
     this.owed.add(id);
     effects.push({ ...act, id });

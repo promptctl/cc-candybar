@@ -7,7 +7,7 @@
 // the daemon's own renderer (src/check.ts); this rig is the in-process view a
 // case inspects.
 
-import { previewSigner } from "../../src/click/link-signer";
+import { linkSigner, previewLinkKey } from "../../src/click/link-signer";
 import { locations } from "../../src/daemon/paths";
 import type { ApprovedRepo } from "../../src/config/loader/repo-gate";
 import {
@@ -124,7 +124,7 @@ export async function prepareConfig(
   try {
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: previewSigner(),
+      signer: linkSigner(previewLinkKey()),
     });
     warnings.push(...compiled.loadWarnings);
     const prepared: PreparedConfig = {

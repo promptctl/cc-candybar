@@ -6,7 +6,7 @@
 import type { RendererParts } from "../draw-bar.js";
 import type { SessionId } from "../../daemon/foundations/session-id.js";
 import type {
-  Settled,
+  OwedEffect,
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface.js";
@@ -46,11 +46,15 @@ export interface RendererVerbs {
     sessionId: SessionId,
     context: SessionContext | null,
     idle: IdleSpan,
-    effects: Settled[],
+    effects: OwedEffect[],
   ): void;
   // A change's `effect-done`, in its turn, whose effects what its click's
   // consequence asks joins: false for an id no click's change holds.
-  changeDone(id: EffectId, outcome: EffectOutcome, effects: Settled[]): boolean;
+  changeDone(
+    id: EffectId,
+    outcome: EffectOutcome,
+    effects: OwedEffect[],
+  ): boolean;
   // The origin of the click whose changes are on their way: its consequence
   // waits on its landing, over that origin's config as the landing left it.
   landing(): RenderOrigin | null;

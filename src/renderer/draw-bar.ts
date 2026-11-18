@@ -69,7 +69,7 @@ import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
 import type { LaneActs } from "./lane-acts.js";
-import type { Settled } from "../renderer-interface/interface.js";
+import type { OwedEffect } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -1121,7 +1121,7 @@ export function answerRequest(
   facts: RequestFacts,
   // The request's turn's effects, which the setups its session's clicks owe
   // join.
-  effects: Settled[],
+  effects: OwedEffect[],
 ): RequestAnswer {
   const { time, feeds } = parts;
   using setup = setUpRender(

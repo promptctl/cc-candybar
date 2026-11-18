@@ -130,7 +130,7 @@ import type { LinkSigner } from "../../click/link-signer";
 import type { ConfigWrites, Landed } from "../config-writes";
 import type {
   ActRequest,
-  Settled,
+  OwedEffect,
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
@@ -239,7 +239,7 @@ export interface DaemonContext {
       live: CheckedRenderRequest | null,
       before: LaneSwitches,
       after: LaneSwitches,
-      effects: Settled[],
+      effects: OwedEffect[],
     ) => void;
   };
   // What the diagnostic the frame renderer `by` last delivered for the
@@ -260,7 +260,7 @@ export interface VerbContext extends DaemonContext {
   // THIS click's session as the host's book holds it.
   readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.
-  readonly effects: Settled[];
+  readonly effects: OwedEffect[];
   // THIS click's turn's record, which a doctor report is noted on.
   readonly record: RequestFacts;
 }
@@ -631,7 +631,7 @@ export function changeDone(
   ctx: DaemonContext,
   id: EffectId,
   outcome: EffectOutcome,
-  effects: Settled[],
+  effects: OwedEffect[],
 ): boolean {
   const landed = ctx.configWrites.settled(id, outcome);
   if (landed === undefined) return false;
@@ -642,7 +642,7 @@ export function changeDone(
 function changeLanded(
   ctx: DaemonContext,
   { session, consequence, outcome }: Landed,
-  effects: Settled[],
+  effects: OwedEffect[],
 ): void {
   const failed: string[] = [];
   const step = (work: () => void): void => {
@@ -1649,7 +1649,7 @@ function journaled<C extends DaemonContext>(
   sid: SessionId | null,
   context: SessionContext | null,
   ctx: C,
-  effects: Settled[],
+  effects: OwedEffect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
   const origin = sid === null ? null : originOf(context, sid);
@@ -1692,7 +1692,7 @@ function journaled<C extends DaemonContext>(
     failures.push(e);
   }
   // Each commit runs whatever the other did: both record what landed.
-  const consequence = (landedIn: Settled[]): void => {
+  const consequence = (landedIn: OwedEffect[]): void => {
     const failed: unknown[] = [];
     for (const step of [navigation, journal]) {
       try {
@@ -1776,7 +1776,7 @@ export function closeIdleMenus(
   context: SessionContext | null,
   idle: IdleSpan,
   ctx: DaemonContext,
-  effects: Settled[],
+  effects: OwedEffect[],
 ): void {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const roots = openRoots(nestOf(c, context, sid), (key) =>

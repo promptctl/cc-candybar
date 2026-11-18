@@ -879,6 +879,7 @@ function statusline(r: Rig, configFile: string) {
     () => {},
     {
       ...unfollowedCollector(r.collector),
+      storage: () => {},
       subscribed: (subscriptions) => {
         r.collector.subscribed(subscriptions);
         r.held(subscriptions.storage);

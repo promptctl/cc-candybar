@@ -186,6 +186,7 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     {
       // A command's sessions read no plugin's storage (their owners answer
       // it), so the folders its loads name are held by nothing.
+      storage: () => {},
       subscribed: (subscriptions) => collector.subscribed(subscriptions),
       // No feed draws a command's sessions, so its frames go nowhere.
       frames: () => {},

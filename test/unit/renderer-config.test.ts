@@ -150,7 +150,7 @@ const snapshotOf = (text: string): ConfigSnapshot => ({
 });
 
 const handIn = (r: Renderer, event: Event): Promise<RendererOutput> =>
-  r.answer({ kind: "event", ...READ, event });
+  r.answer({ ...READ, event });
 
 const answered = (output: RendererOutput) => {
   if (output.kind !== "answered")

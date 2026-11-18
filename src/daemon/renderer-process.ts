@@ -137,10 +137,11 @@ export function inProcessRenderer(
   };
 }
 
-// What the daemon hands a link as it starts it: the host's complete start, which delivers each live session's `context` and who
-// watches each session through the host's one path to the renderer,
-// resolving once its turn has answered; and who holds each end as an event,
-// which every session's world state carries for the bar's ⚠.
+// What the daemon hands a link as it starts it: the host's complete start,
+// which delivers each live session's `context` and who watches each session
+// through the host's one path to the renderer, resolving once its turn has
+// answered; and who holds each end as an event, which every session's world
+// state carries for the bar's ⚠.
 // [LAW:no-ambient-temporal-coupling] The start is the host's state as one
 // renderer spawns, so it is sent ahead of every input after it: each of those
 // follows it as a change, and none can repeat or contradict it.
@@ -287,11 +288,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
           : `renderer ${name} has not started`,
     );
 
-  // [LAW:no-ambient-temporal-coupling] What an ended renderer's subscriptions
-  // named stays held until the next one's start answers with its own, since
-  // the host holds the last subscriptions taken: a storage folder both name
-  // is never closed and reopened, as a directory watch leaks on macOS when it
-  // is. Only its effects' ids go with it.
+  // [LAW:no-ambient-temporal-coupling] What an ended renderer's slots named
+  // stays held until the next one's start slot ends, its configs loaded,
+  // since the host takes the storage a slot ends naming: a storage folder
+  // both name is never closed and reopened, as a directory watch leaks on
+  // macOS when it is. Only its effects' ids go with it.
   const release = (link: Link): void => {
     for (const [host, effect] of effects)
       if (effect.by === link) effects.delete(host);
@@ -412,7 +413,9 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
 
   const ended = (link: Link, how: string): void => {
-    link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
+    // [LAW:nothing-unseen] What it was answering as it went.
+    const owed = link.lines.ended(new RendererDown(`renderer ${name} ${how}`));
+    const under = `owed=${owed.length === 0 ? "-" : JSON.stringify(owed.join(", "))}`;
     release(link);
     // [LAW:no-ambient-temporal-coupling] An end once the close has begun
     // starts nothing: a fresh renderer holds nothing to flush, and the close's
@@ -427,7 +430,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     if (phase.kind === "closed") {
       log(
         level,
-        `renderer ${name}[${link.generation}] ${how} in the daemon's close`,
+        `renderer ${name}[${link.generation}] ${how} in the daemon's close ${under}`,
       );
       return;
     }
@@ -456,7 +459,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // then find no renderer.
     log(
       "warn",
-      `${why} after ${Math.round(lived / 1000)} s; next start in ${Math.round(delay / 1000)} s`,
+      `${why} after ${Math.round(lived / 1000)} s; next start in ${Math.round(delay / 1000)} s ${under}`,
     );
     own.ended(event);
   };

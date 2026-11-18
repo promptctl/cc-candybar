@@ -48,10 +48,7 @@ const noticeOf = (fact: UpdateFact, watch: UpdateWatch) => {
     },
   );
 };
-import {
-  daemonGates,
-  UPDATE_DISMISSED_KEY,
-} from "../src/daemon/foundations/update-keys";
+import { UPDATE_DISMISSED_KEY } from "../src/daemon/foundations/update-keys";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { makeBinaryWatch } from "../src/daemon/binary-watch";
 import {

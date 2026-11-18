@@ -83,18 +83,19 @@ import {
 } from "./debug.js";
 import { earliestOf } from "../utils/instant.js";
 import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
-import type {
-  EffectId,
-  Event,
-  Inspect,
-  LoggedLine,
-  PushedFrame,
-  Reading,
-  Renderer,
-  Report,
-  Settled,
-  Subscription,
-  Subscriptions,
+import {
+  NOTHING_NAMED,
+  type EffectId,
+  type Event,
+  type Inspect,
+  type LoggedLine,
+  type PushedFrame,
+  type Reading,
+  type Renderer,
+  type Report,
+  type OwedEffect,
+  type Subscription,
+  type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
 import { reaction } from "mobx";
@@ -132,7 +133,7 @@ export function mainRenderer(
     sources: {},
     lanes: {},
     configs: [],
-    storage: { folders: [], loads: 0 },
+    storage: NOTHING_NAMED,
     wake: null,
   };
   // [LAW:no-ambient-temporal-coupling] Each event that needs its origin's
@@ -166,7 +167,7 @@ export function mainRenderer(
   const turn = (
     event: Event,
     record: RequestFacts,
-    effects: Settled[],
+    effects: OwedEffect[],
     frames: PushedFrame[],
   ): Report | void => {
     switch (event.kind) {
@@ -384,7 +385,7 @@ export function mainRenderer(
     answer: async (input) =>
       time.during(input, () => {
         const record: RequestFacts = [];
-        const effects: Settled[] = [];
+        const effects: OwedEffect[] = [];
         const frames: PushedFrame[] = [];
         const ended = ending(() => turn(input.event, record, effects, frames));
         return {
@@ -411,7 +412,7 @@ export function mainRenderer(
 // [LAW:no-silent-failure] A close that throws is said with its session, and
 // the others close all the same: the session's period begins again
 // (`MenuIdle.due`), so its close is tried a timeout later, never at once.
-function closeIdleMenus(parts: MainRendererParts, effects: Settled[]): void {
+function closeIdleMenus(parts: MainRendererParts, effects: OwedEffect[]): void {
   for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
     try {
       parts.verbs.closeIdle(

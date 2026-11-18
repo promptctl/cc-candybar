@@ -11,7 +11,10 @@ import {
 import type { RenderOrigin } from "../../src/config-hint";
 import type { Layer } from "../../src/config/config-snapshot";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import type { Settled, EffectId } from "../../src/renderer-interface/interface";
+import type {
+  OwedEffect,
+  EffectId,
+} from "../../src/renderer-interface/interface";
 
 const SID = sessionIdOf("s1");
 const DISK: Record<string, string> = {
@@ -52,13 +55,13 @@ function writes() {
   return w;
 }
 
-const ids = (effects: readonly Settled[]): EffectId[] =>
+const ids = (effects: readonly OwedEffect[]): EffectId[] =>
   effects.map((e) => e.id);
 
 describe("a click's config writes", () => {
   test("a click that changed no file has its consequence at once", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
     w.seal(effects, SID, () => (applied = true));
@@ -85,7 +88,7 @@ describe("a click's config writes", () => {
     w.begin("click", () => {
       throw new Error("no snapshot is held");
     });
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     let applied = false;
     w.seal(effects, SID, () => (applied = true));
     expect(applied).toBe(true);
@@ -93,7 +96,7 @@ describe("a click's config writes", () => {
 
   test("each change names its layer by the click's origin and the layer's role", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
     w.land("/c.json5", null, "{ c: 1 }\n");
     w.seal(effects, SID, () => {});
@@ -107,7 +110,7 @@ describe("a click's config writes", () => {
 
   test("an answer to the trust book names the click's origin", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     w.answer("/p", "approved");
     w.seal(effects, SID, () => {});
     expect(effects).toEqual([
@@ -121,7 +124,7 @@ describe("a click's config writes", () => {
 
   test("two writes to one file are one change, from the first read to the last write", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/a.json5", "{ a: 2 }\n", "{ a: 3 }\n");
     w.seal(effects, SID, () => {});
@@ -145,7 +148,7 @@ describe("a click's config writes", () => {
 
   test("the consequence waits for every change, and no click begins while one is owed", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
@@ -170,7 +173,7 @@ describe("a click's config writes", () => {
 
   test("a landing that missed reports why, though a later change landed", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
     w.seal(effects, SID, () => {});
@@ -183,7 +186,7 @@ describe("a click's config writes", () => {
 
   test("a landing names only the files its changes change", () => {
     const w = writes();
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
     w.seal(effects, SID, () => {});

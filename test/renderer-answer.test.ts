@@ -27,7 +27,7 @@ import { checkRenderRequest } from "../src/daemon/render-checkpoint";
 import type {
   Effect,
   Present,
-  Settled,
+  OwedEffect,
   Event,
   Renderer,
   RendererOutput,
@@ -176,7 +176,6 @@ const contextTurn = (
   context: CheckedRenderRequest,
 ) =>
   r.answer({
-    kind: "event",
     ...READ,
     event: {
       kind: "context",
@@ -197,7 +196,6 @@ const configsNamed = async (
     if (rig.cache.holdsConfig(origin)) continue;
     rig.cache.configs.follow(origin);
     last = await r.answer({
-      kind: "event",
       ...READ,
       event: {
         kind: "config",
@@ -221,7 +219,6 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
   const context = checked();
   await configure(t, context);
   return t.r.answer({
-    kind: "event",
     ...READ,
     event: {
       kind: "request",
@@ -231,8 +228,7 @@ const request = async (t: { r: Renderer; rig: SessionRig }) => {
   });
 };
 
-const handIn = (r: Renderer, event: Event) =>
-  r.answer({ kind: "event", ...READ, event });
+const handIn = (r: Renderer, event: Event) => r.answer({ ...READ, event });
 
 // The session's view as the cache holds it, released at once.
 function viewOf(rig: SessionRig) {
@@ -242,9 +238,8 @@ function viewOf(rig: SessionRig) {
   return held.view;
 }
 
-const done = (r: Renderer, { session, id: of }: Settled, ok: boolean) =>
+const done = (r: Renderer, { session, id: of }: OwedEffect, ok: boolean) =>
   r.answer({
-    kind: "event",
     ...READ,
     event: {
       kind: "effect-done",
@@ -300,7 +295,6 @@ describe("a statusline request", () => {
       hookData: { ...mine.hookData, session_id: other },
     };
     const output = await r.answer({
-      kind: "event",
       ...READ,
       event: {
         kind: "start",
@@ -337,7 +331,6 @@ describe("a statusline request", () => {
     expect(viewOf(t.rig)).toBeNull();
     const { effects } = answered(
       await t.r.answer({
-        kind: "event",
         ...READ,
         event: {
           kind: "request",
@@ -737,7 +730,6 @@ describe("the session's config, ahead of its request", () => {
   test("a request with no config before it is refused, naming the session", async () => {
     const t = renderer();
     const answering = await t.r.answer({
-      kind: "event",
       ...READ,
       event: {
         kind: "request",
@@ -984,7 +976,6 @@ describe("the idle close", () => {
     t.parts.menuIdle.drew(SESSION, 0 as Tick, true, 30);
     const due = (tick: number) =>
       t.r.answer({
-        kind: "event",
         at: AT,
         tick: tick as Tick,
         event: { kind: "due" },

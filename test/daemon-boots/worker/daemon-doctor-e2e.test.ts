@@ -520,8 +520,24 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
     );
 
+    // Each run's report is noted on the record of the turn that took its
+    // reading.
+    const doctorLines = (lines: readonly string[]) =>
+      lines.filter((l) => {
+        const fields = fieldsOf(l);
+        return fields.has("doctor") && fields.get("sid") === SID;
+      });
     writeFileSync(projectConfig, barOf("still"));
     await click(daemon, run!);
+    // [LAW:no-ambient-temporal-coupling] A run clicked while the one before
+    // it is still reading replaces it, and the earlier reading is never
+    // reported, so the next is clicked once this one's report has landed.
+    await loggedLines(
+      env,
+      doctorLines,
+      (found) => found.length >= 2,
+      "the doctor's second run",
+    );
     await draw();
     await click(daemon, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
@@ -555,13 +571,6 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(menuIdle[0]).toBe("-");
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
-    // Each run's report is noted on the record of the turn that took its
-    // reading.
-    const doctorLines = (lines: readonly string[]) =>
-      lines.filter((l) => {
-        const fields = fieldsOf(l);
-        return fields.has("doctor") && fields.get("sid") === SID;
-      });
     expect(
       (
         await loggedLines(

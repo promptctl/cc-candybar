@@ -29,6 +29,7 @@ export const unfollowedCollector = (
   subscribed: collector.subscribed.bind(collector),
   holding: collector.holding.bind(collector),
   writableSettings: collector.writableSettings.bind(collector),
+  storage: () => {},
   frames: () => {},
   stored: () => {},
   recorded: () => {},

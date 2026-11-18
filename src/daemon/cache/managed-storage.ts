@@ -20,7 +20,10 @@ import { KeyedSource, NO_WATCH, type Resume } from "../../utils/keyed-source";
 import type { Lane } from "../../utils/reading";
 import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
-import type { StorageNamed } from "../../renderer-interface/interface";
+import {
+  NOTHING_NAMED,
+  type StorageNamed,
+} from "../../renderer-interface/interface";
 import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
@@ -116,9 +119,6 @@ interface Watched {
 // has not ended and the folder at the path is the one it opened on. So
 // whichever of a removal's events comes first, a recreated folder is a new
 // generation.
-// Before the renderer's first subscriptions, and after the close.
-const NOTHING_NAMED: StorageNamed = { folders: [], loads: 0 };
-
 const current = (was: Watched, found: Found): boolean =>
   was.health.kind === "watching" &&
   found.kind === "found" &&
@@ -132,10 +132,10 @@ const current = (was: Watched, found: Found): boolean =>
 // creates the folder, watches it once per generation, reads only the files of
 // sessions something holds, and removes files nobody has written for 30 days.
 //
-// [LAW:no-ambient-temporal-coupling] A folder's watch lives as long as a
-// render state declaring it is named by the renderer's subscriptions
-// (`held`), never as long as a view: opening or closing a directory watch leaks on macOS. A folder gone or
-// replaced, or its watch faulted, ends its generation. While a hold still
+// [LAW:no-ambient-temporal-coupling] A folder's watch lives as long as the
+// renderer's slots end naming it (`held`), never as long as a view: opening
+// or closing a directory watch leaks on macOS. A folder gone or replaced, or
+// its watch faulted, ends its generation. While a hold still
 // names the folder its owner opens the next: for one lost, at the next period,
 // so a plugin folder being removed is gone, and its hold released, before the
 // folder is made in it again; and for every ended one when file events
@@ -150,7 +150,7 @@ export class ManagedStorage {
   // [LAW:one-source-of-truth] By folder: each folder's current generation's
   // watch, the one record of what the owner knows of the folder.
   private readonly watched = new Map<string, Watched>();
-  // What the renderer's latest subscriptions named.
+  // What the renderer's latest slot ended naming.
   private named: StorageNamed = NOTHING_NAMED;
   private readonly faultCounts: Record<FaultCause, number> = {
     unusable: 0,
@@ -207,10 +207,10 @@ export class ManagedStorage {
     });
   }
 
-  // [LAW:one-source-of-truth] The folders the renderer's subscriptions name,
+  // [LAW:one-source-of-truth] The folders a renderer's slot ended naming,
   // whole, replacing the last: each is kept current (`kept`) before any
   // folder no longer named closes, so a folder both name is never closed
-  // between them. Keeping a folder makes and stats it, so a turn that ran no
+  // between them. Keeping a folder makes and stats it, so a slot that ran no
   // load and moved no folder, as most do not, keeps nothing again.
   held(named: StorageNamed): void {
     if (

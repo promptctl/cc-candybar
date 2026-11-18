@@ -126,6 +126,7 @@ export function clickParts(
     hostHeld(held.renderer),
     () => {},
     {
+      storage: () => {},
       subscribed: () => {},
       frames: () => {},
       holding: collector.holding,

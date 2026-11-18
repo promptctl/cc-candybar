@@ -2,8 +2,9 @@
 // (src/daemon/renderer-host.ts): an origin a turn newly names gets its
 // `config` turn in that turn's slot, before anything queued behind it; each
 // origin a turn's landing moved gets its own there too, before the landing's
-// `effect-done`; and an origin a watch moved that the renderer let go before
-// its slot came is abandoned, with nothing handed in.
+// `effect-done`; an origin a watch moved that the renderer let go before
+// its slot came is abandoned, with nothing handed in; and the storage owner
+// hears the folders a slot ends naming, once its config turns have loaded.
 
 import fs from "node:fs";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
@@ -20,6 +21,7 @@ import type {
   Event,
   RendererInput,
   RendererOutput,
+  StorageNamed,
 } from "../src/renderer-interface/interface";
 import type { Monotonic } from "../src/time";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
@@ -59,6 +61,7 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 const output = (
   effects: readonly Effect[],
   configs: readonly RenderOrigin[],
+  storage: StorageNamed = { folders: [], loads: 0 },
 ): RendererOutput => ({
   kind: "answered",
   stored: [],
@@ -68,7 +71,7 @@ const output = (
     sources: {},
     lanes: {},
     configs,
-    storage: { folders: [], loads: 0 },
+    storage,
     wake: null,
   },
   record: [],
@@ -78,13 +81,15 @@ const output = (
 // A host over a renderer whose every turn answers `turn` of its event, and
 // whose discovery follows what each output names, holds `SNAPSHOT` for each
 // followed origin, and answers `landed` for a landing. `heard` is every
-// event the renderer heard, in order, and `logged` every line.
+// event the renderer heard, in order, `logged` every line, and `storage`
+// every set of folders the storage owner was handed.
 function hostOver(
   turn: (event: Event) => RendererOutput,
   landed: () => readonly RenderOrigin[] = () => [],
 ) {
   const heard: string[] = [];
   const logged: string[] = [];
+  const storage: StorageNamed[] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
     follow: (origins) => {
@@ -115,6 +120,7 @@ function hostOver(
     ),
     (level, line) => logged.push(`${level} ${line}`),
     {
+      storage: (named) => void storage.push(named),
       subscribed: () => {},
       frames: () => {},
       holding: () => () => {},
@@ -124,7 +130,7 @@ function hostOver(
     },
     { ...NO_ACTS, stateDir: path.join(dir, "state"), configs },
   );
-  return { host, heard, logged };
+  return { host, heard, logged, storage };
 }
 
 const due = { kind: "due" } as const;
@@ -285,4 +291,24 @@ describe("a turn settles as the config turns it named", () => {
       { kind: "failed", reason: "the renderer let the origin go" },
     ]);
   });
+});
+
+// [LAW:no-ambient-temporal-coupling] A restarted renderer's start answers
+// before the configs it names have loaded, so its own output names no folder;
+// handed that, the owner would close every folder the renderer before it
+// named and open each again, leaking a directory watch each on macOS.
+test("the storage owner hears the folders a start's slot ends naming, once the configs it named have loaded", async () => {
+  const named = { folders: ["/storage/plugin"], loads: 1 };
+  const { host, heard, storage } = hostOver((event) =>
+    event.kind === "start" ? output([], [ORIGIN]) : output([], [ORIGIN], named),
+  );
+  await host.start(
+    () => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }),
+    [],
+  );
+  expect(heard).toEqual(["start", "config"]);
+  expect(storage).toEqual([named]);
 });

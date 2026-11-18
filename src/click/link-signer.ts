@@ -204,9 +204,6 @@ let preview: Buffer | undefined;
 export function previewLinkKey(): Buffer {
   return (preview ??= randomBytes(LINK_KEY_BYTES));
 }
-export function previewSigner(): LinkSigner {
-  return linkSigner(previewLinkKey());
-}
 
 // The frames one draw hands out, each bar link signed.
 // [LAW:dataflow-not-control-flow] A link of another scheme is the terminal's

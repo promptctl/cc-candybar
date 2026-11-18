@@ -125,7 +125,10 @@ export interface RendererOverLines {
   // came.
   readonly heapSnapshot: (write: (chunk: string) => void) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
-  readonly ended: (why: Error) => void;
+  // Fails everything still owed with `why`, and answers what each was, so
+  // an end names the input its renderer died under, whose output, and every
+  // line the turn logged, never came.
+  readonly ended: (why: Error) => readonly string[];
 }
 
 export function rendererOverLines(deps: {
@@ -263,6 +266,7 @@ export function rendererOverLines(deps: {
       owed.clear();
       chunks.clear();
       for (const each of waiting) each.fail(why);
+      return waiting.map(({ what }) => what);
     },
   };
 }

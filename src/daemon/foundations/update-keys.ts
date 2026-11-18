@@ -4,7 +4,7 @@
 
 import type { Globals } from "../../config/dsl-types";
 import { SETTINGS } from "../../config/setting-projections";
-import { createGates, type Gates, type HeldKeys } from "./gates";
+import type { HeldKeys } from "./gates";
 
 // [LAW:one-source-of-truth] The session key a dismissal writes and the
 // config field a disable writes, spelled once. The field is checked against
@@ -30,7 +30,3 @@ export const DAEMON_HELD_KEYS: HeldKeys = {
     { key: UPDATE_DISMISSED_KEY, allowed: [] },
   ],
 };
-
-export function daemonGates(): Gates {
-  return createGates(DAEMON_HELD_KEYS);
-}

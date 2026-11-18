@@ -26,7 +26,7 @@ import { Acts, type ActDeps, type HostAct } from "../src/daemon/acts";
 import type {
   Act,
   ActRequest,
-  Settled,
+  OwedEffect,
   EffectId,
 } from "../src/renderer-interface/interface";
 import type { CheckedRenderRequest } from "../src/renderer-interface/request-context";
@@ -919,7 +919,7 @@ describe("the acts a lane switch asks", () => {
       refused: (session, reason) => void refused.push(`${session}: ${reason}`),
       log: (level, msg) => void logs.push(`${level} ${msg}`),
     });
-    const effects: Settled[] = [];
+    const effects: OwedEffect[] = [];
     // The acts asked since the last look, without their ids.
     const asked = (): ActRequest[] =>
       effects.splice(0).map(({ id: _, ...act }) => act as ActRequest);

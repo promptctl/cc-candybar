@@ -753,7 +753,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
-          managedStorage.held(subscriptions.storage);
           frameFeeds.switched(subscriptions.lanes);
           // [LAW:one-source-of-truth] The rows held are the sessions whose
           // view switches the tmux status line on.
@@ -767,6 +766,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
             ),
           );
         },
+        storage: (named) => managedStorage.held(named),
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
