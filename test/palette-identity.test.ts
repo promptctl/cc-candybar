@@ -13,7 +13,9 @@ import {
   ColorDepth,
   ColorSpec,
   type ColorRgba,
+  contrastRatio,
   drawnColour,
+  STANDARD_TABLE,
   getThemePalette,
   listThemePalettes,
 } from "@promptctl/rich-js";
@@ -27,6 +29,9 @@ import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { ERROR_REDS, doorClose } from "./helpers/door-close";
+import { readsRed } from "../src/render/segment-color";
+import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
+import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { POWERLINE } from "./helpers/powerline";
 import { LADDER } from "./helpers/decor-vocabulary";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
@@ -119,22 +124,43 @@ describe("every background the bar draws is a colour its palette names", () => {
   });
 });
 
-describe("the open door's ✖ is a red its palette names for its error role", () => {
-  test("under every bundled theme and every dial position, at truecolor", () => {
-    const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
+// The rank the ✖ is held to, spelled here apart from the code that picks it:
+// the body text floor, then the quiet one, then whatever stands farthest off.
+const doorTier = (ratio: number): number => (ratio >= TEXT_MIN_CONTRAST ? 0 : ratio >= QUIET_MIN_CONTRAST ? 1 : 2);
+// ANSI's red and bright red, as a terminal holds them.
+const TERMINAL_REDS = [1, 9].map((index) => STANDARD_TABLE.get(index));
+
+describe("the open door's ✖ is the theme's own error red as each depth draws it", () => {
+  test.each([
+    ["truecolor", "truecolor", ColorDepth.TRUECOLOR],
+    ["256 colours", "256", ColorDepth.EIGHT_BIT],
+    ["ansi", "ansi", ColorDepth.STANDARD],
+  ] as const)("under every bundled theme and every dial position, at %s", (_name, compatibility, depth) => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: '${compatibility}' } }`, COLS);
     const wrong: string[] = [];
     let measured = 0;
     try {
       for (const theme of THEMES) {
         const palette = getThemePalette(theme)!;
-        const reds = new Map(ERROR_REDS.map((name) => [drawnColour(palette.get(name)!, ColorDepth.TRUECOLOR).hex, name]));
         bar.pick("theme", theme);
         for (const shade of SHADE_NAMES) {
           bar.pick("shade", shade);
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
-          const { ink } = doorClose(bar.render(AT).frame);
+          const { ink, ground } = doorClose(bar.render(AT).frame);
           measured++;
-          if (!reds.has(ink.hex)) wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
+          // What the depth draws each of the theme's error colours as, kept
+          // where it is red; the terminal's reds only where none is.
+          const drawnRed = (colours: readonly ColorRgba[]) =>
+            colours.map((c) => drawnColour(c, depth)).filter(readsRed);
+          const themed = drawnRed(ERROR_REDS.map((name) => palette.get(name)!));
+          const allowed = themed.length > 0 ? themed : drawnRed(TERMINAL_REDS);
+          const best = Math.min(...allowed.map((c) => doorTier(contrastRatio(c, ground))));
+          const farthest = Math.max(...allowed.map((c) => contrastRatio(c, ground)));
+          const ratio = contrastRatio(ink, ground);
+          const where = `${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`;
+          if (!allowed.some((c) => c.hex === ink.hex)) wrong.push(`${where} is none of ${allowed.map((c) => c.hex).join(" ")}`);
+          else if (doorTier(ratio) !== best) wrong.push(`${where} clears tier ${doorTier(ratio)} where ${best} is reachable`);
+          else if (best === 2 && ratio < farthest) wrong.push(`${where} at ${ratio.toFixed(2)} where ${farthest.toFixed(2)} is reachable`);
         }
       }
     } finally {

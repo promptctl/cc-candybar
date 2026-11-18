@@ -39,3 +39,31 @@ export function doorClose({ rows }: Pick<Frame, "rows">): {
   const { fg, bg } = found[0]!;
   return { ink: truecolorOf(fg), ground: truecolorOf(bg) };
 }
+
+/**
+ * `frame` with the door's ✖ taken out of the run that draws it, so a check
+ * that holds every other character to its truecolor floor leaves the ✖ to the
+ * door's own tests: its hue outranks its contrast. A frame with the door
+ * closed has none and comes back as it is; one holding a second ✖ (edit
+ * mode's remove) is refused rather than guessed at.
+ */
+export function withoutDoorClose(frame: Frame): Frame {
+  const holding = frame.rows.flatMap(({ runs }) =>
+    runs.filter(({ text }) => text.includes(DOOR_CLOSE_GLYPH)),
+  );
+  if (holding.length > 1)
+    throw new Error(
+      `expected at most one ${DOOR_CLOSE_GLYPH} in the frame, found ${holding.length}`,
+    );
+  return {
+    ...frame,
+    rows: frame.rows.map((row) => ({
+      ...row,
+      runs: row.runs.map((run) =>
+        run.text.includes(DOOR_CLOSE_GLYPH)
+          ? { ...run, text: run.text.replace(DOOR_CLOSE_GLYPH, "") }
+          : run,
+      ),
+    })),
+  };
+}

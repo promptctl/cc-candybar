@@ -63,15 +63,13 @@ export const DISCLOSURE_GLYPH_OPEN = "▾";
 // answer can live). Two affordances, one meaning, one glyph.
 export const DISCLOSURE_GLYPH_CLOSE = "✕";
 
-// [LAW:one-source-of-truth] The theme role a close glyph's TEXT wears, beside
-// the glyph it colours: a body's or a picker's ✕ is `warning` — it closes one
-// panel — and the risen door's ✖ is `error` — it dismisses the whole menu. A
+// [LAW:one-source-of-truth] The theme role a body's or a picker's ✕ TEXT
+// wears, beside the glyph it colours: `warning`, since it closes one panel. A
 // ✕ keeps the role's hue and moves only its lightness, until it reads on the
-// ground it is drawn on (`closeOn`, render/band-style.ts); the door's ✖ is
-// always one of the colours the theme names for the role, never moved
-// (`roleTextOn`, render/segment-color.ts), so it is that theme's red.
+// ground it is drawn on (`closeOn`, render/band-style.ts). The risen door's ✖
+// dismisses the whole menu and wears the theme's error red (`errorRedOn`,
+// render/segment-color.ts).
 export const DISCLOSURE_CLOSE_ROLE: SemanticRole = "warning";
-export const DOOR_CLOSE_ROLE: SemanticRole = "error";
 
 // [LAW:one-source-of-truth] The global settings menu's own glyph — its whole
 // closed display by default, since the door binds a glyph / `✖` rather than a

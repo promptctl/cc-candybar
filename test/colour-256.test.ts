@@ -19,6 +19,7 @@
 
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
+import { withoutDoorClose } from "./helpers/door-close";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { drawnChars, same, seams } from "./helpers/seams";
 import {
@@ -174,8 +175,10 @@ async function forEachStage(
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) await rig.click(url);
+      // The door's ✖ keeps its hue over its contrast, and is held by the
+      // door's own tests (palette-identity.test.ts).
       measure(stage, (colorCompatibility) =>
-        drawnChars(render(colorCompatibility)),
+        drawnChars(withoutDoorClose(render(colorCompatibility))),
       );
     }
   } finally {

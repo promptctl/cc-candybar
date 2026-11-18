@@ -53,7 +53,6 @@ import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   DOOR_CLOSE_GLYPH,
-  DOOR_CLOSE_ROLE,
   DOOR_GLYPH,
   disclosureCycleAction,
   disclosureNode,
@@ -918,20 +917,15 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
+      // the ✖ wears the theme's own error red as this depth draws it on the
+      // pressed state (`errorRedOn`). It never slides lightness: a slid red
+      // stops reading as red, and the ✖ must be red on every theme. Closed,
+      // the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template:
           `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}` +
           `{{ if ${disclosureTerm(SETTINGS_REF)} }}` +
-          `{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}` +
+          `{{ fg (errorRedOn (bgOf)) $door }}` +
           `{{ else }}{{ $door }}{{ end }}` +
           DIAGNOSTICS_INDICATOR,
       },

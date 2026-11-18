@@ -21,10 +21,10 @@ import {
   contrastRatio,
   drawnColour,
   ColorDepth,
+  STANDARD_TABLE,
   transposePalette,
 } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../../src/template-engine/engine";
-import { QUIET_MIN_CONTRAST } from "../../src/config/quiet-text";
 import {
   resolveSegmentColors,
   ColorSpecError,
@@ -34,7 +34,11 @@ import {
   openSegment,
 } from "../../src/render/active-segment";
 import type { ActiveSegmentRef } from "../../src/render/active-segment";
-import { segmentColorFuncs } from "../../src/render/segment-color";
+import {
+  errorRedCandidates,
+  readsRed,
+  segmentColorFuncs,
+} from "../../src/render/segment-color";
 import type { Disclosure } from "../../src/themes/decor";
 import { DEFAULT_DECOR } from "../helpers/decor";
 import {
@@ -218,93 +222,34 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 1b. keptOn: a colour shown as given, which rounding never makes less legible
+// 1b. errorRedOn: the door's ✖ is the theme's own red as the depth draws it
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("keptOn: a colour shown exactly as given, which the terminal's rounding never makes less legible", () => {
-  const at = (drawnAt: ColorDepth) => {
-    const ref = createActiveSegmentRef(() => drawnAt);
-    const engine = createCcCandybarEngine({
-      ...TEST_ENGINE,
-      extraFuncs: segmentColorFuncs(ref),
-    });
-    openSegment(
-      ref,
-      SEG,
-      SEG,
-      makeTestPalette(),
-      DISCLOSURE,
-      TINT,
-      PAIRED_TEXT,
-    );
-    return (fg: string, bg: string): string =>
-      engine
-        .parse(`{{ keptOn "${fg}" "${bg}" }}`)
-        .evaluate({})
-        .map((f) => f.plain)
-        .join("");
-  };
-  // rose-pine-moon's door ✖ red on its open state: 3.90:1 in truecolor, and
-  // 2.73:1 once the terminal rounds both to 256 colours.
-  const RED = "#ea6f92";
-  const STATE = "#443546";
-  const drawn = (hex: string) =>
-    drawnColour(parseRgbHex(hex.slice(1)), ColorDepth.EIGHT_BIT);
-
-  test("in truecolor it is the colour itself, however faint — a theme that gives it faintly keeps it so", () => {
-    const keptOn = at(ColorDepth.TRUECOLOR);
-    expect(keptOn(RED, STATE)).toBe(RED);
-    expect(keptOn("#ff4444", "#ee5555")).toBe("#ff4444");
-  });
-
-  test("at 256 colours it stands as far off its ground as the truecolor pair does, where rounding alone would cost it", () => {
-    const held = contrastRatio(
-      parseRgbHex(RED.slice(1)),
-      parseRgbHex(STATE.slice(1)),
-    );
-    expect(contrastRatio(drawn(RED), drawn(STATE))).toBeLessThan(held);
-    const kept = at(ColorDepth.EIGHT_BIT)(RED, STATE);
-    expect(contrastRatio(drawn(kept), drawn(STATE))).toBeGreaterThanOrEqual(
-      held,
-    );
-  });
-
-  test("at 256 colours a red that reads under the quiet floor on its ground before rounding keeps that contrast, and is never lifted toward the floor", () => {
-    // atom-one-dark's error-lighten-3 on primary-darken-2: the farthest named
-    // red, accepted at 2.00:1. Lifted to the quiet floor it rounds to a yellow
-    // (#ffff87, 3.65:1). Its own rounding (#ffaf87, 2.15:1) already keeps
-    // what it had, so it is the red itself.
-    const FAINT_RED = "#ffa09b";
-    const GROUND = "#2c87c4";
-    const held = contrastRatio(
-      parseRgbHex(FAINT_RED.slice(1)),
-      parseRgbHex(GROUND.slice(1)),
-    );
-    expect(held).toBeLessThan(QUIET_MIN_CONTRAST);
-    const kept = at(ColorDepth.EIGHT_BIT)(FAINT_RED, GROUND);
-    expect(kept).toBe(FAINT_RED);
-    expect(contrastRatio(drawn(kept), drawn(GROUND))).toBeGreaterThanOrEqual(
-      held,
-    );
-  });
-
-  test("a translucent colour is measured as the terminal draws it, over black — never laid over its ground", () => {
-    // White at half alpha on #202020 is drawn #808080: 4.13:1 off the ground
-    // as drawn, 4.32:1 once 256 colours round the pair, so it keeps its
-    // contrast as it is. Laid over the ground it would claim 5.10:1, and a
-    // floor taken from that refused the grey the terminal draws.
-    expect(at(ColorDepth.EIGHT_BIT)("#ffffff80", "#202020")).toBe("#808080");
+describe("readsRed: a colour reads as red by its hue and its chroma", () => {
+  // Inside, at each edge: a theme's pinkest error rung (-18°), a crimson
+  // 256 colours draws (-14°), and the terminal's reds (29°).
+  test.each(["ffcdeb", "87005f", "ff0000", "800000", "ff5f5f", "ff8b6b"])(
+    "#%s reads as red",
+    (hex) => expect(readsRed(parseRgbHex(hex))).toBe(true),
+  );
+  // Outside: the orange-reds past 40°, the oranges 256 colours rounds theme
+  // reds to, a magenta past -20°, and greys of every lightness.
+  test.each(["ff5f00", "ff6600", "d75f00", "af5f00", "ffaf87", "ff00d7", "c0c0c0", "808080", "ffffff", "fffffe"])(
+    "#%s does not",
+    (hex) => expect(readsRed(parseRgbHex(hex))).toBe(false),
+  );
+  test("ANSI's red and bright red read as red at every depth", () => {
+    for (const depth of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
+      for (const index of [1, 9]) {
+        expect(readsRed(drawnColour(STANDARD_TABLE.get(index), depth))).toBe(true);
+      }
+    }
   });
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// 1c. roleTextOn: a role's text on a ground, selected among the colours the
-//     theme names for the role
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("roleTextOn: a role's text on a ground is a colour the theme names for the role, never a synthesised one", () => {
-  // A role whose text colour and ladder are spelled by hand, so each answer
-  // below is one entry, measured on paper against the ground it is asked for.
+describe("errorRedOn: the door's ✖ is the theme's own error red as the depth draws it", () => {
+  // An error role whose text colour and ladder are spelled by hand, so each
+  // truecolor answer below is one entry, measured on paper.
   const RED = new Map<PaletteRole, ColorRgba>([
     ["text-error", parseRgbHex("c86464")],
     ["error", parseRgbHex("a03c3c")],
@@ -317,50 +262,73 @@ describe("roleTextOn: a role's text on a ground is a colour the theme names for 
   ]);
   const on = (
     ground: string,
-    palette = withRoles("reds", RED),
-    role = "error",
+    palette: Palette = withRoles("reds", RED),
+    depth: ColorDepth = ColorDepth.TRUECOLOR,
   ): string => {
-    const ref = createActiveSegmentRef(() => ColorDepth.TRUECOLOR);
+    const ref = createActiveSegmentRef(() => depth);
     const engine = createCcCandybarEngine({
       ...TEST_ENGINE,
       extraFuncs: segmentColorFuncs(ref),
     });
     openSegment(ref, SEG, SEG, palette, DISCLOSURE, TINT, PAIRED_TEXT);
     return engine
-      .parse(`{{ roleTextOn "${role}" "${ground}" }}`)
+      .parse(`{{ errorRedOn "${ground}" }}`)
       .evaluate({})
       .map((f) => f.plain)
       .join("");
   };
+  const theme = (name: string) => getThemePalette(name)!;
+  const drawn = (hex: string, depth: ColorDepth) =>
+    drawnColour(parseRgbHex(hex.slice(1)), depth);
 
-  test("the role's text colour, where it clears the text floor, though a rung stands farther off", () => {
+  test("the error text colour, where it clears the text floor, though a rung stands farther off", () => {
     // On black: text-error 5.46:1, error-lighten-3 10.2:1.
     expect(on("#000000")).toBe("#c86464");
   });
 
   test("otherwise the role itself where it clears, though a rung stands farther off", () => {
-    // On white, whose pole is black: text-error 3.84:1, error 6.55:1,
+    // On white, whose far pole is black: text-error 3.84:1, error 6.55:1,
     // darken-1 9.20:1.
     expect(on("#ffffff")).toBe("#a03c3c");
   });
 
-  test("otherwise the first rung out toward the pole the ground stands farther from that clears it, not the farthest", () => {
-    // On #202020, whose pole is white: text-error 4.23:1, error 2.49:1,
+  test("otherwise the first rung out toward the far pole that clears it, not the farthest", () => {
+    // On #202020, whose far pole is white: text-error 4.23:1, error 2.49:1,
     // lighten-1 3.26:1, lighten-2 5.20:1, lighten-3 7.94:1.
     expect(on("#202020")).toBe("#d27878");
   });
 
-  test("where none of the role's colours clears it, the one standing farthest off, on either side of the ground", () => {
-    // On #707070, whose pole is white yet whose lightenings close in on it:
-    // lighten-3 2.41:1 at best, darken-3 3.37:1, text-error 1.29:1.
+  test("a theme red that clears only the quiet floor is kept over a terminal red that clears the text floor", () => {
+    // On #707070: darken-3 3.37:1 is the best of the theme's reds; ANSI's red
+    // #800000 stands 2.4:1 and bright red 1.4:1, so a theme red at the quiet
+    // floor is the answer, never a red the theme does not name.
     expect(on("#707070")).toBe("#460000");
   });
 
-  test("a role the palette names no full ladder for fails loudly, naming the missing entry, even where the text colour reads", () => {
-    // nord's text-muted reads on black, and no theme has a muted ladder.
-    expect(() => on("#000000", getThemePalette("nord"), "muted")).toThrow(
-      /"muted" did not resolve/,
-    );
+  test("at 256 colours a theme red that rounds to orange is passed over for a theme red that rounds to red", () => {
+    // solarized-light's error #db322f is drawn #d75f00 at 256 colours.
+    const palette = theme("solarized-light");
+    expect(readsRed(drawn("#db322f", ColorDepth.EIGHT_BIT))).toBe(false);
+    const red = on("#000000", palette, ColorDepth.EIGHT_BIT);
+    expect(readsRed(drawn(red, ColorDepth.EIGHT_BIT))).toBe(true);
+    expect(errorRedCandidates(palette, false).map((c) => c.hex)).toContain(red);
+  });
+
+  test("at sixteen colours, where every theme red is drawn grey or silver, it is the terminal's red", () => {
+    const palette = theme("catppuccin-frappe");
+    for (const c of errorRedCandidates(palette, false)) {
+      expect(readsRed(drawnColour(c, ColorDepth.STANDARD))).toBe(false);
+    }
+    const red = on("#000000", palette, ColorDepth.STANDARD);
+    expect([1, 9].map((i) => STANDARD_TABLE.get(i).hex)).toContain(red);
+  });
+
+  test("a near-white error text colour is never taken for red, at any depth", () => {
+    // textual-ansi's text-error is #fffffe.
+    const palette = theme("textual-ansi");
+    for (const depth of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
+      expect(on("#000000", palette, depth)).not.toBe(palette.get("text-error")!.hex);
+    }
   });
 });
 
