@@ -71099,6 +71099,7 @@ var ManagedStorage = class {
   fileEvents;
   clock;
   unsubscribe;
+  closedAll = false;
   constructor(opts) {
     this.watchers = opts.watchers;
     this.logger = opts.logger;
@@ -71153,8 +71154,10 @@ var ManagedStorage = class {
   }
   // A file in `folder` is declared: a folder with no generation opens its
   // first. One whose generation ended waits for a delivery notice (`renewed`).
+  // [LAW:no-ambient-temporal-coupling] After the close a declaration opens
+  // nothing (a render that was mid-wait): no close would ever come for it.
   declared(folder) {
-    if (!this.watched.has(folder)) this.kept(folder);
+    if (!this.closedAll && !this.watched.has(folder)) this.kept(folder);
   }
   // [LAW:one-type-per-behavior] An ended generation, lost or faulted, moved on
   // by a delivery notice: its next opens while a file in it is held, and it
@@ -71186,12 +71189,14 @@ var ManagedStorage = class {
     };
   }
   close() {
+    this.closedAll = true;
     this.unsubscribe();
     this.sessions.close();
     for (const watched of [...this.watched.values()]) this.closed(watched);
   }
-  // What a generation finds at a folder's path as it opens. Creates the storage folder, so its
-  // program has somewhere to write before any session reads it.
+  // What a generation finds at a folder's path as it opens. Creates the
+  // storage folder, so its program has somewhere to write before any session
+  // reads it.
   // [LAW:no-silent-failure] A folder that cannot be created or read is its
   // generation's standing fault, read by every source in it, never a throw:
   // one plugin's folder fails only that plugin's sources, not the build.
@@ -71328,21 +71333,23 @@ var ManagedStorage = class {
     this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
-  // folder. Each period and each catch-up moves on every folder whose
-  // generation ended before it, a catch-up because the span may have held
-  // what ended it. Each period judges every watched one against the disk: the
-  // event naming a removed folder can drop without a stall. Every change of
+  // folder. Each period judges every watched one against the disk, since the
+  // event naming a removed folder can drop without a stall, then moves on
+  // every folder whose generation ended, so a folder replaced by rename, which
+  // its watch never hears, opens its next at the period that finds it. A
+  // catch-up moves them on too, because the span may have held what ended
+  // them. Every change of
   // delivery and every catch-up re-reads every held file, so no lane keeps a
   // stall after delivery moves on, and a file written during a span lands.
   noticed(notice) {
     switch (notice.kind) {
       // [LAW:dataflow-not-control-flow] Each step passes over the generations
-      // it does not move, so a loss judged here moves on at the next period.
+      // it does not move.
       case "period":
         for (const watched of [...this.watched.values()]) {
-          this.renewed(watched);
           this.judged(watched, () => {
           });
+          this.renewed(watched);
         }
         return;
       case "caught-up":
@@ -95775,12 +95782,7 @@ var REACH_KINDS = {
   log: "notice",
   eventAnswered: "notice"
 };
-function reachesOf(table, prefix = "") {
-  return Object.entries(table).flatMap(
-    ([key, value]) => typeof value === "string" ? [`${prefix}${key}`] : reachesOf(value, `${prefix}${key}.`)
-  );
-}
-var REACHES = reachesOf(REACH_KINDS);
+var REACHES = Object.keys(REACH_KINDS);
 
 // src/daemon/renderer-process.ts
 var inProcessPort = ({ name, build: build2 }) => ({

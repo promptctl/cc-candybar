@@ -4,15 +4,22 @@
     {
       "version": "pr-795",
       "ref": "refs/pull/795/merge",
-      "sha": "4c10ea1856a10c75d52e8c8e06b6c44464384151",
-      "timestamp": "2026-11-18T07:36:58.197Z",
+      "sha": "787f72b0e677641c0e337006433d68f6ba69798a",
+      "timestamp": "2026-11-18T08:27:59.078Z",
       "commits": [
         {
-          "sha": "4c10ea1856a10c75d52e8c8e06b6c44464384151",
+          "sha": "787f72b0e677641c0e337006433d68f6ba69798a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T00:35:55-07:00",
-          "message": "Merge b0416878eb6e156ecfa15ada4c4d8f6bd47ce0d3 into e33675a193dfc48790988daa17ac05641e602a19\n"
+          "timestamp": "2026-11-18T08:26:52Z",
+          "message": "Merge ca4cf4e4e50a27625be72344dad964d8cb836424 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "ca4cf4e4e50a27625be72344dad964d8cb836424",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T01:26:31-07:00",
+          "message": "fix(daemon): storage closes cleanly, recovers a replaced folder at the period that finds it, and tests read no real transcripts (2jt, 1/7)\n\nA declaration after the owner closes opens no watch. A period judges every\nfolder before it moves ended generations on, so a folder replaced by rename\nopens its next at the period that finds it lost. The reach table is flat, the\neffect mint is not generic, and the design doc and memory say what the single\nowner does.\n\nTest view facts report the isolated Claude Code directory, as a test client\ndoes, so no test scans the host's transcripts.\n"
         },
         {
           "sha": "b0416878eb6e156ecfa15ada4c4d8f6bd47ce0d3",
