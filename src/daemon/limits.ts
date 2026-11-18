@@ -446,15 +446,6 @@ async function attempt(
   }
 }
 
-// [LAW:types-are-the-program] A post-mortem's unit is the BREACH, not the
-// file. A breach leaves a heap snapshot AND a memory report sharing one
-// `<stamp>-<pid>` identity, so rotation counting files would keep one and a
-// half post-mortems and evict half of another — leaving a heap snapshot whose
-// attribution is gone. Newest first: the leading ISO timestamp orders the
-// identities lexically, the trailing -<pid> only tiebreaks same-instant
-// writes. A file no breach wrote is not ours, so it is no post-mortem.
-// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
-// doctor reads it whole.
 // [LAW:no-silent-failure] Every artifact a breach left in `dir`: a directory
 // not yet made holds no breaches; one that cannot be read throws, never read
 // as "none".
@@ -482,6 +473,15 @@ export function listPostMortems(dir: string): Asked<readonly PostMortem[]> {
   }
 }
 
+// [LAW:types-are-the-program] A post-mortem's unit is the BREACH, not the
+// file. A breach leaves a heap snapshot AND a memory report sharing one
+// `<stamp>-<pid>` identity, so rotation counting files would keep one and a
+// half post-mortems and evict half of another — leaving a heap snapshot whose
+// attribution is gone. Newest first: the leading ISO timestamp orders the
+// identities lexically, the trailing -<pid> only tiebreaks same-instant
+// writes. A file no breach wrote is not ours, so it is no post-mortem.
+// [LAW:one-source-of-truth] The one grouping: rotation evicts its tail, the
+// doctor reads it whole.
 export function postMortemsOf(files: readonly string[]): PostMortem[] {
   const byIdentity = new Map<string, Partial<Record<BreachArtifact, string>>>();
   for (const file of files) {

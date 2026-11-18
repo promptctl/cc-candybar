@@ -2,10 +2,20 @@
 // the renderer wrote, `kept` as kept, and anything else as a loud refusal.
 
 import {
-  faultsNote,
+  faultsNote as noteOf,
   readFaults,
+  spelledFaults,
   type Fault,
 } from "../../src/renderer-interface/noted-faults";
+
+const faultsNote = (
+  faults: readonly Fault[],
+  last: readonly Fault[] | undefined,
+): string =>
+  noteOf(
+    spelledFaults(faults),
+    last === undefined ? undefined : spelledFaults(last),
+  );
 
 const SEGMENT: Fault = {
   level: "warning",
@@ -41,8 +51,14 @@ test.each([
   ["a level of neither", `[{"level":"info","kind":"k","message":"m"}]`],
   ["no kind", `[{"level":"error","message":"m"}]`],
   ["no message", `[{"level":"error","kind":"k"}]`],
-  ["a subject that is not text", `[{"level":"error","kind":"k","subject":1,"message":"m"}]`],
-  ["a field no fault has", `[{"level":"error","kind":"k","message":"m","extra":1}]`],
+  [
+    "a subject that is not text",
+    `[{"level":"error","kind":"k","subject":1,"message":"m"}]`,
+  ],
+  [
+    "a field no fault has",
+    `[{"level":"error","kind":"k","message":"m","extra":1}]`,
+  ],
 ])("a note with %s throws", (_what, value) => {
   expect(() => readFaults(value)).toThrow();
 });

@@ -24,18 +24,18 @@ export interface Fault<Kind extends string = string> {
 // on every tick.
 export const KEPT_FAULTS = "kept";
 
-// [LAW:single-enforcer] The one spelling of the note: the faults, or `kept`
-// while they equal those `last` noted. A session's first note has no `last`,
-// so it always holds the list, an empty one included.
-export function faultsNote(
-  faults: readonly Fault[],
-  last: readonly Fault[] | undefined,
-): string {
-  const noted = JSON.stringify(faults);
-  return last !== undefined && JSON.stringify(last) === noted
-    ? KEPT_FAULTS
-    : noted;
-}
+// The faults as a note spells them whole.
+export const spelledFaults = (faults: readonly Fault[]): string =>
+  JSON.stringify(faults);
+
+// [LAW:single-enforcer] The one spelling of the note: the faults spelled
+// whole, or `kept` while they equal the spelling `last` noted. A session's
+// first note has no `last`, so it always holds the list, an empty one
+// included.
+export const faultsNote = (
+  spelled: string,
+  last: string | undefined,
+): string => (last === spelled ? KEPT_FAULTS : spelled);
 
 const LEVELS: ReadonlySet<unknown> = new Set(["error", "warning"]);
 const FIELDS: ReadonlySet<string> = new Set([

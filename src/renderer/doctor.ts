@@ -145,7 +145,8 @@ export class DoctorRuns {
     )
       return;
     const reading = doctor.value;
-    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    if (reading.kind === "failed")
+      return this.fail(session, reading.reason, record);
     try {
       this.report(
         this.deps.sessionState,
@@ -155,7 +156,7 @@ export class DoctorRuns {
       );
       run.reading = { read: reading, at: doctor.at };
     } catch (e) {
-      this.fail(session, e instanceof Error ? e.message : String(e));
+      this.fail(session, e instanceof Error ? e.message : String(e), record);
     }
   }
 
@@ -189,18 +190,29 @@ export class DoctorRuns {
     record: RequestFacts,
   ): void {
     const reports = runDoctor(facts);
+    const fields = doctorFields(facts);
     store.setBatch(session, doctorReportPairs(reports));
-    noteFacts(record, { [DOCTOR_NOTE]: doctorNote(notedReports(reports)) });
-    record.push(...doctorFields(facts));
+    noteFacts(record, {
+      [DOCTOR_NOTE]: doctorNote({
+        kind: "reported",
+        reports: notedReports(reports),
+      }),
+    });
+    record.push(...fields);
   }
 
   retire(session: SessionId): void {
     this.runs.delete(session);
   }
 
-  private fail(session: SessionId, reason: string): void {
+  // [LAW:no-silent-failure] A failed run shows why on its session's bar, and
+  // its turn's record says so, for a reader waiting on the run's note.
+  private fail(session: SessionId, reason: string, record: RequestFacts): void {
     this.runs.delete(session);
     this.deps.failed(session, `doctor: ${reason}`);
+    noteFacts(record, {
+      [DOCTOR_NOTE]: doctorNote({ kind: "failed", reason }),
+    });
   }
 
   private judged(
@@ -213,6 +225,7 @@ export class DoctorRuns {
       run.load,
       run.target,
       readStores(this.deps.stores),
+      arrival,
     );
     return { ...facts, clicked: this.filed(arrival, facts) };
   }

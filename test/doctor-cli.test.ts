@@ -33,10 +33,8 @@ import {
   rendererOf,
   type TurnRecord,
 } from "../src/renderer-interface/interface";
-import {
-  DOCTOR_NOTE,
-  readDoctorNote,
-} from "../src/renderer-interface/noted-doctor";
+import { DOCTOR_NOTE } from "../src/renderer-interface/noted-doctor";
+import { notedReportsOf } from "./helpers/doctor-note";
 
 let dir: string;
 beforeEach(() => {
@@ -142,7 +140,7 @@ describe("doctorPlan with no daemon", () => {
       .flatMap((record) => record)
       .filter(([key]) => key === DOCTOR_NOTE);
     expect(noted).toHaveLength(1);
-    expect(readDoctorNote(noted[0]![1]).map(reportLine).join("")).toBe(
+    expect(notedReportsOf(noted[0]![1]).map(reportLine).join("")).toBe(
       out.stdout,
     );
   });
@@ -209,6 +207,56 @@ describe("doctorPlan with no daemon", () => {
     expect(out.code).toBe(2);
     expect(out.stdout).toBe("");
     expect(out.stderr).toMatch(/^doctor: no report within 0\.05s/);
+  });
+
+  test("a run whose reading failed is exit 2 with the reason, not a wait for a report", async () => {
+    const out = await plan({
+      edge: () => ({
+        ...healthyEdge(),
+        daemons: async () => {
+          throw new Error("the process table would not read");
+        },
+      }),
+    });
+    expect(out.code).toBe(2);
+    expect(out.stdout).toBe("");
+    expect(out.stderr).toMatch(
+      /^doctor: the doctor's run failed: .*the process table would not read/,
+    );
+  });
+
+  test("a terminal release with a space in it is noted whole, and the run reports", async () => {
+    const records: TurnRecord[] = [];
+    const out = await plan({
+      world: worldIn({ TERM_PROGRAM_VERSION: "1.3 beta" }),
+      build: recording(records),
+    });
+    expect(out.code).toBe(0);
+    const terminal = records
+      .flatMap((record) => record)
+      .filter(([key]) => key === "terminal");
+    expect(terminal).toEqual([["terminal", "ghostty@1.3 beta"]]);
+  });
+
+  test("a close that fails is the command's failure, said after the report, and the rest still close", async () => {
+    const out = await plan({
+      build: (inputs, host) => {
+        const renderer = mainRendererOf(inputs, host);
+        return rendererOf({
+          event: (input) => renderer.answer(input),
+          adapter: (input) => {
+            if (input.push.kind === "close-journal")
+              throw new Error("the journal would not close");
+            return renderer.answer(input);
+          },
+        });
+      },
+    });
+    expect(out.code).toBe(2);
+    expect(out.stdout).toMatch(/^✓ config/);
+    expect(out.stderr).toMatch(
+      /^doctor: bar close failed: .*the journal would not close/,
+    );
   });
 });
 

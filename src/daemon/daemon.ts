@@ -785,6 +785,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
         writableSettings: (session) => collector.writableSettings(session),
+        // The daemon waits on no turn's note.
+        recorded: () => {},
       },
       {
         perform: (act) => acts.perform(act),

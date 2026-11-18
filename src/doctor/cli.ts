@@ -46,7 +46,6 @@ import { fileStorage } from "../daemon/file-storage.js";
 import {
   commandDaemonFacts,
   localBar,
-  type LocalBar,
   type RendererBuilder,
 } from "../daemon/local-bar.js";
 import { createPayloadProviders } from "../daemon/payload-providers.js";
@@ -125,188 +124,208 @@ export interface DoctorPlanInputs {
 // [LAW:effects-at-boundaries] The whole CLI as data: the machine in, (streams,
 // exit code) out. `doctorCommandPlan` hands it to the one delivery.
 export async function doctorPlan(inputs: DoctorPlanInputs): Promise<CliPlan> {
+  const closes: TeardownStep[] = [];
+  const plan = await doctorRun(inputs, closes).catch(
+    (e: unknown): CliPlan => ({
+      stdout: "",
+      stderr: `doctor: ${e instanceof Error ? e.message : String(e)}\n`,
+      code: EXIT_USAGE,
+    }),
+  );
+  // A one-shot run leaks no timer, watch or child past its report.
+  // [LAW:no-silent-failure] A step that failed to close is the command's
+  // failure, said beside its report.
+  const torn: string[] = [];
+  const failed = await runTeardown(closes, (_level, text) => {
+    torn.push(`doctor: ${text}\n`);
+  });
+  return failed.length === 0
+    ? plan
+    : { ...plan, stderr: plan.stderr + torn.join(""), code: EXIT_USAGE };
+}
+
+// The run itself, each thing it opens pushed onto `closes`: throws when it
+// could not report.
+async function doctorRun(
+  inputs: DoctorPlanInputs,
+  closes: TeardownStep[],
+): Promise<CliPlan> {
   const { world, cwd } = inputs;
   const { host, clock, launcher } = world;
-  const closes: TeardownStep[] = [];
   const quiet: DaemonLogger = () => {};
-  let bar: LocalBar | null = null;
-  try {
-    // [LAW:one-source-of-truth] The hints a statusline client started here
-    // would report, by the client's own detection, over the terminal the
-    // command runs in.
-    const hints = detectClientHints(host, cwd, inputs.measureTerminal());
-    // The request a statusline client started here would send for a session
-    // of its own: this directory, this shell's environment, and the config
-    // file named on the command line. The session is new, so its bar is the
-    // one a session opens on, and it has no transcript.
-    const session = randomUUID();
-    const checked = checkRenderRequest(
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData: {
-          hook_event_name: "Status",
-          session_id: session,
-          cwd,
-          transcript_path: path.join(
-            host.tmp,
-            `cc-candybar-doctor-${session}.jsonl`,
-          ),
-          model: { id: "", display_name: "" },
-          workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-        },
-        args: [
-          "cc-candybar",
-          ...(inputs.configFile === undefined
-            ? []
-            : ["--config", inputs.configFile]),
-        ],
+  // [LAW:one-source-of-truth] The hints a statusline client started here
+  // would report, by the client's own detection, over the terminal the
+  // command runs in.
+  const hints = detectClientHints(host, cwd, inputs.measureTerminal());
+  // The request a statusline client started here would send for a session
+  // of its own: this directory, this shell's environment, and the config
+  // file named on the command line. The session is new, so its bar is the
+  // one a session opens on, and it has no transcript.
+  const session = randomUUID();
+  const checked = checkRenderRequest(
+    {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      hookData: {
+        hook_event_name: "Status",
+        session_id: session,
         cwd,
-        encoding: "frame",
-        env: plainEnvironment(host.env),
-        ...hints,
+        transcript_path: path.join(
+          host.tmp,
+          `cc-candybar-doctor-${session}.jsonl`,
+        ),
+        model: { id: "", display_name: "" },
+        workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
       },
-      { firstSightOfUnknownHookField: () => false },
-      quiet,
-      host.home,
+      args: [
+        "cc-candybar",
+        ...(inputs.configFile === undefined
+          ? []
+          : ["--config", inputs.configFile]),
+      ],
+      cwd,
+      encoding: "frame",
+      env: plainEnvironment(host.env),
+      ...hints,
+    },
+    { firstSightOfUnknownHookField: () => false },
+    quiet,
+    host.home,
+  );
+  if (!checked.ok)
+    throw new Error(
+      `the doctor's own request was refused: ${checked.problems.join("; ")}`,
     );
-    if (!checked.ok)
-      throw new Error(
-        `the doctor's own request was refused: ${checked.problems.join("; ")}`,
-      );
-    const { req, environment } = checked;
-    const origin = req.requested;
-    // [LAW:single-enforcer] The daemon's discovery, at the origin the
-    // request names.
-    const { snapshot } = discover(
-      {
-        projectDir: origin.projectDir,
-        configFile: origin.target.path,
-        cwd: origin.cwd,
-      },
-      readShared({ locations: locations(host), stateDir: stateDir(host) }),
-    );
-    // [LAW:one-source-of-truth] The renderer's stores, read by the daemon's
-    // own reader from the files the daemon keeps them in.
-    const stores = new HeldStores(
-      fileStorage(profilePaths(daemonPaths(host), MAIN_RENDERER), quiet, clock),
-    );
-    stores.load();
-    // The bar this run judges is the one drawn here, once it is.
-    let drawn: SightedBar | null = null;
-    const sighted = (): Sighted => {
-      if (drawn === null)
-        throw new Error("the doctor's read came before its bar was drawn");
-      return {
-        serving: NOT_HELD,
-        rateLimits: NOT_HELD,
-        transcripts: NOT_HELD,
-        clients: NOT_HELD,
-        bars: [drawn],
-        width: {
-          kind: "ok",
-          value: { columns: hints.termCols ?? null, of: { kind: "command" } },
-        },
-      };
-    };
-    const at = instantAt(clock);
-    bar = localBar({
-      world,
-      gates: daemonGates(),
-      linkSigner: previewSigner(),
-      stateDir: stateDir(host),
-      home: host.home,
-      locate: checkoutLocation,
-      origin,
-      snapshot,
-      stored: stores.current(),
-      // [LAW:single-enforcer] The daemon's own owners, built as it builds
-      // them, with its one reader of the doctor's facts.
-      owners: (sourceRuns, log) => {
-        const ledger = new RefreshLedger(log);
-        const watchers = new WatcherRegistry({ clock, logger: log });
-        const doctor = new DoctorSource({
-          edge: (signal) =>
-            inputs.edge(
-              {
-                ...launcher,
-                launch: (opts) => launcher.launch({ ...opts, signal }),
-              },
-              host,
-              stateDir(host),
-            ),
-          sighted,
-          clock,
-          logger: log,
-          ledger,
-        });
-        const providers = createPayloadProviders({
-          launcher,
-          host,
-          watchers,
-          fileEvents: new FileEventDelivery({ watchers, logger: log, clock }),
-          clock,
-          logger: log,
-          ledger,
-          sourceRuns,
-          doctor,
-        });
-        closes.push(
-          ...providers.closes,
-          ["doctor close", () => doctor.close()],
-          ["watchers close", () => watchers.closeAll()],
-        );
-        return providers;
-      },
-      daemon: () => commandDaemonFacts(at),
-      build: inputs.build,
-    });
-    const { answer } = await bar.draw(
-      req,
-      environment,
-      clock.monotonic() + SETTLE_MS,
-    );
-    drawn = {
-      role: "statusline",
-      frame: answer.seen,
+  const { req, environment } = checked;
+  const origin = req.requested;
+  // [LAW:single-enforcer] The daemon's discovery, at the origin the
+  // request names.
+  const { snapshot } = discover(
+    {
       projectDir: origin.projectDir,
-      claudeConfigDir: claudeConfigDir(hints.claudeConfigDir, host.home),
-    };
-    // Waited on before the click, so no turn after it is missed.
-    const reportMs = inputs.reportMs ?? REPORT_MS;
-    const noted = bar.noted(DOCTOR_NOTE, clock.monotonic() + reportMs);
-    const value = encodeSegments([session]);
-    const clicked = await bar.click({
-      kind: "click",
-      verb: VERB_DOCTOR_RUN,
-      value,
-      session: clickSessionOf(VERB_DOCTOR_RUN, value),
-      arrival: { via: "command" },
-      context: heardContextOf(req),
-    });
-    if (clicked.kind === "threw")
-      throw new Error(`the doctor's run failed: ${clicked.failure.message}`);
-    const note = await noted;
-    // [LAW:no-silent-failure] A run that reported nothing is the run's
-    // failure, with whatever the bar logged on the way.
-    if (note === null)
-      throw new Error(
-        [`no report within ${reportMs / 1000}s`, ...bar.errors()].join("\n"),
-      );
-    const reports = readDoctorNote(note);
+      configFile: origin.target.path,
+      cwd: origin.cwd,
+    },
+    readShared({ locations: locations(host), stateDir: stateDir(host) }),
+  );
+  // [LAW:one-source-of-truth] The renderer's stores, read by the daemon's
+  // own reader from the files the daemon keeps them in.
+  const stores = new HeldStores(
+    fileStorage(profilePaths(daemonPaths(host), MAIN_RENDERER), quiet, clock),
+  );
+  stores.load();
+  // The bar this run judges is the one drawn here, once it is.
+  let drawn: SightedBar | null = null;
+  const sighted = (): Sighted => {
+    if (drawn === null)
+      throw new Error("the doctor's read came before its bar was drawn");
     return {
-      stdout: reports.map(reportLine).join(""),
-      stderr: "",
-      code: reports.every((r) => r.verdict.ok) ? EXIT_OK : EXIT_FAILED,
+      serving: NOT_HELD,
+      rateLimits: NOT_HELD,
+      transcripts: NOT_HELD,
+      clients: NOT_HELD,
+      bars: [drawn],
+      width: {
+        kind: "ok",
+        value: { columns: hints.termCols ?? null, of: { kind: "command" } },
+      },
     };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
-  } finally {
-    // A one-shot run leaks no timer, watch or child past its report.
-    await bar?.close();
-    await runTeardown(closes, quiet);
-  }
+  };
+  const at = instantAt(clock);
+  const bar = localBar({
+    world,
+    gates: daemonGates(),
+    linkSigner: previewSigner(),
+    stateDir: stateDir(host),
+    home: host.home,
+    locate: checkoutLocation,
+    origin,
+    snapshot,
+    stored: stores.current(),
+    // [LAW:single-enforcer] The daemon's own owners, built as it builds
+    // them, with its one reader of the doctor's facts.
+    owners: (sourceRuns, log) => {
+      const ledger = new RefreshLedger(log);
+      const watchers = new WatcherRegistry({ clock, logger: log });
+      const doctor = new DoctorSource({
+        edge: (signal) =>
+          inputs.edge(
+            {
+              ...launcher,
+              launch: (opts) => launcher.launch({ ...opts, signal }),
+            },
+            host,
+            stateDir(host),
+          ),
+        sighted,
+        clock,
+        logger: log,
+        ledger,
+      });
+      const providers = createPayloadProviders({
+        launcher,
+        host,
+        watchers,
+        fileEvents: new FileEventDelivery({ watchers, logger: log, clock }),
+        clock,
+        logger: log,
+        ledger,
+        sourceRuns,
+        doctor,
+      });
+      closes.push(
+        ...providers.closes,
+        ["doctor close", () => doctor.close()],
+        ["watchers close", () => watchers.closeAll()],
+      );
+      return providers;
+    },
+    daemon: () => commandDaemonFacts(at),
+    build: inputs.build,
+  });
+  // The bar closes first: what it drew with closes after it.
+  closes.unshift(["bar close", () => bar.close()]);
+  const { answer } = await bar.draw(
+    req,
+    environment,
+    clock.monotonic() + SETTLE_MS,
+  );
+  drawn = {
+    role: "statusline",
+    frame: answer.seen,
+    projectDir: origin.projectDir,
+    claudeConfigDir: claudeConfigDir(hints.claudeConfigDir, host.home),
+  };
+  // Waited on before the click, so no turn after it is missed.
+  const reportMs = inputs.reportMs ?? REPORT_MS;
+  const noted = bar.noted(DOCTOR_NOTE, clock.monotonic() + reportMs);
+  const value = encodeSegments([session]);
+  const clicked = await bar.click({
+    kind: "click",
+    verb: VERB_DOCTOR_RUN,
+    value,
+    session: clickSessionOf(VERB_DOCTOR_RUN, value),
+    arrival: { via: "command" },
+    context: heardContextOf(req),
+  });
+  if (clicked.kind === "threw")
+    throw new Error(`the doctor's run failed: ${clicked.failure.message}`);
+  const note = await noted;
+  // [LAW:no-silent-failure] A run that reported nothing is the run's
+  // failure, with whatever the bar logged on the way.
+  if (note === null)
+    throw new Error(
+      [`no report within ${reportMs / 1000}s`, ...bar.errors()].join("\n"),
+    );
+  const run = readDoctorNote(note);
+  if (run.kind === "failed")
+    throw new Error(`the doctor's run failed: ${run.reason}`);
+  const { reports } = run;
+  return {
+    stdout: reports.map(reportLine).join(""),
+    stderr: "",
+    code: reports.every((r) => r.verdict.ok) ? EXIT_OK : EXIT_FAILED,
+  };
 }
 
 // The terminal the command runs in, which the bar of a Claude Code started

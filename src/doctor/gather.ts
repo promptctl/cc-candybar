@@ -146,15 +146,22 @@ function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
 }
 
 // [LAW:single-enforcer] The one composition of a run's facts: the machine as
-// read, the load the ask was made for, and the stores as they stand.
+// read, the load the ask was made for, the stores as they stand, and how the
+// click being judged arrived — one that came by a link proves the URL
+// handler, whatever the reading found for the click that asked it.
 export function doctorFacts(
   { machine, install }: DoctorRead,
   load: ConfigLoad,
   target: ConfigTarget,
   stores: StoresRead,
+  arrival: ClickArrival,
 ): DoctorFacts {
   return {
     ...machine,
+    urlHandler:
+      arrival.via === "link"
+        ? { kind: "arrived", delivery: arrival.delivery }
+        : machine.urlHandler,
     config: configFacts(load, target),
     marks: stores.marks,
     clicked: stores.clicked,

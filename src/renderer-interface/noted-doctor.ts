@@ -28,17 +28,39 @@ export interface NotedReport {
   readonly verdict: NotedVerdict;
 }
 
-export const doctorNote = (reports: readonly NotedReport[]): string =>
-  JSON.stringify(reports);
+// [LAW:no-silent-failure] How a run ended: its reports, or why there are
+// none, so a reader waiting on the note hears a failed run as one.
+export type NotedRun =
+  | { readonly kind: "reported"; readonly reports: readonly NotedReport[] }
+  | { readonly kind: "failed"; readonly reason: string };
+
+export const doctorNote = (run: NotedRun): string => JSON.stringify(run);
 
 const text = (v: unknown): v is string => typeof v === "string";
 
 // [LAW:parse-dont-validate] A note as a record holds it, read back. Anything
 // else is a note no renderer writes, and throws naming what is wrong with it.
-export function readDoctorNote(value: string): readonly NotedReport[] {
+export function readDoctorNote(value: string): NotedRun {
   const parsed: unknown = JSON.parse(value);
-  if (!Array.isArray(parsed))
-    throw new Error(`a doctor note is a JSON array: ${value}`);
+  if (typeof parsed !== "object" || parsed === null)
+    throw new Error(`a doctor note is a JSON object: ${value}`);
+  const run = parsed as Record<string, unknown>;
+  if (run.kind === "failed") {
+    if (!text(run.reason))
+      throw new Error(`a failed run has no reason: ${value}`);
+    return { kind: "failed", reason: run.reason };
+  }
+  if (run.kind !== "reported")
+    throw new Error(`a doctor note is neither reported nor failed: ${value}`);
+  if (!Array.isArray(run.reports))
+    throw new Error(`a reported run's reports are not a JSON array: ${value}`);
+  return { kind: "reported", reports: readReports(run.reports, value) };
+}
+
+function readReports(
+  parsed: readonly unknown[],
+  value: string,
+): readonly NotedReport[] {
   return parsed.map((entry: unknown, i): NotedReport => {
     const bad = (problem: string): Error =>
       new Error(`report ${i} of the doctor note ${problem}: ${value}`);

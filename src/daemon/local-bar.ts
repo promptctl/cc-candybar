@@ -17,7 +17,6 @@ import type {
   Event,
   Renderer,
   RequestId,
-  TurnRecord,
 } from "../renderer-interface/interface.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -193,14 +192,8 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     throw new Error(NO_ACT);
   };
   const turns: HostTurn[] = [];
-  // [LAW:single-enforcer] Every turn's record passes here, so a wait on a
-  // note sees each one, whatever input it took. A wait is its key and how it
-  // ends.
+  // A wait on a note: its key and how it ends.
   const waiting = new Map<string, Set<(value: string | null) => void>>();
-  const recorded = (record: TurnRecord): void => {
-    for (const [key, value] of record)
-      waiting.get(key)?.forEach((done) => done(value));
-  };
   const rendered = rendererHost(
     MAIN_RENDERER,
     world.clock,
@@ -216,6 +209,12 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       holding: (session) => collector.holding(session),
       // No doctor reading hands one in.
       writableSettings: () => [],
+      // [LAW:single-enforcer] Every turn's record, whatever input it took,
+      // so a wait on a note sees each one.
+      recorded: (record) => {
+        for (const [key, value] of record)
+          waiting.get(key)?.forEach((done) => done(value));
+      },
     },
     {
       perform: async () => refused(),
@@ -234,19 +233,12 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       unheard: (text) => errors.push(text),
     },
   );
-  // Each turn a request's answer takes, as the host took it, and each
-  // turn's record.
+  // Each turn a request's answer takes, as the host took it.
   host = {
     ...rendered,
     answer: async (make) => {
       const turn = await rendered.answer(make);
       turns.push(turn);
-      recorded(turn.record);
-      return turn;
-    },
-    deliver: async (make, about) => {
-      const turn = await rendered.deliver(make, about);
-      recorded(turn.record);
       return turn;
     },
   };

@@ -77,6 +77,7 @@ export async function gatherFacts(
     load,
     origin.target,
     stores,
+    { via: "command" },
   );
   return facts;
 }

@@ -64,7 +64,7 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { type AdapterToHost } from "../renderer-interface/adapter.js";
-import { faultsNote, type Fault } from "../renderer-interface/noted-faults.js";
+import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
@@ -901,7 +901,6 @@ export function drawRender(
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
     warnRecord: recorded ? "new" : "kept",
-    faults: faultsNote(faults, renderWarnings.noted(sessionId, drawing.by)),
     // The message the viewer showed in the body's place, `-` while closed.
     viewer:
       viewing === null
@@ -979,13 +978,17 @@ function keepDraw(
   view.frames.set(by, record);
   view.lastRenderCellsBySegment = segments;
   parts.effectSessions.keep(session, motion);
-  parts.renderWarnings.keep(
-    session,
-    by,
-    warnings.scope,
-    warnings.list,
-    warnings.faults,
-  );
+  // [LAW:single-enforcer] The faults are noted as their record is kept, so a
+  // frame that throws notes none.
+  noteFacts(setup.facts, {
+    faults: parts.renderWarnings.keep(
+      session,
+      by,
+      warnings.scope,
+      warnings.list,
+      warnings.faults,
+    ),
+  });
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
 }
 

@@ -27,25 +27,35 @@ const REPORTS: readonly NotedReport[] = [
   },
 ];
 
-test("a note reads back as the reports it was written from", () => {
-  expect(readDoctorNote(doctorNote(REPORTS))).toEqual(REPORTS);
+test("a note reads back as the run it was written from", () => {
+  const reported = { kind: "reported", reports: REPORTS } as const;
+  expect(readDoctorNote(doctorNote(reported))).toEqual(reported);
+  const failed = { kind: "failed", reason: "the probe was refused" } as const;
+  expect(readDoctorNote(doctorNote(failed))).toEqual(failed);
 });
 
+const reported = (reports: string): string =>
+  `{"kind":"reported","reports":${reports}}`;
+
 test.each([
-  ["not an array", `{"name":"config"}`, /a doctor note is a JSON array/],
+  ["not an object", `[]`, /neither reported nor failed/],
+  ["a failed run with no reason", `{"kind":"failed"}`, /has no reason/],
+  ["reports that are not a list", reported(`{}`), /not a JSON array/],
   [
     "a report with no label",
-    `[{"name":"x","verdict":{"ok":true}}]`,
+    reported(`[{"name":"x","verdict":{"ok":true}}]`),
     /report 0 .* has no name or label/,
   ],
   [
     "a verdict neither ok nor failed",
-    `[{"name":"x","label":"x","verdict":{"ok":"yes"}}]`,
+    reported(`[{"name":"x","label":"x","verdict":{"ok":"yes"}}]`),
     /neither ok nor failed/,
   ],
   [
     "a failed verdict with no list of problems",
-    `[{"name":"x","label":"x","verdict":{"ok":false,"reason":"r","fixable":false}}]`,
+    reported(
+      `[{"name":"x","label":"x","verdict":{"ok":false,"reason":"r","fixable":false}}]`,
+    ),
     /no list of further problems/,
   ],
 ])("%s is refused, naming what is wrong", (_what, note, problem) => {

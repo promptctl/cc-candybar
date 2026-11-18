@@ -15,7 +15,7 @@ import {
   type TmuxFacts,
 } from "../../src/doctor/checks";
 import { detectTmuxHint } from "../../src/tmux-hint";
-import { frameFields, truecolorEnvFields } from "../../src/doctor/report";
+import { frameFields, truecolorEnvFields } from "../helpers/doctor-fields";
 import type { JsonObject, SettingsSource } from "../../src/claude-settings";
 import type { JsonValue } from "../../src/var-system/types";
 import type { FrameSighting } from "../../src/daemon/foundations/sightings";

@@ -18,7 +18,7 @@ import {
   type TranscriptWindow,
 } from "../src/doctor/checks";
 import { readTranscriptWindow, transcriptWindow } from "../src/doctor/edge";
-import { transcriptFields } from "../src/doctor/report";
+import { transcriptFields } from "./helpers/doctor-fields";
 import { transcriptSaid } from "../src/daemon/render-sightings";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 

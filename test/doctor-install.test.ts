@@ -17,7 +17,7 @@ import {
 } from "../src/doctor/checks";
 import { installFacts } from "../src/doctor/edge";
 import { type InstallEdge } from "../src/doctor/ports";
-import { installFields } from "../src/doctor/report";
+import { installFields } from "./helpers/doctor-fields";
 import { RenderSightings } from "../src/daemon/render-sightings";
 import { SIGHTINGS_KEPT } from "../src/daemon/foundations/sightings";
 import { parseClientHints } from "../src/daemon/foundations/protocol";

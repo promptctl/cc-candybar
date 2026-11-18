@@ -8,7 +8,7 @@ import {
   type TmuxClient,
   type TmuxFacts,
 } from "../src/doctor/checks";
-import { terminalFeatureFields } from "../src/doctor/report";
+import { terminalFeatureFields } from "./helpers/doctor-fields";
 import { DEFAULT_TERMINAL_WIDTH } from "../src/render/strip";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 

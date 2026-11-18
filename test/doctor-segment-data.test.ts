@@ -21,7 +21,7 @@ import {
   type SegmentDataFacts,
 } from "../src/doctor/checks";
 import { forgeLogin, forgeLoginOf } from "../src/doctor/edge";
-import { dataFields } from "../src/doctor/report";
+import { dataFields } from "./helpers/doctor-fields";
 import { rateLimitsSeen } from "../src/daemon/render-sightings";
 import { HEALTHY_FACTS } from "./helpers/doctor-facts";
 

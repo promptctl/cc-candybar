@@ -5,10 +5,8 @@
 // (candybar-daemon-health-ajx0.co4): a link it delivers proves it, and a link
 // `cc-candybar url-handle` delivered came through the retired applet.
 
-import {
-  DOCTOR_NOTE,
-  readDoctorNote,
-} from "../src/renderer-interface/noted-doctor";
+import { DOCTOR_NOTE } from "../src/renderer-interface/noted-doctor";
+import { notedReportsOf } from "./helpers/doctor-note";
 import {
   checkByName,
   notJudged,
@@ -35,6 +33,7 @@ import {
 } from "./helpers/click";
 import { DoctorHost } from "./helpers/doctor-gather";
 import { systemTimekeeper } from "../src/time";
+import { instantAt } from "../src/utils/instant";
 import {
   emptyStores,
   HEALTHY_FACTS,
@@ -218,7 +217,7 @@ describe("the daemon's side of the round trip", () => {
       clickVerb(verb, value, ctx);
       await host.settle(ctx.doctorRuns);
     };
-    return { sessionState, host, click };
+    return { sessionState, host, click, ctx };
   }
 
   const KEYLESS = linkSignerOver(() => ({
@@ -267,7 +266,7 @@ describe("the daemon's side of the round trip", () => {
       verdict: d.sessionState.get(S1, keys.verdict),
       reason: d.sessionState.get(S1, keys.reason),
       // The urlHandler verdict as the turn's record notes it.
-      noted: readDoctorNote(notes[0]![1]).find((r) => r.name === "urlHandler")
+      noted: notedReportsOf(notes[0]![1]).find((r) => r.name === "urlHandler")
         ?.verdict,
       clicked: d.host.taken.find(([key]) => key === "clicked")?.[1],
     };
@@ -304,6 +303,29 @@ describe("the daemon's side of the round trip", () => {
       note: `the forwarder app opens cc-candybar://; ${TMUX_UNDELIVERED}`,
     });
     expect(row.clicked).toBe("no");
+  });
+
+  // A [fix] or mark click on a run asked another way judges the facts as the
+  // click in hand proves them: one that came by a link proves the handler.
+  test("a link click on a run asked from the tmux status line proves the handler", async () => {
+    const d = daemon({ via: "tmux-status" }, REGISTERED);
+    hearRender(
+      d.sessionState,
+      heardRequest(S1, "/tmp/proj", {
+        tmux: null,
+        claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
+        terminalEnv: { TERM_PROGRAM: "ghostty" },
+        termCols: 148,
+      }),
+    );
+    await d.click(VERB_DOCTOR_RUN, "s1");
+    const now = instantAt(systemTimekeeper);
+    expect(
+      d.ctx.doctorRuns.facts(S1, { via: "tmux-status" }, now)?.urlHandler,
+    ).toMatchObject({ kind: "registered" });
+    expect(
+      d.ctx.doctorRuns.facts(S1, link(FORWARDED), now)?.urlHandler,
+    ).toEqual({ kind: "arrived", delivery: FORWARDED });
   });
 
   test("a platform with no URL handler: a run with no link is ok", async () => {

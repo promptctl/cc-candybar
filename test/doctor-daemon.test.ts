@@ -16,7 +16,7 @@ import {
 } from "../src/doctor/checks";
 import { daemonProcesses, ownsEntry } from "../src/doctor/edge";
 import { applyFix } from "./helpers/doctor-gather";
-import { daemonFields } from "../src/doctor/report";
+import { daemonFields } from "./helpers/doctor-fields";
 import {
   filePostMortemsRead,
   parsePostMortemsRead,

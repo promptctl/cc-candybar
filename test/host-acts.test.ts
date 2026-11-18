@@ -128,6 +128,7 @@ function hostOver(
       holding: () => () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
     },
     world,
   );

@@ -9,7 +9,7 @@ import {
   type TmuxClient,
 } from "../../src/doctor/checks";
 import type { Identified, TerminalName } from "../../src/doctor/terminal";
-import { linkFields } from "../../src/doctor/report";
+import { linkFields } from "../helpers/doctor-fields";
 import {
   parseClickedTerminals,
   withClicked,

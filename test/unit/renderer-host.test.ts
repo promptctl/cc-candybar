@@ -69,6 +69,7 @@ function hostOver(output: Ended) {
       writableSettings: () => {
         throw new Error("a push lands no change");
       },
+      recorded: () => {},
       holding: () => {
         throw new Error("a push holds no session");
       },
@@ -169,6 +170,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       frames: () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     NO_ACTS,
@@ -188,6 +190,52 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   open();
   await Promise.all([asked, waiting, started]);
   expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+});
+
+test("every turn's record reaches `recorded`, whatever input it took and however it was asked", async () => {
+  const records: string[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async (input) => ({
+          ...answered(),
+          record: [["took", input.event.kind]],
+        }),
+        adapter: async () => {
+          throw new Error("this rig sends no push");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      writableSettings: () => [],
+      recorded: (record) =>
+        void records.push(record.map(([k, v]) => `${k}=${v}`).join(" ")),
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  await host.start(
+    () => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }),
+    [],
+  );
+  await host.answer(() => ({
+    kind: "event",
+    event: { kind: "retire", session: "s" as never },
+  }));
+  await host.deliver(
+    () => ({ kind: "event", event: { kind: "retire", session: "t" as never } }),
+    [],
+  );
+  expect(records).toEqual(["took=start", "took=retire", "took=retire"]);
 });
 
 test("an input carries the clock's two readings as its slot comes, never as it was asked", async () => {
@@ -216,6 +264,7 @@ test("an input carries the clock's two readings as its slot comes, never as it w
       frames: () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     NO_ACTS,
@@ -271,6 +320,7 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
       frames: (taken) => void frames.push(taken.length),
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     { ...NO_ACTS, unheard: (text) => void unheard.push(text) },
@@ -324,6 +374,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
       frames: () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     NO_ACTS,
@@ -383,6 +434,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
       frames: () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     {
@@ -448,6 +500,7 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
       frames: () => {},
       stored: () => {},
       writableSettings: () => [],
+      recorded: () => {},
       holding: () => () => {},
     },
     NO_ACTS,

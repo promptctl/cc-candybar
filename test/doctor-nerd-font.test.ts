@@ -29,7 +29,7 @@ import { gatherFacts, type GatherEdge } from "./helpers/doctor-gather";
 import { type DoctorEdge } from "../src/doctor/ports";
 import { type StoresRead } from "../src/daemon/foundations/stats-snapshot";
 import type { Asked } from "../src/doctor/checks";
-import { nerdFontFields } from "../src/doctor/report";
+import { nerdFontFields } from "./helpers/doctor-fields";
 import { parseMarkBook, withMark } from "../src/doctor/mark-book";
 import {
   EMPTY_STORES,

@@ -135,11 +135,17 @@ function reportedOn(record: readonly Field[]): string[] {
   const lines: string[] = [];
   for (const [key, value] of record) {
     if (key === "doctor") {
-      const verdicts = readDoctorNote(value).map(
-        ({ name, verdict }) =>
-          `${name}=${verdict.ok ? "ok" : `failed(${1 + verdict.more.length})`}`,
+      const run = readDoctorNote(value);
+      lines.push(
+        run.kind === "failed"
+          ? `doctor failed: ${run.reason}`
+          : `doctor: ${run.reports
+              .map(
+                ({ name, verdict }) =>
+                  `${name}=${verdict.ok ? "ok" : `failed(${1 + verdict.more.length})`}`,
+              )
+              .join(" ")}`,
       );
-      lines.push(`doctor: ${verdicts.join(" ")}`);
     } else if (lines.length > 0)
       lines[lines.length - 1] += ` ${key}=${valueOf(value)}`;
   }
@@ -392,7 +398,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
-    expect(rt.reported().at(-1)).toMatch(/ termWidth=ok .* cols=97 widthOf=session /);
+    expect(rt.reported().at(-1)).toMatch(
+      / termWidth=ok .* cols=97 widthOf=session /,
+    );
     expect(rt.render()).toContain("✓ terminal width");
   });
 
@@ -767,7 +775,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
       }
     });
 
-    test("a probe the rate limit refused fails the run with the reason on the bar, and writes no report", async () => {
+    test("a probe the rate limit refused fails the run with the reason on the bar and its record, and writes no report", async () => {
       const limited: TerminalFixture = {
         ...ITERM_MENLO,
         fontInUse: async () => busy("the font"),
@@ -779,7 +787,9 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         "doctor: the doctor looked at the font less than a second ago — click again",
       );
       expect(rt.render()).not.toContain("Nerd Font");
-      expect(rt.reported()).toEqual([]);
+      expect(rt.reported()).toEqual([
+        "doctor failed: the doctor looked at the font less than a second ago — click again",
+      ]);
     });
 
     test("only a check that takes a mark is given the actions that make one", async () => {
