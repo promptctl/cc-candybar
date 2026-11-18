@@ -29783,28 +29783,41 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  let linked;
-  try {
-    linked = publishByLink(status, `${formatJobEnd(end)}
-`);
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      return { stands: false, signalled: false, leftover: null };
+  const signal = () => {
+    const signalled = spawner.signalJob(pid2, "SIGTERM");
+    if (signalled) {
+      clock.after(
+        TIMEOUT_KILL_GRACE_MS,
+        () => spawner.signalJob(pid2, "SIGKILL"),
+        {
+          unref: true
+        }
+      );
     }
+    return signalled;
+  };
+  let landed;
+  try {
+    landed = landVerdict(status, end);
+  } catch (err) {
+    signal();
     throw err;
   }
-  const stands = linked.outcome === "published";
-  const signalled = spawner.signalJob(pid2, "SIGTERM");
-  if (signalled) {
-    clock.after(
-      TIMEOUT_KILL_GRACE_MS,
-      () => spawner.signalJob(pid2, "SIGKILL"),
-      {
-        unref: true
-      }
+  return { ...landed, signalled: signal() };
+}
+function landVerdict(status, end) {
+  try {
+    const { outcome, leftover } = publishByLink(
+      status,
+      `${formatJobEnd(end)}
+`
     );
+    return { verdict: outcome, leftover };
+  } catch (err) {
+    if (err.code === "ENOENT")
+      return { verdict: "gone", leftover: null };
+    throw err;
   }
-  return { stands, signalled, leftover: linked.leftover };
 }
 function createLauncher(owner, clock, spawner) {
   return launcherWithState(owner, clock, spawner).launcher;
@@ -50790,7 +50803,8 @@ function makeActReader(dir, read2, jobs, clock) {
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-    if (!fs_default.existsSync(actDir)) return null;
+    if (!fs_default.existsSync(actDir))
+      return known.ours ? { act: act2, record: record2, alive: true, end: null, lastLine: null } : null;
     const facts = { act: act2, record: record2, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
@@ -63602,13 +63616,17 @@ function makeUpdateWatch(opts) {
       );
     }
     if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
-    const { stands, signalled, leftover } = endOverdue(
+    const { verdict, signalled, leftover } = endOverdue(
       actsDir2,
       facts,
       launcher
     );
     watched = { ...watched, ended: true };
-    const why2 = stands ? "timed out" : "outlived its verdict";
+    const why2 = {
+      published: "timed out",
+      taken: "outlived its verdict",
+      gone: "outlived its act's files"
+    }[verdict];
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
       "error",
