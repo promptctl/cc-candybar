@@ -36,13 +36,12 @@ import {
   type Reading,
   type RendererInput,
   type OwedEffect,
-  type StorageNamed,
   type TimedRenderer,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
-  NOTHING_NAMED,
 } from "../renderer-interface/interface.js";
+import type { StorageNamed } from "./cache/managed-storage.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
@@ -213,7 +212,12 @@ export function rendererHost(
   // renderer that holds none.
   let served = new Set<string>();
   // The storage folders the latest output named, which its slot hands on.
-  let storage: StorageNamed = NOTHING_NAMED;
+  let storage: readonly string[] = [];
+  // [LAW:one-source-of-truth] The `config` turns handed in, across every
+  // renderer this host starts: each is a load, when the storage owner keeps
+  // its folders again. A count that began again with each renderer could
+  // repeat the last one's, and the load would keep nothing.
+  let loads = 0;
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -235,7 +239,9 @@ export function rendererHost(
           return await slot(queuedMs, (input) => void (held.input = input));
         } finally {
           holder = null;
-          taking("storage", () => collector.storage(storage));
+          taking("storage", () =>
+            collector.storage({ folders: storage, loads }),
+          );
         }
       },
       at,
@@ -272,6 +278,7 @@ export function rendererHost(
     // [LAW:one-source-of-truth] A renderer sent its `start` holds no config,
     // whether or not the start answers: every origin it names after is new.
     if (input.event.kind === "start") served = new Set();
+    if (input.event.kind === "config") loads++;
     try {
       release = session === null ? release : collector.holding(session);
       const sentAt = clock.monotonic();
@@ -641,13 +648,13 @@ export function rendererHost(
   // [LAW:no-silent-failure] A turn that threw fails its caller, naming the
   // renderer, what the turn was and how long it ran; the failure keeps its
   // kind, so one no renderer took reads as one.
-  const threw = (what: string, turn: HostTurn): void => {
+  const failIfThrew = (what: string, turn: HostTurn): void => {
     if (turn.kind !== "threw") return;
-    const took = turn.turnMs === null ? "" : ` took=${turn.turnMs}ms`;
+    const ran = turn.turnMs === null ? "" : ` took=${turn.turnMs}ms`;
     throw new CrossedFailure({
       ...turn.failure,
       message: `renderer ${name} ${what} threw: ${turn.failure.message}`,
-      detail: `renderer ${name} ${what} threw${took}: ${turn.failure.detail}`,
+      detail: `renderer ${name} ${what} threw${ran}: ${turn.failure.detail}`,
     });
   };
   // [LAW:single-enforcer] The one place an inspect's answer is judged: its
@@ -659,7 +666,7 @@ export function rendererHost(
       kind: "event",
       event: { kind: "inspect", ask },
     }));
-    threw(`inspect ${ask.kind}`, turn);
+    failIfThrew(`inspect ${ask.kind}`, turn);
     const report = turn.effects.find((effect) => effect.kind === "report");
     if (report?.reading.kind !== ask.kind)
       throw new Error(
@@ -672,7 +679,7 @@ export function rendererHost(
   // [LAW:single-enforcer] A step's failure is its teardown's to say, so
   // the turn writes no line of its own.
   const closeStep = async (step: "closing" | "close"): Promise<void> =>
-    threw(
+    failIfThrew(
       `close step ${step}`,
       await answer(() => ({ kind: "event", event: { kind: step } })),
     );

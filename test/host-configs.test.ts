@@ -21,8 +21,8 @@ import type {
   Event,
   RendererInput,
   RendererOutput,
-  StorageNamed,
 } from "../src/renderer-interface/interface";
+import type { StorageNamed } from "../src/daemon/cache/managed-storage";
 import type { Monotonic } from "../src/time";
 import { eventRenderer, hostHeld, NO_ACTS } from "./helpers/renderers";
 
@@ -61,7 +61,7 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 const output = (
   effects: readonly Effect[],
   configs: readonly RenderOrigin[],
-  storage: StorageNamed = { folders: [], loads: 0 },
+  storage: readonly string[] = [],
 ): RendererOutput => ({
   kind: "answered",
   stored: [],
@@ -82,7 +82,8 @@ const output = (
 // whose discovery follows what each output names, holds `SNAPSHOT` for each
 // followed origin, and answers `landed` for a landing. `heard` is every
 // event the renderer heard, in order, `logged` every line, and `storage`
-// every set of folders the storage owner was handed.
+// every set of folders the storage owner was handed, with the host's count
+// of config turns.
 function hostOver(
   turn: (event: Event) => RendererOutput,
   landed: () => readonly RenderOrigin[] = () => [],
@@ -298,9 +299,11 @@ describe("a turn settles as the config turns it named", () => {
 // handed that, the owner would close every folder the renderer before it
 // named and open each again, leaking a directory watch each on macOS.
 test("the storage owner hears the folders a start's slot ends naming, once the configs it named have loaded", async () => {
-  const named = { folders: ["/storage/plugin"], loads: 1 };
+  const folders = ["/storage/plugin"];
   const { host, heard, storage } = hostOver((event) =>
-    event.kind === "start" ? output([], [ORIGIN]) : output([], [ORIGIN], named),
+    event.kind === "start"
+      ? output([], [ORIGIN])
+      : output([], [ORIGIN], folders),
   );
   await host.start(
     () => ({
@@ -310,5 +313,23 @@ test("the storage owner hears the folders a start's slot ends naming, once the c
     [],
   );
   expect(heard).toEqual(["start", "config"]);
-  expect(storage).toEqual([named]);
+  expect(storage).toEqual([{ folders, loads: 1 }]);
+});
+
+// [LAW:one-source-of-truth] A load is a config turn the host handed in, so a
+// renderer started again, which counts nothing of its own, cannot repeat the
+// count the storage owner last kept at and leave a refused watch untried.
+test("the host's count of loads runs on across renderers", async () => {
+  const { host, storage } = hostOver(() => output([], [ORIGIN]));
+  const start = () =>
+    host.start(
+      () => ({
+        kind: "event",
+        event: { kind: "start", viewers: {}, sessions: [] },
+      }),
+      [],
+    );
+  await start();
+  await start();
+  expect(storage.map(({ loads }) => loads)).toEqual([1, 2]);
 });

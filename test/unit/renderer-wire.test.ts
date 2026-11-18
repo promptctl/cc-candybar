@@ -54,7 +54,7 @@ function talkingRenderer(): TimedRenderer {
             sources: {},
             lanes: {},
             configs: [],
-            storage: { folders: ["/plug"], loads: 1 },
+            storage: ["/plug"],
             wake: null,
           },
           record: [],

@@ -177,7 +177,7 @@ const PINNED: Timed<RendererOutput> = {
     sources: {},
     lanes: {},
     configs: [],
-    storage: { folders: [], loads: 0 },
+    storage: [],
     wake: null,
   },
   record: [],

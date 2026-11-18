@@ -6,7 +6,6 @@ import type {
   ViewFacts,
 } from "../renderer-interface/request-context.js";
 import type {
-  StorageNamed,
   Subscription,
   Subscriptions,
 } from "../renderer-interface/interface.js";
@@ -1174,8 +1173,6 @@ export class RenderCache<
   }
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
-  // The config loads run, of every origin (`storage`).
-  private loads = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
@@ -1613,9 +1610,6 @@ export class RenderCache<
     served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    // [LAW:dataflow-not-control-flow] Every load counts, built, kept or
-    // failed: each is when the host keeps the folders again.
-    this.loads++;
     return loadOrigin(cwd, snapshot, this.deps, served);
   }
 
@@ -1734,11 +1728,11 @@ export class RenderCache<
   // predecessor are both held within the turn, so a folder both name is
   // never closed and reopened. Each folder once, however many sources name
   // it, in one order, so the host tells an unchanged set at a glance.
-  storage(): StorageNamed {
+  storage(): readonly string[] {
     const folders = new Set<string>();
     for (const state of this.holds.keys())
       for (const folder of state.sources.values()) folders.add(folder);
-    return { folders: [...folders].sort(), loads: this.loads };
+    return [...folders].sort();
   }
 
   private holdOf(state: DslRenderState): StateHold {

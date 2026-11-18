@@ -20,10 +20,6 @@ import { KeyedSource, NO_WATCH, type Resume } from "../../utils/keyed-source";
 import type { Lane } from "../../utils/reading";
 import { ABSENT, failed, type Outcome } from "../../utils/outcome";
 import type { DaemonLogger } from "../../utils/logger";
-import {
-  NOTHING_NAMED,
-  type StorageNamed,
-} from "../../renderer-interface/interface";
 import { RefreshLedger, REFRESH_TRIGGERS } from "../../utils/refresh-ledger";
 import { valueOf } from "../../utils/logfmt";
 import { jsonParser } from "../../var-system/parse";
@@ -125,6 +121,20 @@ const current = (was: Watched, found: Found): boolean =>
   found.identity !== "gone" &&
   was.identity !== "gone" &&
   sameIdentity(found.identity, was.identity);
+
+// The storage folders a renderer's slot ended naming, and how many config
+// turns the host has handed in. A load is when a folder is kept again, as it
+// was when it was first named: a watch refused or lost is tried again then.
+// So the owner keeps every folder again when either moves, and otherwise, as
+// on most slots, does nothing.
+export interface StorageNamed {
+  // Each folder once, sorted.
+  readonly folders: readonly string[];
+  readonly loads: number;
+}
+
+// Before the renderer's first slot, and after the close.
+const NOTHING_NAMED: StorageNamed = { folders: [], loads: 0 };
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
 // the whole daemon (design-docs/PLUGIN-API.md, "Managed storage"). A plugin's
@@ -292,8 +302,9 @@ export class ManagedStorage {
 
   // Closes every folder the subscriptions do not name.
   private closeUnheld(): void {
+    const named = new Set(this.named.folders);
     for (const [folder, watched] of [...this.watched])
-      if (!this.named.folders.includes(folder)) this.closed(watched);
+      if (!named.has(folder)) this.closed(watched);
   }
 
   // Opens a folder's next generation, on what its hold found, as the folder's

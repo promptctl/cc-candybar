@@ -472,20 +472,6 @@ export type Subscription =
   | { readonly kind: "env"; readonly name: string }
   | { readonly kind: "doctor"; readonly ask: DoctorAsk };
 
-// The storage folders a renderer's states name, and how many config loads it
-// has run. A load is when a folder is kept again, as it was when it was
-// first named: a watch refused or lost is tried again then. So the host keeps
-// every folder again when either moves, and otherwise, as on most turns, does
-// nothing.
-export interface StorageNamed {
-  // Each folder once, sorted.
-  readonly folders: readonly string[];
-  readonly loads: number;
-}
-
-// What a renderer names before its first load.
-export const NOTHING_NAMED: StorageNamed = { folders: [], loads: 0 };
-
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read, which lanes its settings switch on, and when the
 // renderer next wants a turn. The host diffs it; nothing is declared by
@@ -509,8 +495,8 @@ export interface Subscriptions {
   // [LAW:no-ambient-temporal-coupling] The plugin storage folders the latest
   // load of each render state names, from its first load to its reclaim: the
   // host's storage owner keeps each one, so a folder's watch lives as long as
-  // a build names it, never as long as a view.
-  readonly storage: StorageNamed;
+  // a build names it, never as long as a view. Each folder once, sorted.
+  readonly storage: readonly string[];
   // [LAW:no-ambient-temporal-coupling] The tick the renderer next wants a
   // turn at, derived from its own state as each turn ends: the host keeps one
   // timer to it and hands it in as a `due`. Null while nothing is due.

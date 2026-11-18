@@ -55,7 +55,7 @@ const output = (effects: readonly OwedEffect[]): RendererOutput => ({
     sources: {},
     lanes: {},
     configs: [],
-    storage: { folders: [], loads: 0 },
+    storage: [],
     wake: null,
   },
   record: [],

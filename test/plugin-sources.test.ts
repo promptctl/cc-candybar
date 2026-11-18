@@ -68,6 +68,7 @@ import type { Run } from "../src/facts/source-identity";
 import { settledLane } from "../src/utils/reading";
 import { installFromRepo } from "../src/plugin-install";
 import { REPO_PLUGIN_DIR } from "../src/daemon/config-discovery/plugin-folders";
+import type { StorageNamed } from "../src/daemon/cache/managed-storage";
 import { textOf, ansiOf, parseFrame } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
@@ -94,7 +95,6 @@ import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import type { Frame } from "../src/render/frame";
 import type {
   RequestId,
-  StorageNamed,
   TurnOutcome,
 } from "../src/renderer-interface/interface";
 import type { RequestFacts } from "../src/daemon/foundations/request-event";
@@ -879,11 +879,8 @@ function statusline(r: Rig, configFile: string) {
     () => {},
     {
       ...unfollowedCollector(r.collector),
-      storage: () => {},
-      subscribed: (subscriptions) => {
-        r.collector.subscribed(subscriptions);
-        r.held(subscriptions.storage);
-      },
+      storage: (named) => r.held(named),
+      subscribed: (subscriptions) => r.collector.subscribed(subscriptions),
     },
     { ...NO_ACTS, configs: r.configs.discovery },
   );

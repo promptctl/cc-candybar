@@ -12,7 +12,7 @@ import { instantAt } from "../../src/utils/instant";
 import { retireSession } from "../../src/renderer/draw-bar";
 import type { RenderCache } from "../../src/renderer/render-cache";
 import type { ViewFacts } from "../../src/renderer-interface/request-context";
-import type { StorageNamed } from "../../src/renderer-interface/interface";
+import type { StorageNamed } from "../../src/daemon/cache/managed-storage";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 import { daemonFactsOf } from "./daemon-facts";
@@ -75,9 +75,16 @@ export function collected(
       throw new Error("the collector handed in before its cache was served");
     return served;
   };
-  const ended = (): void => {
+  // The config turns the rig ran, as the host counts them: each is a load,
+  // when the storage owner keeps its folders again.
+  let loads = 0;
+  const handedBack = (): void => {
     collector.subscribed(cache().subscriptions());
-    held(cache().storage());
+    held({ folders: cache().storage(), loads });
+  };
+  const ended = (): void => {
+    loads++;
+    handedBack();
   };
   const collector: Collector = new Collector({
     clock: systemTimekeeper,
@@ -97,7 +104,7 @@ export function collected(
       if (event.kind === "world-state") worldStates.take(event.worldState, []);
       else retireSession({ renderCache: cache(), worldStates }, event.session);
       await Promise.resolve();
-      ended();
+      handedBack();
       return { kind: "answered" };
     },
   });

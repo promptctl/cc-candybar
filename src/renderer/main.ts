@@ -84,7 +84,6 @@ import {
 import { earliestOf } from "../utils/instant.js";
 import { failureOf, type Failure } from "../daemon/foundations/verb-error.js";
 import {
-  NOTHING_NAMED,
   type EffectId,
   type Event,
   type Inspect,
@@ -133,7 +132,7 @@ export function mainRenderer(
     sources: {},
     lanes: {},
     configs: [],
-    storage: NOTHING_NAMED,
+    storage: [],
     wake: null,
   };
   // [LAW:no-ambient-temporal-coupling] Each event that needs its origin's
