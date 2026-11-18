@@ -279,8 +279,11 @@ export class WatcherRegistry {
     const followed = followWatch(held, spec, (key, targets) =>
       this.acquire(key, targets, onInvalidate),
     );
-    if (followed.move === "kept")
-      this.reread(this.slots.get(followed.watch.key)?.polled ?? []);
+    // [LAW:dataflow-not-control-flow] Every follow reads the slot it holds,
+    // whichever way it moved; an acquire's read leaves nothing to fire. A
+    // closed registry holds no slot and reads nothing.
+    const slot = this.slots.get(followed.watch.key);
+    if (slot !== undefined) this.reread(slot.polled);
     return followed;
   }
 
@@ -550,9 +553,8 @@ export class WatcherRegistry {
   }
 
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // the acquire is a change; or the one already held, which the acquire reads
+  // again (`reread`).
   private polledAt(at: string): PolledPath {
     const held = this.polled.get(at);
     if (held !== undefined) return held;
@@ -593,11 +595,14 @@ export class WatcherRegistry {
   }
 
   // [LAW:no-ambient-temporal-coupling] Every acquire and every follow reads
-  // its polled paths now, as the sweep does. A holder follows right after it
-  // reads, and a baseline older than that read hides any change that undoes
-  // what it read before the next sweep: a file made and removed within one
-  // period reads the same at both sweeps. A path that moved since the last
-  // sweep fires, a spare re-read and never a missed one.
+  // its polled paths now, as the sweep does, because a baseline older than a
+  // holder's read hides a change that undoes what it read before the next
+  // sweep: a file made and removed within one period reads the same at both
+  // sweeps. A holder that follows before it reads hears whatever moves after
+  // the follow at the next sweep; one that reads first leaves the span
+  // between its read and its follow unwatched. A path that moved since the
+  // last sweep fires every slot on it, a spare re-read for any that already
+  // read it.
   private reread(records: Iterable<PolledPath>): void {
     for (const record of records) {
       const now = entryAt(record.path);
