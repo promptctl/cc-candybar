@@ -1,3 +1,10 @@
+## [1.232.3](https://github.com/promptctl/cc-candybar/compare/v1.232.2...v1.232.3) (2026-11-18)
+
+### Bug Fixes
+
+* **update-act:** an overdue act whose files a newer act pruned still has its proven group ended (pj1z) ([#806](https://github.com/promptctl/cc-candybar/issues/806)) ([23b2de0](https://github.com/promptctl/cc-candybar/commit/23b2de009c29760ad28d0fb6368579b0eeea19ef))
+* **watchers:** a path watched by name is polled at its path, and only folders ride the OS event stream (iywk) ([#805](https://github.com/promptctl/cc-candybar/issues/805)) ([5562879](https://github.com/promptctl/cc-candybar/commit/556287991e7955f7a9fbfc4a12b9ded691a25344))
+
 ## [1.232.2](https://github.com/promptctl/cc-candybar/compare/v1.232.1...v1.232.2) (2026-11-18)
 
 ### Bug Fixes
