@@ -207,7 +207,7 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       // profile's files.
       stored: () => {},
       holding: (session) => collector.holding(session),
-      // No doctor reading hands one in.
+      // A command performs no act, so no change writes a settings file.
       writableSettings: () => [],
       // [LAW:single-enforcer] Every turn's record, whatever input it took,
       // so a wait on a note sees each one.

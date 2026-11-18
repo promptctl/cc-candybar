@@ -238,6 +238,25 @@ describe("doctorPlan with no daemon", () => {
     expect(terminal).toEqual([["terminal", "ghostty@1.3 beta"]]);
   });
 
+  test("an error the bar logged on a run that reported is the command's failure, said beside the report", async () => {
+    const out = await plan({
+      build: (inputs, host) => {
+        const renderer = mainRendererOf(inputs, host);
+        return rendererOf({
+          event: async (input) => {
+            if (input.event.kind === "effect-done")
+              throw new Error("the outcome would not land");
+            return renderer.answer(input);
+          },
+          adapter: (input) => renderer.answer(input),
+        });
+      },
+    });
+    expect(out.stdout).toMatch(/^✓ config/);
+    expect(out.stderr).toMatch(/^doctor: .*the outcome would not land/);
+    expect(out.code).toBe(2);
+  });
+
   test("a close that fails is the command's failure, said after the report, and the rest still close", async () => {
     const out = await plan({
       build: (inputs, host) => {

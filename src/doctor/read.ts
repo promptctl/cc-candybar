@@ -39,7 +39,11 @@ import {
   isConfigured,
 } from "./terminal.js";
 import type { ServingDaemon } from "../daemon/foundations/memory-limit.js";
-import type { ClickArrival, SightedBar } from "./sightings.js";
+import {
+  handlerProvenBy,
+  type ClickArrival,
+  type SightedBar,
+} from "./sightings.js";
 import type { DoctorEdge } from "./ports.js";
 import { seen } from "./busy.js";
 import {
@@ -274,17 +278,16 @@ export interface Sighted {
 // [LAW:dataflow-not-control-flow] What the run knows of the URL handler, by
 // how its click arrived: a link proves it, and a run asked any other way
 // reads what is registered for the scheme.
-async function urlHandlerOf(
+const urlHandlerOf = async (
   edge: DoctorEdge,
   arrival: ClickArrival,
-): Promise<UrlHandlerFacts> {
-  if (arrival.via === "link")
-    return { kind: "arrived", delivery: arrival.delivery };
-  const registration = await edge.handler();
-  return registration.kind === "unsupported"
-    ? registration
-    : { kind: "registered", via: arrival.via, opener: registration.opener };
-}
+): Promise<UrlHandlerFacts> =>
+  handlerProvenBy(arrival, async ({ via }): Promise<UrlHandlerFacts> => {
+    const registration = await edge.handler();
+    return registration.kind === "unsupported"
+      ? registration
+      : { kind: "registered", via, opener: registration.opener };
+  });
 
 // [LAW:single-enforcer] Every fact comes from what the CLIENT saw: its tmux,
 // the Claude Code directory its session runs with, and the origin its config

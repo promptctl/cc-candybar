@@ -26,7 +26,7 @@ import type {
 } from "./checks.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import type { ConfigTarget } from "../config-hint.js";
-import type { ClickArrival } from "./sightings.js";
+import { handlerProvenBy, type ClickArrival } from "./sightings.js";
 import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
 import type { DoctorDocuments, ConfigLoad } from "./ports.js";
 import {
@@ -158,10 +158,7 @@ export function doctorFacts(
 ): DoctorFacts {
   return {
     ...machine,
-    urlHandler:
-      arrival.via === "link"
-        ? { kind: "arrived", delivery: arrival.delivery }
-        : machine.urlHandler,
+    urlHandler: handlerProvenBy(arrival, () => machine.urlHandler),
     config: configFacts(load, target),
     marks: stores.marks,
     clicked: stores.clicked,

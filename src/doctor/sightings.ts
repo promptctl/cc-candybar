@@ -26,6 +26,17 @@ export type ClickArrival =
   | { readonly via: "tmux-status" }
   | { readonly via: "command" };
 
+// [LAW:single-enforcer] What a click's arrival proves of the URL handler: a
+// link proves it by arriving; any other arrival proves nothing, so what is
+// known is `otherwise`'s, for that arrival.
+export const handlerProvenBy = <T>(
+  arrival: ClickArrival,
+  otherwise: (unproven: Exclude<ClickArrival, { via: "link" }>) => T,
+): { readonly kind: "arrived"; readonly delivery: Delivery } | T =>
+  arrival.via === "link"
+    ? { kind: "arrived", delivery: arrival.delivery }
+    : otherwise(arrival);
+
 // One bar a sighting drew, and where the settings that redraw it are read:
 // the session's project, and the Claude Code directory it runs with.
 export interface SightedBar extends FrameSighting {

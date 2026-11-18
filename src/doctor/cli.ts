@@ -321,10 +321,18 @@ async function doctorRun(
   if (run.kind === "failed")
     throw new Error(`the doctor's run failed: ${run.reason}`);
   const { reports } = run;
+  // [LAW:no-silent-failure] What the bar logged as an error on the way, or
+  // could put on no bar, is the command's failure beside its report.
+  const errors = bar.errors();
   return {
     stdout: reports.map(reportLine).join(""),
-    stderr: "",
-    code: reports.every((r) => r.verdict.ok) ? EXIT_OK : EXIT_FAILED,
+    stderr: errors.map((line) => `doctor: ${line}\n`).join(""),
+    code:
+      errors.length > 0
+        ? EXIT_USAGE
+        : reports.every((r) => r.verdict.ok)
+          ? EXIT_OK
+          : EXIT_FAILED,
   };
 }
 
