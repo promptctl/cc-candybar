@@ -69,36 +69,36 @@ describe("the session state's file", () => {
 
   // A daemon started after one closed reads what it closed with: flushed so
   // no debounced write outlives the temp dir.
-  const restarted = (maxSessions?: number) => {
+  const restarted = async (maxSessions?: number) => {
     const daemon = daemonOver(storage(), maxSessions);
-    daemon.stores.close();
+    await daemon.stores.close();
     return daemon.state;
   };
 
   // [LAW:no-ambient-temporal-coupling] What lands after a daemon closed stays
   // in memory: a late write can't land over the file a next daemon took up.
-  it("a write after close reaches memory and not the file", () => {
+  it("a write after close reaches memory and not the file", async () => {
     const session = storage();
     const { state, turn, stores } = daemonOver(session);
     turn((s) => s.set(S1, "theme", "nord"));
-    stores.close();
+    await stores.close();
     const closedWith = readFileSync(file, "utf8");
     expect(JSON.parse(closedWith)).toEqual({ s1: { theme: "nord" } });
 
     turn((s) => s.set(S1, "theme", "dracula"));
     expect(state.get(S1, "theme")).toBe("dracula");
     expect(stores.current().sessions[S1]).toEqual({ theme: "dracula" });
-    session.flush();
+    await session.flush();
     expect(readFileSync(file, "utf8")).toBe(closedWith);
   });
 
-  // [LAW:nothing-unseen] A flush blocks the daemon's one thread, so each one
-  // says what it wrote and how long it held the thread.
-  it("each flush logs the bytes and sessions it wrote and how long it took", () => {
+  // [LAW:nothing-unseen] Each flush says what it wrote, how long it took,
+  // and how much of that it held the daemon's one thread.
+  it("each flush logs the bytes and sessions it wrote and how long it took", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
     session.save({ [S1]: { theme: "dracula" } });
-    session.flush();
+    await session.flush();
     const bytes = Buffer.byteLength(readFileSync(file, "utf8"));
     expect(logged.at(-1)).toMatch(
       new RegExp(
@@ -110,7 +110,7 @@ describe("the session state's file", () => {
   // [LAW:parse-dont-validate] The file's keys cross the session id
   // checkpoint on load: a refused key is reported and dropped, and the
   // sessions beside it load whole.
-  it("a stored key the session id checkpoint refuses is reported and not loaded", () => {
+  it("a stored key the session id checkpoint refuses is reported and not loaded", async () => {
     writeFileSync(
       file,
       JSON.stringify({ "a/b": { theme: "nord" }, [S1]: { theme: "dracula" } }),
@@ -145,14 +145,12 @@ describe("the session state's file", () => {
       s1: { theme: "nord" },
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${file}.writing`)).toBe(false);
   });
 
-  // The rename that publishes a debounced write runs on the thread pool, so a
-  // flush can land while it is on its way. The newer state still wins, the
-  // older write's temp file is gone, and nothing calls the superseded rename
-  // a failure.
-  it("a synchronous flush while the debounced rename is in flight keeps the newer state", async () => {
+  // [LAW:no-ambient-temporal-coupling] Writes land in the order they began: a
+  // flush while the debounced write is on its way waits for it, then lands
+  // the newer state, so older state never lands over newer.
+  it("a flush while the debounced write is in flight lands after it, with the newer state", async () => {
     const logged: string[] = [];
     const session = storage((_level, line) => logged.push(line));
     const rename = fs.promises.rename;
@@ -162,45 +160,59 @@ describe("the session state's file", () => {
     });
     const spy = jest
       .spyOn(fs.promises, "rename")
-      .mockImplementation(async (from, to) => {
+      .mockImplementationOnce(async (from, to) => {
         await held;
         return rename(from, to);
       });
+    let flushed: Promise<void>;
     try {
       session.save({ [S1]: { theme: "old" } });
       await settled(() => spy.mock.calls.length === 1);
       session.save({ [S1]: { theme: "new" } });
-      session.flush();
+      flushed = session.flush();
       release();
-      // The held rename runs out: it finds no temp file, and the write ends.
-      await settled(() => logged.some((l) => l.includes("superseded")));
+      await flushed;
     } finally {
       spy.mockRestore();
     }
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
-    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
-      expect.stringContaining("superseded by a flush landed=false"),
-    ]);
+    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
-  // A flush the disk refuses supersedes nothing: the debounced write it raced
-  // still publishes, and the flush's newer state waits for the next save.
-  it("a synchronous flush the disk refuses leaves the in-flight write to land", async () => {
+  // A flush the disk refuses drops nothing: it rejects with the reason, the
+  // snapshot stays pending, and the next flush lands it.
+  it("a flush the disk refuses rejects and leaves its snapshot for the next flush", async () => {
     const logged: string[] = [];
-    // A real debounce: the newer state the failed flush leaves pending is
-    // rescheduled once the raced write lands, and must not land before the
-    // file is read back.
-    const session = new SessionFile(
-      SESSION_STATE_FILE,
-      file,
-      systemTimekeeper,
-      500,
-      (_level, line) => logged.push(line),
-    );
+    const session = storage((_level, line) => logged.push(line));
+    const spy = jest
+      .spyOn(fs.promises, "writeFile")
+      .mockRejectedValueOnce(
+        Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
+      );
+    try {
+      session.save({ [S1]: { theme: "nord" } });
+      await expect(session.flush()).rejects.toThrow(
+        expect.objectContaining({ code: "ENOSPC" }),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(existsSync(file)).toBe(false);
+    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
+    await session.flush();
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
+      s1: { theme: "nord" },
+    });
+  });
+
+  // The write in flight lands; the newer flush the disk refuses rejects and
+  // leaves its state pending, so the older state stands until a flush lands.
+  it("a flush refused behind a write in flight leaves that write's state, and its own pending", async () => {
+    const session = storage();
     const rename = fs.promises.rename;
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => {
@@ -208,100 +220,63 @@ describe("the session state's file", () => {
     });
     const renameSpy = jest
       .spyOn(fs.promises, "rename")
-      .mockImplementation(async (from, to) => {
+      .mockImplementationOnce(async (from, to) => {
         await held;
         return rename(from, to);
       });
-    const writeSpy = jest.spyOn(fs, "writeFileSync").mockImplementation(() => {
-      throw Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" });
-    });
+    let writeSpy: jest.SpiedFunction<typeof fs.promises.writeFile> | null =
+      null;
     try {
       session.save({ [S1]: { theme: "old" } });
-      await settled(() => renameSpy.mock.calls.length === 1);
+      await until(() => renameSpy.mock.calls.length === 1, "the held rename");
+      writeSpy = jest
+        .spyOn(fs.promises, "writeFile")
+        .mockRejectedValueOnce(
+          Object.assign(new Error("ENOSPC: no space"), { code: "ENOSPC" }),
+        );
       session.save({ [S1]: { theme: "new" } });
-      session.flush();
+      const flushed = session.flush();
       release();
-      await settled(() => logged.some((l) => l.includes("saved")));
+      await expect(flushed).rejects.toThrow(/ENOSPC/);
     } finally {
-      writeSpy.mockRestore();
+      writeSpy?.mockRestore();
       renameSpy.mockRestore();
     }
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "old" },
     });
-    expect(logged.filter((l) => l.includes("save failed"))).toHaveLength(1);
-    expect(logged.filter((l) => l.includes("superseded"))).toEqual([]);
-    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(1);
-    // The newer state is still pending: the next flush lands it.
-    session.flush();
+    await session.flush();
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
   });
 
-  // [LAW:no-ambient-temporal-coupling] Shutdown's synchronous flush writes the
-  // newest state; a debounced write already on its way is older, and must not
-  // land over it. Here the flush lands before that write reaches its rename:
-  // the write removes its own temp file and says it was superseded.
-  it("a synchronous flush before the debounced rename supersedes it", async () => {
+  // A snapshot its kind cannot encode fails that one write, and the next
+  // write still runs.
+  it("a snapshot that cannot be encoded fails its write, not every later one", async () => {
     const logged: string[] = [];
-    const session = storage((_level, line) => logged.push(line));
-    const mkdir = fs.promises.mkdir;
-    const spy = jest
-      .spyOn(fs.promises, "mkdir")
-      .mockImplementation(async (dir, opts) => {
-        // The write's first await: the flush lands before it resumes.
-        session.save({ [S1]: { theme: "new" } });
-        session.flush();
-        return mkdir(dir, opts);
-      });
-    try {
-      session.save({ [S1]: { theme: "old" } });
-      await settled(() => logged.some((l) => l.includes("superseded")));
-    } finally {
-      spy.mockRestore();
-    }
+    let encodable = false;
+    const session = new SessionFile(
+      {
+        ...SESSION_STATE_FILE,
+        record: (kv) => {
+          if (!encodable) throw new Error("not encodable");
+          return kv;
+        },
+      },
+      file,
+      systemTimekeeper,
+      0,
+      (_level, line) => logged.push(line),
+    );
+    session.save({ [S1]: { theme: "nord" } });
+    await expect(session.flush()).rejects.toThrow("not encodable");
+    encodable = true;
+    await session.flush();
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
+      s1: { theme: "nord" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
-    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
-    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
-      expect.stringContaining("superseded by a flush landed=false"),
-    ]);
-  });
-
-  // The other ordering: the debounced rename lands, and the flush writes over
-  // it before the write resumes. The write says it was superseded rather than
-  // `saved` after the flush's own line, and the flush's state stands.
-  it("a synchronous flush right after the debounced rename lands supersedes it", async () => {
-    const logged: string[] = [];
-    const session = storage((_level, line) => logged.push(line));
-    const rename = fs.promises.rename;
-    const spy = jest
-      .spyOn(fs.promises, "rename")
-      .mockImplementation(async (from, to) => {
-        await rename(from, to);
-        // On disk, but the write has not resumed: the flush lands in between.
-        session.save({ [S1]: { theme: "new" } });
-        session.flush();
-      });
-    try {
-      session.save({ [S1]: { theme: "old" } });
-      await settled(() => logged.some((l) => l.includes("superseded")));
-    } finally {
-      spy.mockRestore();
-    }
-    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
-      s1: { theme: "new" },
-    });
-    expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
-    expect(logged.filter((l) => l.includes("superseded"))).toEqual([
-      expect.stringContaining("superseded by a flush landed=true"),
-    ]);
-    // The flush's `saved` is the last one.
-    expect(logged.filter((l) => l.includes("saved")).length).toBe(1);
   });
 
   // A disk that refuses a write is retried by the next save or shutdown's
@@ -325,40 +300,40 @@ describe("the session state's file", () => {
     );
   });
 
-  it("survives a daemon restart: a fresh instance reads identical values", () => {
+  it("survives a daemon restart: a fresh instance reads identical values", async () => {
     const first = daemonOver(storage());
     first.turn((s) => s.set(S1, "theme", "dracula"));
     first.turn((s) => s.set(S1, "displayStyle", "capsule"));
     first.turn((s) => s.set(S2, "endcaps", "plain"));
-    first.stores.close();
+    await first.stores.close();
 
-    const reborn = restarted();
+    const reborn = await restarted();
     expect(reborn.get(S1, "theme")).toBe("dracula");
     expect(reborn.get(S1, "displayStyle")).toBe("capsule");
     expect(reborn.get(S2, "endcaps")).toBe("plain");
   });
 
-  it("clear() persists removal across a restart", () => {
+  it("clear() persists removal across a restart", async () => {
     const first = daemonOver(storage());
     first.turn((s) => s.set(S1, "endcaps", "plain"));
     first.turn((s) => s.clear(S1, "endcaps"));
-    first.stores.close();
+    await first.stores.close();
 
-    expect(restarted().get(S1, "endcaps")).toBeNull();
+    expect((await restarted()).get(S1, "endcaps")).toBeNull();
     expect(onDisk()).toEqual({});
   });
 
   // [LAW:types-are-the-program] Both copies are ordered by write, so the
   // file keeps the recency the renderer's bound evicts by.
-  it("a restart keeps the order the sessions were last written in", () => {
+  it("a restart keeps the order the sessions were last written in", async () => {
     const first = daemonOver(storage());
     first.turn((s) => s.set(A_2, "t", "1"));
     first.turn((s) => s.set(B, "t", "2"));
     first.turn((s) => s.set(A_2, "t", "3"));
-    first.stores.close();
+    await first.stores.close();
     expect(Object.keys(onDisk())).toEqual(["b", "a"]);
 
-    const reborn = restarted(2);
+    const reborn = await restarted(2);
     reborn.set(C, "t", "4");
     expect(reborn.get(B, "t")).toBeNull();
     expect(reborn.get(A_2, "t")).toBe("3");
@@ -382,9 +357,8 @@ describe("the session state's file", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
       await settled(() => existsSync(file));
-      expect(existsSync(`${file}.writing`)).toBe(false);
 
-      const reborn = restarted();
+      const reborn = await restarted();
       expect(reborn.get(S1, "theme")).toBe("nord");
       expect(reborn.get(S1, "style")).toBe("muted");
     } finally {
@@ -392,24 +366,24 @@ describe("the session state's file", () => {
     }
   });
 
-  it("corrupt file hydrates to empty state, not a throw", () => {
+  it("corrupt file hydrates to empty state, not a throw", async () => {
     writeFileSync(file, "{ not valid json");
-    const ss = restarted();
+    const ss = await restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
-  it("wrong-shape file hydrates to empty state", () => {
+  it("wrong-shape file hydrates to empty state", async () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: 42 } }));
-    const ss = restarted();
+    const ss = await restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
-  it("missing file hydrates to empty state", () => {
-    const ss = restarted();
+  it("missing file hydrates to empty state", async () => {
+    const ss = await restarted();
     expect(ss.get(S1, "theme")).toBeNull();
   });
 
-  it("bounds the store: oldest idle session is evicted past the cap", () => {
+  it("bounds the store: oldest idle session is evicted past the cap", async () => {
     const ss = new SessionState(undefined, 2);
     ss.set(A_2, "theme", "1");
     ss.set(B, "theme", "2");
@@ -421,7 +395,7 @@ describe("the session state's file", () => {
 
   // A read moves nothing, so the host's copy, which hears only writes, is
   // ordered as this one is.
-  it("a read does not protect a session from eviction", () => {
+  it("a read does not protect a session from eviction", async () => {
     const ss = new SessionState(undefined, 2);
     ss.set(A_2, "theme", "1");
     ss.set(B, "theme", "2");
@@ -431,7 +405,7 @@ describe("the session state's file", () => {
     expect(ss.get(B, "theme")).toBe("2");
   });
 
-  it("over-cap file is trimmed on hydrate and the trim is persisted to disk", () => {
+  it("over-cap file is trimmed on hydrate and the trim is persisted to disk", async () => {
     writeFileSync(
       file,
       JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
@@ -441,21 +415,21 @@ describe("the session state's file", () => {
     // host hears the trim with the first turn, whatever it wrote.
     expect(state.get(A_2, "t")).toBeNull();
     turn(() => {});
-    stores.close();
+    await stores.close();
     expect(Object.keys(onDisk())).toEqual(["b", "c"]);
   });
 
-  it("clear() of the last key removes the session entirely (no empty husk)", () => {
+  it("clear() of the last key removes the session entirely (no empty husk)", async () => {
     const { turn, stores } = daemonOver(storage());
     turn((s) => {
       s.set(S1, "endcaps", "plain");
       s.clear(S1, "endcaps");
     });
-    stores.close();
+    await stores.close();
     expect(onDisk()).toEqual({});
   });
 
-  it("clear() promotes a surviving session so it isn't evicted early", () => {
+  it("clear() promotes a surviving session so it isn't evicted early", async () => {
     const ss = new SessionState(undefined, 2);
     ss.set(A_2, "theme", "1");
     ss.set(A_2, "style", "x");
@@ -466,7 +440,7 @@ describe("the session state's file", () => {
     expect(ss.get(B, "theme")).toBeNull();
   });
 
-  it("a failed write keeps pending and retries on the next flush", () => {
+  it("a failed write keeps pending and retries on the next flush", async () => {
     // Parent of the target is a regular file, so mkdir/write/rename fails.
     const blocker = join(dir, "blocker");
     writeFileSync(blocker, "");
@@ -478,30 +452,31 @@ describe("the session state's file", () => {
       0,
     );
     session.save({ [S1]: { theme: "nord" } });
-    session.flush(); // write fails; snapshot must NOT be dropped
+    // The write fails; the snapshot must NOT be dropped.
+    await expect(session.flush()).rejects.toThrow(/EEXIST/);
     expect(existsSync(badPath)).toBe(false);
     // Make the path writable, then flush again — the retained snapshot lands.
     rmSync(blocker);
-    session.flush();
+    await session.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
     expect(onDisk.s1.theme).toBe("nord");
   });
 
-  it("writes the state file with owner-only (no group/other) permissions", () => {
+  it("writes the state file with owner-only (no group/other) permissions", async () => {
     const session = storage();
     session.save({ [S1]: { theme: "nord" } });
-    session.flush();
+    await session.flush();
     expect(statSync(file).mode & 0o077).toBe(0);
   });
 
-  it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
+  it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", async () => {
     const first = daemonOver(storage());
     first.turn((s) => s.set(__PROTO__, "theme", "evil"));
-    first.stores.close();
+    await first.stores.close();
     // Object.prototype untouched — no pollution.
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
     // The malicious key survives as ordinary stored data.
-    const reborn = restarted();
+    const reborn = await restarted();
     expect(reborn.get(__PROTO__, "theme")).toBe("evil");
   });
 });

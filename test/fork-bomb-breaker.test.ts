@@ -281,32 +281,27 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   });
 });
 
-// ─── realBreakerDeps.writeEntry: no orphaned tmp file on a rename failure ───
+// ─── realBreakerDeps.writeEntry: no staged file left on a rename failure ───
 //
-// [LAW:no-silent-failure] Mirrors socket-lease.ts's writeLease cleanup for
-// the identical write-tmp-then-rename shape: if the rename fails after the
-// tmp file was created, the tmp file must not be left behind (listRegistryFiles
-// only collects *.json, so a stray .tmp would never be swept by anything).
+// [LAW:no-silent-failure] listRegistryFiles only collects *.json, so a stray
+// staged file would never be swept by anything: a failed rename removes it.
 
-describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
-  test("rethrows and cleans up the tmp file when the rename target can't accept it", async () => {
+describe("realBreakerDeps writeEntry (no staged file left)", () => {
+  test("rethrows and removes the staged file when the rename target can't accept it", async () => {
     const dir = freshDir();
     fs.mkdirSync(dir, { recursive: true });
     const filePath = path.join(dir, "pid-123.json");
-    // writeFileSync(tmp) must SUCCEED (tmp is a sibling file in an existing
-    // dir) while renameSync(tmp, filePath) FAILS — isolating the rename step
-    // specifically. Renaming a file onto an existing directory is a
-    // reliable, platform-independent way to force exactly that: filePath
-    // itself is a directory, so the rename is rejected (EISDIR) without
-    // ever touching tmp's own write.
+    // The staged write succeeds (a sibling file in an existing dir) while the
+    // rename fails: renaming a file onto a non-empty directory is refused on
+    // every platform, without ever touching the staged write.
     fs.mkdirSync(filePath);
+    fs.writeFileSync(path.join(filePath, "occupied"), "");
     const identity = { pid: 123, startTime: "st" };
-    const tmp = `${filePath}.${identity.pid}.tmp`;
     try {
       expect(() =>
         realBreakerDeps(WORLD, null, dir).writeEntry(filePath, identity),
       ).toThrow();
-      expect(fs.existsSync(tmp)).toBe(false);
+      expect(fs.readdirSync(dir)).toEqual(["pid-123.json"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

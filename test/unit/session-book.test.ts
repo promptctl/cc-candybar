@@ -57,12 +57,12 @@ const durable = (dir: string): DurableContext => ({
 
 // A book's file in memory: what it holds when the book loads, and every save.
 function storage(held: ReadonlyMap<SessionId, DurableContext> = new Map()) {
-  const saves: Readonly<Record<SessionId, DurableContext>>[] = [];
+  const saves: Array<Readonly<Record<SessionId, DurableContext>>> = [];
   let flushes = 0;
   const storage: SessionFileStorage<DurableContext> = {
     load: () => held,
     save: (snapshot) => void saves.push(snapshot),
-    flush: () => void (flushes += 1),
+    flush: async () => void (flushes += 1),
   };
   return { storage, saves, flushes: () => flushes };
 }

@@ -119,9 +119,9 @@ export class HeldStores {
   // lands, and what is written after it (a render that was awaiting, a run
   // settling) stays in memory, so it never lands over the files a next
   // daemon has taken up.
-  close(): void {
-    this.storage.session.flush();
+  close(): Promise<void> {
     this.closed = true;
+    return this.storage.session.flush();
   }
 }
 

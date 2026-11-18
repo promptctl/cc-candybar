@@ -37,7 +37,7 @@ export function productionAdapters(
       fileStorage(profilePaths(paths, name), log, machine),
     sessionBook: (log) =>
       new SessionFile(SESSION_BOOK_FILE, paths.sessionBook, machine, 500, log),
-    linkKey: linkKeyFromFile(linkKeyFile(paths.state)),
+    linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,

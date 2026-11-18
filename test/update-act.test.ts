@@ -278,6 +278,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
       ).toEqual({
         stands: true,
         signalled: false,
+        leftover: null,
       });
       jest.runOnlyPendingTimers();
       expect(kill).not.toHaveBeenCalledWith(-424242, "SIGKILL");
@@ -300,6 +301,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
       ).toEqual({
         stands: true,
         signalled: true,
+        leftover: null,
       });
       expect(() => jest.runOnlyPendingTimers()).not.toThrow();
       expect(kill).toHaveBeenCalledWith(-424242, "SIGKILL");
@@ -316,6 +318,7 @@ describe("launchJobSync: a job whose output and verdict are files", () => {
     ).toEqual({
       stands: false,
       signalled: false,
+      leftover: null,
     });
   });
 

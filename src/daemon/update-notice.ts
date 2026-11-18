@@ -385,7 +385,11 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       );
     }
     if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
-    const { stands, signalled } = endOverdue(actsDir, facts, launcher);
+    const { stands, signalled, leftover } = endOverdue(
+      actsDir,
+      facts,
+      launcher,
+    );
     watched = { ...watched, ended: true };
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
@@ -393,6 +397,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
       "error",
       `apply-update: act ${facts.act} ${why} after ${watched.spentMs}ms watched (${watched.unwatchedMs}ms unwatched); ${ending}`,
     );
+    if (leftover !== null) log("warn", `apply-update: ${leftover}`);
   }
 
   // Notices an act ending, whichever daemon started it: a success means the
