@@ -69,7 +69,7 @@ function rig({ throwing = new Set<string>() } = {}) {
     watchers: {
       acquire: (_key, targets, changed) => {
         watched.push({ targets, changed: () => changed({} as never) });
-        return { release: () => {}, deaf: [] };
+        return { release: () => {}, deaf: [], ridesStream: false };
       },
     },
     clock,
@@ -115,20 +115,20 @@ test("a request's declaration over a landed entry reads nothing", async () => {
   expect(calls).toEqual([]);
 });
 
-test("the watch hears the transcript and the settings file by name, and a write it hears reads every lane again", async () => {
+test("the watch polls the transcript and the settings file at their paths, and a change it hears reads every lane again", async () => {
   const { clock, calls, watched, lanes } = rig();
   close.push(() => lanes.close());
   const holds = new Holds();
   holds.declare(() => lanes.declare(holds, FOLLOWED));
   await clock.settle(0);
-  expect(watched.map((w) => w.targets.dirs)).toEqual([
-    [
-      {
-        path: "/home/t/.claude/projects/p",
-        filenames: ["lanes-test.jsonl"],
-      },
-      { path: "/home/t/.claude", filenames: ["settings.json"] },
-    ],
+  expect(watched.map((w) => w.targets)).toEqual([
+    {
+      dirs: [],
+      polled: [
+        "/home/t/.claude/projects/p/lanes-test.jsonl",
+        "/home/t/.claude/settings.json",
+      ],
+    },
   ]);
   calls.length = 0;
   watched[0]!.changed();

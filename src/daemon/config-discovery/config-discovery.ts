@@ -8,7 +8,6 @@
 // output named, keyed by `originKey`, and one it stops naming is dropped
 // with its watch.
 
-import fs from "node:fs";
 import path from "node:path";
 import { originKey, type RenderOrigin } from "../../config-hint.js";
 import type {
@@ -23,8 +22,7 @@ import {
   type SharedFacts,
 } from "./discover.js";
 import { REPO_PLUGIN_DIR } from "./plugin-folders.js";
-import { repoConfigsDir, repoConfigsPath } from "./repo-configs.js";
-import { nearestWatchTarget } from "../../utils/watch-target.js";
+import { repoConfigsPath } from "./repo-configs.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
@@ -57,18 +55,15 @@ export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
-  // origin. The book has a folder of its own, made here so the watch never
-  // falls back to the state directory, where the daemon's log writes on every
-  // request.
+  // origin.
   private readonly answersWatch: WatcherHandle;
   private closed = false;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
-    fs.mkdirSync(repoConfigsDir(deps.stateDir), { recursive: true });
-    const { dir, name } = nearestWatchTarget(repoConfigsPath(deps.stateDir));
+    const answers = repoConfigsPath(deps.stateDir);
     this.answersWatch = deps.watchers.acquire(
-      `repo-configs:${dir}/${name}`,
-      { dirs: [{ path: dir, filenames: [name] }] },
+      `repo-configs:${answers}`,
+      { dirs: [], polled: [answers] },
       () => this.heard(this.asking(), "answers-watch"),
     );
   }
@@ -237,7 +232,7 @@ export class ConfigDiscovery {
     const { projectDir, cwd } = origin;
     this.deps.log(
       "info",
-      `config watch bound projectDir=${projectDir} cwd=${cwd} dirs=${paths.targets.dirs.map((d) => d.path).join(",")}`,
+      `config watch bound projectDir=${projectDir} cwd=${cwd} dirs=${paths.targets.dirs.map((d) => d.path).join(",")} polled=${paths.targets.polled.join(",")}`,
     );
     for (const { path: p, reason } of paths.unresolved)
       this.deps.log(

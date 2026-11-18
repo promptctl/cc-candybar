@@ -1374,11 +1374,13 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
     fs.mkdirSync(locked);
     fs.chmodSync(locked, 0);
     try {
+      // A folder is watched whole, by the OS; a file is polled, and its
+      // own read says what refused it.
       const f = path.join(locked, "data");
       const { registry } = make();
       registry.declareFile("val", f, {
         parse: text("(none)"),
-        cache: { kind: "watch_file", path: f },
+        cache: { kind: "watch_file", path: locked },
       });
       expect(registry.getLastError("val")?.message).toMatch(
         /watch_file .*cannot watch/,
@@ -2006,10 +2008,12 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       missedSince: null,
     };
 
+    // A folder watched whole rides the OS's event stream, which a stall
+    // stops; a file is polled, which it does not.
     function rig(dir: string) {
       const watched = path.join(dir, "watched");
       const data = path.join(dir, "data");
-      fs.writeFileSync(watched, "w");
+      fs.mkdirSync(watched);
       fs.writeFileSync(data, "before");
       const events = handDelivery();
       const store = new VariableStore(systemTimekeeper);
@@ -2025,7 +2029,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       return { watched, data, events, store, registry, cache };
     }
 
-    it("every watch_file variable, in a view too, says so with the span's start; a ttl variable does not", async () => {
+    it("every watch_file variable on a folder, in a view too, says so with the span's start; a ttl variable and one on a file do not", async () => {
       const { dir, cleanup } = makeTmpDir();
       try {
         const { watched, data, events, store, registry, cache } = rig(dir);
@@ -2042,6 +2046,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           cache: { kind: "ttl", durationMs: 60_000 },
         });
         view.declareFile("own", data, { parse: TEXT, cache });
+        registry.declareFile("polled", data, {
+          parse: TEXT,
+          cache: { kind: "watch_file", path: data },
+        });
         await ran(registry);
         await ran(view);
         expect(view.cachePolicyFaults().size).toBe(0);
@@ -2207,17 +2215,17 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       await ran(home);
       await ran(view);
       expect(watchers.size()).toBe(1);
+      // The file is polled: one path read, no OS watch.
       expect(counters).toMatchObject({
         watchersOpened: 1,
-        dirWatchesOpened: 1,
+        dirWatchesOpened: 0,
       });
+      expect(watchers.polledPaths()).toBe(1);
       // A run nobody holds is dropped, and its watch closed with it.
       heldOf(view).held.close();
       heldOf(home).held.close();
-      expect(counters).toMatchObject({
-        watchersClosed: 1,
-        dirWatchesClosed: 1,
-      });
+      expect(counters).toMatchObject({ watchersClosed: 1 });
+      expect(watchers.polledPaths()).toBe(0);
       expect(watchers.size()).toBe(0);
     } finally {
       cleanup();
@@ -2351,10 +2359,9 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
 
     // No real directory can be made to fail its watch on demand, so each
     // directory's handle is a stand-in the test can make fail. A failed
-    // directory is the watcher registry's period to open again: an event on
-    // another directory of the watch re-derives and re-reads, and keeps the
-    // failed one as it is.
-    it("a directory whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
+    // folder is the watcher registry's period to open again: a re-read keeps
+    // it as it is.
+    it("a folder whose watch fails is the variable's fault and a re-read, and is opened again only by the period's judgment", async () => {
       const { dir, cleanup } = makeTmpDir();
       const opened: Array<{
         dir: string;
@@ -2372,11 +2379,10 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }) as unknown as typeof fs.watch);
       try {
         const real = fs.realpathSync(dir);
-        fs.mkdirSync(path.join(dir, "one"));
-        const state = path.join(dir, "one", "state");
-        const a = path.join(dir, "a");
+        const one = path.join(real, "one");
+        fs.mkdirSync(one);
+        const state = path.join(one, "state");
         fs.writeFileSync(state, "v1");
-        fs.symlinkSync(state, a);
         const watchers = new WatcherRegistry({
           clock: systemTimekeeper,
           logger: () => {},
@@ -2390,14 +2396,13 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
           undefined,
           runsOver({ watchers }),
         );
-        registry.declareFile("val", a, {
+        registry.declareFile("val", state, {
           parse: TEXT,
-          cache: { kind: "watch_file", path: a },
+          cache: { kind: "watch_file", path: one },
         });
         await ran(registry);
         expect(store.read("val")).toBe("v1");
         const opensOf = (d: string) => opened.filter((o) => o.dir === d);
-        const one = path.join(real, "one");
         expect(opensOf(one)).toHaveLength(1);
         expect(registry.cachePolicyFaults().has("val")).toBe(false);
 
@@ -2412,16 +2417,6 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         );
         expect(opensOf(one)).toHaveLength(1);
 
-        // An event on the link's own directory re-derives and re-reads, and
-        // the failed directory stays as it is.
-        fs.writeFileSync(state, "v3");
-        opensOf(real)[0]!.listener("rename", "a");
-        await until(() => store.read("val") === "v3", "the store reading v3");
-        expect(opensOf(one)).toHaveLength(1);
-        expect(registry.cachePolicyFaults().get("val")?.message).toMatch(
-          /watching .*one failed — EMFILE/,
-        );
-
         // The period's judgment opens it again, and the fault clears.
         watchers.judge();
         expect(opensOf(one)).toHaveLength(2);
@@ -2435,11 +2430,11 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       }
     });
 
-    // Linux's inotify follows the inode, so a handle on a directory removed
-    // and made again at its path hears nothing more, with no error to say so;
-    // the stand-in handles let every platform see that the watch moves to the
-    // new directory, and hears the file through it.
-    it("a watched directory removed and made again is watched again", async () => {
+    // Linux's inotify follows the inode, so a handle on a folder removed and
+    // made again at its path hears nothing more, with no error to say so; the
+    // stand-in handles let every platform see that the watch moves to the new
+    // folder, and hears a child through it.
+    it("a watched folder removed and made again is watched again", async () => {
       const { dir, cleanup } = makeTmpDir();
       const opened: Array<{
         dir: string;
@@ -2465,7 +2460,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
         const { store, registry } = make();
         registry.declareFile("val", state, {
           parse: TEXT,
-          cache: { kind: "watch_file", path: state },
+          cache: { kind: "watch_file", path: one },
         });
         await ran(registry);
         expect(store.read("val")).toBe("v1");

@@ -303,6 +303,7 @@ export async function replyTo(
         tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
+        polledPaths: watcherRegistry.polledPaths(),
         nextRestartReason: limits.describeNextRestart(),
         clients: renderSightings.list(instantAt(clock)),
         bundle,

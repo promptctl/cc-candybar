@@ -366,7 +366,9 @@ export function withTranscriptLanes<O extends FixtureOwners>(
   return Object.assign(laned, {
     transcriptLanes: new TranscriptLanes({
       owners: laned,
-      watchers: { acquire: () => ({ release: () => {}, deaf: [] }) },
+      watchers: {
+        acquire: () => ({ release: () => {}, deaf: [], ridesStream: false }),
+      },
       clock,
       logger: owners.log,
       ledger: new RefreshLedger(),

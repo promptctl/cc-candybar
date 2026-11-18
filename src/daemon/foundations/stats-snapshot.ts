@@ -154,6 +154,7 @@ export interface StatsSnapshot {
   // `dirs`: the OS directory watches the slots share, open now, opened and
   // closed, a reopen counting one of each; on macOS each open or close
   // rebuilds the one FSEvents stream, so this is the churn that costs.
+  // `polled`: the paths the sweep reads now, which hold no OS watch.
   watchers: {
     active: number;
     opened: number;
@@ -161,6 +162,7 @@ export interface StatsSnapshot {
     refused: number;
     errors: number;
     dirs: { active: number; opened: number; closed: number };
+    polled: number;
   };
   subprocesses: {
     total: number;

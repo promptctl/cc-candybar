@@ -48,7 +48,7 @@ Spawns originate from cache-policy callbacks registered against the MobX store a
 | Source kind | Cache trigger | When it spawns |
 |---|---|---|
 | `kind: "shell"` | `ttl` | TTL timer fires (interval-driven; a ttl below 500ms is refused by the host's judge, so the command never runs) |
-| `kind: "shell"` | `watch_file` | fs.watch event on the named path |
+| `kind: "shell"` | `watch_file` | a change at the named path: a file is polled each second, a folder is watched by fs.watch |
 | `kind: "shell"` | `depends_on` | MobX reaction: any listed var changes |
 | `kind: "shell"` | `key` | MobX reaction: rendered key template changes |
 | `kind: "shell"` | `never` | once, at declaration |

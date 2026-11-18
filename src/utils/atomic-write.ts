@@ -195,11 +195,10 @@ export interface LinkWalk {
 // [LAW:single-enforcer] Every path `at` passes through on the way to the
 // file a write lands in: `at` itself, then each link's target in turn, the
 // last entry a non-link or a path that does not exist. The writer wants the
-// last; a watcher wants them all, because a chain's content changes wherever
-// any one of its links is re-pointed, and a directory watch reports only its
-// own children. A walk the kernel stops (a loop, an unreadable component)
-// keeps the hops it reached, so a watcher still hears the directories it got
-// to. A linked directory on the way
+// last; a watcher polls them all, because a chain's content changes wherever
+// any one of its links is re-pointed. A walk the kernel stops (a loop, an
+// unreadable component) keeps the hops it reached, so a watcher still hears
+// the paths it got to. A linked directory on the way
 // needs resolving only where a relative link is read against it.
 export function walkLinks(at: string): LinkWalk {
   const hops = [at];

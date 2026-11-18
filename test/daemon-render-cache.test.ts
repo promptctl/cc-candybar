@@ -63,7 +63,6 @@ import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import {
-  repoConfigsDir,
   repoConfigsPath,
 } from "../src/daemon/config-discovery/repo-configs";
 import { locations, stateDir } from "../src/daemon/paths";
@@ -540,8 +539,8 @@ describe("RenderCache", () => {
       lines.filter((l) =>
         l.startsWith(`config watch bound projectDir=${dir} cwd=${dir} dirs=`),
       );
-    const hears = (line: string, dir: string): boolean =>
-      / dirs=(.*)$/.exec(line)![1]!.split(",").includes(realpathSync(dir));
+    const polls = (line: string, at: string): boolean =>
+      / polled=(\S*)/.exec(line)![1]!.split(",").includes(at);
 
     test("a write-then-rename of the link's target reloads, every time", async () => {
       const { dir, cleanup } = mkConfigDir();
@@ -559,10 +558,10 @@ describe("RenderCache", () => {
         const entry = cache.getOrCreate(originAt(dir, dir, undefined));
         expect(entry.configLayers).toEqual([link]);
         expect(literalX(entry)).toBe("first");
-        // Bound once, hearing the target's directory as well as the link's.
+        // Bound once, polling the target as well as the link.
         expect(bound(lines, dir)).toHaveLength(1);
-        expect(hears(bound(lines, dir)[0]!, join(dir, "dotfiles"))).toBe(true);
-        expect(hears(bound(lines, dir)[0]!, dir)).toBe(true);
+        expect(polls(bound(lines, dir)[0]!, target)).toBe(true);
+        expect(polls(bound(lines, dir)[0]!, link)).toBe(true);
 
         // A menu click: the daemon writes through the link.
         await reloads.after(entry, () =>
@@ -607,10 +606,10 @@ describe("RenderCache", () => {
           renameSync(`${link}.tmp`, link);
         });
         expect(literalX(entry)).toBe("second");
-        // The target set moved (first.json5 → second.json5 in dotfiles), so
-        // the entry rebound once, still hearing the dotfiles directory.
+        // The target set moved (first.json5 → second.json5), so the entry
+        // rebound once, polling the new target.
         expect(bound(lines, dir)).toHaveLength(2);
-        expect(hears(bound(lines, dir)[1]!, join(dir, "dotfiles"))).toBe(true);
+        expect(polls(bound(lines, dir)[1]!, second)).toBe(true);
         // The rebind follows: a write to the new target reloads too.
         await reloads.after(entry, () =>
           writeAtomic(second, configWith("third")),
@@ -644,12 +643,9 @@ describe("RenderCache", () => {
         symlinkSync(current, link);
         const entry = cache.getOrCreate(originAt(dir, dir, undefined));
         expect(literalX(entry)).toBe("work");
-        // Every hop's directory is heard.
-        expect(hears(bound(lines, dir)[0]!, dir)).toBe(true);
-        expect(hears(bound(lines, dir)[0]!, join(dir, "dotfiles"))).toBe(true);
-        expect(
-          hears(bound(lines, dir)[0]!, join(dir, "dotfiles", "profiles")),
-        ).toBe(true);
+        // Every hop is polled.
+        for (const hop of [link, current, work])
+          expect(polls(bound(lines, dir)[0]!, hop)).toBe(true);
 
         await reloads.after(entry, () => {
           symlinkSync(home, `${current}.tmp`);
@@ -692,13 +688,15 @@ describe("RenderCache", () => {
     });
   });
 
-  // A reload that keeps its watch retries nothing: a config folder the OS
+  // A reload that keeps its watch retries nothing: a plugin root the OS
   // refused waits for the registry's period or a new slot on it, so the fault
   // the bar shows stands while the OS still refuses and clears within one
   // period of the OS watching it again.
-  test("a refused config directory stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
+  test("a refused plugin root stays deaf through a refused retry, is heard again on the period's judgment, and a reload leaves it as it is", () => {
     const { dir, cleanup } = mkConfigDir();
-    const at = realpathSync(dir);
+    const plugins = join(dir, ".cc-candybar", "plugins");
+    mkdirSync(plugins, { recursive: true });
+    const at = realpathSync(plugins);
     const watch = fs.watch.bind(fs);
     let refuse = true;
     const spy = jest.spyOn(fs, "watch").mockImplementation(((
@@ -729,18 +727,15 @@ describe("RenderCache", () => {
     }
   });
 
-  // On Linux a directory watch binds an inode, and a strict ancestor renamed
-  // away reports nothing to it, so an entry whose project directory's parent
-  // is swapped (a project re-cloned beside the old one and moved into place)
-  // keeps a handle on the old tree, listening and deaf to the new one. The
-  // period's judgment rebinds it, and the edit after that is heard.
-  test("an entry whose project directory's parent is replaced by rename reads the new tree on the period's judgment, and hears the edit after it", async () => {
+  // A project re-cloned beside the old one and moved into place: the config
+  // is polled at its path, so the tree now there is read on the next sweep,
+  // and the edit after it is heard.
+  test("an entry whose project directory's parent is replaced by rename reads the new tree, and hears the edit after it", async () => {
     const root = realpathSync(
       mkdtempSync(join(tmpdir(), "cc-candybar-cache-swap-")),
     );
     const proj = join(root, "proj", "app");
-    const { cache, originAt, cleanups, reloads, watchers, counters } =
-      makeCache();
+    const { cache, originAt, cleanups, reloads } = makeCache();
     try {
       mkdirSync(proj, { recursive: true });
       answerRepo(proj);
@@ -767,12 +762,6 @@ describe("RenderCache", () => {
       renameSync(join(root, "proj"), join(root, "old"));
       mkdirSync(proj, { recursive: true });
       writeFileSync(cfg, config("new"));
-      // On macOS the watch follows the path and would hear the write on its
-      // own, so what proves the judgment on both platforms is the handle it
-      // closes, before any window can land.
-      const closed = counters.dirWatchesClosed;
-      watchers.judge();
-      expect(counters.dirWatchesClosed).toBe(closed + 1);
       await until(
         () => x() === "new",
         "the entry read the tree now at its path",
@@ -1079,16 +1068,13 @@ describe("RenderCache", () => {
     }
   });
 
-  // The book's folder, never the state directory, whose log writes on every
-  // request.
-  test("the cache watches the answers' folder, not the state directory", () => {
+  // The book is polled at its path. No OS watch sits on the state directory,
+  // whose log writes on every request, or on the book's folder.
+  test("the answers' book is polled, and no OS watch sits on the state directory", () => {
     const { cleanups, watchers } = makeCache();
     try {
-      const dirs = watchers.watchedDirs();
-      expect(dirs).toContain(
-        realpathSync.native(repoConfigsDir(stateDir(host))),
-      );
-      expect(dirs).not.toContain(realpathSync.native(stateDir(host)));
+      expect(watchers.watchedDirs()).toEqual([]);
+      expect(watchers.polledPaths()).toBe(1);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -1491,6 +1477,9 @@ describe("RenderCache close", () => {
       }
       cache.close();
       expect(cache.size).toBe(0);
+      // The registry's sweep runs while the host polls the answers' book, so
+      // the count is taken once the host has let its watches go too.
+      configs.close();
       expect(jest.getTimerCount()).toBe(0);
       // Every way a state is built refuses: an entry, or a reload of one.
       expect(() => cache.getOrCreate(originAt(dir, dir, undefined))).toThrow(

@@ -10,6 +10,7 @@
 // renderer records every frame's warnings by value.
 
 import {
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   rmSync,
@@ -234,18 +235,20 @@ describe("a daemon render's event names every warning, and the indicator offers 
     }
   });
 
-  // No edit in a folder the OS refuses reloads, so the fact stands on every bar
-  // drawn from an entry that watches it, a bar drawn over a failed load too,
-  // and each bar reads it at its draw, so the next one after the OS listens
-  // says nothing.
-  test("a config folder the OS refuses shows in the indicator on every bar drawn from its entry until the OS listens", async () => {
+  // No plugin installed in a folder the OS refuses reloads, so the fact stands
+  // on every bar drawn from an entry that watches it, a bar drawn over a
+  // failed load too, and each bar reads it at its draw, so the next one after
+  // the OS listens says nothing.
+  test("a plugin root the OS refuses shows in the indicator on every bar drawn from its entry until the OS listens", async () => {
     const dir = realpathSync(
       mkdtempSync(path.join(os.tmpdir(), "cc-candybar-refused-e2e-")),
     );
+    const plugins = path.join(dir, ".cc-candybar", "plugins");
+    mkdirSync(plugins, { recursive: true });
     const broken = path.join(dir, "broken.json5");
     writeFileSync(broken, "{ nope");
-    const refusal = `config watch: cannot watch ${dir} — EMFILE`;
-    const refused = new Set([dir]);
+    const refusal = `config watch: cannot watch ${plugins} — EMFILE`;
+    const refused = new Set([plugins]);
     fakeWatches(refused);
     try {
       const sid = "refused";
@@ -277,7 +280,7 @@ describe("a daemon render's event names every warning, and the indicator offers 
 
       // The OS listens again. No period runs here; a new slot on the folder
       // retries it as the period would.
-      refused.delete(dir);
+      refused.delete(plugins);
       const heard = path.join(dir, "heard.json5");
       writeFileSync(heard, "{ segments: {} }");
       await render(daemon, "refused-heard", dir, {}, [
