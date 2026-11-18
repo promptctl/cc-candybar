@@ -220,9 +220,9 @@ function holdKey(root: string): string {
 // below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
 // nothing staged — rewrites nothing but its ref.
 //
-// The tree is `refs/heads`, not `refs`: on Linux a recursive watch is Node's
-// own walk, one inotify watch and one stat per entry and a re-read of a
-// directory on every event in it, so its cost is the tree's size. Local
+// The tree is `refs/heads`, not `refs`: on Linux the registry hears a tree as
+// one inotify watch per directory and lists the tree on every event in it, so
+// its cost is the tree's size. Local
 // branches are tens to hundreds; remote refs and tags are the remote's to
 // grow, and a fetch rewriting thousands of them would re-walk the directory
 // per ref. Those still reach the bar on the period.
