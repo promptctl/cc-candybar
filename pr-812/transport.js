@@ -29783,28 +29783,41 @@ function readJobEnd(status) {
   throw new Error(`${status}: not a job verdict: ${JSON.stringify(text4)}`);
 }
 function endJob(spawner, clock, pid2, status, end) {
-  let linked;
-  try {
-    linked = publishByLink(status, `${formatJobEnd(end)}
-`);
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      return { stands: false, signalled: false, leftover: null };
+  const signal = () => {
+    const signalled = spawner.signalJob(pid2, "SIGTERM");
+    if (signalled) {
+      clock.after(
+        TIMEOUT_KILL_GRACE_MS,
+        () => spawner.signalJob(pid2, "SIGKILL"),
+        {
+          unref: true
+        }
+      );
     }
+    return signalled;
+  };
+  let landed;
+  try {
+    landed = landVerdict(status, end);
+  } catch (err) {
+    signal();
     throw err;
   }
-  const stands = linked.outcome === "published";
-  const signalled = spawner.signalJob(pid2, "SIGTERM");
-  if (signalled) {
-    clock.after(
-      TIMEOUT_KILL_GRACE_MS,
-      () => spawner.signalJob(pid2, "SIGKILL"),
-      {
-        unref: true
-      }
+  return { ...landed, signalled: signal() };
+}
+function landVerdict(status, end) {
+  try {
+    const { outcome, leftover } = publishByLink(
+      status,
+      `${formatJobEnd(end)}
+`
     );
+    return { verdict: outcome, leftover };
+  } catch (err) {
+    if (err.code === "ENOENT")
+      return { verdict: "gone", leftover: null };
+    throw err;
   }
-  return { stands, signalled, leftover: linked.leftover };
 }
 function createLauncher(owner, clock, spawner) {
   return launcherWithState(owner, clock, spawner).launcher;
@@ -50789,7 +50802,8 @@ function makeActReader(dir, read2, jobs, clock) {
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-    if (!fs_default.existsSync(actDir)) return null;
+    if (!fs_default.existsSync(actDir))
+      return known.ours ? { act: act2, record: record2, alive: true, end: null, lastLine: null } : null;
     const facts = { act: act2, record: record2, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
@@ -63601,13 +63615,17 @@ function makeUpdateWatch(opts) {
       );
     }
     if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
-    const { stands, signalled, leftover } = endOverdue(
+    const { verdict, signalled, leftover } = endOverdue(
       actsDir2,
       facts,
       launcher
     );
     watched = { ...watched, ended: true };
-    const why2 = stands ? "timed out" : "outlived its verdict";
+    const why2 = {
+      published: "timed out",
+      taken: "outlived its verdict",
+      gone: "outlived its act's files"
+    }[verdict];
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
       "error",
@@ -67148,6 +67166,34 @@ var SessionUsageStore = class {
 // src/daemon/cache/git-service.ts
 init_globals();
 var import_node_path27 = __toESM(require_path_browserify(), 1);
+
+// src/proc/git-local-env.ts
+init_globals();
+var localEnvUnset = (stdout2) => Object.fromEntries(
+  stdout2.split("\n").filter((name) => name !== "").map((name) => [name, null])
+);
+function repoLaunch(launcher) {
+  let asked2 = null;
+  return async (opts) => {
+    const ask2 = asked2 ??= launcher.launch({
+      bin: "git",
+      args: ["rev-parse", "--local-env-vars"],
+      timeoutMs: 2e3,
+      category: "git"
+    });
+    const answer2 = await ask2;
+    if (!answer2.ok) {
+      if (asked2 === ask2) asked2 = null;
+      return answer2;
+    }
+    return launcher.launch({
+      ...opts,
+      envOverlay: { ...localEnvUnset(answer2.stdout), ...opts.envOverlay }
+    });
+  };
+}
+
+// src/daemon/cache/git-service.ts
 function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
@@ -67171,10 +67217,10 @@ function configIdentity(configPath) {
 var GitService = class {
   // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
   // close refuses the next read of a pass under way.
+  launch;
   constructor(launcher) {
-    this.launcher = launcher;
+    this.launch = repoLaunch(launcher);
   }
-  launcher;
   isGitRepo(workingDir) {
     return holdsGit(workingDir);
   }
@@ -67189,7 +67235,7 @@ var GitService = class {
   // counting subclass in test/git-spawn-budget.test.ts is that seam; the
   // daemon's own GitDataProvider already extends this class.
   async execGitAsync(args, options) {
-    return this.launcher.launch({
+    return this.launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -67246,9 +67292,10 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: every git read here
+  // launches with git's repository variables unset (`repoLaunch`), since the
+  // daemon's environment describes whichever shell spawned it rather than the
+  // session being rendered.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -67608,7 +67655,7 @@ var GitService = class {
   // (this is a network call, not a local git read). Returns the typed
   // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
   async execForgeAsync(bin, args, options) {
-    return this.launcher.launch({
+    return this.launch({
       bin,
       args: [...args],
       cwd: options.cwd,
@@ -93702,8 +93749,9 @@ var FORGE_PROBE = {
 };
 async function forgeLogin(launcher, cwd2) {
   if (gitRootOf(cwd2) === void 0) return { kind: "ok", value: null };
+  const launch = repoLaunch(launcher);
   const remotes = remotesOf(
-    await launcher.launch({
+    await launch({
       bin: "git",
       args: [...REMOTES_ARGS],
       cwd: cwd2,
@@ -93720,7 +93768,7 @@ async function forgeLogin(launcher, cwd2) {
   const cli = FORGE_CLI[forge];
   const probe2 = FORGE_PROBE[forge];
   const host = probe2.loginHost(remoteHost(url));
-  const run3 = await launcher.launch({
+  const run3 = await launch({
     bin: cli,
     args: [...probe2.args(host)],
     cwd: cwd2,
