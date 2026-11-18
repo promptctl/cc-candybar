@@ -24,6 +24,8 @@ A render in flight holds the state it draws with. Eviction and reload swap the m
 
 In the stats, a retired count that climbs while the cache size holds steady means a render never returned.
 
+The bounded per-session stores evict by recency, and recency rides on the key order of a record keyed by session id through every save, load and handoff to the renderer. A record lists array-index keys ("7") ahead of every other key, so the session-id checkpoint refuses an id that is one; no real id is, since Claude Code's are UUIDs. Carrying the order in the file instead fails a rollback, because an older build cannot read that form.
+
 A reload whose resolved inputs are the ones the served state was built from keeps that state, because a rebuilt state reopens every session view and restarts its sources. A snapshot that digests as the one held loads nothing at all, so a save's watch hearing the bytes the save landed costs one discovery and no load. The key is typed over every input a build resolves from the config's files and folders, so an input added later fails to compile until it is keyed. A storage folder is keyed by path alone: its recovery needs no rebuild, because a session reads its folder by path and the generation is the storage owner's own. What else a build reads belongs to the daemon and is the same for every load, so it is not keyed: anything there that starts to vary per load has to join the key, or a reload keeps a state built from its old value. A test that reloads to drive a build has to change what the config loads first.
 
 ## Dispose releases every MobX subscription

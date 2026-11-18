@@ -27,6 +27,14 @@ describe("the session-id checkpoint", () => {
     expect(parseSessionId(undefined)).toMatchObject({ ok: false });
   });
 
+  // A record keeps these in the order they were set, as it does a UUID.
+  test.each(["07", "1e3", "4294967295", "-1", "-0", "1.5", "0x7", " 7"])(
+    "passes %j, which looks numeric and is no array index",
+    (raw) => {
+      expect(parseSessionId(raw)).toEqual({ ok: true, id: raw });
+    },
+  );
+
   test("passes a UUID, and an id of exactly the byte limit", () => {
     const uuid = randomUUID();
     expect(parseSessionId(uuid)).toEqual({ ok: true, id: uuid });

@@ -5,9 +5,12 @@
 
 declare const SESSION_ID: unique symbol;
 
-// [LAW:types-are-the-program] Non-empty, and a safe file name: `<id>.json` is
-// a legal name in any folder, so a path built from one needs no check of its
-// own. Claude Code's session ids are UUIDs, so no real id is refused.
+// [LAW:types-are-the-program] Non-empty, a safe file name, and never an array
+// index. `<id>.json` is a legal name in any folder, so a path built from one
+// needs no check of its own. A record lists its array-index keys first, and
+// every other key in the order it was set, so a record keyed by session ids
+// keeps the order the bounded stores evict by through every save and load.
+// Claude Code's session ids are UUIDs, so no real id is refused.
 export type SessionId = string & { readonly [SESSION_ID]: true };
 
 // Room for `.json` inside the 255-byte file-name limit, with a byte to spare.
@@ -27,14 +30,24 @@ export function parseSessionId(raw: unknown): ParsedSessionId {
         ? "is empty"
         : raw === "." || raw === ".."
           ? `is ${JSON.stringify(raw)}, which names a folder, not a session`
-          : /[/\\\0]/.test(raw)
-            ? `contains a path separator or NUL: ${JSON.stringify(raw)}`
-            : Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES
-              ? `is longer than ${SESSION_ID_MAX_BYTES} bytes`
-              : null;
+          : isArrayIndex(raw)
+            ? `is ${JSON.stringify(raw)}, an array index, which a record keyed by session id lists before every other key`
+            : /[/\\\0]/.test(raw)
+              ? `contains a path separator or NUL: ${JSON.stringify(raw)}`
+              : Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES
+                ? `is longer than ${SESSION_ID_MAX_BYTES} bytes`
+                : null;
   return problem === null
     ? { ok: true, id: raw as SessionId }
     : { ok: false, problem };
+}
+
+// The keys a JS object lists ahead of the rest, ascending: the canonical
+// spelling of an integer from 0 to 2^32 - 2. "07", "1e3" and "4294967295" are
+// not among them, and keep their place like any other key.
+function isArrayIndex(raw: string): boolean {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n < 2 ** 32 - 1 && String(n) === raw;
 }
 
 // [LAW:single-enforcer] A stored record keyed by session id, as its file
