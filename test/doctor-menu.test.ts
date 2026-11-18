@@ -107,6 +107,7 @@ const CLEAN_LOAD: LoadOutcome = {
   layers: [],
   error: null,
   warnings: [],
+  repo: null,
   unused: [],
 };
 

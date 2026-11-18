@@ -213,21 +213,43 @@ export function repoUnreadNotice(gate: RepoGate): string | null {
     : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;
 }
 
-// What a verdict outside the bar (`check`) says of each repository
-// it did not run. The bar asks instead. A book that could not be read is
-// discovery's notice (`repoUnreadNotice`), said beside these.
+// [LAW:one-source-of-truth] One wording per standing, for what a verdict
+// outside the bar says of a repository it did not run. The bar asks instead.
+const awaitingLine = (dir: string): string =>
+  `awaiting approval: ${dir} — its cc-candybar config runs once it is approved in the bar`;
+const declinedLine = (dir: string): string =>
+  `declined: ${dir} — its cc-candybar config does not run`;
+const unprovenLine = (dir: string, reason: string): string =>
+  `not proven a worktree: ${dir} — it answers for itself, because ${reason}`;
+
+// What `check` says of every repository the gate ruled. A book that could not
+// be read is discovery's notice (`repoUnreadNotice`), said beside these.
 export function repoGateLines(gate: RepoGate): readonly string[] {
   return [
-    ...gate.awaiting.map(
-      (d) =>
-        `awaiting approval: ${d} — its cc-candybar config runs once it is approved in the bar`,
-    ),
-    ...gate.declined.map(
-      (d) => `declined: ${d} — its cc-candybar config does not run`,
-    ),
-    ...gate.unproven.map(
-      (u) =>
-        `not proven a worktree: ${u.dir} — it answers for itself, because ${u.reason}`,
-    ),
+    ...gate.awaiting.map(awaitingLine),
+    ...gate.declined.map(declinedLine),
+    ...gate.unproven.map((u) => unprovenLine(u.dir, u.reason)),
+  ];
+}
+
+// What the doctor says of the one repository the bar asks about: where it
+// stands, and a worktree link that could not be proven. An approved one, and
+// an answers book that could not be read (the load's own warning), add
+// nothing.
+export function repoQuestionLines(
+  question: RepoQuestion | null,
+): readonly string[] {
+  if (question === null) return [];
+  const standing = {
+    awaiting: [awaitingLine(question.dir)],
+    declined: [declinedLine(question.dir)],
+    approved: [],
+    unread: [],
+  } satisfies Record<RepoQuestion["standing"], readonly string[]>;
+  return [
+    ...standing[question.standing],
+    ...(question.unproven === null
+      ? []
+      : [unprovenLine(question.dir, question.unproven)]),
   ];
 }

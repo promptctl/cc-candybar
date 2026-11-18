@@ -135,6 +135,7 @@ function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
     layers: load.layers,
     target,
     warnings: load.warnings,
+    repo: load.repo,
   };
   return load.error !== null
     ? { ...base, kind: "failed", error: load.error }

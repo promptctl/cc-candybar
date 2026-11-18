@@ -83,6 +83,7 @@ const input = (
       layers: [],
       error: null,
       warnings: [],
+      repo: null,
       unused: [],
       config: DEFAULT_DSL_CONFIG,
     },

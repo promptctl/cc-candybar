@@ -2,6 +2,7 @@
 // (src/doctor/read.ts), and its stores, which the renderer files.
 
 import type { Outcome } from "../utils/outcome.js";
+import type { RepoQuestion } from "../config/config-snapshot.js";
 import type { Probed } from "./busy.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { UnusedDecl } from "../config/unused.js";
@@ -102,11 +103,13 @@ export type DoctorMachineEdge = DoctorEdge & { readonly install: InstallEdge };
 // file it resolved, the error that stopped it, the advisories it earned (one
 // per line), and — for the config last loaded — what its file left unused.
 // `config` is the config the bar draws from: the one loaded, else what the
-// bar falls back to under the error.
+// bar falls back to under the error. `repo` is the repository the bar asks
+// about, whose config the chain leaves out until it is approved.
 export interface ConfigLoad {
   readonly layers: readonly string[];
   readonly error: string | null;
   readonly warnings: readonly string[];
+  readonly repo: RepoQuestion | null;
   readonly unused: readonly UnusedDecl[];
   readonly config: DslConfig;
 }

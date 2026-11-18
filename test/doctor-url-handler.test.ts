@@ -168,6 +168,7 @@ describe("the daemon's side of the round trip", () => {
           layers: [],
           error: null,
           warnings: [],
+          repo: null,
           unused: [],
           config: DEFAULT_DSL_CONFIG,
         },

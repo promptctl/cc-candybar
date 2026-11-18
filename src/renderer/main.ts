@@ -606,6 +606,7 @@ export function mainRendererOf(
         layers: entry.configLayers,
         error: entry.lastError,
         warnings: entry.lastWarnings,
+        repo: entry.snapshot.repo,
         unused: entry.state.unused,
         config: entry.state.config,
       };
