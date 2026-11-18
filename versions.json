@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-792",
+      "ref": "refs/pull/792/merge",
+      "sha": "ffaaa7430a7005ce03a226ab50ddd2dbf0191d71",
+      "timestamp": "2026-11-18T01:13:31.337Z",
+      "commits": [
+        {
+          "sha": "ffaaa7430a7005ce03a226ab50ddd2dbf0191d71",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T18:12:30-07:00",
+          "message": "Merge 0466e0d9699ccd457efe997216a355aa38d0b0f7 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+        },
+        {
+          "sha": "0466e0d9699ccd457efe997216a355aa38d0b0f7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T18:08:31-07:00",
+          "message": "feat(daemon): a session's programs run in the environment its client sends (bco)\n\nBoth clients send their whole environment on every render request. The\ncheckpoint takes it off the request, so it never reaches a renderer, and lays\nthe session's facts over it: its id, its project directory and its Claude\nCode directory. The session book holds it in memory only, since it carries\nkeys and tokens.\n\nEvery program the host runs for a session starts from that environment, never\nthe daemon's own: a shell source, a click's run, and the `claude` CLI a lane\nsetup runs. A session the host has not heard from since it started, or one\nwhose client is too old to send an environment, has its programs refused with\nthe reason.\n\nA shell source runs with a base set of variables (HOME, LANG, LC_ALL,\nLC_CTYPE, LOGNAME, PATH, SHELL, TERM, TMPDIR, USER) plus any it names in its\nnew `env` field. Its run identity holds those values, so two sessions in one\ndirectory whose values agree share one run, and a session whose value differs\ngets its own.\n\nAn `env` variable now reads the session's environment through its world\nstate, instead of the daemon's.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "56372f0bd83dcf930c0554eda0b7556027be5d9e",
