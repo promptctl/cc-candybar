@@ -389,6 +389,27 @@ export interface Decor {
 /** The roles whose meaning decoration must never borrow. */
 export type SemanticRole = "error" | "success" | "warning";
 
+// [LAW:dataflow-not-control-flow] What a semantic role's text is at ansi: the
+// terminal's own two colours of its hue, in ANSI names. Sixteen colours leave
+// no room for a theme's ladder, and they round a theme's reds to greys and
+// purples, so only the terminal's own red is red in every terminal.
+export const ROLE_ANSI: Readonly<
+  Record<SemanticRole, readonly [string, string]>
+> = {
+  error: ["bright_red", "red"],
+  warning: ["bright_yellow", "yellow"],
+  success: ["bright_green", "green"],
+};
+
+// [LAW:parse-dont-validate] A role a template names, as a semantic role, or
+// refused naming the three.
+export function semanticRoleOf(role: string): SemanticRole {
+  if (Object.hasOwn(ROLE_ANSI, role)) return role as SemanticRole;
+  throw new Error(
+    `"${role}" is not a semantic role: it is one of ${Object.keys(ROLE_ANSI).join(", ")}`,
+  );
+}
+
 // [LAW:types-are-the-program] Checked by the compiler rather than a review: no
 // semantic role is a decorative hue. (test/decor.test.ts asserts it at runtime
 // too.)

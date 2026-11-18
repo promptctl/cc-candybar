@@ -12,6 +12,7 @@ import {
   render as richRender,
   resolveDestination,
 } from "@promptctl/rich-js";
+import { DOOR_CLOSE_GLYPH } from "../../src/config/disclosure";
 import { runLines } from "../../src/render/frame";
 import { barOf } from "./drawn-frame";
 import { POWERLINE } from "./powerline";
@@ -253,8 +254,19 @@ export function compare(
     const q = quantized[i]!;
     // A seam that is an arrow at either depth is a shape, held above. A
     // swatch is no text either: it is a theme's colours side by side, and at
-    // 256 it shows that theme's colours as the terminal draws them.
-    if (joiner || q.joiner || ch === SWATCH_GLYPH || !isRgb(fg) || !isRgb(bg))
+    // 256 it shows that theme's colours as the terminal draws them. The
+    // door's ✖ is held by its hue, not a floor: it is a red its theme names,
+    // chosen on the colours each depth draws, and where rounding costs every
+    // named red its contrast it reads lower rather than leave red
+    // (test/unit/segment-colors.test.ts holds it).
+    if (
+      joiner ||
+      q.joiner ||
+      ch === SWATCH_GLYPH ||
+      ch === DOOR_CLOSE_GLYPH ||
+      !isRgb(fg) ||
+      !isRgb(bg)
+    )
       return;
     measured++;
     if (!isRgb(q.fg) || !isRgb(q.bg)) {

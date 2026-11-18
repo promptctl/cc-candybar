@@ -65,7 +65,7 @@ Everything that searched for a colour or measured a floor between cells. By the 
 - `plainWith` and `stripPrivateGlyphs` in `src/render/strip.ts` follow the new `SeamForm`; the glyph probe draws two cells. `test/helpers/powerline.ts` loses `divider`. `test/doctor-nerd-font.test.ts` asserts the probe's output inline and changes with it. The two snapshot files regenerate with U+E0B0 where U+E0B1 was.
 - The lines in `.claude/memory/colour.md` on the state search, the floors, the band item repair, and "its cells parted by the joiner's divider" in the shade table's comment. The sentence in `docs/interaction-authoring.md` about cells parted by the divider.
 
-Text contrast stays: `textOn`, `readableOn`, `ensureContrast` for `fg` on `bg`, `keptOn` for the door's ✖. Those are about reading, not about neighbours.
+Text contrast stays: `textOn`, `readableOn`, `ensureContrast` for `fg` on `bg`, `roleTextOn` for the door's ✖. Those are about reading, not about neighbours.
 
 ### What replaces it: named shades for the activated state and the plane
 

@@ -119,7 +119,7 @@ describe("every background the bar draws is a colour its palette names", () => {
   });
 });
 
-describe("the open door's ✖ is a red its palette names for its error role", () => {
+describe("the open door's ✖ is red at every depth", () => {
   test("under every bundled theme and every dial position, at truecolor", () => {
     const bar = sessionBar(`{ globals: { colorCompatibility: 'truecolor' } }`, COLS);
     const wrong: string[] = [];
@@ -142,6 +142,27 @@ describe("the open door's ✖ is a red its palette names for its error role", ()
     }
     expect(wrong).toEqual([]);
     expect(measured).toBe(THEMES.length * SHADE_NAMES.length);
+  });
+
+  // Sixteen colours round a theme's reds to greys and purples, so at ansi the
+  // ✖ is the terminal's own red or bright red.
+  test("under every bundled theme and every dial position, at ansi, it is the terminal's red or bright red", () => {
+    const bar = sessionBar(`{ globals: { colorCompatibility: 'ansi' } }`, COLS);
+    const wrong: string[] = [];
+    try {
+      for (const theme of THEMES) {
+        bar.pick("theme", theme);
+        for (const shade of SHADE_NAMES) {
+          bar.pick("shade", shade);
+          bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
+          const { ink } = doorClose(bar.render(AT).frame);
+          if (ink.hex !== "#ff0000" && ink.hex !== "#800000") wrong.push(`${theme} at ${shade}: ✖ ${ink.hex}`);
+        }
+      }
+    } finally {
+      bar.dispose();
+    }
+    expect(wrong).toEqual([]);
   });
 });
 

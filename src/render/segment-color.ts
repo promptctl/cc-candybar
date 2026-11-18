@@ -7,24 +7,31 @@
 // rich-js's `color` and `ramp` with *which* palette, and adds the functions
 // whose meaning is candybar-specific — `bgOf`, the background of the segment
 // currently rendering, `tint`, the decoration its region dealt it,
-// `roleTextOn`, the colour the theme names for a role's text on a ground, and
-// `keptOn`, a colour shown as given at the depth this render draws at.
+// and `roleTextOn`, the colour a role's text wears on a ground at the depth
+// this render draws at.
 // [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
 import {
+  ANSI_COLOR_NAMES,
   ColorDepth,
+  STANDARD_TABLE,
   contrastFor,
   contrastRatio,
   drawnColour,
-  ensureDrawn,
   resolveColorRef,
   type ColorRgba,
   type Palette,
 } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { renderGauge } from "../template-engine/gauge.js";
-import { TEXT_MIN_CONTRAST, type RoleShade } from "../themes/decor.js";
+import {
+  ROLE_ANSI,
+  TEXT_MIN_CONTRAST,
+  semanticRoleOf,
+  type RoleShade,
+  type SemanticRole,
+} from "../themes/decor.js";
 import {
   requireActiveSegment,
   type ActiveSegmentRef,
@@ -32,7 +39,7 @@ import {
 
 /**
  * Bind rich-js's palette functions (`color`, `ramp`, …), and `bgOf`, `tint`,
- * `roleTextOn`, `keptOn` and `gauge`, to the segment the walk has published.
+ * `roleTextOn` and `gauge`, to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
@@ -97,65 +104,17 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "string",
   };
 
-  // `roleTextOn role bg`: the colour the theme names for `role`'s text on
-  // `bg` (`namedRoleText`). Every answer is an entry of the palette, as given.
+  // `roleTextOn role bg`: the colour `role`'s text wears on `bg` at the depth
+  // this render draws at (`roleText`).
   const roleTextOn: TemplateFunc = {
     fn: ((role: string, bgRef: string) => {
       const { palette } = requireActiveSegment(ref, "{{ roleTextOn }}");
-      return namedRoleText(palette, role, resolveColorRef(palette, bgRef)).hex;
-    }) as TemplateFunc["fn"],
-    argTypes: ["string", "string"],
-    arity: { kind: "exact" },
-    returnType: "string",
-  };
-
-  // A colour shown exactly as given — the door's ✖ is a red its theme names,
-  // never slid, so it reads as red on every theme (#294) — that the
-  // terminal's rounding must still not cost legibility: `keptOn fg bg` is `fg`
-  // itself in truecolor, and at a depth that draws other colours (rich-js
-  // `ensureDrawn`, which has nothing to replace a truecolor colour with) the
-  // nearest drawn colour that stands on `bg` as drawn at least as far as `fg`
-  // does on `bg` unrounded, capped at the text floor. `bg` is the ground this
-  // depth draws the door on, which can be another rung than truecolor's, and
-  // the red was chosen for it. The floor is what the red has on that ground
-  // before rounding, and never more: a named red that reads faintly on its
-  // ground is accepted as it is, and a floor above it would hand rounding a
-  // non-red that clears. The cap is AA: past it the ✖ needs no more
-  // contrast, so rounding may spend the rest, and the drawn colour stays
-  // nearer the red.
-  // [LAW:one-source-of-truth] rich-js measures and repairs; this only names
-  // the floor.
-  const keptOn: TemplateFunc = {
-    fn: ((fgRef: string, bgRef: string) => {
-      const { palette } = requireActiveSegment(ref, "{{ keptOn }}");
-      const fg = resolveColorRef(palette, fgRef);
-      const bg = resolveColorRef(palette, bgRef);
-      // As every floor is measured: on the colours as drawn, each composited
-      // over the terminal's black — never `fg` laid over `bg`, which no
-      // terminal draws.
-      const held = contrastRatio(
-        drawnColour(fg, ColorDepth.TRUECOLOR),
-        drawnColour(bg, ColorDepth.TRUECOLOR),
-      );
-      const floor = Math.min(TEXT_MIN_CONTRAST, held);
-      const depth = ref.drawnAt();
-      const kept = ensureDrawn(
-        fg,
-        depth,
-        (candidate, drawn) => contrastRatio(candidate, drawn(bg)) >= floor,
-      );
-      // [LAW:no-silent-failure] At every depth a colour setting draws at,
-      // some colour clears: truecolor accepts `fg` itself, which stands at
-      // `held`, and 256 colours and ansi draw black and white, one of which
-      // stands at least 4.58:1 off any ground. No answer means that stopped
-      // holding, and drawing `fg` anyway would hide a ✖ that may not read.
-      if (kept === undefined) {
-        throw new Error(
-          `keptOn: nothing drawn at ${ColorDepth[depth]} stands ` +
-            `${floor.toFixed(2)}:1 off ${bg.hex} (drawn ${drawnColour(bg, depth).hex})`,
-        );
-      }
-      return kept.hex;
+      return roleText(
+        palette,
+        semanticRoleOf(role),
+        resolveColorRef(palette, bgRef),
+        ref.drawnAt(),
+      ).hex;
     }) as TemplateFunc["fn"],
     argTypes: ["string", "string"],
     arity: { kind: "exact" },
@@ -223,7 +182,7 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
     returnType: "T",
   };
 
-  return { ...palette, bgOf, tint, roleTextOn, keptOn, gauge };
+  return { ...palette, bgOf, tint, roleTextOn, gauge };
 }
 
 /** A rung of a role's ladder other than the role itself: `<role>-<rung>` in a palette. */
@@ -239,60 +198,95 @@ const RUNGS_OUT: Readonly<Record<string, readonly Rung[]>> = {
 const RUNGS = Object.values(RUNGS_OUT).flat();
 
 /**
- * The colour `role`'s text wears on `ground`, selected among the colours the
- * theme names for the role and never synthesised, so the text stays the
- * theme's own colour for the role on every ground: the role's text colour
- * (`text-<role>`, held by the palette to WCAG AA on `<role>-muted`) where it
- * clears TEXT_MIN_CONTRAST on `ground`; otherwise, walking the role's ladder
- * out from the role itself toward the pole `ground` stands farther from, the
- * first that clears it, the role first; and otherwise whichever of the role's
- * colours stands farthest off `ground`, its text colour and the role itself
- * included, which clears it wherever any of them does. Each pair is measured
- * as truecolor draws it, over black; the depth's rounding is `keptOn`'s.
+ * The colour `role`'s text wears on `ground` at `depth`, selected among
+ * colours that depth draws as the role's and never synthesised, so the text
+ * keeps the role's hue on every ground. Every candidate, and the ground, is
+ * measured as `depth` draws it, over black, so the terminal's rounding never
+ * costs what was measured unrounded.
+ *
+ * The candidates, in order: at ansi, the terminal's two colours of the role
+ * (`ROLE_ANSI`); at every other depth, the theme's names for it, its text
+ * colour (`text-<role>`, held by the palette to WCAG AA on `<role>-muted`),
+ * the role itself, then its ladder out toward the pole `ground` stands
+ * farther from. The first that clears TEXT_MIN_CONTRAST is taken; otherwise
+ * whichever of the role's colours stands farthest off `ground`, which clears
+ * it wherever any of them does.
  *
  * [LAW:single-enforcer] The one place this choice is made.
- * [LAW:dataflow-not-control-flow] A fixed list of named entries, each
- * measured, and the first that clears taken: a selection, not a search
- * through lightness. [LAW:no-silent-failure] A role the palette names no
- * text colour or full ladder for fails loudly, naming the missing entry.
+ * [LAW:dataflow-not-control-flow] A fixed list of colours, each measured, and
+ * the first that clears taken: a selection, not a search through lightness.
+ * [LAW:no-silent-failure] A role the palette names no text colour or full
+ * ladder for fails loudly, naming the missing entry.
  */
-function namedRoleText(
+export function roleText(
   palette: Palette,
-  role: string,
+  role: SemanticRole,
   ground: ColorRgba,
+  depth: ColorDepth,
 ): ColorRgba {
-  const shown = drawnColour(ground, ColorDepth.TRUECOLOR);
-  const named = (name: string) => {
-    const colour = resolveColorRef(palette, name);
-    return {
-      colour,
-      ratio: contrastRatio(drawnColour(colour, ColorDepth.TRUECOLOR), shown),
-    };
-  };
+  const shown = drawnColour(ground, depth);
+  const measured = (colour: ColorRgba) => ({
+    colour,
+    ratio: contrastRatio(drawnColour(colour, depth), shown),
+  });
+  const { preferred, all } =
+    depth === ColorDepth.STANDARD
+      ? ansiCandidates(role)
+      : namedCandidates(palette, role, shown);
+  const ranked = preferred.map(measured);
+  return (
+    ranked.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
+    all
+      .map(measured)
+      .reduce((farthest, colour) =>
+        colour.ratio > farthest.ratio ? colour : farthest,
+      )
+  ).colour;
+}
+
+interface Candidates {
+  // In the order they are tried.
+  readonly preferred: readonly ColorRgba[];
+  // Every colour of the role, the farthest of which stands in when none clears.
+  readonly all: readonly ColorRgba[];
+}
+
+// The terminal's own colours of the role, bright first.
+function ansiCandidates(role: SemanticRole): Candidates {
+  const colours = ROLE_ANSI[role].map(
+    (name) => STANDARD_TABLE.get(ANSI_COLOR_NAMES[name]!) as ColorRgba,
+  );
+  return { preferred: colours, all: colours };
+}
+
+// The theme's names for the role, with its ladder out toward the pole `shown`
+// stands farther from. Every name is resolved up front, so a palette missing
+// one fails on every ground rather than only on the grounds that reach it.
+function namedCandidates(
+  palette: Palette,
+  role: SemanticRole,
+  shown: ColorRgba,
+): Candidates {
   const pole = contrastFor(shown).hex;
   const out = RUNGS_OUT[pole];
   if (out === undefined) {
     throw new Error(
-      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`,
+      `contrastFor named ${pole} for ${shown.hex}, which is neither pole`,
     );
   }
   const text = `text-${role}`;
   const rung = (step: Rung) => `${role}-${step}`;
-  // Every colour the role names, measured up front, so a palette missing one
-  // fails on every ground rather than only on the grounds that reach it.
   const colours = new Map(
-    [text, role, ...RUNGS.map(rung)].map((name) => [name, named(name)]),
+    [text, role, ...RUNGS.map(rung)].map((name) => [
+      name,
+      resolveColorRef(palette, name),
+    ]),
   );
   // [LAW:no-defensive-null-guards] `colours` holds every name asked for here.
-  const preferred = [text, role, ...out.map(rung)].map(
-    (name) => colours.get(name)!,
-  );
-  return (
-    preferred.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
-    [...colours.values()].reduce((farthest, colour) =>
-      colour.ratio > farthest.ratio ? colour : farthest,
-    )
-  ).colour;
+  return {
+    preferred: [text, role, ...out.map(rung)].map((name) => colours.get(name)!),
+    all: [...colours.values()],
+  };
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)
