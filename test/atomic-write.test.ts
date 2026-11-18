@@ -102,8 +102,14 @@ describe.each([
 describe("publishByLink", () => {
   test("the first write is published, a later one finds it taken", () => {
     const file = path.join(dir, "key");
-    expect(publishByLink(file, "first", 0o600)).toBe("published");
-    expect(publishByLink(file, "second", 0o600)).toBe("taken");
+    expect(publishByLink(file, "first", 0o600)).toEqual({
+      outcome: "published",
+      leftover: null,
+    });
+    expect(publishByLink(file, "second", 0o600)).toEqual({
+      outcome: "taken",
+      leftover: null,
+    });
     expect(fs.readFileSync(file, "utf8")).toBe("first");
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     expect(fs.readdirSync(dir)).toEqual(["key"]);
@@ -122,23 +128,21 @@ describe("publishByLink", () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
-  // The publish stands, so the error says how it came out, beside the staged
-  // path, with the removal's code.
-  test("a staged file that will not go after the link is said with the outcome", () => {
+  // The publish stands, so it is the outcome, with the staged file that would
+  // not go beside it.
+  test("a staged file that will not go after the link is said beside the outcome", () => {
     const file = path.join(dir, "key");
     const spy = jest.spyOn(fs, "rmSync").mockImplementationOnce(refused("EBUSY"));
-    let thrown: unknown;
+    let linked: ReturnType<typeof publishByLink>;
     try {
-      publishByLink(file, "bytes");
-    } catch (e) {
-      thrown = e;
+      linked = publishByLink(file, "bytes");
     } finally {
       spy.mockRestore();
     }
-    expect(thrown).toMatchObject({
-      code: "EBUSY",
-      message: expect.stringMatching(
-        new RegExp(`^${file}: published; the staged file ${file}\\..+\\.tmp was left behind: EBUSY: refused$`),
+    expect(linked).toEqual({
+      outcome: "published",
+      leftover: expect.stringMatching(
+        new RegExp(`^${file}\\..+\\.tmp was left behind: EBUSY: refused$`),
       ),
     });
     expect(fs.readFileSync(file, "utf8")).toBe("bytes");

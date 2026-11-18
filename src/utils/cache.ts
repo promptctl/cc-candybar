@@ -3,6 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { debug } from "./logger";
 import { sleep, type Timekeeper } from "../time";
+import { publishByRenameAsync } from "./atomic-write";
 
 interface ErrnoError extends Error {
   code?: string;
@@ -210,7 +211,9 @@ export class CacheManager {
       };
       const cacheContent = JSON.stringify(cacheEntry);
 
-      await fs.promises.writeFile(cachePath, cacheContent, "utf-8");
+      // [LAW:single-enforcer] Published whole: a reader takes no lock, so a
+      // file written in place could be read half written.
+      await publishByRenameAsync(cachePath, cacheContent);
       debug(`[CACHE-SET] ${cacheType} disk cache stored`);
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);

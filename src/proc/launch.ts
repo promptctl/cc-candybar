@@ -44,7 +44,7 @@ import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
-import { publishByLink } from "../utils/atomic-write";
+import { publishByLink, type Linked } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
 import type { SpawnedChild, Spawner } from "./spawner";
@@ -1216,15 +1216,16 @@ function endJob(
   // [LAW:one-source-of-truth] Published by link, so the first verdict stands.
   // The verdict is staged beside the status, so ENOENT from either step is the
   // directory gone.
-  let stands: boolean;
+  let linked: Linked;
   try {
-    stands = publishByLink(status, `${formatJobEnd(end)}\n`) === "published";
+    linked = publishByLink(status, `${formatJobEnd(end)}\n`);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return { stands: false, signalled: false };
+      return { stands: false, signalled: false, leftover: null };
     }
     throw err;
   }
+  const stands = linked.outcome === "published";
   const signalled = spawner.signalJob(pid, "SIGTERM");
   if (signalled) {
     clock.after(
@@ -1235,7 +1236,7 @@ function endJob(
       },
     );
   }
-  return { stands, signalled };
+  return { stands, signalled, leftover: linked.leftover };
 }
 
 // [LAW:types-are-the-program] The launch that holds its caller's loop until the

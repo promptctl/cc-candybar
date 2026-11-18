@@ -145,7 +145,6 @@ describe("the session state's file", () => {
       s1: { theme: "nord" },
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${file}.writing`)).toBe(false);
   });
 
   // [LAW:no-ambient-temporal-coupling] Writes land in the order they began: a
@@ -197,7 +196,7 @@ describe("the session state's file", () => {
     try {
       session.save({ [S1]: { theme: "nord" } });
       await expect(session.flush()).rejects.toThrow(
-        "session-state save failed: ENOSPC: no space",
+        expect.objectContaining({ code: "ENOSPC" }),
       );
     } finally {
       spy.mockRestore();
@@ -358,7 +357,6 @@ describe("the session state's file", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
       await settled(() => existsSync(file));
-      expect(existsSync(`${file}.writing`)).toBe(false);
 
       const reborn = await restarted();
       expect(reborn.get(S1, "theme")).toBe("nord");
@@ -455,7 +453,7 @@ describe("the session state's file", () => {
     );
     session.save({ [S1]: { theme: "nord" } });
     // The write fails; the snapshot must NOT be dropped.
-    await expect(session.flush()).rejects.toThrow(/save failed/);
+    await expect(session.flush()).rejects.toThrow(/EEXIST/);
     expect(existsSync(badPath)).toBe(false);
     // Make the path writable, then flush again — the retained snapshot lands.
     rmSync(blocker);

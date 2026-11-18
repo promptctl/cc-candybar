@@ -365,9 +365,11 @@ export type JobLaunch =
 // What `endJob` did: whether the launcher's verdict is the one that stands, and
 // whether the group took the SIGTERM. Only a group that took it gets the SIGKILL,
 // since an id that answered nothing may no longer be the job's by the grace's end.
+// `leftover` is the verdict's staged file that would not go, for the log.
 export interface JobEnding {
   readonly stands: boolean;
   readonly signalled: boolean;
+  readonly leftover: string | null;
 }
 
 // [LAW:one-type-per-behavior] One owner's launches. Each form is one lifetime

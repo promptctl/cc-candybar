@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { LINK_KEY_BYTES } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { publishByLink } from "../utils/atomic-write.js";
+import { quietLogger, type DaemonLogger } from "../utils/logger.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
@@ -20,11 +21,14 @@ export function linkKeyFile(dir: string): string {
 // Importing the daemon touches no disk for it, and a key that could not be
 // read is read again at the next ask, so removing a broken file (its error's
 // own remedy) recovers with no restart.
-export function linkKeyFromFile(file: string): () => Asked<Buffer> {
+export function linkKeyFromFile(
+  file: string,
+  log: DaemonLogger = quietLogger,
+): () => Asked<Buffer> {
   let key: Buffer | undefined;
   return () => {
     try {
-      key ??= readOrCreate(file);
+      key ??= readOrCreate(file, log);
       return { kind: "ok", value: key };
     } catch (e) {
       return { kind: "failed", reason: (e as Error).message };
@@ -37,13 +41,13 @@ export function linkKeyFromFile(file: string): () => Asked<Buffer> {
 // [LAW:no-silent-failure] A key file of the wrong length is refused loudly,
 // naming the file, never replaced: a replaced key silently voids every link
 // already drawn.
-function readOrCreate(file: string): Buffer {
+function readOrCreate(file: string, log: DaemonLogger): Buffer {
   let key: Buffer;
   try {
     key = fs.readFileSync(file);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    create(file);
+    create(file, log);
     key = fs.readFileSync(file);
   }
   if (key.length !== LINK_KEY_BYTES) {
@@ -58,7 +62,8 @@ function readOrCreate(file: string): Buffer {
 // finds one already there, so a racer never reads a key half written, and
 // every racer, published or taken, ends on the key that landed. Readable by
 // this user alone: whoever holds it can forge a link that runs a program.
-function create(file: string): void {
+function create(file: string, log: DaemonLogger): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  publishByLink(file, randomBytes(LINK_KEY_BYTES), 0o600);
+  const { leftover } = publishByLink(file, randomBytes(LINK_KEY_BYTES), 0o600);
+  if (leftover !== null) log("warn", `link key: ${leftover}`);
 }

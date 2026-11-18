@@ -85,12 +85,26 @@ test("a document filed over one that did not read is refused, and nothing is wri
   expect(written).toBe(false);
 });
 
-test("writes taken after the close are held, and none is written", () => {
+// [LAW:no-silent-failure] A shutdown that lost state says so.
+test("a close whose flush the file refuses rejects with the file's error", async () => {
+  const refused = Object.assign(new Error("ENOSPC: no space"), {
+    code: "ENOSPC",
+  });
+  const stores = held({
+    session: {
+      ...ephemeralSessionFile(),
+      flush: () => Promise.reject(refused),
+    },
+  });
+  await expect(stores.close()).rejects.toBe(refused);
+});
+
+test("writes taken after the close are held, and none is written", async () => {
   let saves = 0;
   const stores = held({
     history: { load: () => new Map(), save: () => void (saves += 1) },
   });
-  stores.close();
+  await stores.close();
   stores.take([{ store: "settings-history", key: S1, value: STEP }]);
   expect(saves).toBe(0);
   expect(stores.current().history[S1]).toEqual(STEP);

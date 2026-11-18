@@ -73,10 +73,11 @@ export class SessionBook {
   private book = new Map<SessionId, DurableContext>();
   // The environment of each session heard since the daemon started.
   private readonly environments = new Map<SessionId, SessionEnvironment>();
-  // [LAW:no-ambient-temporal-coupling] The file is written only while open:
-  // before the load, a save would land over the book the daemon before it
-  // flushed, unread; after the close, over the file a next daemon has taken
-  // up. What is heard outside it stays in memory.
+  // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
+  // and the close flushes what the open phase saved: before the load, a save
+  // would land over the book the daemon before it flushed, unread; after the
+  // close, over the file a next daemon has taken up. What is heard outside
+  // it stays in memory.
   private phase: "unread" | "open" | "closed" = "unread";
 
   constructor(private readonly storage: SessionFileStorage<DurableContext>) {}

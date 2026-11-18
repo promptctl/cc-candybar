@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
+import { types } from "node:util";
 
 // [LAW:single-enforcer] Writing a file whole beside its readers: the bytes
 // are written under a name of their own, then published by one rename or
@@ -51,18 +52,21 @@ export async function publishByRenameAsync(
     if (mode !== undefined) await fs.promises.chmod(staged, mode);
     await fs.promises.rename(staged, file);
   } catch (e) {
-    const removal = await fs.promises.rm(staged, { force: true }).then(
-      () => null,
-      (c: unknown) => c,
-    );
+    const removal = await fs.promises
+      .rm(staged, { force: true })
+      .then(() => null, asError);
     throw noted(e, staged, removal);
   }
 }
 
 // [LAW:types-are-the-program] What a link publish comes to: a link lands
 // only where nothing is, so the first write wins and a later one finds the
-// name taken. That is an outcome, not a failure.
-export type Linked = "published" | "taken";
+// name taken. That is an outcome, not a failure. A staged name that would not
+// go after the link is said beside the outcome, which stands either way.
+export interface Linked {
+  readonly outcome: "published" | "taken";
+  readonly leftover: string | null;
+}
 
 export function publishByLink(
   file: string,
@@ -70,11 +74,11 @@ export function publishByLink(
   mode?: number,
 ): Linked {
   const staged = stagedName(file);
-  let linked: Linked;
+  let outcome: Linked["outcome"];
   try {
     fs.writeFileSync(staged, bytes, { flag: "wx", mode });
     if (mode !== undefined) fs.chmodSync(staged, mode);
-    linked = taken(() => fs.linkSync(staged, file));
+    outcome = taken(() => fs.linkSync(staged, file));
   } catch (e) {
     throw noted(
       e,
@@ -82,23 +86,15 @@ export function publishByLink(
       failure(() => fs.rmSync(staged, { force: true })),
     );
   }
-  // [LAW:no-silent-failure] A staged name that will not go is said, beside
-  // the outcome it came after. The publish stands, so a caller that asks
-  // again finds it.
   const removal = failure(() => fs.rmSync(staged, { force: true }));
-  if (removal !== null) {
-    throw noted(
-      Object.assign(new Error(`${file}: ${linked}`), {
-        code: (removal as NodeJS.ErrnoException).code,
-      }),
-      staged,
-      removal,
-    );
-  }
-  return linked;
+  return {
+    outcome,
+    leftover:
+      removal === null ? null : `${staged} was left behind: ${removal.message}`,
+  };
 }
 
-function taken(link: () => void): Linked {
+function taken(link: () => void): Linked["outcome"] {
   try {
     link();
     return "published";
@@ -115,26 +111,29 @@ function stagedName(file: string): string {
 }
 
 // What a step threw, or null when it ran.
-function failure(step: () => void): unknown {
+function failure(step: () => void): Error | null {
   try {
     step();
     return null;
   } catch (e) {
-    return e;
+    return asError(e);
   }
+}
+
+// [LAW:parse-dont-validate] Whatever was thrown, as an Error. isNativeError,
+// not instanceof: Node's own errors can come from another realm.
+export function asError(thrown: unknown): Error {
+  return types.isNativeError(thrown) ? thrown : new Error(String(thrown));
 }
 
 // [LAW:no-silent-failure] The write's own error is the error, since callers
 // branch on its `code`; a staged file its removal could not take is added to
 // that error's message, never put in its place.
-function noted(e: unknown, staged: string, removal: unknown): unknown {
-  if (removal === null) return e;
-  const note = `; the staged file ${staged} was left behind: ${String((removal as Error).message ?? removal)}`;
-  if (e instanceof Error) {
-    e.message += note;
-    return e;
-  }
-  return new Error(`${String(e)}${note}`);
+function noted(e: unknown, staged: string, removal: Error | null): Error {
+  const error = asError(e);
+  if (removal !== null)
+    error.message += `; the staged file ${staged} was left behind: ${removal.message}`;
+  return error;
 }
 
 // The write for every file a user may be reading while we write it — the
@@ -149,10 +148,12 @@ function noted(e: unknown, staged: string, removal: unknown): unknown {
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(at);
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  const kept = fs.statSync(file, { throwIfNoEntry: false })?.mode;
+  // A file's permission bits, never its type's.
   publishByRename(
     file,
     text,
-    mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode,
+    mode ?? (kept === undefined ? undefined : kept & 0o777),
   );
 }
 

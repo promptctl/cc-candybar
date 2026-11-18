@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import { publishByRenameAsync } from "../utils/atomic-write";
+import { asError, publishByRenameAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
@@ -49,11 +49,11 @@ export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-// What one write came to. Nothing pending is landed: an earlier write
-// landed it.
+// What one write came to, its error kept whole. Nothing pending is landed:
+// an earlier write landed it.
 type Landed =
   | { readonly ok: true }
-  | { readonly ok: false; readonly reason: string };
+  | { readonly ok: false; readonly error: Error };
 const LANDED: Landed = { ok: true };
 
 // [LAW:single-enforcer] The debounce + atomic write of every per-session
@@ -62,8 +62,8 @@ const LANDED: Landed = { ok: true };
 export class SessionFile<V> implements SessionFileStorage<V> {
   // What clears the debounce timer while one is armed.
   private clearTimer: (() => void) | null = null;
-  // [LAW:one-source-of-truth] State not yet durably written: cleared only once
-  // its write lands, so a disk that refuses leaves it for the next write.
+  // [LAW:one-source-of-truth] State not yet written: cleared only once its
+  // write lands, so a disk that refuses leaves it for the next write.
   private pending: Readonly<Record<SessionId, V>> | null = null;
   // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
   // chain, so writes land in the order they began and none overtakes
@@ -172,7 +172,12 @@ export class SessionFile<V> implements SessionFileStorage<V> {
         return this.land();
       });
       this.waiting = waiting;
-      this.written = waiting.then(() => {});
+      // [LAW:no-silent-failure] The chain settles whatever a write did, so no
+      // write's failure stops the next; the write's own promise keeps it.
+      this.written = waiting.then(
+        () => {},
+        () => {},
+      );
     }
     return this.waiting;
   }
@@ -194,31 +199,35 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   // metadata op, and on a busy disk it waits on the journal like any write:
   // run synchronously here it held every bar and click for 180 ms on a CI
   // runner, past every client's reply budget.
-  // [LAW:no-silent-failure] Nothing it does can reject the chain: a write
-  // that fails says so, and the next write still runs.
+  // [LAW:no-silent-failure] A write that fails says so and is a value; the
+  // next write still runs.
   private async land(): Promise<Landed> {
     // An earlier write in the chain may have landed this snapshot already.
     const snapshot = this.pending;
     if (snapshot === null) return LANDED;
     const started = this.clock.monotonic();
+    let body: string;
+    let heldMs: number;
     try {
-      const body = this.body(snapshot);
+      body = this.body(snapshot);
       // The thread is held until the first await.
-      const heldMs = elapsedMs(this.clock, started);
+      heldMs = elapsedMs(this.clock, started);
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
       // [LAW:single-enforcer] Daemon runtime files are owner-only, like
       // pid/spawn.lock: a session file carries conversation identifiers.
       await publishByRenameAsync(this.filePath, body, 0o600);
-      this.saved(body, snapshot, started, heldMs);
-      if (this.pending === snapshot) this.pending = null;
-      return LANDED;
     } catch (e) {
       // A snapshot whose write failed waits for the next save or shutdown's
       // flush, so a disk that keeps refusing is not retried on a timer.
-      const reason = `${this.kind.name} save failed: ${(e as Error).message}`;
-      this.logger("warn", reason);
-      return { ok: false, reason };
+      const error = asError(e);
+      this.logger("warn", `${this.kind.name} save failed: ${error.message}`);
+      return { ok: false, error };
     }
+    // [LAW:no-ambient-temporal-coupling] An identity, not a value: a newer
+    // save made while this one was on its way stays pending.
+    if (this.pending === snapshot) this.pending = null;
+    this.saved(body, snapshot, started, heldMs);
+    return LANDED;
   }
 
   // For shutdown and for callers that read the file back: what is pending
@@ -228,7 +237,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     this.clearTimer?.();
     this.clearTimer = null;
     const landed = await this.write();
-    if (!landed.ok) throw new Error(landed.reason);
+    if (!landed.ok) throw landed.error;
   }
 
   // [LAW:nothing-unseen] Every write that writes says what it wrote, how long
