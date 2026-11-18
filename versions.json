@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-827",
+      "ref": "refs/pull/827/merge",
+      "sha": "f5e13f246a8ccb00871068da89b13aeb209f8818",
+      "timestamp": "2026-11-18T19:31:25.629Z",
+      "commits": [
+        {
+          "sha": "f5e13f246a8ccb00871068da89b13aeb209f8818",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:27:18-07:00",
+          "message": "Merge 3474f5692f01d03bbb82551e9e3bbd961cf5d325 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "3474f5692f01d03bbb82551e9e3bbd961cf5d325",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:27:06-07:00",
+          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-819",
       "ref": "refs/pull/819/merge",
       "sha": "9522685250f8c82b6b67105c602fecce831c62cc",
