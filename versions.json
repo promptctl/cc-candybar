@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-808",
+      "ref": "refs/pull/808/merge",
+      "sha": "55b69d0479c75fc33780e06da4bc3341fb0a47d2",
+      "timestamp": "2026-11-18T16:09:15.567Z",
+      "commits": [
+        {
+          "sha": "55b69d0479c75fc33780e06da4bc3341fb0a47d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:07:41-07:00",
+          "message": "Merge b419bc2f04c79edcfb449b03e915127c36498c59 into 9ffa98534dfa6e86e99e386945d6eae856f1ecaa\n"
+        },
+        {
+          "sha": "b419bc2f04c79edcfb449b03e915127c36498c59",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:05:22-07:00",
+          "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-807",
       "ref": "refs/pull/807/merge",
       "sha": "03eb10912a0827e0605a75273e0190fb6416772a",
