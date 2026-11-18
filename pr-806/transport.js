@@ -50749,7 +50749,8 @@ function makeActReader(dir, read2, jobs, clock) {
     const files = filesOf(actDir);
     const end = readJobEnd(files.status);
     const lastLine = end === null ? null : lastLineOf(files.stderr) ?? lastLineOf(files.stdout);
-    if (!fs_default.existsSync(actDir)) return null;
+    if (!fs_default.existsSync(actDir))
+      return known.ours ? { act: act2, record: record2, alive: true, end: null, lastLine: null } : null;
     const facts = { act: act2, record: record2, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
