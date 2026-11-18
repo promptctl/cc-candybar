@@ -5,7 +5,6 @@ import path from "node:path";
 import {
   arbitrateSocket,
   readLease,
-  removeLeaseIfOwned,
   writeLease,
   type LeaseRead,
 } from "../src/daemon/socket-lease";
@@ -158,38 +157,5 @@ describe("lease file I/O", () => {
   ])("readLease: %s → unreadable", (_label, contents) => {
     fs.writeFileSync(leasePath, contents);
     expect(readLease(leasePath).kind).toBe("unreadable");
-  });
-
-  test("removeLeaseIfOwned: removes when the lease names us", async () => {
-    writeLease(leasePath, {
-      pid: 777,
-      version: 2,
-      binPath: undefined,
-      startTime: "t",
-    });
-    removeLeaseIfOwned(leasePath, 777);
-    expect(fs.existsSync(leasePath)).toBe(false);
-  });
-
-  // [LAW:one-source-of-truth] A displaced daemon must NOT delete the current
-  // owner's lease — that would cascade the theft (next EADDRINUSE reads absent
-  // → reclaims the live thief's socket).
-  test("removeLeaseIfOwned: keeps a lease owned by someone else", async () => {
-    writeLease(leasePath, {
-      pid: 888,
-      version: 2,
-      binPath: undefined,
-      startTime: "t",
-    });
-    removeLeaseIfOwned(leasePath, 777);
-    expect(readLease(leasePath)).toEqual({
-      kind: "owned",
-      pid: 888,
-      startTime: "t",
-    });
-  });
-
-  test("removeLeaseIfOwned: no-op on an absent lease", async () => {
-    expect(() => removeLeaseIfOwned(leasePath, 777)).not.toThrow();
   });
 });

@@ -10,12 +10,7 @@ import {
   leasePathFor,
   type DaemonPaths,
 } from "./paths";
-import {
-  arbitrateSocket,
-  readLease,
-  removeLeaseIfOwned,
-  writeLease,
-} from "./socket-lease";
+import { arbitrateSocket, readLease, writeLease } from "./socket-lease";
 import {
   makeOwnershipWatch,
   readSocketIdentity,
@@ -507,20 +502,15 @@ function shutdown(code: number): void {
 async function closeThenExit(code: number): Promise<void> {
   // [LAW:no-silent-failure][LAW:dataflow-not-control-flow] Every step runs,
   // in order, and one that throws is said by name without skipping the rest:
-  // a close that failed still gives up the lease. An unhandled rejection here
-  // would only reach a shutdown already under way, and the backstop's SIGKILL
-  // would end the process in place of the exit below.
+  // a close that failed still gives up the registry slot. An unhandled
+  // rejection here would only reach a shutdown already under way, and the
+  // backstop's SIGKILL would end the process in place of the exit below.
   const steps: ReadonlyArray<readonly [string, () => unknown]> = [
     ["close", () => serving?.close()],
-    // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
-    // displaced daemon (socket stolen, thief wrote its own lease) must not
-    // delete the live owner's lease on its way out, or the next EADDRINUSE
-    // would read `absent` and reclaim the thief's live socket — cascading the
-    // theft.
-    [
-      "lease removal",
-      () => removeLeaseIfOwned(daemonProcess().paths.lease, process.pid),
-    ],
+    // [LAW:single-enforcer] The lease stays, as the socket path does: no
+    // removal can tell our lease from one a successor published a moment
+    // before it, and taking a successor's lease ends that successor and
+    // invites a reclaim of its live socket (see writeLease).
     // [LAW:single-enforcer] The registry's one removal (removeEntry). A slot
     // this daemon never claimed (exempt production, or refused before
     // claiming one) is null and skipped.

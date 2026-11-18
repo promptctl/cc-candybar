@@ -159,6 +159,15 @@ export function readLease(leasePath: string): LeaseRead {
 // Write our lease after we win the bind. Overwrite-on-write: whoever holds the
 // socket right now replaces whatever stale lease a dead owner left.
 //
+// [LAW:single-enforcer] Publishing is the lease's one mutation; nothing removes
+// a lease. POSIX has no unlink-if-still-mine, so any removal is a check and then
+// an unlink of a shared name, and a successor's publish landing between the two
+// is the lease the unlink takes. An absent lease drains that successor at its
+// next ownership self-check and lets the next EADDRINUSE reclaim its live
+// socket. A lease its owner left on exit names a dead process identity, which
+// arbitration reclaims exactly as it does an absent one, and the next publish
+// replaces it.
+//
 // [LAW:no-ambient-temporal-coupling] Published by rename, so a concurrent
 // reader (a second daemon's EADDRINUSE arbitration) sees either the old lease
 // or the complete new one — never a truncated/empty file mid-write, which
@@ -176,22 +185,5 @@ export function writeLease(
     // [LAW:no-silent-failure] The reason is the caller's: a lease that did
     // not land, and any staged file it left, reach whoever wrote it.
     return (e as Error).message;
-  }
-}
-
-// [LAW:one-source-of-truth] Only the owner mutates its lease. A daemon that was
-// displaced (its socket stolen, the thief wrote a new lease) must NOT delete the
-// current owner's lease on its way out — that would make the next EADDRINUSE
-// read `absent` and reclaim the live thief's socket, cascading the theft. So
-// remove only when the lease still names us.
-export function removeLeaseIfOwned(leasePath: string, myPid: number): void {
-  const read = readLease(leasePath);
-  if (read.kind === "owned" && read.pid === myPid) {
-    try {
-      fs.unlinkSync(leasePath);
-    } catch {
-      // Best-effort cleanup; a leftover lease naming a dead pid is harmless
-      // (the next daemon reads it, kill(pid,0)→ESRCH, reclaims).
-    }
   }
 }

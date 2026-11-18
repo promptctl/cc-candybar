@@ -253,3 +253,64 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
     }
   });
 });
+
+// [LAW:single-enforcer] Publishing is the lease's one mutation; a daemon's exit
+// removes no lease. These run the real close a signal starts, the one that
+// would take a lease on the way out.
+describe("a daemon's exit and the lease (integration)", () => {
+  jest.setTimeout(30_000);
+
+  // The race the exit must lose: a newer daemon publishes over the lease, then
+  // the displaced one ends. The order is the test's own (publish, signal, await
+  // the exit, read), so nothing waits on a timer.
+  test("a displaced daemon's exit leaves the newer daemon's lease standing", async () => {
+    const fx = makeFixture();
+    const newer = spawnLiveHolder();
+    try {
+      expect(newer.pid).toBeDefined();
+      const newerPid = newer.pid as number;
+      const displaced = await spawnDaemonWithEnv(fx.env);
+      const newerLease = {
+        pid: newerPid,
+        version: 2,
+        binPath: "/newer",
+        startTime: await realStartTime(newerPid),
+      };
+      expect(writeLease(fx.leasePath, newerLease)).toBeNull();
+
+      const exited = waitForExit(displaced.child);
+      displaced.killTree("SIGTERM");
+      await exited;
+
+      expect(readLease(fx.leasePath)).toEqual({
+        kind: "owned",
+        pid: newerLease.pid,
+        startTime: newerLease.startTime,
+      });
+    } finally {
+      newer.kill("SIGKILL");
+      fx.cleanup();
+    }
+  });
+
+  // A daemon's own lease outlives it too: any removal at exit is a check and an
+  // unlink of a shared name, whose window the case above cannot reach, so the
+  // lease still standing after its own owner's exit is what shows no removal
+  // runs. The next daemon reclaims it by the dead owner's identity.
+  test("a daemon's own lease outlives its exit", async () => {
+    const fx = makeFixture();
+    try {
+      const daemon = await spawnDaemonWithEnv(fx.env);
+      const own = readLease(fx.leasePath);
+      expect(own.kind).toBe("owned");
+
+      const exited = waitForExit(daemon.child);
+      daemon.killTree("SIGTERM");
+      await exited;
+
+      expect(readLease(fx.leasePath)).toEqual(own);
+    } finally {
+      fx.cleanup();
+    }
+  });
+});
