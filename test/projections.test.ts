@@ -27,6 +27,7 @@ import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { loadDiscovered } from "./helpers/config-host";
+import { InstalledLayers } from "../src/config/dsl-loader";
 
 const config = (variables: string, helpers = "{}") =>
   parseAndValidate(
@@ -214,6 +215,7 @@ test("the config load line names the load's projections", () => {
       locations: locs(),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     expect(loaded.error).toBeNull();

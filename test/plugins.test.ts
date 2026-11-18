@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
-import { homeLayer } from "../src/config/dsl-loader";
+import { homeLayer, InstalledLayers } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { until } from "./helpers/until";
 import { instantOf } from "../src/utils/instant";
@@ -596,6 +596,7 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     locations: locations(host),
     signer: TEST_SIGNER,
     gates: bareGates(),
+    installed: new InstalledLayers(),
     sessionState: new SessionState(),
   });
   try {
@@ -655,6 +656,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -702,6 +704,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -759,6 +762,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -777,6 +781,7 @@ describe("a plugin's own variables", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -934,6 +939,7 @@ describe("an installed plugin", () => {
         locations: locations(host),
         signer: TEST_SIGNER,
         gates: bareGates(),
+        installed: new InstalledLayers(),
         sessionState: new SessionState(),
       },
     );
@@ -1091,6 +1097,7 @@ describe("an installed plugin", () => {
         locations: locations(host),
         signer: TEST_SIGNER,
         gates: bareGates(),
+        installed: new InstalledLayers(),
         sessionState: new SessionState(),
       });
       loaded.state?.registry.dispose();
@@ -1634,6 +1641,7 @@ describe("an installed plugin", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -1787,6 +1795,7 @@ describe("an installed plugin", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -1867,6 +1876,7 @@ describe("an installed plugin", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {
@@ -2028,6 +2038,7 @@ describe("a repo's plugin beside an installed one of its name", () => {
       locations: locations(host),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
       sessionState: new SessionState(),
     });
     try {

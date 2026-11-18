@@ -20,7 +20,11 @@ import {
   type PreparedConfig,
 } from "../../../test/helpers/prepared-config.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { homeLayer, loadSnapshot } from "../../../src/config/dsl-loader.js";
+import {
+  homeLayer,
+  InstalledLayers,
+  loadSnapshot,
+} from "../../../src/config/dsl-loader.js";
 import {
   installedRoots,
   sessionPlugins,
@@ -162,6 +166,7 @@ export const STAGES: readonly Benchmark[] = [
     async run(plan) {
       const cwd = scratchDir("ccbn-stage");
       try {
+        const installed = new InstalledLayers();
         const ms = await repeat(plan.samples, () => {
           const locs = locations(processWorld().host);
           loadSnapshot(
@@ -172,6 +177,7 @@ export const STAGES: readonly Benchmark[] = [
             locs.home,
             DEFAULT_DSL_CONFIG,
             { warned: () => {} },
+            installed,
           );
         });
         return measured([{ name: "load", samples: ms }]);

@@ -18,6 +18,8 @@ The render cache's share of the memory budget is what is left under the line the
 
 Entries share one compile when their configs compile alike. A new entry appears for every directory a session renders from: every worktree, every cd. With one compile per entry, that exhausted the memory limit several times a day. So a compile captures nothing that differs per directory: no store, no registry, no variables. A checkout-relative plugin path resolves into the variables, so a compile that read them would differ per worktree. A compile's template functions reach the render in progress through one binding. It is bound for the synchronous walk and unbound on every exit, so a shared compile keeps nothing from whoever drew last. A read with nothing bound throws.
 
+The installed-plugin layer is held per checkout and leaves when the last entry serving that checkout does. Each layer is a whole merged config, outside the bytes the budget counts, and a daemon serving many worktrees would otherwise hold one for every checkout it ever rendered.
+
 ## Retire, then reclaim when unheld
 
 A render in flight holds the state it draws with. Eviction and reload swap the map at once and retire the state they no longer serve. One place disposes states, and only once a state is retired and no render holds it. So a render always finishes on the state it took its payload from, never on one disposed while it awaited the payload. A reload builds the new state completely before swapping, so a broken config keeps the last good one.

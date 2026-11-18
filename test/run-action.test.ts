@@ -34,7 +34,7 @@ import { segmentErrorsOf } from "./helpers/draw-payload";
 import { LOADING_GLYPH } from "../src/dsl/node-registry";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { checkConfig, type CheckOutcome } from "../src/check";
-import { parseDslConfig } from "../src/config/dsl-loader";
+import { parseDslConfig, InstalledLayers } from "../src/config/dsl-loader";
 import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
 import { Runs, type RunAct } from "../src/daemon/runs";
@@ -431,6 +431,7 @@ describe("a run's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -459,6 +460,7 @@ describe("a run's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(loaded.error).toBeNull();

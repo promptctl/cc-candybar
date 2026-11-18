@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, type CheckOutcome } from "../src/check";
 import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
-import { homeLayer } from "../src/config/dsl-loader";
+import { homeLayer, InstalledLayers } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import { SessionState } from "../src/renderer/session-state";
 import { systemTimekeeper } from "../src/time";
@@ -699,6 +699,7 @@ describe("a project layer inserting into the user's row", () => {
       sessionState: new SessionState(),
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(loaded.kind).toBe("built");
@@ -820,6 +821,7 @@ test("a layer that could not be read fails the load naming it", () => {
     sessionState: new SessionState(),
     signer: TEST_SIGNER,
     gates: bareGates(),
+    installed: new InstalledLayers(),
   });
   try {
     expect(loaded.snapshot.chain.map((l) => [l.role, l.content.kind])).toEqual([

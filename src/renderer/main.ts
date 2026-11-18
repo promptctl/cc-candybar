@@ -590,6 +590,7 @@ export function mainRendererOf(
     gates,
     sessionState,
     snapshotFor: (origin) => renderCache.snapshotFor(origin),
+    installed: renderCache.installed,
     locations: inputs.locations,
     configWrites,
     clickLanded: (sessionId) => menuIdle.clicked(sessionId, time.tick),

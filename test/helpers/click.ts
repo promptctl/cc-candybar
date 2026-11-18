@@ -67,6 +67,7 @@ import { LANE_NAMES, type LaneSwitches } from "../../src/config/lanes";
 import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
+import { InstalledLayers } from "../../src/config/dsl-loader";
 
 const NO_LANES = Object.fromEntries(
   LANE_NAMES.map((lane) => [lane, false]),
@@ -353,6 +354,7 @@ export function testVerbContext(
   return configWrites.of({
     configWrites,
     snapshotFor: discovered.snapshotOf,
+    installed: new InstalledLayers(),
     acts: new ActsOnTheirWay(mint, (session, reason) =>
       holdClickError(sessionState, session, reason, instantOf(new Date())),
     ),

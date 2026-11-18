@@ -10,8 +10,7 @@ import {
   type ChainTrace,
   type ConfigLayer,
   type LoadContext,
-  type LoadedChain,
-} from "../../src/config/dsl-loader";
+  type LoadedChain, InstalledLayers } from "../../src/config/dsl-loader";
 import {
   installedRoots,
   layerOf,
@@ -72,5 +71,5 @@ export function loadChain(
     sessionPlugins(locs, installedRoots(locs), null, cwd ?? locs.home),
     chain.map((l) => layerOf(l.role, l.path, content(l.path), locs.home)),
   );
-  return loadSnapshot(snapshot, locs.home, dflt, trace);
+  return loadSnapshot(snapshot, locs.home, dflt, trace, new InstalledLayers());
 }

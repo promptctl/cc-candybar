@@ -266,48 +266,74 @@ export function loadConfigSource(
   };
 }
 
-// [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes and folders, the checkout, the home, the base and the
-// palettes, so it is memoised on exactly those: a load with nothing installed
-// changed pays one digest of the definitions, not one reference check per
-// plugin. Per-plugin validation stays — it is what lets one plugin drop alone.
-const installedMemo = new WeakMap<
-  DslConfig,
-  Map<string, { readonly key: string; readonly layer: PluginLayer }>
->();
+// [LAW:one-source-of-truth] The slot one checkout's installed layer is held
+// at. Keyed on the checkout, not the working directory: every directory of one
+// checkout reads the same data, and the next load after a `.git` appears above
+// a directory reads the new checkout's. Nothing watches for that `.git`: an
+// ancestor watch per session is the cost, a reload the remedy.
+export const installedSlot = (checkout: string | null, home: string): string =>
+  JSON.stringify([checkout, home]);
 
-function installedLayer(
-  files: readonly PluginFile[],
-  ctx: PluginContext,
-  dflt: DslConfig,
-  allowedPalettes: ReadonlySet<string> | undefined,
-): PluginLayer {
-  const key = digestOf({
-    palettes: [...(allowedPalettes ?? [])].sort(),
-    files: files.map((f) => ({
-      path: f.path,
-      scope: f.scope,
-      definition: f.definition,
-    })),
-  });
-  const byProject = installedMemo.get(dflt) ?? new Map();
-  installedMemo.set(dflt, byProject);
-  // Keyed on the checkout, not the working directory: every directory of one
-  // checkout reads the same data, and the next load after a `.git` appears
-  // above a directory reads the new checkout's. Nothing watches for that
-  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
-    files,
-    ctx,
-    { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
-  );
-  byProject.set(slot, { key, layer });
-  return layer;
+// [LAW:one-source-of-truth] The installed layers its owner's loads merge over,
+// one per checkout slot. A layer is a function of the definitions' bytes and
+// folders, the checkout, the home, the base and the palettes, so it is held on
+// exactly those: a load with nothing installed changed pays one digest of the
+// definitions, not one reference check per plugin. Per-plugin validation stays
+// — it is what lets one plugin drop alone. Each layer is a merged config, so
+// the owner names the slots it still serves and the rest go.
+export class InstalledLayers {
+  private readonly held = new Map<
+    string,
+    {
+      readonly dflt: DslConfig;
+      readonly key: string;
+      readonly layer: PluginLayer;
+    }
+  >();
+
+  layer(
+    files: readonly PluginFile[],
+    ctx: PluginContext,
+    dflt: DslConfig,
+    allowedPalettes: ReadonlySet<string> | undefined,
+  ): PluginLayer {
+    const key = digestOf({
+      palettes: [...(allowedPalettes ?? [])].sort(),
+      files: files.map((f) => ({
+        path: f.path,
+        scope: f.scope,
+        definition: f.definition,
+      })),
+    });
+    const slot = installedSlot(ctx.checkout?.root ?? null, ctx.home);
+    const hit = this.held.get(slot);
+    if (hit?.key === key && hit.dflt === dflt) return hit.layer;
+    const layer = applyPlugins(
+      files,
+      ctx,
+      { config: dflt, rendering: new Map() },
+      (c, plugin, replaces) =>
+        checkPlugin(
+          c,
+          plugin,
+          replaces,
+          "<installed plugins>",
+          allowedPalettes,
+        ),
+    );
+    this.held.set(slot, { dflt, key, layer });
+    return layer;
+  }
+
+  // Every slot `serving` does not name goes.
+  keep(serving: ReadonlySet<string>): void {
+    for (const slot of [...this.held.keys()])
+      if (!serving.has(slot)) this.held.delete(slot);
+  }
+
+  slots(): ReadonlySet<string> {
+    return new Set(this.held.keys());
+  }
 }
 
 /**
@@ -371,6 +397,7 @@ export function loadSnapshot(
   home: string,
   dflt: DslConfig,
   trace: ChainTrace,
+  installed: InstalledLayers,
   allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
   const { ctx, plugins, base, layers } = mergeChain(
@@ -378,6 +405,7 @@ export function loadSnapshot(
     home,
     dflt,
     trace,
+    installed,
     allowedPalettes,
   );
   return validateChain(ctx, plugins, base, layers, trace, allowedPalettes);
@@ -395,10 +423,15 @@ export function inheritedConfig(
   snapshot: ConfigSnapshot,
   home: string,
   dflt: DslConfig,
+  installed: InstalledLayers,
 ): DslConfig {
-  const { base, layers } = mergeChain(snapshot, home, dflt, {
-    warned: () => {},
-  });
+  const { base, layers } = mergeChain(
+    snapshot,
+    home,
+    dflt,
+    { warned: () => {} },
+    installed,
+  );
   return layers.at(-1)?.config ?? base;
 }
 
@@ -409,6 +442,7 @@ function mergeChain(
   home: string,
   dflt: DslConfig,
   trace: ChainTrace,
+  installed: InstalledLayers,
   allowedPalettes?: ReadonlySet<string>,
 ) {
   const ctx: PluginContext = { checkout: snapshot.checkout, home };
@@ -416,7 +450,7 @@ function mergeChain(
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
+  const merged = installed.layer(snapshot.plugins, ctx, dflt, allowedPalettes);
   const plugins = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)],

@@ -21,8 +21,7 @@ import {
   loadSnapshot,
   refuseDrops,
   type ConfigLayer,
-  type DroppedPlugin,
-} from "../../src/config/dsl-loader";
+  type DroppedPlugin, InstalledLayers } from "../../src/config/dsl-loader";
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import {
@@ -94,9 +93,13 @@ export async function prepareConfig(
   const layers = snapshot.chain
     .filter((l) => l.content.kind === "text")
     .map((l) => l.path);
-  const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
-    warned: (w) => warnings.push(...w),
-  });
+  const loaded = loadSnapshot(
+    snapshot,
+    world.host.home,
+    DEFAULT_DSL_CONFIG,
+    { warned: (w) => warnings.push(...w) },
+    new InstalledLayers(),
+  );
   refuseDrops(loaded.dropped);
   const { config } = loaded;
   const store = new VariableStore(world.clock);

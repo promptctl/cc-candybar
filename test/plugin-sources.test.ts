@@ -99,6 +99,7 @@ import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
+import { InstalledLayers } from "../src/config/dsl-loader";
 
 const S1 = sessionIdOf("s1");
 
@@ -419,6 +420,7 @@ describe("a source's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -515,6 +517,7 @@ describe("a source's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(
@@ -548,6 +551,7 @@ describe("a source's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(loaded.error).toBeNull();
@@ -673,6 +677,7 @@ describe("a source's declaration", () => {
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
+      installed: new InstalledLayers(),
     });
     try {
       expect(pluginLoadLine(loaded.layers, loaded.state!)).toContain(

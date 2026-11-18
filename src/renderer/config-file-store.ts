@@ -31,6 +31,7 @@ import {
   inheritedConfig,
   loadSnapshot,
   type LoadedChain,
+  type InstalledLayers,
 } from "../config/dsl-loader.js";
 import {
   writable,
@@ -439,6 +440,9 @@ export interface WriteLayer extends Layer {
   readonly snapshot: ConfigSnapshot;
   // The user's home, which a `~` in a listed or data path expands to.
   readonly home: string;
+  // The installed layers the bar's own loads merge over: the click's proof
+  // reuses the layer its render built.
+  readonly installed: InstalledLayers;
 }
 
 // [LAW:no-silent-failure] The layer `role` names in `snapshot`'s chain, or
@@ -449,6 +453,7 @@ export function writeLayerOf(
   role: LayerRole,
   configFile: string | null,
   home: string,
+  installed: InstalledLayers,
 ): WriteLayer {
   const layer = snapshot.chain.find((l) => l.role === role);
   if (layer === undefined)
@@ -463,7 +468,7 @@ export function writeLayerOf(
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${layer.path} could not be read (${layer.content.error}), and a click does not write over a file it could not read`,
     );
-  return { ...layer, snapshot, home };
+  return { ...layer, snapshot, home, installed };
 }
 
 // [LAW:one-source-of-truth] A write as its click sees it: each neighbouring
@@ -617,6 +622,7 @@ function inheritedOf(into: Seen): DslConfig {
       heldSnapshot(into, into.below),
       into.home,
       DEFAULT_DSL_CONFIG,
+      into.installed,
     );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
@@ -642,6 +648,7 @@ function chainOver(into: Seen, text: string | null): LoadedChain {
     into.home,
     DEFAULT_DSL_CONFIG,
     { warned: () => {} },
+    into.installed,
   );
 }
 

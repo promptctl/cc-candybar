@@ -168,6 +168,7 @@ import {
 } from "../../daemon/foundations/session-id";
 import type { IdleSpan } from "../menu-idle";
 import { throwAll } from "../../utils/run-each";
+import { type InstalledLayers } from "../../config/dsl-loader.js";
 
 // What the daemon hands everything that writes a session's state: a click's
 // verb, and the idle close of its menus (`closeIdleMenus`).
@@ -179,6 +180,8 @@ export interface DaemonContext {
   // what a click reads and writes its layers from. One not held throws,
   // naming the origin.
   readonly snapshotFor: (origin: RenderOrigin) => ConfigSnapshot;
+  // The installed layers the render cache's loads merge over.
+  readonly installed: InstalledLayers;
   // [LAW:effects-at-boundaries] The turn's wall instant, which the host read.
   readonly now: () => Instant;
   readonly log: (level: "info" | "warn" | "error", msg: string) => void;
@@ -728,7 +731,7 @@ function nestOf(
 // chain is the bar's. A layer the chain has no place for is refused, never
 // written somewhere else.
 function heldLayer(
-  ctx: Pick<ClickContext, "snapshotFor" | "locations">,
+  ctx: Pick<ClickContext, "snapshotFor" | "locations" | "installed">,
   origin: RenderOrigin,
   role: LayerRole,
 ): WriteLayer {
@@ -737,6 +740,7 @@ function heldLayer(
     role,
     origin.target.path ?? null,
     ctx.locations.home,
+    ctx.installed,
   );
 }
 

@@ -23,6 +23,7 @@ import type {
 } from "../../src/renderer/settings-history";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { Step } from "../../src/renderer-interface/history-storage";
+import { InstalledLayers } from "../../src/config/dsl-loader";
 
 // A history's files with no click around it: the chain's layers at the paths
 // `layers` names, read from and written to the disk at once, with no home to
@@ -78,6 +79,7 @@ export function soleLayer(file: string, home: string): WriteLayer {
       watch: null,
     },
     home,
+    installed: new InstalledLayers(),
   };
 }
 
@@ -93,6 +95,7 @@ export function layerNow(
     role,
     origin.target.path ?? null,
     locations(host).home,
+    new InstalledLayers(),
   );
 }
 

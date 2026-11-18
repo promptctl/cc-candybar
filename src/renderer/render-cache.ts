@@ -27,6 +27,8 @@ import {
   ConfigError,
   type DroppedFileError,
   type ConfigLayer,
+  InstalledLayers,
+  installedSlot,
 } from "../config/dsl-loader.js";
 import type { LayerRole } from "../config/layer-role.js";
 import type {
@@ -166,6 +168,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
 
 // What building one config's state needs.
 export interface StateDeps {
+  // The installed layers its loads merge over: the render cache's, which it
+  // keeps to the checkouts it serves, or a one-shot load's own.
+  readonly installed: InstalledLayers;
   // The clock its variables' ages run on, and its sources' held work: the
   // renderer's turn time, or the clock of a command that draws once.
   readonly clock: TurnClock;
@@ -680,6 +685,7 @@ function declaredSources(config: DslConfig): DeclaredSources {
 export function resolveLoad(
   cwd: string,
   chain: ConfigChain,
+  installed: InstalledLayers,
 ): ResolvedLoad | Failed {
   const warnings: string[] = [];
   try {
@@ -688,6 +694,7 @@ export function resolveLoad(
       chain.locs.home,
       DEFAULT_DSL_CONFIG,
       { warned: (w) => warnings.push(...w) },
+      installed,
     );
     const inputs = {
       cwd,
@@ -892,7 +899,7 @@ function loadChain(
   deps: StateDeps,
   served: DslRenderState | null = null,
 ): LoadOutcome {
-  const resolved = resolveLoad(cwd, chain);
+  const resolved = resolveLoad(cwd, chain, deps.installed);
   if (resolved.kind === "failed") {
     return settle(chain, [], resolved);
   }
@@ -938,15 +945,19 @@ export function fallbackState(
 ): DslRenderState {
   // The failed load's approved project: the seed draws the plugins it ships,
   // as the load would have.
-  const resolved = resolveLoad(cwd, {
-    layers: [],
-    home: "",
-    // A failed load's writes are refused until its chain loads (the writer
-    // proves the whole chain), so its bar offers the one layer every chain has.
-    writable: ["user"],
-    snapshot: { ...snapshot, chain: [] },
-    locs: deps.locations,
-  });
+  const resolved = resolveLoad(
+    cwd,
+    {
+      layers: [],
+      home: "",
+      // A failed load's writes are refused until its chain loads (the writer
+      // proves the whole chain), so its bar offers the one layer every chain has.
+      writable: ["user"],
+      snapshot: { ...snapshot, chain: [] },
+      locs: deps.locations,
+    },
+    deps.installed,
+  );
   const built =
     resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   // [LAW:no-silent-failure] The default validates by program invariant
@@ -1216,6 +1227,10 @@ export class RenderCache<
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
+  // [LAW:one-source-of-truth] The installed layers every load of this cache
+  // and every click's proof over it merge over, held for the checkouts its
+  // entries serve (drop).
+  readonly installed = new InstalledLayers();
   private readonly deps: RenderDeps<S> & StateDeps;
   private readonly log: DaemonLogger;
   // Read when an eviction is decided: the budget is a boot-time fact.
@@ -1234,6 +1249,7 @@ export class RenderCache<
     this.deps = {
       ...deps,
       compile: (key, input) => this.compileOf(key, input),
+      installed: this.installed,
     };
     this.log = deps.log ?? quietLogger;
     this.budgetBytes = opts.budgetBytes;
@@ -1653,6 +1669,18 @@ export class RenderCache<
   ): void {
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
+    // [LAW:one-source-of-truth] A checkout's installed layer is a merged
+    // config, held only while an entry serves that checkout.
+    this.installed.keep(
+      new Set(
+        [...this.entries.values()].map((e) =>
+          installedSlot(
+            e.snapshot.checkout?.root ?? null,
+            this.deps.locations.home,
+          ),
+        ),
+      ),
+    );
   }
 
   get stats(): RenderCacheStats {

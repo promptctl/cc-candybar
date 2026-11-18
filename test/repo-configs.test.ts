@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
-import { configResolutionNotice } from "../src/config/dsl-loader";
+import { configResolutionNotice, InstalledLayers } from "../src/config/dsl-loader";
 import { resolutionOf } from "./helpers/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 import { chainPlaces } from "../src/config/loader/chain-places";
@@ -163,6 +163,7 @@ describe("the gate over a project's plugins", () => {
       sessionState: new SessionState(),
       signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
+      installed: new InstalledLayers(),
       stateDir: stateDir(host),
       locations: locations(host),
       env: host.env,

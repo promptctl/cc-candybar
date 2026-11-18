@@ -47,6 +47,7 @@ import { bareGates } from "./helpers/gates";
 import { configHost } from "./helpers/config-host";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
+import { installedSlot } from "../src/config/dsl-loader";
 
 // brandon-unfiled-3248.8yp: the render cache held one 9.3 MB state per
 // directory a session rendered from, and released one only past 256 of them,
@@ -337,6 +338,22 @@ describe("the cache is bounded by bytes", () => {
     ).toHaveLength(1);
     expect(at("b").state).toBe(b);
     expect(at("c").state).toBe(c);
+  });
+
+  // [LAW:verifiable-goals] A checkout's merged installed layer is held only
+  // while an entry serves that checkout: a long-running cache over many
+  // worktrees holds none for the ones it no longer serves.
+  test("the installed layers held are the checkouts the entries serve", () => {
+    const { cache, originAt } = makeCache(64 * COMPILE_BYTES, 2);
+    const cfg = file("config.json5", carouselConfig("mode", "alpha"));
+    const at = (d: string) =>
+      cache.getOrCreate(originAt(path.join(dir, d), path.join(dir, d), cfg));
+    const slotsOf = (...ds: string[]) =>
+      new Set(ds.map((d) => installedSlot(path.join(dir, d), locs().home)));
+    for (const d of ["a", "b", "c"]) at(d);
+    expect(cache.installed.slots()).toEqual(slotsOf("b", "c"));
+    at("a");
+    expect(cache.installed.slots()).toEqual(slotsOf("c", "a"));
   });
 
   test("a budget no entry fits still serves the newest", () => {

@@ -27,7 +27,11 @@ import { discover, readShared } from "./daemon/config-discovery/discover.js";
 import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
-import { loadSnapshot, type ConfigLayer } from "./config/dsl-loader.js";
+import {
+  loadSnapshot,
+  type ConfigLayer,
+  InstalledLayers,
+} from "./config/dsl-loader.js";
 import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
@@ -228,9 +232,13 @@ function passesOf(
   try {
     // The renderer's load says what this one warns, so nothing here repeats
     // it.
-    loaded = loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, {
-      warned: () => {},
-    });
+    loaded = loadSnapshot(
+      snapshot,
+      home,
+      DEFAULT_DSL_CONFIG,
+      { warned: () => {} },
+      new InstalledLayers(),
+    );
   } catch {
     // [LAW:no-silent-failure] The renderer's load fails the same way, and
     // its error is the fresh pass's.
