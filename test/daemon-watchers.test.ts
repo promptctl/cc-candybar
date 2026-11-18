@@ -87,18 +87,18 @@ describe("WatcherRegistry", () => {
       expect(seen).toEqual([{ kind: "changed", paths: [f] }]);
     });
 
-    test("changed between a holder's read and its follow, fires at the next sweep", () => {
+    test("a slot joining a path another polls, made since the sweep and removed before the next, fires at the next sweep", () => {
       const f = path.join(dir, "f");
-      fs.writeFileSync(f, "one");
-      const spec = specOf({ dirs: [], polled: [f] });
-      const seen: Invalidation[] = [];
-      const held = reg.follow(null, spec, (inv) => seen.push(inv)).watch;
+      polling(f);
       swept();
-      expect(fs.readFileSync(f, "utf8")).toBe("one");
-      fs.writeFileSync(f, "two!");
-      reg.follow(held, spec, (inv) => seen.push(inv));
+      fs.writeFileSync(f, "made");
+      const joined: Invalidation[] = [];
+      reg.acquire("joined", { dirs: [], polled: [f] }, (inv) =>
+        joined.push(inv),
+      );
+      fs.rmSync(f);
       swept();
-      expect(seen).toEqual([{ kind: "changed", paths: [f] }]);
+      expect(joined).toEqual([{ kind: "changed", paths: [f] }]);
     });
 
     // [LAW:no-ambient-temporal-coupling] Only the sweep fires, so a holder

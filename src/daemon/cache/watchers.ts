@@ -102,12 +102,16 @@ interface Listener {
 
 // [LAW:single-enforcer] One record per polled path, shared by every slot that
 // names it: what the last sweep of the path found, and who hears it change.
-// [LAW:one-source-of-truth] Only the sweep reads an entry into it, so it is
-// never newer than any holder's read: a holder may read before it follows,
-// and an entry taken at the follow would hide a change between the two.
+// [LAW:one-source-of-truth] A new record takes the disk at its first acquire;
+// after that only the sweep reads an entry into it, and an acquire or follow
+// only marks it unseen, because a holder may read before it follows and an
+// entry taken at the follow would hide a change between the two. What this
+// cannot see is a change a holder read that was undone before its acquire or
+// follow, or one between a read and the first acquire of its path: that needs
+// the entry the holder read, which only the holder has.
 interface PolledPath {
   readonly path: string;
-  entry: string;
+  entry: string | typeof UNSEEN;
   readonly slots: Set<WatcherSlot>;
 }
 
@@ -181,6 +185,9 @@ const heldBy = (
 ): state is Extract<DirState, { kind: "listening" }> =>
   state.kind === "listening" && state.handle === handle;
 
+// An entry no read gives: a path holding it differs at the next sweep.
+const UNSEEN: unique symbol = Symbol("unseen");
+
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
 
@@ -196,9 +203,6 @@ const dirId = (target: DirTarget): string =>
 // fires as it starts failing and as it stops, and the holder's own read of it
 // fails loudly in between. A missing parent and a folder replaced on the way
 // arrive the same way, so a polled path is never deaf and never judged.
-// An entry no read gives: a path holding it differs at the next sweep.
-const UNSEEN = "unseen";
-
 function entryAt(at: string): string {
   try {
     const s = fs.lstatSync(at, { bigint: true });
@@ -269,8 +273,8 @@ export class WatcherRegistry {
     // [LAW:single-enforcer] Every acquire names its directories as they are
     // now: joining a slot judges its directories as opening one does.
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    if (shared !== undefined) this.sighted(shared.polled);
     const slot = shared ?? this.opened(key, targets);
+    this.sighted(slot.polled);
     const holder: Holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -569,13 +573,10 @@ export class WatcherRegistry {
   }
 
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, sighted.
+  // the acquire is a change; or the one already held, which the acquire sights.
   private polledAt(at: string): PolledPath {
     const held = this.polled.get(at);
-    if (held !== undefined) {
-      this.sighted([held]);
-      return held;
-    }
+    if (held !== undefined) return held;
     const record: PolledPath = {
       path: at,
       entry: entryAt(at),
