@@ -72350,6 +72350,23 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   };
 }
 
+// src/doctor/sightings.ts
+init_globals();
+var handlerProvenBy = (arrival, otherwise) => arrival.via === "link" ? { kind: "arrived", delivery: arrival.delivery } : otherwise(arrival);
+function sessionWidth(sessionId2, said2) {
+  const statusline = said2.find((s) => s.role === "statusline");
+  return statusline === void 0 ? {
+    kind: "failed",
+    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
+  } : {
+    kind: "ok",
+    value: {
+      columns: statusline.termCols,
+      of: { kind: "session", sessionId: sessionId2 }
+    }
+  };
+}
+
 // src/doctor/gather.ts
 function asked(read2) {
   try {
@@ -72399,7 +72416,7 @@ function configFacts(load, target) {
 function doctorFacts({ machine, install: install2 }, load, target, stores, arrival) {
   return {
     ...machine,
-    urlHandler: arrival.via === "link" ? { kind: "arrived", delivery: arrival.delivery } : machine.urlHandler,
+    urlHandler: handlerProvenBy(arrival, () => machine.urlHandler),
     config: configFacts(load, target),
     marks: stores.marks,
     clicked: stores.clicked,
@@ -92135,12 +92152,10 @@ async function segmentDataFacts(edge, needs, cwd2, rateLimits) {
     rateLimits: await need(needs.rateLimits, () => rateLimits)
   };
 }
-async function urlHandlerOf(edge, arrival) {
-  if (arrival.via === "link")
-    return { kind: "arrived", delivery: arrival.delivery };
+var urlHandlerOf = async (edge, arrival) => handlerProvenBy(arrival, async ({ via }) => {
   const registration = await edge.handler();
-  return registration.kind === "unsupported" ? registration : { kind: "registered", via: arrival.via, opener: registration.opener };
-}
+  return registration.kind === "unsupported" ? registration : { kind: "registered", via, opener: registration.opener };
+});
 async function readDoctor(edge, hints, ask2, origin, sighted) {
   const tmux3 = await tmuxFacts(edge, hints.tmux);
   const terminal = terminalIdentity(tmux3, hints.terminalEnv);
@@ -92179,22 +92194,6 @@ async function readDoctor(edge, hints, ask2, origin, sighted) {
       },
       sighted.bars
     )
-  };
-}
-
-// src/doctor/sightings.ts
-init_globals();
-function sessionWidth(sessionId2, said2) {
-  const statusline = said2.find((s) => s.role === "statusline");
-  return statusline === void 0 ? {
-    kind: "failed",
-    reason: `the daemon holds no statusline render of session ${sessionId2} \u2014 none since it started, or dropped for newer sessions' renders, or only a frames display draws it, which reports no width \u2014 so no width a statusline client measured is known; run this again once the statusline has redrawn`
-  } : {
-    kind: "ok",
-    value: {
-      columns: statusline.termCols,
-      of: { kind: "session", sessionId: sessionId2 }
-    }
   };
 }
 

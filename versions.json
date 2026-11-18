@@ -4,15 +4,22 @@
     {
       "version": "pr-793",
       "ref": "refs/pull/793/merge",
-      "sha": "b65562525b610b89556891562dfb437a7dfffa72",
-      "timestamp": "2026-11-18T04:45:19.378Z",
+      "sha": "3b70f3f232269a6a208318fb885ed58e7d799169",
+      "timestamp": "2026-11-18T04:56:54.577Z",
       "commits": [
         {
-          "sha": "b65562525b610b89556891562dfb437a7dfffa72",
+          "sha": "3b70f3f232269a6a208318fb885ed58e7d799169",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T04:44:18Z",
-          "message": "Merge 71b4fb1f0cb1a457f68c88ecf416d766379a7ee0 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+          "timestamp": "2026-11-18T04:56:01Z",
+          "message": "Merge 631841e5c74f419b3c105917a1623491b4d71029 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+        },
+        {
+          "sha": "631841e5c74f419b3c105917a1623491b4d71029",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T21:55:50-07:00",
+          "message": "fix(doctor): errors a reporting run logged fail the command, and one rule says what a click proves of the URL handler (9a7)\n"
         },
         {
           "sha": "71b4fb1f0cb1a457f68c88ecf416d766379a7ee0",
