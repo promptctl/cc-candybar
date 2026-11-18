@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-799",
+      "ref": "refs/pull/799/merge",
+      "sha": "69d416b1a2ed73360a99b3e8e7a3ed73e3afd3a9",
+      "timestamp": "2026-11-18T13:10:26.227Z",
+      "commits": [
+        {
+          "sha": "69d416b1a2ed73360a99b3e8e7a3ed73e3afd3a9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:09:24Z",
+          "message": "Merge 1f09e1276786ff736ac8e4ab886b11d9ac3d9dc7 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "1f09e1276786ff736ac8e4ab886b11d9ac3d9dc7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:09:13-07:00",
+          "message": "fix(edit): edit chrome spells preset and placement with one injective, readable identifier (5bfl)\n\nA placement or preset name is letters and digits as they are and every\nother code point as Z and six hex digits, so names that differ only in\npunctuation keep their own chrome and menu keys. The preset collision\nguard protected only the lossy preset spelling and is deleted.\n"
+        },
+        {
+          "sha": "2da58b391ed0013455c92fe34ae64ef6afd42c6d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:48:16-07:00",
+          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5d66d500b01f137d9d9a6bdbec6d0664ede19584",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:56:04-07:00",
           "message": "fix(colour): the door's ✖ is chosen among the reds the render's depth draws (7u1g)\n\nAt ansi the ✖ was a theme red rounded into sixteen colours, repaired by a\nnearest-colour search that tested contrast alone, so it was drawn silver,\nyellow, black or purple. The choice now measures every candidate as the\nrender's depth draws it: the theme's named reds at truecolor and 256, and\nthe terminal's red and bright red at ansi. keptOn is deleted, and the\ntemplate's role is parsed as a semantic role.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-799",
-      "ref": "refs/pull/799/merge",
-      "sha": "bca7b732d1e316abca6e836230dc5204d00ab3f9",
-      "timestamp": "2026-11-18T12:49:34.690Z",
-      "commits": [
-        {
-          "sha": "bca7b732d1e316abca6e836230dc5204d00ab3f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:48:32-07:00",
-          "message": "Merge 2da58b391ed0013455c92fe34ae64ef6afd42c6d into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "2da58b391ed0013455c92fe34ae64ef6afd42c6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:48:16-07:00",
-          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
         }
       ]
     }

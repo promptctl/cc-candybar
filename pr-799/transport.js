@@ -47138,9 +47138,9 @@ var Recolored = class {
     if (options.colorSystem === null)
       return { segments, hold: UNMOVED };
     const depth = options.colorSystem ?? ColorDepth.TRUECOLOR;
-    const looked = looks(segments, depth, this.theme);
-    const walked = walk(looked);
-    const animation = this.effect(measured(looked, () => walked, depth, this.theme));
+    const looked2 = looks(segments, depth, this.theme);
+    const walked = walk(looked2);
+    const animation = this.effect(measured(looked2, () => walked, depth, this.theme));
     const shown = shownAt(animation, this.t, options);
     return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
@@ -47351,9 +47351,9 @@ function walkGlyphs(segments) {
 function inked(text4) {
   return text4.trim() !== "";
 }
-function walk(looked) {
-  const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
-  return looked.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
+function walk(looked2) {
+  const placed2 = walkGlyphs(looked2.map(({ segment }) => segment));
+  return looked2.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
 }
 function edgesBeside(walked, drawings) {
   let rows;
@@ -47391,7 +47391,7 @@ function edgesBeside(walked, drawings) {
 function drawsLines(style) {
   return [style.underline, style.underline2, style.strike, style.overline, style.frame, style.encircle].some((on2) => on2 === true);
 }
-function measured(looked, walked, depth, theme24) {
+function measured(looked2, walked, depth, theme24) {
   const ground = theme24.backgroundColor.hex;
   let everything;
   const list2 = () => walked().flatMap(({ look, glyphs }) => {
@@ -47403,7 +47403,7 @@ function measured(looked, walked, depth, theme24) {
   const listed = () => everything ??= list2();
   let all2;
   let shown;
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
+  const words2 = looked2.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
   const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
@@ -50553,6 +50553,34 @@ function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path15.default.join(stateDir2, "update-act", key);
 }
+function looked(prev, job, began, done, longestLookMs) {
+  if (prev === null || !sameJob(prev.job, job)) {
+    return {
+      kind: "first",
+      watched: {
+        job,
+        spentMs: 0,
+        unwatchedMs: 0,
+        lookedAt: done,
+        ended: false
+      }
+    };
+  }
+  const waitedMs = spanMs(prev.lookedAt, began);
+  return waitedMs <= longestLookMs ? {
+    kind: "spent",
+    watched: { ...prev, spentMs: prev.spentMs + waitedMs, lookedAt: done },
+    waitedMs
+  } : {
+    kind: "unwatched",
+    watched: {
+      ...prev,
+      unwatchedMs: prev.unwatchedMs + waitedMs,
+      lookedAt: done
+    },
+    waitedMs
+  };
+}
 function judgeAct(facts) {
   if (facts === null) return IDLE;
   const { act: act2, record: record2, alive, end, lastLine } = facts;
@@ -50614,12 +50642,27 @@ async function isRecordedJob(record2, read2, jobs, boot) {
   return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
 }
 function readRecord(actDir) {
+  const file = recordOf(actDir);
+  let text4;
   try {
-    return JSON.parse(fs_default.readFileSync(recordOf(actDir), "utf8"));
+    text4 = fs_default.readFileSync(file, "utf8");
   } catch (err) {
     if (err.code === "ENOENT") return null;
     throw err;
   }
+  return parsedRecord(file, text4);
+}
+function parsedRecord(file, text4) {
+  const r = JSON.parse(text4);
+  if (typeof r === "object" && r !== null && "identity" in r && typeof r.identity === "string" && "pid" in r && typeof r.pid === "number" && Number.isSafeInteger(r.pid) && "startTime" in r && (r.startTime === null || typeof r.startTime === "string") && "started" in r && typeof r.started === "number" && Number.isFinite(r.started)) {
+    return {
+      identity: r.identity,
+      pid: r.pid,
+      startTime: r.startTime,
+      started: r.started
+    };
+  }
+  throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
 var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
 function makeActReader(dir, read2, jobs, clock) {
@@ -50663,11 +50706,18 @@ function makeActReader(dir, read2, jobs, clock) {
     }
   };
 }
+var INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
 function stakeClaim(dir, actDir, record2) {
   fs_default.mkdirSync(dir, { recursive: true });
   const staging = fs_default.mkdtempSync(import_node_path15.default.join(dir, ".claim-"));
   try {
-    fs_default.writeFileSync(recordOf(staging), JSON.stringify(record2));
+    fs_default.writeFileSync(
+      recordOf(staging),
+      JSON.stringify({
+        ...record2,
+        deadline: INERT_DEADLINE
+      })
+    );
     fs_default.renameSync(staging, actDir);
     return true;
   } catch (err) {
@@ -50678,7 +50728,7 @@ function stakeClaim(dir, actDir, record2) {
     fs_default.rmSync(staging, { recursive: true, force: true });
   }
 }
-async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now2, read2) {
+async function claimAct(launcher, dir, after, identity2, command, now2, read2) {
   const act2 = (after ?? 0) + 1;
   const actDir = import_node_path15.default.join(dir, String(act2));
   const job = launcher.launchJobSync(command, filesOf(actDir));
@@ -50690,8 +50740,7 @@ async function claimAct(launcher, dir, after, identity2, command, timeoutMs, now
       identity: identity2,
       pid: job.pid,
       startTime: start.kind === "start" ? start.token : null,
-      started: now2,
-      deadline: now2 + timeoutMs
+      started: now2
     };
     if (!stakeClaim(dir, actDir, record2)) return CLAIMED_FIRST;
     if (actNumbers(dir).some((n) => n > act2)) {
@@ -54439,6 +54488,12 @@ init_globals();
 init_globals();
 function ident(name) {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+function exactIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Ya-z0-9]$/.test(c) ? c : `Z${c.codePointAt(0).toString(16).padStart(6, "0")}`
+  ).join("");
 }
 
 // src/config/menu-keys.ts
@@ -62342,11 +62397,8 @@ function chromeCell(name, template, artifacts) {
   artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
   return { kind: "segment", name };
 }
-function chromeIdent(id2) {
-  return Array.from(id2, (c) => c.codePointAt(0).toString(36)).join("_");
-}
 function removeTerm(ctx, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${chromeIdent(id2)}`;
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${exactIdent(id2)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id2
@@ -62375,7 +62427,7 @@ function placementDraftKey(presetIdent, id2, setting) {
 }
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
-  const placement = chromeIdent(id2);
+  const placement = exactIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.presetIdent, id2);
   ctx.configured.push(member);
@@ -62559,7 +62611,7 @@ function insertTerm(ctx, anchor, relation) {
   };
 }
 function insertGap(presetIdent, anchor, relation) {
-  const gap = `${relation}.${chromeIdent(anchor)}`;
+  const gap = `${relation}.${exactIdent(anchor)}`;
   const apply = `${EDIT_NS}${presetIdent}.insert.${gap}`;
   const host = `${EDIT_NS}${presetIdent}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
@@ -62648,7 +62700,7 @@ function withTrailingCell(node, cell3) {
 function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
   const { node } = presetRoot(config2, presetName);
   const ctx = {
-    presetIdent: ident(presetName),
+    presetIdent: exactIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config2.segments,
     artifacts,
@@ -63297,6 +63349,7 @@ function releaseReading(release4) {
 }
 var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
 var ACT_POLL_MS = 2e3;
+var LONGEST_LOOK_MS = 5 * ACT_POLL_MS;
 function describeBuild(b) {
   switch (b.kind) {
     case "current":
@@ -63417,17 +63470,44 @@ function makeUpdateWatch(opts) {
       return { ok: false, error: unreadable };
     }
   }
-  function endIfOverdue(facts) {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+  let watched = null;
+  function endIfOverdue(facts, began) {
+    if (!facts?.alive) return;
+    const look = looked(
+      watched,
+      facts.record,
+      began,
+      clock.monotonic(),
+      LONGEST_LOOK_MS
+    );
+    watched = look.watched;
+    if (look.kind === "first") {
+      log(
+        "info",
+        `apply-update: act ${facts.act}: this daemon's budget for its job starts unspent`
+      );
+    }
+    if (look.kind === "unwatched") {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${look.waitedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`
+      );
+    }
+    if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
+    watched = { ...watched, ended: true };
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+    log(
+      "error",
+      `apply-update: act ${facts.act} ${why2} after ${watched.spentMs}ms watched (${watched.unwatchedMs}ms unwatched); ${ending}`
+    );
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
+      const began = clock.monotonic();
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) endIfOverdue(facts, began);
       return facts;
     });
     if (closed || !read2.ok) return;
@@ -63499,7 +63579,6 @@ function makeUpdateWatch(opts) {
         newest === null ? null : newest.act,
         updateIdentity(update),
         { ...command, category: "update.apply" },
-        ACT_TIMEOUT_MS,
         clock.now(),
         readStart
       );
@@ -82242,23 +82321,6 @@ var UNREAD_DISTRIBUTION = {
   bar: (nodePath3) => `${nodePath3} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container \u2014 a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (nodePath3) => `${nodePath3} sets "distribution" on a vertical container in a disclosure body \u2014 a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container), or give a group \`direction: 'horizontal'\`.`
 };
-function presetIdentCollisions(ctx, presets) {
-  const byIdent = /* @__PURE__ */ new Map();
-  for (const name of Object.keys(presets)) {
-    const id2 = ident(name);
-    const names = byIdent.get(id2);
-    if (names) names.push(name);
-    else byIdent.set(id2, [name]);
-  }
-  for (const [id2, names] of byIdent) {
-    if (names.length < 2) continue;
-    ctx.issues.push({
-      path: "presets",
-      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id2}" \u2014 edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-  }
-}
 function authoredPlacement(raw, name) {
   const layouts = [
     ["root", raw.root],
@@ -82319,7 +82381,6 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       line: findKeyLine(ctx.source, ["globals", "preset"])
     });
   }
-  presetIdentCollisions(ctx, cfg.presets);
   const templateScope = templateScopeOf(cfg);
   for (const name of templateScope.names) {
     if (name !== "settings" && !name.startsWith(SETTINGS_SCOPE_PREFIX))
@@ -88902,13 +88963,13 @@ function endedPlacements(before, after) {
   const survivors = new Set(
     presetNames(after.presets).flatMap(
       (preset) => placed2(after, preset).map(
-        (n) => configureMember(ident(preset), placementId(n))
+        (n) => configureMember(exactIdent(preset), placementId(n))
       )
     )
   );
   return presetNames(before.presets).flatMap(
     (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(ident(preset), placementId(node)),
+      member: configureMember(exactIdent(preset), placementId(node)),
       node
     })).filter(({ member }) => !survivors.has(member))
   );
