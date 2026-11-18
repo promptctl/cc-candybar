@@ -51069,7 +51069,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.7";
+var PACKAGE_VERSION = "1.232.8";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -72796,7 +72796,9 @@ function resolveValued(field, staged, sessionPick, globals) {
 }
 function presetOf(config2, sessionPick) {
   return effectivePresetName(
-    sessionPick("preset"),
+    // [LAW:one-source-of-truth] Read under the row's `sessionKey`, the key a
+    // preset pick is written under.
+    sessionPick(GLOBAL_FIELDS.preset.sessionKey),
     config2.globals.preset,
     config2.presets
   );
@@ -72807,9 +72809,7 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
   const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config2.editGlobals : {};
   const theme24 = resolveThemeSelection(
     staged.palette,
-    // [LAW:one-source-of-truth] The session key the settings menu writes a
-    // theme pick under, spelled once.
-    sessionPick(THEME_SETTING),
+    sessionPick(GLOBAL_FIELDS.palette.sessionKey),
     declared.palette
   );
   const globals = underThemeDefault(
@@ -72828,13 +72828,13 @@ function resolveEffectiveGlobals(config2, sessionPick, presetCustomized) {
     theme: theme24,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick("style"),
+      sessionPick(GLOBAL_FIELDS.style.sessionKey),
       globals.style,
       config2.styles
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick(EFFECT_SETTING),
+      sessionPick(GLOBAL_FIELDS.effect.sessionKey),
       globals.effect
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??

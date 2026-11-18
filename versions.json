@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-810",
+      "ref": "refs/pull/810/merge",
+      "sha": "a57504d2a369a3d5562a1dd71f230c3495c09d97",
+      "timestamp": "2026-11-18T22:35:51.688Z",
+      "commits": [
+        {
+          "sha": "a57504d2a369a3d5562a1dd71f230c3495c09d97",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:34:47Z",
+          "message": "Merge 529033c636d7371d0596fe41b17a4d1f0eb0a980 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "529033c636d7371d0596fe41b17a4d1f0eb0a980",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:38-07:00",
+          "message": "fix(test): the quiet-text sweep draws through a one-session rig, and each row asserts the theme it drew under (s33)\n"
+        },
+        {
+          "sha": "6f01db3354e1d16f72bd6703ae0a8d643a1061df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:37-07:00",
+          "message": "fix(config): the globals resolution reads each selector's pick under its globals row's sessionKey, the key the settings menu writes (s33)\n"
+        },
+        {
+          "sha": "064333c629eddfaf984e3306ec2650695189f401",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:14:02-07:00",
+          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-834",
       "ref": "refs/pull/834/merge",
       "sha": "7593e639dda420a51dbe27a2c1e42d44ad7204f2",
@@ -93,42 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:14:05-07:00",
           "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-810",
-      "ref": "refs/pull/810/merge",
-      "sha": "219e675b4e5445d6c43750ccaee03d8de97e4e9b",
-      "timestamp": "2026-11-18T22:24:55.401Z",
-      "commits": [
-        {
-          "sha": "219e675b4e5445d6c43750ccaee03d8de97e4e9b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:23:56Z",
-          "message": "Merge 97e10287b4730251865508b49a08309a1f1243e1 into 5a71a43f5da66bd536475cb0df17c28d9a6469e0\n"
-        },
-        {
-          "sha": "97e10287b4730251865508b49a08309a1f1243e1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:38-07:00",
-          "message": "fix(test): the quiet-text sweep draws through the rig, and each row asserts the theme it drew under (s33)\n"
-        },
-        {
-          "sha": "56f2c84b7097e0096de516995c483e4e0cb5c328",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:37-07:00",
-          "message": "fix(config): the globals resolution reads the theme and effect picks under THEME_SETTING and EFFECT_SETTING, the keys the settings menu writes (s33)\n"
-        },
-        {
-          "sha": "064333c629eddfaf984e3306ec2650695189f401",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:02-07:00",
-          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
         }
       ]
     }
