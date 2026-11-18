@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-797",
+      "ref": "refs/pull/797/merge",
+      "sha": "d463595bb16d73516d6faa5bb08f7b320fe9c509",
+      "timestamp": "2026-11-18T12:14:32.344Z",
+      "commits": [
+        {
+          "sha": "d463595bb16d73516d6faa5bb08f7b320fe9c509",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:13:19-07:00",
+          "message": "Merge f9a8c7b0a8c08ba45499619b1eb9803be4ff0a75 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "f9a8c7b0a8c08ba45499619b1eb9803be4ff0a75",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:12:48-07:00",
+          "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-796",
       "ref": "refs/pull/796/merge",
       "sha": "6c242e5d1d61b50b90e5ad7aee4363f77f2b3087",
