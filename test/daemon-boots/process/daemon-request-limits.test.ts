@@ -4,7 +4,13 @@
 // test/daemon-render-event-e2e.test.ts's, in the worker.
 
 import { execFileSync } from "node:child_process";
-import { constants, mkdtempSync, rmSync } from "node:fs";
+import {
+  constants,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { open } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +39,9 @@ jest.setTimeout(TEST_TIMEOUT_MS);
 // the test writes into the pipe the file is. The test holds that read open
 // past the backstop, so the render outlives it by construction, not by how
 // slow a compile is on this machine. The render's event says the client read
-// another reply, and the hold it drew under is released when it ends.
+// another reply, and the hold it drew under is released when it ends. Only the
+// render's read may hold: the config watch hears the write and reads the path
+// again, and a pipe with no writer left blocks that read for good.
 test("a render that outlives its request timeout writes timedOut=Y", async () => {
   const { sockPath, env, removeTmpDirs } = prepareIsolatedDaemonEnv(
     "cc-candybar-request-limits",
@@ -89,7 +97,16 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
       throw e;
     });
     await sleep(REQUEST_TIMEOUT_MS * 2);
-    await pipe.writeFile(JSON.stringify({ segments: {}, root: { h: [] } }));
+    const contents = JSON.stringify({ segments: {}, root: { h: [] } });
+    await pipe.writeFile(contents);
+    // [LAW:no-ambient-temporal-coupling] The path stops being the pipe before
+    // the hold ends: the render reads on through the descriptor it opened,
+    // while every later open of the path, the watch's re-read among them, gets
+    // a plain file. The loop is held until the close below, so no re-read can
+    // land before the swap, however soon the watch fires.
+    const settled = path.join(projectDir, "settled.json5");
+    writeFileSync(settled, contents);
+    renameSync(settled, config);
     await pipe.close();
     await expect(answered).resolves.toMatchObject({
       ok: false,
