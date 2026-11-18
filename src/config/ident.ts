@@ -5,18 +5,29 @@
 // path or a synthesis-time accumulator key. Every non-alphanumeric RUN
 // collapses to a single `_`.
 //
-// [LAW:no-silent-failure] Multiple sites depend on this SAME collapse
-// producing the SAME result for the SAME input: menu-keys.ts derives a
-// menu's synthesized SessionState/action identity from it; edit-chrome.ts
-// keys synthesized per-preset reset/±-chrome artifacts by it;
-// loader/cross-ref.ts's presetIdentCollisions checks that no two preset
-// names collide under it BEFORE edit-chrome.ts ever runs. Before this
-// module existed, three call sites reimplemented the same regex
-// independently (module-privacy taken too far) — a genuine drift risk: if
-// one copy changed without the others, the collision GUARD would stop
-// matching the collision RULE it exists to enforce, silently reopening the
-// exact "second preset steals the first's synthesized action" bug the
-// guard was written to prevent. One function now; every site imports it.
+// [LAW:one-source-of-truth] Every site that derives a name by this collapse
+// imports it, so the same input always meets the same key: menu-keys.ts
+// derives a menu's synthesized SessionState/action identity from it. A name
+// that must stay apart from every other is spelled by `escapedIdent` below.
 export function ident(name: string): string {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+
+// The marker that opens an escape, and so the one letter never kept as itself.
+const ESCAPE = "Z";
+
+// [LAW:one-source-of-truth] A name spelled injectively as an identifier, by
+// escape encoding: an ASCII letter or digit is kept as itself, except
+// `ESCAPE`, and every other code point becomes `ESCAPE` and its six hex
+// digits. `ident` would merge `git-2` and `git_2`; these stay `gitZ00002d2`
+// and `gitZ00005f2`. Every synthesized name that must stay apart from
+// another, such as edit chrome's preset and placement names, is spelled
+// here.
+export function escapedIdent(name: string): string {
+  return Array.from(name, (c) =>
+    /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE
+      ? c
+      : // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+        `${ESCAPE}${c.codePointAt(0)!.toString(16).padStart(6, "0")}`,
+  ).join("");
 }

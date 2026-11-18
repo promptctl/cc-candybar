@@ -27,7 +27,7 @@ import {
   EDIT_MODE_ARRANGE,
 } from "../src/config/loader/edit-mode";
 import { disclosureNest } from "../src/config/disclosure-nest";
-import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
+import { EDIT_LIVE_KEY, insertGap } from "../src/config/edit-chrome";
 import {
   CLOSING_FLASH_SECONDS,
   MENU_TIMEOUT_RANGE,
@@ -228,9 +228,10 @@ describe("the close is the write the door's ✕ makes, on a click's own path", (
       segments: { arrange: { template: '{{ action "edit.toggle" "✎" }}' } },
       root: { h: ['directory', 'arrange'] },
     }`);
-    const library = "menus.edit_default_insertSeg_0.edit_default_insert_0";
+    const gap = insertGap("default", "directory", "before");
+    const library = gap.stateKey;
     await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    await rt.clickWriting(library, "edit.default.insert.0");
+    await rt.clickWriting(library, gap.apply);
     expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
     expect(menuRows(rt.draw(instantOf(new Date())))).toBeGreaterThan(0);
     await closeIdleMenus(

@@ -45,7 +45,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
-import { ident } from "./ident.js";
+import { escapedIdent } from "./ident.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -270,13 +270,12 @@ function chromeCell(
 }
 
 // The `-` affordance (drawn `✖`) for one placement, addressed by its id: a
-// literal `removeSegment` action, and the `{{ action }}` that clicks it. The
-// action is named by its POSITION, as an insertion's is: an id is free text,
-// and `ident` would collapse `git-2` and `git_2` onto one action. It is red
-// TEXT on the cell's own ground, floored to stay legible on it, as the `✚`
-// beside it is green.
-function removeTerm(ctx: SpliceCtx, posIdent: string, id: string): string {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+// literal `removeSegment` action, and the `{{ action }}` that clicks it. It
+// is red TEXT on the cell's own ground, floored to stay legible on it, as the
+// `✚` beside it is green.
+function removeTerm(ctx: SpliceCtx, id: string): string {
+  // [LAW:one-source-of-truth] Spelled as every chrome name for the placement.
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id,
@@ -354,19 +353,18 @@ interface ConfigureParts {
 
 function configureParts(
   ctx: SpliceCtx,
-  posIdent: string,
   node: SegmentNode,
   decls: Readonly<Record<string, SettingDecl>>,
 ): ConfigureParts {
   const id = placementId(node);
+  const placement = escapedIdent(id);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id);
+  const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${posIdent}`;
+  const enter = `${prefix}.configure.${placement}`;
   // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Named by position, so the
-  // placement configured there next would find a list left open; entering
-  // configure folds it, and each visit starts with every list closed.
+  // it is a template path no other variable owns. Entering configure folds
+  // it, so each visit starts with every list closed.
   // [LAW:single-enforcer] exception: closing configure folds this list too
   // (disclosure-nest.ts), but a layout edit releases configure on the
   // reloaded config, where the removed placement's member nests nothing.
@@ -383,18 +381,18 @@ function configureParts(
   const drafts: Record<string, DraftSlot> = {};
   const controls: LayoutNode[] = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id, name);
-    // Named by position so it is a template field path (`.edit.draft.pp.d3.x`):
-    // an id is free text, and a preset's ident may lead with a digit, which a
-    // field name may not — hence its `p`. The key, not the name, is what a
-    // session holds across reloads.
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
+    // A template field path (`.edit.draft.pp.d1bZ00002d29.x`): an escaped
+    // preset or placement may lead with a digit, which a field name may not —
+    // hence `p` and `d`. The key, not the name, is what a session
+    // holds across reloads.
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
       default: settingSpelling(node.settings?.[name] ?? decl.default),
     };
     drafts[name] = { id, key, variable };
-    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    const segName = `${prefix}.setting.${placement}.${name}`;
     // [LAW:one-type-per-behavior] The settings menu's generator; the lists of
     // one placement's pickers share one accordion.
     const control = settingControl(
@@ -432,8 +430,8 @@ function configureParts(
   };
 }
 
-// `ident` (every per-preset chrome name's `edit.<preset>.` prefix) emits no
-// `:`, so no preset's chrome can land under this namespace.
+// `escapedIdent` (every per-preset chrome name's `edit.<preset>.` prefix)
+// emits no `:`, so no preset's chrome can land under this namespace.
 const LABEL_NS = `${EDIT_NS}label:`;
 
 // [LAW:one-source-of-truth] The segment a placed segment stands for in the
@@ -523,19 +521,15 @@ function editableUnit(
   ctx: SpliceCtx,
 ): LayoutNode[] {
   const id = placementId(child);
-  const leading = first
-    ? [insertTerm(ctx, String(ctx.posCounter.n++), id, "before")]
-    : [];
-  const afterPos = String(ctx.posCounter.n++);
-  const after = insertTerm(ctx, afterPos, id, "after");
-  // Every content segment has exactly one `after` insertion, so its
-  // position names its removal and its configuration too.
-  const remove = removeTerm(ctx, afterPos, id);
+  const leading = first ? [insertTerm(ctx, id, "before")] : [];
+  const after = insertTerm(ctx, id, "after");
+  const remove = removeTerm(ctx, id);
   // Every placement has settings — `theme` at least (settingsOf) — so
-  // every placement configures. [LAW:no-defensive-null-guards] cross-ref
-  // proved every placed segment is declared.
+  // every placement configures. [LAW:no-defensive-null-guards] the loader
+  // drops every placement of an undeclared segment before chrome is spliced
+  // (loader/unplaced.ts).
   const decl = ctx.segments[child.name]!;
-  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  const configure = configureParts(ctx, child, settingsOf(decl));
   // The buttons are drawn inside the cell of the placement they act on, in
   // whichever of the two views shows it, so nothing sits between them.
   const lead = inArrangeMode(remove);
@@ -582,7 +576,7 @@ function insertedUnit(
     kind: "segment",
     // Keyed by the preset too: another preset may hold the same id as an
     // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
+    // `/`, so the two names never meet.
     name: labelSegment(
       ctx,
       `${id}/${ctx.presetIdent}`,
@@ -611,13 +605,15 @@ function insertedUnit(
 // functions, not by re-deriving the shape.
 function insertTerm(
   ctx: SpliceCtx,
-  posIdent: string,
   anchor: string,
   relation: "before" | "after",
 ): { readonly host: string; readonly template: string } {
-  const { presetIdent, artifacts } = ctx;
-  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
+  const { artifacts } = ctx;
+  const {
+    apply: applyName,
+    host: chromeSegName,
+    stateKey,
+  } = insertGap(ctx.preset, anchor, relation);
   artifacts.actions[applyName] = {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
@@ -626,7 +622,6 @@ function insertTerm(
   };
 
   const member = menuMember(applyName);
-  const stateKey = menuStateKey(chromeSegName, applyName, undefined);
   const pageKey = menuPageKey(stateKey);
   const identity = menuActionName(stateKey, member);
   // A `✚` is edit chrome, gated on edit mode rather than hung under it, so its
@@ -669,15 +664,38 @@ function insertTerm(
   };
 }
 
+// [LAW:one-source-of-truth] The names of the `+` gap beside one placement,
+// from the preset's and the placement's names as written: its insert action,
+// the segment that hosts its menu, and that menu's open state. Edit chrome's
+// action, segment and variable names spell their preset and placement with
+// `escapedIdent`, so an add, removal or move elsewhere hands none of a
+// placement's state (an open `✚` library, its page, a configure list) to a
+// neighbour. Labels, the configure member and draft keys are values, not
+// names, and carry the id as written. An authored placement has a gap after
+// it, and the first of its row one before it too; an inserted cell has none.
+export function insertGap(
+  preset: string,
+  anchor: string,
+  relation: "before" | "after",
+): {
+  readonly apply: string;
+  readonly host: string;
+  readonly stateKey: string;
+} {
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
+  return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
+}
+
 // One splice's context, threaded unchanged through the recursion.
-// `posCounter` is shared by reference so position identifiers stay unique
-// across the WHOLE preset tree, not just one container.
 interface SpliceCtx {
+  // The preset's name as written, and as every chrome name spells it.
+  readonly preset: string;
   readonly presetIdent: string;
   readonly rootKey: string;
   readonly segments: DslConfig["segments"];
   readonly artifacts: ChromeArtifacts;
-  readonly posCounter: { n: number };
   // Every configure member the splice mints, collected for configuringVar.
   readonly configured: string[];
 }
@@ -898,11 +916,11 @@ function spliceEditChromeForPreset(
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const ctx: SpliceCtx = {
-    presetIdent: ident(presetName),
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config.segments,
     artifacts,
-    posCounter: { n: 0 },
     configured: [],
   };
   const spliced = spliceContainer(node, ctx);

@@ -7,7 +7,7 @@
 // prefix one synthesis pass mints its artifacts under — the `state` var, the
 // `cycle` action, the toggle segment — and reserves against user authorship:
 // group sugar (layout.ts), the `{{ menu }}` helper (menu-keys.ts), edit mode
-// (edit-mode.ts, plus edit-chrome.ts's per-position controls), and the global
+// (edit-mode.ts, plus edit-chrome.ts's per-placement controls), and the global
 // settings menu (settings-menu.ts). They live here, downhill of every
 // synthesizer, so the one predicate over them (`isReservedName`) never has to
 // reach up into a pass that already imports this module [LAW:one-way-deps].
