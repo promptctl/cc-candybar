@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "36b0c268535b139534bb9b29bd59ac0a0621b719",
+      "timestamp": "2026-11-18T15:33:20.460Z",
+      "commits": [
+        {
+          "sha": "36b0c268535b139534bb9b29bd59ac0a0621b719",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:32:14-07:00",
+          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7) (#798)\n\n* fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n\n* fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n\n* fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole."
+        }
+      ]
+    },
+    {
       "version": "pr-806",
       "ref": "refs/pull/806/merge",
       "sha": "3c796a734f706e6c4728f2e45ca3be3e880ff1ba",
@@ -60,42 +75,6 @@
       ]
     },
     {
-      "version": "pr-798",
-      "ref": "refs/pull/798/merge",
-      "sha": "d812718555ae24361527643541904e55d6e9fa87",
-      "timestamp": "2026-11-18T15:26:23.411Z",
-      "commits": [
-        {
-          "sha": "d812718555ae24361527643541904e55d6e9fa87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:25:22Z",
-          "message": "Merge 318811fd0125b9ca4f3a101da7e62a7d62280e98 into f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017\n"
-        },
-        {
-          "sha": "318811fd0125b9ca4f3a101da7e62a7d62280e98",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:02:07-07:00",
-          "message": "fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole.\n"
-        },
-        {
-          "sha": "67dd4b589b8c4cfdce98e34762e211db764e389f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:42:35-07:00",
-          "message": "fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n"
-        },
-        {
-          "sha": "03256b5ec44d947545744bebee2736f9b439d95d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:25:40-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-805",
       "ref": "refs/pull/805/merge",
       "sha": "ca26458194eb21f7dc48911d300e2450c6a34a59",
@@ -114,21 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:24:10-07:00",
           "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017",
-      "timestamp": "2026-11-18T15:17:52.319Z",
-      "commits": [
-        {
-          "sha": "f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T15:16:38Z",
-          "message": "chore(release): set `package.json` to 1.232.0\n\n## [1.232.0](https://github.com/promptctl/cc-candybar/compare/v1.231.0...v1.232.0) (2026-11-18)\n\n### Features\n\n* check and the doctor CLI draw through Renderer.answer, with no daemon running (9a7) ([#793](https://github.com/promptctl/cc-candybar/issues/793)) ([e33675a](https://github.com/promptctl/cc-candybar/commit/e33675a193dfc48790988daa17ac05641e602a19))\n\n### Bug Fixes\n\n* an update act's budget is spent in time a daemon watched it run, not wall time ([#797](https://github.com/promptctl/cc-candybar/issues/797)) ([5d66d50](https://github.com/promptctl/cc-candybar/commit/5d66d500b01f137d9d9a6bdbec6d0664ede19584))\n* **colour:** the door's ✖ is red as each depth draws it, the theme's own wherever one reads (87n6) ([#803](https://github.com/promptctl/cc-candybar/issues/803)) ([da23aa8](https://github.com/promptctl/cc-candybar/commit/da23aa8eef006c7d3ab59ca80d78ed17d712ef01))\n* **test:** a registry's teardown ends the runs held over it (y1ff) ([#804](https://github.com/promptctl/cc-candybar/issues/804)) ([414ac46](https://github.com/promptctl/cc-candybar/commit/414ac46b373d30c9a48f0b105345462e9a64bd0f))\n"
         }
       ]
     }
