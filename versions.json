@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-830",
+      "ref": "refs/pull/830/merge",
+      "sha": "637340e3b8ead97d7e9c03a83094fd8d432d4f4c",
+      "timestamp": "2026-11-18T21:41:22.406Z",
+      "commits": [
+        {
+          "sha": "637340e3b8ead97d7e9c03a83094fd8d432d4f4c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T21:40:32Z",
+          "message": "Merge 8c1ef8b5c031d8d3a25bd49243751c7ac0c9c90f into c8a92c406ada8c34ff102fb22f8e050196acde2a\n"
+        },
+        {
+          "sha": "8c1ef8b5c031d8d3a25bd49243751c7ac0c9c90f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:14:39-07:00",
+          "message": "fix(config): the installed layer's comments claim only what the load and the install do (70xn)\n"
+        },
+        {
+          "sha": "387e8fa50187a3ef27e56d9864bb4a6e5a736b87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:10:02-07:00",
+          "message": "fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n"
+        },
+        {
+          "sha": "a946ccb371687da7ccf77e3a13f5c8781242ee67",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:00:04-07:00",
+          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
+        },
+        {
+          "sha": "aa2cf20db6e108bc42ce750f0a0088fd222d890c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:07:47-07:00",
+          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c8a92c406ada8c34ff102fb22f8e050196acde2a",
@@ -13,71 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T14:38:13-07:00",
           "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv) (#824)\n\n* fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n\n* fix(watchers): an event looks again only at the path it names, a tree that cannot be listed keeps its watches, and a directory refused as it joins reaches its holders (cimv)\n\n* fix(watchers): an event re-reads the listing of its own directory, so nothing it names can throw, and a held directory that cannot be listed is refused (cimv)\n\n* fix(watchers): a tree directory gone from its path leaves without a refusal (cimv)"
-        }
-      ]
-    },
-    {
-      "version": "pr-831",
-      "ref": "refs/pull/831/merge",
-      "sha": "594305ff1d1c5f43e46e74cd2913ec5ebc257e93",
-      "timestamp": "2026-11-18T21:28:24.187Z",
-      "commits": [
-        {
-          "sha": "594305ff1d1c5f43e46e74cd2913ec5ebc257e93",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:27:25-07:00",
-          "message": "Merge 3a88d1801b6b3ad6453d9d7a6a50e59a05942da4 into eb4bbabafeb10bce11c78d1adc12007f6dd831ee\n"
-        },
-        {
-          "sha": "3a88d1801b6b3ad6453d9d7a6a50e59a05942da4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:26:58-07:00",
-          "message": "fix(edit): a placement's session state ends at the next load of the config that dropped it\n\nWhatever removes a placement (a hand edit, another session's click, a\nchange made while the daemon was down), every session's state for it ends\nat the next load of its config, so a re-added id opens with its libraries\nclosed, nothing configured and no drafts.\n\nThe key's minter says which placement a key belongs to, and one rule\nreleases every key whose placement the loaded config no longer holds,\nmeasured before unplaced placements are dropped. The render cache runs it\non every successful load over the sessions whose last click acted in that\nconfig. A clicking session's own release goes through the click's journal,\nso undo restores its drafts. A failed load releases nothing, and author\nmenus are never touched. The daemon log names each release.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-830",
-      "ref": "refs/pull/830/merge",
-      "sha": "1c2d729d9639761e2f05a64818015ef921de367c",
-      "timestamp": "2026-11-18T21:15:56.972Z",
-      "commits": [
-        {
-          "sha": "1c2d729d9639761e2f05a64818015ef921de367c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:14:50Z",
-          "message": "Merge 7f08858ecb0b70fc3d62de7dd1b9203359d5c406 into faf3e3eb7acc2326880d6a32d25e68576a6f6cb9\n"
-        },
-        {
-          "sha": "7f08858ecb0b70fc3d62de7dd1b9203359d5c406",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:14:39-07:00",
-          "message": "fix(config): the installed layer's comments claim only what the load and the install do (70xn)\n"
-        },
-        {
-          "sha": "c9f08fee3cafd3a35fb8a6f13c8176d1b556213f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:10:02-07:00",
-          "message": "fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n"
-        },
-        {
-          "sha": "ba7f51493d05693188f27d2eb11c56383db877be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:00:04-07:00",
-          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
-        },
-        {
-          "sha": "5386e0b1b4802cf94cdee087886beb7bd8b14b07",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:07:47-07:00",
-          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
         }
       ]
     },
