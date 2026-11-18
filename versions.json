@@ -4,15 +4,22 @@
     {
       "version": "pr-799",
       "ref": "refs/pull/799/merge",
-      "sha": "69d416b1a2ed73360a99b3e8e7a3ed73e3afd3a9",
-      "timestamp": "2026-11-18T13:10:26.227Z",
+      "sha": "228551d4633aa57a374417b68040a714270adc19",
+      "timestamp": "2026-11-18T13:25:43.023Z",
       "commits": [
         {
-          "sha": "69d416b1a2ed73360a99b3e8e7a3ed73e3afd3a9",
+          "sha": "228551d4633aa57a374417b68040a714270adc19",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:09:24Z",
-          "message": "Merge 1f09e1276786ff736ac8e4ab886b11d9ac3d9dc7 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+          "timestamp": "2026-11-18T13:24:47Z",
+          "message": "Merge 709d2fab431a44a53bc409996a13b4b9d5b65773 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "709d2fab431a44a53bc409996a13b4b9d5b65773",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:24:36-07:00",
+          "message": "fix(edit): chrome name builders take names as written and escape inside (5bfl)\n"
         },
         {
           "sha": "1f09e1276786ff736ac8e4ab886b11d9ac3d9dc7",

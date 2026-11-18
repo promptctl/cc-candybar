@@ -54489,10 +54489,14 @@ init_globals();
 function ident(name) {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
 }
-function exactIdent(name) {
+var ESCAPE = "Z";
+function escapedIdent(name) {
   return Array.from(
     name,
-    (c) => /^[A-Ya-z0-9]$/.test(c) ? c : `Z${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
   ).join("");
 }
 
@@ -60014,8 +60018,8 @@ var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
 var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(presetIdent, id2) {
-  return `${presetIdent}:${id2}`;
+function configureMember(preset, id2) {
+  return `${escapedIdent(preset)}:${id2}`;
 }
 var EDIT_MODE_REF = {
   variable: EDIT_MODE_KEY,
@@ -62398,7 +62402,7 @@ function chromeCell(name, template, artifacts) {
   return { kind: "segment", name };
 }
 function removeTerm(ctx, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${exactIdent(id2)}`;
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id2
@@ -62427,9 +62431,9 @@ function placementDraftKey(presetIdent, id2, setting) {
 }
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
-  const placement = exactIdent(id2);
+  const placement = escapedIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id2);
+  const member = configureMember(ctx.preset, id2);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
   const listKey = sharedMenuStateKey(enter);
@@ -62562,7 +62566,7 @@ function insertedUnit(child, insertedBy, spliced, ctx) {
     kind: "segment",
     // Keyed by the preset too: another preset may hold the same id as an
     // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
+    // `/`, so the two names never meet.
     name: labelSegment(
       ctx,
       `${id2}/${ctx.presetIdent}`,
@@ -62586,7 +62590,7 @@ function insertTerm(ctx, anchor, relation) {
     apply: applyName,
     host: chromeSegName,
     stateKey
-  } = insertGap(ctx.presetIdent, anchor, relation);
+  } = insertGap(ctx.preset, anchor, relation);
   artifacts.actions[applyName] = {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
@@ -62610,10 +62614,10 @@ function insertTerm(ctx, anchor, relation) {
     template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
   };
 }
-function insertGap(presetIdent, anchor, relation) {
-  const gap = `${relation}.${exactIdent(anchor)}`;
-  const apply = `${EDIT_NS}${presetIdent}.insert.${gap}`;
-  const host = `${EDIT_NS}${presetIdent}.insertSeg.${gap}`;
+function insertGap(preset, anchor, relation) {
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
 }
 function spliceContainer(node, ctx) {
@@ -62700,7 +62704,8 @@ function withTrailingCell(node, cell3) {
 function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
   const { node } = presetRoot(config2, presetName);
   const ctx = {
-    presetIdent: exactIdent(presetName),
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config2.segments,
     artifacts,
@@ -87655,23 +87660,19 @@ function presetKeys(doc) {
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, under3, into) {
-  const taken = new Set(
-    [
-      ...Object.keys(under3.presets),
-      ...presetKeys(doc),
-      // Each layer above as the loader reads it (JSON5, duplicate keys and
-      // all) — the editor refuses files the loader renders.
-      ...into.above.flatMap(
-        (l) => Object.keys(
-          import_json55.default.parse(l.text).presets ?? {}
-        )
-      )
-    ].map(ident)
-  );
+  const taken = /* @__PURE__ */ new Set([
+    ...Object.keys(under3.presets),
+    ...presetKeys(doc),
+    // Each layer above as the loader reads it (JSON5, duplicate keys and
+    // all) — the editor refuses files the loader renders.
+    ...into.above.flatMap(
+      (l) => Object.keys(import_json55.default.parse(l.text).presets ?? {})
+    )
+  ]);
   return Array.from(
     { length: taken.size + 1 },
     (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
-  ).find((candidate) => !taken.has(ident(candidate)));
+  ).find((candidate) => !taken.has(candidate));
 }
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
@@ -88962,14 +88963,12 @@ function endedPlacements(before, after) {
   );
   const survivors = new Set(
     presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map(
-        (n) => configureMember(exactIdent(preset), placementId(n))
-      )
+      (preset) => placed2(after, preset).map((n) => configureMember(preset, placementId(n)))
     )
   );
   return presetNames(before.presets).flatMap(
     (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(exactIdent(preset), placementId(node)),
+      member: configureMember(preset, placementId(node)),
       node
     })).filter(({ member }) => !survivors.has(member))
   );
