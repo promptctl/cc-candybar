@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-817",
+      "ref": "refs/pull/817/merge",
+      "sha": "4a445f22d76427e62ae41a1120e71809042dc489",
+      "timestamp": "2026-11-18T17:45:16.709Z",
+      "commits": [
+        {
+          "sha": "4a445f22d76427e62ae41a1120e71809042dc489",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:44:14-07:00",
+          "message": "Merge b45e383da4df96bf22238568f1943ce1346309fe into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "b45e383da4df96bf22238568f1943ce1346309fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:44:03-07:00",
+          "message": "fix(daemon): a fork-bomb registry that cannot be listed refuses an isolated boot, naming why (g75t)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-816",
       "ref": "refs/pull/816/merge",
       "sha": "9353f597c5bfd18851f1ae05fc72ff59fd07c684",
