@@ -1,3 +1,9 @@
+## [1.230.1](https://github.com/promptctl/cc-candybar/compare/v1.230.0...v1.230.1) (2026-11-18)
+
+### Bug Fixes
+
+* **test:** the request-limits config stops being a fifo before its hold ends (6sc) ([#790](https://github.com/promptctl/cc-candybar/issues/790)) ([0b6f815](https://github.com/promptctl/cc-candybar/commit/0b6f815cbfb0a4fae522cf79a7757c5c88ce1287))
+
 ## [1.230.0](https://github.com/promptctl/cc-candybar/compare/v1.229.0...v1.230.0) (2026-11-18)
 
 ### Features
