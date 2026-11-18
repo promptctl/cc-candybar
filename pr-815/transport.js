@@ -71375,7 +71375,7 @@ var statFault = (folder, e) => ({
   cause: "error",
   reason: `${folder} could not be read: ${e.message}`
 });
-function madeOnce(folder) {
+function madeIfAbsent(folder) {
   try {
     fs_default.mkdirSync(folder);
   } catch (e) {
@@ -71392,9 +71392,14 @@ var CAUSE_OF = {
   refused: "refused",
   failed: "error"
 };
-var folderOf = (f) => f.kind === "unmade" ? f.folder : f.key.folder;
-var where = (f) => f.kind === "unmade" ? `folder=${valueOf(f.folder)}` : `folder=${valueOf(f.key.folder)} generation=${f.key.generation}`;
-var faultsOf = (f) => f.kind === "unmade" ? [f.fault] : [f.watch, f.stat].filter((x) => x !== null);
+var folderOf = (f) => f.kind === "unopened" ? f.folder : f.key.folder;
+var where = (f) => f.kind === "unopened" ? `folder=${valueOf(f.folder)}` : `folder=${valueOf(f.key.folder)} generation=${f.key.generation}`;
+var faultsOf = (f) => f.kind === "unopened" ? [["folder", f.fault]] : [
+  ["watch", f.watch],
+  ["folder", f.folder]
+].flatMap(
+  ([source, fault]) => fault === null ? [] : [[source, fault]]
+);
 var watchFaultOf = (handle) => {
   const [deaf] = handle.deaf;
   return deaf === void 0 ? null : { cause: CAUSE_OF[deaf.kind], reason: deafnessLine(deaf) };
@@ -71467,42 +71472,36 @@ var ManagedStorage = class {
   kept(folder) {
     const was = this.folders.get(folder);
     const found2 = this.found(folder);
-    if (found2.kind === "unmade") {
-      this.unmade(folder, was, found2.fault);
-      return;
-    }
     if (was?.kind === "watched" && was.health.kind === "watching") {
-      if (found2.kind === "unread") return this.statted(was, found2.fault);
+      if (found2.kind === "unopened") return this.statted(was, found2.fault);
       if (current(was, found2.identity)) return this.statted(was, null);
     }
+    if (found2.kind === "unopened")
+      return this.unopened(folder, was, found2.fault);
     const generation = this.generations++;
     if (was !== void 0)
       this.logger(
         "info",
         `plugin storage generation folder=${valueOf(folder)} generation=${generation}`
       );
-    this.opened(
-      { folder, generation },
-      found2.kind === "found" ? found2.identity : "gone",
-      found2.kind === "unread" ? found2.fault : null
-    );
-    if (was?.kind === "unmade") this.restated(was, was.fault, null);
+    this.opened({ folder, generation }, found2.identity);
+    if (was?.kind === "unopened") this.restated(was, "folder", was.fault, null);
     else if (was !== void 0) this.closed(was);
     this.sessions.changed((f) => f.folder === folder);
   }
-  // A held folder that could not be made: one already unmade restates its
-  // reason; any other becomes unmade, its generation closed.
-  unmade(folder, was, fault) {
-    if (was?.kind === "unmade") {
+  // A held folder no generation could open on: one already unopened restates
+  // its reason; any other becomes unopened, its generation closed.
+  unopened(folder, was, fault) {
+    if (was?.kind === "unopened") {
       const before = was.fault;
       was.fault = fault;
-      this.restated(was, before, fault);
+      this.restated(was, "folder", before, fault);
       return;
     }
-    const unmade = { kind: "unmade", folder, fault };
-    this.folders.set(folder, unmade);
+    const unopened = { kind: "unopened", folder, fault };
+    this.folders.set(folder, unopened);
     if (was !== void 0) this.closed(was);
-    this.restated(unmade, null, fault);
+    this.restated(unopened, "folder", null, fault);
   }
   // A render state reclaimed: the folders only it named close.
   release(id2) {
@@ -71541,10 +71540,10 @@ var ManagedStorage = class {
   // only that plugin's sources, not the build.
   found(folder) {
     try {
-      madeOnce(folder);
+      madeIfAbsent(folder);
     } catch (e) {
       return {
-        kind: "unmade",
+        kind: "unopened",
         fault: {
           cause: "unusable",
           reason: `${folder} could not be created: ${e.message}`
@@ -71554,7 +71553,7 @@ var ManagedStorage = class {
     try {
       return { kind: "found", identity: this.identityOf(folder) };
     } catch (e) {
-      return { kind: "unread", fault: statFault(folder, e) };
+      return { kind: "unopened", fault: statFault(folder, e) };
     }
   }
   // Closes every folder no hold names.
@@ -71565,7 +71564,7 @@ var ManagedStorage = class {
   }
   // Opens a folder's next generation, on the folder its hold found, as the
   // folder's current watch.
-  opened(key, identity2, stat3) {
+  opened(key, identity2) {
     const watched = {
       kind: "watched",
       key,
@@ -71584,26 +71583,25 @@ var ManagedStorage = class {
       ),
       health: { kind: "watching" },
       watch: null,
-      stat: null
+      folder: null
     };
     this.folders.set(key.folder, watched);
     this.heard(watched);
-    this.statted(watched, stat3);
     void this.sweep(key);
   }
-  // Closes a folder's generation, or its unmade record: each fault still
+  // Closes a folder's generation, or its unopened record: each fault still
   // standing ends with it. The folder's entry goes only if it is still this
   // one: a hold that moved the generation has already put its successor
   // there.
   closed(entry) {
     const folder = folderOf(entry);
     if (this.folders.get(folder) === entry) this.folders.delete(folder);
-    for (const fault of faultsOf(entry))
+    for (const [source, fault] of faultsOf(entry))
       this.logger(
         "info",
-        `plugin storage fault ended ${where(entry)} cause=${fault.cause}`
+        `plugin storage fault ended ${where(entry)} source=${source} cause=${fault.cause}`
       );
-    if (entry.kind === "unmade") return;
+    if (entry.kind === "unopened") return;
     entry.health = { kind: "closed" };
     entry.stopSweep();
     entry.handle.release();
@@ -71613,34 +71611,38 @@ var ManagedStorage = class {
   // re-reads the folder's held files. Each source moves on its own, so no
   // fault hides another's start or clear. Its slot already holds `now`: the
   // re-read starts here, and reads it.
-  restated(entry, was, now2) {
+  restated(entry, source, was, now2) {
     if (compareStructural(was, now2)) return;
     if (now2 !== null) {
       this.faultCounts[now2.cause]++;
       this.logger(
         "warn",
-        `plugin storage fault ${where(entry)} cause=${now2.cause} reason=${JSON.stringify(now2.reason)}`
+        `plugin storage fault ${where(entry)} source=${source} cause=${now2.cause} reason=${JSON.stringify(now2.reason)}`
       );
     } else if (was !== null) {
       this.logger(
         "info",
-        `plugin storage fault cleared ${where(entry)} cause=${was.cause}`
+        `plugin storage fault cleared ${where(entry)} source=${source} cause=${was.cause}`
       );
     }
     const folder = folderOf(entry);
     this.sessions.changed((f) => f.folder === folder);
   }
-  // The watch's deafness, as the registry last told it.
+  // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
+  // folder still there, is a standing fault of every source in the folder,
+  // taken from the handle when a window reaches the generation. A lost
+  // generation's files read the path, so its watch moves nothing.
   heard(watched) {
+    if (watched.health.kind !== "watching") return;
     const was = watched.watch;
     watched.watch = watchFaultOf(watched.handle);
-    this.restated(watched, was, watched.watch);
+    this.restated(watched, "watch", was, watched.watch);
   }
-  // The generation's stat of its folder.
+  // The generation's last make or stat of its folder.
   statted(watched, now2) {
-    const was = watched.stat;
-    watched.stat = now2;
-    this.restated(watched, was, now2);
+    const was = watched.folder;
+    watched.folder = now2;
+    this.restated(watched, "folder", was, now2);
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -71739,8 +71741,8 @@ var ManagedStorage = class {
     const entry = this.folders.get(folder);
     if (entry === void 0) return null;
     const lost = entry.kind === "watched" && entry.health.kind === "lost";
-    const [fault] = lost ? [] : faultsOf(entry);
-    if (fault !== void 0) return `cannot refresh: ${fault.reason}`;
+    const [first2] = lost ? [] : faultsOf(entry);
+    if (first2 !== void 0) return `cannot refresh: ${first2[1].reason}`;
     const stall = stallReason(this.fileEvents.delivery());
     return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
