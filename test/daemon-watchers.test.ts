@@ -12,9 +12,11 @@ import {
 } from "../src/daemon/cache/watchers";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import {
+  specOf,
   watchFault,
   watchTargetsOf,
   type Deafness,
+  type HeldWatch,
   type Invalidation,
 } from "../src/daemon/foundations/watch-targets";
 import { GitDataProvider } from "../src/daemon/cache/git";
@@ -67,6 +69,53 @@ describe("WatcherRegistry", () => {
       );
       return seen;
     };
+
+    // The daemon makes the file and the holder reads it between two sweeps,
+    // then follows: its baseline is no older than its read.
+    test("a holder that follows after its read hears the file's removal before the next sweep", () => {
+      const f = path.join(dir, "f");
+      const spec = specOf({ dirs: [], polled: [f] });
+      const seen: Invalidation[] = [];
+      const held = reg.follow(null, spec, (inv) => seen.push(inv)).watch;
+      fs.writeFileSync(f, "made");
+      reg.follow(held, spec, (inv) => seen.push(inv));
+      fs.rmSync(f);
+      swept();
+      expect(seen).toEqual([{ kind: "changed", paths: [f] }]);
+    });
+
+    // [LAW:no-ambient-temporal-coupling] A follow fires nothing, so a holder
+    // re-deriving on its own invalidation never re-arms itself.
+    test("a holder that follows inside its own invalidation, while the file keeps changing, is fired by the sweep alone", () => {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "x");
+      const spec = specOf({ dirs: [], polled: [f] });
+      let n = 1;
+      let fires = 0;
+      let held: HeldWatch | null = null;
+      const onInvalidate = (): void => {
+        fires++;
+        fs.writeFileSync(f, "x".repeat(++n));
+        held = reg.follow(held, spec, onInvalidate).watch;
+      };
+      held = reg.follow(null, spec, onInvalidate).watch;
+      fs.writeFileSync(f, "x".repeat(++n));
+      swept();
+      expect(fires).toBe(1);
+      clock.advance(POLL_MS - 2 * DEBOUNCE_MS);
+      expect(fires).toBe(1);
+    });
+
+    test("a second holder joining a slot hides no change from the first", () => {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "one");
+      const first: Invalidation[] = [];
+      reg.acquire("k", { dirs: [], polled: [f] }, (inv) => first.push(inv));
+      fs.writeFileSync(f, "two!");
+      reg.acquire("k", { dirs: [], polled: [f] }, () => {});
+      swept();
+      expect(first).toEqual([{ kind: "changed", paths: [f] }]);
+    });
 
     test("acquired after the registry closed, is refused by its path and never read", () => {
       const f = path.join(dir, "f");

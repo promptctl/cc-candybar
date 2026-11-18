@@ -101,15 +101,22 @@ interface Listener {
 }
 
 // [LAW:single-enforcer] One record per polled path, shared by every slot that
-// names it: what the last read of the path found, and who hears it change.
+// names it, so the sweep reads each path once.
 interface PolledPath {
   readonly path: string;
-  entry: string;
   readonly slots: Set<WatcherSlot>;
 }
 
+// [LAW:one-source-of-truth] A holder's baselines are its own: what each
+// polled path held when it last acquired or followed, the nearest the
+// registry knows to what it read. Shared by the slot, one holder's follow
+// would hide a change from the others; firing on a follow would let a holder
+// that follows inside its own invalidation fire itself at debounce speed
+// while the file is busy, where the sweep bounds a polled path's work to one
+// fire a period.
 interface Holder {
   readonly onInvalidate: (invalidation: Invalidation) => void;
+  readonly seen: Map<string, string>;
 }
 
 interface WatcherSlot {
@@ -209,6 +216,11 @@ export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly dirs = new Map<string, DirWatch>();
   private readonly polled = new Map<string, PolledPath>();
+  // Each handle's slot and holder, for a follow that keeps it.
+  private readonly owners = new WeakMap<
+    WatcherHandle,
+    { readonly slot: WatcherSlot; readonly holder: Holder }
+  >();
   // The next sweep's cancel, armed exactly while a path is polled.
   private sweep: (() => void) | null = null;
   private readonly counters?: WatcherCounters;
@@ -264,7 +276,8 @@ export class WatcherRegistry {
     // now: joining a slot judges its directories as opening one does.
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
     const slot = shared ?? this.opened(key, targets);
-    const holder: Holder = { onInvalidate };
+    const holder: Holder = { onInvalidate, seen: new Map() };
+    this.sighted(slot, holder);
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
   }
@@ -275,9 +288,20 @@ export class WatcherRegistry {
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    return followWatch(held, spec, (key, targets) =>
+    const followed = followWatch(held, spec, (key, targets) =>
       this.acquire(key, targets, onInvalidate),
     );
+    // [LAW:dataflow-not-control-flow] Every follow takes the follower's
+    // baselines again, however it moved; it fires nothing. A closed
+    // registry's handle holds no slot.
+    const owned = this.owners.get(followed.watch.handle);
+    if (owned !== undefined) this.sighted(owned.slot, owned.holder);
+    return followed;
+  }
+
+  // A holder's baselines: one lstat of each path its slot polls.
+  private sighted(slot: WatcherSlot, holder: Holder): void {
+    for (const { path: at } of slot.polled) holder.seen.set(at, entryAt(at));
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
@@ -493,7 +517,7 @@ export class WatcherRegistry {
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
-    return {
+    const handle: WatcherHandle = {
       get deaf() {
         return slot.listeners.flatMap(({ dir }) =>
           dir.state.kind === "deaf" ? [dir.state.deafness] : [],
@@ -508,6 +532,8 @@ export class WatcherRegistry {
         this.slots.delete(slot.key);
       },
     };
+    this.owners.set(handle, { slot, holder });
+    return handle;
   }
 
   private closeHandle(at: string, handle: fs.FSWatcher, cause: string): void {
@@ -545,18 +571,11 @@ export class WatcherRegistry {
     if (this.counters) this.counters.watchersClosed++;
   }
 
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // The record for a polled path, the one already held or a new one.
   private polledAt(at: string): PolledPath {
     const held = this.polled.get(at);
     if (held !== undefined) return held;
-    const record: PolledPath = {
-      path: at,
-      entry: entryAt(at),
-      slots: new Set(),
-    };
+    const record: PolledPath = { path: at, slots: new Set() };
     this.polled.set(at, record);
     return record;
   }
@@ -582,15 +601,22 @@ export class WatcherRegistry {
   }
 
   // [LAW:dataflow-not-control-flow] The same read for every polled path each
-  // sweep. A path whose entry differs fires every slot that names it, by its
-  // path, through the slot's debounce, as a directory watch reports a child.
+  // sweep. A slot where some holder's baseline differs from it fires, by its
+  // path, through the slot's debounce, as a directory watch reports a child,
+  // and every holder's baseline becomes it.
   private readPolled(): void {
     for (const record of this.polled.values()) {
       const now = entryAt(record.path);
-      if (now === record.entry) continue;
-      record.entry = now;
-      for (const slot of record.slots)
-        this.fire(slot, { kind: "changed", paths: new Set([record.path]) });
+      for (const slot of record.slots) {
+        let moved = false;
+        for (const holder of slot.holders) {
+          if (holder.seen.get(record.path) === now) continue;
+          holder.seen.set(record.path, now);
+          moved = true;
+        }
+        if (moved)
+          this.fire(slot, { kind: "changed", paths: new Set([record.path]) });
+      }
     }
   }
 
