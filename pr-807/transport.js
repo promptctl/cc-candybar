@@ -60853,29 +60853,26 @@ function configProblems(config2) {
   }
 }
 function repoSaid(repo2) {
-  const unproven2 = repo2?.unproven == null ? [] : [unprovenLine(repo2.dir, repo2.unproven)];
-  switch (repo2?.standing) {
-    case "awaiting":
-      return { problems: [awaitingLine(repo2.dir)], notes: unproven2 };
-    case "declined":
-      return { problems: [], notes: [declinedLine(repo2.dir), ...unproven2] };
-    default:
-      return { problems: [], notes: unproven2 };
-  }
+  if (repo2 === null) return [];
+  const standing2 = {
+    awaiting: [awaitingLine(repo2.dir)],
+    declined: [declinedLine(repo2.dir)],
+    approved: [],
+    unread: []
+  };
+  return [
+    ...standing2[repo2.standing],
+    ...repo2.unproven === null ? [] : [unprovenLine(repo2.dir, repo2.unproven)]
+  ];
 }
 var config = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
-    const repo2 = repoSaid(config2.repo);
-    const [first2, ...more] = [...configProblems(config2), ...repo2.problems];
-    return first2 === void 0 ? { ok: true, note: [judged, ...repo2.notes].join("; ") } : {
-      ok: false,
-      reason: `${judged}: ${first2}`,
-      more: [...more, ...repo2.notes]
-    };
+    const judged = [judgedConfig(config2), ...repoSaid(config2.repo)].join("; ");
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";

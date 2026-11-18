@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-807",
+      "ref": "refs/pull/807/merge",
+      "sha": "c031f407d5b308e2eadb4568c51a056ba30e88e4",
+      "timestamp": "2026-11-18T15:51:36.964Z",
+      "commits": [
+        {
+          "sha": "c031f407d5b308e2eadb4568c51a056ba30e88e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:50:29Z",
+          "message": "Merge 20ac02af8f8c3cbce064c56913d76ede4bca5122 into 3ce2357e96988528f010578e31cb069ce8d02ecc\n"
+        },
+        {
+          "sha": "20ac02af8f8c3cbce064c56913d76ede4bca5122",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:32:32-07:00",
+          "message": "fix(doctor): the config row names the repository the bar asks about, and where it stands (qo8j)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-806",
       "ref": "refs/pull/806/merge",
       "sha": "250ba6901090ac3b1a6297e564f6a4de58f27c27",
@@ -20,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:29:04-07:00",
           "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-807",
-      "ref": "refs/pull/807/merge",
-      "sha": "40c044fc3f4bab5ffc8949c4ed8c3392ad35f65b",
-      "timestamp": "2026-11-18T15:47:13.677Z",
-      "commits": [
-        {
-          "sha": "40c044fc3f4bab5ffc8949c4ed8c3392ad35f65b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:45:19-07:00",
-          "message": "Merge 24b3a3d7f8c9f9ded05cf8faf5cdf347465b5f53 into 3ce2357e96988528f010578e31cb069ce8d02ecc\n"
-        },
-        {
-          "sha": "24b3a3d7f8c9f9ded05cf8faf5cdf347465b5f53",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:32:32-07:00",
-          "message": "fix(doctor): the config row names the repository the bar asks about, failing while it awaits an answer (qo8j)\n"
         }
       ]
     },
