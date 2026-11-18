@@ -3,6 +3,7 @@
 // session's picks is a rig's own.
 import { linkSigner } from "../src/click/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import { registerOptionDomain } from "../src/config/option-domain";
 import { compileInputOf, compileKey } from "../src/dsl/render";
 import { textOf } from "../src/render/frame";
@@ -128,6 +129,58 @@ describe("buildRig", () => {
       );
       expect(sharedCompile(two)(key, input)).not.toBe(
         sharedCompile(one)(key, input),
+      );
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  test("a narrowed rig draws the narrowed config under the selection of the whole", () => {
+    const rig = buildRig({
+      source: `{ globals: { palette: 'nord' }, ${SOURCE.slice(1)}`,
+      narrow: (whole) => ({
+        ...whole,
+        globals: { ...whole.globals, palette: "tokyo-night" },
+      }),
+    });
+    try {
+      const { frame, selection } = rig.draw();
+      expect(selection.theme).toMatchObject({ kind: "decided", name: "nord" });
+      expect(textOf(frame)).toContain("hello");
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  test("a draw returns the selection it drew with", () => {
+    const rig = buildRig({ source: SOURCE });
+    try {
+      const unpicked = rig.draw();
+      rig.sessionState.set(
+        rig.sessionId,
+        GLOBAL_FIELDS.palette.sessionKey,
+        "nord",
+      );
+      const picked = rig.draw();
+      expect(picked.selection.theme).toMatchObject({ name: "nord" });
+      expect(picked.frame.rows).not.toEqual(unpicked.frame.rows);
+      // Handed back in, the returned selection draws the same frame.
+      expect(rig.draw({ selection: picked.selection }).frame.rows).toEqual(
+        picked.frame.rows,
+      );
+      expect(rig.draw({ selection: unpicked.selection }).frame.rows).toEqual(
+        unpicked.frame.rows,
+      );
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  test("a draw of a payload naming another session throws", () => {
+    const rig = buildRig({ source: SOURCE });
+    try {
+      expect(() => rig.draw({ payload: { session_id: "other" } })).toThrow(
+        /the payload draws session other/,
       );
     } finally {
       rig.dispose();

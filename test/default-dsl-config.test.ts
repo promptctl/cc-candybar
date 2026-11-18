@@ -19,8 +19,8 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
   EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
+import { GLOBAL_FIELDS } from "../src/config/globals-fields";
 import {
-  THEME_SETTING,
   walkNodes,
   type DslConfig,
   type ValidatedConfig,
@@ -52,6 +52,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
+import { buildRig, type RigFrame } from "./helpers/rig";
 import { checkPayload } from "./helpers/check-payload";
 import {
   renderOptionsOf,
@@ -1022,56 +1023,49 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const EXPANDED = () => detailState("expanded");
 
+    // [LAW:one-source-of-truth] One segment of the bundled default, drawn
+    // through the rig every render test draws through: `variables` are
+    // authored over the default's own, and the picks are read from the
+    // session the payload draws.
     function renderSegment(
       segment: string,
-      git: Record<string, unknown> = GIT_PAYLOAD.git,
-      variables: DslConfig["variables"] = {},
-      sessionState: SessionState = new SessionState(),
-    ): Frame {
-      const parsed = parseAndValidate("<default>", SERIALIZED);
-      const narrowed = narrowToSegment(parsed, segment);
-      const cfg = {
-        ...narrowed,
-        variables: { ...narrowed.variables, ...variables },
-      };
-      const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store, "", sessionState);
+      {
+        git = GIT_PAYLOAD.git,
+        variables = {},
+        sessionState = new SessionState(),
+      }: {
+        readonly git?: Record<string, unknown>;
+        readonly variables?: DslConfig["variables"];
+        readonly sessionState?: SessionState;
+      } = {},
+    ): RigFrame {
+      const rig = buildRig({
+        label: "<default>",
+        source: JSON.stringify({
+          ...RAW_DEFAULT_DSL_CONFIG,
+          variables: { ...RAW_DEFAULT_DSL_CONFIG.variables, ...variables },
+        }),
+        narrow: (whole) => narrowToSegment(whole, segment),
+        sessionId: GIT_PAYLOAD.session_id,
+        sessionState,
+      });
       try {
-        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-        // [LAW:one-source-of-truth] Every pick is read from the one session
-        // the registry reads, as the daemon reads it.
-        const selection = selectionFor(cfg, {}, (key) =>
-          sessionState.get(GIT_PAYLOAD.session_id, key),
-        );
-        return drawPayload(
-          cfg,
-          compiled,
-          store,
-          registry,
-          { ...GIT_PAYLOAD, git },
-          instantOf(new Date()),
-          {
-            endcaps: "powerline",
-            colorCompatibility: "truecolor",
-            wrap: true,
-            padding: 1,
-            width: Number.POSITIVE_INFINITY,
-          },
-          selection,
-        ).frame;
+        return rig.draw({
+          payload: { ...GIT_PAYLOAD, git },
+          opts: { padding: 1 },
+        });
       } finally {
-        registry.dispose();
+        rig.dispose();
       }
     }
 
     test.each(["collapsed", "expanded"] as const)(
       "the %s form renders more than one distinct color across the facts",
       (detail) => {
-        const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
-          {},
-          detailState(detail),
-        );
-        expect(distinctForegrounds(line).size).toBeGreaterThan(1);
+        const { frame } = renderSegment("gitaculous", {
+          sessionState: detailState(detail),
+        });
+        expect(distinctForegrounds(frame).size).toBeGreaterThan(1);
       },
     );
 
@@ -1124,10 +1118,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
       ["collapsed", { branch: "" }, ""],
       ["expanded", { branch: "" }, ""],
     ] as const)("%s: %j reads %j", (detail, git, text) => {
-      const visible = textOf(renderSegment("gitaculous", git,
-        {},
-        detailState(detail),
-      )).replace(CAPS, "");
+      const { frame } = renderSegment("gitaculous", {
+        git,
+        sessionState: detailState(detail),
+      });
+      const visible = textOf(frame).replace(CAPS, "");
       expect(visible.trim()).toBe(text);
     });
 
@@ -1135,18 +1130,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // variable's default, which a user redeclares to start expanded.
     test("a session starts in the form git.detail defaults to", () => {
       const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
-      expect(strip(renderSegment("gitaculous"))).toBe("⎇ main +1/-1 SU?!1 ▸");
-      expect(
-        strip(
-          renderSegment("gitaculous", GIT_PAYLOAD.git, {
-            "git.detail": {
-              kind: "state",
-              key: "git-detail",
-              default: "expanded",
-            },
-          }),
-        ),
-      ).toMatch(/^\(git\) .* ◂$/);
+      expect(strip(renderSegment("gitaculous").frame)).toBe(
+        "⎇ main +1/-1 SU?!1 ▸",
+      );
+      const { frame } = renderSegment("gitaculous", {
+        variables: {
+          "git.detail": {
+            kind: "state",
+            key: "git-detail",
+            default: "expanded",
+          },
+        },
+      });
+      expect(strip(frame)).toMatch(/^\(git\) .* ◂$/);
     });
 
     // The arrow is one clickable region, and a click on it flips the form
@@ -1162,25 +1158,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
         return urls[0]!;
       };
       const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
-      const collapsed = renderSegment("gitaculous", GIT_PAYLOAD.git,
-        {},
-        state,
-      );
+      const draw = () =>
+        renderSegment("gitaculous", { sessionState: state }).frame;
+      const collapsed = draw();
       expect(strip(collapsed)).toMatch(/▸$/);
       await clickUrl(arrow(collapsed), ctx);
       expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe("expanded");
 
-      const expanded = renderSegment("gitaculous", GIT_PAYLOAD.git,
-        {},
-        state,
-      );
+      const expanded = draw();
       expect(strip(expanded)).toMatch(/^\(git\) .* ◂$/);
       await clickUrl(arrow(expanded), ctx);
-      expect(
-        strip(
-          renderSegment("gitaculous", GIT_PAYLOAD.git, {}, state),
-        ),
-      ).toBe(strip(collapsed));
+      expect(strip(draw())).toBe(strip(collapsed));
     });
 
     // brandon-segments-3eo.1.1: the one-line and full git segments
@@ -1209,19 +1197,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // A fact's colour is a variable, so overriding one variable recolours
     // exactly that fact.
     test("a git.color.* variable recolours its fact", () => {
-      const stock = renderSegment("gitaculous");
-      const recoloured = renderSegment("gitaculous", GIT_PAYLOAD.git,
-        {
+      const stock = renderSegment("gitaculous").frame;
+      const recoloured = renderSegment("gitaculous", {
+        variables: {
           "git.color.behind": { kind: "literal", value: "error" },
         },
-      );
+      }).frame;
       const errorFg = fgOfText(stock, "!1"); // conflicts are painted `error`
       expect(fgOfText(stock, "-1")).not.toBe(errorFg);
       expect(fgOfText(recoloured, "-1")).toBe(errorFg);
     });
 
     test("unstaged and untracked are colored distinctly, not merged into one indicator", () => {
-      const line = renderSegment("gitaculous");
+      const line = renderSegment("gitaculous").frame;
       const unstagedFg = fgOfText(line, "U");
       const untrackedFg = fgOfText(line, "?");
       expect(unstagedFg).toBeDefined();
@@ -1230,9 +1218,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("both forms color the branch alike", () => {
-      const collapsedFg = fgOfText(renderSegment("gitaculous"), "main");
+      const collapsedFg = fgOfText(renderSegment("gitaculous").frame, "main");
       const expandedFg = fgOfText(
-        renderSegment("gitaculous", GIT_PAYLOAD.git, {}, EXPANDED()),
+        renderSegment("gitaculous", { sessionState: EXPANDED() }).frame,
         "main",
       );
       expect(collapsedFg).toBeDefined();
@@ -1240,10 +1228,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("the expanded form colors the stash count instead of leaving it plain", () => {
-      const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
-        {},
-        EXPANDED(),
-      );
+      const line = renderSegment("gitaculous", {
+        sessionState: EXPANDED(),
+      }).frame;
       const stashFg = fgOfText(line, "(2 stashed)");
       const plainFg = fgOfText(line, "abc1234"); // sha: structural, never painted
       expect(stashFg).toBeDefined();
@@ -1263,10 +1250,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const STRUCTURAL = ["abc1234", "origin/main"];
 
       test("expanded: every painted fact differs from the structural color", () => {
-        const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
-          {},
-          EXPANDED(),
-        );
+        const line = renderSegment("gitaculous", {
+          sessionState: EXPANDED(),
+        }).frame;
         const quiet = fgOfText(line, STRUCTURAL[0]!);
         expect(quiet).toBeDefined();
         // Every other structural token shares that one color...
@@ -1284,38 +1270,33 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // [LAW:verifiable-goals] The quiet color is a *computed* blend toward the
       // segment's own background, so how legible it ends up is a property of
       // each theme's foreground/surface distance — not something one eyeballed
-      // screenshot can settle. Measured bare, the 60% blend ranges 1.93–3.10
-      // across these themes; the `readableOn` floor in GIT_QUIET_FG is what
-      // makes the result uniform. This asserts the floor holds everywhere,
-      // which is the claim the config comment makes.
-      // [LAW:verifiable-goals] The floor holds for any palette, so it proves
-      // nothing about a theme unless the frame is drawn in it: a theme the
-      // session picks draws a ground of its own, never the unpicked bar's.
-      const unpicked = bgOfText(
-        renderSegment("gitaculous", GIT_PAYLOAD.git, {}, EXPANDED()),
-        "abc1234",
-      );
-      const ownTheme = selectionFor(parseAndValidate("<default>", SERIALIZED)).theme;
+      // screenshot can settle; the `readableOn` floor in GIT_QUIET_FG is what
+      // makes the result uniform. A floor proves nothing about a theme unless
+      // the frame is drawn in it, so each row draws as a session that picked
+      // its theme, and the selection it drew under names that theme.
       test.each(listResolvablePaletteNames())(
         "quiet structural text clears WCAG large-text contrast under theme %s",
         (theme) => {
           const state = EXPANDED();
-          state.set(GIT_PAYLOAD.session_id, THEME_SETTING, theme);
-          const line = renderSegment("gitaculous", GIT_PAYLOAD.git, {}, state);
-          const quiet = fgOfText(line, "abc1234");
-          const bg = bgOfText(line, "abc1234");
-          expect({ theme, drawnInIt: bg !== unpicked }).toEqual({
+          state.set(
+            GIT_PAYLOAD.session_id,
+            GLOBAL_FIELDS.palette.sessionKey,
             theme,
-            drawnInIt: !(ownTheme.kind === "decided" && ownTheme.name === theme),
+          );
+          const { frame, selection, warnings } = renderSegment("gitaculous", {
+            sessionState: state,
           });
-          // Just under the floor: ensureContrast bisects to the threshold, and the 8-bit
-          // quantization of the result can land a hair under the exact target.
-          expect(
-            contrastRatio(
-              truecolorOf(quiet),
-              truecolorOf(bg),
-            ),
-          ).toBeGreaterThan(QUIET_MIN_CONTRAST - 0.01);
+          expect(selection.theme).toMatchObject({
+            kind: "decided",
+            name: theme,
+          });
+          expect(warnings).toEqual([]);
+          const ratio = contrastRatio(
+            truecolorOf(fgOfText(frame, "abc1234")),
+            truecolorOf(bgOfText(frame, "abc1234")),
+          );
+          // The WCAG 2.x large-text minimum (SC 1.4.3).
+          expect(ratio).toBeGreaterThanOrEqual(3);
         },
       );
     });
