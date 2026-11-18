@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-826",
+      "ref": "refs/pull/826/merge",
+      "sha": "9aa536aa3161fd9fcf0569aecb617827b1b6115e",
+      "timestamp": "2026-11-18T19:13:12.711Z",
+      "commits": [
+        {
+          "sha": "9aa536aa3161fd9fcf0569aecb617827b1b6115e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:12:06-07:00",
+          "message": "Merge a1032c9e34e3602ac2fa9503dfd18064d4732d1a into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "a1032c9e34e3602ac2fa9503dfd18064d4732d1a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:11:55-07:00",
+          "message": "fix(daemon): a lane reads Claude Code's input through the daemon's one claude-input edge, so an override reaches it (izc.ubq)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-823",
       "ref": "refs/pull/823/merge",
       "sha": "fc6789f55cf4d54a76d6c2c508b80c6e655bb883",
