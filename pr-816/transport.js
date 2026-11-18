@@ -64862,22 +64862,34 @@ function watchSpec(gitDir, commonDir) {
 }
 function refsDirs(root) {
   const dirs = [];
+  const walked = /* @__PURE__ */ new Set();
   const walk3 = (dir) => {
     dirs.push(dir);
     let entries;
     try {
+      const { dev, ino } = fs_default.statSync(dir);
+      const id2 = `${dev}:${ino}`;
+      if (walked.has(id2)) return;
+      walked.add(id2);
       entries = fs_default.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
       const child = import_node_path23.default.join(dir, entry.name);
-      if (entry.isDirectory()) walk3(child);
-      else if (entry.isSymbolicLink()) dirs.push(child);
+      if (entry.isDirectory() || entry.isSymbolicLink() && isFolder(child))
+        walk3(child);
     }
   };
   walk3(root);
   return dirs.sort();
+}
+function isFolder(at) {
+  try {
+    return fs_default.statSync(at).isDirectory();
+  } catch {
+    return false;
+  }
 }
 function branchOf(outcome) {
   return outcome.kind === "ok" ? outcome.value.branch : void 0;
@@ -93875,10 +93887,10 @@ var REPO_PLUGIN_DIR = import_node_path42.default.join(".cc-candybar", "plugins")
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
+    const isFolder2 = (e) => e.isDirectory() || isDirectoryLink(root, e);
     return {
-      folders: entries.filter(isFolder).map((e) => e.name),
-      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
+      folders: entries.filter(isFolder2).map((e) => e.name),
+      files: entries.filter((e) => !isFolder2(e)).map((e) => e.name)
     };
   } catch (e) {
     return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
