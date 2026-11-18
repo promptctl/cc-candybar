@@ -18,12 +18,11 @@ import {
   readingsOf,
   settledLanes,
   type PayloadInputs,
-  type RenderPayloadDeps,
 } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { ContextProvider } from "../src/segments/context";
 import { MetricsProvider } from "../src/segments/metrics";
+import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { systemTimekeeper } from "../src/time";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";
 import { instantOf } from "../src/utils/instant";
@@ -33,6 +32,8 @@ import { HOST } from "./helpers/host";
 import {
   absentOwners,
   readTranscriptLanes,
+  type FixtureOwners,
+  withTranscriptLanes,
 } from "./helpers/payload-owners";
 import { globalsFor } from "./helpers/selection";
 
@@ -117,21 +118,21 @@ afterEach(() => {
 
 // A request under `hookData` over owners of its own, so what one hook's
 // refresh stores cannot reach the other's document.
-function inputsOf(hookData: CheckedHookData): PayloadInputs {
+function inputsOf(hookData: CheckedHookData) {
   const usageStore = new SessionUsageStore({
     clock: systemTimekeeper,
     host: HOST,
     sweepIntervalMs: 0,
   });
   stores.push(usageStore);
-  const deps = {
+  const deps = withTranscriptLanes({
     ...absentOwners(),
     usageStore,
     contextProvider: new ContextProvider({ clock: systemTimekeeper }),
     metricsProvider: new MetricsProvider({ clock: systemTimekeeper }),
     log: () => {},
-  } as unknown as RenderPayloadDeps;
-  return { hookData, deps, cwd: "/tmp", hints: {} };
+  } satisfies FixtureOwners);
+  return { hookData, deps, cwd: "/tmp", hints: {} } satisfies PayloadInputs;
 }
 
 test("two hooks that differ only in their instantaneous fields read one document and compose two payloads", async () => {
@@ -142,7 +143,7 @@ test("two hooks that differ only in their instantaneous fields read one document
 
   // Each document is its own hook's read of the lanes, so a hook value either
   // one stored would show as a difference.
-  const documentOf = async (inputs: PayloadInputs) => {
+  const documentOf = async (inputs: ReturnType<typeof inputsOf>) => {
     await readTranscriptLanes(
       inputs.deps,
       inputs,

@@ -6,8 +6,6 @@
 // fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
 import { CacheExpiryProvider } from "../src/segments/cache";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +13,6 @@ import { join } from "node:path";
 import { prFactOf } from "../src/renderer/render-payload";
 import { claudeConfigDir } from "../src/claude-settings";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
-import type { RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import { VALUED_FIELDS } from "../src/config/globals-fields";
@@ -43,6 +40,7 @@ import {
   fakeUsage,
   requestPayload,
   settled,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 
@@ -51,8 +49,8 @@ type LogEntry = { level: string; msg: string };
 function depsWith(
   gitOutcome: Outcome<GitInfo>,
   logs: LogEntry[],
-  overrides: Record<string, unknown> = {},
-): RenderPayloadDeps {
+  overrides: Partial<FixtureOwners> = {},
+): FixtureOwners {
   return {
     ...absentOwners(),
     gitProvider: fakeGit(async () => gitOutcome),
@@ -64,12 +62,8 @@ function depsWith(
     metricsProvider: fakeMetrics(async () => ABSENT),
     tmuxService: fakeTmux(async () => ABSENT),
     log: (level: string, msg: string) => logs.push({ level, msg }),
-    clock: systemTimekeeper,
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: () => UNFOLLOWED_FEEDS,
     ...overrides,
-  } as unknown as RenderPayloadDeps;
+  };
 }
 
 // One read of a clean repo on `main` with no upstream, stash, remote or PR —

@@ -26,7 +26,7 @@ import {
   SHELL_READ_TIMEOUT_MS,
   type SourceRunsDeps,
 } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { shellEnvOf } from "../src/config/shell-env";
 import {
   plainEnvironment,
@@ -34,7 +34,6 @@ import {
 } from "../src/daemon/foundations/session-env";
 import { MIN_SHELL_TTL_MS } from "../src/daemon/foundations/judge-run";
 import { PendingValueError } from "../src/var-system/types";
-import { instantOf } from "../src/utils/instant";
 import { timeoutSignal } from "../src/time";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { heldClock } from "./helpers/held-clock";
@@ -93,7 +92,7 @@ const liveRuns = new Set<SourceRuns>();
 // `shell` and `file` sources run in this suite.
 const holders = new Map<
   SourceRegistry,
-  { held: CheckRuns; runs: SourceRuns }
+  { held: CollectedRuns; runs: SourceRuns }
 >();
 afterEach(() => {
   for (const registry of live) registry.dispose();
@@ -118,12 +117,7 @@ function hold(
   runs: SourceRuns,
   environment: Environment = plainEnvironment(process.env),
 ): void {
-  const held = new CheckRuns(
-    runs,
-    registry,
-    instantOf(new Date()),
-    environment,
-  );
+  const held = collectedRuns(runs, registry, environment);
   holders.set(registry, { held, runs });
   registry.bindInputs({
     session: () => {

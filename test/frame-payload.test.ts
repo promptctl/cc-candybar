@@ -14,7 +14,6 @@
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { sumsOf } from "./helpers/today";
 import { renderWidth, todayOf } from "../src/renderer/render-payload";
-import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { globalsFor } from "./helpers/selection";
 import { NO_CONFIG_FILE } from "./helpers/config-file-facts";
@@ -39,6 +38,7 @@ import {
   fakeTmux,
   fakeUsage,
   payloadOf,
+  withTranscriptLanes,
 } from "./helpers/payload-owners";
 
 const EFFECTIVE = globalsFor(DEFAULT_DSL_CONFIG);
@@ -121,7 +121,8 @@ function counted(pr: unknown = ABSENT) {
   };
   // The lanes the session's declaration took: every frame and the request
   // read the same handles, as the collector's do.
-  const deps = owners as unknown as RenderPayloadDeps;
+  const deps = withTranscriptLanes(owners);
+  cleanups.push(() => deps.transcriptLanes.close());
   const lanes = declaredLanes(
     owners,
     {
@@ -145,7 +146,7 @@ function counted(pr: unknown = ABSENT) {
   };
   // `today` as a draw at `at` projects it.
   const today = (at = AT) => todayOf(todayReadingOf(inputs()), at);
-  return { reads, inputs, request, today, deps, logs };
+  return { reads, inputs, request, today, deps, owners, logs };
 }
 
 describe("a frame's payload", () => {
@@ -238,10 +239,10 @@ describe("a frame's payload", () => {
   });
 
   test("a `today` whose session lane's refresh threw is that failure, before the lane is read", async () => {
-    const { inputs, reads, request, deps } = counted();
+    const { inputs, reads, request, owners } = counted();
     await request();
     const before = reads["today"];
-    deps.faults.refreshed(
+    owners.faults.refreshed(
       sessionIdOf(HOOK.session_id),
       "session",
       "ingest threw",
@@ -299,19 +300,19 @@ describe("a frame's payload", () => {
   });
 
   test("a lane whose refresh threw is its failure on every frame, until a refresh runs clean", async () => {
-    const { inputs, request, deps } = counted();
-    const refresh = deps.contextProvider.refresh;
-    deps.contextProvider.refresh = () => {
+    const { inputs, request, owners } = counted();
+    const refresh = owners.contextProvider.refresh;
+    owners.contextProvider.refresh = () => {
       throw new Error("refresh bug");
     };
     await request();
     for (let frame = 0; frame < 2; frame++) {
       expect(payloadOf(inputs(), DRAW).context).toBeUndefined();
     }
-    deps.contextProvider.refresh = refresh;
+    owners.contextProvider.refresh = refresh;
     await request();
     expect(
-      deps.faults.of(sessionIdOf(HOOK.session_id), "context"),
+      owners.faults.of(sessionIdOf(HOOK.session_id), "context"),
     ).toBeUndefined();
   });
 

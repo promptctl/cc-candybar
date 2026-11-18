@@ -69,24 +69,31 @@ export type Locator = ViewFacts & { readonly environment: SessionEnvironment };
 
 // ─── Provider dependencies ────────────────────────────────────────────────────
 
+// [LAW:types-are-the-program] Each owner as far as a session's reads call it:
+// a declaration takes its entry, a read takes what it stored. So a world built
+// of fixtures (`cc-candybar check`, a test) types as the daemon's does, with
+// no owner it does not need.
 export interface RenderPayloadDeps {
   // [LAW:one-source-of-truth] The user's home directory: the one derivation
   // (`Host.home`) the payload's `home`, the default Claude Code directory and
   // the usage store's transcripts share.
   readonly home: string;
-  readonly gitProvider: GitDataProvider;
+  readonly gitProvider: Pick<GitDataProvider, "declare">;
   // [LAW:one-source-of-truth] One store backs BOTH the `session` and `today`
   // projections — they are folds over the same per-session records, not two
   // independent providers that could disagree.
-  readonly usageStore: SessionUsageStore;
-  readonly contextProvider: ContextProvider;
-  readonly metricsProvider: MetricsProvider;
-  readonly activityProvider: ActivityProvider;
-  readonly tmuxService: TmuxService;
+  readonly usageStore: Pick<
+    SessionUsageStore,
+    "usageOf" | "speedOf" | "declareToday" | "daysOutside"
+  >;
+  readonly contextProvider: Pick<ContextProvider, "tokensOf">;
+  readonly metricsProvider: Pick<MetricsProvider, "foldOf">;
+  readonly activityProvider: Pick<ActivityProvider, "activityOf">;
+  readonly tmuxService: Pick<TmuxService, "declare">;
   // [LAW:single-enforcer] The one owner of every plugin's session files: a
   // session's declaration holds each source its renderer subscribes to there,
   // and a render state's build holds the folders its config declares.
-  readonly managedStorage: ManagedStorage;
+  readonly managedStorage: Pick<ManagedStorage, "declare">;
   // [LAW:single-enforcer] The one owner of every `shell` and `file` run: a
   // session's declaration holds each run its renderer subscribes to there,
   // so one digest is one run however many sessions name it.
@@ -96,19 +103,19 @@ export interface RenderPayloadDeps {
   readonly doctor: Pick<DoctorSource, "declare">;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
-  readonly autoCompact: AutoCompactProvider;
+  readonly autoCompact: Pick<AutoCompactProvider, "stored">;
   // Each session's prompt-cache expiry, read off its transcript's tail.
-  readonly cacheExpiry: CacheExpiryProvider;
+  readonly cacheExpiry: Pick<CacheExpiryProvider, "expiryOf">;
   // The machine's identity: its host name and the daemon's user.
-  readonly hostService: HostService;
+  readonly hostService: Pick<HostService, "declareName" | "declareUser">;
   // [LAW:single-enforcer] The one trigger of every session's transcript
   // lanes: a session's declaration holds its entry, whose watch and period
   // refresh the providers above.
-  readonly transcriptLanes: TranscriptLanes;
+  readonly transcriptLanes: Pick<TranscriptLanes, "declare">;
   // The log for a read that threw: a bug no owner saw.
   readonly log: DaemonLogger;
   // Each session lane whose refresh threw, until one runs clean.
-  readonly faults: RefreshFaults;
+  readonly faults: Pick<RefreshFaults, "of">;
 }
 
 // What every payload function reads of the render it serves: the request's
@@ -127,9 +134,10 @@ function settingsPathOf(hints: ClientHints, home: string): string {
 // [LAW:nothing-unseen] The repository and usage caches' tallies, as a render
 // event's facts show them: what the host's caches answered by the end of a
 // render.
-export function cacheTallyFacts(
-  deps: Pick<RenderPayloadDeps, "gitProvider" | "usageStore">,
-): { readonly git: string; readonly usage: string } {
+export function cacheTallyFacts(deps: {
+  readonly gitProvider: Pick<GitDataProvider, "getStats">;
+  readonly usageStore: Pick<SessionUsageStore, "getStats">;
+}): { readonly git: string; readonly usage: string } {
   const tally = (t: {
     readonly size: number;
     readonly hits: number;
@@ -182,18 +190,19 @@ export interface Readings {
 }
 
 // The owners of the keyed lanes, which a declaration takes its holds in.
+// [LAW:types-are-the-program] Of the usage store a declaration calls only its
+// day's declare, so a fixture of the keyed lanes owes nothing more.
 export type KeyedOwners = Pick<
   RenderPayloadDeps,
   | "home"
   | "gitProvider"
   | "tmuxService"
   | "hostService"
-  | "usageStore"
   | "transcriptLanes"
   | "managedStorage"
   | "sourceRuns"
   | "doctor"
->;
+> & { readonly usageStore: Pick<SessionUsageStore, "declareToday"> };
 
 // [LAW:types-are-the-program] What a session's declaration hands its stamps:
 // one lane per keyed lane, each closed over the entry the declaration took, so

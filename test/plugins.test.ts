@@ -46,7 +46,7 @@ import { bareGates } from "./helpers/gates";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import {
   DiscoveringCache,
@@ -1035,11 +1035,7 @@ describe("an installed plugin", () => {
           );
           const s = held.state;
           expect(s).toBe(states[i]);
-          const runs = new CheckRuns(
-            sourceRuns,
-            held.view.registry,
-            instantOf(new Date()), TEST_ENV
-          );
+          const runs = collectedRuns(sourceRuns, held.view.registry, TEST_ENV);
           try {
             expect(await runs.settled(AbortSignal.timeout(5000))).toEqual([]);
             return textOf(

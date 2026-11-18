@@ -35,7 +35,7 @@ import { selectionFor } from "./helpers/selection";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S = sessionIdOf("s");
@@ -78,7 +78,7 @@ function renderer(cfg: ValidatedConfig) {
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({ launcher, clock });
-  const runs = new CheckRuns(sourceRuns, registry, AT, TEST_ENV);
+  const runs = collectedRuns(sourceRuns, registry, TEST_ENV);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
@@ -328,10 +328,7 @@ describe("a placement whose value is not answered yet draws where it stood", () 
       // each is the fault it is.
       const answered = on.draw();
       expect(answered.errors).toHaveLength(1);
-      expect(answered.warnings.map((w) => w.kind)).toEqual([
-        "segment",
-        "when",
-      ]);
+      expect(answered.warnings.map((w) => w.kind)).toEqual(["segment", "when"]);
       on.unanswer();
       const { text, errors, warnings, frame } = on.draw();
       expect(text).toContain(LOADING_GLYPH);

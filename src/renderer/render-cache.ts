@@ -1147,6 +1147,14 @@ const subscriptionsOf = ({
   ...[...state.sources].map(
     ([source, folder]): Subscription => ({ kind: "plugin", source, folder }),
   ),
+  ...registrySubscriptions(registry),
+];
+
+// [LAW:single-enforcer] What a registry needs read: each run it names, in
+// digest order, then each variable its `env` sources read, sorted.
+export const registrySubscriptions = (
+  registry: Pick<SourceRegistry, "subscriptions" | "envSubscriptions">,
+): Subscription[] => [
   ...registry
     .subscriptions()
     .map((run): Subscription => ({ kind: "run", run })),

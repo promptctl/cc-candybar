@@ -30,11 +30,7 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../src/daemon/foundations/session-id";
-import {
-  declareLanes,
-  type KeyedOwners,
-  type RenderPayloadDeps,
-} from "../src/daemon/readings";
+import { declareLanes, type KeyedOwners } from "../src/daemon/readings";
 import { type ViewFacts } from "../src/renderer-interface/request-context";
 import type { Fact } from "../src/facts/fact";
 import type { Update, WorldState } from "../src/facts/world-state";
@@ -58,6 +54,7 @@ import {
   fakeCacheExpiry,
   fakeMetrics,
   withTranscriptLanes,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
@@ -116,7 +113,7 @@ function handLanded() {
     },
     doctor: { declare: (holds: Holds) => entry(holds, "doctor") },
     log: () => {},
-  } as unknown as RenderPayloadDeps;
+  } satisfies FixtureOwners;
   const land = (key: string, value: Current<unknown>) =>
     runInAction(() => values.set(key, value));
   return { owners, held, land };
@@ -128,7 +125,7 @@ const ANSWERED = { kind: "answered" } as const;
 // records each hand-in and answers it at once. `watched` is which sessions an
 // open feed draws; `retired` is when each retire settles.
 function collectorOver(
-  owners: RenderPayloadDeps,
+  owners: FixtureOwners,
   {
     update = () => pendingOf("unread"),
     watched = new Set<SessionId>(),
@@ -244,7 +241,7 @@ describe("a session's transcript", () => {
           ok({ lastResponseTime: null, messageCount: transcript.entries }),
         ),
         cacheExpiry: fakeCacheExpiry(() => ABSENT),
-      } as unknown as RenderPayloadDeps,
+      } satisfies FixtureOwners,
       append: () => transcript.entries++,
     };
   }
@@ -373,7 +370,7 @@ describe("a stamp that throws", () => {
     const owners = {
       ...base,
       hostService: { declareName: failing, declareUser: failing },
-    } as unknown as RenderPayloadDeps;
+    } satisfies FixtureOwners;
     const { collector, handedIn, logged } = collectorOver(owners);
     const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     runInAction(() => broken.set(true));
@@ -409,7 +406,7 @@ describe("owners that keep failing to read", () => {
     const owners = {
       ...base,
       hostService: { declareName: failing, declareUser: failing },
-    } as unknown as RenderPayloadDeps;
+    } satisfies FixtureOwners;
     const { collector, handedIn } = collectorOver(owners, {
       update: () => newer.get(),
     });
@@ -512,7 +509,7 @@ describe("the renderer's subscriptions", () => {
         launcher: unscriptedLauncher,
         clock: heldClock(new Date(0)),
       }),
-    } as RenderPayloadDeps);
+    });
     const run = runOf({
       read: { kind: "file", path: "status.json", readMode: "whole" },
       parse: { kind: "json" },
@@ -772,7 +769,7 @@ describe("over the real repository owner", () => {
         declareToday: () => settledLane(ABSENT),
       },
       log: () => {},
-    } as unknown as RenderPayloadDeps;
+    } satisfies FixtureOwners;
     const { collector, handedIn } = collectorOver(owners);
     collector.requested(requestAt(dir), TEST_ENVIRONMENT);
     expect(git.getStats().held).toBe(1);
@@ -805,6 +802,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     return settledLane(ABSENT);
   };
   const owners = {
+    ...absentOwners(),
     gitProvider: {
       declare: () => {
         throw new Error("resolver bug");
@@ -818,7 +816,7 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
     usageStore: { declareToday: () => take("today") },
     transcriptLanes: { declare: () => take("transcript") },
     home: "/home/tester",
-  } as unknown as KeyedOwners;
+  } satisfies KeyedOwners;
   const facts: ViewFacts = {
     ...requestAt("/w"),
     hints: parseClientHints({
@@ -883,7 +881,7 @@ test("a run whose declaration throws answers its failure, and every other run an
         return { digest: run.digest, current: () => ABSENT, fault: () => null };
       },
     },
-  } as unknown as KeyedOwners;
+  } satisfies KeyedOwners;
   const declared = holds.declare(() =>
     declareLanes(
       owners,

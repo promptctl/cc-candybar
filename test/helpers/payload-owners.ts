@@ -17,12 +17,21 @@ import type { Holds } from "../../src/utils/holds";
 import type { SessionUsageStore } from "../../src/daemon/cache/session-usage-store";
 import { HOST } from "./host";
 import type { DoctorSource } from "../../src/daemon/cache/doctor";
+import type { ManagedStorage } from "../../src/daemon/cache/managed-storage";
 
 // [LAW:no-silent-failure] The doctor owner of a rig that runs no doctor: a
 // subscription naming a doctor run is a test that needs a real one.
 export const NO_DOCTOR: Pick<DoctorSource, "declare"> = {
   declare: () => {
     throw new Error("this rig reads no doctor run");
+  },
+};
+
+// [LAW:no-silent-failure] The storage owner of a rig whose configs declare no
+// plugin source: a subscription naming one is a test that needs a real owner.
+export const NO_STORAGE: Pick<ManagedStorage, "declare"> = {
+  declare: (_holds, folder) => {
+    throw new Error(`this rig reads no plugin source (${folder})`);
   },
 };
 import type { ClaudeHookData } from "../../src/utils/claude";
@@ -65,7 +74,6 @@ import {
   declareLanes,
   readingsOf,
   type DeclaredLanes,
-  type KeyedOwners,
   type PayloadInputs,
   type RenderPayloadDeps,
 } from "../../src/daemon/readings";
@@ -331,6 +339,12 @@ export function fakeAutoCompact(
   };
 }
 
+// What a test composes its owners as: every owner a session's reads call,
+// with the refreshes its transcript lanes' trigger calls, and no trigger yet:
+// `withTranscriptLanes` builds it over them.
+export type FixtureOwners = Omit<RenderPayloadDeps, "transcriptLanes"> &
+  LaneOwners;
+
 // `owners` with the trigger of their transcript lanes built over them, as the
 // daemon builds its own over its providers (createPayloadProviders): built
 // where a test composes its owners, so it reads the owners the test chose, and
@@ -342,27 +356,34 @@ type TranscriptClock = ConstructorParameters<
   typeof TranscriptLanes
 >[0]["clock"];
 
-export function withTranscriptLanes<O>(
+export function withTranscriptLanes<O extends FixtureOwners>(
   owners: O,
   clock: TranscriptClock = systemTimekeeper,
 ): O & { readonly transcriptLanes: TranscriptLanes } {
-  const { log = () => {} } = owners as { readonly log?: DaemonLogger };
   // The trigger reads the owners of the object it returns, so a case that
   // swaps an owner on it after composing swaps the one the trigger reads.
-  const laned = { ...owners } as O & { transcriptLanes: TranscriptLanes };
-  laned.transcriptLanes = new TranscriptLanes({
-    owners: laned as unknown as LaneOwners,
-    watchers: { acquire: () => ({ release: () => {}, deaf: [] }) },
-    clock,
-    logger: log,
-    ledger: new RefreshLedger(),
+  const laned: O = { ...owners };
+  return Object.assign(laned, {
+    transcriptLanes: new TranscriptLanes({
+      owners: laned,
+      watchers: { acquire: () => ({ release: () => {}, deaf: [] }) },
+      clock,
+      logger: owners.log,
+      ledger: new RefreshLedger(),
+    }),
   });
-  return laned;
 }
+
+// A log nobody reads.
+const NO_LOG: DaemonLogger = () => {};
 
 // Every lane answering ABSENT: a payload whose sources have nothing.
 export function absentOwners() {
   return {
+    // No plugin source, no doctor run, and a log nobody reads.
+    managedStorage: NO_STORAGE,
+    doctor: NO_DOCTOR,
+    log: NO_LOG,
     // The user's home, which the payload's `home` and the default Claude Code
     // directory come from.
     home: HOST.home,
@@ -394,7 +415,7 @@ export function absentOwners() {
 export async function requestPayload(
   rawHookData: ClaudeHookData,
   at: Instant,
-  deps: RenderPayloadDeps,
+  deps: FixtureOwners,
   cwd: string | undefined,
   effective: EffectiveGlobals,
   hints: ClientHints,
@@ -415,7 +436,7 @@ export async function requestPayload(
     hookData,
     cwd,
     hints,
-    deps,
+    deps: home.owners,
     lanes: home.lanes,
   };
   await settleLanes(inputs);
@@ -443,12 +464,15 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
 // trigger built over them here as the daemon builds its own over its
 // providers; disposing it closes the view's home.
 function openHome(
-  owners: unknown,
+  owners: FixtureOwners,
   facts: ViewFacts,
   clock: TranscriptClock = systemTimekeeper,
-): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
+): Disposable & {
+  owners: RenderPayloadDeps;
+  lanes: () => ReturnType<typeof declareLanes>["lanes"];
+} {
   const holds = new HoldsClass();
-  const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
+  const keyed = withTranscriptLanes(owners, clock);
   const { lanes, faults } = declareLanes(
     keyed,
     holds,
@@ -473,6 +497,7 @@ function openHome(
     throw new Error(`a lane's declaration threw:\n${faults.join("\n")}`);
   }
   return {
+    owners: keyed,
     lanes: () => lanes,
     [Symbol.dispose]: close,
   };
@@ -481,7 +506,7 @@ function openHome(
 // One read of every transcript lane over `owners` at a request's facts, as the
 // transcript's watch or period makes one, landed.
 export async function readTranscriptLanes(
-  owners: unknown,
+  owners: FixtureOwners,
   facts: ViewFacts,
   clock: TranscriptClock = systemTimekeeper,
 ): Promise<void> {
@@ -494,7 +519,7 @@ export async function readTranscriptLanes(
 // frames over deps it built itself. [LAW:no-ambient-temporal-coupling] The
 // view's home closes with the case's cleanups.
 export function declaredLanes(
-  owners: unknown,
+  owners: FixtureOwners,
   facts: ViewFacts,
   cleanups: Array<() => void>,
 ): () => ReturnType<typeof declareLanes>["lanes"] {

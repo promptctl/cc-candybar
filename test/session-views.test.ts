@@ -25,7 +25,7 @@ import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
-import { CheckRuns } from "../src/check-runs";
+import { collectedRuns, type CollectedRuns } from "./helpers/held-runs";
 import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
@@ -57,15 +57,11 @@ afterEach(() => {
 
 // What holds each view's runs, over the one owner the test's cache was made
 // with.
-let holding: { sourceRuns: SourceRuns; held: Map<SessionView, CheckRuns> };
-const runsOf = (view: SessionView): CheckRuns => {
+let holding: { sourceRuns: SourceRuns; held: Map<SessionView, CollectedRuns> };
+const runsOf = (view: SessionView): CollectedRuns => {
   let held = holding.held.get(view);
   if (held === undefined) {
-    held = new CheckRuns(
-      holding.sourceRuns,
-      view.registry,
-      instantOf(new Date()), TEST_ENV
-    );
+    held = collectedRuns(holding.sourceRuns, view.registry, TEST_ENV);
     holding.held.set(view, held);
   }
   return held;

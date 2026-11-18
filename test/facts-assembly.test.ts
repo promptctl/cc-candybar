@@ -14,7 +14,7 @@ import {
 } from "../src/daemon/facts-assembly";
 import { stampFailureOf } from "../src/facts/world-state";
 import type { Update } from "../src/facts/world-state";
-import { readingsOf, type RenderPayloadDeps } from "../src/daemon/readings";
+import { readingsOf } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { oneDay } from "../src/daemon/foundations/today-facts";
 import { sumsOf } from "./helpers/today";
@@ -43,6 +43,7 @@ import {
   fakeMetrics,
   fakeTmux,
   fakeUsage,
+  withTranscriptLanes,
 } from "./helpers/payload-owners";
 
 const SID = sessionIdOf("facts-assembly");
@@ -108,7 +109,8 @@ afterEach(() => {
 
 function rig(git?: Outcome<unknown>) {
   const held = owners(git);
-  const deps = held as unknown as RenderPayloadDeps;
+  const deps = withTranscriptLanes(held);
+  cleanups.push(() => deps.transcriptLanes.close());
   const inputs: LanedInputs = {
     hookData: HOOK,
     deps,
@@ -292,7 +294,7 @@ describe("a session's facts document", () => {
         daemonFactsOf(),
         T0,
       );
-      r.deps.faults.refreshed(SID, "cache", "refresh threw");
+      r.held.faults.refreshed(SID, "cache", "refresh threw");
       const second = assembleFacts(
         first,
         SID,
@@ -316,7 +318,7 @@ describe("a session's facts document", () => {
       ]);
 
       // The refresh running clean again is a change too: stamped when it came.
-      r.deps.faults.refreshed(SID, "cache", null);
+      r.held.faults.refreshed(SID, "cache", null);
       const third = assembleFacts(
         second,
         SID,

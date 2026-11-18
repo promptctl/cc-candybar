@@ -12,7 +12,6 @@ import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -20,8 +19,6 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
-import { type RenderPayloadDeps } from "../src/daemon/readings";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 import type { ClientHints } from "../src/daemon/foundations/protocol";
@@ -40,6 +37,7 @@ import {
   fakeTmux,
   fakeUsage,
   requestPayload,
+  type FixtureOwners,
 } from "./helpers/payload-owners";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -88,10 +86,7 @@ async function bar(
     }),
     autoCompact: fakeAutoCompact(() => ok(400_000)),
     log: () => {},
-    history: () => EMPTY_HISTORY_DEPTH,
-    navigation: () => 0,
-    feeds: () => UNFOLLOWED_FEEDS,
-  } as unknown as RenderPayloadDeps;
+  } satisfies FixtureOwners;
   const payload = await requestPayload(
     HOOK_DATA,
     instantOf(new Date()),
