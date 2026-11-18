@@ -20,6 +20,7 @@ import {
   EFFORT_BUBBLE_CONTRAST,
 } from "../src/config/default-dsl-config";
 import {
+  THEME_SETTING,
   walkNodes,
   type DslConfig,
   type ValidatedConfig,
@@ -41,7 +42,6 @@ import {
   contrastRatio,
 } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { paletteForThemeName } from "../src/themes";
 import {
   recordRender,
   testVerbContext,
@@ -1011,11 +1011,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     }
 
-    // `theme` defaults to the config's own palette; passing one renders the
-    // same segment under a different theme, which is how the contrast floor
-    // below is checked across the whole registry rather than on one theme.
-    // The form `gitaculous` shows is the session's `git-detail` state, so a
-    // test picks one by writing it into the session the payload names.
+    // A segment is drawn as the session the payload names: the form
+    // `gitaculous` shows is its `git-detail` pick, and its theme is its
+    // `theme` pick, which is how the contrast floor below is checked across
+    // the whole registry rather than on one theme.
     const detailState = (detail: "collapsed" | "expanded"): SessionState => {
       const state = new SessionState();
       state.set(GIT_PAYLOAD.session_id, "git-detail", detail);
@@ -1025,7 +1024,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function renderSegment(
       segment: string,
-      theme?: string,
       git: Record<string, unknown> = GIT_PAYLOAD.git,
       variables: DslConfig["variables"] = {},
       sessionState: SessionState = new SessionState(),
@@ -1040,8 +1038,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(store, "", sessionState);
       try {
         const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
-        const basePalette = paletteForThemeName(
-          theme ?? cfg.globals.palette ?? "textual-dark",
+        // [LAW:one-source-of-truth] Every pick is read from the one session
+        // the registry reads, as the daemon reads it.
+        const selection = selectionFor(cfg, {}, (key) =>
+          sessionState.get(GIT_PAYLOAD.session_id, key),
         );
         return drawPayload(
           cfg,
@@ -1057,6 +1057,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             padding: 1,
             width: Number.POSITIVE_INFINITY,
           },
+          selection,
         ).frame;
       } finally {
         registry.dispose();
@@ -1066,10 +1067,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     test.each(["collapsed", "expanded"] as const)(
       "the %s form renders more than one distinct color across the facts",
       (detail) => {
-        const line = renderSegment(
-          "gitaculous",
-          undefined,
-          GIT_PAYLOAD.git,
+        const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
           {},
           detailState(detail),
         );
@@ -1126,10 +1124,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       ["collapsed", { branch: "" }, ""],
       ["expanded", { branch: "" }, ""],
     ] as const)("%s: %j reads %j", (detail, git, text) => {
-      const visible = textOf(renderSegment(
-        "gitaculous",
-        undefined,
-        git,
+      const visible = textOf(renderSegment("gitaculous", git,
         {},
         detailState(detail),
       )).replace(CAPS, "");
@@ -1143,7 +1138,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(strip(renderSegment("gitaculous"))).toBe("⎇ main +1/-1 SU?!1 ▸");
       expect(
         strip(
-          renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {
+          renderSegment("gitaculous", GIT_PAYLOAD.git, {
             "git.detail": {
               kind: "state",
               key: "git-detail",
@@ -1167,10 +1162,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         return urls[0]!;
       };
       const strip = (line: Frame) => textOf(line).replace(CAPS, "").trim();
-      const collapsed = renderSegment(
-        "gitaculous",
-        undefined,
-        GIT_PAYLOAD.git,
+      const collapsed = renderSegment("gitaculous", GIT_PAYLOAD.git,
         {},
         state,
       );
@@ -1178,10 +1170,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(arrow(collapsed), ctx);
       expect(state.get(GIT_PAYLOAD.session_id, "git-detail")).toBe("expanded");
 
-      const expanded = renderSegment(
-        "gitaculous",
-        undefined,
-        GIT_PAYLOAD.git,
+      const expanded = renderSegment("gitaculous", GIT_PAYLOAD.git,
         {},
         state,
       );
@@ -1189,7 +1178,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(arrow(expanded), ctx);
       expect(
         strip(
-          renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, state),
+          renderSegment("gitaculous", GIT_PAYLOAD.git, {}, state),
         ),
       ).toBe(strip(collapsed));
     });
@@ -1221,10 +1210,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // exactly that fact.
     test("a git.color.* variable recolours its fact", () => {
       const stock = renderSegment("gitaculous");
-      const recoloured = renderSegment(
-        "gitaculous",
-        undefined,
-        GIT_PAYLOAD.git,
+      const recoloured = renderSegment("gitaculous", GIT_PAYLOAD.git,
         {
           "git.color.behind": { kind: "literal", value: "error" },
         },
@@ -1246,7 +1232,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     test("both forms color the branch alike", () => {
       const collapsedFg = fgOfText(renderSegment("gitaculous"), "main");
       const expandedFg = fgOfText(
-        renderSegment("gitaculous", undefined, GIT_PAYLOAD.git, {}, EXPANDED()),
+        renderSegment("gitaculous", GIT_PAYLOAD.git, {}, EXPANDED()),
         "main",
       );
       expect(collapsedFg).toBeDefined();
@@ -1254,10 +1240,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
 
     test("the expanded form colors the stash count instead of leaving it plain", () => {
-      const line = renderSegment(
-        "gitaculous",
-        undefined,
-        GIT_PAYLOAD.git,
+      const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
         {},
         EXPANDED(),
       );
@@ -1280,10 +1263,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const STRUCTURAL = ["abc1234", "origin/main"];
 
       test("expanded: every painted fact differs from the structural color", () => {
-        const line = renderSegment(
-          "gitaculous",
-          undefined,
-          GIT_PAYLOAD.git,
+        const line = renderSegment("gitaculous", GIT_PAYLOAD.git,
           {},
           EXPANDED(),
         );
@@ -1308,26 +1288,34 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // across these themes; the `readableOn` floor in GIT_QUIET_FG is what
       // makes the result uniform. This asserts the floor holds everywhere,
       // which is the claim the config comment makes.
+      // [LAW:verifiable-goals] The floor holds for any palette, so it proves
+      // nothing about a theme unless the frame is drawn in it: a theme the
+      // session picks draws a ground of its own, never the unpicked bar's.
+      const unpicked = bgOfText(
+        renderSegment("gitaculous", GIT_PAYLOAD.git, {}, EXPANDED()),
+        "abc1234",
+      );
+      const ownTheme = selectionFor(parseAndValidate("<default>", SERIALIZED)).theme;
       test.each(listResolvablePaletteNames())(
         "quiet structural text clears WCAG large-text contrast under theme %s",
         (theme) => {
-          const line = renderSegment(
-            "gitaculous",
-            theme,
-            GIT_PAYLOAD.git,
-            {},
-            EXPANDED(),
-          );
+          const state = EXPANDED();
+          state.set(GIT_PAYLOAD.session_id, THEME_SETTING, theme);
+          const line = renderSegment("gitaculous", GIT_PAYLOAD.git, {}, state);
           const quiet = fgOfText(line, "abc1234");
           const bg = bgOfText(line, "abc1234");
-          // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
+          expect({ theme, drawnInIt: bg !== unpicked }).toEqual({
+            theme,
+            drawnInIt: !(ownTheme.kind === "decided" && ownTheme.name === theme),
+          });
+          // Just under the floor: ensureContrast bisects to the threshold, and the 8-bit
           // quantization of the result can land a hair under the exact target.
           expect(
             contrastRatio(
               truecolorOf(quiet),
               truecolorOf(bg),
             ),
-          ).toBeGreaterThan(2.99);
+          ).toBeGreaterThan(QUIET_MIN_CONTRAST - 0.01);
         },
       );
     });
