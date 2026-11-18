@@ -157,9 +157,6 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
     log,
     // A command's bar holds no daemon-wide event.
     eventAnswered: () => {},
-    // A command's sessions read no plugin's storage (their owners answer
-    // it), so there is no folder to hold.
-    storage: { hold: () => {}, release: () => {} },
   };
   const link = inProcessRenderer(
     MAIN_RENDERER,

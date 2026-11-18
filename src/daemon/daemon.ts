@@ -666,10 +666,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
-    storage: {
-      hold: (id, folders) => managedStorage.hold(id, folders),
-      release: (id) => managedStorage.release(id),
-    },
   };
   const link = preparedRenderer.start({
     reaches,

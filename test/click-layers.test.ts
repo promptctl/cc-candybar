@@ -21,7 +21,6 @@ import {
 import { answerRepo } from "./helpers/repo-approval";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { encodeSegments } from "../src/click/wire";
 import { VERBS, type VerbContext } from "../src/renderer/verbs";
 import { SessionState } from "../src/renderer/session-state";
@@ -85,7 +84,6 @@ function session(): {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,

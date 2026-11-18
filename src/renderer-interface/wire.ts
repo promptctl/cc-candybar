@@ -52,7 +52,7 @@ export interface RendererBoot {
   readonly linkKey: Asked<string>;
 }
 
-// A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
+// A reach's path in `AdapterToHost`, dotted for a reach in a group.
 export type ReachPath = string;
 
 export type HostLine =
@@ -117,7 +117,6 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   log: "notice",
   eventAnswered: "notice",
-  storage: { hold: "notice", release: "notice" },
 };
 
 type Reach = (...args: readonly unknown[]) => unknown;

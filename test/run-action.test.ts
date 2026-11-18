@@ -240,7 +240,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       locations: locs(),
       sessionState,
       watchers,
-      storage: providers.managedStorage,
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,

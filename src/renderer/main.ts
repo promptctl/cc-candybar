@@ -506,7 +506,6 @@ export function mainRendererOf(
       locations: inputs.locations,
       sessionState,
       log,
-      storage: host.storage,
       signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload

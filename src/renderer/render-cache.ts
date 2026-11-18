@@ -9,10 +9,6 @@ import type {
   Subscription,
   Subscriptions,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
@@ -137,8 +133,7 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 export const MAX_ENTRIES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — session state
-// (for declareState atoms) and the host's storage owner. Daemon-
-// owned data providers like the SessionUsageStore/git provider/etc. live in
+// (for declareState atoms) among them. Daemon-owned data providers like the SessionUsageStore/git provider/etc. live in
 // the session source (src/renderer/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
@@ -148,9 +143,6 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // (StateDeps).
   locations: Locations;
   sessionState: SessionStateRW;
-  // The host's storage owner, which holds the folders each served state's
-  // latest load named (`holdFolders`), from its first load to its reclaim.
-  storage: AdapterToHost["storage"];
   // What signs the `run` links its compiles draw (StateDeps).
   signer: LinkSigner;
   // The gates a load builds against (StateDeps).
@@ -284,10 +276,8 @@ export interface DslRenderState {
   readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
-  // [LAW:no-ambient-temporal-coupling] Each plugin source the config
-  // declares, at its storage folder. The cache holds these folders for as
-  // long as it serves the state, so a reload, which holds its successor's
-  // first, never closes and reopens a watch, and no view touches one.
+  // Each plugin source the config declares, at its storage folder, which a
+  // session's plugin subscription names.
   readonly sources: DeclaredSources;
 }
 
@@ -464,8 +454,6 @@ export interface CacheEntry {
 // render — which otherwise resumed on a disposed store, every chained read
 // recomputed untracked.
 interface StateHold {
-  // The id the state's storage folders are held under at the host.
-  readonly id: StorageHoldId;
   holders: number;
   retired: Teardown | null;
 }
@@ -1182,8 +1170,6 @@ export class RenderCache<
   }
   // Every state the map serves or served, until reclaimed.
   private readonly holds = new Map<DslRenderState, StateHold>();
-  // The last storage hold id minted.
-  private storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
@@ -1326,17 +1312,15 @@ export class RenderCache<
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
     this.serve(entry.state);
-    // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
+    // [LAW:single-enforcer] Insert, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
     // and dispose, so a throwing observer cannot strand a registry outside
     // it, and a reentrant getOrCreate for this key finds the entry rather
-    // than building a duplicate. The hold precedes the bound: an eviction
-    // there releases another state's folders, which this one may name too.
-    // The bound is a fact about the MAP, complete at insertion: nothing later
-    // (including an observer throwing) can skip it.
+    // than building a duplicate. The bound is a fact about the MAP, complete
+    // at insertion: nothing later (including an observer throwing) can skip
+    // it.
     // [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -1727,24 +1711,13 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    this.holds.set(state, {
-      id: ++this.storageHolds as StorageHoldId,
-      holders: 0,
-      retired: null,
-    });
+    this.holds.set(state, { holders: 0, retired: null });
     this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
       );
-  }
-
-  // The host holds the storage folders a served state's latest load named.
-  private holdFolders(state: DslRenderState): void {
-    // [LAW:single-enforcer] The host keys each folder once, however many
-    // sources name it.
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -1800,7 +1773,6 @@ export class RenderCache<
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
     this.holds.delete(state);
-    this.deps.storage.release(hold.id);
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
     // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
     // so a compile no state left there carries has no render to draw it.
@@ -1854,10 +1826,6 @@ export class RenderCache<
       entry.state = loaded.state;
       this.serve(loaded.state);
     }
-    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
-    // The successor's hold precedes its predecessor's release, so a folder
-    // both name is never closed and reopened.
-    this.holdFolders(entry.state);
     if (loaded.kind === "built")
       this.retire(served, "reload", { entry, state: loaded.state });
     // A reload can move the entry onto a compile no other entry carries, and

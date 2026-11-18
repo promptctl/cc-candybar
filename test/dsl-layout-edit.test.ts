@@ -112,7 +112,6 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal, untilHeard } from "./helpers/reload-signal";
 import { viewFacts } from "./helpers/view-facts";
 import { instantOf } from "../src/utils/instant";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -1013,7 +1012,6 @@ function makeCache(reloads?: ReloadSignal): {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
@@ -1223,7 +1221,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         clock: systemTimekeeper,
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),
-        storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState,

@@ -176,9 +176,6 @@ interface Rig {
   readonly updateFact: UpdateFact;
   readonly reloads: ReloadSignal;
   readonly lines: string[];
-  // The cache's storage notices, in the order sent: `hold <id>` or
-  // `release <id>`.
-  readonly storageCalls: string[];
   readonly collector: Collector;
   readonly worldStates: WorldStates;
   // A request's turn as the main renderer takes one: the world state the
@@ -238,7 +235,6 @@ function rig(): Rig {
   const sessionState = new SessionState();
   const updateFact = newUpdateFact();
   const reloads = new ReloadSignal();
-  const storageCalls: string[] = [];
   const served = collected(
     {
       owners: providers,
@@ -252,16 +248,6 @@ function rig(): Rig {
       clock: systemTimekeeper,
       locations: locations(host),
       sessionState,
-      storage: {
-        hold: (id, folders) => {
-          storageCalls.push(`hold ${id}`);
-          providers.managedStorage.hold(id, folders);
-        },
-        release: (id) => {
-          storageCalls.push(`release ${id}`);
-          providers.managedStorage.release(id);
-        },
-      },
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
@@ -300,7 +286,6 @@ function rig(): Rig {
     updateFact,
     reloads,
     lines,
-    storageCalls,
     collector: served.collector,
     worldStates: served.worldStates,
     hold: (configFile, sid = "s1") => {
@@ -429,10 +414,12 @@ describe("a source's declaration", () => {
       expect([...loaded.state!.sources]).toEqual([
         [STATUS, path.join(dir, "p", "session")],
       ]);
-      // A build holds no folder; the cache's hold on the state it serves
-      // makes it, so the program has somewhere to write.
-      expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
+      // Neither a build nor the cache's serving makes the folder; a session's
+      // declaration of its file there does, so the program has somewhere to
+      // write.
       r.cache.getOrCreate(r.configs.at(dir, dir, p));
+      expect(fs.existsSync(path.join(dir, "p", "session"))).toBe(false);
+      using _held = r.hold(p);
       expect(fs.statSync(path.join(dir, "p", "session")).isDirectory()).toBe(
         true,
       );
@@ -1218,27 +1205,29 @@ describe("a storage folder's watch", () => {
     expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("a built reload holds its successor's folders before it releases its predecessor's; a kept one holds again under the same id", async () => {
+  test("a kept reload, then a built one, opens and closes no watch", async () => {
     const r = rig();
     const file = config(["plugins.p.gated"]);
-    // No render holds the state through the reload: a held one's release
+    // No render holds the state through the reload: a held one's retire
     // waits for that render's return.
     const held = r.hold(file);
     await answered(held.view);
     held[Symbol.dispose]();
     const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
-    expect(r.storageCalls).toEqual(["hold 1"]);
+    const opened = r.counters.watchersOpened;
+    const closed = r.counters.watchersClosed;
     fs.appendFileSync(file, "\n// a comment keeps the state\n");
     r.configs.again();
-    expect(r.storageCalls).toEqual(["hold 1", "hold 1"]);
     const edited = fs
       .readFileSync(file, "utf8")
       .replace(`template: "mine"`, `template: "mine, edited"`);
     await r.reloads.after(entry, () => fs.writeFileSync(file, edited));
-    expect(r.storageCalls.slice(2, 4)).toEqual(["hold 2", "release 1"]);
+    expect(r.counters.watchersOpened).toBe(opened);
+    expect(r.counters.watchersClosed).toBe(closed);
+    expect(r.providers.managedStorage.stats().folders).toBe(1);
   });
 
-  test("a refused watch's fault clears at the config's reload", async () => {
+  test("a refused watch is retried at the next period, and requests in between leave it refused", async () => {
     const file = config(["plugins.p.gated"]);
     const storage = storageOf();
     fs.mkdirSync(storage, { recursive: true });
@@ -1249,12 +1238,17 @@ describe("a storage folder's watch", () => {
     await answered(view);
     expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
     jest.restoreAllMocks();
-    fs.appendFileSync(file, "\n// a comment keeps the state\n");
-    r.configs.again();
+    // Another session's request declares its own file in the folder: every
+    // request declares, so none retries the watch.
+    const next = r.hold(file, "s2");
+    await answered(next.view);
+    next[Symbol.dispose]();
+    expect(r.providers.managedStorage.stats().faults.refused).toBe(1);
+    r.fileEvents.notify({ kind: "period" });
     await writeUntilShown(
       () => programWrites(storage, "s1", { home: "/recovered" }),
       () => draw(view).text.includes("home=/recovered"),
-      "the write after the reload",
+      "the write after the period",
     );
   });
 
@@ -1374,18 +1368,18 @@ describe("an installed plugin's storage", () => {
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.gated"] } }`,
     );
 
-  test("uninstalling it closes its watch once its states are reclaimed, and does not recreate its folder", async () => {
+  test("uninstalling it closes its watch at the period after its folder goes, and does not recreate its folder", async () => {
     const r = rig();
     plugin("", path.join(root(), "p"));
     // Placing none of its segments: a config that placed one would fail to
-    // load without it, and keep the state that holds the folder.
+    // load without it, and keep the state that declares the folder.
     const file = write(
       "config.json5",
       `{ segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
     const held = r.hold(file);
     held[Symbol.dispose]();
-    // The state holds the folder its config declares, read by a view or not.
+    // The watch outlives the declaration that opened it.
     expect(r.providers.managedStorage.stats().folders).toBe(1);
     const entry = r.cache.getOrCreate(r.configs.at(dir, dir, file));
     const folder = path.join(root(), "p");
@@ -1395,6 +1389,12 @@ describe("an installed plugin's storage", () => {
         n.startsWith("plugins.p."),
       ),
     ).toEqual([]);
+    // The session's next request declares what the reloaded config reads, so
+    // it holds no file in the folder; with none held, the period after the
+    // loss closes the watch rather than making the folder again.
+    r.hold(file)[Symbol.dispose]();
+    r.fileEvents.notify({ kind: "period" });
+    r.fileEvents.notify({ kind: "period" });
     expect(r.providers.managedStorage.stats().folders).toBe(0);
     expect(fs.existsSync(folder)).toBe(false);
   });

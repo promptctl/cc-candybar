@@ -12,7 +12,6 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { fakeWatches } from "./helpers/fake-watches";
 import { locations, stateDir } from "../src/daemon/paths";
@@ -71,7 +70,6 @@ function rig(
     {
       clock: opts.clock ?? systemTimekeeper,
       locations: locations(host),
-      storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
