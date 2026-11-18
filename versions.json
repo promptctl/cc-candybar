@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-812",
+      "ref": "refs/pull/812/merge",
+      "sha": "f146fa03ee98a3c61450842fa60c4dbd17e71f65",
+      "timestamp": "2026-11-18T17:10:57.363Z",
+      "commits": [
+        {
+          "sha": "f146fa03ee98a3c61450842fa60c4dbd17e71f65",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T17:08:47Z",
+          "message": "Merge 015248f5eadb5ff12c881b85ccc1ba585966f27c into 23b2de009c29760ad28d0fb6368579b0eeea19ef\n"
+        },
+        {
+          "sha": "015248f5eadb5ff12c881b85ccc1ba585966f27c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:00:08-07:00",
+          "message": "fix(storage): a storage folder's watch or stat fault clears when the OS answers again (tvhj)\n\nA refused or erroring watch, or a folder a judgment could not stat, no\nlonger ends its generation. The fault is derived from the handle's\ndeafness (taken at each window and at open, when the registry tells a\nmove of it) and the last judgment's stat, so the registry's period\nreopen and the next judgment clear it in place. A start or change of a\nfault is counted and logged once; a clear is logged. Only a folder that\ncould not be made stays terminal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-813",
       "ref": "refs/pull/813/merge",
       "sha": "65b784a5f7af35d69d91d1621ffaff29ad4ca078",
@@ -35,35 +57,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-18T17:09:03Z",
           "message": "chore(release): set `package.json` to 1.232.3\n\n## [1.232.3](https://github.com/promptctl/cc-candybar/compare/v1.232.2...v1.232.3) (2026-11-18)\n\n### Bug Fixes\n\n* **update-act:** an overdue act whose files a newer act pruned still has its proven group ended (pj1z) ([#806](https://github.com/promptctl/cc-candybar/issues/806)) ([23b2de0](https://github.com/promptctl/cc-candybar/commit/23b2de009c29760ad28d0fb6368579b0eeea19ef))\n* **watchers:** a path watched by name is polled at its path, and only folders ride the OS event stream (iywk) ([#805](https://github.com/promptctl/cc-candybar/issues/805)) ([5562879](https://github.com/promptctl/cc-candybar/commit/556287991e7955f7a9fbfc4a12b9ded691a25344))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-812",
-      "ref": "refs/pull/812/merge",
-      "sha": "a6d5297105765796dd49473699cb3df530af0ab3",
-      "timestamp": "2026-11-18T17:09:09.046Z",
-      "commits": [
-        {
-          "sha": "a6d5297105765796dd49473699cb3df530af0ab3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T17:08:04Z",
-          "message": "Merge 1c2a2817e6cb6347b687d6f622c7d3c6a20c2467 into 23b2de009c29760ad28d0fb6368579b0eeea19ef\n"
-        },
-        {
-          "sha": "1c2a2817e6cb6347b687d6f622c7d3c6a20c2467",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:07:44-07:00",
-          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
-        },
-        {
-          "sha": "015248f5eadb5ff12c881b85ccc1ba585966f27c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:00:08-07:00",
-          "message": "fix(storage): a storage folder's watch or stat fault clears when the OS answers again (tvhj)\n\nA refused or erroring watch, or a folder a judgment could not stat, no\nlonger ends its generation. The fault is derived from the handle's\ndeafness (taken at each window and at open, when the registry tells a\nmove of it) and the last judgment's stat, so the registry's period\nreopen and the next judgment clear it in place. A start or change of a\nfault is counted and logged once; a clear is logged. Only a folder that\ncould not be made stays terminal.\n"
         }
       ]
     },
