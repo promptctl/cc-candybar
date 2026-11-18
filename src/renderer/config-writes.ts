@@ -21,6 +21,7 @@ import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import type { Layer } from "../config/config-snapshot.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { LayerRole } from "../config/layer-role.js";
+import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type {
   Act,
   ConfigChange,
@@ -41,6 +42,9 @@ export interface Landing {
   readonly origin: RenderOrigin | null;
   readonly files: readonly string[];
   readonly consequence: Consequence;
+  // The click's own view of its session's state: what it writes through lands
+  // with its consequence, in its step.
+  readonly sessionState: SessionStateRW;
 }
 
 // How a landing ended: every change of its click landed, or the first reason
@@ -172,6 +176,7 @@ export class ConfigWrites {
     effects: Effect[],
     session: SessionId | null,
     consequence: Consequence,
+    sessionState: SessionStateRW,
   ): void {
     const answers = this.answers;
     const settings = this.settings;
@@ -243,7 +248,7 @@ export class ConfigWrites {
       })),
     ];
     this.inFlight = {
-      of: { session, origin, files, consequence },
+      of: { session, origin, files, consequence, sessionState },
       owed: new Set(landing.map((c) => c.id)),
       missed: null,
     };
@@ -265,6 +270,13 @@ export class ConfigWrites {
   // The origin of the click whose changes are on their way, if one's are.
   landing(): RenderOrigin | null {
     return this.inFlight?.of.origin ?? null;
+  }
+
+  // The view of `session`'s own click whose changes are on their way, if
+  // they are: what is written through it joins that click's step.
+  landingOf(session: SessionId): SessionStateRW | null {
+    const landing = this.inFlight?.of;
+    return landing?.session === session ? landing.sessionState : null;
   }
 
   // No click begins after this: the daemon is closing.

@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  MEETS_NOTHING,
   RenderCache,
   type RenderCacheObservers,
   type SessionView,
@@ -173,6 +174,7 @@ export function sessionRig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
+      meets: MEETS_NOTHING,
       source: sessionSource({
         sessionState,
         worldStates: served.worldStates,

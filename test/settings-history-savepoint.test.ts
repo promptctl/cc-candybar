@@ -18,6 +18,7 @@ import { HeldStores } from "../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../src/daemon/session-state-file";
 import { emptyStores } from "./helpers/doctor-facts";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import { placementDraftKey } from "../src/config/edit-chrome";
 import { readConfigText } from "../src/utils/atomic-write";
 import { redoOf, rewindOf, undoOf, inPlace } from "./helpers/history-step";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -314,6 +315,77 @@ describe("the savepoint under the history's bounds", () => {
     expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
     undoOf(history, SID, files);
     expect(sessionState.get(SID, "theme")).toBeNull();
+  });
+});
+
+// [LAW:verifiable-goals] A session's key released because the config it
+// meets ended the placement it belonged to (src/renderer/placement-release.ts):
+// with no click of its own landing, it is gone from the store and from every
+// step, so no undo, redo or cancel throws over it or brings it back.
+describe("a released key leaves the history it was stepped in", () => {
+  const DRAFT = placementDraftKey("default", "vcs", "detail");
+  // One click that picks the draft, as a configure control does.
+  const draft = (history: SettingsHistory, value: string): void => {
+    const journal = history.begin(files);
+    journal.sessionState.set(SID, DRAFT, value);
+    journal.commit();
+  };
+
+  test("undo and redo step past it, never bringing it back", () => {
+    const { history, sessionState, pick, theme } = rig();
+    pick("nord");
+    draft(history, "true");
+    pick("gruvbox");
+    history.release(SID, [DRAFT], null);
+    expect(sessionState.get(SID, DRAFT)).toBeNull();
+    expect(history.depth(SID)).toEqual({ undo: 2, redo: 0, sinceEdit: 0 });
+    undoOf(history, SID, files);
+    expect(theme()).toBe("nord");
+    undoOf(history, SID, files);
+    expect(theme()).toBeNull();
+    redoOf(history, SID, files);
+    redoOf(history, SID, files);
+    expect(theme()).toBe("gruvbox");
+    expect(sessionState.get(SID, DRAFT)).toBeNull();
+  });
+
+  test("cancel puts back everything else edit mode changed, and not it", () => {
+    const { history, sessionState, pick, toggle, theme } = rig();
+    toggle("arrange");
+    draft(history, "true");
+    pick("nord");
+    history.release(SID, [DRAFT], null);
+    expect(history.depth(SID).sinceEdit).toBe(1);
+    rewindOf(history, SID, files);
+    expect(theme()).toBeNull();
+    expect(sessionState.get(SID, DRAFT)).toBeNull();
+  });
+
+  test("through a landing click, it joins that click's step, and its undo brings it back", () => {
+    const { history, sessionState, edit } = rig();
+    draft(history, "true");
+    const journal = history.begin(files);
+    history.release(SID, [DRAFT], journal.sessionState);
+    // Held until the click's consequence, as every write of a click is.
+    expect(sessionState.get(SID, DRAFT)).toBe("true");
+    journal.commit();
+    expect(sessionState.get(SID, DRAFT)).toBeNull();
+    edit();
+    undoOf(history, SID, files);
+    undoOf(history, SID, files);
+    expect(sessionState.get(SID, DRAFT)).toBe("true");
+  });
+
+  test("an empty release moves nothing", () => {
+    const { history, sessionState, pick } = rig();
+    pick("nord");
+    history.drain();
+    const revision = sessionState.latestRevision();
+    const before = history.history(SID);
+    history.release(SID, [], null);
+    expect(history.history(SID)).toBe(before);
+    expect(history.drain()).toEqual([]);
+    expect(sessionState.latestRevision()).toBe(revision);
   });
 });
 

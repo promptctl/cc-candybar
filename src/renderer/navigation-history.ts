@@ -165,6 +165,25 @@ export class NavigationHistory {
     return { step, discarded };
   }
 
+  // The session's `keys` are gone with the placement they belonged to
+  // (src/renderer/placement-release.ts): every change to them leaves its
+  // steps, so going back never reopens a removed placement's library or
+  // configure over a later placement that takes its id. A step left empty
+  // leaves too.
+  forget(sessionId: SessionId, keys: readonly string[]): void {
+    const gone = new Set(keys);
+    const steps = this.past.get(sessionId) ?? [];
+    // A session whose steps change none of them keeps its place in the
+    // recency order.
+    if (!steps.some((step) => step.some((c) => gone.has(c.key)))) return;
+    this.put(
+      sessionId,
+      steps
+        .map((step) => step.filter((c) => !gone.has(c.key)))
+        .filter((step) => step.length > 0),
+    );
+  }
+
   private push(sessionId: SessionId, step: NavigationStep): void {
     const steps = this.past.get(sessionId) ?? [];
     this.put(sessionId, [...steps, step].slice(-MAX_STEPS));

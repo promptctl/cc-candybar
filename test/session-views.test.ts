@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { runInAction } from "mobx";
 import {
+  MEETS_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   type SessionView,
@@ -98,6 +99,7 @@ function makeCache(
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
       log: (_level, line) => {
         opts.log?.(line);

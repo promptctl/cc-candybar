@@ -20,7 +20,8 @@ import path from "node:path";
 import { createPayloadProviders } from "../src/daemon/payload-providers";
 import { FileEventDelivery } from "../src/daemon/cache/file-events";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { RenderCache, type SessionView } from "../src/renderer/render-cache";
+import {
+  MEETS_NOTHING, RenderCache, type SessionView } from "../src/renderer/render-cache";
 import { renderOptionsOf } from "../src/renderer/render-payload";
 import { collected } from "./helpers/collected";
 import {
@@ -244,6 +245,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
+      meets: MEETS_NOTHING,
       source: sessionSource({
         sessionState,
         worldStates: served.worldStates,

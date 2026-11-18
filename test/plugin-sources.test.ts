@@ -35,6 +35,7 @@ import {
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
 import {
+  MEETS_NOTHING,
   pluginLoadLine,
   RenderCache,
   type SessionView,
@@ -265,6 +266,7 @@ function rig(): Rig {
       signer: TEST_SIGNER,
       gates: bareGates(),
       log,
+      meets: MEETS_NOTHING,
       source: sessionSource({
         sessionState,
         worldStates: served.worldStates,

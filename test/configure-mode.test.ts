@@ -23,11 +23,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
-import { linkClick } from "./helpers/click";
 import {
-  parseEffects,
   VERB_APPLY_LAYOUT_OP,
-  VERB_DISPATCH,
   VERB_SAVE,
   VERB_SAVE_PRESET,
   VERB_UNDO,
@@ -53,8 +50,6 @@ import {
   type SegmentNode,
 } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
-import { encodeLayoutOp } from "../src/config/layout-ops";
-import { presetRootKey } from "../src/config/loader/persist-target";
 import { placementDrafts } from "../src/renderer/setting-drafts";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../src/config/settings-menu";
@@ -607,30 +602,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     },
   );
 
-  test("removing a placement releases its unsaved values", async () => {
-    durable.write(SRC);
-    const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
-    await rt.click(
-      rt.urlWriting(rt.render(), draftKey("vcs", "detail"), "true"),
-    );
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const remove = rt.urlWriting(
-      rt.render(),
-      presetRootKey("default"),
-      encodeLayoutOp({ op: "remove", target: "vcs" }),
-    );
-    await rt.click(remove);
-    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBeNull();
-    // The configure key named it, so it ends with it: a later placement that
-    // takes the id opens with nothing configured.
-    expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
-    // One click, one step: its undo brings the placement and its draft back.
-    await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
-    expect(durable.text()).toBe(SRC);
-    expect(rt.sessionState.get(SID, draftKey("vcs", "detail"))).toBe("true");
-  });
-
   test.each([
     ["a placement this tree does not hold", "default", "gone"],
     ["another preset's placement", "other", "vcs"],
@@ -703,30 +674,5 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     expect(textOf(rt.render())).not.toContain("form:");
     configurePlacement(rt.sessionState, SID, "b", "vcs2");
     expect(textOf(rt.render())).toContain("◀ form ▶");
-  });
-
-  test("a removal from a row two presets share ends both presets' drafts, and says so", async () => {
-    // `b` stages the config's own root, so it renders the row `default` does.
-    const src = SRC.replace("globals: {},", "globals: {}, presets: { b: {} },");
-    durable.write(src);
-    const rt = configureBar(src);
-    const inB = placementDraftKey("b", "vcs", "detail");
-    rt.sessionState.set(SID, inB, "true");
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-    const remove = rt.urlWriting(
-      rt.render(),
-      presetRootKey("default"),
-      encodeLayoutOp({ op: "remove", target: "vcs" }),
-    );
-    const logged: string[] = [];
-    const { verb, value } = linkClick(remove);
-    const [effect] =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    await CLICK_VERBS.get(effect!.verb)!(effect!.value, {
-      ...rt.ctx,
-      log: (_level, message) => logged.push(message),
-    });
-    expect(rt.sessionState.get(SID, inB)).toBeNull();
-    expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);
   });
 });

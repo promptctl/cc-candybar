@@ -58,6 +58,7 @@ import { isGlobalsField } from "../src/config/loader/globals";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  MEETS_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -838,6 +839,7 @@ function makeCache(): {
       gates: bareGates(),
       sessionState,
       watchers,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
     },
     {

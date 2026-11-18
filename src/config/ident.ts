@@ -31,3 +31,20 @@ export function escapedIdent(name: string): string {
         `${ESCAPE}${c.codePointAt(0)!.toString(16).padStart(6, "0")}`,
   ).join("");
 }
+
+// [LAW:one-source-of-truth] `escapedIdent` read back: the name it spells, or
+// null for a spelling it never produces. A reader of a synthesized name
+// re-mints what this returns and compares, so only an exact spelling names a
+// name.
+export function unescapedIdent(spelled: string): string | null {
+  const name = spelled.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    // A number past the last code point is no escape: it stays as written,
+    // and the round trip below refuses it.
+    (escape, hex: string) => {
+      const point = parseInt(hex, 16);
+      return point <= 0x10ffff ? String.fromCodePoint(point) : escape;
+    },
+  );
+  return escapedIdent(name) === spelled ? name : null;
+}

@@ -127,6 +127,13 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return this.sessions.get(sessionId)?.values.get(key) ?? null;
   }
 
+  // Every key the session holds, with its value: what a session meeting a
+  // config is measured by (src/renderer/placement-release.ts).
+  entries(sessionId: SessionId): ReadonlyArray<readonly [string, string]> {
+    this.atom.reportObserved();
+    return [...(this.sessions.get(sessionId)?.values ?? [])];
+  }
+
   revision(sessionId: SessionId): number {
     this.atom.reportObserved();
     return this.sessions.get(sessionId)?.revision ?? 0;

@@ -228,9 +228,10 @@ class LandingAtOnce extends ConfigWrites {
     effects: Effect[],
     session: SessionId | null,
     consequence: Consequence,
+    sessionState: SessionStateRW,
   ): void {
     const from = effects.length;
-    super.seal(effects, session, consequence);
+    super.seal(effects, session, consequence, sessionState);
     const landing = effects.splice(from);
     if (landing.length === 0) return;
     const outcome = performChanges(

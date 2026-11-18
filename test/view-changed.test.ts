@@ -10,7 +10,8 @@ import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { heldRuns } from "./helpers/held-runs";
 import os from "node:os";
 import path from "node:path";
-import { RenderCache } from "../src/renderer/render-cache";
+import {
+  MEETS_NOTHING, RenderCache } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
 import { TEST_SIGNER } from "./helpers/link-signer";
@@ -88,6 +89,7 @@ function setUp() {
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
+      meets: MEETS_NOTHING,
       source: runs.source,
     },
     {

@@ -49,6 +49,11 @@ import {
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
+import {
+  EVERY_PLACEMENT,
+  placementsOf,
+  type Placements,
+} from "../config/edit-chrome.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   fixedSource,
@@ -158,6 +163,13 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // What a view draws from (src/renderer/session-source.ts); a test drawing no
   // view's own payload passes SOURCES_NOTHING.
   source: SourceOf<S>;
+  // [LAW:single-enforcer] Where a session meets a config: called with the
+  // placements a state holds before every view of the session opens over it,
+  // first, reopened after an eviction or a restart, or a reload's successor,
+  // so what the session holds of a placement the config ended is released
+  // (src/renderer/placement-release.ts). It returns the keys it released. A
+  // test that opens views over no such state passes MEETS_NOTHING.
+  meets: (sessionId: SessionId, placements: Placements) => readonly string[];
   // Where the cache's events go — every load, every teardown. Only the
   // daemon passes its log; a caller passing none logs quietly, like the
   // providers and the usage store.
@@ -284,6 +296,10 @@ export interface DslRenderState {
   readonly unused: readonly UnusedDecl[];
   // The plugin definitions this load merged, and those it dropped.
   readonly plugins: LoadedPlugins;
+  // [LAW:one-source-of-truth] The placements the config holds, read once at
+  // load off the trees its files authored (placementsOf), before a placement
+  // whose segment this load doesn't declare is dropped.
+  readonly placements: Placements;
   // [LAW:no-ambient-temporal-coupling] Each plugin source the config
   // declares, at its storage folder. The cache holds these folders for as
   // long as it serves the state, so a reload, which holds its successor's
@@ -826,6 +842,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         reached: installed.reached,
         rendering: installed.rendering,
       },
+      placements: placementsOf(loaded.placed),
       sources: load.sources,
     },
   };
@@ -955,7 +972,9 @@ export function fallbackState(
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause,
     });
-  return built.state;
+  // [LAW:no-silent-failure] The default stands in for a config that failed to
+  // load, which ended no placement: every placement's state is kept.
+  return { ...built.state, placements: EVERY_PLACEMENT };
 }
 
 // The scopes a render cache entry and a session's view declare.
@@ -1023,6 +1042,10 @@ export interface SourcedView {
 }
 
 export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
+
+// A session that meets a config releases nothing: for a test whose views'
+// sessions hold no placement's state.
+export const MEETS_NOTHING: RenderDeps["meets"] = () => [];
 
 // A source answering nothing yet: every input of the view pending, its
 // session the view's own (so `state` reads answer), and the selections the
@@ -1511,7 +1534,9 @@ export class RenderCache<
   ): SessionView<S, F> {
     const sessionId = facts.hookData.session_id;
     let view: SessionView<S, F>;
+    let released: readonly string[];
     try {
+      released = this.deps.meets(sessionId, state.placements);
       view = openView(state, entry.cwd, facts, {
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -1526,7 +1551,7 @@ export class RenderCache<
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
+      `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size} ended=${released.length}`,
     );
     return view;
   }

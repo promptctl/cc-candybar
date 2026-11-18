@@ -62,6 +62,7 @@ function setup() {
     await CLICK_VERBS.get(VERB_UNDO)!(encodeSegments(["s1"]), ctx);
   return {
     sessionState,
+    navigation: ctx.navigation,
     // What the bar's ◁ counts: measured against the gate of the config the
     // session renders now.
     depth: (): number =>
@@ -155,6 +156,22 @@ describe("back", () => {
     expect(sessionState.get(S1, MENU)).toBe("open");
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
+    expect(depth()).toBe(0);
+    dispose();
+  });
+
+  test("a forgotten key leaves every step, and a step it alone made leaves with it", async () => {
+    const { sessionState, navigation, depth, set, back, dispose } = setup();
+    await set(TAB, "a");
+    await set(MENU, "open");
+    await set(MENU, "closed", TAB, "b");
+    navigation.forget(S1, [MENU]);
+    expect(depth()).toBe(2);
+    await back();
+    expect(sessionState.get(S1, TAB)).toBe("a");
+    expect(sessionState.get(S1, MENU)).toBe("closed");
+    await back();
+    expect(sessionState.get(S1, TAB)).toBeNull();
     expect(depth()).toBe(0);
     dispose();
   });

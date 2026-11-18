@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  MEETS_NOTHING,
   RenderCache,
   type CacheEntry,
   type LoadCause,
@@ -132,6 +133,7 @@ function makeCache(
       gates: bareGates(),
       sessionState,
       log,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
     },
     {
@@ -1458,6 +1460,7 @@ describe("RenderCache close", () => {
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
+        meets: MEETS_NOTHING,
         source: SOURCES_NOTHING,
       },
       { budgetBytes: () => 4 * ENTRY_BYTES + COMPILE_BYTES },
@@ -1517,6 +1520,7 @@ describe("RenderCache frames and pins", () => {
         gates: bareGates(),
         sessionState: new SessionState(),
         log: (_level, line) => logs.push(line),
+        meets: MEETS_NOTHING,
         source: SOURCES_NOTHING,
       },
       // Room for four entries over one compile, and the view of one.
@@ -1636,6 +1640,7 @@ describe("RenderCache frames and pins", () => {
         sessionState: new SessionState(),
         log: (_level, line) => logs.push(line),
         // The second view built over the entry, the reload's successor, fails.
+        meets: MEETS_NOTHING,
         source: (view) => {
           if (++opens === 2) throw new Error("the successor broke");
           return SOURCES_NOTHING(view);
@@ -1706,6 +1711,7 @@ describe("RenderCache frames and pins", () => {
         gates: bareGates(),
         sessionState: new SessionState(),
         log: () => {},
+        meets: MEETS_NOTHING,
         source: () => {
           throw new Error("the view broke");
         },

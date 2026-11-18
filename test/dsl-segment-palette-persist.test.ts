@@ -59,6 +59,7 @@ import {
 import type { DslConfig } from "../src/config/dsl-types";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  MEETS_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -478,6 +479,7 @@ function makeCache(): {
       gates: bareGates(),
       sessionState,
       watchers,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
     },
     {

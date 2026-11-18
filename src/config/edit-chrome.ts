@@ -45,7 +45,7 @@ import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { perConfigDomainsFor, type ResolvedDomain } from "./option-domain.js";
 import { controlDeclOf, settingControl } from "./setting-control.js";
 import { presetRootKey } from "./loader/persist-target.js";
-import { escapedIdent } from "./ident.js";
+import { escapedIdent, unescapedIdent } from "./ident.js";
 import { GROUP_LABELS, LIBRARY_GROUPS, OTHER_GROUP } from "./segment-groups.js";
 import {
   configureMember,
@@ -55,7 +55,12 @@ import {
   EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
-import { EDIT_NS, isReservedName } from "./reserved-names.js";
+import {
+  EDIT_NS,
+  isReservedName,
+  MENU_NS,
+  MENU_PAGE_NS,
+} from "./reserved-names.js";
 import { declareHelp } from "./help.js";
 import { TEXT_MIN_CONTRAST } from "../themes/decor.js";
 import { NO_FILL } from "../template-engine/colors.js";
@@ -336,6 +341,19 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
+// [LAW:one-source-of-truth] THE action that enters configure on one
+// placement, which also names the placement's configure list.
+function configureEnter(preset: string, id: string): string {
+  return `${EDIT_NS}${escapedIdent(preset)}.configure.${escapedIdent(id)}`;
+}
+
+// [LAW:one-source-of-truth] THE key the lists of one placement's pickers share
+// as one accordion: a shared `{{ menu }}` key's spelling, `ident`-normalized
+// under `menus.`, so it is a template path no other variable owns.
+export function configureListKey(preset: string, id: string): string {
+  return sharedMenuStateKey(configureEnter(preset, id));
+}
+
 // What configure mode adds to one placement: the `🔧` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
@@ -361,14 +379,10 @@ function configureParts(
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
-  // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
-  const listKey = sharedMenuStateKey(enter);
+  const enter = configureEnter(ctx.preset, id);
+  // Entering configure folds the list key, so each visit starts with every
+  // list closed.
+  const listKey = configureListKey(ctx.preset, id);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
   ctx.artifacts.actions[enter] = {
@@ -686,6 +700,105 @@ export function insertGap(
   const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, undefined) };
+}
+
+// ─── The keys a placement owns ──────────────────────────────────────────────
+
+// [LAW:one-source-of-truth] Which placement a session key belongs to, read
+// back by the code that mints it: the configure member (`configureMember`) of
+// the placement whose `✚` library or its page, configure list or its page, or
+// unsaved value the key holds, or the one `edit.configure` names as `value`;
+// null for a key no placement owns. Each reader splits the key, mints it
+// again from what it split out, and owns the key only on an exact match, so
+// no list of spellings stands beside the minters to drift from them. A
+// `{{ menu }}` an author placed is not read back: its spelling (`ident`)
+// merges distinct names, so the placement it belongs to can't be told.
+export function placementOfKey(key: string, value: string): string | null {
+  return configuredBy(key, value) ?? draftOwner(key) ?? menuOwner(key);
+}
+
+// The placement `edit.configure` configures, when its value names one.
+function configuredBy(key: string, value: string): string | null {
+  if (key !== EDIT_CONFIGURE_KEY) return null;
+  const at = value.indexOf(":");
+  const preset = unescapedIdent(value.slice(0, at));
+  return at > 0 &&
+    preset !== null &&
+    configureMember(preset, value.slice(at + 1)) === value
+    ? value
+    : null;
+}
+
+// The placement an unsaved value belongs to: its preset leads the key's path,
+// its setting ends it, and the id is what lies between (placementDraftKey).
+function draftOwner(key: string): string | null {
+  if (!key.startsWith(PLACEMENT_DRAFT_NS)) return null;
+  const path = key.slice(PLACEMENT_DRAFT_NS.length);
+  const first = path.indexOf(".");
+  const last = path.lastIndexOf(".");
+  const presetIdent = path.slice(0, first);
+  const preset = unescapedIdent(presetIdent);
+  const id = path.slice(first + 1, last);
+  return first > 0 &&
+    last > first + 1 &&
+    preset !== null &&
+    placementDraftKey(presetIdent, id, path.slice(last + 1)) === key
+    ? configureMember(preset, id)
+    : null;
+}
+
+// The placement a `✚` library's or a configure list's open state, or either
+// one's page, belongs to. Every name in them is spelled by `escapedIdent`, so
+// a name is a run of letters and digits between the separators.
+function menuOwner(key: string): string | null {
+  const state = key.startsWith(MENU_PAGE_NS)
+    ? key.slice(MENU_PAGE_NS.length)
+    : key;
+  if (!state.startsWith(MENU_NS)) return null;
+  const minted = (stateKey: string): boolean =>
+    stateKey === state && (key === state || menuPageKey(stateKey) === key);
+  const names = state.slice(MENU_NS.length).split(/[._]/);
+  const preset = unescapedIdent(names[1] ?? "");
+  if (preset === null) return null;
+  const relation = names[3];
+  const anchor = unescapedIdent(names[4] ?? "");
+  if (
+    (relation === "before" || relation === "after") &&
+    anchor !== null &&
+    minted(insertGap(preset, anchor, relation).stateKey)
+  )
+    return configureMember(preset, anchor);
+  const id = unescapedIdent(names[3] ?? "");
+  return id !== null && minted(configureListKey(preset, id))
+    ? configureMember(preset, id)
+    : null;
+}
+
+// [LAW:types-are-the-program] The placements one config holds, as configure
+// members: what a session meets when its view opens over that config.
+export interface Placements {
+  holds(member: string): boolean;
+}
+
+// What a config that failed its first load holds: every placement, since it
+// ended none.
+export const EVERY_PLACEMENT: Placements = { holds: () => true };
+
+// [LAW:one-source-of-truth] Every placement of every preset's tree, read off
+// the trees the files authored before the load drops a placement whose
+// segment it doesn't declare: a typo mid-edit, or a plugin absent from this
+// origin, ends no placement.
+export function placementsOf(
+  placed: Pick<DslConfig, "presets" | "root">,
+): Placements {
+  const members = new Set(
+    presetNames(placed.presets).flatMap((preset) =>
+      [...walkNodes(presetRoot(placed, preset).node)].flatMap((n) =>
+        n.kind === "segment" ? [configureMember(preset, placementId(n))] : [],
+      ),
+    ),
+  );
+  return { holds: (member) => members.has(member) };
 }
 
 // One splice's context, threaded unchanged through the recursion.

@@ -31,6 +31,7 @@ import { memoryLimitBytes } from "../src/daemon/limits";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import {
+  MEETS_NOTHING,
   renderCacheBudget,
   SOURCES_NOTHING,
 } from "../src/renderer/render-cache";
@@ -90,6 +91,7 @@ function session(): {
       gates: bareGates(),
       sessionState,
       watchers,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
     },
     { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },

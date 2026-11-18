@@ -18,6 +18,7 @@ import { until } from "./helpers/until";
 import { instantOf } from "../src/utils/instant";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  MEETS_NOTHING,
   pluginLoadLine,
   RenderCache,
   renderCacheBudget,
@@ -995,6 +996,7 @@ describe("an installed plugin", () => {
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
+        meets: MEETS_NOTHING,
         source: SOURCES_NOTHING,
       },
       { budgetBytes: () => renderCacheBudget(memoryLimitBytes({})) },
@@ -1675,6 +1677,7 @@ describe("an installed plugin", () => {
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
+        meets: MEETS_NOTHING,
         source: SOURCES_NOTHING,
       },
       {

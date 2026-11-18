@@ -64,6 +64,7 @@ import { EffectSessions } from "../render/effect.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
+import { placementRelease } from "./placement-release.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
@@ -509,6 +510,14 @@ export function mainRendererOf(
       storage: host.storage,
       signer: linkSigner,
       gates,
+      // [LAW:single-enforcer] A session meeting a config releases what it
+      // holds of a placement that config ended.
+      meets: placementRelease({
+        sessionState,
+        history: settingsHistory,
+        navigation: navigationHistory,
+        landingOf: (sessionId) => configWrites.landingOf(sessionId),
+      }),
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
       // histories' depths.

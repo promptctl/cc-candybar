@@ -127,8 +127,9 @@ export interface Journal {
 // twice records one change from its first `before` to its last `after`.
 type Pending = Map<SessionId, Map<string, Change>>;
 
+const sessionTarget = (key: string): string => `session:${key}`;
 const identity = (c: Change): string =>
-  c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
+  c.kind === "session" ? sessionTarget(c.key) : `layer:${c.role}:${c.digest}`;
 
 export class SettingsHistory {
   // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
@@ -301,6 +302,31 @@ export class SettingsHistory {
         held.flush();
       },
     };
+  }
+
+  // [LAW:single-enforcer] The session's `keys` released, because the config
+  // its view opens over holds no placement they belong to
+  // (src/renderer/placement-release.ts). `landing` is the view of the
+  // session's own click whose changes are landing: the keys clear through it,
+  // so they are part of that click's step, and its undo brings them back with
+  // the placement. With none, they clear in the store and every change to
+  // them leaves both stacks and the savepoint (`forgotten`), so undo, redo and
+  // cancel never throw over a key that is gone, nor bring it back.
+  release(
+    sessionId: SessionId,
+    keys: readonly string[],
+    landing: SessionStateRW | null,
+  ): void {
+    if (landing !== null) {
+      for (const key of keys) landing.clear(sessionId, key);
+      return;
+    }
+    runInAction(() => {
+      for (const key of keys) this.sessionState.clear(sessionId, key);
+    });
+    const history = this.history(sessionId);
+    const next = forgotten(history, new Set(keys.map(sessionTarget)));
+    if (next !== history) this.put(sessionId, next);
   }
 
   private undo(click: Click, sessionId: SessionId): Step {
@@ -714,11 +740,20 @@ function stepOf(
 
 // The history with every change to the targets `gone` names gone from both
 // stacks. Edit mode's net change forgets those targets too: putting them back
-// would overwrite whatever changed them.
+// would overwrite whatever changed them. A history that holds no change to
+// them is returned as it is.
 function forgotten(
-  { past, future, savepoint }: SessionHistory,
+  history: SessionHistory,
   gone: ReadonlySet<string>,
 ): SessionHistory {
+  const { past, future, savepoint } = history;
+  const steps = [
+    ...past,
+    ...future,
+    ...(savepoint === undefined ? [] : [savepoint.net, ...savepoint.below]),
+  ];
+  if (!steps.some((step) => step.some((c) => gone.has(identity(c)))))
+    return history;
   return {
     past: without(past, gone),
     future: without(future, gone),

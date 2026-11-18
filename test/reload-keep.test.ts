@@ -4,6 +4,7 @@ import type { Host, World } from "../src/host";
 import os from "node:os";
 import path from "node:path";
 import {
+  MEETS_NOTHING,
   RenderCache,
   SOURCES_NOTHING,
   type LoadCause,
@@ -75,6 +76,7 @@ function rig(
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },

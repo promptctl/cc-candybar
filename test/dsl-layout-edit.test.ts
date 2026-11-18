@@ -83,6 +83,7 @@ import { deriveConfigActionValidators } from "../src/daemon/foundations/config-v
 import { configGate } from "./helpers/gates";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import {
+  MEETS_NOTHING,
   SOURCES_NOTHING,
   RenderCache,
   renderCacheBudget,
@@ -1018,6 +1019,7 @@ function makeCache(reloads?: ReloadSignal): {
       gates: bareGates(),
       sessionState,
       watchers,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
     },
     {
@@ -1228,6 +1230,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         gates: bareGates(),
         sessionState,
         watchers,
+        meets: MEETS_NOTHING,
         source: SOURCES_NOTHING,
         log: (_level, line) => lines.push(line),
       },

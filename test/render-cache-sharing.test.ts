@@ -12,6 +12,7 @@ import path from "node:path";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
+  MEETS_NOTHING,
   COMPILE_BYTES,
   SOURCES_NOTHING,
   ENTRY_BYTES,
@@ -89,6 +90,7 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
+      meets: MEETS_NOTHING,
       source: SOURCES_NOTHING,
       log: (_level, line) => lines.push(line),
     },

@@ -9,11 +9,14 @@ import {
   type ClickLayers,
 } from "../../src/renderer/config-writes";
 import type { RenderOrigin } from "../../src/config-hint";
+import { SessionState } from "../../src/renderer/session-state";
 import type { Layer } from "../../src/config/config-snapshot";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import type { Effect, EffectId } from "../../src/renderer-interface/interface";
 
 const SID = sessionIdOf("s1");
+// The click's own view of session state, which its landing carries.
+const VIEW = new SessionState();
 const DISK: Record<string, string> = {
   "/a.json5": "{ a: 1 }\n",
   "/b.json5": "{ b: 1 }\n",
@@ -61,7 +64,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
-    w.seal(effects, SID, () => (applied = true));
+    w.seal(effects, SID, () => (applied = true), VIEW);
     expect(effects).toEqual([]);
     expect(applied).toBe(true);
   });
@@ -87,7 +90,7 @@ describe("a click's config writes", () => {
     });
     const effects: Effect[] = [];
     let applied = false;
-    w.seal(effects, SID, () => (applied = true));
+    w.seal(effects, SID, () => (applied = true), VIEW);
     expect(applied).toBe(true);
   });
 
@@ -96,7 +99,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
     w.land("/c.json5", null, "{ c: 1 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, () => {}, VIEW);
     expect(effects.map((e) => (e.kind === "change" ? e.target : null))).toEqual(
       [
         { kind: "layer", origin: ORIGIN, role: "project" },
@@ -109,7 +112,7 @@ describe("a click's config writes", () => {
     const w = writes();
     const effects: Effect[] = [];
     w.answer("/p", "approved");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, () => {}, VIEW);
     expect(effects).toEqual([
       expect.objectContaining({
         kind: "approve-repo",
@@ -124,7 +127,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/a.json5", "{ a: 2 }\n", "{ a: 3 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, () => {}, VIEW);
     expect(effects).toEqual([
       {
         kind: "change",
@@ -149,7 +152,7 @@ describe("a click's config writes", () => {
     let applied = false;
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
-    w.seal(effects, SID, () => (applied = true));
+    w.seal(effects, SID, () => (applied = true), VIEW);
     const [a, b] = ids(effects);
     expect(w.settled(a!, { kind: "ok" })).toBe("owed");
     expect(() => w.begin("next", () => LAYERS)).toThrow(
@@ -173,7 +176,7 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, () => {}, VIEW);
     const [a, b] = ids(effects);
     w.settled(a!, { kind: "refused", reason: "a moved" });
     expect(w.settled(b!, { kind: "ok" })).toMatchObject({
@@ -186,10 +189,21 @@ describe("a click's config writes", () => {
     const effects: Effect[] = [];
     w.land("/a.json5", DISK["/a.json5"]!, DISK["/a.json5"]!);
     w.land("/b.json5", DISK["/b.json5"]!, "{ b: 2 }\n");
-    w.seal(effects, SID, () => {});
+    w.seal(effects, SID, () => {}, VIEW);
     expect(w.settled(ids(effects)[0]!, { kind: "ok" })).toMatchObject({
       files: ["/b.json5"],
     });
+  });
+
+  test("a landing's view is its own session's, while its changes are on their way", () => {
+    const w = writes();
+    const effects: Effect[] = [];
+    w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
+    w.seal(effects, SID, () => {}, VIEW);
+    expect(w.landingOf(SID)).toBe(VIEW);
+    expect(w.landingOf(sessionIdOf("s2"))).toBeNull();
+    w.settled(ids(effects)[0]!, { kind: "ok" });
+    expect(w.landingOf(SID)).toBeNull();
   });
 
   test("an id no change of its holds is not its to settle", () => {
@@ -199,7 +213,7 @@ describe("a click's config writes", () => {
   test("a write with no session to land for is the click's bug, said", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    expect(() => w.seal([], null, () => {})).toThrow(
+    expect(() => w.seal([], null, () => {}, VIEW)).toThrow(
       "a click with no session wrote /a.json5",
     );
   });
