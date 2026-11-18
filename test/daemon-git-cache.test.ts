@@ -1180,7 +1180,7 @@ describe("GitDataProvider owns its failures and its PR's timing", () => {
     void gitOf(svc, holds, "/repo");
     await jest.advanceTimersByTimeAsync(0);
     expect(logs.filter((l) => l.startsWith("git "))).toEqual([
-      "git watch bound root=/repo dirs=/repo/.git,/repo/.git/refs/heads deaf=2",
+      "git watch bound root=/repo dirs=/repo/.git/refs/heads polled=/repo/.git/HEAD,/repo/.git/index deaf=1",
       "git refresh threw (/repo): Error: logger bug",
     ]);
     await jest.advanceTimersByTimeAsync(1_000);
@@ -1350,8 +1350,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 0,
         watchErrors: 0,
-        // The git directory and the refs tree, never reopened.
-        dirWatchesOpened: 2,
+        // The refs tree alone, never reopened: HEAD and index are polled.
+        dirWatchesOpened: 1,
         dirWatchesClosed: 0,
       });
     } finally {
@@ -1400,9 +1400,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 1,
         watchRefusals: 0,
         watchErrors: 0,
-        // Both directories were made again: each handle reopens in place.
-        dirWatchesOpened: 4,
-        dirWatchesClosed: 2,
+        // The refs tree was made again: its handle reopens in place.
+        dirWatchesOpened: 2,
+        dirWatchesClosed: 1,
       });
       const before = svc.getStats().changes;
       await untilHeard(
@@ -1471,8 +1471,8 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 0,
         watchErrors: 0,
-        // The git directory and the refs tree, held while the path is empty.
-        dirWatchesOpened: 2,
+        // The refs tree, held while the path is empty.
+        dirWatchesOpened: 1,
         dirWatchesClosed: 0,
       });
 
@@ -1489,9 +1489,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 1,
         watchRefusals: 0,
         watchErrors: 0,
-        // Both directories were made again: each handle reopens in place.
-        dirWatchesOpened: 4,
-        dirWatchesClosed: 2,
+        // The refs tree was made again: its handle reopens in place.
+        dirWatchesOpened: 2,
+        dirWatchesClosed: 1,
       });
     } finally {
       svc.close();
@@ -1517,11 +1517,10 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       await until(() => passes(logs).length >= 2, "a period pass landed");
       expect(logs.some((l) => l.startsWith("git refresh threw"))).toBe(false);
       expect(passes(logs)[0]).toMatch(/ watch=kept /);
-      // The git directory and the refs tree under it are both refused, on
-      // every platform.
+      // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=.*\.git,.*refs\/heads deaf=2$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
         ),
       ).toBe(true);
       expect(counters).toEqual({

@@ -25,10 +25,8 @@ import {
 } from "../../doctor/state-file.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
-// The book's own folder: the daemon watches it so a hand edit (removing an
-// entry to be asked again) reaches every bar, and the state directory itself
-// holds the log, which writes on every request — a watch there wakes on each
-// line.
+// The book's own folder. The daemon polls the book's path, so a hand edit
+// (removing an entry to be asked again) reaches every bar.
 const REPO_CONFIGS_DIR = "repo-configs";
 
 // [LAW:one-source-of-truth] One book per user, under the state directory:

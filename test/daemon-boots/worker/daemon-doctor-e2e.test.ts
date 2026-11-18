@@ -520,7 +520,9 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
       "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval",
     );
 
-    writeFileSync(projectConfig, barOf("still"));
+    // The config is polled, so the doctor runs once the bar draws the edit.
+    writeFileSync(projectConfig, barOf("at rest"));
+    await reported(draw, "at rest");
     await click(daemon, run!);
     await draw();
     await click(daemon, run!);

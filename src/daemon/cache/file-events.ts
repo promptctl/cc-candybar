@@ -72,8 +72,7 @@ const label = (d: Delivery): string =>
   d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
 
 // [LAW:single-enforcer] The one owner of whether the OS is delivering this
-// daemon's file events. The registry opens only directory watches, and libuv
-// carries every directory watch in a process on one FSEvents stream (macOS)
+// daemon's file events. libuv carries every directory watch in a process on one FSEvents stream (macOS)
 // or one inotify instance whose overflow is shared (Linux), so delivery fails
 // for the whole daemon at once, never for one folder: one fact, one owner.
 //
@@ -161,7 +160,9 @@ export class FileEventDelivery {
       // [LAW:single-enforcer] The only acquirer of this registry key.
       handle: this.watchers.acquire(
         `file-events:${folder}`,
-        { dirs: [{ path: folder, filenames: [PROBE_FILE] }] },
+        // The folder whole: what the probe measures is the OS's event
+        // stream, and only an OS watch rides it (`ridesStream`).
+        { dirs: [{ path: folder }], polled: [] },
         (heard) => this.heard(probing, heard),
       ),
     };

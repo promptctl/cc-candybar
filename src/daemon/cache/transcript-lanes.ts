@@ -7,7 +7,6 @@
 // gates its read on its file's stamp, so a read over an unchanged transcript
 // reads nothing.
 
-import { basename, dirname } from "node:path";
 import { inspect } from "node:util";
 import { ok, type Outcome } from "../../utils/outcome.js";
 import {
@@ -26,6 +25,7 @@ import { valueOf } from "../../utils/logfmt.js";
 import { REFRESH_LANES, type RefreshLane } from "../../facts/world-state.js";
 import type { Timekeeper } from "../../time.js";
 import type { SessionId } from "../foundations/session-id.js";
+import { watchTargetsOf } from "../foundations/watch-targets.js";
 import type { SessionUsageStore } from "./session-usage-store.js";
 import type { ContextProvider } from "../../segments/context.js";
 import type { MetricsProvider } from "../../segments/metrics.js";
@@ -115,18 +115,18 @@ export class TranscriptLanes {
     this.source.close();
   }
 
-  // The transcript's directory heard for its name alone, and the settings
-  // file's likewise, under one key per entry.
+  // The transcript and the settings file, each polled at every hop of its
+  // link chain, under one key per entry: their folders are busy trees (every
+  // session's transcripts, Claude Code's own state), which an OS watch would
+  // route here whole, and a settings file is often a link into a dotfiles
+  // checkout, whose edits land at the link's target. [LAW:single-enforcer]
+  // The hops are the one rule's (`watchTargetsOf`). A chain that loops is not
+  // a fault here: the lane's own read of the path fails, loudly.
   private watch(followed: Followed, changed: () => void): Release {
     const { transcript, settings } = followed;
     const handle = this.deps.watchers.acquire(
       `transcript-lanes:${keyOfFollowed(followed)}`,
-      {
-        dirs: [
-          { path: dirname(transcript), filenames: [basename(transcript)] },
-          { path: dirname(settings), filenames: [basename(settings)] },
-        ],
-      },
+      watchTargetsOf({ named: [transcript, settings], whole: [] }).targets,
       changed,
     );
     return () => handle.release();

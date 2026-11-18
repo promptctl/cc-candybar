@@ -479,12 +479,16 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   // after the last one started, nor for the session's next request.
   test("a file source rewritten between requests is pushed within the feed's spacing, woken by its data", async () => {
     const sid = "feed-source-wake";
-    const statusFile = path.join(projectDir, "source-wake.txt");
+    // A folder watched whole, which the OS reports at once; a file watched
+    // by name is polled, and wakes on the sweep.
+    const statusDir = path.join(projectDir, "source-wake");
+    mkdirSync(statusDir);
+    const statusFile = path.join(statusDir, "status.txt");
     writeFileSync(statusFile, "green");
     const config = path.join(projectDir, "source-wake.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusDir)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -522,6 +526,35 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // falls due a still period after the last one started, just before the
     // write, so a frame in by half of one is the wake's.
     expect(frames[2]!.at - wrote).toBeLessThan(FEED_PERIODS.still / 2);
+    expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
+  });
+
+  // A `watch_file` that names a file is polled, so its wake trails the write
+  // by up to a poll: the push is proved by the wake the feed counts, not by
+  // beating the still bar's spacing.
+  test("a file source watching the file it reads is pushed on the poll, woken by its data", async () => {
+    const sid = "feed-source-poll";
+    const statusFile = path.join(projectDir, "source-poll.txt");
+    writeFileSync(statusFile, "green");
+    const config = path.join(projectDir, "source-poll.json5");
+    writeFileSync(
+      config,
+      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+    );
+    await render(sockPath, sid, projectDir, {}, [
+      "cc-candybar",
+      "--config",
+      config,
+    ]);
+    const frames = await framesOf(sid, async ({ received, waitFor }) => {
+      await waitFor(() => received.length > 0, "the bar before the write");
+      writeAtomic(statusFile, "red");
+      await waitFor(() => shows(received, "status red"), "the rewritten value");
+    });
+    expect(bars(frames).map(textOf)).toEqual([
+      expect.stringContaining("status green"),
+      expect.stringContaining("status red"),
+    ]);
     expect(await closedSummary(sid)).toMatch(/ woke=data:[1-9]\d*,/u);
   });
 

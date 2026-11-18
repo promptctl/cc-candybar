@@ -21,15 +21,23 @@ export interface FileEventsWarning {
   readonly message: string;
 }
 
+// What a user sees go stale is a change inside a folder: only a folder is
+// an OS watch (`ridesStream`). A file is polled and refreshes through any
+// stall, and the row says so, so a reader knows which part of the bar to
+// doubt.
+const WATCHED_FOLDER =
+  "a change inside a watched folder (a plugin installed, a folder a watch_file names)";
+const STILL_READ = "config files and files a watch_file names still refresh";
+
 export function fileEventsWarnings(d: Delivery): FileEventsWarning[] {
   if (d.missedSince === null) return [];
   const since = iso(d.missedSince);
   const message = (): string => {
     switch (d.kind) {
       case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so an edit to the config made since may not have reloaded`;
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so ${WATCHED_FOLDER} may have been missed; ${STILL_READ}`;
       case "stalled":
-        return `${stopped(d.missedSince)}, so an edit to the config will not reload until they resume`;
+        return `${stopped(d.missedSince)}, so ${WATCHED_FOLDER} won't be seen until they resume; ${STILL_READ}`;
       case "unmeasured":
         return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
     }
