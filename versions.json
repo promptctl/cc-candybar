@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "3ce2357e96988528f010578e31cb069ce8d02ecc",
+      "timestamp": "2026-11-18T15:43:36.297Z",
+      "commits": [
+        {
+          "sha": "3ce2357e96988528f010578e31cb069ce8d02ecc",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-18T15:42:23Z",
+          "message": "chore(release): set `package.json` to 1.232.1\n\n## [1.232.1](https://github.com/promptctl/cc-candybar/compare/v1.232.0...v1.232.1) (2026-11-18)\n\n### Bug Fixes\n\n* every staged file is published through one operation, under a name unique to its call (ooi7) ([#798](https://github.com/promptctl/cc-candybar/issues/798)) ([36b0c26](https://github.com/promptctl/cc-candybar/commit/36b0c268535b139534bb9b29bd59ac0a0621b719))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-806",
       "ref": "refs/pull/806/merge",
       "sha": "8b2c14fd8677b5f56b92f5150d06e2058fcdb577",
@@ -42,21 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:38:17-07:00",
           "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "36b0c268535b139534bb9b29bd59ac0a0621b719",
-      "timestamp": "2026-11-18T15:33:20.460Z",
-      "commits": [
-        {
-          "sha": "36b0c268535b139534bb9b29bd59ac0a0621b719",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:32:14-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7) (#798)\n\n* fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n\n* fix: staging syncs nothing, applies a mode exactly, and one bad write no longer stops the session file (ooi7)\n\nNo publish syncs: the writes run on clicks and at start, often on the\ndaemon's thread, and the shutdown flush must finish inside its backstop. A\ngiven mode is chmodded past the umask. The async form's cleanup stays off\nthe thread, and a link's cleanup error keeps its code and ignores a staged\nname already gone. The session file encodes inside its write's try, keeps\nat most one write waiting, and its flush rejects when its write fails.\n\n* fix: a link publish that stood is its outcome, and the session file's chain settles whatever a write did (ooi7)\n\nA staged name that would not go after the link is now said beside the\noutcome rather than thrown in its place, so endJob still signals the group\nand a raced link key still reads the key that landed. The write chain\nsettles on a write's failure as well as its success, the write keeps its\nown error with its code, the success log runs after the try, cleanup\nfailures are Errors (realm-safe), writeAtomic keeps only permission bits,\nand the usage cache publishes whole."
         }
       ]
     },
