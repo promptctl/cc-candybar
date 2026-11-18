@@ -4,15 +4,22 @@
     {
       "version": "pr-827",
       "ref": "refs/pull/827/merge",
-      "sha": "f5e13f246a8ccb00871068da89b13aeb209f8818",
-      "timestamp": "2026-11-18T19:31:25.629Z",
+      "sha": "c05e3d9938916c10e475ab2535b088b6ea79c699",
+      "timestamp": "2026-11-18T19:32:29.755Z",
       "commits": [
         {
-          "sha": "f5e13f246a8ccb00871068da89b13aeb209f8818",
+          "sha": "c05e3d9938916c10e475ab2535b088b6ea79c699",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:27:18-07:00",
-          "message": "Merge 3474f5692f01d03bbb82551e9e3bbd961cf5d325 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+          "timestamp": "2026-11-18T19:30:57Z",
+          "message": "Merge fe92e1b55c8a7bffbb5c12ad70718e03d646cab0 into cf8d3437b19b458c96b45972d2055cbaeb241720\n"
+        },
+        {
+          "sha": "fe92e1b55c8a7bffbb5c12ad70718e03d646cab0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:30:45-07:00",
+          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
         },
         {
           "sha": "3474f5692f01d03bbb82551e9e3bbd961cf5d325",
