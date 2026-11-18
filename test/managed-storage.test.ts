@@ -126,6 +126,29 @@ const answered = async <T>(lane: { current(): Current<T> }) => {
   return lane.current();
 };
 
+// The owner's lines about its faults: one as each starts or changes, one as
+// it clears.
+const faultLines = (r: Rig): string[] =>
+  r.lines.filter((l) => l.includes("plugin storage fault"));
+const started = (cause: string) =>
+  expect.stringMatching(
+    new RegExp(`^warn plugin storage fault folder=\\S+ cause=${cause} reason=`),
+  );
+const cleared = (cause: string) =>
+  expect.stringMatching(
+    new RegExp(
+      `^info plugin storage fault cleared folder=\\S+ cause=${cause}$`,
+    ),
+  );
+
+// An identity read that fails, with EACCES, while `unreadable` says so.
+const flakyIdentity =
+  (unreadable: { now: boolean }): IdentityRead =>
+  (folder) => {
+    if (unreadable.now) throw new Error("EACCES: permission denied");
+    return statIdentity(folder);
+  };
+
 const refreshes = (r: Rig, by: string): string[] =>
   r.lines.filter(
     (l) => l.includes("plugin storage refresh") && l.includes(`by=${by}`),
@@ -183,7 +206,7 @@ describe("ManagedStorage reads", () => {
       await answered(r.storage.declare(new Holds(), r.folder, A)),
     ).toMatchObject({
       kind: "failed",
-      reason: expect.stringContaining("could not be created or read: ENOENT"),
+      reason: expect.stringContaining("could not be created: ENOENT"),
     });
   });
 
@@ -439,24 +462,51 @@ describe("ManagedStorage watches", () => {
       failedAt: "read",
       reason: expect.stringMatching(
         new RegExp(
-          `^cannot refresh: ${r.folder} could not be created or read: ENOTDIR: .*; retried when the config next loads or file events catch up$`,
+          `^cannot refresh: ${r.folder} could not be created: ENOTDIR: .*; retried at the next config load or file-event check$`,
         ),
       ),
     });
     expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
-    expect(r.lines).toContainEqual(
-      expect.stringMatching(
-        /^warn plugin storage fault folder=\S+ generation=0 cause=unusable reason=/,
-      ),
-    );
+    // Still unmade at the next hold: the fault stands, told once.
+    r.hold();
+    expect(faultLines(r)).toEqual([started("unusable")]);
+    expect(r.counters.watchersOpened).toBe(0);
     fs.rmSync(path.dirname(r.folder));
     fs.mkdirSync(path.dirname(r.folder));
     r.hold();
-    expect(r.generation()).toBe(1);
+    expect(r.counters.watchersOpened).toBe(1);
+    expect(faultLines(r)).toEqual([started("unusable"), cleared("unusable")]);
     r.write(A, '"a"');
     // The lane carries across the generation, re-read once it opens.
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("a"));
+  });
+
+  test("a fault that stands across periods re-reads nothing and is told once", async () => {
+    const r = rig();
+    fs.rmdirSync(path.dirname(r.folder));
+    fs.writeFileSync(path.dirname(r.folder), "");
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    await answered(lane);
+    const reads = r.lines.filter((l) => l.includes("plugin storage refresh"));
+    for (let i = 0; i < 3; i++) r.fileEvents.notify({ kind: "period" });
+    r.hold();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(r.lines.filter((l) => l.includes("plugin storage refresh"))).toEqual(
+      reads,
+    );
+    expect(faultLines(r)).toEqual([started("unusable")]);
+  });
+
+  // Nothing asked the OS again, so nothing cleared.
+  test("a faulted folder no hold names any more leaves without a clear", () => {
+    const r = rig();
+    fakeWatches(new Set([r.folder]));
+    const release = r.hold();
+    release();
+    expect(faultLines(r)).toEqual([started("refused")]);
+    expect(r.storage.stats().folders).toBe(0);
   });
 
   test("a file where the folder should be is a standing fault of its sources, never a folder", async () => {
@@ -467,7 +517,7 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} could not be created or read: ${r.folder} is not a folder; retried when the config next loads or file events catch up`,
+      reason: `cannot refresh: ${r.folder} could not be created: ${r.folder} is not a folder; retried at the next config load or file-event check`,
     });
     expect(r.storage.stats().faults).toMatchObject({ unusable: 1 });
   });
@@ -504,7 +554,7 @@ describe("ManagedStorage watches", () => {
       expect(r.generation()).toBe(1);
     });
 
-    test("the config load first, then its own event: a new generation, and the stale event marks nothing", async () => {
+    test("the config load first, then its own event: the load counts the loss and opens a new generation, and the stale event marks nothing", async () => {
       const { r, watches, recreate } = await recreated();
       recreate();
       r.hold();
@@ -513,11 +563,11 @@ describe("ManagedStorage watches", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
       r.hold();
       expect(r.generation()).toBe(1);
-      expect(r.storage.stats().lost).toBe(0);
+      expect(r.storage.stats().lost).toBe(1);
     });
   });
 
-  test("a refused watch is a standing fault on every source in the folder; the next load's hold is a new generation", async () => {
+  test("a refused watch is a standing fault on every source in the folder while the OS refuses it; the next load's hold clears it in the same generation", async () => {
     const r0 = rig();
     fakeWatches(new Set([r0.folder]));
     r0.hold();
@@ -526,23 +576,26 @@ describe("ManagedStorage watches", () => {
     expect(await answered(lane)).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; retried when the config next loads or file events catch up`,
+      reason: `cannot refresh: ${r0.folder} EMFILE: too many open files, watch '${r0.folder}'; retried at the next config load or file-event check`,
     });
     expect(r0.counters.watchRefusals).toBe(1);
     expect(r0.storage.stats().faults).toEqual({
       unusable: 0,
+      unreadable: 0,
       refused: 1,
       error: 0,
     });
+    r0.hold();
+    expect(faultLines(r0)).toEqual([started("refused")]);
     jest.restoreAllMocks();
     r0.hold();
-    expect(r0.generation()).toBe(1);
-    // The lane carries across the generation, re-read once it opens.
+    expect(r0.generation()).toBe(0);
+    expect(faultLines(r0)).toEqual([started("refused"), cleared("refused")]);
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("a"));
   });
 
-  test("an error after open on a folder still there is the fault, and the held keys read it", async () => {
+  test("an error after open on a folder still there is the fault, and the held keys read it; the next load's hold reopens the watch", async () => {
     const watches = fakeWatches();
     const r = rig();
     r.hold();
@@ -554,21 +607,112 @@ describe("ManagedStorage watches", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; retried when the config next loads or file events catch up`,
+      reason: `cannot refresh: ${r.folder} EIO: i/o error; retried at the next config load or file-event check`,
     });
     expect(r.counters.watchErrors).toBe(1);
     expect(r.storage.stats().faults).toEqual({
       unusable: 0,
+      unreadable: 0,
       refused: 0,
       error: 1,
     });
-    expect(r.lines).toContainEqual(
-      expect.stringMatching(
-        /^warn plugin storage fault folder=\S+ generation=0 cause=error reason=/,
-      ),
-    );
     r.hold();
-    expect(r.generation()).toBe(1);
+    expect(r.generation()).toBe(0);
+    expect(watches).toHaveLength(2);
+    expect(faultLines(r)).toEqual([started("error"), cleared("error")]);
+    await until(() => lane.current().kind === "ok", "the re-read");
+  });
+
+  test("a folder whose identity cannot be read is a standing fault that opens no watch, until a period reads it", async () => {
+    const unreadable = { now: true };
+    const r = rig({ identityOf: flakyIdentity(unreadable) });
+    r.hold();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder} could not be read: EACCES: permission denied; retried at the next config load or file-event check`,
+    });
+    expect(r.counters.watchersOpened).toBe(0);
+    expect(r.storage.stats().faults).toMatchObject({ unreadable: 1 });
+    unreadable.now = false;
+    r.write(A, '"a"');
+    r.fileEvents.notify({ kind: "period" });
+    expect(r.counters.watchersOpened).toBe(1);
+    expect(faultLines(r)).toEqual([
+      started("unreadable"),
+      cleared("unreadable"),
+    ]);
+    await until(() => lane.current().kind === "ok", "the re-read");
+  });
+
+  // The disk's own answer, not an injected one: a folder there whose stat
+  // fails is one that cannot be read, never one mkdir could not make. Root
+  // ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a folder there whose stat fails is unreadable, not unmade",
+    async () => {
+      const r = rig();
+      fs.mkdirSync(r.folder, { recursive: true });
+      const parent = path.dirname(r.folder);
+      fs.chmodSync(parent, 0o600);
+      try {
+        r.hold();
+        const lane = r.storage.declare(new Holds(), r.folder, A);
+        expect(await answered(lane)).toMatchObject({
+          kind: "failed",
+          reason: expect.stringContaining(
+            `${r.folder} could not be read: EACCES`,
+          ),
+        });
+        expect(r.storage.stats().faults).toMatchObject({
+          unreadable: 1,
+          unusable: 0,
+        });
+      } finally {
+        fs.chmodSync(parent, 0o700);
+      }
+    },
+  );
+
+  // A stat that fails says nothing of whether the folder moved.
+  test("a stat that fails on a watched folder is a standing fault that keeps its generation and its watch", async () => {
+    const unreadable = { now: false };
+    const r = rig({ identityOf: flakyIdentity(unreadable) });
+    r.hold();
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual(ok("a"));
+    unreadable.now = true;
+    r.fileEvents.notify({ kind: "period" });
+    await until(() => lane.current().kind === "failed", "the fault");
+    expect(lane.current()).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder} could not be read: EACCES: permission denied; retried at the next config load or file-event check`,
+    });
+    unreadable.now = false;
+    r.fileEvents.notify({ kind: "period" });
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(r.generation()).toBe(0);
+    expect(r.counters).toMatchObject({ watchersOpened: 1, watchersClosed: 0 });
+    expect(faultLines(r)).toEqual([
+      started("unreadable"),
+      cleared("unreadable"),
+    ]);
+  });
+
+  test("a hold that cannot make a watched folder again ends its generation", async () => {
+    const r = rig();
+    r.hold();
+    fs.rmSync(r.folder, { recursive: true });
+    fs.writeFileSync(r.folder, "");
+    r.hold();
+    expect(r.counters.watchersClosed).toBe(1);
+    expect(r.storage.stats()).toMatchObject({
+      folders: 1,
+      faults: { unusable: 1 },
+    });
   });
 });
 
@@ -676,10 +820,10 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     expect(lane.current()).toEqual({
       kind: "failed",
       failedAt: "read",
-      reason: `cannot refresh: ${r.folder} ${r.folder}: EIO: i/o error; retried when the config next loads or file events catch up`,
+      reason: `cannot refresh: ${r.folder} EIO: i/o error; retried at the next config load or file-event check`,
     });
     expect(r.storage.stats()).toMatchObject({
-      faults: { unusable: 0, refused: 0, error: 1 },
+      faults: { unusable: 0, unreadable: 0, refused: 0, error: 1 },
     });
   });
 
@@ -755,16 +899,29 @@ describe("ManagedStorage under the daemon's file-event delivery", () => {
     expect(lane.current()).toEqual(ok("in the new folder"));
   });
 
-  test("a refused watch's generation opens again once file events catch up, with no load's hold", async () => {
-    const r = rig();
-    fakeWatches(new Set([r.folder]));
-    r.hold();
-    expect(r.storage.stats().faults).toMatchObject({ refused: 1 });
-    jest.restoreAllMocks();
-    fakeWatches();
-    r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT });
-    expect(r.generation()).toBe(1);
-  });
+  // [LAW:no-ambient-temporal-coupling] The owner's own triggers ask the
+  // registry again: no daemon wiring of its period reaches this rig.
+  test.each([
+    ["a period", (r: Rig) => r.fileEvents.notify({ kind: "period" })],
+    [
+      "a catch-up",
+      (r: Rig) =>
+        r.fileEvents.set(delivering, { kind: "caught-up", since: STALLED_AT }),
+    ],
+  ])(
+    "a refused watch's fault clears at %s once the OS opens it, with no load's hold",
+    async (_trigger, trigger) => {
+      const r = rig();
+      fakeWatches(new Set([r.folder]));
+      r.hold();
+      expect(r.storage.stats().faults).toMatchObject({ refused: 1 });
+      jest.restoreAllMocks();
+      fakeWatches();
+      trigger(r);
+      expect(r.generation()).toBe(0);
+      expect(faultLines(r)).toEqual([started("refused"), cleared("refused")]);
+    },
+  );
 
   test("a period with delivery unchanged re-reads nothing", async () => {
     fakeWatches();

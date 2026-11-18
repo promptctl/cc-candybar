@@ -254,7 +254,7 @@ export class RuntimeStats {
         },
         pluginStorage: {
           folders: 0,
-          faults: { unusable: 0, refused: 0, error: 0 },
+          faults: { unusable: 0, unreadable: 0, refused: 0, error: 0 },
           lost: 0,
         },
       },
