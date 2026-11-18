@@ -139,10 +139,10 @@ const entryPath = (dir: string, pid: number): string =>
 // [LAW:no-silent-failure] Null is no entry: a name admission never writes, or
 // a file removed since the listing (its daemon released it). A start time
 // that cannot be read, from content unreadable or not an identity, leaves the
-// entry judged by its pid alone. That liveness can count a recycled pid as
-// live and never a live one as dead, so the count can come out high, which
-// refuses, and never short. It needs no descriptor either, so a fork storm's
-// spent descriptors still count every sibling.
+// entry judged by its pid alone (kill(pid, 0)). That can count a recycled pid
+// as live and never a live one as dead, so the count can come out high, which
+// refuses, and never short. The content keeps its pid for readers that take
+// it from there.
 export function readRegistryEntry(filePath: string): ProcessIdentity | null {
   const named = ENTRY_NAME.exec(path.basename(filePath));
   if (named === null) return null;
@@ -160,7 +160,10 @@ export function readRegistryEntry(filePath: string): ProcessIdentity | null {
 function startTimeOf(raw: string): string | null {
   try {
     const parsed = JSON.parse(raw) as { startTime?: unknown } | null;
-    return typeof parsed?.startTime === "string" ? parsed.startTime : null;
+    // An empty token names no process (readStartTime never mints one).
+    return typeof parsed?.startTime === "string" && parsed.startTime !== ""
+      ? parsed.startTime
+      : null;
   } catch {
     return null;
   }
@@ -265,19 +268,19 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
   return { decision, registryPath };
 }
 
-// Self-cleanup on shutdown — mirrors removeLeaseIfOwned (socket-lease.ts):
-// only remove the entry if it still names us, so a displaced/superseded record
-// from a different process is never deleted. [LAW:no-silent-failure] A removal
-// that fails throws to the shutdown step, which logs it; the next boot's sweep
-// reclaims the entry.
+// Self-cleanup on shutdown. The entry is named by our own pid, which no other
+// live process holds, so it is ours while we run. Gone already is released.
+// [LAW:no-silent-failure] Any other failure throws to the shutdown step, which
+// logs it; the next boot's sweep reclaims the entry.
 export function releaseRegistration(
   registryPath: string,
-  myPid: number,
-  readEntry: (filePath: string) => ProcessIdentity | null,
   removeFile: (filePath: string) => void,
 ): void {
-  const entry = readEntry(registryPath);
-  if (entry !== null && entry.pid === myPid) removeFile(registryPath);
+  try {
+    removeFile(registryPath);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
 }
 
 // `myStartTime` is threaded in rather than recomputed here so callers (only

@@ -179,10 +179,15 @@ describe("readRegistryEntry", () => {
     fs.mkdirSync(unreadable);
     const stranger = path.join(dir, "pid-125.json");
     fs.writeFileSync(stranger, JSON.stringify({ pid: 9, startTime: 5 }));
-    expect([corrupt, unreadable, stranger].map(readRegistryEntry)).toEqual([
+    const blank = path.join(dir, "pid-126.json");
+    fs.writeFileSync(blank, JSON.stringify({ pid: 126, startTime: "" }));
+    expect(
+      [corrupt, unreadable, stranger, blank].map(readRegistryEntry),
+    ).toEqual([
       { pid: 123, startTime: null },
       { pid: 124, startTime: null },
       { pid: 125, startTime: null },
+      { pid: 126, startTime: null },
     ]);
   });
 
@@ -396,12 +401,11 @@ describe("admitDaemon", () => {
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/corrupt.json"],
-        readEntry: () => null, // corrupt or gone — excluded from the count
+        readEntry: () => null, // gone, or a name admission never writes
         isSameLiveProcess: async () => true,
       }),
     );
-    // The corrupt entry never enters the live count, so a ceiling of 1 still
-    // has room for us.
+    // It never enters the live count, so a ceiling of 1 still has room for us.
     expect(result.decision.allow).toBe(true);
   });
 
@@ -461,45 +465,28 @@ describe("admitDaemon", () => {
 // ─── releaseRegistration: only remove if it still names us ─────────────────
 
 describe("releaseRegistration", () => {
-  test("removes the entry when it still names our pid", async () => {
+  test("removes our entry", async () => {
     const removeFile = jest.fn();
-    releaseRegistration(
-      "/fake/pid-42.json",
-      42,
-      () => ({ pid: 42, startTime: "st" }),
-      removeFile,
-    );
+    releaseRegistration("/fake/pid-42.json", removeFile);
     expect(removeFile).toHaveBeenCalledWith("/fake/pid-42.json");
   });
 
-  test("does not remove when a different pid now owns the entry", async () => {
-    const removeFile = jest.fn();
-    releaseRegistration(
-      "/fake/pid-42.json",
-      42,
-      () => ({ pid: 999, startTime: "st" }),
-      removeFile,
-    );
-    expect(removeFile).not.toHaveBeenCalled();
-  });
-
-  test("does not remove when the entry is gone", async () => {
-    const removeFile = jest.fn();
-    releaseRegistration("/fake/pid-42.json", 42, () => null, removeFile);
-    expect(removeFile).not.toHaveBeenCalled();
+  test("an entry gone already is released", async () => {
+    expect(() =>
+      releaseRegistration("/fake/pid-42.json", () => {
+        throw Object.assign(new Error("ENOENT: no such file or directory"), {
+          code: "ENOENT",
+        });
+      }),
+    ).not.toThrow();
   });
 
   // The shutdown step logs it (server.ts).
   test("a removal that fails throws its error", async () => {
     expect(() =>
-      releaseRegistration(
-        "/fake/pid-42.json",
-        42,
-        () => ({ pid: 42, startTime: null }),
-        () => {
-          throw new Error("EACCES: permission denied, unlink");
-        },
-      ),
+      releaseRegistration("/fake/pid-42.json", () => {
+        throw new Error("EACCES: permission denied, unlink");
+      }),
     ).toThrow(/EACCES/);
   });
 });

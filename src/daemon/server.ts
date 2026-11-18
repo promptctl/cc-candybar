@@ -30,7 +30,6 @@ import {
   admitDaemon,
   realBreakerDeps,
   releaseRegistration,
-  readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
@@ -524,20 +523,13 @@ async function closeThenExit(code: number): Promise<void> {
       "lease removal",
       () => removeLeaseIfOwned(daemonProcess().paths.lease, process.pid),
     ],
-    // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
-    // lease above, reused via releaseRegistration — a slot this daemon never
-    // claimed (exempt production, or refused before claiming one) is null and
-    // skipped.
+    // A slot this daemon never claimed (exempt production, or refused before
+    // claiming one) is null and skipped.
     [
       "registry release",
       () =>
         breakerRegistryPath !== null &&
-        releaseRegistration(
-          breakerRegistryPath,
-          process.pid,
-          readRegistryEntry,
-          (p) => fs.unlinkSync(p),
-        ),
+        releaseRegistration(breakerRegistryPath, (p) => fs.unlinkSync(p)),
     ],
   ];
   for (const [step, run] of steps) {
