@@ -11,17 +11,14 @@ import { inspect } from "node:util";
 import type { Daemon } from "./daemon.js";
 import { renderFailed } from "./foundations/render-answers.js";
 import { NOTHING_TO_SETTLE } from "./statusline-answer.js";
-import { LANE_FRAMES } from "./lane-frames";
+import { laneFramed } from "./lane-frames";
 import {
   PROTOCOL_VERSION,
   classifyInbound,
-  encodeFrame,
-  encodeJsonFrame,
   makeFrameReader,
   type Inbound,
-  type Response,
 } from "./foundations/protocol";
-import type { HandledRequest, Reply } from "./reply.js";
+import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
 import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline.js";
@@ -36,7 +33,6 @@ export type ConnectionDaemon = Pick<
 // and whether the client took it.
 type Owed = Pick<Reply, "exitAfterFlush" | "settled">;
 const OWES_NOTHING: Owed = { exitAfterFlush: null, settled: NOTHING_TO_SETTLE };
-const told = (resp: Response): Reply => ({ resp, ...OWES_NOTHING });
 
 // [LAW:types-are-the-program] A connection's one state.
 // - `awaiting`: no frame yet; a client is taken to wait.
@@ -46,17 +42,22 @@ const told = (resp: Response): Reply => ({ resp, ...OWES_NOTHING });
 //   design, not a peer leaving: the frame stays in flight until its click is
 //   handled, under the same deadline every request has (a click past it is
 //   refused, so a repeat click cannot revert it, src/daemon/reply.ts).
-//   `lapsed`: the deadline passed, and no one was told.
-// - `answered`: the socket's one answer is written, by the reply or by the
-//   backstop's TIMEOUT.
+//   `lapsed`: the deadline passed, and no one was told. `told`: its writer
+//   was written its verdict, the socket's one answer.
+// - `answered`: the socket's one answer is written: the reply (a refusal of
+//   a subscribe included), or the backstop's TIMEOUT.
 // - `streaming`: the session's subscription stands.
-// - `closed`: over, and nothing more is sent: the peer has gone, or a url
-//   frame's click is done. `from` is the phase it ended in, so whether the
+// - `closed`: over, and nothing more is sent: the peer has gone, a url
+//   frame's click is done, or a stream was refused. `from` is the phase it ended in, so whether the
 //   deadline passed and whether a waiting client left stay readable.
 type Open =
   | { readonly kind: "awaiting" }
   | { readonly kind: "answering" }
-  | { readonly kind: "unattended"; readonly lapsed: boolean }
+  | {
+      readonly kind: "unattended";
+      readonly lapsed: boolean;
+      readonly told: boolean;
+    }
   | { readonly kind: "answered"; readonly by: "reply" | "backstop" }
   | { readonly kind: "streaming"; readonly unsubscribe: () => void };
 type Phase = Open | { readonly kind: "closed"; readonly from: Open };
@@ -165,7 +166,7 @@ const STEP: {
       ? [
           e.frame === "request"
             ? { kind: "answering" }
-            : { kind: "unattended", lapsed: false },
+            : { kind: "unattended", lapsed: false, told: false },
           NONE,
         ]
       : [p, NONE],
@@ -180,7 +181,7 @@ const STEP: {
         return [{ kind: "answered", by: "backstop" }, write(e.answer)];
       // A url frame's click still runs, and is refused at its turn.
       case "unattended":
-        return [{ kind: "unattended", lapsed: true }, NONE];
+        return [{ ...p, lapsed: true }, NONE];
       case "answered":
       case "streaming":
       case "closed":
@@ -210,22 +211,28 @@ const STEP: {
     }
   },
   // The app is told at once whether its link opened, when it reads that, and
-  // the click runs on under the deadline. A url frame read after the backstop
-  // answered is told nothing more: TIMEOUT was the socket's one answer.
+  // the click runs on under the deadline, still unattended. A url frame read
+  // after the backstop answered is told nothing more: TIMEOUT was the
+  // socket's one answer.
   verdict: (p, e) =>
-    p.kind === "unattended"
-      ? [p, e.awaited ? write(e.answer) : NONE]
-      : [p, dropped(p, e.answer)],
+    p.kind !== "unattended" || p.told
+      ? [p, dropped(p, e.answer)]
+      : e.awaited
+        ? [{ ...p, told: true }, write(e.answer)]
+        : [p, NONE],
   // [LAW:no-silent-failure] Answered with the failure whoever sent the
   // frame: a request's client, or a URL handler, which reads it as its
   // verdict. A url frame whose handler failed has no click to land, so it is
-  // over once told.
+  // over once told, and told only if its socket has had no answer yet.
   failed: (p, e) => {
     switch (p.kind) {
       case "answering":
         return [{ kind: "answered", by: "reply" }, write(e.answer)];
       case "unattended":
-        return [{ kind: "closed", from: p }, write(e.answer)];
+        return [
+          { kind: "closed", from: p },
+          p.told ? dropped(p, e.answer) : write(e.answer),
+        ];
       case "awaiting":
       case "answered":
       case "streaming":
@@ -238,11 +245,21 @@ const STEP: {
   // A refused subscription is over: its refusal ends the stream, and a frame
   // still waiting for the socket to drain is dropped, as newest-wins drops
   // any frame a newer one replaces. The feed refuses inside the subscribe,
-  // before the stream stands, or while it does.
-  refused: (p, e) =>
-    p.kind === "answering" || p.kind === "streaming"
-      ? [p, write(e.answer)]
-      : [p, dropped(p, e.answer)],
+  // where the refusal is the request's answer, or while the stream stands,
+  // having already let it go.
+  refused: (p, e) => {
+    switch (p.kind) {
+      case "answering":
+        return [{ kind: "answered", by: "reply" }, write(e.answer)];
+      case "streaming":
+        return [{ kind: "closed", from: p }, write(e.answer)];
+      case "awaiting":
+      case "unattended":
+      case "answered":
+      case "closed":
+        return [p, dropped(p, e.answer)];
+    }
+  },
   // Only a waiting client's subscribe attaches: one the backstop answered
   // while it was on its way, or whose subscriber hung up first, is not a
   // subscription.
@@ -314,7 +331,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () =>
     on({
       kind: "deadline",
-      answer: told({
+      answer: replyOf({
         ok: false,
         error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
         code: "TIMEOUT",
@@ -354,6 +371,10 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         return attach(act.sessionId, act.lane);
       case "unsubscribe":
         return act.unsubscribe();
+      default: {
+        const unperformed: never = act;
+        throw new Error(`no act ${inspect(unperformed)}`);
+      }
     }
   }
 
@@ -367,30 +388,24 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // exit; the SIGKILL backstop inside server.ts's shutdown() is the unrelated
   // last-resort safety.
   //
-  // [LAW:no-silent-failure] An answer no reader would take (one that does not
-  // serialize, or one past the frame cap) is answered RENDER_FAILED naming
-  // why, which always fits, so a client is never left on a stream nothing
-  // answers.
-  function send({ resp, exitAfterFlush, settled }: Reply): void {
+  // A reply comes framed (reply.ts `replyOf`): one too big to send is already
+  // its RENDER_FAILED, so a client is never left on a stream nothing answers.
+  function send({ frame, unsent, exitAfterFlush, settled }: Reply): void {
     const settle =
       exitAfterFlush === null
         ? undefined
         : (): void => daemon.exit(exitAfterFlush);
-    let frame: Buffer;
-    let encoded = true;
-    try {
-      frame = encodeFrame(resp);
-    } catch (e) {
-      daemon.log("error", `response encode failed: ${inspect(e)}`);
-      frame = encodeFrame(renderFailed(e));
-      encoded = false;
-    }
+    // [LAW:no-silent-failure] Said in the daemon's log as well as to the
+    // client: a render's event records the failure, but no other reply
+    // writes an event.
+    if (unsent !== null)
+      daemon.log("error", `response unsendable: ${inspect(unsent)}`);
     try {
       // [LAW:single-enforcer] Told once, on every exit, whether the client
       // took this response. A peer that already left fails the flush (it
       // ended its side), so a clean one is the client holding the response.
       sock.end(frame, (err?: Error | null) => {
-        settled(encoded && err == null);
+        settled(unsent === null && err == null);
         settle?.();
       });
     } catch (e) {
@@ -429,11 +444,15 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
               sessionId: r.sessionId,
               lane: r.lane,
             });
+          default: {
+            const unhandled: never = r;
+            throw new Error(`no handling for ${inspect(unhandled)}`);
+          }
         }
       })
       .catch((err: unknown) => {
         daemon.log("error", `handler threw: ${inspect(err)}`);
-        on({ kind: "failed", answer: told(renderFailed(err)) });
+        on({ kind: "failed", answer: replyOf(renderFailed(err)) });
       });
     // [LAW:single-enforcer] A connection carries one frame: the reader reads
     // nothing after it.
@@ -444,7 +463,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     daemon.log("warn", `frame parse failed: ${err.message}`);
     on({
       kind: "unparsed",
-      answer: told({
+      answer: replyOf({
         ok: false,
         error: err.message,
         code: "BAD_REQUEST",
@@ -457,7 +476,11 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   // A version 1 writer has closed, and a write to its socket is only an error
   // event.
   function clicked(r: Extract<HandledRequest, { kind: "url" }>): void {
-    on({ kind: "verdict", answer: told(r.verdict), awaited: r.awaitsVerdict });
+    on({
+      kind: "verdict",
+      answer: replyOf(r.verdict),
+      awaited: r.awaitsVerdict,
+    });
     void r
       .land()
       .catch((err: unknown) =>
@@ -475,21 +498,17 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
     const unsubscribe = daemon.subscribe(sessionId, {
       lane,
       // [LAW:no-silent-failure] A frame that cannot be pushed (past the cap)
-      // is pushed as RENDER_FAILED naming why, a frame a follower draws, as a
-      // bar that could not be drawn is. Ending the stream instead would read
-      // to the follower as a daemon restart, and it would resubscribe into
-      // the same failure.
+      // is pushed as the render failure naming why, in its lane's shape, a
+      // frame the follower draws as it draws any render that failed. Ending
+      // the stream instead would read to the follower as a daemon restart,
+      // and it would resubscribe into the same failure.
       frame: (bar, json) => {
-        let frame: Buffer;
-        try {
-          frame = encodeJsonFrame(LANE_FRAMES[lane](bar, json));
-        } catch (e) {
-          daemon.log("error", `pushed frame encode failed: ${inspect(e)}`);
-          frame = encodeFrame(renderFailed(e));
-        }
+        const { frame, unsent } = laneFramed(lane, bar, json);
+        if (unsent !== null)
+          daemon.log("error", `pushed frame unsendable: ${inspect(unsent)}`);
         push(frame);
       },
-      refused: (resp) => on({ kind: "refused", answer: told(resp) }),
+      refused: (resp) => on({ kind: "refused", answer: replyOf(resp) }),
       drawing: () => true,
     });
     on({ kind: "attached", unsubscribe });

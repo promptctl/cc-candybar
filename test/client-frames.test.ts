@@ -9,7 +9,11 @@ import {
   openFrameStream,
   type StreamEnd,
 } from "../src/daemon/client-frames";
-import { encodeFrame, PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
+import {
+  encodeFrame,
+  PROTOCOL_VERSION,
+  ProtocolError,
+} from "../src/daemon/foundations/protocol";
 
 const FRAME = { ok: true, bar: "x", daemonV: PROTOCOL_VERSION };
 
@@ -61,13 +65,26 @@ test("a consumer that throws on a frame is handed none of the frames after it", 
   }).toEqual({ frames: 1, ends: ["failed"] });
 });
 
-test("a frame that is no object fails the stream and reaches no consumer", async () => {
-  const stream = await streamOf(encodeFrame(null));
-  await stream.consume(() => {});
-  expect({
-    frames: stream.frames.length,
-    ends: stream.ends.map((e) =>
-      e.kind === "failed" ? e.error.message : e.kind,
-    ),
-  }).toEqual({ frames: 0, ends: ["a frame that is not a response: null"] });
-});
+test.each([null, [], {}])(
+  "a frame that is no response (%j) fails the stream as malformed and reaches no consumer",
+  async (frame) => {
+    const stream = await streamOf(encodeFrame(frame));
+    await stream.consume(() => {});
+    expect({
+      frames: stream.frames.length,
+      ends: stream.ends.map((e) =>
+        e.kind === "failed"
+          ? { malformed: e.error instanceof ProtocolError, why: e.error.message }
+          : e.kind,
+      ),
+    }).toEqual({
+      frames: 0,
+      ends: [
+        {
+          malformed: true,
+          why: `a frame that is not a response: ${JSON.stringify(frame)}`,
+        },
+      ],
+    });
+  },
+);

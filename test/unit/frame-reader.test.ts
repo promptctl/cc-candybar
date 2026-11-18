@@ -3,12 +3,17 @@
 // is, nothing after is handled, and a handler's throw reaches the error arm as
 // itself, never as the peer's malformed frame.
 
+import { duplexPair } from "node:stream";
+
 import {
   FRAME_HEADER_BYTES,
+  PROTOCOL_VERSION,
   ProtocolError,
   encodeFrame,
   makeFrameReader,
+  sendOne,
 } from "../../src/daemon/foundations/protocol";
+import { interpretException } from "../../src/daemon/client-transport";
 
 const reading = (next: (frame: unknown) => "more" | "done") => {
   const frames: unknown[] = [];
@@ -66,3 +71,28 @@ test("a frame stated past the cap is one ProtocolError, and what follows is neve
   expect(r.errors).toHaveLength(1);
   expect(r.errors[0]).toBeInstanceOf(ProtocolError);
 });
+
+// [LAW:parse-dont-validate] A one-frame request takes only a response: a
+// frame that is none is malformed, the permanent class the native client
+// gives it, never a connection failure that would kick a live daemon.
+test.each([null, [], {}])(
+  "a request answered with a frame that is no response (%j) is malformed",
+  async (frame) => {
+    const [client, daemon] = duplexPair();
+    daemon.once("data", () => daemon.write(encodeFrame(frame)));
+    const error: unknown = await sendOne(
+      client,
+      { v: PROTOCOL_VERSION, kind: "stats" },
+      Infinity,
+      { now: () => 0, after: () => () => {} },
+    ).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ProtocolError);
+    expect(interpretException(error)).toMatchObject({
+      kind: "permanent",
+      cause: "malformed_response",
+    });
+  },
+);

@@ -648,6 +648,22 @@ export function makeFrameReader(
   };
 }
 
+// [LAW:parse-dont-validate] A frame is a response only as an object that says
+// `ok`. Anything else (null, an array, an empty object) is a malformed frame:
+// the permanent class the native client gives it too, never a kick.
+export function parseResponse(frame: unknown): Response {
+  if (
+    typeof frame === "object" &&
+    frame !== null &&
+    !Array.isArray(frame) &&
+    typeof (frame as { ok?: unknown }).ok === "boolean"
+  )
+    return frame as Response;
+  throw new ProtocolError(
+    `a frame that is not a response: ${JSON.stringify(frame)}`,
+  );
+}
+
 // Send one frame and await one response, giving up at `deadline` (epoch
 // milliseconds) — the instant a render request states as its own, so the
 // client hangs up when it said it would. Resolves to the parsed response or
@@ -672,9 +688,7 @@ export function sendOne(
       sock.off("data", reader);
       sock.off("error", onError);
       sock.off("close", onClose);
-      try {
-        fn();
-      } catch {}
+      fn();
     };
     const clearTimer = clock.after(deadline - clock.now(), () => {
       finish(() => {
@@ -685,7 +699,10 @@ export function sendOne(
 
     const reader = makeFrameReader(
       (frame) => {
-        finish(() => resolve(frame as Response));
+        // Parsed before it settles: a frame that is no response throws into
+        // the reader's error arm below, and rejects as malformed.
+        const resp = parseResponse(frame);
+        finish(() => resolve(resp));
         return "done";
       },
       (err) => finish(() => reject(err)),

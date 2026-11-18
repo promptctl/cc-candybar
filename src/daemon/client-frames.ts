@@ -7,8 +7,8 @@ import net from "node:net";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
-  ProtocolError,
   makeFrameReader,
+  parseResponse,
   type Response,
   type SubscribeRequest,
 } from "./foundations/protocol";
@@ -70,21 +70,14 @@ export function openFrameStream(
     "data",
     makeFrameReader(
       (frame) => {
-        // [LAW:parse-dont-validate] A frame that is no object is no
-        // response, and fails the stream as a malformed frame does.
-        if (typeof frame !== "object" || frame === null)
-          finish({
-            kind: "failed",
-            error: new ProtocolError(
-              `a frame that is not a response: ${String(frame)}`,
-            ),
-          });
-        else if (isRefusal(frame as Response))
-          finish({ kind: "refused", resp: frame as Refusal });
+        // [LAW:parse-dont-validate] A frame that is no response throws its
+        // ProtocolError into the failure below, as a malformed frame does.
+        const resp = parseResponse(frame);
+        if (isRefusal(resp)) finish({ kind: "refused", resp });
         // [LAW:no-silent-failure] A consumer that cannot take a frame ends
         // the stream it reads: the reader hands its throw to the failure
         // below as its own, never as a malformed frame's.
-        else onFrame(frame as Response);
+        else onFrame(resp);
         // [LAW:single-enforcer] An ended stream reads no more, so nothing
         // reaches `onFrame` after `onEnd`.
         return end === null ? "more" : "done";
