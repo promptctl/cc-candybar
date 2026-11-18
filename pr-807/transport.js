@@ -54542,6 +54542,16 @@ init_globals();
 function ident(name) {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
 }
+var ESCAPE = "Z";
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
 
 // src/config/menu-keys.ts
 var PAGE_HOLDING_CURRENT = "-1";
@@ -60061,8 +60071,8 @@ var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
 var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(presetIdent, id2) {
-  return `${presetIdent}:${id2}`;
+function configureMember(preset, id2) {
+  return `${escapedIdent(preset)}:${id2}`;
 }
 var EDIT_MODE_REF = {
   variable: EDIT_MODE_KEY,
@@ -60481,6 +60491,19 @@ function repoUnreadNotice(gate2) {
 var awaitingLine = (dir) => `awaiting approval: ${dir} \u2014 its cc-candybar config runs once it is approved in the bar`;
 var declinedLine = (dir) => `declined: ${dir} \u2014 its cc-candybar config does not run`;
 var unprovenLine = (dir, reason) => `not proven a worktree: ${dir} \u2014 it answers for itself, because ${reason}`;
+function repoQuestionLines(question) {
+  if (question === null) return [];
+  const standing2 = {
+    awaiting: [awaitingLine(question.dir)],
+    declined: [declinedLine(question.dir)],
+    approved: [],
+    unread: []
+  };
+  return [
+    ...standing2[question.standing],
+    ...question.unproven === null ? [] : [unprovenLine(question.dir, question.unproven)]
+  ];
+}
 
 // src/daemon/foundations/memory-limit.ts
 init_globals();
@@ -60852,27 +60875,18 @@ function configProblems(config2) {
       ];
   }
 }
-function repoSaid(repo2) {
-  if (repo2 === null) return [];
-  const standing2 = {
-    awaiting: [awaitingLine(repo2.dir)],
-    declined: [declinedLine(repo2.dir)],
-    approved: [],
-    unread: []
-  };
-  return [
-    ...standing2[repo2.standing],
-    ...repo2.unproven === null ? [] : [unprovenLine(repo2.dir, repo2.unproven)]
-  ];
-}
 var config = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config: config2 }) => {
-    const judged = [judgedConfig(config2), ...repoSaid(config2.repo)].join("; ");
+    const judged = judgedConfig(config2);
+    const repo2 = repoQuestionLines(config2.repo);
     const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+    return verdict.ok ? { ok: true, note: [judged, ...repo2].join("; ") } : {
+      ...verdict,
+      reason: [`${judged}: ${verdict.reason}`, ...repo2].join("; ")
+    };
   }
 };
 var REINSTALL = "re-run `cc-candybar install`";
@@ -62534,8 +62548,8 @@ function chromeCell(name, template, artifacts) {
   artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
   return { kind: "segment", name };
 }
-function removeTerm(ctx, posIdent, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+function removeTerm(ctx, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${escapedIdent(id2)}`;
   ctx.artifacts.actions[actionName] = {
     persist: ctx.rootKey,
     removeSegment: id2
@@ -62562,12 +62576,13 @@ function configureRefsIn(nodes) {
 function placementDraftKey(presetIdent, id2, setting) {
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
 }
-function configureParts(ctx, posIdent, node, decls) {
+function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
+  const placement = escapedIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id2);
+  const member = configureMember(ctx.preset, id2);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${posIdent}`;
+  const enter = `${prefix}.configure.${placement}`;
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
@@ -62581,14 +62596,14 @@ function configureParts(ctx, posIdent, node, decls) {
   const drafts = {};
   const controls = Object.entries(decls).map(([name, decl]) => {
     const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
       default: settingSpelling(node.settings?.[name] ?? decl.default)
     };
     drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    const segName = `${prefix}.setting.${placement}.${name}`;
     const control2 = settingControl(
       controlDeclOf(decl),
       key,
@@ -62664,12 +62679,11 @@ function labelSegment(ctx, key, child, decl, text4) {
 }
 function editableUnit(child, spliced, first2, ctx) {
   const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
-  const afterPos = String(ctx.posCounter.n++);
-  const after = insertTerm(ctx, afterPos, id2, "after");
-  const remove = removeTerm(ctx, afterPos, id2);
+  const leading = first2 ? [insertTerm(ctx, id2, "before")] : [];
+  const after = insertTerm(ctx, id2, "after");
+  const remove = removeTerm(ctx, id2);
   const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  const configure = configureParts(ctx, child, settingsOf(decl));
   const lead = inArrangeMode(remove);
   const trail = inArrangeMode(configure.term);
   return [
@@ -62699,7 +62713,7 @@ function insertedUnit(child, insertedBy, spliced, ctx) {
     kind: "segment",
     // Keyed by the preset too: another preset may hold the same id as an
     // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
+    // `/`, so the two names never meet.
     name: labelSegment(
       ctx,
       `${id2}/${ctx.presetIdent}`,
@@ -62717,10 +62731,13 @@ function insertedUnit(child, insertedBy, spliced, ctx) {
     }
   ];
 }
-function insertTerm(ctx, posIdent, anchor, relation) {
-  const { presetIdent, artifacts } = ctx;
-  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
+function insertTerm(ctx, anchor, relation) {
+  const { artifacts } = ctx;
+  const {
+    apply: applyName,
+    host: chromeSegName,
+    stateKey
+  } = insertGap(ctx.preset, anchor, relation);
   artifacts.actions[applyName] = {
     persist: ctx.rootKey,
     insertSegmentFrom: ADDABLE_DOMAIN,
@@ -62728,7 +62745,6 @@ function insertTerm(ctx, posIdent, anchor, relation) {
     relation
   };
   const member = menuMember(applyName);
-  const stateKey = menuStateKey(chromeSegName, applyName, void 0);
   const pageKey = menuPageKey(stateKey);
   const identity2 = menuActionName(stateKey, member);
   artifacts.variables[stateKey] = {
@@ -62744,6 +62760,12 @@ function insertTerm(ctx, posIdent, anchor, relation) {
     host: chromeSegName,
     template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
   };
+}
+function insertGap(preset, anchor, relation) {
+  const gap = `${relation}.${escapedIdent(anchor)}`;
+  const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
+  const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
+  return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
 }
 function spliceContainer(node, ctx) {
   const children2 = [];
@@ -62829,11 +62851,11 @@ function withTrailingCell(node, cell3) {
 function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
   const { node } = presetRoot(config2, presetName);
   const ctx = {
-    presetIdent: ident(presetName),
+    preset: presetName,
+    presetIdent: escapedIdent(presetName),
     rootKey: presetRootKey(presetName),
     segments: config2.segments,
     artifacts,
-    posCounter: { n: 0 },
     configured: []
   };
   const spliced = spliceContainer(node, ctx);
@@ -82352,23 +82374,6 @@ var UNREAD_DISTRIBUTION = {
   bar: (nodePath3) => `${nodePath3} sets "distribution" on a vertical container none of whose children is a segment or a horizontal container \u2014 a bar row's hue is placed by the innermost vertical container it stacks through, so it would place nothing. Set it on that container, or on the row whose children are the cells (the horizontal container).`,
   band: (nodePath3) => `${nodePath3} sets "distribution" on a vertical container in a disclosure body \u2014 a body's items are placed along their rows, never by which row they sit on, so it would place nothing. Set it on the row whose children are the items (the horizontal container), or give a group \`direction: 'horizontal'\`.`
 };
-function presetIdentCollisions(ctx, presets) {
-  const byIdent = /* @__PURE__ */ new Map();
-  for (const name of Object.keys(presets)) {
-    const id2 = ident(name);
-    const names = byIdent.get(id2);
-    if (names) names.push(name);
-    else byIdent.set(id2, [name]);
-  }
-  for (const [id2, names] of byIdent) {
-    if (names.length < 2) continue;
-    ctx.issues.push({
-      path: "presets",
-      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id2}" \u2014 edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
-      line: findKeyLine(ctx.source, ["presets"])
-    });
-  }
-}
 function authoredPlacement(raw, name) {
   const layouts = [
     ["root", raw.root],
@@ -82429,7 +82434,6 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
       line: findKeyLine(ctx.source, ["globals", "preset"])
     });
   }
-  presetIdentCollisions(ctx, cfg.presets);
   const templateScope = templateScopeOf(cfg);
   for (const name of templateScope.names) {
     if (name !== "settings" && !name.startsWith(SETTINGS_SCOPE_PREFIX))
@@ -87704,23 +87708,19 @@ function presetKeys(doc) {
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, under3, into) {
-  const taken2 = new Set(
-    [
-      ...Object.keys(under3.presets),
-      ...presetKeys(doc),
-      // Each layer above as the loader reads it (JSON5, duplicate keys and
-      // all) — the editor refuses files the loader renders.
-      ...into.above.flatMap(
-        (l) => Object.keys(
-          import_json55.default.parse(l.text).presets ?? {}
-        )
-      )
-    ].map(ident)
-  );
+  const taken2 = /* @__PURE__ */ new Set([
+    ...Object.keys(under3.presets),
+    ...presetKeys(doc),
+    // Each layer above as the loader reads it (JSON5, duplicate keys and
+    // all) — the editor refuses files the loader renders.
+    ...into.above.flatMap(
+      (l) => Object.keys(import_json55.default.parse(l.text).presets ?? {})
+    )
+  ]);
   return Array.from(
     { length: taken2.size + 1 },
     (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
-  ).find((candidate) => !taken2.has(ident(candidate)));
+  ).find((candidate) => !taken2.has(candidate));
 }
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
@@ -89011,14 +89011,12 @@ function endedPlacements(before, after) {
   );
   const survivors = new Set(
     presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map(
-        (n) => configureMember(ident(preset), placementId(n))
-      )
+      (preset) => placed2(after, preset).map((n) => configureMember(preset, placementId(n)))
     )
   );
   return presetNames(before.presets).flatMap(
     (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(ident(preset), placementId(node)),
+      member: configureMember(preset, placementId(node)),
       node
     })).filter(({ member }) => !survivors.has(member))
   );
