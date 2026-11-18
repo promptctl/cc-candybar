@@ -339,8 +339,13 @@ export function makeActReader(
         ? null
         : (lastLineOf(files.stderr) ?? lastLineOf(files.stdout));
     // An act removed after its record was read reads as an end it never had,
-    // so what was read stands only while the act still does.
-    if (!fs.existsSync(actDir)) return null;
+    // so what was read of its files stands only while the act still does.
+    // [LAW:no-silent-failure] A group this read proved alive stays alive: the
+    // overdue end still owes it its signal, whoever removed its files.
+    if (!fs.existsSync(actDir))
+      return known.ours
+        ? { act, record, alive: true, end: null, lastLine: null }
+        : null;
     const facts = { act, record, alive: known.ours, end, lastLine };
     if (!facts.alive) known.final = facts;
     return facts;
@@ -465,8 +470,8 @@ const CLAIMED_FIRST: Claim = {
 };
 
 // Ends an act whose group its reader watched alive past its budget, with a
-// `timeout` verdict unless the job's own landed first: a live read already
-// proved the group the recorded job.
+// `timeout` verdict unless the job's own landed first or a newer act pruned its
+// files: a live read already proved the group the recorded job.
 export function endOverdue(
   dir: string,
   facts: ActFacts,

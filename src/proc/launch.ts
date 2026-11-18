@@ -44,7 +44,7 @@ import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
-import { publishByLink, type Linked } from "../utils/atomic-write";
+import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
 import type { SpawnedChild, Spawner } from "./spawner";
@@ -1204,8 +1204,12 @@ export function readJobEnd(status: string): JobEnd | null {
 // Ends a job's group with the timeout's own escalation, and gives it a verdict
 // of the launcher's unless its own landed first: the first verdict stands, and
 // a group that outlives its verdict (a child the program left) is ended all the
-// same. A status whose directory is gone belongs to a job whose files were
-// removed once it had ended, so there is nothing left to end.
+// same. [LAW:single-enforcer] The caller proves the group the job's; the files
+// prove nothing about it. A status whose directory is gone takes no verdict, and
+// its group is ended all the same: whoever removed the files did not end the
+// group with them. The verdict lands before the signal, so the job's own exit
+// on SIGTERM never takes the place of the launcher's; a verdict that cannot be
+// written is thrown [LAW:no-silent-failure] once the group has been signalled.
 function endJob(
   spawner: Spawner,
   clock: Pick<Timekeeper, "after">,
@@ -1213,30 +1217,48 @@ function endJob(
   status: string,
   end: JobEnd,
 ): JobEnding {
-  // [LAW:one-source-of-truth] Published by link, so the first verdict stands.
-  // The verdict is staged beside the status, so ENOENT from either step is the
-  // directory gone.
-  let linked: Linked;
-  try {
-    linked = publishByLink(status, `${formatJobEnd(end)}\n`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return { stands: false, signalled: false, leftover: null };
+  const signal = (): boolean => {
+    const signalled = spawner.signalJob(pid, "SIGTERM");
+    if (signalled) {
+      clock.after(
+        TIMEOUT_KILL_GRACE_MS,
+        () => spawner.signalJob(pid, "SIGKILL"),
+        {
+          unref: true,
+        },
+      );
     }
+    return signalled;
+  };
+  let landed: Pick<JobEnding, "verdict" | "leftover">;
+  try {
+    landed = landVerdict(status, end);
+  } catch (err) {
+    signal();
     throw err;
   }
-  const stands = linked.outcome === "published";
-  const signalled = spawner.signalJob(pid, "SIGTERM");
-  if (signalled) {
-    clock.after(
-      TIMEOUT_KILL_GRACE_MS,
-      () => spawner.signalJob(pid, "SIGKILL"),
-      {
-        unref: true,
-      },
+  return { ...landed, signalled: signal() };
+}
+
+// Whose verdict the status holds once the launcher's is offered: the first one
+// written stands, since it is published by link. [LAW:one-source-of-truth] The
+// verdict is staged beside the status, so ENOENT from either step is the
+// directory gone, which takes no verdict.
+function landVerdict(
+  status: string,
+  end: JobEnd,
+): Pick<JobEnding, "verdict" | "leftover"> {
+  try {
+    const { outcome, leftover } = publishByLink(
+      status,
+      `${formatJobEnd(end)}\n`,
     );
+    return { verdict: outcome, leftover };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT")
+      return { verdict: "gone", leftover: null };
+    throw err;
   }
-  return { stands, signalled, leftover: linked.leftover };
 }
 
 // [LAW:types-are-the-program] The launch that holds its caller's loop until the
