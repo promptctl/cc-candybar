@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-807",
+      "ref": "refs/pull/807/merge",
+      "sha": "40c044fc3f4bab5ffc8949c4ed8c3392ad35f65b",
+      "timestamp": "2026-11-18T15:47:13.677Z",
+      "commits": [
+        {
+          "sha": "40c044fc3f4bab5ffc8949c4ed8c3392ad35f65b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:45:19-07:00",
+          "message": "Merge 24b3a3d7f8c9f9ded05cf8faf5cdf347465b5f53 into 3ce2357e96988528f010578e31cb069ce8d02ecc\n"
+        },
+        {
+          "sha": "24b3a3d7f8c9f9ded05cf8faf5cdf347465b5f53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:32:32-07:00",
+          "message": "fix(doctor): the config row names the repository the bar asks about, failing while it awaits an answer (qo8j)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-799",
       "ref": "refs/pull/799/merge",
       "sha": "feb83a3615c3ceaea40fd956037c819042005ddf",
