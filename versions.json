@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f72209a57f1948648b44508adcfa2a143579eaf8",
+      "timestamp": "2026-11-18T20:02:45.006Z",
+      "commits": [
+        {
+          "sha": "f72209a57f1948648b44508adcfa2a143579eaf8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:01:42-07:00",
+          "message": "fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k) (#820)\n\n* fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k)\n\n* docs(stats): name the unreadable fault cause (9z3k)\n\n* fix(plugins): a standing storage fault re-reads nothing, and a folder no hold names leaves without a clear (9z3k)\n\n* fix(plugins): a folder there whose stat fails reads as unreadable, and a hold counts the loss it finds (9z3k)"
+        }
+      ]
+    },
+    {
       "version": "pr-828",
       "ref": "refs/pull/828/merge",
       "sha": "7c1b3ec6d3fdfc650a04878a6473805cb2b49419",
@@ -20,49 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T12:54:55-07:00",
           "message": "fix(render-cache): the installed-plugin layers are the render cache's, held only for the checkouts its entries serve (izc.967)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-820",
-      "ref": "refs/pull/820/merge",
-      "sha": "5a1b7302dfce2dda96698ee322644345416628cb",
-      "timestamp": "2026-11-18T19:51:45.226Z",
-      "commits": [
-        {
-          "sha": "5a1b7302dfce2dda96698ee322644345416628cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:50:02-07:00",
-          "message": "Merge feebca1b18e58e5aa1080bd058f95a8204c16e6f into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
-        },
-        {
-          "sha": "feebca1b18e58e5aa1080bd058f95a8204c16e6f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:41:21-07:00",
-          "message": "fix(plugins): a folder there whose stat fails reads as unreadable, and a hold counts the loss it finds (9z3k)\n"
-        },
-        {
-          "sha": "67a5287724ed6fe907cdbfddc0773d2cd0e168bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:28:39-07:00",
-          "message": "fix(plugins): a standing storage fault re-reads nothing, and a folder no hold names leaves without a clear (9z3k)\n"
-        },
-        {
-          "sha": "041a94f3f69e165a0477a169f4e6aee5ceb8085c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:14:57-07:00",
-          "message": "docs(stats): name the unreadable fault cause (9z3k)\n"
-        },
-        {
-          "sha": "cdb5d0a74b4a8e850bcccdea0dd6eea6d21f840a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:14:31-07:00",
-          "message": "fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k)\n"
         }
       ]
     },
@@ -142,21 +114,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T12:27:06-07:00",
           "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "1c2d955fd5bc787336ce3430ee52aeab1e787b59",
-      "timestamp": "2026-11-18T19:39:14.254Z",
-      "commits": [
-        {
-          "sha": "1c2d955fd5bc787336ce3430ee52aeab1e787b59",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T19:38:09Z",
-          "message": "chore(release): set `package.json` to 1.232.4\n\n## [1.232.4](https://github.com/promptctl/cc-candybar/compare/v1.232.3...v1.232.4) (2026-11-18)\n\n### Bug Fixes\n\n* **doctor:** the config row names the repository the bar asks about (qo8j) ([#807](https://github.com/promptctl/cc-candybar/issues/807)) ([fd629ed](https://github.com/promptctl/cc-candybar/commit/fd629edab3c2116a266ec18501d1ce208592daaf))\n* **watchers:** an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk) ([#823](https://github.com/promptctl/cc-candybar/issues/823)) ([cf8d343](https://github.com/promptctl/cc-candybar/commit/cf8d3437b19b458c96b45972d2055cbaeb241720))\n"
         }
       ]
     },
