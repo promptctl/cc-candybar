@@ -20,6 +20,7 @@
 // colour rich-js's joiner lifts it to, with rich-js itself as the oracle.
 
 import type { Frame } from "../src/render/frame";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { linkUrls } from "./helpers/frame";
 import { withoutDoorClose } from "./helpers/door-close";
 import { listThemePalettes } from "@promptctl/rich-js";
@@ -167,6 +168,7 @@ async function forEachStage(
   const rig = buildRig({
     source: `{ globals: { palette: '${theme}' } }`,
     base: DEFAULT_DSL_CONFIG,
+    sessionId: sessionIdOf(PAYLOAD.session_id),
   });
   try {
     // One instant for every render, as `closedBars` draws.

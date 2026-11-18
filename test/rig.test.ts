@@ -3,6 +3,7 @@
 // session's picks is a rig's own.
 import { linkSigner } from "../src/click/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { settingNameOf } from "../src/config/globals-fields";
 import { registerOptionDomain } from "../src/config/option-domain";
 import { compileInputOf, compileKey } from "../src/dsl/render";
 import { textOf } from "../src/render/frame";
@@ -128,6 +129,62 @@ describe("buildRig", () => {
       );
       expect(sharedCompile(two)(key, input)).not.toBe(
         sharedCompile(one)(key, input),
+      );
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  test("a narrowed rig draws the narrowed config under the selection of the whole", () => {
+    const source = `{ globals: { palette: 'nord' }, ${SOURCE.slice(1)}`;
+    const rig = buildRig({
+      source,
+      narrow: (whole) => ({
+        ...whole,
+        globals: { ...whole.globals, palette: "tokyo-night" },
+      }),
+    });
+    const whole = buildRig({ source });
+    const pickedIn = (theme: string) => {
+      whole.sessionState.set(whole.sessionId, settingNameOf("palette"), theme);
+      return whole.draw().frame.rows;
+    };
+    try {
+      const { frame, selection } = rig.draw();
+      expect(selection.theme).toMatchObject({ kind: "decided", name: "nord" });
+      expect(frame.rows).toEqual(pickedIn("nord"));
+      expect(frame.rows).not.toEqual(pickedIn("tokyo-night"));
+    } finally {
+      rig.dispose();
+      whole.dispose();
+    }
+  });
+
+  test("a draw returns the selection it drew with", () => {
+    const rig = buildRig({ source: SOURCE });
+    try {
+      const unpicked = rig.draw();
+      rig.sessionState.set(rig.sessionId, settingNameOf("palette"), "nord");
+      const picked = rig.draw();
+      expect(picked.selection.theme).toMatchObject({ name: "nord" });
+      expect(picked.frame.rows).not.toEqual(unpicked.frame.rows);
+      // Handed back in, the returned selection draws the same frame.
+      expect(rig.draw({ selection: picked.selection }).frame.rows).toEqual(
+        picked.frame.rows,
+      );
+      expect(rig.draw({ selection: unpicked.selection }).frame.rows).toEqual(
+        unpicked.frame.rows,
+      );
+    } finally {
+      rig.dispose();
+    }
+  });
+
+  test("a draw of a payload naming another session throws", () => {
+    const rig = buildRig({ source: SOURCE });
+    try {
+      expect(() => rig.draw({ payload: { session_id: "other" } })).toThrow(
+        /the payload draws session other/,
       );
     } finally {
       rig.dispose();

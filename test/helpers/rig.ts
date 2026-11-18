@@ -33,10 +33,7 @@ import {
   type RenderSelection,
 } from "../../src/dsl/render";
 import type { LinkSigner } from "../../src/click/link-signer";
-import {
-  sessionIdOf,
-  type SessionId,
-} from "../../src/daemon/foundations/session-id";
+import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
 import type { Host } from "../../src/host";
@@ -54,6 +51,7 @@ import {
 } from "./click";
 import { readingsIn } from "./session-environment";
 import { drawPayload } from "./draw-payload";
+import { sessionOfPayload, TEST_SESSION } from "./payload-session";
 import { unscriptedRuns } from "./fake-launcher";
 import { TEST_SIGNER } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
@@ -61,7 +59,8 @@ import { selectionFor } from "./selection";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 
-const SESSION_ID = sessionIdOf("s1");
+// The session a payload naming none draws, so such a payload draws the rig's own.
+const SESSION_ID = TEST_SESSION;
 const CWD = "/tmp/proj";
 const ALL_PALETTES: ReadonlySet<string> = new Set(listResolvablePaletteNames());
 
@@ -82,6 +81,12 @@ export interface RigInit {
   /** What `source` merges over: `EMPTY_DEFAULT` (its own slice alone) or `DEFAULT_DSL_CONFIG` (the production cascade). */
   readonly base?: DslConfig;
   readonly palettes?: ReadonlySet<string>;
+  /**
+   * The part of the parsed config the rig compiles and draws: the whole of it
+   * unless a test narrows it (to one segment, say). The selection is still
+   * resolved over the whole config, as the daemon resolves it.
+   */
+  readonly narrow?: (config: ValidatedConfig) => ValidatedConfig;
   /** The directory `shell` sources run in; the session's project directory. */
   readonly cwd?: string;
   /** The session's environment, which an `env` source reads; empty unless stated. */
@@ -100,8 +105,13 @@ export interface DrawInit {
   readonly payload?: object;
   readonly opts?: Partial<BuildLineOptions>;
   readonly at?: Instant;
-  /** The selection, whole. Defaults to the daemon's resolution over the session's picks. */
+  /** The selection, whole. Defaults to the daemon's resolution over the picks of the session the payload draws. */
   readonly selection?: RenderSelection;
+}
+
+/** A frame as the rig drew it, with the selection it was drawn under. */
+export interface RigFrame extends DrawnFrame {
+  readonly selection: RenderSelection;
 }
 
 export interface Rig {
@@ -114,7 +124,7 @@ export interface Rig {
   /** The context a click runs in: a test that overrides a field spreads it. */
   readonly ctx: VerbContext;
   /** The frame the session draws now. */
-  draw(init?: DrawInit): DrawnFrame;
+  draw(init?: DrawInit): RigFrame;
   /** One click, through the verb its URL names, as the daemon runs it. */
   click(url: string): Promise<void>;
   dispose(): void;
@@ -211,12 +221,13 @@ export function buildRig(init: RigInit = {}): Rig {
     init.base ?? EMPTY_DEFAULT,
     init.palettes ?? ALL_PALETTES,
   );
+  const drawn = (init.narrow ?? ((whole) => whole))(config);
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState, null);
   const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(
-    config,
+    drawn,
     registry,
     cwd,
     sharedCompile(init.signer ?? TEST_SIGNER),
@@ -240,22 +251,37 @@ export function buildRig(init: RigInit = {}): Rig {
     sessionState,
     sessionId,
     ctx,
-    draw: (draw = {}) =>
-      drawPayload(
-        config,
-        compiled,
-        store,
-        registry,
-        draw.payload ?? {
-          session_id: sessionId,
-          workspace: { project_dir: cwd },
-        },
-        draw.at ?? instantOf(new Date()),
-        { ...RIG_OPTS, ...draw.opts },
+    draw: (draw = {}) => {
+      const payload = draw.payload ?? {
+        session_id: sessionId,
+        workspace: { project_dir: cwd },
+      };
+      // [LAW:one-source-of-truth] The rig is one session: the one its picks,
+      // its booking and its clicks are under. A payload drawing another
+      // would draw a view whose picks nothing here reads or writes.
+      const session = sessionOfPayload(payload);
+      if (session !== sessionId)
+        throw new Error(
+          `the rig is session ${sessionId}, but the payload draws session ${session}`,
+        );
+      const selection =
         draw.selection ??
-          selectionFor(config, {}, (key) => sessionState.get(sessionId, key)),
-        readings,
-      ),
+        selectionFor(config, {}, (key) => sessionState.get(sessionId, key));
+      return {
+        ...drawPayload(
+          drawn,
+          compiled,
+          store,
+          registry,
+          payload,
+          draw.at ?? instantOf(new Date()),
+          { ...RIG_OPTS, ...draw.opts },
+          selection,
+          readings,
+        ),
+        selection,
+      };
+    },
     click: (url) => clickUrl(url, ctx),
     dispose: () => registry.dispose(),
   };

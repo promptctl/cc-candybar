@@ -593,11 +593,28 @@ export type ValuedGlobals = {
 };
 
 // A setting's name: a selection's session key, a session setting's field.
-type SettingNameOf<K extends ControlledField> =
-  GlobalFieldRows[K] extends SelectionRow<infer S> ? S : K;
+// Distributes over a union of fields, so a field not known until run time
+// names the union of their settings.
+type SettingNameOf<K extends ControlledField> = K extends ControlledField
+  ? GlobalFieldRows[K] extends SelectionRow<infer S>
+    ? S
+    : K
+  : never;
 export type SettingName = {
   [K in ControlledField]: SettingNameOf<K>;
 }[ControlledField];
+
+// [LAW:one-source-of-truth] The SessionState key a controlled field's pick is
+// written and read under: the one rule, for the resolution that reads a pick
+// and the settings that write one.
+export function settingNameOf<K extends ControlledField>(
+  field: K,
+): SettingNameOf<K> {
+  const row: FieldRow = GLOBAL_FIELDS[field];
+  return (
+    row.kind === "selection" ? row.sessionKey : field
+  ) as SettingNameOf<K>;
+}
 
 // [LAW:one-source-of-truth] The globals a theme may carry a default for — the
 // "look" settings that decide which of the theme's own colours each cell wears

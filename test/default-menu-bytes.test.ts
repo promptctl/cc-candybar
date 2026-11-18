@@ -103,6 +103,7 @@ function menuBar(root: string) {
     source: `{ globals: {}, root: ${root} }`,
     label: "<user>",
     base: DEFAULT_DSL_CONFIG,
+    sessionId: SID,
   });
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;
   const { config, sessionState, click } = rig;

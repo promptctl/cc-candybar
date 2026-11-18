@@ -14,12 +14,13 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { walkNodes } from "../src/config/dsl-types";
 import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
 import { buildRig } from "./helpers/rig";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
 // `test/parity/fixtures.ts`. The parity infra was retired alongside the
 // legacy renderer (bzh.2), so this test holds its own minimal fixture
 // rather than importing from a module whose other consumers are gone.
-const SESSION_ID = "0a1b2c3d-4e5f-6789-abcd-ef1234567890";
+const SESSION_ID = sessionIdOf("0a1b2c3d-4e5f-6789-abcd-ef1234567890");
 
 const HOOK_DATA = {
   hook_event_name: "Status",
@@ -59,7 +60,13 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     source: string = FIXTURE_SOURCE,
     palettes: ReadonlySet<string> = ALLOWED_PALETTES,
   ) {
-    const rig = buildRig({ source, palettes, cwd, env: ENV });
+    const rig = buildRig({
+      source,
+      palettes,
+      cwd,
+      env: ENV,
+      sessionId: SESSION_ID,
+    });
     return { ...rig, drawHook: () => rig.draw({ payload: HOOK_DATA }).frame };
   }
 

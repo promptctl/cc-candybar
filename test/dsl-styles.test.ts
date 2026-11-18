@@ -316,7 +316,12 @@ describe('from: "styles" — rendered options and the derived gate share the con
   });
 
   test("the styles() binding renders one option region per declared name", () => {
-    const rig = buildRig({ source: SRC, label: "<looks>", palettes: ALLOWED });
+    const rig = buildRig({
+      source: SRC,
+      label: "<looks>",
+      palettes: ALLOWED,
+      sessionId: SID,
+    });
     try {
       const rendered = rig.draw({ payload: { session_id: SID } }).frame;
       // Each style name appears as a clickable region writing itself to `style` —
@@ -452,7 +457,12 @@ describe("globals.style as an expression — a style chosen by data", () => {
   }`;
 
   function styleExpressionBar(src = SRC) {
-    const rig = buildRig({ source: src, label: "<looks-expr>", palettes: ALLOWED });
+    const rig = buildRig({
+      source: src,
+      label: "<looks-expr>",
+      palettes: ALLOWED,
+      sessionId: SID,
+    });
     const { config, sessionState } = rig;
     const render = (pct: number, staged?: string): Frame =>
       rig.draw({

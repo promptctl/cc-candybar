@@ -22,7 +22,7 @@ const S1 = sessionIdOf("s1");
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 function placementBar(src: string) {
-  const rig = buildRig({ source: src });
+  const rig = buildRig({ source: src, sessionId: S1 });
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (): Frame => {

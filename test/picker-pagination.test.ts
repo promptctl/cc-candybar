@@ -74,7 +74,7 @@ function pickerConfig(): string {
 }
 
 function pickerBar(style: Endcaps, padding = 0) {
-  const rig = buildRig({ source: pickerConfig() });
+  const rig = buildRig({ source: pickerConfig(), sessionId: S1 });
   const renderPage = (width: number, page: number, wrap = true): Frame => {
     rig.sessionState.set(S1, "theme-page", String(page));
     return rig.draw({ opts: { endcaps: style, wrap, width, padding } }).frame;
@@ -265,7 +265,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
   const STYLE_PAGE = menuPageKey(ENDCAPS_OPEN);
 
   function menuRowBar(style: Endcaps, padding = 0) {
-    const rig = buildRig({ source: menuRowConfig() });
+    const rig = buildRig({ source: menuRowConfig(), sessionId: S1 });
     // openStyle: also open the style menu (its own page cursor) so BOTH bodies
     // drop in one render — the multiple-open-menus-in-one-row case.
     const render = (

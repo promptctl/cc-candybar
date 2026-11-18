@@ -38,6 +38,7 @@ function nestBar(src: string) {
     source: src,
     label: "<user>",
     base: DEFAULT_DSL_CONFIG,
+    sessionId: SID,
   });
   const { config, sessionState } = rig;
   const render = (): Frame => rig.draw({ payload: PAYLOAD }).frame;

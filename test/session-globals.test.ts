@@ -12,8 +12,8 @@
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { recordRender } from "./helpers/click";
-import { buildRig } from "./helpers/rig";
+import { buildRig, type Rig } from "./helpers/rig";
+import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection } from "../src/themes";
 import { effectivePresetName } from "../src/config/presets";
@@ -81,28 +81,47 @@ function resolved(
 }
 
 function globalsBar(padding: number = CONFIG_PADDING) {
-  const rig = buildRig({ source: src(padding), label: "<session-globals>", palettes: ALLOWED });
-  const { config, sessionState } = rig;
+  // A rig is one session, so each session draws through its own, all over the
+  // one SessionState the sessions share, as the daemon's sessions do.
+  const sessionState = new SessionState();
+  const rigs = new Map<SessionId, Rig>();
+  const rigOf = (sid: SessionId): Rig => {
+    let rig = rigs.get(sid);
+    if (rig === undefined) {
+      rig = buildRig({
+        source: src(padding),
+        label: "<session-globals>",
+        palettes: ALLOWED,
+        sessionId: sid,
+        sessionState,
+      });
+      rigs.set(sid, rig);
+    }
+    return rig;
+  };
+  const { config } = rigOf(S_BYSTANDER);
   // [LAW:one-source-of-truth] Resolve both fields per render exactly as
   // draw-bar.ts does — the session's clicked value over the config default over
   // the floor. Freezing either would pass here while the real daemon moved.
   const globals = (sid: SessionId): EffectiveGlobals =>
     globalsFor(config, (key) => sessionState.get(sid, key));
   const render = (sid: SessionId, width: number): Frame =>
-    rig.draw({
+    rigOf(sid).draw({
       payload: { session_id: sid },
       opts: { wrap: globals(sid).autoWrap, padding: globals(sid).padding, width },
     }).frame;
 
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   // The dispatch gates the write by the config the clicking session renders,
-  // so the session's render is recorded first.
+  // which the session's rig records.
   const setState = async (sid: SessionId, key: string, value: string): Promise<void> => {
-    recordRender(sessionState, sid);
-    await rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+    await rigOf(sid).click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
   };
 
-  return { config, sessionState, render, setState, dispose: rig.dispose };
+  const dispose = (): void => {
+    for (const rig of rigs.values()) rig.dispose();
+  };
+  return { config, sessionState, render, setState, dispose };
 }
 
 const WIDE = 200;
