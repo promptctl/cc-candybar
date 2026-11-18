@@ -75,10 +75,22 @@ programs.set("awk", () => RESIDENT);
 // page's daemon is no process, and none other runs on the demo machine.
 programs.set("ps", () => ok(""));
 
-// The four commands the git segment runs (src/segments/git.ts); anything else
-// fails as git does, and says so in the console, so a new one is noticed.
+// The commands a git read runs: the four the git segment runs
+// (src/segments/git.ts), after the ask for the variables every read unsets
+// (src/proc/git-local-env.ts). Anything else fails as git does, and says so in
+// the console, so a new one is noticed.
+// git 2.x's answer to `rev-parse --local-env-vars`.
+const LOCAL_ENV_VARS = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+  "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+];
 programs.set("git", (args) => {
   const line = args.join(" ");
+  if (line === "rev-parse --local-env-vars")
+    return ok(LOCAL_ENV_VARS.map((name) => `${name}\n`).join(""));
   if (line.startsWith("status --porcelain=v2 --branch")) {
     const rows = [
       `# branch.oid ${repo.head}`,
