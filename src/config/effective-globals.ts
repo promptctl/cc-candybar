@@ -7,6 +7,7 @@ import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
 import type { DslConfig, Globals } from "./dsl-types.js";
 import {
+  GLOBAL_FIELDS,
   VALUED_FIELDS,
   valuedRow,
   type ValuedField,
@@ -123,7 +124,9 @@ export function presetOf(
   sessionPick: (key: string) => string | null,
 ): string {
   return effectivePresetName(
-    sessionPick("preset"),
+    // [LAW:one-source-of-truth] Read under the row's `sessionKey`, the key a
+    // preset pick is written under.
+    sessionPick(GLOBAL_FIELDS.preset.sessionKey),
     config.globals.preset,
     config.presets,
   );
@@ -163,9 +166,11 @@ export function resolveEffectiveGlobals(
   // The theme resolves before the look, because the look's config-default
   // rung is the THEME's default folded under the declared globals
   // (src/config/theme-defaults.ts): which theme decides which fragment.
+  // [LAW:one-source-of-truth] Every selector's pick is read under its globals
+  // row's `sessionKey`, the key a pick from the settings menu is written under.
   const theme = resolveThemeSelection(
     staged.palette,
-    sessionPick("theme"),
+    sessionPick(GLOBAL_FIELDS.palette.sessionKey),
     declared.palette,
   );
   const globals = underThemeDefault(
@@ -184,13 +189,13 @@ export function resolveEffectiveGlobals(
     theme,
     style: resolveStyleSelection(
       staged.style,
-      sessionPick("style"),
+      sessionPick(GLOBAL_FIELDS.style.sessionKey),
       globals.style,
       config.styles,
     ),
     effect: resolveEffectSelection(
       staged.effect,
-      sessionPick("effect"),
+      sessionPick(GLOBAL_FIELDS.effect.sessionKey),
       globals.effect,
     ),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
