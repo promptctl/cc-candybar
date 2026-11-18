@@ -71415,6 +71415,19 @@ var faultsOf = (folder) => {
     }
   }
 };
+var sameFolder = (a, b) => {
+  if (a === b) return true;
+  if (a === void 0 || b === void 0 || a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "watching":
+      return false;
+    case "lost":
+      return true;
+    case "unmade":
+    case "unreadable":
+      return a.reason === b.reason;
+  }
+};
 var sameFault = (a, b) => a === b || a?.cause === b?.cause && a?.reason === b?.reason;
 var watchKey = (key) => `plugin-storage:${keyString(key)}`;
 var targetsOf = (folder) => ({
@@ -71624,14 +71637,14 @@ var ManagedStorage = class {
       was.stopSweep();
       was.handle.release();
     }
-    this.settle(folder);
-    if (was !== now2) this.sessions.changed((f) => f.folder === folder);
+    if (now2 === void 0) this.told.delete(folder);
+    this.settle(folder, !sameFolder(was, now2));
   }
   // [LAW:no-silent-failure] Each fault a folder stands on is logged and
   // counted as it starts and as its reason changes, and logged as it clears,
-  // once each; a source whose fault moved re-reads its files, which read the
-  // faults standing now.
-  settle(folder) {
+  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
+  // on a move of its state or its faults, which they read first.
+  settle(folder, stateMoved = false) {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now2 = faultsOf(this.folders.get(folder));
     let moved2 = false;
@@ -71656,7 +71669,7 @@ var ManagedStorage = class {
     if (SOURCES.every((source) => now2[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now2);
-    if (moved2) this.sessions.changed((f) => f.folder === folder);
+    if (moved2 || stateMoved) this.sessions.changed((f) => f.folder === folder);
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
