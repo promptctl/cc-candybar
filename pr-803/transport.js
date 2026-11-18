@@ -39025,15 +39025,6 @@ function ensureContrast(fg, bg, minRatio = 4.5, drawnAt = ColorDepth.TRUECOLOR, 
     return chosen;
   return table.written.get(table.shown.matchReadable(fg.compositeOver(ground), shownBg, minRatio));
 }
-function ensureDrawn(chosen, drawnAt, accept, substrate = SURFACE_BLACK, terminal) {
-  const opaque = drawnBackground(chosen, substrate);
-  const table = drawnTable(drawnAt, terminal);
-  const drawn = (c) => shownAs(table, drawnBackground(c, substrate));
-  if (accept(drawn(opaque), drawn))
-    return opaque;
-  const index = table?.shown.matchWhere(opaque, (entry) => accept(entry, drawn));
-  return index === void 0 ? void 0 : table.written.get(index);
-}
 function drawnColour(colour, drawnAt, substrate = SURFACE_BLACK, terminal) {
   return shownAs(drawnTable(drawnAt, terminal), drawnBackground(colour, substrate));
 }
@@ -62139,11 +62130,10 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for its error role, or the
-      // terminal's own red, whichever reads as red on the pressed state as
-      // this depth draws it (`errorRedOn`). It never slides lightness: a slid
-      // red stops reading as red, and the ✖ must be red on every theme.
-      // Closed, the author's glyph keeps the cell's own text.
+      // the ✖ wears the theme's own error red as this depth draws it on the
+      // pressed state (`errorRedOn`). It never slides lightness: a slid red
+      // stops reading as red, and the ✖ must be red on every theme. Closed,
+      // the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
       },
@@ -79444,56 +79434,42 @@ function segmentColorFuncs(ref) {
   };
   return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
-var RUNGS_OUT = {
-  "#000000": ["darken-1", "darken-2", "darken-3"],
-  "#ffffff": ["lighten-1", "lighten-2", "lighten-3"]
-};
-var TERMINAL_REDS = ["red", "bright_red"].map(
-  (name) => STANDARD_TABLE.get(ANSI_COLOR_NAMES[name])
-);
+var DARKENINGS = ["darken-1", "darken-2", "darken-3"];
+var LIGHTENINGS = ["lighten-1", "lighten-2", "lighten-3"];
+var TERMINAL_REDS = [1, 9].map((index) => STANDARD_TABLE.get(index));
 var RED_HUE = { from: -20, to: 40, chroma: 0.06 };
 function readsRed(colour) {
   const { h, c } = Oklch.fromRgba(colour);
   const hue = h > 180 ? h - 360 : h;
   return c >= RED_HUE.chroma && hue >= RED_HUE.from && hue <= RED_HUE.to;
 }
+function errorRedCandidates(palette, farPoleBlack) {
+  const [out, back2] = farPoleBlack ? [DARKENINGS, LIGHTENINGS] : [LIGHTENINGS, DARKENINGS];
+  return [
+    "text-error",
+    "error",
+    ...[...out, ...back2].map((r) => `error-${r}`)
+  ].map((name) => resolveColorRef(palette, name));
+}
 function errorRed(palette, ground, depth) {
   const shown = drawnColour(ground, depth);
-  const pole = contrastFor(shown).hex;
-  const out = RUNGS_OUT[pole];
-  if (out === void 0) {
-    throw new Error(
-      `contrastFor named ${pole} for ${ground.hex}, which is neither pole`
-    );
-  }
-  const back2 = Object.values(RUNGS_OUT).find((rungs) => rungs !== out);
-  const candidates = [
-    ...[
-      "text-error",
-      "error",
-      ...[...out, ...back2].map((r) => `error-${r}`)
-    ].map((name) => resolveColorRef(palette, name)),
-    ...TERMINAL_REDS
-  ];
-  for (const floor3 of [TEXT_MIN_CONTRAST, QUIET_MIN_CONTRAST]) {
-    for (const colour of candidates) {
-      const cleared = ensureDrawn(
-        colour,
-        depth,
-        (drawn) => readsRed(drawn) && contrastRatio(drawn, shown) >= floor3
-      );
-      if (cleared !== void 0) return cleared;
-    }
-  }
-  const red = candidates.map((colour) => {
+  const measured3 = (colours) => colours.map((colour) => {
     const drawn = drawnColour(colour, depth);
     return {
       colour,
       red: readsRed(drawn),
       ratio: contrastRatio(drawn, shown)
     };
-  }).filter(({ red: red2 }) => red2);
-  return red.reduce((farthest, c) => c.ratio > farthest.ratio ? c : farthest).colour;
+  }).filter(({ red }) => red);
+  const themed = measured3(
+    errorRedCandidates(palette, contrastFor(shown).hex === "#000000")
+  );
+  const kept = themed.length > 0 ? themed : measured3(TERMINAL_REDS);
+  const tier = (ratio) => ratio >= TEXT_MIN_CONTRAST ? 0 : ratio >= QUIET_MIN_CONTRAST ? 1 : 2;
+  return kept.reduce((best, c) => {
+    const [tb, tc] = [tier(best.ratio), tier(c.ratio)];
+    return tc < tb || tc === 2 && tb === 2 && c.ratio > best.ratio ? c : best;
+  }).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {

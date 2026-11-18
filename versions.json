@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-803",
+      "ref": "refs/pull/803/merge",
+      "sha": "cecec9ac4fe46c770b40fc4799120800f344fc22",
+      "timestamp": "2026-11-18T14:03:18.300Z",
+      "commits": [
+        {
+          "sha": "cecec9ac4fe46c770b40fc4799120800f344fc22",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:02:13-07:00",
+          "message": "Merge b5f7c2ee26510af8c242973daeb83ae79299b5b0 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "b5f7c2ee26510af8c242973daeb83ae79299b5b0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:02:01-07:00",
+          "message": "fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-802",
       "ref": "refs/pull/802/merge",
       "sha": "f93a8d6a32f2e43bd1ef6bfc4ecd4c68e65f8426",
@@ -20,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T06:55:00-07:00",
           "message": "test(daemon): the close case counts only the resources its own work creates (6f3)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-801",
-      "ref": "refs/pull/801/merge",
-      "sha": "40b6709c249c0a0021ad2681e77f75ac01ca6f36",
-      "timestamp": "2026-11-18T13:46:11.784Z",
-      "commits": [
-        {
-          "sha": "40b6709c249c0a0021ad2681e77f75ac01ca6f36",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:45:10-07:00",
-          "message": "Merge 06c4ddcee155e2e8b60ac2bef88a0ecd541c7fd3 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "06c4ddcee155e2e8b60ac2bef88a0ecd541c7fd3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:44:53-07:00",
-          "message": "fix(colour): the door's ✖ is red as each depth draws it, judged on its drawn colour (fmkv)\n"
         }
       ]
     },
