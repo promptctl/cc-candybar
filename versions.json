@@ -4,15 +4,22 @@
     {
       "version": "pr-792",
       "ref": "refs/pull/792/merge",
-      "sha": "ffaaa7430a7005ce03a226ab50ddd2dbf0191d71",
-      "timestamp": "2026-11-18T01:13:31.337Z",
+      "sha": "89f42f6e6993d752d7bd685898b4d380914e4fa7",
+      "timestamp": "2026-11-18T01:31:54.426Z",
       "commits": [
         {
-          "sha": "ffaaa7430a7005ce03a226ab50ddd2dbf0191d71",
+          "sha": "89f42f6e6993d752d7bd685898b4d380914e4fa7",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T18:12:30-07:00",
-          "message": "Merge 0466e0d9699ccd457efe997216a355aa38d0b0f7 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+          "timestamp": "2026-11-18T01:31:04Z",
+          "message": "Merge ae03de6ee560f9b414495323bbe0d9395126fb84 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+        },
+        {
+          "sha": "ae03de6ee560f9b414495323bbe0d9395126fb84",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T18:30:53-07:00",
+          "message": "fix(daemon): a session's environment has one holder, every sender sends it, and no pane id outlives its client (bco)\n\n- The collector reads a session's environment from the session book, the\n  newest request's, so a request that arrived behind a newer one runs nothing\n  in its older environment.\n- A render request's `env` is required of every sender in the repo; the bench\n  and the site page sent none, so a session flipped between an environment\n  and none on every other request.\n- TMUX and TMUX_PANE are never passed on: the book holds an environment past\n  the client that reported it, and tmux reuses a closed pane's id.\n- The base set gains the XDG base directories; a shell run's key is its\n  declaration's digest with its values, and its log line names both digests.\n- Stale prose fixed: the data-sources memory, the host.ssh and env comments,\n  the demo example, the env-names spec, the not-heard reason.\n"
         },
         {
           "sha": "0466e0d9699ccd457efe997216a355aa38d0b0f7",

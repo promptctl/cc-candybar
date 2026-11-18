@@ -2410,6 +2410,414 @@ var init_globals = __esm({
   }
 });
 
+// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
+var require_path_browserify = __commonJS({
+  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function assertPath(path46) {
+      if (typeof path46 !== "string") {
+        throw new TypeError("Path must be a string. Received " + JSON.stringify(path46));
+      }
+    }
+    function normalizeStringPosix(path46, allowAboveRoot) {
+      var res = "";
+      var lastSegmentLength = 0;
+      var lastSlash = -1;
+      var dots = 0;
+      var code2;
+      for (var i2 = 0; i2 <= path46.length; ++i2) {
+        if (i2 < path46.length)
+          code2 = path46.charCodeAt(i2);
+        else if (code2 === 47)
+          break;
+        else
+          code2 = 47;
+        if (code2 === 47) {
+          if (lastSlash === i2 - 1 || dots === 1) {
+          } else if (lastSlash !== i2 - 1 && dots === 2) {
+            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
+              if (res.length > 2) {
+                var lastSlashIndex = res.lastIndexOf("/");
+                if (lastSlashIndex !== res.length - 1) {
+                  if (lastSlashIndex === -1) {
+                    res = "";
+                    lastSegmentLength = 0;
+                  } else {
+                    res = res.slice(0, lastSlashIndex);
+                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
+                  }
+                  lastSlash = i2;
+                  dots = 0;
+                  continue;
+                }
+              } else if (res.length === 2 || res.length === 1) {
+                res = "";
+                lastSegmentLength = 0;
+                lastSlash = i2;
+                dots = 0;
+                continue;
+              }
+            }
+            if (allowAboveRoot) {
+              if (res.length > 0)
+                res += "/..";
+              else
+                res = "..";
+              lastSegmentLength = 2;
+            }
+          } else {
+            if (res.length > 0)
+              res += "/" + path46.slice(lastSlash + 1, i2);
+            else
+              res = path46.slice(lastSlash + 1, i2);
+            lastSegmentLength = i2 - lastSlash - 1;
+          }
+          lastSlash = i2;
+          dots = 0;
+        } else if (code2 === 46 && dots !== -1) {
+          ++dots;
+        } else {
+          dots = -1;
+        }
+      }
+      return res;
+    }
+    function _format(sep2, pathObject) {
+      var dir = pathObject.dir || pathObject.root;
+      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
+      if (!dir) {
+        return base;
+      }
+      if (dir === pathObject.root) {
+        return dir + base;
+      }
+      return dir + sep2 + base;
+    }
+    var posix = {
+      // path.resolve([from ...], to)
+      resolve: function resolve() {
+        var resolvedPath = "";
+        var resolvedAbsolute = false;
+        var cwd2;
+        for (var i2 = arguments.length - 1; i2 >= -1 && !resolvedAbsolute; i2--) {
+          var path46;
+          if (i2 >= 0)
+            path46 = arguments[i2];
+          else {
+            if (cwd2 === void 0)
+              cwd2 = process.cwd();
+            path46 = cwd2;
+          }
+          assertPath(path46);
+          if (path46.length === 0) {
+            continue;
+          }
+          resolvedPath = path46 + "/" + resolvedPath;
+          resolvedAbsolute = path46.charCodeAt(0) === 47;
+        }
+        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
+        if (resolvedAbsolute) {
+          if (resolvedPath.length > 0)
+            return "/" + resolvedPath;
+          else
+            return "/";
+        } else if (resolvedPath.length > 0) {
+          return resolvedPath;
+        } else {
+          return ".";
+        }
+      },
+      normalize: function normalize(path46) {
+        assertPath(path46);
+        if (path46.length === 0) return ".";
+        var isAbsolute4 = path46.charCodeAt(0) === 47;
+        var trailingSeparator = path46.charCodeAt(path46.length - 1) === 47;
+        path46 = normalizeStringPosix(path46, !isAbsolute4);
+        if (path46.length === 0 && !isAbsolute4) path46 = ".";
+        if (path46.length > 0 && trailingSeparator) path46 += "/";
+        if (isAbsolute4) return "/" + path46;
+        return path46;
+      },
+      isAbsolute: function isAbsolute4(path46) {
+        assertPath(path46);
+        return path46.length > 0 && path46.charCodeAt(0) === 47;
+      },
+      join: function join4() {
+        if (arguments.length === 0)
+          return ".";
+        var joined;
+        for (var i2 = 0; i2 < arguments.length; ++i2) {
+          var arg = arguments[i2];
+          assertPath(arg);
+          if (arg.length > 0) {
+            if (joined === void 0)
+              joined = arg;
+            else
+              joined += "/" + arg;
+          }
+        }
+        if (joined === void 0)
+          return ".";
+        return posix.normalize(joined);
+      },
+      relative: function relative(from, to) {
+        assertPath(from);
+        assertPath(to);
+        if (from === to) return "";
+        from = posix.resolve(from);
+        to = posix.resolve(to);
+        if (from === to) return "";
+        var fromStart = 1;
+        for (; fromStart < from.length; ++fromStart) {
+          if (from.charCodeAt(fromStart) !== 47)
+            break;
+        }
+        var fromEnd = from.length;
+        var fromLen = fromEnd - fromStart;
+        var toStart = 1;
+        for (; toStart < to.length; ++toStart) {
+          if (to.charCodeAt(toStart) !== 47)
+            break;
+        }
+        var toEnd = to.length;
+        var toLen = toEnd - toStart;
+        var length = fromLen < toLen ? fromLen : toLen;
+        var lastCommonSep = -1;
+        var i2 = 0;
+        for (; i2 <= length; ++i2) {
+          if (i2 === length) {
+            if (toLen > length) {
+              if (to.charCodeAt(toStart + i2) === 47) {
+                return to.slice(toStart + i2 + 1);
+              } else if (i2 === 0) {
+                return to.slice(toStart + i2);
+              }
+            } else if (fromLen > length) {
+              if (from.charCodeAt(fromStart + i2) === 47) {
+                lastCommonSep = i2;
+              } else if (i2 === 0) {
+                lastCommonSep = 0;
+              }
+            }
+            break;
+          }
+          var fromCode = from.charCodeAt(fromStart + i2);
+          var toCode = to.charCodeAt(toStart + i2);
+          if (fromCode !== toCode)
+            break;
+          else if (fromCode === 47)
+            lastCommonSep = i2;
+        }
+        var out = "";
+        for (i2 = fromStart + lastCommonSep + 1; i2 <= fromEnd; ++i2) {
+          if (i2 === fromEnd || from.charCodeAt(i2) === 47) {
+            if (out.length === 0)
+              out += "..";
+            else
+              out += "/..";
+          }
+        }
+        if (out.length > 0)
+          return out + to.slice(toStart + lastCommonSep);
+        else {
+          toStart += lastCommonSep;
+          if (to.charCodeAt(toStart) === 47)
+            ++toStart;
+          return to.slice(toStart);
+        }
+      },
+      _makeLong: function _makeLong(path46) {
+        return path46;
+      },
+      dirname: function dirname3(path46) {
+        assertPath(path46);
+        if (path46.length === 0) return ".";
+        var code2 = path46.charCodeAt(0);
+        var hasRoot = code2 === 47;
+        var end = -1;
+        var matchedSlash = true;
+        for (var i2 = path46.length - 1; i2 >= 1; --i2) {
+          code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              end = i2;
+              break;
+            }
+          } else {
+            matchedSlash = false;
+          }
+        }
+        if (end === -1) return hasRoot ? "/" : ".";
+        if (hasRoot && end === 1) return "//";
+        return path46.slice(0, end);
+      },
+      basename: function basename2(path46, ext) {
+        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
+        assertPath(path46);
+        var start = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i2;
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path46.length) {
+          if (ext.length === path46.length && ext === path46) return "";
+          var extIdx = ext.length - 1;
+          var firstNonSlashEnd = -1;
+          for (i2 = path46.length - 1; i2 >= 0; --i2) {
+            var code2 = path46.charCodeAt(i2);
+            if (code2 === 47) {
+              if (!matchedSlash) {
+                start = i2 + 1;
+                break;
+              }
+            } else {
+              if (firstNonSlashEnd === -1) {
+                matchedSlash = false;
+                firstNonSlashEnd = i2 + 1;
+              }
+              if (extIdx >= 0) {
+                if (code2 === ext.charCodeAt(extIdx)) {
+                  if (--extIdx === -1) {
+                    end = i2;
+                  }
+                } else {
+                  extIdx = -1;
+                  end = firstNonSlashEnd;
+                }
+              }
+            }
+          }
+          if (start === end) end = firstNonSlashEnd;
+          else if (end === -1) end = path46.length;
+          return path46.slice(start, end);
+        } else {
+          for (i2 = path46.length - 1; i2 >= 0; --i2) {
+            if (path46.charCodeAt(i2) === 47) {
+              if (!matchedSlash) {
+                start = i2 + 1;
+                break;
+              }
+            } else if (end === -1) {
+              matchedSlash = false;
+              end = i2 + 1;
+            }
+          }
+          if (end === -1) return "";
+          return path46.slice(start, end);
+        }
+      },
+      extname: function extname(path46) {
+        assertPath(path46);
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var preDotState = 0;
+        for (var i2 = path46.length - 1; i2 >= 0; --i2) {
+          var code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              startPart = i2 + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i2 + 1;
+          }
+          if (code2 === 46) {
+            if (startDot === -1)
+              startDot = i2;
+            else if (preDotState !== 1)
+              preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          return "";
+        }
+        return path46.slice(startDot, end);
+      },
+      format: function format(pathObject) {
+        if (pathObject === null || typeof pathObject !== "object") {
+          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
+        }
+        return _format("/", pathObject);
+      },
+      parse: function parse4(path46) {
+        assertPath(path46);
+        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
+        if (path46.length === 0) return ret;
+        var code2 = path46.charCodeAt(0);
+        var isAbsolute4 = code2 === 47;
+        var start;
+        if (isAbsolute4) {
+          ret.root = "/";
+          start = 1;
+        } else {
+          start = 0;
+        }
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i2 = path46.length - 1;
+        var preDotState = 0;
+        for (; i2 >= start; --i2) {
+          code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              startPart = i2 + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i2 + 1;
+          }
+          if (code2 === 46) {
+            if (startDot === -1) startDot = i2;
+            else if (preDotState !== 1) preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          if (end !== -1) {
+            if (startPart === 0 && isAbsolute4) ret.base = ret.name = path46.slice(1, end);
+            else ret.base = ret.name = path46.slice(startPart, end);
+          }
+        } else {
+          if (startPart === 0 && isAbsolute4) {
+            ret.name = path46.slice(1, startDot);
+            ret.base = path46.slice(1, end);
+          } else {
+            ret.name = path46.slice(startPart, startDot);
+            ret.base = path46.slice(startPart, end);
+          }
+          ret.ext = path46.slice(startDot, end);
+        }
+        if (startPart > 0) ret.dir = path46.slice(0, startPart - 1);
+        else if (isAbsolute4) ret.dir = "/";
+        return ret;
+      },
+      sep: "/",
+      delimiter: ":",
+      win32: null,
+      posix: null
+    };
+    posix.posix = posix;
+    module2.exports = posix;
+  }
+});
+
 // site/shims/url.ts
 var url_exports = {};
 __export(url_exports, {
@@ -3805,414 +4213,6 @@ var init_tslib_es6 = __esm({
       __disposeResources,
       __rewriteRelativeImportExtension
     };
-  }
-});
-
-// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
-var require_path_browserify = __commonJS({
-  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function assertPath(path46) {
-      if (typeof path46 !== "string") {
-        throw new TypeError("Path must be a string. Received " + JSON.stringify(path46));
-      }
-    }
-    function normalizeStringPosix(path46, allowAboveRoot) {
-      var res = "";
-      var lastSegmentLength = 0;
-      var lastSlash = -1;
-      var dots = 0;
-      var code2;
-      for (var i2 = 0; i2 <= path46.length; ++i2) {
-        if (i2 < path46.length)
-          code2 = path46.charCodeAt(i2);
-        else if (code2 === 47)
-          break;
-        else
-          code2 = 47;
-        if (code2 === 47) {
-          if (lastSlash === i2 - 1 || dots === 1) {
-          } else if (lastSlash !== i2 - 1 && dots === 2) {
-            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
-              if (res.length > 2) {
-                var lastSlashIndex = res.lastIndexOf("/");
-                if (lastSlashIndex !== res.length - 1) {
-                  if (lastSlashIndex === -1) {
-                    res = "";
-                    lastSegmentLength = 0;
-                  } else {
-                    res = res.slice(0, lastSlashIndex);
-                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
-                  }
-                  lastSlash = i2;
-                  dots = 0;
-                  continue;
-                }
-              } else if (res.length === 2 || res.length === 1) {
-                res = "";
-                lastSegmentLength = 0;
-                lastSlash = i2;
-                dots = 0;
-                continue;
-              }
-            }
-            if (allowAboveRoot) {
-              if (res.length > 0)
-                res += "/..";
-              else
-                res = "..";
-              lastSegmentLength = 2;
-            }
-          } else {
-            if (res.length > 0)
-              res += "/" + path46.slice(lastSlash + 1, i2);
-            else
-              res = path46.slice(lastSlash + 1, i2);
-            lastSegmentLength = i2 - lastSlash - 1;
-          }
-          lastSlash = i2;
-          dots = 0;
-        } else if (code2 === 46 && dots !== -1) {
-          ++dots;
-        } else {
-          dots = -1;
-        }
-      }
-      return res;
-    }
-    function _format(sep2, pathObject) {
-      var dir = pathObject.dir || pathObject.root;
-      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
-      if (!dir) {
-        return base;
-      }
-      if (dir === pathObject.root) {
-        return dir + base;
-      }
-      return dir + sep2 + base;
-    }
-    var posix = {
-      // path.resolve([from ...], to)
-      resolve: function resolve() {
-        var resolvedPath = "";
-        var resolvedAbsolute = false;
-        var cwd2;
-        for (var i2 = arguments.length - 1; i2 >= -1 && !resolvedAbsolute; i2--) {
-          var path46;
-          if (i2 >= 0)
-            path46 = arguments[i2];
-          else {
-            if (cwd2 === void 0)
-              cwd2 = process.cwd();
-            path46 = cwd2;
-          }
-          assertPath(path46);
-          if (path46.length === 0) {
-            continue;
-          }
-          resolvedPath = path46 + "/" + resolvedPath;
-          resolvedAbsolute = path46.charCodeAt(0) === 47;
-        }
-        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
-        if (resolvedAbsolute) {
-          if (resolvedPath.length > 0)
-            return "/" + resolvedPath;
-          else
-            return "/";
-        } else if (resolvedPath.length > 0) {
-          return resolvedPath;
-        } else {
-          return ".";
-        }
-      },
-      normalize: function normalize(path46) {
-        assertPath(path46);
-        if (path46.length === 0) return ".";
-        var isAbsolute4 = path46.charCodeAt(0) === 47;
-        var trailingSeparator = path46.charCodeAt(path46.length - 1) === 47;
-        path46 = normalizeStringPosix(path46, !isAbsolute4);
-        if (path46.length === 0 && !isAbsolute4) path46 = ".";
-        if (path46.length > 0 && trailingSeparator) path46 += "/";
-        if (isAbsolute4) return "/" + path46;
-        return path46;
-      },
-      isAbsolute: function isAbsolute4(path46) {
-        assertPath(path46);
-        return path46.length > 0 && path46.charCodeAt(0) === 47;
-      },
-      join: function join4() {
-        if (arguments.length === 0)
-          return ".";
-        var joined;
-        for (var i2 = 0; i2 < arguments.length; ++i2) {
-          var arg = arguments[i2];
-          assertPath(arg);
-          if (arg.length > 0) {
-            if (joined === void 0)
-              joined = arg;
-            else
-              joined += "/" + arg;
-          }
-        }
-        if (joined === void 0)
-          return ".";
-        return posix.normalize(joined);
-      },
-      relative: function relative(from, to) {
-        assertPath(from);
-        assertPath(to);
-        if (from === to) return "";
-        from = posix.resolve(from);
-        to = posix.resolve(to);
-        if (from === to) return "";
-        var fromStart = 1;
-        for (; fromStart < from.length; ++fromStart) {
-          if (from.charCodeAt(fromStart) !== 47)
-            break;
-        }
-        var fromEnd = from.length;
-        var fromLen = fromEnd - fromStart;
-        var toStart = 1;
-        for (; toStart < to.length; ++toStart) {
-          if (to.charCodeAt(toStart) !== 47)
-            break;
-        }
-        var toEnd = to.length;
-        var toLen = toEnd - toStart;
-        var length = fromLen < toLen ? fromLen : toLen;
-        var lastCommonSep = -1;
-        var i2 = 0;
-        for (; i2 <= length; ++i2) {
-          if (i2 === length) {
-            if (toLen > length) {
-              if (to.charCodeAt(toStart + i2) === 47) {
-                return to.slice(toStart + i2 + 1);
-              } else if (i2 === 0) {
-                return to.slice(toStart + i2);
-              }
-            } else if (fromLen > length) {
-              if (from.charCodeAt(fromStart + i2) === 47) {
-                lastCommonSep = i2;
-              } else if (i2 === 0) {
-                lastCommonSep = 0;
-              }
-            }
-            break;
-          }
-          var fromCode = from.charCodeAt(fromStart + i2);
-          var toCode = to.charCodeAt(toStart + i2);
-          if (fromCode !== toCode)
-            break;
-          else if (fromCode === 47)
-            lastCommonSep = i2;
-        }
-        var out = "";
-        for (i2 = fromStart + lastCommonSep + 1; i2 <= fromEnd; ++i2) {
-          if (i2 === fromEnd || from.charCodeAt(i2) === 47) {
-            if (out.length === 0)
-              out += "..";
-            else
-              out += "/..";
-          }
-        }
-        if (out.length > 0)
-          return out + to.slice(toStart + lastCommonSep);
-        else {
-          toStart += lastCommonSep;
-          if (to.charCodeAt(toStart) === 47)
-            ++toStart;
-          return to.slice(toStart);
-        }
-      },
-      _makeLong: function _makeLong(path46) {
-        return path46;
-      },
-      dirname: function dirname3(path46) {
-        assertPath(path46);
-        if (path46.length === 0) return ".";
-        var code2 = path46.charCodeAt(0);
-        var hasRoot = code2 === 47;
-        var end = -1;
-        var matchedSlash = true;
-        for (var i2 = path46.length - 1; i2 >= 1; --i2) {
-          code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              end = i2;
-              break;
-            }
-          } else {
-            matchedSlash = false;
-          }
-        }
-        if (end === -1) return hasRoot ? "/" : ".";
-        if (hasRoot && end === 1) return "//";
-        return path46.slice(0, end);
-      },
-      basename: function basename2(path46, ext) {
-        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
-        assertPath(path46);
-        var start = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i2;
-        if (ext !== void 0 && ext.length > 0 && ext.length <= path46.length) {
-          if (ext.length === path46.length && ext === path46) return "";
-          var extIdx = ext.length - 1;
-          var firstNonSlashEnd = -1;
-          for (i2 = path46.length - 1; i2 >= 0; --i2) {
-            var code2 = path46.charCodeAt(i2);
-            if (code2 === 47) {
-              if (!matchedSlash) {
-                start = i2 + 1;
-                break;
-              }
-            } else {
-              if (firstNonSlashEnd === -1) {
-                matchedSlash = false;
-                firstNonSlashEnd = i2 + 1;
-              }
-              if (extIdx >= 0) {
-                if (code2 === ext.charCodeAt(extIdx)) {
-                  if (--extIdx === -1) {
-                    end = i2;
-                  }
-                } else {
-                  extIdx = -1;
-                  end = firstNonSlashEnd;
-                }
-              }
-            }
-          }
-          if (start === end) end = firstNonSlashEnd;
-          else if (end === -1) end = path46.length;
-          return path46.slice(start, end);
-        } else {
-          for (i2 = path46.length - 1; i2 >= 0; --i2) {
-            if (path46.charCodeAt(i2) === 47) {
-              if (!matchedSlash) {
-                start = i2 + 1;
-                break;
-              }
-            } else if (end === -1) {
-              matchedSlash = false;
-              end = i2 + 1;
-            }
-          }
-          if (end === -1) return "";
-          return path46.slice(start, end);
-        }
-      },
-      extname: function extname(path46) {
-        assertPath(path46);
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var preDotState = 0;
-        for (var i2 = path46.length - 1; i2 >= 0; --i2) {
-          var code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              startPart = i2 + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i2 + 1;
-          }
-          if (code2 === 46) {
-            if (startDot === -1)
-              startDot = i2;
-            else if (preDotState !== 1)
-              preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          return "";
-        }
-        return path46.slice(startDot, end);
-      },
-      format: function format(pathObject) {
-        if (pathObject === null || typeof pathObject !== "object") {
-          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
-        }
-        return _format("/", pathObject);
-      },
-      parse: function parse4(path46) {
-        assertPath(path46);
-        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-        if (path46.length === 0) return ret;
-        var code2 = path46.charCodeAt(0);
-        var isAbsolute4 = code2 === 47;
-        var start;
-        if (isAbsolute4) {
-          ret.root = "/";
-          start = 1;
-        } else {
-          start = 0;
-        }
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i2 = path46.length - 1;
-        var preDotState = 0;
-        for (; i2 >= start; --i2) {
-          code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              startPart = i2 + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i2 + 1;
-          }
-          if (code2 === 46) {
-            if (startDot === -1) startDot = i2;
-            else if (preDotState !== 1) preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          if (end !== -1) {
-            if (startPart === 0 && isAbsolute4) ret.base = ret.name = path46.slice(1, end);
-            else ret.base = ret.name = path46.slice(startPart, end);
-          }
-        } else {
-          if (startPart === 0 && isAbsolute4) {
-            ret.name = path46.slice(1, startDot);
-            ret.base = path46.slice(1, end);
-          } else {
-            ret.name = path46.slice(startPart, startDot);
-            ret.base = path46.slice(startPart, end);
-          }
-          ret.ext = path46.slice(startDot, end);
-        }
-        if (startPart > 0) ret.dir = path46.slice(0, startPart - 1);
-        else if (isAbsolute4) ret.dir = "/";
-        return ret;
-      },
-      sep: "/",
-      delimiter: ":",
-      win32: null,
-      posix: null
-    };
-    posix.posix = posix;
-    module2.exports = posix;
   }
 });
 
@@ -28252,6 +28252,91 @@ var require_hdrhistogram_umd = __commonJS({
 // site/transport.ts
 init_globals();
 
+// src/daemon/foundations/session-env.ts
+init_globals();
+
+// src/utils/outcome.ts
+init_globals();
+function ok(value) {
+  return { kind: "ok", value };
+}
+var ABSENT = { kind: "absent" };
+function failed(reason, failedAt) {
+  return { kind: "failed", reason, failedAt };
+}
+function orElse(outcome, fallback) {
+  return outcome?.kind === "ok" ? outcome.value : fallback;
+}
+var PENDINGS = {
+  unread: Object.freeze({ kind: "pending", why: "unread" }),
+  superseded: Object.freeze({ kind: "pending", why: "superseded" })
+};
+function pendingOf(why2) {
+  return PENDINGS[why2];
+}
+function isPending(value) {
+  return typeof value === "object" && value !== null && value.kind === "pending";
+}
+
+// src/claude-settings.ts
+init_globals();
+var import_node_path = __toESM(require_path_browserify(), 1);
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path.default.join(home, ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path.default.join(configDir, "settings.json");
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process.platform);
+var projectLocalSettingsFile = (projectDir) => import_node_path.default.join(projectDir, ".claude", "settings.local.json");
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// src/daemon/foundations/session-env.ts
+function plainEnvironment(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).flatMap(
+      ([name, value]) => value === void 0 ? [] : [[name, value]]
+    )
+  );
+}
+function variableOf(env2, name) {
+  return Object.hasOwn(env2, name) ? ok(env2[name]) : ABSENT;
+}
+var NOT_HEARD = {
+  kind: "failed",
+  reason: "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps"
+};
+var NOT_PASSED_ON = [
+  CLAUDE_CONFIG_DIR_ENV,
+  "TMUX",
+  "TMUX_PANE"
+];
+function sessionEnvironment(reported, facts) {
+  return {
+    ...Object.fromEntries(
+      Object.entries(reported).filter(
+        ([name]) => !NOT_PASSED_ON.includes(name)
+      )
+    ),
+    CLAUDE_CODE_SESSION_ID: facts.sessionId,
+    CLAUDE_PROJECT_DIR: facts.projectDir,
+    ...facts.claudeConfigDir !== void 0 && {
+      [CLAUDE_CONFIG_DIR_ENV]: facts.claudeConfigDir
+    }
+  };
+}
+
 // src/click/wire.ts
 init_globals();
 init_url();
@@ -29957,7 +30042,7 @@ init_globals();
 
 // src/daemon/session-book.ts
 init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
+var import_node_path2 = __toESM(require_path_browserify(), 1);
 
 // src/renderer-interface/request-context.ts
 init_globals();
@@ -29973,59 +30058,6 @@ function heardContextOf(req) {
     session: req.hookData.session_id,
     durable: durableOf(req),
     live: req
-  };
-}
-
-// src/daemon/foundations/session-env.ts
-init_globals();
-
-// src/utils/outcome.ts
-init_globals();
-function ok(value) {
-  return { kind: "ok", value };
-}
-var ABSENT = { kind: "absent" };
-function failed(reason, failedAt) {
-  return { kind: "failed", reason, failedAt };
-}
-function orElse(outcome, fallback) {
-  return outcome?.kind === "ok" ? outcome.value : fallback;
-}
-var PENDINGS = {
-  unread: Object.freeze({ kind: "pending", why: "unread" }),
-  superseded: Object.freeze({ kind: "pending", why: "superseded" })
-};
-function pendingOf(why2) {
-  return PENDINGS[why2];
-}
-function isPending(value) {
-  return typeof value === "object" && value !== null && value.kind === "pending";
-}
-
-// src/daemon/foundations/session-env.ts
-function plainEnvironment(env2) {
-  return Object.fromEntries(
-    Object.entries(env2).flatMap(
-      ([name, value]) => value === void 0 ? [] : [[name, value]]
-    )
-  );
-}
-function variableOf(env2, name) {
-  return Object.hasOwn(env2, name) ? ok(env2[name]) : ABSENT;
-}
-var NOT_HEARD = {
-  kind: "failed",
-  reason: "no request from this session since the daemon started, so its environment is not known yet"
-};
-function sessionEnvironment(reported, facts) {
-  const { CLAUDE_CONFIG_DIR: _reportedDir, ...rest2 } = reported;
-  return {
-    ...rest2,
-    CLAUDE_CODE_SESSION_ID: facts.sessionId,
-    CLAUDE_PROJECT_DIR: facts.projectDir,
-    ...facts.claudeConfigDir !== void 0 && {
-      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
-    }
   };
 }
 
@@ -30066,7 +30098,7 @@ var SESSION_BOOK_FILE = {
     const origin = originOfRecord(value);
     if (origin === null) return null;
     const { claudeConfigDir: claudeConfigDir2 } = value;
-    if (!(0, import_node_path.isAbsolute)(origin.projectDir) || !(0, import_node_path.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path.isAbsolute)(claudeConfigDir2)))
+    if (!(0, import_node_path2.isAbsolute)(origin.projectDir) || !(0, import_node_path2.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path2.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path2.isAbsolute)(claudeConfigDir2)))
       return null;
     return {
       origin,
@@ -30143,7 +30175,7 @@ var SessionBook = class {
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 
 // src/proc/launcher.ts
 init_globals();
@@ -30264,7 +30296,7 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path2.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path3.default.resolve(run3.cwd, program) : program,
       args: [...args],
       // The program's own variables over its session's environment.
       environment: environment.value,
@@ -30315,7 +30347,7 @@ var Runs = class {
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/renderer-name.ts
 init_globals();
@@ -30327,19 +30359,19 @@ function xdgEnv(env2, name) {
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path3.default.join(host.home, ".local", "state");
-  return import_node_path3.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path4.default.join(host.home, ".local", "state");
+  return import_node_path4.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path3.default.join(host.home, ".cache");
-  return import_node_path3.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path4.default.join(host.home, ".cache");
+  return import_node_path4.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path3.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function leasePathFor(sockPath) {
   return `${sockPath}.lease`;
@@ -30348,26 +30380,26 @@ function leasePath(host) {
   return leasePathFor(socketPath(host));
 }
 function sessionStatePath(host) {
-  return import_node_path3.default.join(stateDir(host), "session-state.json");
+  return import_node_path4.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path3.default.join(stateDir(host), "settings-history.json");
+  return import_node_path4.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path3.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path3.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path4.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path3.default.join(stateDir(host), "watch-probe");
+  return import_node_path4.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path3.default.join(stateDir(host), "daemon.log");
+  return import_node_path4.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -30378,7 +30410,7 @@ function daemonPaths(host) {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
-    sessionBook: import_node_path3.default.join(stateDir(host), "session-book.json"),
+    sessionBook: import_node_path4.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host)
   };
@@ -30390,21 +30422,21 @@ function profilePaths(paths2, name) {
       settingsHistory: paths2.settingsHistory,
       documents: paths2.state
     };
-  const state = import_node_path3.default.join(paths2.state, "renderers", name, "state");
+  const state = import_node_path4.default.join(paths2.state, "renderers", name, "state");
   return {
-    sessionState: import_node_path3.default.join(state, import_node_path3.default.basename(paths2.sessionState)),
-    settingsHistory: import_node_path3.default.join(state, import_node_path3.default.basename(paths2.settingsHistory)),
+    sessionState: import_node_path4.default.join(state, import_node_path4.default.basename(paths2.sessionState)),
+    settingsHistory: import_node_path4.default.join(state, import_node_path4.default.basename(paths2.settingsHistory)),
     documents: state
   };
 }
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path3.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path4.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path3.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path3.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path4.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path4.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -34717,30 +34749,6 @@ function stampFailureOf(document) {
   return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }
 
-// src/claude-settings.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path4.default.join(home, ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path4.default.join(configDir, "settings.json");
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process.platform);
-var projectLocalSettingsFile = (projectDir) => import_node_path4.default.join(projectDir, ".claude", "settings.local.json");
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-
 // src/daemon/source-runs.ts
 init_globals();
 
@@ -36155,7 +36163,9 @@ var SourceRuns = class {
       name: `source.${kind}`,
       scope: "daemon",
       keyOf: (run3) => run3.digest,
-      fields: ({ digest: digest2, run: { identity: identity2 } }, holders) => `digest=${shortDigest(digest2)} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
+      // [LAW:nothing-unseen] Its declaration's digest beside its own, so
+      // the entry is found from the session's subscriptions that name it.
+      fields: ({ digest: digest2, run: run3 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run3.digest)} where=${valueOf(whereOf(run3.identity.read))} sharedBy=${holders}`,
       // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
       // readers through this one function; text/regex/json are three
       // parsers through it.
@@ -36255,7 +36265,7 @@ function sessionRunOf(judged, environment) {
   );
   return {
     kind: "ok",
-    value: { digest: digestOf({ identity: run3.identity, env: env2 }), run: run3, env: env2 }
+    value: { digest: digestOf({ run: run3.digest, env: env2 }), run: run3, env: env2 }
   };
 }
 
@@ -36305,7 +36315,8 @@ function gitAt({
     hookData2.workspace?.project_dir
   ];
 }
-function declareLanes(owners, holds2, facts, environment, sources) {
+function declareLanes(owners, holds2, facts, sources) {
+  const { environment } = facts;
   const pane = facts.hints.tmux ?? null;
   const faults = [];
   const declare = (lane, take) => {
@@ -52452,7 +52463,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.closing,
       parts.log,
       checked.req,
-      checked.environment,
+      // [LAW:one-source-of-truth] The book's, the newest request's, so a
+      // request that arrived behind a newer one runs nothing in its older
+      // environment.
+      parts.sessionBook.environmentOf(checked.req.hookData.session_id),
       order2,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
@@ -72784,13 +72798,7 @@ var Collector = class {
         acquired,
         released
       } = holds2.declare(
-        () => declareLanes(
-          this.deps.owners,
-          holds2,
-          locator,
-          locator.environment,
-          subscriptions
-        )
+        () => declareLanes(this.deps.owners, holds2, locator, subscriptions)
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -75782,7 +75790,14 @@ var SHELL_BASE_ENV = [
   "SHELL",
   "TERM",
   "TMPDIR",
-  "USER"
+  "USER",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_DIRS",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_DIRS",
+  "XDG_DATA_HOME",
+  "XDG_RUNTIME_DIR",
+  "XDG_STATE_HOME"
 ];
 function shellEnvOf(declared = []) {
   return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
@@ -83881,11 +83896,11 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // arrived over SSH. All three come through the augmented payload rather
     // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
-    //     DAEMON, which is detached and serves every session for this user at
-    //     once — its `SSH_*` env describes whichever shell happened to spawn
-    //     it. The fact is captured by the live client and carried as a wire
-    //     hint (the `termCols` pattern); the payload is the only honest source.
+    //   • `host.ssh` is the client's judgement over three variables (any of
+    //     `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY` set), carried as a wire
+    //     hint (the `termCols` pattern), so the payload holds one boolean that
+    //     the bar and the doctor read alike; an `env` variable reads one
+    //     string.
     //   • `host.name`/`host.user` are machine facts the daemon reads directly,
     //     so they cost two syscalls instead of a per-render subprocess.
     //
@@ -96164,6 +96179,7 @@ async function frame(size) {
     v: PROTOCOL_VERSION,
     kind: "render",
     encoding: "frame",
+    env: plainEnvironment(HOST.env),
     hookData: hookData(),
     args: ["cc-candybar"],
     cwd: REPO,
