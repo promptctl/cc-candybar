@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-806",
+      "ref": "refs/pull/806/merge",
+      "sha": "d28568ac903429080e16b1e7a5f3ba82122ab636",
+      "timestamp": "2026-11-18T16:04:50.769Z",
+      "commits": [
+        {
+          "sha": "d28568ac903429080e16b1e7a5f3ba82122ab636",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:02:17Z",
+          "message": "Merge f6d83d50d20f9072aab6679bb9c9f6ae122dccdf into 9ffa98534dfa6e86e99e386945d6eae856f1ecaa\n"
+        },
+        {
+          "sha": "f6d83d50d20f9072aab6679bb9c9f6ae122dccdf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:29:04-07:00",
+          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-807",
       "ref": "refs/pull/807/merge",
       "sha": "eb061d05aaaa69385818be754c4aa3a8dbb7d095",
@@ -57,28 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:00:01-07:00",
           "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl) (#799)\n\n* fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n\n* fix(edit): edit chrome spells preset and placement with one injective, readable identifier (5bfl)\n\nA placement or preset name is letters and digits as they are and every\nother code point as Z and six hex digits, so names that differ only in\npunctuation keep their own chrome and menu keys. The preset collision\nguard protected only the lossy preset spelling and is deleted.\n\n* fix(edit): chrome name builders take names as written and escape inside (5bfl)"
-        }
-      ]
-    },
-    {
-      "version": "pr-806",
-      "ref": "refs/pull/806/merge",
-      "sha": "f2146118da338ffd0db402ef1937b0ea96a42111",
-      "timestamp": "2026-11-18T16:00:12.654Z",
-      "commits": [
-        {
-          "sha": "f2146118da338ffd0db402ef1937b0ea96a42111",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:59:03-07:00",
-          "message": "Merge 36cd6084ad390c6249d7426b31c422eb68397722 into 3ce2357e96988528f010578e31cb069ce8d02ecc\n"
-        },
-        {
-          "sha": "36cd6084ad390c6249d7426b31c422eb68397722",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:29:04-07:00",
-          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
         }
       ]
     }
