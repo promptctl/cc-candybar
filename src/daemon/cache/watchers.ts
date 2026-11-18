@@ -53,8 +53,8 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // its target matters, not for as long as one value derived from it.
 //
 // Nor is holding one free, so a polled path opens none: one sweep lstats every
-// polled path each period, and its cost is the paths, whatever happens in the
-// tree around them.
+// polled path each period, and an acquire or follow lstats its own once each,
+// whatever happens in the tree around them.
 
 // [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
 // single source consumers derive from (e.g. the load harness's git-churn
@@ -101,7 +101,10 @@ interface Listener {
 }
 
 // [LAW:single-enforcer] One record per polled path, shared by every slot that
-// names it: what the last read of the path found, and who hears it change.
+// names it: what the last sweep of the path found, and who hears it change.
+// [LAW:one-source-of-truth] Only the sweep reads an entry into it, so it is
+// never newer than any holder's read: a holder may read before it follows,
+// and an entry taken at the follow would hide a change between the two.
 interface PolledPath {
   readonly path: string;
   entry: string;
@@ -193,6 +196,9 @@ const dirId = (target: DirTarget): string =>
 // fires as it starts failing and as it stops, and the holder's own read of it
 // fails loudly in between. A missing parent and a folder replaced on the way
 // arrive the same way, so a polled path is never deaf and never judged.
+// An entry no read gives: a path holding it differs at the next sweep.
+const UNSEEN = "unseen";
+
 function entryAt(at: string): string {
   try {
     const s = fs.lstatSync(at, { bigint: true });
@@ -263,6 +269,7 @@ export class WatcherRegistry {
     // [LAW:single-enforcer] Every acquire names its directories as they are
     // now: joining a slot judges its directories as opening one does.
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    if (shared !== undefined) this.sighted(shared.polled);
     const slot = shared ?? this.opened(key, targets);
     const holder: Holder = { onInvalidate };
     slot.holders.add(holder);
@@ -275,9 +282,25 @@ export class WatcherRegistry {
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    return followWatch(held, spec, (key, targets) =>
+    const followed = followWatch(held, spec, (key, targets) =>
       this.acquire(key, targets, onInvalidate),
     );
+    // A rebound acquired, which sighted; a closed registry holds no slot.
+    if (followed.move === "kept")
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    return followed;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  private sighted(records: readonly PolledPath[]): void {
+    for (const record of records)
+      if (entryAt(record.path) !== record.entry) record.entry = UNSEEN;
   }
 
   private opened(key: string, targets: WatchTargets): WatcherSlot {
@@ -546,12 +569,13 @@ export class WatcherRegistry {
   }
 
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // the acquire is a change; or the one already held, sighted.
   private polledAt(at: string): PolledPath {
     const held = this.polled.get(at);
-    if (held !== undefined) return held;
+    if (held !== undefined) {
+      this.sighted([held]);
+      return held;
+    }
     const record: PolledPath = {
       path: at,
       entry: entryAt(at),
@@ -565,10 +589,11 @@ export class WatcherRegistry {
   // path is polled and the registry is open. The reads are synchronous, so no
   // two sweeps overlap and no older read lands over a newer one.
   // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path, so a mount under a polled path that stops
-  // answering stops every bar until it answers. The paths are a session's own
-  // files (its transcript, its settings, its config, its git directory), which
-  // the daemon reads on this thread to render anyway.
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
   private armSweep(): void {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
