@@ -38,7 +38,6 @@ import {
   type ConfigPath,
 } from "../config/loader/persist-target.js";
 import {
-  effectivePresetName,
   presetByName,
   presetGlobals,
   presetNames,
@@ -60,6 +59,7 @@ import {
 } from "../themes/policy.js";
 import { type SettingCounts } from "./render-payload.js";
 import {
+  presetOf,
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
@@ -236,11 +236,9 @@ export function durableLanding(
   sessionPick: (key: string) => string | null,
   key: string,
 ): DurableLanding {
-  const preset = effectivePresetName(
-    sessionPick(SETTINGS.preset.sessionKey),
-    config.globals.preset,
-    config.presets,
-  );
+  // [LAW:one-source-of-truth] The preset the session renders, as the render
+  // resolves it.
+  const preset = presetOf(config, sessionPick);
   const target = parsePersistTarget(key);
   return {
     key:
