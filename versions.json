@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-834",
+      "ref": "refs/pull/834/merge",
+      "sha": "7593e639dda420a51dbe27a2c1e42d44ad7204f2",
+      "timestamp": "2026-11-18T22:33:35.892Z",
+      "commits": [
+        {
+          "sha": "7593e639dda420a51dbe27a2c1e42d44ad7204f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:32:29-07:00",
+          "message": "Merge ac6bf4fb1a4f55d233d2b0e32311b4ec76e033d2 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "ac6bf4fb1a4f55d233d2b0e32311b4ec76e033d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:27:27-07:00",
+          "message": "fix(git): the daemon's git and forge reads run without the spawning shell's repository variables (38p6)\n\nThe detached daemon's environment is whichever shell spawned it, so a\nGIT_DIR, GIT_WORK_TREE or GH_REPO from a git hook, a `rebase --exec` or a\nvcsh shell pointed every session's git and PR read at that shell's\nrepository.\n\nThe process now settles the names once at start (`git rev-parse\n--local-env-vars`, plus gh's GH_REPO) and hands them to createDaemon as\ndata; the daemon builds its one environment without them before anything\nreads it, so every launch that inherits it runs without them and a read\nasks nothing. A git that fails the ask or answers nothing leaves a fixed\nlist (git 2.50.1's answer), warned of in daemon.log, as a standing warning\non every bar and in a new `git environment` doctor row, which otherwise\nnames the dropped variables. plugin install settles its own through the\nsame function and warns the same way. The Pages site's simulated git\nanswers the ask.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "9187c64a31d7678e5391997f73ef0f8636dad37d",
