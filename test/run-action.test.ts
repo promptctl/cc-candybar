@@ -879,7 +879,12 @@ describe("the run owner", () => {
       ),
     });
     expect(o.held).toEqual([]);
-    expect(o.runs.stats()).toMatchObject({ running: 0, failed: 1 });
+    expect(o.runs.stats()).toMatchObject({
+      started: 0,
+      failed: 0,
+      refused: 1,
+      running: 0,
+    });
   });
 
   test("a non-zero exit fails with the trimmed stderr, and counts as failed", async () => {

@@ -8,8 +8,7 @@
 
 import type { EffectiveGlobals } from "../config/effective-globals.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
-import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
-import { pendingOf } from "../utils/outcome.js";
+import { UNREAD_ENV, UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 import type { Fact } from "../facts/fact.js";
 
 // The selections whose config rung may hold a rule, as the resolution left
@@ -28,7 +27,7 @@ export interface HostReadings {
 // variable still unread.
 export const NOTHING_READ: HostReadings = {
   run: () => UNREAD_RUN,
-  env: () => pendingOf("unread"),
+  env: () => UNREAD_ENV,
 };
 
 export type ViewSource = ViewInputs & HostReadings;

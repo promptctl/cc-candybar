@@ -1456,8 +1456,8 @@ function runOf(
     action,
     program,
     args,
-    // The action's own variables: the host lays them over the session's
-    // environment, which no renderer holds.
+    // [LAW:single-enforcer] The action's own variables only: the host lays
+    // them over the session's environment, which no renderer holds.
     env: drawn.env,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,

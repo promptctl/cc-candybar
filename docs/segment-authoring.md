@@ -92,7 +92,7 @@ statusline in — the directory the bar's git facts are read in — so a command
 asks about "this repo" answers for the session's repo. It runs in the
 session's environment, the one Claude Code gave the statusline, so a script on
 that `PATH` is found. It sees only the variables it needs: `HOME`, `LANG`,
-`LC_ALL`, `LC_CTYPE`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `TMPDIR`, `USER`,
+`LC_ALL`, `LC_CTYPE`, `LOGNAME`, `PATH`, `SHELL`, `TMPDIR`, `USER`,
 the XDG base directories (`XDG_CONFIG_HOME` and the rest), and any more it
 names in `env` (Step 2), such as `SSH_AUTH_SOCK` for a command that reaches a
 remote over ssh. A command the

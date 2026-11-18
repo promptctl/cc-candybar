@@ -37,6 +37,10 @@ export interface RunFact {
   readonly fault: string | null;
 }
 
+// An `env` variable no world state carries yet: the host has not handed it
+// in.
+export const UNREAD_ENV: Fact<string> = pendingOf("unread");
+
 // [LAW:types-are-the-program] A run no world state carries yet: never read,
 // with no watch to fault.
 export const UNREAD_RUN: RunFact = {

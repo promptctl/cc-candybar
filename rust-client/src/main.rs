@@ -358,14 +358,16 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     }
     // The environment Claude Code gave this client, which the daemon runs the
     // session's programs in (src/daemon/foundations/session-env.ts). JSON
-    // carries only UTF-8, so a name or value that is not reads lossily.
+    // carries only UTF-8, so a variable whose name or value is not is left
+    // unset: its value with the bytes replaced would name a path that is not
+    // there.
     request["env"] = serde_json::Value::Object(
         env::vars_os()
-            .map(|(name, value)| {
-                (
-                    name.to_string_lossy().into_owned(),
-                    serde_json::Value::String(value.to_string_lossy().into_owned()),
-                )
+            .filter_map(|(name, value)| {
+                Some((
+                    name.into_string().ok()?,
+                    serde_json::Value::String(value.into_string().ok()?),
+                ))
             })
             .collect(),
     );

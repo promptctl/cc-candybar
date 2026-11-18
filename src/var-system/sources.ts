@@ -58,7 +58,7 @@ import {
   type RunRefresh,
   type SourceRead,
 } from "../facts/source-identity.js";
-import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
+import { UNREAD_ENV, UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 import type { Fact } from "../facts/fact.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
@@ -216,7 +216,7 @@ const UNBOUND: InputSource = {
   },
   read: () => pendingOf("unread"),
   run: () => UNREAD_RUN,
-  env: () => pendingOf("unread"),
+  env: () => UNREAD_ENV,
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",

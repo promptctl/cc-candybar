@@ -22,6 +22,16 @@ export type Plain<T> = unknown extends T
         ? ReadonlyArray<Plain<E>>
         : { readonly [K in keyof T]: Plain<T[K]> };
 
+// [LAW:single-enforcer] A record's own value at `key`. A record that crossed
+// as JSON has a prototype, so a key a config names, like `constructor`, reads
+// the prototype's member unless only own keys are read.
+export function ownValue<T>(
+  record: Readonly<Record<string, T>>,
+  key: string,
+): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 // [LAW:types-are-the-program] An object written as the projection of a `T`:
 // every key of `T`, optional ones included, and no other. Used with
 // `satisfies`, so a field added to `T` fails to compile until its projection

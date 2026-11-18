@@ -49,6 +49,7 @@ import {
   readingsOf,
   settledLanes,
   type DeclaredLanes,
+  type Locator,
   type Readings,
   type RenderPayloadDeps,
 } from "./readings.js";
@@ -169,10 +170,6 @@ interface StampInputs {
   readonly owners: Ok<Readings> | Failed;
   readonly daemon: DaemonFacts;
 }
-
-// What a session's declaration keys on, of the request that named it: its
-// keys, and the environment its runs run in, which stays in the host.
-type Locator = ViewFacts & { readonly environment: SessionEnvironment };
 
 const locatorOf = (
   req: ViewFacts,

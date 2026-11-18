@@ -7,7 +7,8 @@
 // the names it declares: what a command needs to find programs, a home and
 // the XDG base directories its tools keep their config and data under, a
 // temporary directory and its locale. Each is the same in every session of
-// one user, so naming it splits no run. Chosen so the bundled default and the
+// one user, so naming it splits no run; `TERM` is not, since a session in
+// tmux and one in a bare terminal differ, and a command's stdout is a pipe. Chosen so the bundled default and the
 // documented examples name nothing more.
 export const SHELL_BASE_ENV: readonly string[] = [
   "HOME",
@@ -17,7 +18,6 @@ export const SHELL_BASE_ENV: readonly string[] = [
   "LOGNAME",
   "PATH",
   "SHELL",
-  "TERM",
   "TMPDIR",
   "USER",
   "XDG_CACHE_HOME",

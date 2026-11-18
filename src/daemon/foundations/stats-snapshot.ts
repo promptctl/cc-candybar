@@ -213,6 +213,8 @@ export interface RunStats {
   // Ended with a non-zero exit, or could not be started.
   readonly failed: number;
   readonly timedOut: number;
+  // Never started: the host held no environment for its session.
+  readonly refused: number;
   // In flight now.
   readonly running: number;
 }

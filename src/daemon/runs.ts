@@ -89,6 +89,7 @@ export class Runs {
   private readonly inFlight = new Set<AbortController>();
   private started = 0;
   private failed = 0;
+  private refused = 0;
   private timedOut = 0;
   private closed = false;
 
@@ -106,7 +107,7 @@ export class Runs {
     // hold runs nothing: the host's own environment is never a session's.
     const environment = this.deps.environmentOf(run.session);
     if (environment.kind === "failed") {
-      this.failed++;
+      this.refused++;
       const reason = `not run: ${environment.reason}`;
       return Promise.resolve({
         outcome: { kind: "failed", reason },
@@ -130,7 +131,8 @@ export class Runs {
         // looked up on PATH.
         bin: program.includes("/") ? path.resolve(run.cwd, program) : program,
         args: [...args],
-        // The program's own variables over its session's environment.
+        // [LAW:single-enforcer] The program's own variables over its
+        // session's environment, laid here for every click's run.
         environment: environment.value,
         envOverlay: run.env,
         cwd: run.cwd,
@@ -154,6 +156,7 @@ export class Runs {
       started: this.started,
       failed: this.failed,
       timedOut: this.timedOut,
+      refused: this.refused,
       running: this.inFlight.size,
     };
   }

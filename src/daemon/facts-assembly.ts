@@ -1,5 +1,6 @@
 import { compareStructural } from "mobx";
 import { restamp, type Fact } from "../facts/fact";
+import { ownValue } from "../utils/plain";
 import type {
   BuiltinFacts,
   DaemonFacts,
@@ -115,7 +116,7 @@ export function assembleFacts(
   const env: Record<string, Fact<string>> = Object.fromEntries(
     [...lanes.env].map(([name, reading]) => [
       name,
-      stamp(prior?.env[name], reading),
+      stamp(prior && ownValue(prior.env, name), reading),
     ]),
   );
 

@@ -63,6 +63,10 @@ import {
   type SessionEnvironment,
 } from "./foundations/session-env.js";
 
+// What a session's declaration keys on, of the request that named it: its
+// keys, and the environment its runs run in, which stays in the host.
+export type Locator = ViewFacts & { readonly environment: SessionEnvironment };
+
 // ─── Provider dependencies ────────────────────────────────────────────────────
 
 export interface RenderPayloadDeps {
@@ -283,9 +287,7 @@ function gitAt({
 export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
-  // The session's keys, and the environment its runs run in, which stays in
-  // the host.
-  facts: ViewFacts & { readonly environment: SessionEnvironment },
+  facts: Locator,
   sources: Subscribed,
 ): Declaration {
   const { environment } = facts;
