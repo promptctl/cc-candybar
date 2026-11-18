@@ -614,21 +614,46 @@ describe("WatcherRegistry", () => {
     );
 
     (process.getuid?.() === 0 ? test.skip : test)(
-      "a directory that cannot be listed keeps the watches below it",
-      () => {
+      "a held directory that cannot be listed is refused, and the watches below it stay",
+      async () => {
         const team = path.join(root, "team");
         fs.mkdirSync(path.join(team, "x"), { recursive: true });
-        acquired([]);
+        const seen: Invalidation[] = [];
+        const handle = acquired(seen);
         expect(reg.dirWatches()).toBe(3);
         fs.chmodSync(team, 0o300);
         try {
           reg.judge();
-          expect(reg.dirWatches()).toBe(3);
+          expect(handle.deaf).toEqual([
+            expect.objectContaining({ kind: "refused", path: team }),
+          ]);
+          expect(reg.dirWatches()).toBe(2);
+          await until(
+            () => seen.some((inv) => inv.kind === "failed"),
+            "the refusal's window",
+          );
         } finally {
           fs.chmodSync(team, 0o700);
         }
       },
     );
+
+    // `git branch -m feat/x feat`: the prefix directory is pruned and a ref
+    // file takes its name, so an event below it names a path whose parent is
+    // a file.
+    test("a directory replaced by a file leaves with its watches, and the daemon hears on", async () => {
+      const feat = path.join(root, "feat");
+      fs.mkdirSync(path.join(feat, "x"), { recursive: true });
+      const seen: Invalidation[] = [];
+      acquired(seen);
+      expect(reg.dirWatches()).toBe(3);
+      fs.rmSync(feat, { recursive: true });
+      fs.writeFileSync(feat, "ref");
+      await until(() => reg.dirWatches() === 1, "the pruned watches closing");
+      seen.length = 0;
+      fs.writeFileSync(path.join(root, "main"), "ref");
+      await until(() => seen.length > 0, "the root's next event");
+    });
 
     test("where the recursive watch is native, a tree is one watch", () => {
       const native = new WatcherRegistry({

@@ -226,8 +226,9 @@ function holdKey(root: string): string {
 // are the remote's to grow. Those still reach the bar on the period.
 // [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
 // each directory names it for the key and decides nothing, and the stat
-// cannot throw. A tree that cannot be opened is a refusal the registry logs
-// and counts, and the period is what refreshes a repo whose watch is refused.
+// cannot throw. A directory of the tree that cannot be opened is a refusal
+// the registry logs and puts on the handle, and the period is what refreshes
+// a repo whose watch is refused.
 //
 // HEAD and the index are polled, so a git directory deleted and recreated at
 // its path (`worktree remove` then `worktree add` of the same name, `rm -rf`
