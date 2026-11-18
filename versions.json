@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-806",
+      "ref": "refs/pull/806/merge",
+      "sha": "3c796a734f706e6c4728f2e45ca3be3e880ff1ba",
+      "timestamp": "2026-11-18T15:31:04.381Z",
+      "commits": [
+        {
+          "sha": "3c796a734f706e6c4728f2e45ca3be3e880ff1ba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:29:34-07:00",
+          "message": "Merge 10aa67106028263815e351d03f07145d49c34273 into f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017\n"
+        },
+        {
+          "sha": "10aa67106028263815e351d03f07145d49c34273",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T08:29:04-07:00",
+          "message": "fix(update-act): an overdue act whose files a newer act pruned still has its proven group ended (pj1z)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-799",
       "ref": "refs/pull/799/merge",
       "sha": "3e296c7f2f5d505e7b87f155ed8fb8f3f462b51b",
