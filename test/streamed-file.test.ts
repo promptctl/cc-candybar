@@ -37,7 +37,7 @@ test("a file that cannot be made asks nothing of the stream", async () => {
   expect(fs.readFileSync(file, "utf8")).toBe("kept");
 });
 
-test("a stream that fails is the write's failure, with what it sent kept", async () => {
+test("a stream that fails is the write's failure, and leaves no cut-off file", async () => {
   const file = path.join(dir, "heap.heapsnapshot");
   await expect(
     streamedToFile(file, async (write) => {
@@ -45,5 +45,5 @@ test("a stream that fails is the write's failure, with what it sent kept", async
       throw new Error("out of memory");
     }),
   ).rejects.toThrow("out of memory");
-  expect(fs.readFileSync(file, "utf8")).toBe("{");
+  expect(fs.existsSync(file)).toBe(false);
 });

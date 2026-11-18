@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
-import type { SessionStorage } from "../renderer-interface/session-state";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
@@ -14,10 +13,27 @@ export interface SessionFileKind<V> {
   readonly parse: (value: unknown) => V | null;
 }
 
-// The session picks: each session's key → value strings.
-export const SESSION_STATE_FILE: SessionFileKind<
-  Readonly<Record<string, string>>
-> = {
+// [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
+// file, or nowhere. Its owner holds them, and persistence is the storage's.
+export interface SessionFileStorage<V> {
+  load(): ReadonlyMap<SessionId, V>;
+  save(snapshot: Readonly<Record<SessionId, V>>): void;
+  flush(): void;
+}
+
+// [LAW:dataflow-not-control-flow] Kept nowhere: it loads nothing and writes
+// nothing, so a daemon that keeps no files (the page) runs the same path.
+export const ephemeralSessionFile = <V>(): SessionFileStorage<V> => ({
+  load: () => new Map(),
+  save: () => {},
+  flush: () => {},
+});
+
+// A session's picks: its key → value strings.
+export type SessionPicks = Readonly<Record<string, string>>;
+
+// The session picks' file.
+export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
   parse: (kv) =>
@@ -25,7 +41,7 @@ export const SESSION_STATE_FILE: SessionFileKind<
     typeof kv === "object" &&
     !Array.isArray(kv) &&
     Object.values(kv).every((leaf) => typeof leaf === "string")
-      ? (kv as Readonly<Record<string, string>>)
+      ? (kv as SessionPicks)
       : null,
 };
 
@@ -35,7 +51,7 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 // [LAW:single-enforcer] The debounce + atomic write of every per-session
 // file. Its owner calls save() on every change; this coalesces the bursty
 // 22-session × 1 Hz write load into at most one disk write per window.
-export class SessionFile<V> {
+export class SessionFile<V> implements SessionFileStorage<V> {
   // What clears the debounce timer while one is armed.
   private clearTimer: (() => void) | null = null;
   private pending: Readonly<Record<SessionId, V>> | null = null;
@@ -287,5 +303,5 @@ export const sessionStateFile = (
   clock: Pick<Timekeeper, "after" | "monotonic">,
   debounceMs?: number,
   logger?: DaemonLogger,
-): SessionStorage =>
+): SessionFileStorage<SessionPicks> =>
   new SessionFile(SESSION_STATE_FILE, filePath, clock, debounceMs, logger);

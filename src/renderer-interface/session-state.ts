@@ -34,20 +34,3 @@ export interface SessionStateRW extends SessionStateReader {
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
 // on-disk representation and the save currency between store and storage.
 export type SessionSnapshot = Record<string, Record<string, string>>;
-
-// What a storage loads: each session's values, keyed by a session id the storage
-// has already checked. Holding the brand here is what lets the store take the
-// keys as they are.
-export type LoadedSessions = ReadonlyMap<
-  SessionId,
-  Readonly<Record<string, string>>
->;
-
-// [LAW:locality-or-seam] The store depends on this seam, not on the filesystem.
-// The daemon injects a disk-backed impl; tests and non-daemon callers get the
-// ephemeral default. Persistence is a property of the *storage*, not the store.
-export interface SessionStorage {
-  load(): LoadedSessions;
-  save(snapshot: SessionSnapshot): void;
-  flush(): void;
-}

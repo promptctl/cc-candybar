@@ -12,8 +12,9 @@ import { SessionState } from "../src/renderer/session-state";
 import {
   SESSION_STATE_FILE,
   SessionFile,
+  type SessionFileStorage,
+  type SessionPicks,
 } from "../src/daemon/session-state-file";
-import type { SessionStorage } from "../src/renderer-interface/session-state";
 import {
   EPHEMERAL_HISTORY_STORAGE,
   HeldStores,
@@ -45,7 +46,10 @@ describe("the session state's file", () => {
 
   // A daemon over the file: the host's held stores, loaded as it serves, and
   // a renderer built from them, each of its writes taken as a turn's are.
-  const daemonOver = (session: SessionStorage, maxSessions?: number) => {
+  const daemonOver = (
+    session: SessionFileStorage<SessionPicks>,
+    maxSessions?: number,
+  ) => {
     const stores = new HeldStores({
       session,
       history: EPHEMERAL_HISTORY_STORAGE,

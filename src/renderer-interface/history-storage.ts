@@ -63,8 +63,8 @@ export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
 // storage has already checked.
 export type LoadedHistory = ReadonlyMap<SessionId, SessionHistory>;
 
-// [LAW:locality-or-seam] Persistence is the storage's property, as with
-// SessionStorage: the host binds a file, or keeps nothing.
+// [LAW:locality-or-seam] Persistence is the storage's property: the host
+// binds a file, or keeps nothing.
 export interface HistoryStorage {
   load(): LoadedHistory;
   save(state: HistoryState): void;

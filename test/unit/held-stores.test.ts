@@ -3,10 +3,10 @@
 
 import {
   EPHEMERAL_HISTORY_STORAGE,
-  EPHEMERAL_SESSION_STORAGE,
   HeldStores,
   type ProfileStorage,
 } from "../../src/daemon/held-stores";
+import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { emptyStores } from "../helpers/doctor-facts";
 
@@ -15,7 +15,7 @@ const STEP = { past: [], future: [] };
 
 function held(storage: Partial<ProfileStorage>): HeldStores {
   const stores = new HeldStores({
-    session: EPHEMERAL_SESSION_STORAGE,
+    session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE,
     doctor: emptyStores(),
     ...storage,

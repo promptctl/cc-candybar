@@ -1,6 +1,8 @@
 // The daemon as a value: what it holds, built from its inputs, and its one close.
 
-import { SessionBook, type SessionBookStorage } from "./session-book.js";
+import { SessionBook } from "./session-book.js";
+import type { SessionFileStorage } from "./session-state-file.js";
+import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
@@ -115,7 +117,9 @@ export interface DaemonAdapters {
   readonly profile: (name: RendererName, log: DaemonLogger) => ProfileStorage;
   // Where the host keeps its book of each session's durable context: the
   // host's own, whichever renderer it runs.
-  readonly sessionBook: (log: DaemonLogger) => SessionBookStorage;
+  readonly sessionBook: (
+    log: DaemonLogger,
+  ) => SessionFileStorage<DurableContext>;
   // The doctor's reads of the machine.
   readonly doctorEdge: (launcher: Launcher, host: Host) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;

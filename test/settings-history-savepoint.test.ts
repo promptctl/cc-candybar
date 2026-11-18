@@ -14,19 +14,12 @@ import {
   type ConfigFiles,
 } from "../src/renderer/settings-history";
 import { fileHistoryStorage } from "../src/daemon/history-file";
-import {
-  EPHEMERAL_SESSION_STORAGE,
-  HeldStores,
-} from "../src/daemon/held-stores";
+import { HeldStores } from "../src/daemon/held-stores";
+import { ephemeralSessionFile } from "../src/daemon/session-state-file";
 import { emptyStores } from "./helpers/doctor-facts";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { readConfigText } from "../src/utils/atomic-write";
-import {
-  redoOf,
-  rewindOf,
-  undoOf,
-  inPlace,
-} from "./helpers/history-step";
+import { redoOf, rewindOf, undoOf, inPlace } from "./helpers/history-step";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s1");
@@ -311,7 +304,9 @@ describe("the savepoint under the history's bounds", () => {
     journal.commit();
     // An undo of C, refused: `other` was edited by hand.
     fs.writeFileSync(other, "o hand");
-    expect(() => undoOf(history, SID, files)).toThrow(/changed since that edit/);
+    expect(() => undoOf(history, SID, files)).toThrow(
+      /changed since that edit/,
+    );
     // A was only `other`, so it left; the savepoint counts B alone below it.
     expect(history.history(SID).savepoint?.at).toBe(1);
     rewindOf(history, SID, files);
@@ -326,7 +321,7 @@ describe("the savepoint survives a restart", () => {
   // The host's stores over the history file, loaded as a daemon serves.
   const heldOver = (historyFile: string): HeldStores => {
     const stores = new HeldStores({
-      session: EPHEMERAL_SESSION_STORAGE,
+      session: ephemeralSessionFile(),
       history: fileHistoryStorage(historyFile, () => {}),
       doctor: emptyStores(),
     });

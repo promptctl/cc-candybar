@@ -16,9 +16,10 @@ type Name = keyof DoctorStoreValues;
 
 export class HeldDocuments {
   private readonly held: { -readonly [K in Name]: Asked<DoctorStoreValues[K]> };
-  // [LAW:one-source-of-truth] The documents filed since the host was last
-  // told (`drain`).
-  private readonly moved = new Set<Name>();
+  // [LAW:types-are-the-program] Each document filed since the host was last
+  // told (`drain`), as its write: only a document that read is filed, so a
+  // write holds the value it filed, and a drain has nothing to check.
+  private readonly moved = new Map<Name, StoreWrite>();
   readonly documents: DoctorDocuments;
 
   constructor(loaded: StoredState["doctor"]) {
@@ -32,17 +33,9 @@ export class HeldDocuments {
 
   // What the host has not yet been told: each document filed, whole.
   drain(): StoreWrite[] {
-    const writes = [...this.moved].map((name) => this.writeOf(name));
+    const writes = [...this.moved.values()];
     this.moved.clear();
     return writes;
-  }
-
-  private writeOf(name: Name): StoreWrite {
-    const held = this.held[name];
-    // [LAW:no-silent-failure] Only a document that read is ever filed.
-    if (held.kind !== "ok")
-      throw new Error(`doctor document ${name} was filed over a failed read`);
-    return { store: name, value: held.value } as StoreWrite;
   }
 
   private document<K extends Name>(
@@ -59,7 +52,7 @@ export class HeldDocuments {
         // [LAW:types-are-the-program] exception: `name` and the value are of
         // one document, which the index cannot carry to the held field's type.
         (this.held as Record<Name, Asked<DoctorStoreValues[K]>>)[name] = filed;
-        this.moved.add(name);
+        this.moved.set(name, { store: name, value } as StoreWrite);
         return filed;
       },
     };

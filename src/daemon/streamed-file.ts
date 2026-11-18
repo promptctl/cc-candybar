@@ -8,9 +8,10 @@ import fs from "node:fs";
 // process. Each chunk is on the disk before the host reads its next line, so
 // the host holds one chunk at a time and a disk slower than the pipe leaves
 // the rest unread in the pipe, never in the host's heap, which a breach has
-// already put over its limit. [LAW:no-silent-failure] A write that fails is
-// the call's failure once the stream ends; the chunks after it are dropped,
-// since the file is lost already.
+// already put over its limit. [LAW:no-silent-failure] A stream or a write
+// that fails is the call's failure once the stream ends, and the file goes
+// with it: a cut-off snapshot parses as nothing. The chunks after a failed
+// write are dropped, since the file is lost already.
 export async function streamedToFile(
   file: string,
   stream: (write: (chunk: string) => void) => Promise<void>,
@@ -26,8 +27,12 @@ export async function streamedToFile(
         failed = e;
       }
     });
+  } catch (e) {
+    failed ??= e;
   } finally {
     fs.closeSync(fd);
   }
-  if (failed !== null) throw failed;
+  if (failed === null) return;
+  fs.rmSync(file, { force: true });
+  throw failed;
 }

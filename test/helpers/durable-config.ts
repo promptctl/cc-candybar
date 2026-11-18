@@ -38,10 +38,8 @@ import {
 import { settingsHistoryPath } from "../../src/daemon/paths";
 import { digestOf } from "../../src/utils/plain";
 import { fileHistoryStorage } from "../../src/daemon/history-file";
-import {
-  EPHEMERAL_SESSION_STORAGE,
-  HeldStores,
-} from "../../src/daemon/held-stores";
+import { HeldStores } from "../../src/daemon/held-stores";
+import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { emptyStores } from "./doctor-facts";
 import { recordRender } from "./click";
 
@@ -104,7 +102,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   // The host's stores over this fixture's history file, as a daemon loads them.
   const profile = (): HeldStores => {
     const stores = new HeldStores({
-      session: EPHEMERAL_SESSION_STORAGE,
+      session: ephemeralSessionFile(),
       history: fileHistoryStorage(settingsHistoryPath(host), () => {}),
       doctor: emptyStores(),
     });

@@ -4,7 +4,7 @@
 // turns return, each written behind to its file.
 
 import type { SessionId } from "./foundations/session-id.js";
-import type { SessionStorage } from "../renderer-interface/session-state.js";
+import type { SessionFileStorage, SessionPicks } from "./session-state-file.js";
 import type {
   HistoryStorage,
   SessionHistory,
@@ -21,19 +21,13 @@ import {
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
-  readonly session: SessionStorage;
+  readonly session: SessionFileStorage<SessionPicks>;
   readonly history: HistoryStorage;
   readonly doctor: DoctorStores;
 }
 
-// [LAW:dataflow-not-control-flow] A store kept nowhere: it loads nothing and
-// writes nothing, so a daemon that keeps no files (the page) holds its stores
-// in memory alone, through the same path.
-export const EPHEMERAL_SESSION_STORAGE: SessionStorage = {
-  load: () => new Map(),
-  save: () => {},
-  flush: () => {},
-};
+// [LAW:dataflow-not-control-flow] A history kept nowhere, as a session file
+// kept nowhere (`ephemeralSessionFile`).
 export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
   load: () => new Map(),
   save: () => {},
@@ -42,7 +36,7 @@ export const EPHEMERAL_HISTORY_STORAGE: HistoryStorage = {
 export class HeldStores {
   // [LAW:types-are-the-program] Insertion order is each store's recency
   // order, as the renderer's own: a write moves its entry to the end.
-  private sessions = new Map<SessionId, Readonly<Record<string, string>>>();
+  private sessions = new Map<SessionId, SessionPicks>();
   private history = new Map<SessionId, SessionHistory>();
   private doctor: StoresRead = EMPTY_STORED_STATE.doctor;
   private closed = false;

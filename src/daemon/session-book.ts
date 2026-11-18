@@ -15,7 +15,10 @@ import {
 } from "../renderer-interface/request-context.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { originOfRecord, originRecord } from "./foundations/render-origin.js";
-import type { SessionFileKind } from "./session-state-file.js";
+import type {
+  SessionFileKind,
+  SessionFileStorage,
+} from "./session-state-file.js";
 
 // [LAW:carrying-cost] As many sessions as the host holds requests of.
 const MAX_SESSIONS = 256;
@@ -58,29 +61,19 @@ const sameDurable = (a: DurableContext, b: DurableContext): boolean =>
   a.origin.target.source === b.origin.target.source &&
   a.claudeConfigDir === b.claudeConfigDir;
 
-// Where the book is kept: its file, or nowhere.
-export interface SessionBookStorage {
-  load(): ReadonlyMap<SessionId, DurableContext>;
-  save(snapshot: Readonly<Record<SessionId, DurableContext>>): void;
-  flush(): void;
-}
-
-export const EPHEMERAL_SESSION_BOOK: SessionBookStorage = {
-  load: () => new Map(),
-  save: () => {},
-  flush: () => {},
-};
-
 export class SessionBook {
-  // [LAW:types-are-the-program] Insertion order is the order each session's
-  // durable context last changed in, which the bound drops the oldest of.
+  // [LAW:types-are-the-program] Insertion order is the order each session
+  // was last heard in, which the bound drops the oldest of.
   private book = new Map<SessionId, DurableContext>();
-  private closed = false;
+  // [LAW:no-ambient-temporal-coupling] The file is written only while open:
+  // before the load, a save would land over the book the daemon before it
+  // flushed, unread; after the close, over the file a next daemon has taken
+  // up. What is heard outside it stays in memory.
+  private phase: "unread" | "open" | "closed" = "unread";
 
-  constructor(private readonly storage: SessionBookStorage) {}
+  constructor(private readonly storage: SessionFileStorage<DurableContext>) {}
 
-  // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, after
-  // the daemon before it flushed. A session heard before it is newer than
+  // Read once the daemon serves. A session heard before it is newer than
   // anything the file holds of it, so it stays, and the file's come first.
   load(): void {
     const heard = this.book;
@@ -89,24 +82,21 @@ export class SessionBook {
     );
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
-    // [LAW:one-source-of-truth] The merged book is what lands, so a save the
-    // sessions heard first made never lands over the file's sessions.
+    this.phase = "open";
     this.storage.save(Object.fromEntries(this.book));
   }
 
-  // The session's newest request: what it says the session is, kept when it
-  // moved.
+  // The session's newest request: what it says the session is, saved when
+  // it moved.
   heard(req: CheckedRenderRequest): void {
     const session = req.hookData.session_id;
     const durable = durableOf(req);
     const held = this.book.get(session);
-    if (held !== undefined && sameDurable(held, durable)) return;
     this.book.delete(session);
     this.book.set(session, durable);
     this.bound();
-    // [LAW:no-ambient-temporal-coupling] Once closed, what is heard stays in
-    // memory, so it never lands over the file a next daemon has taken up.
-    if (!this.closed) this.storage.save(Object.fromEntries(this.book));
+    if (held !== undefined && sameDurable(held, durable)) return;
+    if (this.phase === "open") this.storage.save(Object.fromEntries(this.book));
   }
 
   // [LAW:one-source-of-truth] The session as a click finds it: live from the
@@ -123,7 +113,7 @@ export class SessionBook {
 
   close(): void {
     this.storage.flush();
-    this.closed = true;
+    this.phase = "closed";
   }
 
   private bound(): void {
