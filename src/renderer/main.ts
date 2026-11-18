@@ -605,7 +605,7 @@ export function mainRendererOf(
       return {
         layers: entry.configLayers,
         error: entry.lastError,
-        warning: entry.lastWarning,
+        warnings: entry.lastWarnings,
         unused: entry.state.unused,
         config: entry.state.config,
       };

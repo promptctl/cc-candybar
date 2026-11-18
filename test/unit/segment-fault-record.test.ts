@@ -188,7 +188,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
     level: "warning",
     kind: "segment",
     subject: "broken",
-    message: MESSAGE,
+    message: `segment "broken": ${MESSAGE}`,
   });
   expect(noted(first, "warn")).toContain("segment:broken");
   // A config naming no preset draws the floor, and the record says which.
@@ -216,5 +216,5 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   const viewed = textOf(presentOf((await request()).effects).frame);
   expect(viewed).toContain("[1/1]");
   expect(viewed).not.toContain("⚠ broken:");
-  expect(viewed).toContain(`⚠ ${MESSAGE}`);
+  expect(viewed).toContain(`⚠ segment "broken": ${MESSAGE}`);
 });

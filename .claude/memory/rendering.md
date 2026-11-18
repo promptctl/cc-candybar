@@ -2,7 +2,7 @@
 
 ## One path
 
-The daemon draws every bar. The check command and the doctor command draw through the renderer's `answer` in their own process, over the daemon's own collector and host, so what they show is what the daemon draws. There is no parallel renderer and no fallback computation. A turn's record notes every fault its frame met in full only when the list moved since the session's last record, so `check` draws each preset as a session of its own, whose first record always carries the whole list.
+The daemon draws every bar. The check command and the doctor command draw through the renderer's own turns in their own process, over the daemon's own collector and host, so what they show is what the daemon draws. There is no parallel renderer and no fallback computation. A turn's record notes every fault its frame met in full only when the list moved since the session's last record, so `check` draws each preset as a session of its own, whose first record always carries the whole list.
 
 ## One instant per render
 

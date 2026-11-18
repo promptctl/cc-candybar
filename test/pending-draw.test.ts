@@ -401,7 +401,7 @@ describe("a json source with no default", () => {
       );
       expect(errors).toEqual([
         expect.stringContaining(
-          'value: field "doc.label" not found on receiver',
+          'segment "value": field "doc.label" not found on receiver',
         ),
       ]);
       expect(frame.pending).toEqual([]);

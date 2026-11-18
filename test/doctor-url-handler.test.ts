@@ -167,7 +167,7 @@ describe("the daemon's side of the round trip", () => {
         load: {
           layers: [],
           error: null,
-          warning: null,
+          warnings: [],
           unused: [],
           config: DEFAULT_DSL_CONFIG,
         },

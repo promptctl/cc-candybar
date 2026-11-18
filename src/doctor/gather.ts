@@ -134,7 +134,7 @@ function configFacts(load: ConfigLoad, target: ConfigTarget): ConfigFacts {
   const base = {
     layers: load.layers,
     target,
-    warnings: load.warning === null ? [] : load.warning.split("\n"),
+    warnings: load.warnings,
   };
   return load.error !== null
     ? { ...base, kind: "failed", error: load.error }

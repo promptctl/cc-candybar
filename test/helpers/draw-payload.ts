@@ -67,10 +67,10 @@ export function drawPayload(
 // surface's.
 const records = new WeakMap<VariableStore, FrameRecord<RenderedLine>>();
 
-// Each placement that drew its ⚠ cell, as `<placement>: <message>`.
+// Each placement that drew its ⚠ cell, by the message that names it.
 export const segmentErrorsOf = (
   warnings: readonly RenderWarning[],
 ): string[] =>
   warnings.flatMap((w) =>
-    w.kind === "segment" ? [`${w.placement}: ${w.message}`] : [],
+    w.kind === "segment" ? [w.message] : [],
   );

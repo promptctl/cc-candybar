@@ -51,7 +51,7 @@ const S = sessionIdOf("s");
 const LOAD: ConfigLoad = {
   layers: [],
   error: null,
-  warning: null,
+  warnings: [],
   unused: [],
   config: EMPTY_DEFAULT,
 };

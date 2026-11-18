@@ -3,7 +3,8 @@
 // to diagnose a cc-candybar that cannot start. Its exit code:
 //   0: every check ok
 //   1: at least one check failed (its reason on the line)
-//   2: a usage error, or a run that could not report
+//   2: a usage error, a run that could not report, or one that reported
+//      while logging an error or failing to close (said on stderr)
 //
 // [LAW:single-enforcer] It is a host of its own bar, through the daemon's
 // parts (src/daemon/local-bar.ts): the renderer in this process, a session
@@ -125,34 +126,56 @@ export interface DoctorPlanInputs {
 // exit code) out. `doctorCommandPlan` hands it to the one delivery.
 export async function doctorPlan(inputs: DoctorPlanInputs): Promise<CliPlan> {
   const closes: TeardownStep[] = [];
-  const plan = await doctorRun(inputs, closes).catch(
-    (e: unknown): CliPlan => ({
-      stdout: "",
-      stderr: `doctor: ${e instanceof Error ? e.message : String(e)}\n`,
-      code: EXIT_USAGE,
-    }),
+  // [LAW:no-silent-failure] Every line the run said above info, in order —
+  // a store that would not read, what the bar logged as an error through its
+  // close, a step that failed to close — is said beside the report; an error
+  // among them, or a close that failed, is the command's failure.
+  const said: string[] = [];
+  let failing = false;
+  const say: DaemonLogger = (level, text) => {
+    if (level === "info") return;
+    said.push(`doctor: ${text}\n`);
+    failing ||= level === "error";
+  };
+  const run = await doctorRun(inputs, closes, say).then(
+    (reports) => ({ kind: "reported", reports }) as const,
+    (e: unknown) =>
+      ({
+        kind: "failed",
+        message: e instanceof Error ? e.message : String(e),
+      }) as const,
   );
   // A one-shot run leaks no timer, watch or child past its report.
-  // [LAW:no-silent-failure] A step that failed to close is the command's
-  // failure, said beside its report.
-  const torn: string[] = [];
-  const failed = await runTeardown(closes, (_level, text) => {
-    torn.push(`doctor: ${text}\n`);
-  });
-  return failed.length === 0
-    ? plan
-    : { ...plan, stderr: plan.stderr + torn.join(""), code: EXIT_USAGE };
+  const torn = await runTeardown(closes, say);
+  const stderr = said.join("");
+  if (run.kind === "failed")
+    return {
+      stdout: "",
+      stderr: `doctor: ${run.message}\n${stderr}`,
+      code: EXIT_USAGE,
+    };
+  return {
+    stdout: run.reports.map(reportLine).join(""),
+    stderr,
+    code:
+      failing || torn.length > 0
+        ? EXIT_USAGE
+        : run.reports.every((r) => r.verdict.ok)
+          ? EXIT_OK
+          : EXIT_FAILED,
+  };
 }
 
-// The run itself, each thing it opens pushed onto `closes`: throws when it
+// The run itself, each thing it opens pushed onto `closes` and each line it
+// says above info to `say`: the reports its run noted, or a throw when it
 // could not report.
 async function doctorRun(
   inputs: DoctorPlanInputs,
   closes: TeardownStep[],
-): Promise<CliPlan> {
+  say: DaemonLogger,
+): Promise<readonly NotedReport[]> {
   const { world, cwd } = inputs;
   const { host, clock, launcher } = world;
-  const quiet: DaemonLogger = () => {};
   // [LAW:one-source-of-truth] The hints a statusline client started here
   // would report, by the client's own detection, over the terminal the
   // command runs in.
@@ -189,7 +212,7 @@ async function doctorRun(
       ...hints,
     },
     { firstSightOfUnknownHookField: () => false },
-    quiet,
+    say,
     host.home,
   );
   if (!checked.ok)
@@ -211,7 +234,7 @@ async function doctorRun(
   // [LAW:one-source-of-truth] The renderer's stores, read by the daemon's
   // own reader from the files the daemon keeps them in.
   const stores = new HeldStores(
-    fileStorage(profilePaths(daemonPaths(host), MAIN_RENDERER), quiet, clock),
+    fileStorage(profilePaths(daemonPaths(host), MAIN_RENDERER), say, clock),
   );
   stores.load();
   // The bar this run judges is the one drawn here, once it is.
@@ -283,8 +306,13 @@ async function doctorRun(
     daemon: () => commandDaemonFacts(at),
     build: inputs.build,
   });
-  // The bar closes first: what it drew with closes after it.
+  // The bar closes first: what it drew with closes after it. What it logged
+  // as an error, or could put on no bar, is read once everything has closed.
   closes.unshift(["bar close", () => bar.close()]);
+  closes.push([
+    "bar errors",
+    () => bar.errors().forEach((line) => say("error", line)),
+  ]);
   const { answer } = await bar.draw(
     req,
     environment,
@@ -313,27 +341,11 @@ async function doctorRun(
   const note = await noted;
   // [LAW:no-silent-failure] A run that reported nothing is the run's
   // failure, with whatever the bar logged on the way.
-  if (note === null)
-    throw new Error(
-      [`no report within ${reportMs / 1000}s`, ...bar.errors()].join("\n"),
-    );
+  if (note === null) throw new Error(`no report within ${reportMs / 1000}s`);
   const run = readDoctorNote(note);
   if (run.kind === "failed")
     throw new Error(`the doctor's run failed: ${run.reason}`);
-  const { reports } = run;
-  // [LAW:no-silent-failure] What the bar logged as an error on the way, or
-  // could put on no bar, is the command's failure beside its report.
-  const errors = bar.errors();
-  return {
-    stdout: reports.map(reportLine).join(""),
-    stderr: errors.map((line) => `doctor: ${line}\n`).join(""),
-    code:
-      errors.length > 0
-        ? EXIT_USAGE
-        : reports.every((r) => r.verdict.ok)
-          ? EXIT_OK
-          : EXIT_FAILED,
-  };
+  return run.reports;
 }
 
 // The terminal the command runs in, which the bar of a Claude Code started

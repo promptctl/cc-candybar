@@ -655,9 +655,10 @@ export function drawRender(
     ...(configWatch === null
       ? []
       : [{ kind: "config-watch" as const, message: configWatch }]),
-    ...(entry.lastWarning === null
-      ? []
-      : [{ kind: "load" as const, message: entry.lastWarning }]),
+    ...entry.lastWarnings.map((message) => ({
+      kind: "load" as const,
+      message,
+    })),
     // [LAW:no-silent-failure] A turn that could not be stamped leaves the bar
     // drawn from the last one that was, so the bar says it is behind.
     ...(failure === null

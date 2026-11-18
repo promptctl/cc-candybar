@@ -55,7 +55,7 @@ const loadsConfig =
   () => ({
     layers: [],
     error: null,
-    warning: null,
+    warnings: [],
     unused: [],
     config,
   });

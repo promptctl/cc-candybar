@@ -494,7 +494,7 @@ test("a config load starts no view's source, and still names a session value tha
   expect(entry.lastError).toBeNull();
   // The one value that cannot declare, and no view source faulted for want of
   // a session.
-  expect(entry.lastWarning).toBe('Variable "unclosed": unclosed action');
+  expect(entry.lastWarnings).toEqual(['Variable "unclosed": unclosed action']);
   expect(shells).toBe(0);
 
   // A session asks for each of them, and a render settles what it started.

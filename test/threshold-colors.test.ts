@@ -323,7 +323,7 @@ describe("a threshold below its neighbour is a loud render error", () => {
       expect(textOf(rendered)).toContain("⚠");
       expect(errors).toHaveLength(1);
       expect(errors[0]).toMatch(
-        new RegExp(`^${segment}: .*ascending position order; ${pair}`),
+        new RegExp(`^segment "${segment}": .*ascending position order; ${pair}`),
       );
     },
   );

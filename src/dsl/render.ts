@@ -1542,7 +1542,11 @@ export function drawDsl(
       region,
       segments,
       brokenPlacement: (placement, message) =>
-        warn({ kind: "segment", placement, message }),
+        warn({
+          kind: "segment",
+          placement,
+          message: `segment "${placement}": ${message}`,
+        }),
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
         evaluateOnce(

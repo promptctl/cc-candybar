@@ -229,7 +229,7 @@ export type ReloadedEntry = Readonly<
     | "configLayers"
     | "snapshot"
     | "lastError"
-    | "lastWarning"
+    | "lastWarnings"
   >
 > & { readonly state: Readonly<Pick<DslRenderState, "config">> };
 
@@ -397,7 +397,7 @@ export function configLoadedLine(
   settled: Settled,
 ): string {
   const { repo } = entry.snapshot;
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo === null ? "-" : valueOf(`${repo.standing}:${repo.dir}`)} unproven=${repo?.unproven == null ? "-" : JSON.stringify(repo.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`;
+  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo === null ? "-" : valueOf(`${repo.standing}:${repo.dir}`)} unproven=${repo?.unproven == null ? "-" : JSON.stringify(repo.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
 
 export function configDisposeLine(
@@ -423,7 +423,7 @@ interface HeldSnapshot {
 //
 // [LAW:one-type-per-behavior] error and warning are distinct severities, so
 // they get distinct channels. `lastError` is load-fatal (config didn't
-// parse / validate); `lastWarning` is advisory (e.g., extension collision —
+// parse / validate); `lastWarnings` are advisory (e.g., extension collision —
 // load succeeded but something the user should know about). The render path
 // surfaces both through one diagnostics composer in src/renderer/draw-bar.ts.
 // [LAW:types-are-the-program] `projectDir` and `cwd` are required inputs to
@@ -451,7 +451,7 @@ export interface CacheEntry {
   snapshot: ConfigSnapshot;
   digest: string;
   lastError: string | null;
-  lastWarning: string | null;
+  lastWarnings: readonly string[];
   state: DslRenderState;
 }
 
@@ -529,22 +529,16 @@ function authoredRoots(
   );
 }
 
-// The load's warning is ONE message (the bar's diagnostics show it whole);
-// absent advisories are nulls in the list, an empty list is null.
-function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
-  return parts.filter(Boolean).join("\n") || null;
-}
-
 // [LAW:types-are-the-program] One attempt at loading a config's snapshot, and
 // what became of it: a state `built`, the served state `kept` because the
 // resolve named the inputs it was built from, or `failed`, with the error and
 // the file to blame. A state XOR an error, never both, never neither.
-// `warning` and `layers` are facts of the attempt regardless of arm
+// `warnings` and `layers` are facts of the attempt regardless of arm
 // (collision detection runs on a broken file too).
 export type LoadOutcome = {
   readonly layers: readonly string[];
   readonly home: string;
-  readonly warning: string | null;
+  readonly warnings: readonly string[];
 } & (
   | {
       readonly kind: "built" | "kept";
@@ -859,15 +853,19 @@ export function settle(
   // to an absent file is named whatever the default then does. The host's
   // discovery watches every candidate path, so creating/removing a duplicate
   // — or the named file appearing — hands in a snapshot that moved.
-  const warning = (own: readonly string[]): string | null =>
-    joinWarnings([...chain.snapshot.notices, ...resolveWarnings, ...own]);
+  // Each advisory its own, as the bar lists it.
+  const warnings = (own: readonly string[]): readonly string[] => [
+    ...chain.snapshot.notices,
+    ...resolveWarnings,
+    ...own,
+  ];
   switch (attempt.kind) {
     case "built":
     case "kept":
       return {
         ...common,
         kind: attempt.kind,
-        warning: warning(attempt.state.buildWarnings),
+        warnings: warnings(attempt.state.buildWarnings),
         state: attempt.state,
         error: null,
       };
@@ -875,7 +873,7 @@ export function settle(
       return {
         ...common,
         kind: "failed",
-        warning: warning(attempt.warnings),
+        warnings: warnings(attempt.warnings),
         state: null,
         error: thrown(attempt.cause),
         cause: attempt.cause,
@@ -924,7 +922,7 @@ export function loadOrigin(
   // registration, palette resolution — is the `failed` arm; the caller's
   // prior state stays untouched, so the daemon keeps rendering the
   // last-known-good config — the bundled default until one has loaded —
-  // and its diagnostics count `lastError` and `lastWarning`.
+  // and its diagnostics count `lastError` and `lastWarnings`.
   return loadChain(cwd, chainOf(snapshot, deps.locations), deps, served);
 }
 
@@ -1324,7 +1322,7 @@ export class RenderCache<
       snapshot,
       digest,
       lastError: loaded.error,
-      lastWarning: loaded.warning,
+      lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
     this.serve(entry.state);
@@ -1848,7 +1846,7 @@ export class RenderCache<
     entry.snapshot = snapshot;
     entry.digest = digest;
     entry.configLayers = loaded.layers;
-    entry.lastWarning = loaded.warning;
+    entry.lastWarnings = loaded.warnings;
     entry.lastError = loaded.error;
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));

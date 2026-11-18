@@ -330,8 +330,7 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
     switch (fault.kind) {
       case "load":
         if (fault.level === "error") fatal.push(fault.message);
-        // One advisory per line the load warned, as each is its own.
-        else advisories.push(...fault.message.split("\n"));
+        else advisories.push(fault.message);
         return;
       // [LAW:no-silent-failure] The bar draws past a placement of an
       // undeclared segment; a check refuses it, as the file's author has to
@@ -350,12 +349,10 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
       case "rule":
         failures.push(`${fault.subject} rule: ${fault.message}`);
         return;
-      // A placement that drew its ⚠ cell in its place.
+      // A placement that drew its ⚠ cell in its place, a layout `when` that
+      // threw hides what it gates, and a variable that cannot refresh draws
+      // its last value: a bar quietly wrong.
       case "segment":
-        failures.push(`segment "${fault.subject}": ${fault.message}`);
-        return;
-      // A layout `when` that threw hides what it gates, and a variable that
-      // cannot refresh draws its last value: a bar quietly wrong.
       case "when":
       case "refresh":
         failures.push(fault.message);

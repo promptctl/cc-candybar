@@ -106,7 +106,7 @@ export type DoctorMachineEdge = DoctorEdge & { readonly install: InstallEdge };
 export interface ConfigLoad {
   readonly layers: readonly string[];
   readonly error: string | null;
-  readonly warning: string | null;
+  readonly warnings: readonly string[];
   readonly unused: readonly UnusedDecl[];
   readonly config: DslConfig;
 }

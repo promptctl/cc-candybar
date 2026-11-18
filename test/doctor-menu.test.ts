@@ -106,7 +106,7 @@ type LoadOutcome = Omit<ConfigLoad, "config">;
 const CLEAN_LOAD: LoadOutcome = {
   layers: [],
   error: null,
-  warning: null,
+  warnings: [],
   unused: [],
 };
 

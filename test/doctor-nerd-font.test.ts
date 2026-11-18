@@ -664,7 +664,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
       loadConfig: () => ({
         layers: [],
         error: null,
-        warning: null,
+        warnings: [],
         unused: [],
         config,
       }),
