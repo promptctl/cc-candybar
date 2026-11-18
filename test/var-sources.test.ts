@@ -2539,7 +2539,6 @@ describe("SourceRegistry — dispose", () => {
 
       fs.writeFileSync(f, "v2");
       await elapse(350);
-      await ran(registry);
       expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();
@@ -2986,7 +2985,6 @@ describe("SourceRegistry — depends_on cache policy", () => {
       fs.writeFileSync(dataFile, "v2");
       store.setBox("trigger", "b"); // reaction must NOT fire after dispose
       await elapse(250);
-      await ran(registry);
 
       expect(store.read("val")).toBe("v1");
     } finally {

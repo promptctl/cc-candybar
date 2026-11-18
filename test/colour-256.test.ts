@@ -27,6 +27,7 @@ import { drawnChars, same, seams } from "./helpers/seams";
 import {
   NO_REPO,
   prepareConfig,
+  renderEffective,
 } from "./helpers/prepared-config";
 import {
   listResolvablePaletteNames,
@@ -71,7 +72,8 @@ async function closedBars(): Promise<{
     render: async (theme, colorCompatibility) =>
       drawnChars(
         (
-          await prepared.render(
+          await renderEffective(
+            prepared,
             {
               ...resolveEffectiveGlobals(
                 prepared.config,
@@ -85,7 +87,7 @@ async function closedBars(): Promise<{
           )
         ).rendered,
       ),
-    dispose: () => prepared[Symbol.dispose](),
+    dispose: () => prepared.registry.dispose(),
   };
 }
 

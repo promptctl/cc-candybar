@@ -427,6 +427,32 @@ describe("SourceRuns — an entry is kept while held, and dropped with its last 
     }
   });
 
+  it("a registry ended alone lets go of the runs held over it, and its period spawns nothing", async () => {
+    const r = rig();
+    try {
+      r.spawner.program(shell("sleep 1"), runsFor(1000, exits(0, "done")));
+      const a = r.registry();
+      a.registry.declareShell("slow", "sleep 1", {
+        cwd: "/work",
+        env: SHELL_ENV,
+        parse: TEXT,
+        cache: { kind: "ttl", durationMs: 60_000 },
+      });
+      await turns();
+      expect(r.runs.stats().shell).toMatchObject({ entries: 1, held: 1 });
+
+      // The registry's own teardown, with no close of what holds its runs.
+      a.registry.dispose();
+      await turns();
+      r.clock.advance(120_000);
+      await turns();
+      expect(r.started()).toHaveLength(1);
+      expect(r.runs.stats().shell).toMatchObject({ held: 0 });
+    } finally {
+      r.close();
+    }
+  });
+
   it("a reload that re-declares a running identity joins it rather than spawning again", async () => {
     const r = rig();
     try {

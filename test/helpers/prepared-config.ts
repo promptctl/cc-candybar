@@ -67,29 +67,10 @@ export interface PreparedConfig {
   readonly config: ValidatedConfig;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
-  // One draw of the config under `effective`, `width` wide, once the runs
-  // its payload started have answered: its frame, and each render error it
-  // met, by what failed.
-  render(
-    effective: EffectiveGlobals,
-    width: number,
-    at: Instant,
-  ): Promise<{ rendered: Frame; failures: Map<string, string> }>;
-  // [LAW:single-enforcer] The one teardown of what a prepare opened. The
-  // registry and the runs held over it are not handed out, so neither can be
-  // ended alone: a registry ended without its runs leaves the collector's
-  // holds, and their refresh periods, armed for the rest of the worker.
-  [Symbol.dispose](): void;
-}
-
-// What a draw reads of a prepare.
-interface Prepared {
-  readonly layers: readonly string[];
-  readonly config: ValidatedConfig;
-  readonly compiled: CompiledConfig;
-  readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly runs: CollectedRuns;
+  // The one teardown of what a prepare opened.
+  [Symbol.dispose](): void;
 }
 
 // A chain named outright, discovered as the daemon discovers one — each file
@@ -146,7 +127,6 @@ export async function prepareConfig(
       signer: previewSigner(),
     });
     warnings.push(...compiled.loadWarnings);
-    const parts: Prepared = { layers, config, compiled, store, registry, runs };
     const prepared: PreparedConfig = {
       layers,
       droppedPlugins: [
@@ -156,12 +136,14 @@ export async function prepareConfig(
       config,
       compiled,
       store,
-      render: (effective, width, at) => draw(parts, effective, width, at),
+      registry,
+      runs,
       [Symbol.dispose]: dispose,
     };
     // A source keyed on the payload runs once the payload is bound, so the
     // first draw's payload is bound before the wait.
-    await prepared.render(
+    await renderEffective(
+      prepared,
       resolveEffectiveGlobals(
         config,
         () => null,
@@ -177,8 +159,11 @@ export async function prepareConfig(
   }
 }
 
-async function draw(
-  prepared: Prepared,
+// One draw of the prepared config under `effective`, `width` wide, once the
+// runs its payload started have answered: its frame, and each render error it
+// met, by what failed.
+export async function renderEffective(
+  prepared: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
