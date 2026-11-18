@@ -104,7 +104,7 @@ test("a project file that places one segment renders over the user's whole confi
   try {
     expect(prepared.config.globals.menuGlyph).toBe("U");
   } finally {
-    prepared.registry.dispose();
+    prepared[Symbol.dispose]();
   }
 });
 
@@ -358,7 +358,7 @@ describe("a project layer inserting into the user's row", () => {
         ...walkNodes(fragmentNode(prepared.config.presets[preset]!.root!)),
       ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   };
 
@@ -595,7 +595,7 @@ describe("a project layer inserting into the user's row", () => {
       ).toThrow();
       expect(fs.readFileSync(userFile, "utf8")).toBe(before);
     } finally {
-      prepared.registry.dispose();
+      prepared[Symbol.dispose]();
     }
   });
   // The bar's own load of the chain: what it draws, and what it dropped.

@@ -87,7 +87,7 @@ async function closedBars(): Promise<{
           )
         ).rendered,
       ),
-    dispose: () => prepared.registry.dispose(),
+    dispose: () => prepared[Symbol.dispose](),
   };
 }
 
