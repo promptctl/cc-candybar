@@ -1,3 +1,9 @@
+## [1.232.6](https://github.com/promptctl/cc-candybar/compare/v1.232.5...v1.232.6) (2026-11-18)
+
+### Bug Fixes
+
+* **daemon:** a fork-bomb registry that cannot be listed refuses an isolated boot, and no entry is left out of its count (v5fj) ([#819](https://github.com/promptctl/cc-candybar/issues/819)) ([faf3e3e](https://github.com/promptctl/cc-candybar/commit/faf3e3eb7acc2326880d6a32d25e68576a6f6cb9))
+
 ## [1.232.5](https://github.com/promptctl/cc-candybar/compare/v1.232.4...v1.232.5) (2026-11-18)
 
 ### Bug Fixes
