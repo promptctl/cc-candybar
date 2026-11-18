@@ -25,7 +25,6 @@ import {
 } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { renderGauge } from "../template-engine/gauge.js";
-import { QUIET_MIN_CONTRAST } from "../config/quiet-text.js";
 import { TEXT_MIN_CONTRAST, type RoleShade } from "../themes/decor.js";
 import {
   requireActiveSegment,
@@ -179,19 +178,29 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
 /** A rung of the error ladder other than the role itself. */
 type Rung = Exclude<RoleShade, "base" | "muted">;
 
-const DARKENINGS: readonly Rung[] = ["darken-1", "darken-2", "darken-3"];
-const LIGHTENINGS: readonly Rung[] = ["lighten-1", "lighten-2", "lighten-3"];
+// [LAW:dataflow-not-control-flow] The rungs out from the error role toward
+// each pole, nearest first, keyed by the pole: a ground's far pole picks its
+// row, and the rungs back toward the ground follow.
+const RUNGS_OUT: Record<"black" | "white", readonly Rung[]> = {
+  black: ["darken-1", "darken-2", "darken-3"],
+  white: ["lighten-1", "lighten-2", "lighten-3"],
+};
 
-// ANSI's red and bright red: the reds a terminal holds of its own, for a depth
-// at which none of the theme's error colours is drawn red.
-const TERMINAL_REDS = [1, 9].map((index) => STANDARD_TABLE.get(index));
+/**
+ * ANSI's red and bright red: the reds every terminal holds of its own, and
+ * the ones it draws red at every depth (test/unit/segment-colors.test.ts
+ * holds it).
+ */
+export const TERMINAL_REDS: readonly ColorRgba[] = [1, 9].map((index) =>
+  STANDARD_TABLE.get(index),
+);
 
 // [LAW:one-source-of-truth] Where a colour reads as red: its OKLCH hue, in
 // degrees either side of 0, and the chroma under which it reads as grey
 // whatever its hue. Set from every bundled theme's error colours as truecolor
-// draws them (-18° to 36°); the oranges 256 colours round some of them to sit
-// past 40°.
-export const RED_HUE = { from: -20, to: 40, chroma: 0.06 } as const;
+// draws them (-18° to 36°); the salmons and oranges 256 colours round some of
+// them to sit past it.
+const RED_HUE = { from: -20, to: 38, chroma: 0.06 } as const;
 
 /** Whether `colour` reads as red (`RED_HUE`). */
 export function readsRed(colour: ColorRgba): boolean {
@@ -201,41 +210,22 @@ export function readsRed(colour: ColorRgba): boolean {
 }
 
 /**
- * The colours the door's ✖ may wear on a ground whose far pole is black or
- * not, in order of preference: the theme's error text colour (held by the
- * palette to WCAG AA on `error-muted`), the role itself, and its ladder out
- * toward the far pole and then back toward the ground.
- */
-export function errorRedCandidates(
-  palette: Palette,
-  farPoleBlack: boolean,
-): ColorRgba[] {
-  const [out, back] = farPoleBlack
-    ? [DARKENINGS, LIGHTENINGS]
-    : [LIGHTENINGS, DARKENINGS];
-  return [
-    "text-error",
-    "error",
-    ...[...out, ...back].map((r) => `error-${r}`),
-  ].map((name) => resolveColorRef(palette, name));
-}
-
-/**
- * The red the door's ✖ wears on `ground` at `depth`. A reduced depth draws a
- * colour as the nearest entry its table holds, and the nearest entry to a
- * theme red is often an orange or a grey, so each candidate is measured as
- * `depth` draws it, on the ground as `depth` draws it. Kept are the theme's
- * error colours (`errorRedCandidates`) that are drawn red, or, where none
- * is, the terminal's reds. Of those, the first to clear TEXT_MIN_CONTRAST;
- * failing that, the first to clear QUIET_MIN_CONTRAST; failing that, the one
- * standing farthest off. Hue outranks contrast: where no red clears a floor,
- * the ✖ stays red under it.
+ * The red the door's ✖ wears on `ground` at `depth`: of the reds it may
+ * wear, the first to clear TEXT_MIN_CONTRAST, or failing that the one
+ * standing farthest off. The reds, in order of preference, are the theme's
+ * error text colour (held by the palette to WCAG AA on `error-muted`), the
+ * role itself, its ladder out toward the ground's far pole and back, and last
+ * the terminal's own reds. A reduced depth draws a colour as the nearest
+ * entry its table holds, and the nearest entry to a theme red is often an
+ * orange or a grey, so each is measured as `depth` draws it, on the ground as
+ * `depth` draws it, and only those drawn red are kept. Hue outranks
+ * contrast: where no red clears the floor, the ✖ stays red under it.
  *
  * [LAW:single-enforcer] The one place this choice is made, at every depth.
  * [LAW:dataflow-not-control-flow] One closed list, each entry measured, one
- * rank over it; the depth is a value the measuring takes, not a path. No
- * colour is searched out of a table, since a table holds colours no theme
- * names.
+ * rank over it; the depth is a value the measuring takes, not a path. Never
+ * a colour searched out of a depth's table, which would land on colours
+ * neither the theme nor the terminal names as red.
  */
 function errorRed(
   palette: Palette,
@@ -243,32 +233,25 @@ function errorRed(
   depth: ColorDepth,
 ): ColorRgba {
   const shown = drawnColour(ground, depth);
-  const measured = (colours: readonly ColorRgba[]) =>
-    colours
-      .map((colour) => {
-        const drawn = drawnColour(colour, depth);
-        return {
-          colour,
-          red: readsRed(drawn),
-          ratio: contrastRatio(drawn, shown),
-        };
-      })
-      .filter(({ red }) => red);
-  const themed = measured(
-    errorRedCandidates(palette, contrastFor(shown).hex === "#000000"),
-  );
-  // [LAW:no-defensive-null-guards] ANSI's red and bright red are drawn red
-  // at every depth (test/unit/segment-colors.test.ts holds it), so `kept` is
-  // never empty.
-  const kept = themed.length > 0 ? themed : measured(TERMINAL_REDS);
-  const tier = (ratio: number) =>
-    ratio >= TEXT_MIN_CONTRAST ? 0 : ratio >= QUIET_MIN_CONTRAST ? 1 : 2;
-  // The rank: the tier cleared, then within the lowest tier the contrast, and
-  // otherwise the order of preference, which `reduce` keeps on a tie.
-  return kept.reduce((best, c) => {
-    const [tb, tc] = [tier(best.ratio), tier(c.ratio)];
-    return tc < tb || (tc === 2 && tb === 2 && c.ratio > best.ratio) ? c : best;
-  }).colour;
+  const far = contrastFor(shown).hex === "#000000" ? "black" : "white";
+  const back = far === "black" ? "white" : "black";
+  const themed = [
+    "text-error",
+    "error",
+    ...[...RUNGS_OUT[far], ...RUNGS_OUT[back]].map((rung) => `error-${rung}`),
+  ].map((name) => resolveColorRef(palette, name));
+  const kept = [...themed, ...TERMINAL_REDS]
+    .filter((colour) => readsRed(drawnColour(colour, depth)))
+    .map((colour) => ({
+      colour,
+      ratio: contrastRatio(drawnColour(colour, depth), shown),
+    }));
+  // [LAW:no-defensive-null-guards] `kept` holds the terminal's reds at least,
+  // so the reduce has a first entry.
+  return (
+    kept.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ??
+    kept.reduce((best, c) => (c.ratio > best.ratio ? c : best))
+  ).colour;
 }
 
 // [LAW:parse-dont-validate] "<position>:<colour>" → the flat (position, colour)

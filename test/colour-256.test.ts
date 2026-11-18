@@ -175,8 +175,9 @@ async function forEachStage(
     for (const stage of STAGE_NAMES) {
       const url = STAGES[stage](render("truecolor"));
       if (url !== null) await rig.click(url);
-      // The door's ✖ keeps its hue over its contrast, and is held by the
-      // door's own tests (palette-identity.test.ts).
+      // [LAW:verifiable-goals] exception: the door's ✖ keeps its hue over
+      // its contrast, and is held to that by the door's own tests
+      // (palette-identity.test.ts).
       measure(stage, (colorCompatibility) =>
         drawnChars(withoutDoorClose(render(colorCompatibility))),
       );

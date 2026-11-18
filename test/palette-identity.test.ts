@@ -13,9 +13,9 @@ import {
   ColorDepth,
   ColorSpec,
   type ColorRgba,
+  contrastFor,
   contrastRatio,
   drawnColour,
-  STANDARD_TABLE,
   getThemePalette,
   listThemePalettes,
 } from "@promptctl/rich-js";
@@ -29,9 +29,8 @@ import { SWATCH_GLYPH } from "../src/render/swatch";
 import { DECOR_HUES, SHADES, shadeRole, type RoleShade, type ShadeName } from "../src/themes/decor";
 import { instantOf } from "../src/utils/instant";
 import { ERROR_REDS, doorClose } from "./helpers/door-close";
-import { readsRed } from "../src/render/segment-color";
+import { readsRed, TERMINAL_REDS } from "../src/render/segment-color";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
-import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { POWERLINE } from "./helpers/powerline";
 import { LADDER } from "./helpers/decor-vocabulary";
 import { sessionBar, type SessionBar } from "./helpers/session-bar";
@@ -124,11 +123,8 @@ describe("every background the bar draws is a colour its palette names", () => {
   });
 });
 
-// The rank the ✖ is held to, spelled here apart from the code that picks it:
-// the body text floor, then the quiet one, then whatever stands farthest off.
-const doorTier = (ratio: number): number => (ratio >= TEXT_MIN_CONTRAST ? 0 : ratio >= QUIET_MIN_CONTRAST ? 1 : 2);
-// ANSI's red and bright red, as a terminal holds them.
-const TERMINAL_REDS = [1, 9].map((index) => STANDARD_TABLE.get(index));
+const DARKER = ["error-darken-1", "error-darken-2", "error-darken-3"];
+const LIGHTER = ["error-lighten-1", "error-lighten-2", "error-lighten-3"];
 
 describe("the open door's ✖ is the theme's own error red as each depth draws it", () => {
   test.each([
@@ -148,19 +144,25 @@ describe("the open door's ✖ is the theme's own error red as each depth draws i
           bar.pick(SETTINGS_ANCHOR, SETTINGS_OPEN);
           const { ink, ground } = doorClose(bar.render(AT).frame);
           measured++;
-          // What the depth draws each of the theme's error colours as, kept
-          // where it is red; the terminal's reds only where none is.
-          const drawnRed = (colours: readonly ColorRgba[]) =>
-            colours.map((c) => drawnColour(c, depth)).filter(readsRed);
-          const themed = drawnRed(ERROR_REDS.map((name) => palette.get(name)!));
-          const allowed = themed.length > 0 ? themed : drawnRed(TERMINAL_REDS);
-          const best = Math.min(...allowed.map((c) => doorTier(contrastRatio(c, ground))));
-          const farthest = Math.max(...allowed.map((c) => contrastRatio(c, ground)));
+          // The rule, spelled here apart from the code that picks it: of the
+          // theme's error colours and then the terminal's reds, as the depth
+          // draws each, those drawn red; the first to clear the text floor,
+          // or else whichever stands farthest off.
+          // In preference: the error text colour, the role, its rungs out
+          // toward the ground's far pole nearest first, then back.
+          const out = contrastFor(ground).hex === "#000000" ? DARKER : LIGHTER;
+          const order = ["text-error", "error", ...out, ...(out === DARKER ? LIGHTER : DARKER)];
+          const reds = [...order.map((name) => palette.get(name)!), ...TERMINAL_REDS]
+            .map((c) => drawnColour(c, depth))
+            .filter(readsRed);
           const ratio = contrastRatio(ink, ground);
           const where = `${theme} at ${shade}: ✖ ${ink.hex} on ${ground.hex}`;
-          if (!allowed.some((c) => c.hex === ink.hex)) wrong.push(`${where} is none of ${allowed.map((c) => c.hex).join(" ")}`);
-          else if (doorTier(ratio) !== best) wrong.push(`${where} clears tier ${doorTier(ratio)} where ${best} is reachable`);
-          else if (best === 2 && ratio < farthest) wrong.push(`${where} at ${ratio.toFixed(2)} where ${farthest.toFixed(2)} is reachable`);
+          const clearing = reds.find((c) => contrastRatio(c, ground) >= TEXT_MIN_CONTRAST);
+          const farthest = Math.max(...reds.map((c) => contrastRatio(c, ground)));
+          if (clearing !== undefined && ink.hex !== clearing.hex)
+            wrong.push(`${where} where ${clearing.hex} is the first red to clear the text floor`);
+          else if (clearing === undefined && ratio !== farthest)
+            wrong.push(`${where} at ${ratio.toFixed(2)} where a red stands ${farthest.toFixed(2)}`);
         }
       }
     } finally {

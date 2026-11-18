@@ -35,10 +35,11 @@ import {
 } from "../../src/render/active-segment";
 import type { ActiveSegmentRef } from "../../src/render/active-segment";
 import {
-  errorRedCandidates,
   readsRed,
   segmentColorFuncs,
+  TERMINAL_REDS,
 } from "../../src/render/segment-color";
+import { ERROR_REDS } from "../helpers/door-close";
 import type { Disclosure } from "../../src/themes/decor";
 import { DEFAULT_DECOR } from "../helpers/decor";
 import {
@@ -227,21 +228,23 @@ describe("no bg/fg templates → the tint, and the text paired with it", () => {
 
 describe("readsRed: a colour reads as red by its hue and its chroma", () => {
   // Inside, at each edge: a theme's pinkest error rung (-18°), a crimson
-  // 256 colours draws (-14°), and the terminal's reds (29°).
-  test.each(["ffcdeb", "87005f", "ff0000", "800000", "ff5f5f", "ff8b6b"])(
+  // 256 colours draws (-14°), the terminal's reds (29°), a theme's most
+  // orange red (36°), and a dusty red just over the chroma floor.
+  test.each(["ffcdeb", "87005f", "ff0000", "800000", "ff5f5f", "ff8b6b", "b88080"])(
     "#%s reads as red",
     (hex) => expect(readsRed(parseRgbHex(hex))).toBe(true),
   );
-  // Outside: the orange-reds past 40°, the oranges 256 colours rounds theme
-  // reds to, a magenta past -20°, and greys of every lightness.
-  test.each(["ff5f00", "ff6600", "d75f00", "af5f00", "ffaf87", "ff00d7", "c0c0c0", "808080", "ffffff", "fffffe"])(
+  // Outside: the salmon 256 colours rounds a theme's palest red to (39°),
+  // the oranges past it, a magenta past -20°, a red-tinged grey under the
+  // chroma floor, and greys of every lightness.
+  test.each(["ff875f", "ff5f00", "ff6600", "d75f00", "af5f00", "ffaf87", "ff00d7", "a88080", "c0c0c0", "808080", "ffffff", "fffffe"])(
     "#%s does not",
     (hex) => expect(readsRed(parseRgbHex(hex))).toBe(false),
   );
-  test("ANSI's red and bright red read as red at every depth", () => {
+  test("the terminal's reds read as red at every depth", () => {
     for (const depth of [ColorDepth.TRUECOLOR, ColorDepth.EIGHT_BIT, ColorDepth.STANDARD]) {
-      for (const index of [1, 9]) {
-        expect(readsRed(drawnColour(STANDARD_TABLE.get(index), depth))).toBe(true);
+      for (const red of TERMINAL_REDS) {
+        expect(readsRed(drawnColour(red, depth))).toBe(true);
       }
     }
   });
@@ -280,6 +283,8 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
   const theme = (name: string) => getThemePalette(name)!;
   const drawn = (hex: string, depth: ColorDepth) =>
     drawnColour(parseRgbHex(hex.slice(1)), depth);
+  const themeReds = (palette: Palette) =>
+    ERROR_REDS.map((name) => palette.get(name)!);
 
   test("the error text colour, where it clears the text floor, though a rung stands farther off", () => {
     // On black: text-error 5.46:1, error-lighten-3 10.2:1.
@@ -298,10 +303,15 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
     expect(on("#202020")).toBe("#d27878");
   });
 
-  test("a theme red that clears only the quiet floor is kept over a terminal red that clears the text floor", () => {
-    // On #707070: darken-3 3.37:1 is the best of the theme's reds; ANSI's red
-    // #800000 stands 2.4:1 and bright red 1.4:1, so a theme red at the quiet
-    // floor is the answer, never a red the theme does not name.
+  test("a terminal red that clears the text floor is taken where no theme red does", () => {
+    // Pale reds on white all stand under 2:1; ANSI's red #800000 stands 10:1.
+    const PALE = new Map([...RED].map(([role]) => [role, parseRgbHex("f0a8a8")]));
+    expect(on("#ffffff", withRoles("pale", PALE))).toBe("#800000");
+  });
+
+  test("where no red clears the text floor, the one standing farthest off, the theme's or the terminal's", () => {
+    // On #707070: darken-3 3.37:1 stands farthest; ANSI's red #800000 stands
+    // 2.2:1 and bright red 1.4:1.
     expect(on("#707070")).toBe("#460000");
   });
 
@@ -311,16 +321,16 @@ describe("errorRedOn: the door's ✖ is the theme's own error red as the depth d
     expect(readsRed(drawn("#db322f", ColorDepth.EIGHT_BIT))).toBe(false);
     const red = on("#000000", palette, ColorDepth.EIGHT_BIT);
     expect(readsRed(drawn(red, ColorDepth.EIGHT_BIT))).toBe(true);
-    expect(errorRedCandidates(palette, false).map((c) => c.hex)).toContain(red);
+    expect(themeReds(palette).map((c) => c.hex)).toContain(red);
   });
 
   test("at sixteen colours, where every theme red is drawn grey or silver, it is the terminal's red", () => {
     const palette = theme("catppuccin-frappe");
-    for (const c of errorRedCandidates(palette, false)) {
+    for (const c of themeReds(palette)) {
       expect(readsRed(drawnColour(c, ColorDepth.STANDARD))).toBe(false);
     }
     const red = on("#000000", palette, ColorDepth.STANDARD);
-    expect([1, 9].map((i) => STANDARD_TABLE.get(i).hex)).toContain(red);
+    expect(TERMINAL_REDS.map((c) => c.hex)).toContain(red);
   });
 
   test("a near-white error text colour is never taken for red, at any depth", () => {
