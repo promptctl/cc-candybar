@@ -4,15 +4,22 @@
     {
       "version": "pr-794",
       "ref": "refs/pull/794/merge",
-      "sha": "6a6377466c5e889ef960b28b6d51ff0cf5c804f6",
-      "timestamp": "2026-11-18T06:06:20.354Z",
+      "sha": "2a7a95c01935d44a4cd5578da608309dd49258aa",
+      "timestamp": "2026-11-18T06:40:07.588Z",
       "commits": [
         {
-          "sha": "6a6377466c5e889ef960b28b6d51ff0cf5c804f6",
+          "sha": "2a7a95c01935d44a4cd5578da608309dd49258aa",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T23:05:15-07:00",
-          "message": "Merge dae2722ed3f511a4d8b4926f8ef8027bc71a68f7 into e33675a193dfc48790988daa17ac05641e602a19\n"
+          "timestamp": "2026-11-18T06:38:58Z",
+          "message": "Merge dcb474676fe4583da0e3cfcdf0c36380596f22fe into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "dcb474676fe4583da0e3cfcdf0c36380596f22fe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T23:38:45-07:00",
+          "message": "fix(renderer): a restart keeps its storage watches; review findings (2jt)\n\n- The storage owner takes the folders a slot ends naming, once its config\n  turns have loaded: a restarted renderer's start names none, and handing\n  that on closed and reopened every plugin storage watch.\n- A renderer's end names what it was answering, since a turn that never\n  answers takes its log lines with it.\n- A close step's failure is said once, by the teardown that owns it.\n- The renderer input loses its one-valued kind; the effect owed an\n  effect-done is OwedEffect, apart from the launcher's Settled.\n- The test-only previewSigner and daemonGates go.\n- The doctor e2e test waits for a run's report before the next run, which\n  replaces it.\n"
         },
         {
           "sha": "dae2722ed3f511a4d8b4926f8ef8027bc71a68f7",

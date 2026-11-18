@@ -54057,80 +54057,5258 @@ var SESSION_KEY_TO_SETTING = new Map(
   SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
 );
 
-// src/daemon/foundations/gates.ts
-init_globals();
+// src/daemon/foundations/update-keys.ts
+var UPDATE_DISMISSED_KEY = "update.dismissed";
+var UPDATE_NOTICE_FIELD = "updateNotice";
+var UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
+var DAEMON_HELD_KEYS = {
+  config: [{ key: UPDATE_NOTICE_FIELD, allowed: ["false"] }],
+  state: [
+    { key: UPDATE_NOTICE_SESSION_KEY, allowed: ["false"] },
+    { key: UPDATE_DISMISSED_KEY, allowed: [] }
+  ]
+};
 
-// src/daemon/foundations/config-validators.ts
-init_globals();
-
-// src/config/option-domain.ts
-init_globals();
-
-// src/themes/palette-resolvers.ts
-init_globals();
-var baseCache = /* @__PURE__ */ new Map();
-function paletteForThemeName(name) {
-  const palette = basePaletteFor(name);
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
-    );
+// src/daemon/foundations/update-offer.ts
+function updateIdentity(update) {
+  return update.kind === "source" ? update.newer.digest : formatVersion(update.newer);
+}
+var describeStamp = (s) => `${s.version} [${shortDigest(s.digest)}]`;
+function wordsOf(update) {
+  switch (update.kind) {
+    case "source":
+      return {
+        headline: "Newer source",
+        newer: describeStamp(update.newer),
+        running: describeStamp(update.running),
+        act: "rebuild",
+        busy: "rebuilding\u2026"
+      };
+    case "release":
+      return {
+        headline: "Newer release",
+        newer: formatVersion(update.newer),
+        running: formatVersion(update.running),
+        act: "upgrade",
+        busy: "upgrading\u2026"
+      };
   }
-  return palette;
 }
-function placementPalette(theme24, bar) {
-  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
-}
-function basePaletteFor(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
-}
-function transposedPalette(base, key) {
-  return TRANSPOSED(
-    base,
-    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
-    () => transposePalette(base, key)
+var NO_NOTICE = { offer: [], failure: [] };
+function updateNotice(update, act2, ctx) {
+  if (update === null) return NO_NOTICE;
+  const identity2 = updateIdentity(update);
+  if (!ctx.enabled || ctx.dismissed === identity2) return NO_NOTICE;
+  const words2 = wordsOf(update);
+  const sentence = `${words2.headline}: ${words2.newer}. You're on ${words2.running}.`;
+  const failedText = (text4) => ({
+    about: `update-failed\0${identity2}`,
+    text: text4,
+    copy: text4
+  });
+  const failure = act2.kind === "failed" && act2.identity === identity2 ? [failedText(`${words2.act} failed: ${act2.reason}`)] : [];
+  const actSpan = act2.kind === "running" ? diagnosticSpan(`[${words2.busy}]`, null) : diagnosticSpan(
+    `[${words2.act}]`,
+    effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
   );
-}
-var TRANSPOSED = memoPerPalette();
-function namedTheme(name) {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
-}
-function decideThemeName(name, where, onUnresolvable) {
-  const named3 = namedTheme(name);
-  if (named3 !== null) return named3;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`
+  const first2 = [
+    diagnosticSpan(sentence, null),
+    actSpan,
+    diagnosticSpan(
+      "[dismiss]",
+      effectsUrl([
+        {
+          verb: VERB_SET_STATE,
+          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
+        }
+      ])
+    ),
+    diagnosticSpan(
+      "[disable]",
+      effectsUrl([
+        {
+          verb: VERB_SET_CONFIG,
+          // The user's own file: the notice is the user's to turn off.
+          args: [ctx.sessionId, "user", UPDATE_NOTICE_FIELD, "false"]
+        },
+        {
+          verb: VERB_SET_STATE,
+          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"]
+        }
+      ])
     )
-  );
-  return themeFloor();
-}
-function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
-  return resolveSelection(
-    stagedPalette,
-    sessionTheme,
-    globalsPalette,
-    themeFloor(),
-    namedTheme
-  );
-}
-function themeFloor() {
+  ];
   return {
-    kind: "decided",
-    name: THEME_FLOOR,
-    value: paletteForThemeName(THEME_FLOOR)
+    offer: [
+      {
+        severity: UPDATE_SEVERITY,
+        about: `update\0${identity2}`,
+        message: sentence,
+        copy: sentence,
+        lines: [first2]
+      }
+    ],
+    failure
   };
 }
 
-// src/config/presets.ts
+// src/daemon/update-notice.ts
+function commandOf(update) {
+  switch (update.kind) {
+    case "source":
+      return { bin: "pnpm", args: ["build"], cwd: update.root };
+    case "release":
+      return {
+        bin: "pnpm",
+        args: [
+          "dlx",
+          `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
+          "install"
+        ]
+      };
+  }
+}
+function updateReading(build2, release4) {
+  if (build2.kind === "pending") return build2;
+  const b = build2.value;
+  switch (b.kind) {
+    case "stale":
+      return ok({
+        kind: "source",
+        root: b.root,
+        newer: b.source,
+        running: b.running
+      });
+    case "current":
+      return ABSENT;
+    case "unchecked":
+      return failed(`build: unchecked: ${b.reason}`, "read");
+    case "not-source-checkout":
+      return releaseReading(release4);
+  }
+}
+function releaseReading(release4) {
+  if (release4.kind === "pending") return release4;
+  const c = release4.value;
+  switch (c.kind) {
+    case "stale":
+      return ok({ kind: "release", newer: c.latest, running: c.installed });
+    case "current":
+    case "ahead":
+      return ABSENT;
+    case "unchecked":
+      return failed(`release: unchecked: ${c.reason}`, "read");
+  }
+}
+var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
+var ACT_POLL_MS = 2e3;
+function describeBuild(b) {
+  switch (b.kind) {
+    case "current":
+      return ["info", `build: current ${describeStamp(b.stamp)}`];
+    case "stale":
+      return [
+        "info",
+        `build: stale \u2014 source ${describeStamp(b.source)}, running ${describeStamp(b.running)}`
+      ];
+    case "not-source-checkout":
+      return ["info", "build: not a source checkout"];
+    case "unchecked":
+      return ["warn", `build: unchecked: ${b.reason}`];
+  }
+}
+function describeRelease(c) {
+  switch (c.kind) {
+    case "current":
+      return ["info", `release: current ${formatVersion(c.installed)}`];
+    case "stale":
+      return [
+        "info",
+        `release: stale \u2014 latest ${formatVersion(c.latest)}, running ${formatVersion(c.installed)}`
+      ];
+    case "ahead":
+      return [
+        "info",
+        `release: ahead \u2014 running ${formatVersion(c.installed)}, latest ${formatVersion(c.latest)}`
+      ];
+    case "unchecked":
+      return ["warn", `release: unchecked: ${c.reason}`];
+  }
+}
+function makeUpdateWatch(opts) {
+  const {
+    fact,
+    clock,
+    launcher,
+    probe: probe2,
+    entryUrl,
+    digest: digest2,
+    actsDir: actsDir2,
+    intervalMs,
+    releaseIntervalMs,
+    registryUrl,
+    fetchImpl,
+    onApplied,
+    log
+  } = opts;
+  let build2 = pendingOf("unread");
+  let release4 = pendingOf("unread");
+  const readStart = async (pid2) => {
+    const read2 = await probe2.startTime(pid2);
+    if (closed) throw new DaemonClosing("apply-update");
+    return read2;
+  };
+  const acts = makeActReader(actsDir2, readStart, launcher, clock);
+  let seen2 = null;
+  let unreadable = null;
+  const actsRead = observable.box(
+    { act: IDLE, actsError: null },
+    { deep: false, equals: compareStructural }
+  );
+  const publishActs = () => runInAction(
+    () => actsRead.set({ act: seen2 ?? IDLE, actsError: unreadable })
+  );
+  const logBuild = changeLogger(log);
+  const logRelease = changeLogger(log);
+  const actQueue = new KeyedSerialQueue();
+  const actTurn = (body) => actQueue.run("acts", body);
+  let closed = false;
+  const armed = [];
+  const every = (run3, ms) => {
+    armed.push(clock.every(ms, run3, { unref: true }));
+  };
+  const current2 = () => {
+    const held2 = fact.get();
+    return held2.kind === "ok" ? held2.value : null;
+  };
+  function publish() {
+    const reading = closed ? ABSENT : updateReading(build2, release4);
+    const next = restamp(fact.get(), reading, instantAt(clock));
+    runInAction(() => fact.set(next));
+  }
+  function sampleBuild() {
+    const sampled = assessBuild(entryUrl, () => bundleStamp(digest2));
+    build2 = ok(sampled);
+    logBuild(describeBuild(sampled));
+    publish();
+    return sampled;
+  }
+  async function pollRelease() {
+    const latest = await fetchLatestVersion(
+      PACKAGE_NAME,
+      fetchImpl,
+      registryUrl,
+      clock
+    );
+    const assessed = assessCurrency(PACKAGE_VERSION, latest);
+    release4 = ok(assessed);
+    logRelease(describeRelease(assessed));
+    publish();
+  }
+  const logUnreadable = changeLogger(log);
+  async function touchActs(touch) {
+    try {
+      const value = await touch();
+      unreadable = null;
+      publishActs();
+      return { ok: true, value };
+    } catch (err) {
+      if (err instanceof DaemonClosing) {
+        return { ok: false, error: err.message };
+      }
+      unreadable = `update act files (${actsDir2}): ${err.message}`;
+      publishActs();
+      logUnreadable(["error", unreadable]);
+      return { ok: false, error: unreadable };
+    }
+  }
+  function endIfOverdue(facts) {
+    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
+    const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
+    const why2 = stands ? "timed out" : "outlived its verdict";
+    const ending = signalled ? "ending it" : "its group took no signal";
+    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
+  }
+  async function watchAct() {
+    const read2 = await touchActs(async () => {
+      const facts = await acts.read();
+      if (!closed) endIfOverdue(facts);
+      return facts;
+    });
+    if (closed || !read2.ok) return;
+    const next = judgeAct(read2.value);
+    const was = seen2;
+    seen2 = next;
+    if (was === null && next.kind === "running") {
+      log("info", `apply-update: act ${next.act} is running; watching it`);
+    }
+    const ended = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended && next.kind === "succeeded";
+    if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
+    if (ended && next.kind === "failed") {
+      log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
+    }
+    runInAction(() => {
+      if (succeeded) sampleBuild();
+      publishActs();
+    });
+    if (succeeded) onApplied();
+  }
+  let clearTick;
+  async function tick() {
+    await actTurn(watchAct);
+    if (closed) return;
+    clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
+  }
+  return {
+    arm() {
+      const sampled = sampleBuild();
+      every(sampleBuild, intervalMs);
+      armed.push(() => clearTick?.());
+      void tick();
+      if (sampled.kind === "not-source-checkout") {
+        void pollRelease();
+        every(() => void pollRelease(), releaseIntervalMs);
+      }
+    },
+    close() {
+      closed = true;
+      publish();
+      armed.forEach((release5) => release5());
+    },
+    acts: () => actsRead.get(),
+    running: () => actTurn(async () => {
+      const read2 = await touchActs(() => acts.read());
+      return read2.ok && judgeAct(read2.value).kind === "running";
+    }),
+    act: () => actTurn(async () => {
+      if (closed) throw new DaemonClosing("apply-update");
+      const read2 = await touchActs(() => acts.read());
+      if (closed) throw new DaemonClosing("apply-update");
+      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
+      const update = current2();
+      if (update === null) {
+        throw new BadVerbArgs(
+          "apply-update: nothing newer is known to apply"
+        );
+      }
+      const words2 = wordsOf(update);
+      const command = commandOf(update);
+      const newest = read2.value;
+      if (judgeAct(newest).kind === "running") {
+        throw new BadVerbArgs(`apply-update: already ${words2.busy}`);
+      }
+      const claim = await claimAct(
+        launcher,
+        actsDir2,
+        newest === null ? null : newest.act,
+        updateIdentity(update),
+        { ...command, category: "update.apply" },
+        ACT_TIMEOUT_MS,
+        clock.now(),
+        readStart
+      );
+      if (!claim.ok) {
+        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
+      }
+      log(
+        "info",
+        `apply-update: act ${claim.act}: ${words2.act} \u2014 ${command.bin} ${command.args?.join(" ") ?? ""}`
+      );
+      seen2 = { kind: "running", act: claim.act };
+      publishActs();
+    })
+  };
+}
+
+// src/daemon/update-fact.ts
+init_globals();
+function newUpdateFact() {
+  return observable.box(pendingOf("unread"), { deep: false });
+}
+
+// src/daemon/binary-watch.ts
+init_globals();
+function mtimeOf(path46, stat3) {
+  try {
+    return ok(stat3(path46).mtimeMs);
+  } catch (e) {
+    const code2 = e.code;
+    return code2 === "ENOENT" || code2 === "ENOTDIR" ? ABSENT : failed(e.message, "read");
+  }
+}
+function sameStamp(a, b) {
+  return a.kind === "ok" && b.kind === "ok" ? a.value === b.value : a.kind === b.kind;
+}
+function makeBinaryWatch(opts) {
+  const { targets, intervalMs, stat: stat3, held: held2, exit: exit2, log, clock } = opts;
+  const logHeld = changeLogger(log);
+  const boot = targets.map((path46) => ({ path: path46, stamp: mtimeOf(path46, stat3) }));
+  const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
+  let stopSampling = null;
+  let ended = false;
+  const end = () => {
+    ended = true;
+    stopSampling?.();
+  };
+  const sample = async () => {
+    if (ended) return;
+    for (const { path: path46, stamp: stamp2 } of watched) {
+      const now2 = mtimeOf(path46, stat3);
+      if (now2.kind === "failed") {
+        log("warn", `binary stat failed (${path46}): ${now2.reason}`);
+        continue;
+      }
+      if (!sameStamp(stamp2, now2)) {
+        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path46})`;
+        const waiting = await held2();
+        if (ended) return;
+        if (waiting) {
+          logHeld([
+            "info",
+            `${what}; the restart waits for the running update`
+          ]);
+          return;
+        }
+        log("info", `${what}; shutting down`);
+        end();
+        exit2();
+        return;
+      }
+    }
+  };
+  const check = () => sample().catch((e) => {
+    log("error", `binary check failed: ${e.message}`);
+  });
+  return {
+    arm() {
+      for (const { path: path46, stamp: stamp2 } of boot) {
+        if (stamp2.kind === "failed") {
+          log(
+            "warn",
+            `binary stat failed at boot (${path46}): ${stamp2.reason}; not watched`
+          );
+        }
+      }
+      stopSampling = clock.every(intervalMs, () => void check(), {
+        unref: true
+      });
+    },
+    checkNow: check,
+    close: end
+  };
+}
+
+// src/install/index.ts
+init_globals();
+
+// src/attach-launcher.ts
+init_globals();
+var import_node_path18 = __toESM(require_path_browserify(), 1);
+
+// src/claude-command-line.ts
+init_globals();
+
+// src/shell-word.ts
+init_globals();
+var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
+function singleQuoted(s) {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+function shellWord(s) {
+  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
+}
+
+// src/claude-command-line.ts
+function claudeCommandLine(command) {
+  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
+  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
+  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
+}
+
+// src/attach-launcher.ts
+var ATTACH_DIR = "cc-extra";
+function attachLauncherOf(bundle) {
+  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
+}
+function moduleGraphReaderOf(launcher) {
+  return import_node_path18.default.join(import_node_path18.default.dirname(launcher), "bun-graph.js");
+}
+var ATTACH_PRELOAD = "attach-preload.cjs";
+function attachPreloadOf(bundle) {
+  return import_node_path18.default.join(import_node_path18.default.dirname(bundle), ATTACH_PRELOAD);
+}
+var PRELOAD_VARIABLE = "BUN_OPTIONS";
+function attachCommandLine(preload, command) {
+  return claudeCommandLine({
+    ...command,
+    env: [
+      ...command.env,
+      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
+    ]
+  });
+}
+
+// src/install/index.ts
+var import_node_path22 = __toESM(require_path_browserify(), 1);
+
+// site/shims/unavailable.ts
+init_globals();
+var refuse2 = (name) => () => {
+  throw new Error(`${name} is not available in the page`);
+};
+var connect = refuse2("net.connect");
+var createServer = refuse2("net.createServer");
+var createConnection = refuse2("net.createConnection");
+var get = refuse2("https.get");
+var request = refuse2("https.request");
+var createInterface = refuse2("readline.createInterface");
+var createRequire = refuse2("module.createRequire");
+var json = refuse2("stream/consumers.json");
+var text3 = refuse2("stream/consumers.text");
+var writeHeapSnapshot = refuse2("v8.writeHeapSnapshot");
+var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
+var unavailable_default = { connect, createServer, createConnection, get, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
+
+// src/daemon/client.ts
+init_globals();
+
+// src/daemon/client-transport.ts
+init_globals();
+
+// src/daemon/client.ts
+var CLICK_BUDGETS = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
+};
+
+// src/daemon/acquire.ts
+init_globals();
+var import_node_path20 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/limits.ts
+init_globals();
+var import_node_path19 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/memory-report.ts
+init_globals();
+var PROBE_TIMEOUT_MS = 5e3;
+async function memoryReport(probes) {
+  const refusals = [];
+  for (const probe2 of probes) {
+    const outcome = await probe2.read();
+    if (outcome.kind === "text") {
+      return `# memory report from: ${probe2.name}
+${outcome.text}`;
+    }
+    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
+  }
+  return [
+    "# memory report: no probe answered",
+    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
+  ].join("\n");
+}
+async function memoryReports(each) {
+  return (await Promise.all(each.map(memoryReport))).join("\n\n");
+}
+var FOOTPRINT = "/usr/bin/footprint";
+var VMMAP = "/usr/bin/vmmap";
+function platformProbes(launcher, platform3, pid2) {
+  if (platform3 === "darwin") {
+    return [
+      // The whole-process category table: V8's mappings, the MALLOC_* regions
+      // with their reclaimable share, and page tables, each with a size.
+      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
+      // Same mappings, coarser, but present on hosts where `footprint` is not.
+      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
+    ];
+  }
+  if (platform3 === "linux") {
+    return [
+      // One line per accounting class for the whole address space — Linux's
+      // answer to `footprint`, and free (no subprocess). A process may read
+      // its own child's.
+      fileProbe(`/proc/${pid2}/smaps_rollup`),
+      // Always present, coarser: VmRSS and friends, so Linux never falls all
+      // the way through to "no probe answered".
+      fileProbe(`/proc/${pid2}/status`)
+    ];
+  }
+  return [];
+}
+function chargeProbe(launcher, platform3) {
+  return platform3 === "darwin" ? footprintCharge(
+    (args) => launcher.launch({
+      bin: FOOTPRINT,
+      args,
+      timeoutMs: PROBE_TIMEOUT_MS,
+      category: "limits.charge"
+    })
+  ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
+}
+function footprintCharge(run3) {
+  return async (pids, rss) => {
+    const result = await run3([
+      ...pids.flatMap((pid2) => ["-p", String(pid2)]),
+      "--noCategories",
+      "-f",
+      "bytes"
+    ]);
+    if (!result.ok) {
+      return {
+        kind: "stand-in",
+        bytes: rss,
+        unread: `footprint ${failureText(result)}`
+      };
+    }
+    const each = physFootprintsOf(result.stdout);
+    return each.length !== pids.length ? {
+      kind: "stand-in",
+      bytes: rss,
+      unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`
+    } : {
+      kind: "charged",
+      measure: "phys_footprint",
+      bytes: each.reduce((total, bytes) => total + bytes, 0)
+    };
+  };
+}
+function physFootprintsOf(text4) {
+  return [...text4.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map(
+    (m) => Number(m[1])
+  );
+}
+function commandProbe(launcher, bin, args) {
+  return {
+    name: `${bin} ${args.join(" ")}`,
+    read: async () => {
+      const result = await launcher.launch({
+        bin,
+        args: [...args],
+        timeoutMs: PROBE_TIMEOUT_MS,
+        category: "limits.memory-report"
+      });
+      if (!result.ok) {
+        return {
+          kind: "unavailable",
+          reason: failureText(result)
+        };
+      }
+      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
+    }
+  };
+}
+function fileProbe(path46) {
+  return {
+    name: path46,
+    read: async () => {
+      try {
+        const text4 = fs_default.readFileSync(path46, "utf8");
+        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
+      } catch (e) {
+        return { kind: "unavailable", reason: e.message };
+      }
+    }
+  };
+}
+
+// src/daemon/foundations/memory-limit.ts
+init_globals();
+var BYTES_PER_MB = 1024 * 1024;
+var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
+function laterIdentity(a, b) {
+  return a > b;
+}
+var NEAR_LIMIT = 0.75;
+function approachingLimit(bytes, limit) {
+  return bytes > limit * NEAR_LIMIT;
+}
+function chargeWords(charge) {
+  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
+}
+function measureOf(charge) {
+  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
+}
+var BREACH_ARTIFACTS = {
+  memoryReport: { prefix: "memory-", suffix: ".txt" },
+  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
+  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
+};
+
+// src/daemon/limits.ts
+var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
+var DEFAULT_RSS_LIMIT_MB = 1024;
+function memoryLimitMb(env2) {
+  const raw = env2[RSS_LIMIT_ENV];
+  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
+  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
+    throw new Error(
+      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
+    );
+  }
+  return mb2;
+}
+function memoryLimitBytes(env2) {
+  return memoryLimitMb(env2) * BYTES_PER_MB;
+}
+var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
+var HEAP_SNAPSHOT_KEEP = 3;
+function readCharge(probed, previous) {
+  if (probed.kind === "charged") return probed;
+  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
+  return { ...probed, bytes: probed.bytes - gap, gap };
+}
+function artifactFile(dir, kind, identity2) {
+  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+  return import_node_path19.default.join(dir, `${prefix}${identity2}${suffix}`);
+}
+function breachArtifactOf(base) {
+  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
+  }
+  return null;
+}
+function makeLimits(deps) {
+  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
+  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
+  let triggered = false;
+  let latest = { kind: "unmeasured" };
+  let inFlight = null;
+  let disarmed = false;
+  let clearTimer;
+  function check() {
+    inFlight ??= measure3().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+  async function measure3() {
+    if (triggered) return true;
+    const own2 = deps.memoryBytes();
+    const renderer = deps.renderer();
+    const processes = [
+      { role: "host", pid: deps.pid, sizes: own2 },
+      ...renderer === null ? [] : [
+        {
+          role: "renderer",
+          pid: renderer.pid,
+          sizes: renderer.usage
+        }
+      ]
+    ];
+    const pids = processes.map((p2) => p2.pid);
+    const rss = sum(processes, (s) => s.rss);
+    const heapTotal = sum(processes, (s) => s.heapTotal);
+    const charge = readCharge(await deps.memoryCharge(pids, rss), latest);
+    const reading = {
+      kind: "measured",
+      charge,
+      rss,
+      heapTotal,
+      processes
+    };
+    latest = reading;
+    deps.log("info", `memory ${readingFields(reading, limit)}`);
+    if (disarmed || charge.bytes <= limit) return false;
+    triggered = true;
+    deps.log(
+      "warn",
+      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
+    );
+    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
+    const identity2 = `${stamp2}-${deps.pid}`;
+    await attempt2(deps.log, "memory report", async () => {
+      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
+      const report2 = await deps.captureMemoryReport(pids);
+      if (disarmed) return;
+      deps.writeMemoryReport(file, report2);
+      deps.log("info", `memory report written: ${file}`);
+    });
+    const closedDuring = () => {
+      if (disarmed)
+        deps.log(
+          "info",
+          "daemon closed during the breach: no snapshot, no exit"
+        );
+      return disarmed;
+    };
+    if (closedDuring()) return false;
+    if (renderer !== null)
+      await attempt2(deps.log, "renderer heap snapshot", async () => {
+        const file = artifactFile(
+          deps.snapshotDir,
+          "rendererHeapSnapshot",
+          identity2
+        );
+        await renderer.heapSnapshot(file);
+        deps.log("info", `renderer heap snapshot written: ${file}`);
+      });
+    if (closedDuring()) return false;
+    await attempt2(deps.log, "heap snapshot", () => {
+      deps.writeLogNow();
+      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
+      deps.log(
+        "info",
+        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
+      );
+    });
+    await attempt2(deps.log, "artifact rotation", async () => {
+      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
+        keep2
+      )) {
+        for (const file of Object.values(artifacts)) {
+          await attempt2(
+            deps.log,
+            `evicting ${file}`,
+            () => deps.removeFile(file)
+          );
+        }
+      }
+    });
+    deps.shutdown(0);
+    return true;
+  }
+  function describeNextRestart() {
+    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
+  }
+  function serving() {
+    return { pid: deps.pid, memory: latest, limit };
+  }
+  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
+    const tick = async () => {
+      try {
+        if (await check()) return;
+      } catch (e) {
+        deps.log("warn", `memory check failed: ${e.message}`);
+      }
+      if (disarmed) return;
+      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
+        unref: true
+      });
+    };
+    void tick();
+  }
+  function disarm() {
+    disarmed = true;
+    clearTimer?.();
+  }
+  return { check, describeNextRestart, serving, arm: arm2, disarm };
+}
+function sum(processes, size) {
+  return processes.reduce(
+    (total, p2) => total + (p2.sizes === null ? 0 : size(p2.sizes)),
+    0
+  );
+}
+function readingFields({
+  charge,
+  rss,
+  heapTotal,
+  processes
+}, limit) {
+  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
+  const each = processes.map(
+    (p2) => ` ${p2.role}=${p2.pid}:${p2.sizes === null ? "unread" : `rss${mb(p2.sizes.rss)}MB/heap${mb(p2.sizes.heapTotal)}MB`}`
+  ).join("");
+  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}${each}`;
+}
+async function attempt2(log, what, body) {
+  try {
+    await body();
+  } catch (e) {
+    log("warn", `${what} failed: ${e.message}`);
+  }
+}
+function breachArtifacts(dir) {
+  let names;
+  try {
+    names = fs_default.readdirSync(dir);
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw e;
+  }
+  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path19.default.join(dir, f));
+}
+function listPostMortems(dir) {
+  try {
+    return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };
+  } catch (e) {
+    return { kind: "failed", reason: e.message };
+  }
+}
+function postMortemsOf(files) {
+  const byIdentity = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const base = import_node_path19.default.basename(file);
+    const kind = breachArtifactOf(base);
+    if (kind === null) continue;
+    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
+    const identity2 = base.slice(prefix.length, base.length - suffix.length);
+    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
+  }
+  const kinds = Object.keys(BREACH_ARTIFACTS);
+  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found2]) => ({
+    identity: identity2,
+    artifacts: Object.fromEntries(
+      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
+    )
+  }));
+}
+function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
+  const dir = owner.snapshotDir;
+  return {
+    clock: owner.clock,
+    pid: process.pid,
+    snapshotDir: dir,
+    log: owner.log,
+    memoryBytes: () => {
+      const mem = process.memoryUsage();
+      return { rss: mem.rss, heapTotal: mem.heapTotal };
+    },
+    memoryCharge: chargeProbe(owner.launcher, process.platform),
+    captureMemoryReport: (pids) => memoryReports(
+      pids.map(
+        (pid2) => platformProbes(owner.launcher, process.platform, pid2)
+      )
+    ),
+    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
+    // identity, so it shares a permission — a post-mortem pair where one half is
+    // world-readable and the other is not invites exactly the "is this
+    // sensitive?" question at the worst moment to be asking it.
+    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
+    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
+    writeLogNow: owner.writeLogNow,
+    listArtifacts: () => breachArtifacts(dir),
+    removeFile: (file) => fs_default.unlinkSync(file),
+    shutdown,
+    startedAtMs,
+    ...overrides
+  };
+}
+
+// src/daemon/acquire.ts
+init_process();
+
+// src/claude-settings-read.ts
+init_globals();
+var import_node_path21 = __toESM(require_path_browserify(), 1);
+function readSettingsFile(settingsPath) {
+  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read2.kind) {
+    case "absent":
+      return null;
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
+    case "ok":
+      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
+  }
+}
+var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
+function readClaudeSettingsText(settingsPath) {
+  return readSettingsFile(settingsPath)?.text ?? "";
+}
+function readClaudeSettingsOutcome(settingsPath) {
+  const reason = (e) => e instanceof Error ? e.message : String(e);
+  let text4;
+  try {
+    text4 = readClaudeSettingsText(settingsPath);
+  } catch (e) {
+    return failed(reason(e), "read");
+  }
+  try {
+    return ok(parseSettings(settingsPath, text4));
+  } catch (e) {
+    return failed(reason(e), "parse");
+  }
+}
+function parseSettings(settingsPath, text4) {
+  let parsed2;
+  try {
+    if (/^\s*$/.test(text4)) return {};
+    parsed2 = JSON_DIALECT.parse(text4);
+  } catch (e) {
+    throw cannotRead(settingsPath, e);
+  }
+  if (!isJsonObject(parsed2)) {
+    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
+  }
+  return parsed2;
+}
+function readSettingsChain(at) {
+  const dropIns = import_node_path21.default.join(at.managedDir, "managed-settings.d");
+  const located2 = [
+    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
+      scope: "managed",
+      path: import_node_path21.default.join(dropIns, name)
+    })),
+    {
+      scope: "managed",
+      path: import_node_path21.default.join(at.managedDir, "managed-settings.json")
+    },
+    {
+      scope: "project-local",
+      path: projectLocalSettingsFile(at.projectDir)
+    },
+    {
+      scope: "project",
+      path: import_node_path21.default.join(at.projectDir, ".claude", "settings.json")
+    },
+    { scope: "user", path: at.userFile }
+  ];
+  const read2 = located2.flatMap((l) => {
+    const file = readSettingsFile(l.path);
+    if (file === null) return [];
+    const settings = parseSettings(l.path, file.text);
+    const { env: env2 = {} } = settings;
+    if (!isJsonObject(env2)) {
+      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
+    }
+    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
+  });
+  const user = read2.find((r) => r.source.scope === "user");
+  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
+}
+function visibleJsonFiles(dir) {
+  try {
+    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
+  } catch (e) {
+    if (e.code === "ENOENT") return [];
+    throw cannotRead(dir, e);
+  }
+}
+var messageOf = (e) => e instanceof Error ? e.message : String(e);
+
+// src/install/platforms.ts
+init_globals();
+var PLATFORM_PACKAGES = {
+  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
+  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
+  "linux-x64": "@promptctl/cc-candybar-linux-x64",
+  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
+};
+function shipsNative(platform3, arch2) {
+  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
+}
+
+// src/install/index.ts
+function supportDir(host) {
+  if (process.platform === "darwin") {
+    return import_node_path22.default.join(host.home, "Library", "Application Support", "CCCandybar");
+  }
+  return import_node_path22.default.join(locations(host).dataHome, "cc-candybar");
+}
+function stagedDistPath(dir) {
+  return import_node_path22.default.join(dir, "dist", "index.mjs");
+}
+function stableAttachPreload(runningBundle, host) {
+  const checkout = sourceCheckoutOf(runningBundle);
+  return attachPreloadOf(
+    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path22.default.join(checkout, "dist", "index.mjs")
+  );
+}
+function forwarderExecutable(app) {
+  return import_node_path22.default.join(app, "Contents", "MacOS", APP_NAME);
+}
+
+// src/daemon/payload-providers.ts
+init_globals();
+
+// src/daemon/cache/git.ts
+init_globals();
+var import_node_path23 = __toESM(require_path_browserify(), 1);
+
+// src/segments/git.ts
+init_globals();
+function trackingOf(upstream, aheadBehind) {
+  if (upstream.kind === "absent") return ok("none");
+  if (upstream.kind === "failed") return upstream;
+  if (aheadBehind.kind === "failed") return aheadBehind;
+  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
+}
+var PR_FIELDS = {
+  prNumber: true,
+  prState: true,
+  prUrl: true,
+  prError: true,
+  prEarlier: true
+};
+function prOfHead(pr, head) {
+  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
+  if (head.kind === "failed")
+    return failed(`HEAD: ${head.reason}`, head.failedAt);
+  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
+}
+var GITHUB_PR_STATES = {
+  OPEN: "open",
+  MERGED: "merged",
+  CLOSED: "closed"
+};
+var GITLAB_MR_STATES = {
+  opened: "open",
+  locked: "open",
+  merged: "merged",
+  closed: "closed"
+};
+function prStateOf(cli, states, word) {
+  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
+}
+var READ_FIELD_NAMES = {
+  aheadBehind: "aheadBehind",
+  head: "head",
+  sha: "sha",
+  operation: "operation",
+  committedAt: "committedAt",
+  stashCount: "stash",
+  upstream: "upstream",
+  repoName: "repoName",
+  repoUrl: "repoUrl"
+};
+function gitInfoFailures(info) {
+  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
+    const outcome = info[field];
+    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
+  });
+}
+function classify(label2, result, nonZero) {
+  if (result.ok) return ok(result.stdout);
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  if (result.reason === "non-zero" && nonZero === result.exitCode)
+    return ABSENT;
+  return failed(launchFailure(label2, result), "read");
+}
+function launchFailure(label2, result) {
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return `${label2}: ${detail}`;
+}
+function firstLine(s) {
+  return s.trim().split("\n", 1)[0] ?? "";
+}
+var FORGE_CLI = {
+  github: "gh",
+  gitlab: "glab"
+};
+function isMissingCommand(result) {
+  return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
+}
+var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+function parseRemoteRef(raw) {
+  const trimmed = raw.trim();
+  if (DOS_DRIVE_PATH.test(trimmed)) return null;
+  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
+  let url;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  return {
+    scheme: url.protocol.replace(/:$/, ""),
+    host: url.hostname.toLowerCase(),
+    port: url.port,
+    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
+  };
+}
+function remoteHost(remoteUrl) {
+  return parseRemoteRef(remoteUrl)?.host || null;
+}
+function detectForge(remoteUrl) {
+  const host = remoteHost(remoteUrl);
+  if (!host) return null;
+  if (host === "github.com" || host.endsWith(".github.com")) return "github";
+  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
+  return null;
+}
+var REMOTES_ARGS = [
+  "config",
+  "--local",
+  "--get-regexp",
+  "^remote\\..*\\.url$"
+];
+function remotesOf(result) {
+  const r = classify("git config --get-regexp remote url", result, 1);
+  if (r.kind === "failed") return r;
+  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
+}
+function parseRemotes(stdout2) {
+  const urlsByName = /* @__PURE__ */ new Map();
+  for (const line of stdout2.split("\n")) {
+    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
+    if (!match) continue;
+    const urls = urlsByName.get(match[1]) ?? [];
+    urls.push(match[2].trim());
+    urlsByName.set(match[1], urls);
+  }
+  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
+}
+function identifyingUrl(remote) {
+  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
+}
+function pickRepoRemote(remotes) {
+  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
+}
+function repoRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  return remote ? identifyingUrl(remote) : null;
+}
+function forgeRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  if (!remote) return null;
+  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
+}
+function repoNameFromUrl(url) {
+  const parsed2 = parseRemoteRef(url);
+  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
+  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
+  return name || null;
+}
+function remoteWebUrl(raw) {
+  const ref = parseRemoteRef(raw);
+  if (!ref) return null;
+  const web = (() => {
+    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
+    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
+    if (ref.scheme === "ssh" || ref.scheme === "git")
+      return { scheme: "https", port: "" };
+    return null;
+  })();
+  if (!web || !ref.host) return null;
+  const repoPath = ref.path.replace(/\.git$/, "");
+  if (!repoPath) return null;
+  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
+  return `${web.scheme}://${authority}/${repoPath}`;
+}
+function repoWebUrl(remotes) {
+  const url = repoRemoteUrl(remotes);
+  return url === null ? null : remoteWebUrl(url);
+}
+function classifyForgePr(label2, result, noPrPattern, parse4) {
+  if (result.ok) return parse4(result.stdout);
+  if (isMissingCommand(result)) return ABSENT;
+  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
+    return ABSENT;
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return failed(`${label2}: ${detail}`, "read");
+}
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseStatusV2(stdout2) {
+  let branch2 = "detached";
+  let oid = ABSENT;
+  let upstream = ABSENT;
+  let aheadBehind = ABSENT;
+  let staged = 0;
+  let unstaged = 0;
+  let untracked2 = 0;
+  let conflicts = 0;
+  for (const line of stdout2.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith("# ")) {
+      const rest2 = line.slice(2);
+      if (rest2.startsWith("branch.oid ")) {
+        const v = rest2.slice("branch.oid ".length).trim();
+        oid = v === "(initial)" ? ABSENT : ok(v);
+      } else if (rest2.startsWith("branch.head ")) {
+        const v = rest2.slice("branch.head ".length).trim();
+        branch2 = v === "(detached)" ? "detached" : v;
+      } else if (rest2.startsWith("branch.upstream ")) {
+        upstream = ok(rest2.slice("branch.upstream ".length).trim());
+      } else if (rest2.startsWith("branch.ab ")) {
+        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
+        if (m) {
+          aheadBehind = ok({
+            ahead: parseInt(m[1], 10),
+            behind: parseInt(m[2], 10)
+          });
+        }
+      }
+      continue;
+    }
+    const kind = line[0];
+    if (kind === "1" || kind === "2") {
+      const xy = line.slice(2, 4);
+      if (xy[0] !== ".") staged++;
+      if (xy[1] !== ".") unstaged++;
+    } else if (kind === "u") {
+      conflicts++;
+    } else if (kind === "?") {
+      untracked2++;
+    }
+  }
+  let status = "clean";
+  if (conflicts > 0) status = "conflicts";
+  else if (staged || unstaged || untracked2) status = "dirty";
+  return {
+    branch: branch2,
+    status,
+    aheadBehind,
+    oid,
+    upstream,
+    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
+  };
+}
+function parseGithubPr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("gh pr view: JSON is not an object", "parse");
+  const { number, state, url, headRefOid: head } = json2;
+  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
+  }
+  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
+  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
+}
+function parseGitlabMr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("glab mr view: JSON is not an object", "parse");
+  const iid = json2.iid;
+  const state = json2.state;
+  const url = json2.web_url;
+  const head = json2.sha;
+  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
+  }
+  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
+  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
+}
+
+// src/utils/trailing-edge.ts
+init_globals();
+var TrailingEdge = class {
+  // The keys whose loop is currently executing, each with its completion.
+  running = /* @__PURE__ */ new Map();
+  // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
+  // count: ten triggers during one pass mean the same thing as one — the work
+  // must be done once more with current inputs.
+  again = /* @__PURE__ */ new Set();
+  run(key, work) {
+    this.again.add(key);
+    if (this.running.has(key)) return { kind: "queued" };
+    return { kind: "started", done: this.start(key, work) };
+  }
+  // A trigger that only ASKS for a reading — a period's tick, a first read —
+  // and carries no news that the answer changed: the loop in flight already
+  // answers it, so it shares that loop's completion rather than queueing a
+  // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
+  // does mid-read). Idle, it starts a loop exactly as `run` does.
+  share(key, work) {
+    const running = this.running.get(key);
+    if (running !== void 0) return running;
+    this.again.add(key);
+    return this.start(key, work);
+  }
+  start(key, work) {
+    const done = this.loop(key, work);
+    this.running.set(key, done);
+    return done;
+  }
+  async loop(key, work) {
+    try {
+      do {
+        this.again.delete(key);
+        await work();
+      } while (this.again.has(key));
+    } finally {
+      this.running.delete(key);
+      this.again.delete(key);
+    }
+  }
+  // Drop every record of running and pending work — the teardown path of an
+  // owner being disposed. In-flight passes cannot be cancelled from here (the
+  // await belongs to `work`), so they run to completion; what this guarantees is
+  // that no QUEUED trigger is honoured after teardown, and that an owner
+  // rebuilt with the same keys starts clean.
+  clear() {
+    this.running.clear();
+    this.again.clear();
+  }
+  // Number of keys whose loop is executing — a read-only observability surface
+  // for tests asserting the serialization contract. Never read as control flow.
+  get size() {
+    return this.running.size;
+  }
+};
+
+// src/daemon/cache/git.ts
+var GIT_PERIOD_MS = 3e4;
+var RESOLUTION_TTL_MS = 3e4;
+var DEFAULT_MAX_REPOS = 64;
+var PASS = "pass";
+var PR_PERIOD = { okMs: 5 * 6e4, failedMs: 45e3 };
+var PR_BACKOFF_CEILING_MS = PR_PERIOD.okMs;
+var DEFAULT_PR_LOOKUPS = 2;
+var PR_KEYS_KEPT = 16;
+function prPeriodOf({ failures }) {
+  return backedOffMs(PR_PERIOD, failures, PR_BACKOFF_CEILING_MS);
+}
+function triggerOf(asked2) {
+  if (asked2.includes("first")) return "first";
+  return asked2.length === 0 ? "period" : "change";
+}
+function holdKey(root) {
+  return `git:${root}`;
+}
+function watchSpec(root, gitDir, commonDir) {
+  const dirs = [
+    { path: gitDir, filenames: ["HEAD", "index"] },
+    { path: import_node_path23.default.join(commonDir, "refs", "heads"), recursive: true }
+  ];
+  const bounds = dirs.map((d) => boundOf(d.path));
+  const named3 = dirs.map((d, i2) => `${d.path}@${boundKey(bounds[i2])}`);
+  return {
+    key: `git:${root}:${named3.join("|")}`,
+    targets: { dirs },
+    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b)
+  };
+}
+function branchOf(outcome) {
+  return outcome.kind === "ok" ? outcome.value.branch : void 0;
+}
+function owe(pr) {
+  pr.missed = true;
+  renew(pr, "unread");
+}
+function unkeyedPr(pr, failures) {
+  if (pr.missed && pr.reading.get().kind === "pending") {
+    settle(
+      pr,
+      failures.size > 0 ? failed([...failures].join("; "), "read") : ABSENT
+    );
+  }
+  return "unkeyed";
+}
+function composed({ value, pr }) {
+  const info = currentOf(value);
+  if (info.kind !== "ok") return info;
+  return ok({ ...info.value, pullRequest: currentOf(pr) });
+}
+var CLOSED = failed("git cache closed", "read");
+function threw(label2) {
+  return (e) => failed(`${label2} threw: ${String(e)}`, "read");
+}
+var GitDataProvider = class {
+  repos = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
+  // inputs resolution reads — `workingDir|projectDir`. It answers WHICH repo
+  // (if any) a directory belongs to, which `repos` cannot: a state exists only
+  // once something asks for its repo. Untracked, the question is re-asked on
+  // every render — a walk to the filesystem root outside a repo
+  // (brandon-git-cache-y2t, -y9h) — and it coalesces concurrent resolutions
+  // of one directory into one.
+  resolutions = /* @__PURE__ */ new Map();
+  closed = false;
+  hits = 0;
+  misses = 0;
+  changes = 0;
+  gitRefreshes;
+  prRefreshes;
+  inner;
+  periodMs;
+  maxRepos;
+  forgeLookups;
+  watchers;
+  ownsWatchers;
+  logger;
+  clock;
+  constructor(opts) {
+    this.inner = opts.inner;
+    this.clock = opts.clock;
+    this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
+    this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
+    this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
+    this.logger = opts.logger ?? quietLogger;
+    const ledger = opts.ledger ?? new RefreshLedger(this.logger);
+    this.gitRefreshes = ledger.declare({
+      name: "git",
+      scope: "repo",
+      refresh: ["first", "period", "change"],
+      lines: ["first", "period", "change"]
+    });
+    this.prRefreshes = ledger.declare({
+      name: "pr",
+      scope: "repo",
+      refresh: ["first", "period"],
+      lines: ["first", "period"]
+    });
+    if (opts.watchers) {
+      this.watchers = opts.watchers;
+      this.ownsWatchers = false;
+    } else {
+      this.watchers = new WatcherRegistry({
+        clock: this.clock,
+        logger: this.logger
+      });
+      this.ownsWatchers = true;
+    }
+  }
+  getWatcherRegistry() {
+    return this.watchers;
+  }
+  getStats() {
+    let held2 = 0;
+    for (const state of this.repos.values()) if (state.holders > 0) held2++;
+    return {
+      size: this.repos.size,
+      held: held2,
+      hits: this.hits,
+      misses: this.misses,
+      changes: this.changes,
+      watchers: this.watchers.size()
+    };
+  }
+  // One TTL over ALL THREE outcome kinds [LAW:one-type-per-behavior]: being
+  // that stale about "is this a repo" promises nothing new. The walk is
+  // synchronous fs (`GitService.resolveEffectiveGitDir`), so a declaration
+  // knows its repo in the turn it asks and takes its hold then; the window
+  // bounds the walk to one per directory per window (brandon-git-cache-y2t),
+  // and only a declaration consults it — a draw reads the lane it was handed
+  // and never resolves.
+  resolution(workingDir, projectDir) {
+    const key = `${workingDir}|${projectDir ?? ""}`;
+    const now2 = this.clock.monotonic();
+    const existing = this.resolutions.get(key);
+    if (existing && now2 - existing.computedAt < RESOLUTION_TTL_MS) {
+      this.resolutions.delete(key);
+      this.resolutions.set(key, existing);
+      return existing.known;
+    }
+    let known;
+    try {
+      known = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
+    } catch (e) {
+      known = failed(`resolver threw: ${String(e)}`, "read");
+    }
+    this.resolutions.set(key, { known, computedAt: now2 });
+    if (known.kind === "failed") {
+      this.logger(
+        "warn",
+        `git resolve failed (${workingDir}): ${known.reason}`
+      );
+    }
+    while (this.resolutions.size > this.maxRepos) {
+      const oldest = this.resolutions.keys().next().value;
+      if (oldest === void 0) break;
+      this.resolutions.delete(oldest);
+    }
+    return known;
+  }
+  // [LAW:single-enforcer] The one way into a repo: a home's declaration of
+  // what its draws read. `holds` takes the repo, its value and its PR — held
+  // until a declaration of the home's takes them no more, or the home is
+  // disposed, which is what keeps the repo on its periods — and the lane reads
+  // them as they stand, never awaited and taking nothing. A value never read
+  // is pending, its first pass queued; the PR is composed from its own source,
+  // pending on its own while its key is not answered, so the rest of the value
+  // draws as it stands.
+  //
+  // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
+  // refresh, a resolution's by the resolution — so its caller logs none. A
+  // declaration that THROWS is a bug none of those saw, reported by the view's
+  // declaration (declareLanes).
+  declare(holds2, workingDir, projectDir) {
+    const asked2 = this.asked(holds2, workingDir, projectDir);
+    if (asked2.kind === "settled") return settledLane(asked2.outcome);
+    const { state } = asked2;
+    if (state.value.reading.get().kind === "pending") this.misses++;
+    else this.hits++;
+    return { current: () => composed(state) };
+  }
+  // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
+  // the effective gitDir is the state + watch identity, and an absent (not a
+  // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
+  // provider builds no state: a declaration landing after close (a render
+  // that was mid-wait) would otherwise build a repo, and its watch, that
+  // nothing drops, whose period re-arms after every pass while that home
+  // holds it.
+  asked(holds2, workingDir, projectDir) {
+    if (this.closed) return { kind: "settled", outcome: CLOSED };
+    const dir = this.resolution(workingDir, projectDir);
+    if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
+    return { kind: "asked", state: this.ask(dir.value, holds2) };
+  }
+  // A watch's window, whatever it says: the repo changed since any read in
+  // flight began.
+  changed(root) {
+    const state = this.repos.get(root);
+    if (!state) return;
+    this.changes++;
+    if (state.holders === 0) {
+      state.value.missed = true;
+      return;
+    }
+    this.changedPass(state, "watch");
+  }
+  // LRU touch: re-inserting moves the repo to the newest end. A state the
+  // cache has dropped is not put back.
+  touch(state) {
+    if (this.repos.get(state.root) !== state) return;
+    this.repos.delete(state.root);
+    this.repos.set(state.root, state);
+  }
+  // A repo's state, built pending on its first ask: its value is unread and
+  // its PR has no key until the first pass reads the branch it pairs with
+  // ([LAW:single-enforcer] the key moves only in a pass).
+  built(root) {
+    const pr = {
+      period: new Period(() => {
+        void this.readPr(state, pr, "period");
+      }, this.clock),
+      seen: /* @__PURE__ */ new Map(),
+      // Its key is the first pass's to set.
+      missed: true,
+      key: "",
+      remote: ABSENT,
+      reading: unread(),
+      inFlight: null
+    };
+    const state = {
+      root,
+      refresh: new TrailingEdge(),
+      watch: this.followWatch(root, null).watch,
+      period: new Period(() => {
+        void state.refresh.share(PASS, () => this.refreshPass(state));
+      }, this.clock),
+      value: { reading: unread(), missed: false },
+      pr,
+      holders: 0,
+      asked: /* @__PURE__ */ new Set()
+    };
+    this.repos.set(root, state);
+    return state;
+  }
+  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
+  // state's build and for every pass: the git directories resolved from the
+  // root as they stand now, followed by the registry's one rule. A pass calls
+  // it first, before any await, so the watch follows the repo's paths.
+  followWatch(root, held2) {
+    const gitDir = this.inner.resolveGitDir(root);
+    const spec = watchSpec(
+      root,
+      gitDir,
+      this.inner.resolveCommonGitDir(gitDir)
+    );
+    const followed = this.watchers.follow(held2, spec, () => this.changed(root));
+    if (followed.move === "rebound") {
+      this.logger(
+        "info",
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} deaf=${followed.watch.handle.deaf.length}`
+      );
+    }
+    return followed;
+  }
+  changedPass(state, reason) {
+    state.asked.add(reason);
+    state.refresh.run(PASS, () => this.refreshPass(state));
+  }
+  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
+  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
+  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
+  // when the pass ENDS, after its every await, so a tick that shares a running
+  // pass is always followed by the landing that schedules the next one.
+  async refreshPass(state) {
+    try {
+      await this.pass(state);
+    } catch (e) {
+      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
+    } finally {
+      state.period.landed(this.periodMs);
+    }
+  }
+  // One hold of a home: the repo, its value and its PR. A value or a PR key a
+  // change went by is read by the pass `ask` queues, while this reader takes
+  // what is stored. [LAW:one-source-of-truth] A PR read beside a value a
+  // change went by would answer the branch the latest pass read, not the one
+  // the repo is on now, so it is owed: the reader waits for the pass that
+  // reads the value and keys the PR in one turn ([LAW:single-enforcer]
+  // `movePr`).
+  hold(state) {
+    state.holders++;
+    if (state.value.missed) {
+      owe(state.pr);
+      state.asked.add("resume");
+    }
+    if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
+    this.held(state);
+    this.evict();
+    return () => {
+      state.holders--;
+      this.held(state);
+    };
+  }
+  // Whatever an ask added to `asked` is read by ONE pass, queued once it is all
+  // in place. A new one must be read even if a pass is in flight that does not
+  // include it, so it queues a pass rather than sharing one; a reason already
+  // in `asked` means such a pass is queued, and it will see this one too.
+  queue(state, before) {
+    if (state.asked.size > before) {
+      state.refresh.run(PASS, () => this.refreshPass(state));
+    }
+  }
+  held(state) {
+    state.period.hold(state.holders > 0);
+    state.pr.period.hold(state.holders > 0 && !state.pr.missed);
+  }
+  // What one read asks of its repo: the repo's state, built pending on its
+  // first ask, held by `holds` before any pass is queued, so the pass sees its
+  // reader, and a first value and the PR's first key ride one pass (which reads
+  // the remote beside the value).
+  ask(root, holds2) {
+    const known = this.repos.get(root);
+    if (known !== void 0) this.touch(known);
+    const state = known ?? this.built(root);
+    const before = state.asked.size;
+    if (known === void 0) state.asked.add("first");
+    holds2.take(holdKey(root), () => this.hold(state));
+    this.queue(state, before);
+    return state;
+  }
+  // One pass: read the repo and the remote beside the branch it read; store
+  // the outcome, log each failure once, and move the PR's key — all in one
+  // turn once the reads land, so no read sees a branch's value beside another
+  // branch's PR. Each pass that lands writes one refresh event.
+  async pass(state) {
+    if (this.repos.get(state.root) !== state) return;
+    const startedAt = this.clock.monotonic();
+    const asked2 = [...state.asked];
+    state.asked.clear();
+    const followed = this.followWatch(state.root, state.watch);
+    state.watch = followed.watch;
+    const [outcome, remote] = await Promise.all([
+      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
+      this.remoteOf(state)
+    ]);
+    if (this.repos.get(state.root) !== state) return;
+    const failures = /* @__PURE__ */ new Set();
+    state.value.missed = false;
+    settle(state.value, outcome);
+    if (outcome.kind === "failed") failures.add(outcome.reason);
+    if (outcome.kind === "ok") {
+      for (const f of gitInfoFailures(outcome.value)) failures.add(f);
+    }
+    const branch2 = branchOf(outcome);
+    const prMove = branch2 === void 0 ? unkeyedPr(state.pr, failures) : this.movePr(state, branch2, remote);
+    this.held(state);
+    this.gitRefreshes.recorded(
+      `${state.root} asked=${asked2.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
+      triggerOf(asked2),
+      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
+      elapsedMs(this.clock, startedAt)
+    );
+  }
+  // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
+  // PR's failure; only `absent` (no remote configured) means "no forge PR".
+  remoteOf(state) {
+    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
+  }
+  // [LAW:one-source-of-truth] The PR's key is every input its value depends on
+  // — the branch and the remote — so a branch switch or a re-pointed origin is
+  // a new key: its reading is pending until the new lookup lands, and an old
+  // key's answer is never stored for a new one. The same key is left to its
+  // own period. [LAW:decomposition] The lookup is the PR source's own work,
+  // started here and never awaited by a git pass, so a slow forge never holds
+  // back the next local refresh.
+  movePr(state, branch2, remote) {
+    const { pr } = state;
+    const key = `${branch2}|${remote.kind === "ok" ? remote.value : remote.kind}`;
+    if (key === pr.key && !pr.missed) return "kept";
+    pr.key = key;
+    pr.remote = remote;
+    const known = pr.seen.get(key);
+    if (known !== void 0) {
+      pr.seen.delete(key);
+      pr.seen.set(key, known);
+      pr.missed = false;
+      settle(pr, known.outcome);
+      pr.period.landed(prPeriodOf(known), known.at);
+      return "recalled";
+    }
+    if (state.holders === 0) {
+      owe(pr);
+      return "owed";
+    }
+    renew(pr, "unread");
+    pr.missed = false;
+    void this.readPr(state, pr, "first");
+    return "looked-up";
+  }
+  // One lookup for the PR's current key; an ask for a key already being looked
+  // up shares that lookup. The forge dispatch delegates to
+  // inner.resolvePullRequest — this layer is the source's lifecycle only.
+  readPr(state, pr, by) {
+    const key = pr.key;
+    if (pr.inFlight?.key === key) return pr.inFlight.done;
+    const remote = pr.remote;
+    let startedAt = this.clock.monotonic();
+    const lookup2 = remote.kind === "ok" ? this.forgeLookups.run(() => {
+      startedAt = this.clock.monotonic();
+      return this.inner.resolvePullRequest(state.root, remote.value);
+    }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
+    const done = lookup2.then((outcome) => {
+      if (pr.inFlight?.key === key) pr.inFlight = null;
+      if (this.repos.get(state.root) !== state) return;
+      this.prRefreshes.recorded(
+        `${state.root} key=${valueOf(key)}`,
+        by,
+        outcome,
+        elapsedMs(this.clock, startedAt)
+      );
+      const at = this.clock.monotonic();
+      const answer2 = {
+        outcome,
+        at,
+        failures: outcome.kind === "failed" ? (pr.seen.get(key)?.failures ?? 0) + 1 : 0
+      };
+      pr.seen.delete(key);
+      pr.seen.set(key, answer2);
+      for (const oldest of pr.seen.keys()) {
+        if (pr.seen.size <= PR_KEYS_KEPT) break;
+        pr.seen.delete(oldest);
+      }
+      if (pr.key !== key || pr.missed) return;
+      settle(pr, outcome);
+      pr.period.landed(prPeriodOf(answer2), at);
+    });
+    pr.inFlight = { key, done };
+    return done;
+  }
+  drop(state) {
+    const gone = failed(`git state dropped: ${state.root}`, "read");
+    answerPending(state.value, gone);
+    answerPending(state.pr, gone);
+    this.repos.delete(state.root);
+    state.refresh.clear();
+    state.watch.handle.release();
+    state.period.dispose();
+    state.pr.period.dispose();
+  }
+  // The LRU bounds the repos nothing holds; a held repo is never evicted, so
+  // those are bounded by their holders (the render cache's budget).
+  evict() {
+    for (const state of this.repos.values()) {
+      if (this.repos.size <= this.maxRepos) return;
+      if (state.holders > 0) continue;
+      this.drop(state);
+      this.logger("info", `gitCache evict ${state.root}`);
+    }
+  }
+  close() {
+    this.closed = true;
+    for (const state of this.repos.values()) this.drop(state);
+    this.repos.clear();
+    this.resolutions.clear();
+    if (this.ownsWatchers) this.watchers.closeAll();
+  }
+};
+
+// src/daemon/cache/session-usage-store.ts
+init_globals();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
+
+// src/segments/pricing.ts
+init_globals();
+init_url();
+
+// src/utils/cache.ts
+init_globals();
+var import_node_path24 = __toESM(require_path_browserify(), 1);
+var CacheManager = class {
+  // [LAW:one-source-of-truth] Every method takes the cache's root directory
+  // (the host's `cacheDir`), so the layout under it is derived here alone.
+  static usageDir(root) {
+    return import_node_path24.default.join(root, "usage");
+  }
+  static locksDir(root) {
+    return import_node_path24.default.join(root, "locks");
+  }
+  static isLocked(root, name) {
+    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
+    if (!fs_default.existsSync(lockFile)) {
+      return false;
+    }
+    try {
+      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
+      const pid2 = parseInt(lockContent.trim(), 10);
+      if (isNaN(pid2)) {
+        debug(`Invalid PID in lock file ${name}, removing stale lock`);
+        fs_default.unlinkSync(lockFile);
+        return false;
+      }
+      try {
+        process.kill(pid2, 0);
+        return true;
+      } catch (error) {
+        if (error.code === "ESRCH") {
+          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
+          fs_default.unlinkSync(lockFile);
+          return false;
+        }
+        debug(`Error checking process ${pid2} for lock ${name}:`, error);
+        return true;
+      }
+    } catch (error) {
+      debug(`Error reading lock file ${name}:`, error);
+      return true;
+    }
+  }
+  static async acquireLock(root, clock, name, timeout = 5e3) {
+    const RETRY_DELAY_MS = 50;
+    const FILE_CREATE_FLAG = "wx";
+    await this.ensureCacheDirectories(root);
+    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
+    const startTime = clock.monotonic();
+    const lockContent = String(process.pid);
+    while (clock.monotonic() - startTime < timeout) {
+      try {
+        await fs_default.promises.writeFile(lockFile, lockContent, {
+          flag: FILE_CREATE_FLAG
+        });
+        debug(`Lock acquired for ${name}`);
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          await sleep(clock, RETRY_DELAY_MS);
+        } else {
+          throw error;
+        }
+      }
+    }
+    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
+    return false;
+  }
+  static async releaseLock(root, name) {
+    const lockFile = import_node_path24.default.join(this.locksDir(root), name);
+    try {
+      await fs_default.promises.unlink(lockFile);
+      debug(`Lock released for ${name}`);
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        debug(`Error releasing lock for ${name}:`, error);
+      }
+    }
+  }
+  static async ensureCacheDirectories(root) {
+    try {
+      await Promise.all([
+        fs_default.promises.mkdir(root, { recursive: true }),
+        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
+        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
+      ]);
+    } catch (error) {
+      debug("Failed to create cache directories:", error);
+    }
+  }
+  static createProjectHash(projectPath) {
+    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
+  }
+  static async getUsageCache(root, clock, cacheType, latestMtime) {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 75;
+    const FILE_ENCODING = "utf-8";
+    await this.ensureCacheDirectories(root);
+    const cachePath = import_node_path24.default.join(this.usageDir(root), `${cacheType}.json`);
+    const lockName = `${cacheType}.usage.lock`;
+    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
+      const isCurrentlyLocked = this.isLocked(root, lockName);
+      if (isCurrentlyLocked) {
+        debug(`Cache for ${cacheType} is locked, waiting...`);
+        await sleep(clock, RETRY_DELAY_MS);
+        continue;
+      }
+      try {
+        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
+        const cached = JSON.parse(content);
+        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
+        if (cacheIsValid) {
+          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
+          return this.deserializeDates(cached.data);
+        } else {
+          debug(
+            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
+          );
+          return null;
+        }
+      } catch (error) {
+        if (error.code === "ENOENT") {
+          debug(`No shared ${cacheType} usage cache found`);
+          return null;
+        }
+        const attemptNumber = attempt4 + 1;
+        debug(
+          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
+        );
+        await sleep(clock, RETRY_DELAY_MS);
+      }
+    }
+    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
+    return null;
+  }
+  static deserializeDates(data) {
+    if (Array.isArray(data)) {
+      return data.map((entry) => ({
+        ...entry,
+        timestamp: new Date(entry.timestamp)
+      }));
+    }
+    return data;
+  }
+  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
+    const lockName = `${cacheType}.usage.lock`;
+    const lockAcquired = await this.acquireLock(root, clock, lockName);
+    if (!lockAcquired) {
+      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
+      return;
+    }
+    try {
+      await this.ensureCacheDirectories(root);
+      const cachePath = import_node_path24.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cacheTimestamp = latestMtime || clock.now();
+      const cacheEntry = {
+        data,
+        timestamp: cacheTimestamp
+      };
+      const cacheContent = JSON.stringify(cacheEntry);
+      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
+      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
+    } catch (error) {
+      debug(`Failed to save ${cacheType} usage cache:`, error);
+    } finally {
+      await this.releaseLock(root, lockName);
+    }
+  }
+};
+
+// src/segments/pricing.ts
+var OFFLINE_PRICING_DATA = {
+  "claude-haiku-4-5-20251001": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-haiku-4-5": {
+    name: "Claude Haiku 4.5",
+    input: 1,
+    output: 5,
+    cache_write_5m: 1.25,
+    cache_write_1h: 2,
+    cache_read: 0.1
+  },
+  "claude-opus-4-20250514": {
+    name: "Claude Opus 4",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-opus-4-1-20250805": {
+    name: "Claude Opus 4.1",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-sonnet-4-20250514": {
+    name: "Claude Sonnet 4",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-4-opus-20250514": {
+    name: "Claude 4 Opus",
+    input: 15,
+    output: 75,
+    cache_write_5m: 18.75,
+    cache_write_1h: 30,
+    cache_read: 1.5
+  },
+  "claude-4-sonnet-20250514": {
+    name: "Claude 4 Sonnet",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-sonnet-4-5-20250929": {
+    name: "Claude Sonnet 4.5",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  },
+  "claude-opus-4-5": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-5-20251101": {
+    name: "Claude Opus 4.5",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-opus-4-6-20260205": {
+    name: "Claude Opus 4.6",
+    input: 5,
+    output: 25,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10,
+    cache_read: 0.5
+  },
+  "claude-sonnet-4-6": {
+    name: "Claude Sonnet 4.6",
+    input: 3,
+    output: 15,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6,
+    cache_read: 0.3
+  }
+};
+var PricingService = class {
+  static executionCache = null;
+  static modelPricingCache = /* @__PURE__ */ new Map();
+  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
+  static async loadDiskCache(cacheRoot, clock) {
+    const TTL_24H = 24 * 60 * 60 * 1e3;
+    const minValidTime = clock.now() - TTL_24H;
+    return await CacheManager.getUsageCache(
+      cacheRoot,
+      clock,
+      "pricing",
+      minValidTime
+    );
+  }
+  static async saveDiskCache(cacheRoot, clock, data) {
+    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
+  }
+  static async fetchPricingData() {
+    return new Promise((resolve) => {
+      const parsedUrl = new U(this.GITHUB_PRICING_URL);
+      const request2 = get(
+        {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname,
+          headers: {
+            "User-Agent": "cc-candybar",
+            "Cache-Control": "no-cache"
+          },
+          timeout: 5e3
+        },
+        (response) => {
+          if (response.statusCode !== 200) {
+            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
+            resolve(null);
+            return;
+          }
+          let data = "";
+          let size = 0;
+          const MAX_SIZE = 1024 * 1024;
+          response.setEncoding("utf8");
+          response.on("data", (chunk3) => {
+            size += import_buffer.Buffer.byteLength(chunk3);
+            if (size > MAX_SIZE) {
+              debug("Response too large");
+              request2.destroy();
+              resolve(null);
+              return;
+            }
+            data += chunk3;
+          });
+          response.on("end", () => {
+            try {
+              const json2 = JSON.parse(data);
+              const dataObj = json2;
+              const meta = dataObj._meta;
+              const pricingData = {};
+              for (const [key, value] of Object.entries(dataObj)) {
+                if (key !== "_meta") {
+                  pricingData[key] = value;
+                }
+              }
+              if (this.validatePricingData(pricingData)) {
+                debug(
+                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+                );
+                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
+                resolve(pricingData);
+              } else {
+                debug("Invalid pricing data structure");
+                resolve(null);
+              }
+            } catch (error) {
+              debug("Failed to parse JSON:", error);
+              resolve(null);
+            }
+          });
+          response.on("error", (error) => {
+            debug("Response error:", error);
+            resolve(null);
+          });
+        }
+      );
+      request2.on("error", (error) => {
+        debug("Request error:", error);
+        resolve(null);
+      });
+      request2.on("timeout", () => {
+        debug("Request timeout");
+        request2.destroy();
+        resolve(null);
+      });
+      request2.end();
+    });
+  }
+  static async getCurrentPricing(cacheRoot, clock) {
+    if (this.executionCache !== null) {
+      debug(
+        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
+      );
+      return this.executionCache;
+    }
+    const diskCached = await this.loadDiskCache(cacheRoot, clock);
+    if (diskCached) {
+      debug(
+        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
+      );
+      this.executionCache = diskCached;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
+      );
+      return diskCached;
+    }
+    const freshData = await this.fetchPricingData();
+    if (freshData) {
+      await this.saveDiskCache(cacheRoot, clock, freshData);
+      debug(
+        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
+      );
+      this.executionCache = freshData;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
+      );
+      return freshData;
+    }
+    debug(
+      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    this.executionCache = OFFLINE_PRICING_DATA;
+    debug(
+      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    return OFFLINE_PRICING_DATA;
+  }
+  static validatePricingData(data) {
+    if (!data || typeof data !== "object") return false;
+    for (const [, value] of Object.entries(data)) {
+      if (!value || typeof value !== "object") return false;
+      const pricing = value;
+      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
+        return false;
+      }
+    }
+    return true;
+  }
+  static async getModelPricing(modelId, cacheRoot, clock) {
+    if (this.modelPricingCache.has(modelId)) {
+      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
+      return this.modelPricingCache.get(modelId);
+    }
+    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
+    let pricing;
+    if (allPricing[modelId]) {
+      pricing = allPricing[modelId];
+    } else {
+      pricing = this.fuzzyMatchModel(modelId, allPricing);
+    }
+    this.modelPricingCache.set(modelId, pricing);
+    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
+    return pricing;
+  }
+  static fuzzyMatchModel(modelId, allPricing) {
+    const lowerModelId = modelId.toLowerCase();
+    for (const [key, pricing] of Object.entries(allPricing)) {
+      if (key.toLowerCase() === lowerModelId) {
+        return pricing;
+      }
+    }
+    const patterns = [
+      {
+        pattern: ["opus-4-6", "claude-opus-4-6"],
+        fallback: "claude-opus-4-6-20260205"
+      },
+      {
+        pattern: ["opus-4-5", "claude-opus-4-5"],
+        fallback: "claude-opus-4-5-20251101"
+      },
+      {
+        pattern: ["opus-4-1", "claude-opus-4-1"],
+        fallback: "claude-opus-4-1-20250805"
+      },
+      {
+        pattern: ["opus-4", "claude-opus-4"],
+        fallback: "claude-opus-4-20250514"
+      },
+      {
+        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
+        fallback: "claude-sonnet-4-6"
+      },
+      {
+        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
+        fallback: "claude-sonnet-4-5-20250929"
+      },
+      {
+        pattern: ["sonnet-4", "claude-sonnet-4"],
+        fallback: "claude-sonnet-4-20250514"
+      },
+      {
+        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
+        fallback: "claude-haiku-4-5-20251001"
+      },
+      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
+      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
+      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
+    ];
+    for (const { pattern: pattern2, fallback } of patterns) {
+      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
+        if (allPricing[fallback]) {
+          return allPricing[fallback];
+        }
+      }
+    }
+    return allPricing["claude-sonnet-4-5-20250929"] || {
+      name: `${modelId} (Unknown Model)`,
+      input: 3,
+      cache_write_5m: 3.75,
+      cache_write_1h: 6,
+      cache_read: 0.3,
+      output: 15
+    };
+  }
+  static async calculateCostForEntry(entry, cacheRoot, clock) {
+    const usage = entry.message?.usage;
+    if (!usage) {
+      return 0;
+    }
+    const modelId = this.extractModelId(entry);
+    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+    const cacheReadTokens = usage.cache_read_input_tokens || 0;
+    const inputCost = inputTokens / 1e6 * pricing.input;
+    const outputCost = outputTokens / 1e6 * pricing.output;
+    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
+    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
+    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
+  }
+  static extractModelId(entry) {
+    if (entry.model && typeof entry.model === "string") {
+      return entry.model;
+    }
+    const message2 = entry.message;
+    if (message2?.model) {
+      const model = message2.model;
+      if (typeof model === "string") {
+        return model;
+      }
+      const modelObj = model;
+      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
+    }
+    if (entry.model_id && typeof entry.model_id === "string") {
+      return entry.model_id;
+    }
+    return "claude-sonnet-4-5-20250929";
+  }
+};
+
+// src/utils/claude.ts
+init_globals();
+var import_node_path25 = __toESM(require_path_browserify(), 1);
+
+// src/utils/transcript-activity.ts
+init_globals();
+var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
+function slashCommand(text4) {
+  if (typeof text4 !== "string") return void 0;
+  return COMMAND_NAME.exec(text4)?.[1];
+}
+function todoItems(input) {
+  const todos2 = input?.todos;
+  if (!Array.isArray(todos2)) return void 0;
+  const items = [];
+  for (const raw of todos2) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { content, activeForm, status } = raw;
+    const active2 = status === "in_progress";
+    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
+    if (typeof text4 !== "string") continue;
+    items.push({ text: text4, active: active2, done: status === "completed" });
+  }
+  return items;
+}
+function turnText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const block = content.find(
+    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
+  );
+  return block?.text ?? "";
+}
+function entryActivity(parsed2, userEntry) {
+  const msg = parsed2.message;
+  const content = msg?.content;
+  const started2 = [];
+  const finished = [];
+  let todos2;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const b = block;
+      switch (b.type) {
+        case "tool_use": {
+          const { id: id2, name } = b;
+          if (typeof id2 !== "string" || typeof name !== "string") break;
+          started2.push({ id: id2, name });
+          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
+          break;
+        }
+        case "tool_result": {
+          const id2 = b.tool_use_id;
+          if (typeof id2 === "string") finished.push(id2);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
+  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
+    return void 0;
+  }
+  return {
+    ...started2.length > 0 && { started: started2 },
+    ...finished.length > 0 && { finished },
+    ...todos2 !== void 0 && { todos: todos2 },
+    ...command !== void 0 && { command }
+  };
+}
+
+// src/utils/claude.ts
+function getClaudePaths(detected, homeDir) {
+  if (detected !== void 0) return [detected];
+  return [(0, import_node_path25.join)(homeDir, ".config", "claude"), (0, import_node_path25.join)(homeDir, ".claude")].filter(
+    (dir) => existsSync(dir)
+  );
+}
+async function findProjectPaths(claudePaths) {
+  const projectPaths = [];
+  for (const claudePath of claudePaths) {
+    const projectsDir = (0, import_node_path25.join)(claudePath, "projects");
+    const entries = await unlessGone(
+      readdir2(projectsDir, { withFileTypes: true })
+    );
+    for (const entry of entries ?? []) {
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path25.join)(projectsDir, entry.name));
+    }
+  }
+  return projectPaths;
+}
+async function unlessGone(read2) {
+  try {
+    return await read2;
+  } catch (e) {
+    if (e.code === "ENOENT") return void 0;
+    throw e;
+  }
+}
+async function findAgentTranscripts(sessionId2, projectPath, verified) {
+  const paths2 = [];
+  let longLines = [];
+  const subagentsDir = (0, import_node_path25.join)(projectPath, sessionId2, "subagents");
+  try {
+    const files = await readdir2(subagentsDir);
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
+    );
+    for (const fileName2 of agentFileNames) {
+      const filePath2 = (0, import_node_path25.join)(subagentsDir, fileName2);
+      if (verified?.has(filePath2)) {
+        paths2.push(filePath2);
+        continue;
+      }
+      const read2 = await readAppended(filePath2, void 0, void 0);
+      if (read2.kind !== "ok") {
+        debug(`Failed to check agent file ${filePath2}`);
+        continue;
+      }
+      longLines = longLinesWith(longLines, filePath2, read2.value);
+      const line = jsonLine(
+        decodeLines(
+          read2.value,
+          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
+        )
+      );
+      if (line.kind === "object" && line.value.sessionId === sessionId2) {
+        paths2.push(filePath2);
+      }
+    }
+  } catch (error) {
+    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
+  }
+  return { paths: paths2, longLines };
+}
+function userEntryOf(parsed2) {
+  const msg = parsed2.message;
+  const messageType = parsed2.type || msg?.role || msg?.type;
+  if (messageType !== "user") return void 0;
+  if (firstBlockType(msg) === "tool_result") return "tool-result";
+  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
+  if (origin !== void 0 && origin !== "human") return "turn";
+  const text4 = turnText(msg?.content).trimStart();
+  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
+  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
+}
+var TURN_GOES_ON = /* @__PURE__ */ new Set([
+  void 0,
+  "tool_use",
+  "pause_turn"
+]);
+function turnOpenAfter(open2, entry) {
+  if (entry.isSidechain) return open2;
+  switch (entry.userEntry) {
+    case "prompt":
+    case "turn":
+      return true;
+    case "interrupt":
+      return false;
+    case "tool-result":
+    case "claude-code":
+      return open2;
+    case void 0:
+      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
+  }
+}
+var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
+function firstBlockType(msg) {
+  const content = msg?.content;
+  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
+}
+function makeEntry(parsed2) {
+  if (!parsed2.timestamp) return null;
+  const msg = parsed2.message;
+  const usage = msg?.usage;
+  const userEntry = userEntryOf(parsed2);
+  return {
+    timestamp: new Date(parsed2.timestamp),
+    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
+    message: msg ? {
+      id: typeof msg.id === "string" ? msg.id : void 0,
+      model: typeof msg.model === "string" ? msg.model : void 0,
+      usage,
+      role: typeof msg.role === "string" ? msg.role : void 0,
+      type: typeof msg.type === "string" ? msg.type : void 0,
+      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
+    } : void 0,
+    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
+    isSidechain: parsed2.isSidechain === true,
+    userEntry,
+    activity: entryActivity(parsed2, userEntry),
+    raw: {
+      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
+      message: msg ? {
+        id: typeof msg.id === "string" ? msg.id : void 0,
+        model: typeof msg.model === "string" ? msg.model : void 0,
+        usage
+      } : void 0,
+      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
+    }
+  };
+}
+function jsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return { kind: "blank" };
+  try {
+    const value = JSON.parse(trimmed);
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
+  } catch (parseError) {
+    return { kind: "unparsed", reason: String(parseError) };
+  }
+}
+function entryOf3(line) {
+  const read2 = jsonLine(line);
+  if (read2.kind === "unparsed") {
+    debug(`Failed to parse JSONL line: ${read2.reason}`);
+    return null;
+  }
+  if (read2.kind === "blank") return null;
+  try {
+    return makeEntry(read2.value);
+  } catch (projectionError) {
+    debug(`Failed to project JSONL line: ${projectionError}`);
+    return null;
+  }
+}
+function parseJsonlLines(text4) {
+  const entries = [];
+  for (const line of text4.split("\n")) {
+    const entry = entryOf3(line);
+    if (entry) entries.push(entry);
+  }
+  return entries;
+}
+function longLinesWith(longLines, path46, read2) {
+  return read2.longLine === 0 ? longLines : [...longLines, { path: path46, offset: read2.start, bytes: read2.longLine }];
+}
+function longLineLog(longLines) {
+  return longLines.map(
+    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
+  );
+}
+async function foldAppended(filePath2, prior, empty2, step4) {
+  let longLines = [];
+  let cursor = prior?.cursor;
+  let value = prior?.value ?? empty2;
+  let end;
+  for (; ; ) {
+    const read2 = await readAppended(
+      filePath2,
+      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
+      end?.size
+    );
+    if (read2.kind !== "ok") return read2;
+    const window2 = read2.value;
+    if (window2.reset) value = empty2;
+    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
+    if (end === void 0 || window2.reset) {
+      end = { size: window2.size, stamp: window2.stamp };
+    }
+    const next = window2.start + window2.lines.length;
+    value = await step4(
+      value,
+      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
+    );
+    cursor = {
+      offset: next,
+      stamp: end.stamp,
+      ino: window2.ino
+    };
+    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
+  }
+}
+
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
+// src/var-system/store.ts
+init_globals();
+var unwritten = (value) => isPending(value);
+var BoxNode = class {
+  constructor(name, type3, initial2, clock) {
+    this.name = name;
+    this.type = type3;
+    this.clock = clock;
+    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
+    this.cell = observable.box(initial2, { deep: false });
+    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
+  }
+  name;
+  type;
+  clock;
+  kind = "box";
+  cell;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  //
+  // It records when the value last CHANGED, which is what debug.ts calls the
+  // node's age and what anyone reading that age is asking (brandon-var-system-
+  // 1tl). Stamping every write instead reported attempts, and reported them most
+  // misleadingly in the one situation where the age is consulted: a source
+  // re-running with no effect.
+  lastChangedAt;
+  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
+  // THE pending signal, which every place a template is evaluated takes as its
+  // own outcome.
+  read() {
+    const value = this.cell.get();
+    if (unwritten(value)) {
+      throw new PendingValueError(
+        this.name,
+        `variable "${this.name}" has no value yet: nothing has written it`
+      );
+    }
+    return value;
+  }
+  // A box written pending is not answered yet again: what its payload holds
+  // is a source that has not answered (src/renderer/render-payload.ts).
+  set(value) {
+    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
+    if (compareStructural(this.cell.get(), value)) return;
+    this.cell.set(value);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+  // The cell as written, pending included: what `stored` reads.
+  stored() {
+    return this.cell.get();
+  }
+};
+var Kept = class {
+  cell;
+  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
+  // `equals` is what counts as a change: MobX's own comparison unless given.
+  constructor(what, deriver, equals) {
+    this.cell = computed(deriver, {
+      keepAlive: true,
+      ...equals !== void 0 && { equals }
+    });
+    if (typeof this.cell.suspend_ !== "function") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
+      );
+    }
+    if (typeof this.cell.keepAlive_ !== "boolean") {
+      throw new TypeError(
+        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
+      );
+    }
+  }
+  read() {
+    return this.cell.get();
+  }
+  // Unsubscribe from every dependency and drop the cached value. A keepAlive
+  // computed never does this on its own — MobX keeps it subscribed to whatever
+  // it read for as long as those observables live, which for a daemon-wide
+  // observable (the SessionState atom) is the life of the daemon, and that
+  // subscription kept every disposed config's whole store reachable
+  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
+  // computed, so this lifts the guard its own teardown checks and runs that
+  // teardown. Must run inside an action: the unobservation it cascades is
+  // settled when the outermost batch ends.
+  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
+  // `suspend_`) are reached here and nowhere else; the constructor refuses a
+  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
+  release() {
+    this.cell.keepAlive_ = false;
+    this.cell.suspend_();
+  }
+};
+var Projected = class {
+  constructor(deriver) {
+    this.deriver = deriver;
+  }
+  deriver;
+  read() {
+    return this.deriver();
+  }
+};
+var ComputedNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Kept(`Variable "${name}"`, () => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "computed result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "computed";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var ProjectionNode = class {
+  constructor(name, type3, deriver) {
+    this.name = name;
+    this.type = type3;
+    this.cell = new Projected(() => {
+      const v = deriver();
+      assertType(this.name, this.type, v, "projection result");
+      return v;
+    });
+  }
+  name;
+  type;
+  kind = "projection";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+var DocumentCell = class {
+  constructor(name, initial2, clock) {
+    this.name = name;
+    this.clock = clock;
+    this.cell = observable.box(shaped(initial2), { deep: false });
+    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
+  }
+  name;
+  clock;
+  kind = "document";
+  cell;
+  lastChangedAt;
+  read() {
+    return this.cell.get();
+  }
+  set(value) {
+    const next = shaped(value);
+    if (sameDocument(this.cell.get(), next)) return;
+    this.cell.set(next);
+    this.lastChangedAt = this.clock.now();
+  }
+  lastUpdatedMs() {
+    return this.lastChangedAt;
+  }
+};
+var DerivedDocument = class {
+  constructor(name, deriver) {
+    this.name = name;
+    this.cell = new Kept(
+      `Variable "${name}"`,
+      () => shaped(deriver()),
+      sameDocument
+    );
+  }
+  name;
+  kind = "document";
+  cell;
+  read() {
+    return this.cell.read();
+  }
+  release() {
+    this.cell.release();
+  }
+  lastUpdatedMs() {
+    return null;
+  }
+};
+function documentKey(outcome) {
+  return JSON.stringify(outcome);
+}
+function sameDocument(a, b) {
+  return documentKey(a) === documentKey(b);
+}
+function shaped(outcome) {
+  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
+}
+function assertType(name, declared, value, context) {
+  const actual = typeOf(value);
+  if (actual !== declared) {
+    throw new TypeError(
+      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
+    );
+  }
+}
+var VariableStore = class {
+  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
+  // changed; a child store reads the same one as its parent.
+  constructor(clock, parent = null) {
+    this.clock = clock;
+    this.parent = parent;
+  }
+  clock;
+  parent;
+  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
+  // observable: a reaction that read a name before its declaration (a cache
+  // key over a variable declared after it) re-runs when it is declared, so
+  // what it sees does not depend on the order the config lists variables in.
+  // `deep: false` keeps each node the object it was declared as.
+  nodes = observable.map(void 0, {
+    deep: false
+  });
+  defineBox(name, type3, initial2) {
+    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
+  }
+  defineDocument(name, initial2) {
+    this.declare(name, new DocumentCell(name, initial2, this.clock));
+  }
+  // A document whose reading the deriver computes from what it reads.
+  defineDerivedDocument(name, deriver) {
+    this.declare(name, new DerivedDocument(name, deriver));
+  }
+  // Computed deriver receives a `read` function that returns the value
+  // of any variable in the store. Calling `read(other)` from inside the
+  // deriver is what registers the dependency with MobX — the deriver's
+  // body is the dep graph.
+  defineComputed(name, type3, deriver) {
+    this.defineDerived(name, type3, "computed", deriver);
+  }
+  defineDerived(name, type3, derivation, deriver) {
+    const reader = (other) => this.read(other);
+    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
+    this.declare(name, new Node(name, type3, () => deriver(reader)));
+  }
+  // A derived value of this store that is no variable — a template a draw
+  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
+  // what it read changes, or derived at every read, and released with them.
+  derive(name, derivation, deriver) {
+    this.refuseDisposed(`Derived value "${name}"`);
+    if (derivation === "projection") return new Projected(deriver);
+    const kept = new Kept(`Derived value "${name}"`, deriver);
+    this.kept.push(kept);
+    return kept;
+  }
+  kept = [];
+  read(name) {
+    return this.requireVar(name).read();
+  }
+  readDocument(name) {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document`
+      );
+    }
+    return node.read();
+  }
+  // A written node's value as stored, pending included and nothing
+  // serialized: a box's value or a document's reading. Read in a reaction, it
+  // moves exactly when the node is written, which its own compare decides.
+  stored(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") return node.read();
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a written node`
+      );
+    }
+    return node.stored();
+  }
+  setDocument(name, value) {
+    const node = this.requireOwn(name);
+    if (!(node instanceof DocumentCell)) {
+      throw new TypeError(
+        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  setBox(name, value) {
+    const node = this.requireOwn(name);
+    if (node.kind !== "box") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
+      );
+    }
+    runInAction(() => node.set(value));
+  }
+  // Wrap multi-variable updates so dependents only invalidate once per
+  // batch. Used by the render path to push a whole input payload before
+  // any computed re-evaluates.
+  runInAction(fn) {
+    runInAction(fn);
+  }
+  has(name) {
+    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
+  }
+  getType(name) {
+    return this.requireVar(name).type;
+  }
+  getKind(name) {
+    return this.requireNode(name).kind;
+  }
+  // [LAW:one-source-of-truth] A string that changes exactly when the node's
+  // value does — the ONE spelling a change-driven reaction (a `depends_on`
+  // cache policy) compares, total over node kinds so a document can be
+  // depended on like a scalar — or pending, while the node has no value yet.
+  // Structural for documents: every stored document has sorted keys
+  // (toDocument), so a rescan yielding the same content in another key order
+  // is not a change. A failure is a key like any other, never a failed
+  // reading: a dependant re-reads when its dependency starts or stops failing.
+  changeKey(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      const doc = node.read();
+      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+    }
+    try {
+      return ok(String(node.read()));
+    } catch (e) {
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
+  getNode(name) {
+    const node = this.requireNode(name);
+    return node.kind === "document" ? {
+      name: node.name,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    } : {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs()
+    };
+  }
+  names() {
+    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
+  }
+  // Release every computed's subscriptions, so nothing outliving this store
+  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
+  // boxes and documents die with it; only the computeds hold references
+  // outward. Reads after dispose still answer — a released computed recomputes
+  // uncached, and outside a batch subscribes to nothing (inside one, MobX
+  // tracks it for the batch and unobserves again as the batch ends) — so a
+  // late reader cannot resubscribe the store to the world for good. A
+  // declaration after dispose would: it would mint a keepAlive computed with
+  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
+  // released, the fact the caller's log line carries (0 on a second call). One action, so the
+  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
+  // called by SourceRegistry.dispose, the one teardown of everything a config
+  // holds.
+  dispose() {
+    if (this.disposed) return 0;
+    this.disposed = true;
+    let released = 0;
+    runInAction(() => {
+      for (const node of this.nodes.values()) {
+        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
+          node.release();
+          released++;
+        }
+      }
+      for (const kept of this.kept) kept.release();
+    });
+    return released + this.kept.length;
+  }
+  disposed = false;
+  requireNode(name) {
+    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
+    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
+    return node;
+  }
+  // [LAW:single-enforcer] The one door a write takes: a node of this store.
+  // A view writing its directory's node would write every session's value.
+  requireOwn(name) {
+    const node = this.nodes.get(name);
+    if (node !== void 0) return node;
+    if (this.parent?.has(name)) {
+      throw new Error(
+        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
+      );
+    }
+    throw new ReferenceError(`Unknown variable "${name}"`);
+  }
+  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
+  // VarNode; a document reached through them is a caller asking a namespace
+  // for a scalar, said so by name rather than coerced to text.
+  requireVar(name) {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      throw new TypeError(
+        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
+      );
+    }
+    return node;
+  }
+  // [LAW:no-silent-failure] A computed declared after dispose has no release
+  // to come: it would subscribe to the world and hold this store exactly as
+  // before brandon-unfiled-3248.t14.
+  refuseDisposed(what) {
+    if (this.disposed) {
+      throw new Error(`${what}: cannot declare on a disposed store`);
+    }
+  }
+  declare(name, node) {
+    this.refuseDisposed(`Variable "${name}"`);
+    if (this.has(name)) {
+      throw new Error(`Variable "${name}" is already declared`);
+    }
+    runInAction(() => this.nodes.set(name, node));
+  }
+};
+
+// src/daemon/foundations/today-facts.ts
+init_globals();
+var EMPTY_DAY = {
+  cost: 0,
+  input: 0,
+  output: 0,
+  cacheCreation: 0,
+  cacheRead: 0
+};
+function addDay(into, d) {
+  into.cost += d.cost;
+  into.input += d.input;
+  into.output += d.output;
+  into.cacheCreation += d.cacheCreation;
+  into.cacheRead += d.cacheRead;
+}
+function dayKey(date2) {
+  const year = date2.getFullYear();
+  const month = String(date2.getMonth() + 1).padStart(2, "0");
+  const day = String(date2.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function projectToday(facts, at) {
+  const today = dayKey(dateOf(at));
+  const inSet = facts.sums[today];
+  const own2 = facts.own[today];
+  if (inSet === void 0 && own2 === void 0) return ABSENT;
+  const total = { ...EMPTY_DAY };
+  if (inSet !== void 0) addDay(total, inSet);
+  if (own2 !== void 0) addDay(total, own2);
+  return ok({
+    cost: total.cost,
+    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
+    tokenBreakdown: {
+      input: total.input,
+      output: total.output,
+      cacheCreation: total.cacheCreation,
+      cacheRead: total.cacheRead
+    },
+    date: today
+  });
+}
+
+// src/daemon/cache/session-usage-store.ts
+var SPEED_RING_CAPACITY = 64;
+function speedSampleOf(breakdown, turnOpen, atMs) {
+  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
+  const output = breakdown ? breakdown.output : 0;
+  return { input, output, total: input + output, atMs, turnOpen };
+}
+var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
+var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
+var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
+var MAX_UNHELD_SCANS = 8;
+var SEED_CONCURRENCY = 8;
+var EMPTY_USAGE = {
+  calculatedCost: null,
+  tokens: null,
+  tokenBreakdown: null
+};
+function seedCutoffMs(now2) {
+  const d = new Date(now2);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+function emptyBreakdown() {
+  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
+}
+var EMPTY_FILE_FOLD = {
+  entries: 0,
+  cost: 0,
+  breakdown: emptyBreakdown(),
+  days: /* @__PURE__ */ new Map(),
+  turnOpen: false,
+  response: void 0
+};
+function responseOf(entry) {
+  const id2 = entry.message?.id;
+  return id2 === void 0 ? void 0 : `${id2}:${entry.raw.requestId ?? ""}`;
+}
+async function foldFile(state, entries, cacheRoot, clock) {
+  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
+  let count = state.entries;
+  let cost = state.cost;
+  let turnOpen = state.turnOpen;
+  let last2 = state.response;
+  const breakdown = { ...state.breakdown };
+  const days = /* @__PURE__ */ new Map();
+  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
+  for (const entry of entries) {
+    turnOpen = turnOpenAfter(turnOpen, entry);
+    const u = entry.message?.usage;
+    if (!u) continue;
+    const response = responseOf(entry);
+    if (response !== void 0 && response === last2) continue;
+    last2 = response;
+    count++;
+    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
+    cost += priced;
+    breakdown.input += u.input_tokens || 0;
+    breakdown.output += u.output_tokens || 0;
+    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
+    breakdown.cacheRead += u.cache_read_input_tokens || 0;
+    const key = dayKey(new Date(entry.timestamp));
+    if (key < keep2) continue;
+    const d = days.get(key) ?? { ...EMPTY_DAY };
+    d.cost += priced;
+    d.input += u.input_tokens || 0;
+    d.output += u.output_tokens || 0;
+    d.cacheCreation += u.cache_creation_input_tokens || 0;
+    d.cacheRead += u.cache_read_input_tokens || 0;
+    days.set(key, d);
+  }
+  return { entries: count, cost, breakdown, days, turnOpen, response: last2 };
+}
+function mergeFolds(files) {
+  let count = 0;
+  let cost = 0;
+  const bd = emptyBreakdown();
+  const days = /* @__PURE__ */ new Map();
+  for (const { value: f } of files.values()) {
+    count += f.entries;
+    cost += f.cost;
+    bd.input += f.breakdown.input;
+    bd.output += f.breakdown.output;
+    bd.cacheCreation += f.breakdown.cacheCreation;
+    bd.cacheRead += f.breakdown.cacheRead;
+    for (const [k, v] of f.days) {
+      const d = days.get(k) ?? { ...EMPTY_DAY };
+      addDay(d, v);
+      days.set(k, d);
+    }
+  }
+  if (count === 0) return { usage: EMPTY_USAGE, days };
+  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
+  return {
+    usage: {
+      calculatedCost: cost,
+      tokens,
+      tokenBreakdown: bd
+    },
+    days
+  };
+}
+function under(path46, roots) {
+  return path46 !== void 0 && roots.some((root) => path46.startsWith(root));
+}
+function daySumsOver(slots, roots) {
+  const sums = /* @__PURE__ */ new Map();
+  for (const { record: record2 } of slots) {
+    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
+    for (const [day, d] of record2.days) {
+      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
+      addDay(sum2, d);
+      sums.set(day, sum2);
+    }
+  }
+  return Object.fromEntries(sums);
+}
+async function mapPool(items, limit, fn) {
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await fn(item);
+    }
+  };
+  const width = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: width }, worker));
+}
+function answer(box, value) {
+  runInAction(() => box.set(value));
+}
+var SessionUsageStore = class {
+  // No count cap: `today` is a fold over every record, so a cap smaller than
+  // the day's sessions would drop work from it unseen. A record is a few
+  // scalars per file and retained day, and `sweepStale` bounds the map to the
+  // sessions seen within `staleAgeMs` plus those holding work done today.
+  // Observable, shallowly: a slot replaced is the change the day sums read.
+  sessions = observable.map(
+    void 0,
+    {
+      deep: false
+    }
+  );
+  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
+  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
+  // not a cache — the records map IS the cache).
+  flight = new SingleFlight();
+  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
+  // its first read is the seed, and its period, which runs only while a home
+  // holds the set, is the rescan. Keyed by the directories themselves, so a
+  // default that resolves to one directory shares a scan with that directory
+  // named outright. Its answer is `today`'s, a failed scan included.
+  scans;
+  // Each directory set's day sums, derived from the records, kept for the
+  // store's life: there are as few as the Claude Code directories rendered
+  // from, and each reads only this store's own map.
+  daySets = /* @__PURE__ */ new Map();
+  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
+  // for the speed sample. Concurrent renders observing the SAME transcript state
+  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
+  // exactly once — so they return the same prev+cur and render identical,
+  // deterministic throughput instead of the second clobbering the first.
+  speedFlight = new SingleFlight();
+  // [LAW:single-enforcer] A refresh of a session is one unit of work per
+  // (session, observed stamp): the lanes that read the record (session,
+  // speed) share it, so it records and logs once.
+  refreshFlight = new SingleFlight();
+  staleAgeMs;
+  // The machine the store reads: where transcripts live, and where the
+  // pricing table is cached.
+  host;
+  log;
+  refreshTally = { hits: 0, misses: 0 };
+  ledger;
+  // The session record's refresh, which its transcript lanes make; a
+  // rescan's reads are its `today` scan's.
+  usage;
+  sweeps = 0;
+  stopSweep = null;
+  closed = false;
+  clock;
+  constructor(opts) {
+    this.host = opts.host;
+    this.clock = opts.clock;
+    this.log = opts.logger ?? quietLogger;
+    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
+    this.usage = this.ledger.declare({
+      name: "usage",
+      scope: "session",
+      refresh: ["first", "period", "change"],
+      lines: []
+    });
+    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
+    this.scans = new KeyedSource({
+      name: "today",
+      scope: "configDir",
+      keyOf: (paths2) => paths2.join("\0"),
+      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
+      read: (paths2) => this.scan(paths2),
+      every: () => opts.rescan ?? DEFAULT_RESCAN,
+      watch: NO_WATCH,
+      maxEntries: MAX_UNHELD_SCANS,
+      lines: REFRESH_TRIGGERS,
+      logger: this.log,
+      ledger: this.ledger,
+      clock: this.clock
+    });
+    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
+    if (interval > 0) {
+      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
+        unref: true
+      });
+    }
+  }
+  getStats() {
+    return {
+      size: this.sessions.size,
+      hits: this.refreshTally.hits,
+      misses: this.refreshTally.misses,
+      sweeps: this.sweeps
+    };
+  }
+  // The scans as a source: the directory sets kept, those a home holds, the
+  // seeds (`first`) and rescans (`period`), and how many failed.
+  scanStats() {
+    return this.scans.stats();
+  }
+  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
+  // its session and speed lanes read the one ingest it starts, whichever asks
+  // first and whenever the other lands, so it reads, records and logs once.
+  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
+  refresh(sessionId2, transcriptPath, by) {
+    let refresh = null;
+    const once2 = () => {
+      if (refresh !== null) return refresh;
+      const stamp2 = statStamp(transcriptPath);
+      refresh = {
+        stamp: stamp2,
+        record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
+      };
+      return refresh;
+    };
+    return {
+      // [LAW:no-silent-failure] A failed transcript parse flows out as
+      // `failed`; an unknown or empty session is the all-null totals, whose
+      // fields the payload drops one by one, so the hook's cost still lands
+      // over a session with no record.
+      usage: async () => {
+        const record2 = await once2().record;
+        if (record2.kind === "failed") return record2;
+        return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
+      },
+      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
+    };
+  }
+  // The `session` projection as the session's last refresh left it, for a
+  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
+  // dropped) is not answered yet; one whose refresh found no transcript is the
+  // empty record its refresh answers for it.
+  usageOf(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return pendingOf("unread");
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    return ok(slot.record?.usage ?? EMPTY_USAGE);
+  }
+  // A refresh's ingest of its session, whose outcome the session's slot keeps
+  // for the draws until the next one.
+  refreshed(sessionId2, transcriptPath, stamp2, by) {
+    return this.refreshFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const tally = { hits: 0, misses: 0 };
+      const startedAt = this.clock.monotonic();
+      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
+      this.refreshTally.hits += tally.hits;
+      this.refreshTally.misses += tally.misses;
+      if (tally.misses > 0) {
+        this.usage.recorded(
+          `sid=${valueOf(sessionId2)}`,
+          by,
+          record2,
+          elapsedMs(this.clock, startedAt)
+        );
+      }
+      answer(
+        this.hold(sessionId2).failure,
+        record2.kind === "failed" ? record2.reason : null
+      );
+      return record2;
+    });
+  }
+  // The `today` projection, which declareToday and daysOutside below answer
+  // together: the cross-session sum of every record's today bucket.
+  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
+  // makes the whole projection `failed` — a total silently missing today's
+  // main work would be a confident wrong number, worse than a loud gap.
+  //
+  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
+  // the sum is that session plus every session whose transcript lives in THAT
+  // directory — the daemon's own env names none.
+  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
+  // off where its transcript lives: a sum over every directory seen so far, or
+  // over the sessions that had asked, would move with which other sessions
+  // happened to have rendered.
+  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
+  // src/renderer/render-payload.ts): the directory set's scans, held, so a set
+  // no scan has answered starts its first one now — before the request or the
+  // frame that reads it. The lane answers the set's day sums once a scan has
+  // answered; which day of them is the draw's (`projectToday`).
+  declareToday(holds2, claudeConfigDir2) {
+    if (this.closed) return settledLane(failed("usage store closed", "read"));
+    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
+    const scans = this.scans.declare(holds2, claudePaths);
+    const set2 = this.daySet(claudePaths);
+    return {
+      current: () => {
+        const scan = scans.current();
+        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
+      }
+    };
+  }
+  // The rendering session's own days the set's sums do not hold, as the
+  // records stand, for the `today` fact: no I/O, no fold. A record under the
+  // set's roots is in its sums already, so it has none beyond them.
+  // [LAW:no-silent-failure] The session's last ingest failing is this read
+  // failing, so the fact fails with it and the draw shows a gap, never a total
+  // silently missing the session's own work.
+  daysOutside(sessionId2, roots) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot === void 0) return ABSENT;
+    const failure = slot.failure.get();
+    if (failure !== null) return failed(failure, "read");
+    const record2 = slot.record;
+    if (record2 === void 0 || under(record2.transcriptPath, roots)) {
+      return ABSENT;
+    }
+    return ok(Object.fromEntries(record2.days));
+  }
+  // A refresh's speed sample, over its one ingest of the session: its current
+  // cumulative counts and whether its turn is open, added to the session's
+  // ring — taken only at a stamp no sample was taken at, so a period over an
+  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
+  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
+  // session yields a zero-count sample, so a first-ever render establishes a
+  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
+  // clock instant — the store never reads the clock for tok/s timing itself.
+  async observed(sessionId2, refresh, nowMs) {
+    const { stamp: stamp2, record: refreshed } = refresh();
+    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
+      const record2 = await refreshed;
+      if (record2.kind === "failed") {
+        answer(this.hold(sessionId2).speed, record2);
+        return record2;
+      }
+      const slot = this.hold(sessionId2);
+      const standing2 = slot.speed.get();
+      if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
+      const cur = record2.kind === "ok" ? speedSampleOf(
+        record2.value.usage.tokenBreakdown,
+        record2.value.turnOpen,
+        nowMs
+      ) : speedSampleOf(null, false, nowMs);
+      const { ring } = slot;
+      ring.push(cur);
+      ring.sort((a, b) => a.atMs - b.atMs);
+      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      if (ring.at(-1) === cur) slot.sampledAt = stamp2;
+      const observed = ok({ samples: [...ring] });
+      answer(slot.speed, observed);
+      return observed;
+    });
+  }
+  // The session's speed as its last refresh observed it, for a draw: a frame
+  // takes no sample, so how often the bar is drawn moves no rate.
+  speedOf(sessionId2) {
+    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
+  }
+  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
+  // `absent` is a session with no transcript to read, `failed` is a
+  // transcript that exists but couldn't be parsed — NOT cached (only ok
+  // records are stored; the next render retries, same rule as the git
+  // cache). This is the single write-path of a slot's record.
+  async ingest(sessionId2, transcriptPath, tally, stamp2) {
+    const existing = this.see(sessionId2)?.record;
+    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
+      tally.hits++;
+      return ok(existing);
+    }
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
+    tally.misses++;
+    let refolded;
+    try {
+      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
+        const prior2 = this.sessions.get(sessionId2)?.record;
+        return {
+          prior: prior2,
+          outcome: await this.refold(sessionId2, transcriptPath, prior2)
+        };
+      });
+    } catch (error) {
+      return failed(
+        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+    const { prior, outcome } = refolded;
+    if (outcome.kind !== "ok") return outcome;
+    const { mainStamp, ...folded2 } = outcome.value;
+    const record2 = {
+      ...folded2,
+      transcriptStamp: mainStamp,
+      transcriptPath
+    };
+    const landed = this.sessions.get(sessionId2)?.record;
+    if (landed === prior) {
+      this.stored(sessionId2, record2);
+      return ok(record2);
+    }
+    if (landed === void 0) return ok(record2);
+    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
+  }
+  // [LAW:single-enforcer] The one write of a slot's record: the slot is
+  // replaced in the observable map, which is the change the day sums derive
+  // from.
+  stored(sessionId2, record2) {
+    const slot = this.hold(sessionId2);
+    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
+  }
+  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
+  // undefined while the store holds nothing for it — asking stores nothing.
+  see(sessionId2) {
+    const slot = this.sessions.get(sessionId2);
+    if (slot) slot.lastSeenAt = this.clock.now();
+    return slot;
+  }
+  // The slot something is about to be stored in, created on the first store.
+  hold(sessionId2) {
+    const seen2 = this.see(sessionId2);
+    if (seen2) return seen2;
+    const slot = {
+      lastSeenAt: this.clock.now(),
+      record: void 0,
+      ring: [],
+      sampledAt: null,
+      failure: observable.box(null),
+      speed: observable.box(void 0, {
+        deep: false
+      })
+    };
+    runInAction(() => this.sessions.set(sessionId2, slot));
+    return slot;
+  }
+  // A directory set's day sums, derived on first ask and kept with the store.
+  daySet(claudePaths) {
+    const key = claudePaths.join("\0");
+    const known = this.daySets.get(key);
+    if (known !== void 0) return known;
+    const roots = claudePaths.map((dir) => (0, import_node_path26.join)(dir, "projects") + import_node_path26.sep);
+    const set2 = {
+      roots,
+      sums: new Kept(
+        `today over ${claudePaths.join(",")}`,
+        () => daySumsOver(this.sessions.values(), roots)
+      )
+    };
+    this.daySets.set(key, set2);
+    return set2;
+  }
+  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
+  // prior record — the transcript (and each agent sidechain) is append-only, so
+  // per-render work is O(new bytes), not O(file). The whole-file case (cold
+  // record, or a first-ever read) is the same path with an empty prior: the
+  // reader yields the whole file from offset 0. A `failed` read on any file
+  // fails the fold (the boundary logs it); an `absent` file (not yet written /
+  // agent removed) keeps its prior fold and contributes nothing new.
+  async refold(sessionId2, transcriptPath, prior) {
+    const agents = await findAgentTranscripts(
+      sessionId2,
+      (0, import_node_path26.dirname)(transcriptPath),
+      prior === void 0 ? void 0 : new Set(prior.files.keys())
+    );
+    for (const line of longLineLog(agents.longLines)) this.log("info", line);
+    const newFiles = /* @__PURE__ */ new Map();
+    let mainStamp = "";
+    for (const filePath2 of [transcriptPath, ...agents.paths]) {
+      const priorFold = prior?.files.get(filePath2);
+      const read2 = await foldAppended(
+        filePath2,
+        priorFold,
+        EMPTY_FILE_FOLD,
+        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
+      );
+      if (read2.kind === "failed") return read2;
+      if (read2.kind === "absent") {
+        if (priorFold) newFiles.set(filePath2, priorFold);
+        continue;
+      }
+      const { folded: folded2, longLines } = read2.value;
+      for (const line of longLineLog(longLines)) this.log("info", line);
+      newFiles.set(filePath2, folded2);
+      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
+    }
+    return ok({
+      files: newFiles,
+      ...mergeFolds(newFiles),
+      mainStamp,
+      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false
+    });
+  }
+  // The one whole-tree scan of a directory set — its seed, or a rescan:
+  // ingest every session whose transcript was touched recently enough to hold
+  // a today entry. A rescan is the same scan over warm records, so it costs a
+  // stat per transcript plus the bytes appended since the last one.
+  // [LAW:no-silent-failure] A scan that throws, or that could not read a
+  // session it found, answers as failed, which is `today`'s failure until a
+  // scan lands — never a sum silently missing the sessions it did not reach.
+  // Only a file or directory gone between the listing and its read (ENOENT) is
+  // absence.
+  async scan(claudePaths) {
+    try {
+      const cutoff = seedCutoffMs(this.clock.now());
+      const projectPaths = await findProjectPaths(claudePaths);
+      const candidates = [];
+      for (const dir of projectPaths) {
+        const files = await unlessGone(readdir2(dir));
+        for (const file of files ?? []) {
+          if (!file.endsWith(".jsonl")) continue;
+          const filePath2 = (0, import_node_path26.join)(dir, file);
+          const st = await unlessGone(stat2(filePath2));
+          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const id2 = parseSessionId(file.slice(0, -".jsonl".length));
+          if (!id2.ok) {
+            this.log(
+              "warn",
+              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id2.problem}`
+            );
+            continue;
+          }
+          candidates.push({
+            sessionId: id2.id,
+            path: filePath2,
+            stamp: stampOf(st)
+          });
+        }
+      }
+      const failures = [];
+      const tally = { hits: 0, misses: 0 };
+      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
+        if (outcome.kind === "failed") {
+          failures.push(outcome.reason);
+          this.log("warn", `usageStore scan: ${outcome.reason}`);
+        }
+      });
+      this.log(
+        "info",
+        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
+      );
+      if (failures.length > 0) {
+        return failed(
+          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
+          "read"
+        );
+      }
+      return ok({ sessions: candidates.length, read: tally.misses });
+    } catch (error) {
+      return failed(
+        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
+        "read"
+      );
+    }
+  }
+  // Public for tests; called periodically from the timer. Drops what nothing
+  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
+  // today. A stale record holding one is `held`, since `today` sums it — a
+  // session whose transcript the scans have stopped visiting is seen no more,
+  // and a day can run past `staleAgeMs` (a 25-hour DST day).
+  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
+  // wall clock a frame's instant and the scan's cutoff read too.
+  sweepStale() {
+    const now2 = this.clock.now();
+    const today = dayKey(new Date(now2));
+    let dropped = 0;
+    let held2 = 0;
+    let noRecord = 0;
+    runInAction(() => {
+      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
+        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
+        if (record2?.days.has(today)) {
+          held2++;
+          continue;
+        }
+        this.sessions.delete(sid);
+        dropped++;
+        if (record2 === void 0) noRecord++;
+      }
+    });
+    if (dropped > 0) this.sweeps++;
+    if (dropped > 0 || held2 > 0) {
+      this.log(
+        "info",
+        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held2}`
+      );
+    }
+    return dropped;
+  }
+  close() {
+    this.closed = true;
+    this.stopSweep?.();
+    this.stopSweep = null;
+    this.scans.close();
+    runInAction(() => {
+      for (const { sums } of this.daySets.values()) sums.release();
+      this.sessions.clear();
+    });
+    this.daySets.clear();
+  }
+};
+
+// src/daemon/cache/git-service.ts
+init_globals();
+var import_node_path27 = __toESM(require_path_browserify(), 1);
+function derived2(from, project) {
+  if (from.kind !== "ok") return from;
+  const value = project(from.value);
+  return value === null ? ABSENT : ok(value);
+}
+function nonEmpty(o) {
+  if (o.kind !== "ok") return o;
+  const v = o.value.trim();
+  return v ? ok(v) : ABSENT;
+}
+var COMMIT_TIME_CACHE_MAX = 256;
+var REMOTES_CACHE_MAX = 256;
+function configIdentity(configPath) {
+  try {
+    const st = fs_default.statSync(configPath);
+    return { key: `${st.dev}:${st.ino}`, stamp: `${st.mtimeMs}:${st.size}` };
+  } catch {
+    return null;
+  }
+}
+var GitService = class {
+  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
+  // close refuses the next read of a pass under way.
+  constructor(launcher) {
+    this.launcher = launcher;
+  }
+  launcher;
+  isGitRepo(workingDir) {
+    return holdsGit(workingDir);
+  }
+  // [LAW:types-are-the-program] args is a string[] so the boundary type
+  // forbids the only-space-free-arguments contract the prior whitespace-split
+  // implementation relied on. Returns the full LaunchResult — the typed
+  // termination cause `launch` already computed — so `classify` can map it to
+  // an Outcome without a thrown Error flattening that information away.
+  // [LAW:locality-or-seam] `protected`, not private: the per-fetch spawn COUNT
+  // is a property this class is now accountable for (brandon-git-cache-y9h), and
+  // the only way to assert it is to be able to see every invocation go past. A
+  // counting subclass in test/git-spawn-budget.test.ts is that seam; the
+  // daemon's own GitDataProvider already extends this class.
+  async execGitAsync(args, options) {
+    return this.launcher.launch({
+      bin: "git",
+      args: [...args],
+      cwd: options.cwd,
+      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
+      timeoutMs: options.timeout,
+      category: "git"
+    });
+  }
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can key its
+  // cache + watcher on the *effective* git directory — the same directory the
+  // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
+  // alone is wrong when `projectDir` is set and is itself a git repo: the
+  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
+  // below), but a workingDir-keyed cache would store that data under a
+  // different key and wire invalidation to the wrong watcher. The contract:
+  // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
+  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
+  resolveEffectiveGitDir(workingDir, projectDir) {
+    if (this.isWorktree(workingDir)) return ok(workingDir);
+    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
+    if (this.isGitRepo(workingDir)) return ok(workingDir);
+    return this.findGitRoot(workingDir);
+  }
+  // [LAW:locality-or-seam] public so daemon-side caches can key on the
+  // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
+  // "not in a git repository", the everyday domain answer.
+  //
+  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
+  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
+  // already short-circuit on, now asked at every level instead of only at
+  // `workingDir`. Before this, two resolvers answered one question and disagreed
+  // — measured on a repo whose config sets `core.worktree = /elsewhere`:
+  //
+  //   cwd         git's answer   the short-circuit   the old rev-parse
+  //   /repo       /elsewhere     /repo               /private/tmp/…/elsewhere
+  //   /repo/sub   /elsewhere     (falls through)     /private/tmp/…/elsewhere
+  //
+  // so the bar rendered /repo's state while sitting in /repo and a completely
+  // different tree's state one directory down. `rev-parse` also answers with the
+  // PHYSICAL path where the short-circuit answers with the logical one, so ONE
+  // repo could occupy two cache keys depending on which arm replied. The ascent
+  // collapses both onto the rule the short-circuits already commit to: one
+  // predicate, one spelling of a path.
+  //
+  // [LAW:effects-at-boundaries] Pure synchronous fs — the shape
+  // `getOngoingOperation` and `resolveGitDir` in this same class already have —
+  // so a declaration knows its repo in the turn it asks (brandon-unfiled-3248.
+  // 8ro6, step 4). Observable effect: a session whose cwd is outside any repo
+  // spawns no `git` at all, where before it spawned one per render forever —
+  // `getGitInfo`'s `absent` is deliberately not cached, so nothing bounded it.
+  //
+  // Two deliberate differences from `git rev-parse --show-toplevel`, both making
+  // the ascent find MORE repos rather than fewer, neither reachable without an
+  // unusual configuration: `core.worktree` is not honoured (the short-circuit
+  // never honoured it either), and the ascent does not stop at a filesystem
+  // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
+  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
+  // the DAEMON's environment, which describes whichever shell spawned it rather
+  // than the session being rendered.
+  //
+  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
+  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
+  // through `classify(…, "absent")` — a state this never produced, so inventing
+  // one here would be a new answer for an unchanged question.
+  findGitRoot(workingDir) {
+    const root = gitRootOf(workingDir);
+    return root === void 0 ? ABSENT : ok(root);
+  }
+  // [LAW:one-source-of-truth] No inner cache here. The daemon-side
+  // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
+  // a per-process cache on top of an already-cached call would double the
+  // invalidation surface — exactly the trap that kz8.3 collapses.
+  //
+  // [LAW:no-silent-failure] Never rejects: helpers return outcomes by
+  // construction, and an unexpected throw (a bug) is surfaced as a `failed`
+  // outcome whose reason reaches the consuming boundary's log — not a blank
+  // bar, not a swallowed branch.
+  async getGitInfo(workingDir, projectDir) {
+    try {
+      return await this.computeGitInfo(workingDir, projectDir);
+    } catch (e) {
+      return failed(
+        `git: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    }
+  }
+  async computeGitInfo(workingDir, projectDir) {
+    let gitDir;
+    if (this.isWorktree(workingDir)) {
+      gitDir = workingDir;
+    } else if (projectDir && this.isGitRepo(projectDir)) {
+      gitDir = projectDir;
+    } else if (this.isGitRepo(workingDir)) {
+      gitDir = workingDir;
+    } else {
+      const foundGitRoot = this.findGitRoot(workingDir);
+      if (foundGitRoot.kind !== "ok") return foundGitRoot;
+      gitDir = foundGitRoot.value;
+    }
+    const core = await this.getCoreAsync(gitDir);
+    if (core.kind !== "ok") return core;
+    const committedAt = await this.committedAt(gitDir, core.value.oid);
+    const remotes = await this.getRemotesAsync(gitDir);
+    return ok({
+      branch: core.value.branch,
+      status: core.value.status,
+      aheadBehind: core.value.aheadBehind,
+      head: core.value.oid,
+      // sha, upstream, and the worktree counts all rode in on the core call —
+      // attaching them here is a memory read, not another spawn.
+      workingTree: core.value.workingTree,
+      // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
+      // lives with the display field rather than in the parser: `CoreStatus`
+      // keeps the one fact git reported. `git rev-parse --short` auto-lengthens
+      // on collision, but re-spawning it to recover that would undo this
+      // segment's whole point — one porcelain=v2 read instead of a fan-out — and
+      // this value is display-only. The full oid is what keys the
+      // commit-timestamp cache, so ambiguity here stays cosmetic instead of
+      // becoming a wrong lookup.
+      sha: derived2(core.value.oid, (o) => o.slice(0, 7)),
+      upstream: core.value.upstream,
+      committedAt,
+      stashCount: this.getStashCount(gitDir),
+      repoName: derived2(remotes, (r) => this.repoNameFrom(r, gitDir)),
+      repoUrl: derived2(remotes, repoWebUrl),
+      operation: this.getOngoingOperation(gitDir)
+    });
+  }
+  // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
+  // real HEAD/index files even for git worktrees. For a regular repo this is
+  // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
+  // naming the worktree-metadata dir, where HEAD and index live — watching
+  // `<workingDir>/.git/HEAD` would fail (no such path) and the cache would
+  // never invalidate.
+  //
+  // [LAW:no-silent-failure] exception: this is a watch target, not an answer.
+  // A `.git` that names nothing readable (a directory, an unreadable or
+  // malformed file) watches the dotGit path, so callers always get a string.
+  resolveGitDir(workingDir) {
+    return orElse(gitDirNamed(workingDir), import_node_path27.default.join(workingDir, ".git"));
+  }
+  getOngoingOperation(workingDir) {
+    try {
+      const gitDir = this.resolveGitDir(workingDir);
+      if (fs_default.existsSync(import_node_path27.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
+      if (fs_default.existsSync(import_node_path27.default.join(gitDir, "CHERRY_PICK_HEAD")))
+        return ok("CHERRY-PICK");
+      if (fs_default.existsSync(import_node_path27.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs_default.existsSync(import_node_path27.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
+      if (fs_default.existsSync(import_node_path27.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path27.default.join(gitDir, "rebase-apply")))
+        return ok("REBASE");
+      return ABSENT;
+    } catch (e) {
+      return failed(
+        `git operation probe: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    }
+  }
+  // [LAW:decomposition] Two facts were folded into one call, and only one of them
+  // is a property of the repo. The commit's TIMESTAMP never changes — a sha names
+  // one commit forever — while "how long ago" is that timestamp minus a clock
+  // read. Split apart, the repo fact becomes cacheable with no TTL at all (the
+  // daemon's GitDataProvider keys it on the oid) and the clock read belongs to
+  // the render: `git.timeSinceCommit`, a projection, subtracts this from the instant the bar is
+  // drawn at, so a GitInfo cached for a whole TTL window never carries an age
+  // frozen at its fetch. Folded together, the spawn could only ever be cached
+  // for as long as the answer was allowed to be wrong.
+  //
+  // An unborn HEAD has no commit to time, and says so without spawning anything:
+  // `oid` is already absent, and that absence IS the answer the old non-zero
+  // `git log` exit was translated into.
+  async committedAt(gitDir, oid) {
+    if (oid.kind !== "ok") return oid;
+    return this.commitTimestamp(gitDir, oid.value);
+  }
+  // [LAW:one-source-of-truth] exception: the class header rules out a cache here,
+  // and this is one — with the reason that rule exists absent. The rule forbids
+  // layering a per-process cache over an already-cached call because it "would
+  // double the invalidation surface"; this map has NO invalidation surface. An oid
+  // is content-addressed, so the commit it names has one committer date, the same
+  // one forever and in every repo holding the object. There is no staleness to
+  // coordinate, so there is no second invalidation to get wrong.
+  //
+  // It lives here rather than in the daemon's GitDataProvider, where the design
+  // doc put it, because the provider computes GitInfo on a SEPARATE inner
+  // GitService: an override on the provider would never be called. The cache has
+  // to be where the spawn is.
+  //
+  // What it buys: `git log -1` fired once per cache miss — once per 30 s TTL
+  // window on an active repo — to answer a question that had not changed since the
+  // last commit. It now fires once per commit. The age is this timestamp
+  // subtracted from each draw's instant, which is why splitting that
+  // derivation out is what made this cacheable at all.
+  //
+  // Only `ok` is stored: `absent`/`failed` are transient (a commit the status call
+  // just named should be readable), and pinning one under a key that never expires
+  // would make a blip permanent. The promise is the value, so caching and
+  // coalescing are one fact.
+  commitTimes = /* @__PURE__ */ new Map();
+  async commitTimestamp(gitDir, oid) {
+    const hit = this.commitTimes.get(oid);
+    if (hit !== void 0) {
+      this.commitTimes.delete(oid);
+      this.commitTimes.set(oid, hit);
+      return hit;
+    }
+    const pending2 = this.readCommitTimestamp(gitDir, oid);
+    this.commitTimes.set(oid, pending2);
+    void pending2.then(
+      (outcome) => {
+        if (outcome.kind !== "ok" && this.commitTimes.get(oid) === pending2) {
+          this.commitTimes.delete(oid);
+        }
+      },
+      () => {
+        if (this.commitTimes.get(oid) === pending2) {
+          this.commitTimes.delete(oid);
+        }
+      }
+    );
+    while (this.commitTimes.size > COMMIT_TIME_CACHE_MAX) {
+      const oldest = this.commitTimes.keys().next().value;
+      if (oldest === void 0) break;
+      this.commitTimes.delete(oldest);
+    }
+    return pending2;
+  }
+  // The spawn itself. Naming the commit rather than leaving it implicit in HEAD is
+  // what makes the value content-addressed, and it closes a race the implicit form
+  // had: HEAD could move between the status call that reported the oid and this
+  // one, so the timestamp could describe a different commit than the sha shown
+  // beside it.
+  async readCommitTimestamp(gitDir, oid) {
+    const r = nonEmpty(
+      classify(
+        "git log -1",
+        await this.execGitAsync(["log", "-1", "--format=%ct", oid, "--"], {
+          cwd: gitDir,
+          timeout: 2e3
+        }),
+        "absent"
+      )
+    );
+    if (r.kind !== "ok") return r;
+    const committedAt = parseInt(r.value, 10);
+    if (Number.isNaN(committedAt)) {
+      return failed(`git log -1: unparseable timestamp "${r.value}"`, "parse");
+    }
+    return ok(committedAt);
+  }
+  // [LAW:decomposition] The COMMON git directory — where refs shared between a
+  // repo and its linked worktrees live. `resolveGitDir` answers the other,
+  // per-worktree question, which is the right one for HEAD and index and exactly
+  // why it exists. `refs/stash` is not of that kind: measured, a linked
+  // worktree's `git stash list` reports the MAIN repo's stashes, and the reflog
+  // backing them exists ONLY under the common dir. Reading the per-worktree
+  // gitdir would answer zero stashes for every worktree, silently.
+  resolveCommonGitDir(gitDir) {
+    return orElse(commonDirOf(gitDir), gitDir);
+  }
+  // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for
+  // `refs/stash`, not the ref — measured two ways: a hand-written
+  // `logs/refs/stash` is precisely what `git stash list` reports, and a
+  // `refs/stash` that exists with no reflog counts zero from both. libgit2
+  // spells the same fact as `git_reflog_read` + `git_reflog_entrycount`. So the
+  // count is this file's line count, and the counting expression below is the one
+  // the `stash list` output already went through — only its input changed. A
+  // reflog message cannot contain a newline, so lines and entries agree.
+  //
+  // [LAW:no-silent-failure] The three states survive the swap. ENOENT is a REAL
+  // count of 0 — no stash was ever pushed here — while any other read error is
+  // `failed`, so the meaning-erasure the old catch-to-0 created stays
+  // unrepresentable. Sync, because reading one small file is not worth a
+  // microtask: its former `Promise.all` partner is the only spawn left.
+  getStashCount(workingDir) {
+    const reflog = import_node_path27.default.join(
+      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
+      "logs",
+      "refs",
+      "stash"
+    );
+    let text4;
+    try {
+      text4 = fs_default.readFileSync(reflog, "utf-8");
+    } catch (e) {
+      if (e.code === "ENOENT") return ok(0);
+      return failed(
+        `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`,
+        "read"
+      );
+    }
+    const entries = text4.trim();
+    return ok(entries ? entries.split("\n").length : 0);
+  }
+  // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
+  // `repoName` and `repoUrl` share a single call from `computeGitInfo`, so those
+  // two can never disagree about which remote is origin — that pair used to be
+  // one `config --get remote.origin.url` each.
+  //
+  // The PR cache deliberately keeps its OWN call (`getRepoRemoteUrl`, from
+  // src/daemon/cache/git.ts): the forge lookup is a network resource cached
+  // under its own longer TTL, keyed `repoRoot|branch|remote`, and folding its
+  // remote read into GitInfo would tie a network cache's input to the local
+  // cache's fs-watched refresh cycle — the separation those two TTLs exist to
+  // create. So this is one read per lifecycle, not one read overall.
+  //
+  // `--local` scopes the read to THIS repository's config. Without it the read
+  // merges system → global → local, so a stray `remote.origin.url` in
+  // ~/.gitconfig sorts FIRST and would hijack repoUrl, repoName and the PR cache
+  // key for every repo on the machine — a regression against the `git config
+  // --get` this replaced, whose last-wins was really scope precedence. Scoping
+  // also makes config order unambiguous, so "first url" is a fact rather than a
+  // bet about which scope won.
+  //
+  // `--get-regexp` exits 1 when NOTHING matches, which is a repo with no remotes
+  // configured — a domain answer, so it lands as an EMPTY LIST rather than an
+  // `absent` arm. [LAW:dataflow-not-control-flow] Every projection then reads
+  // "no remotes" off the empty set (no repoUrl, basename repoName) instead of
+  // carrying a second no-value state through three consumers. Exit 128 (an
+  // unreadable or corrupt config) is NOT that answer and stays `failed`, so a
+  // broken repo never renders as an empty one. [LAW:no-silent-failure]
+  // [LAW:one-source-of-truth] The memo is keyed by the CONFIG FILE's identity, not
+  // by the working directory and not by a path, because the file is what the answer
+  // depends on: two worktrees of one repo share one config, so they share one memo,
+  // and one repo cannot hold two answers. See `configIdentity` for why a path would
+  // not have been enough.
+  //
+  // Remotes change roughly never, and this was re-read on every cache miss. The
+  // stamp is the config's `mtimeMs:size` rather than its mtime alone — a real `git
+  // remote add` was measured leaving the mtime unchanged at one-second resolution
+  // while the size moved, and a missed change is the costly direction here (a
+  // false one costs a single spawn). Deliberately NOT parsing .git/config: `git
+  // config` honours `include` and `includeIf`, so a hand-rolled INI reader is an
+  // enumeration gap with a wrong answer at the end of it. Keeping the spawn behind
+  // the memo gets the saving with none of that exposure.
+  //
+  // The honest edges, both of which the spawn itself would not have: a remote added
+  // through an INCLUDED file whose own mtime changed is not seen, and neither is
+  // one in a `config.worktree` under `extensions.worktreeConfig`. A stat that fails
+  // yields no stamp and therefore no memo, so an unreadable config re-reads rather
+  // than freezing an answer.
+  async getRemotesAsync(workingDir) {
+    const configPath = import_node_path27.default.join(
+      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
+      "config"
+    );
+    const identity2 = configIdentity(configPath);
+    if (identity2 === null) return this.readRemotes(workingDir);
+    const { key, stamp: stamp2 } = identity2;
+    const memo = this.remotesByConfig.get(key);
+    if (memo !== void 0 && memo.stamp === stamp2) {
+      this.remotesByConfig.delete(key);
+      this.remotesByConfig.set(key, memo);
+      return memo.remotes;
+    }
+    const remotes = this.readRemotes(workingDir);
+    this.remotesByConfig.set(key, { stamp: stamp2, remotes });
+    void remotes.then(
+      (outcome) => {
+        const held2 = this.remotesByConfig.get(key);
+        if (outcome.kind !== "ok" && held2?.remotes === remotes) {
+          this.remotesByConfig.delete(key);
+        }
+      },
+      () => {
+        const held2 = this.remotesByConfig.get(key);
+        if (held2?.remotes === remotes) this.remotesByConfig.delete(key);
+      }
+    );
+    while (this.remotesByConfig.size > REMOTES_CACHE_MAX) {
+      const oldest = this.remotesByConfig.keys().next().value;
+      if (oldest === void 0) break;
+      this.remotesByConfig.delete(oldest);
+    }
+    return remotes;
+  }
+  remotesByConfig = /* @__PURE__ */ new Map();
+  async readRemotes(workingDir) {
+    return remotesOf(
+      await this.execGitAsync(REMOTES_ARGS, { cwd: workingDir, timeout: 2e3 })
+    );
+  }
+  // [LAW:effects-at-boundaries] Pure projection over remotes the caller already
+  // read — no spawn of its own, so it cannot disagree with the sibling repoUrl
+  // projection about what origin is.
+  //
+  // A local-only repo's name is its directory name BY POLICY (the display
+  // contract for repos without a remote) — never as an error fallback; a failed
+  // remotes read stays failed at the call site instead of borrowing this rule.
+  repoNameFrom(remotes, workingDir) {
+    const url = repoRemoteUrl(remotes);
+    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path27.default.basename(workingDir);
+  }
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
+  // remote to fold into its PR cache key (the PR value depends on the remote; a
+  // re-pointed remote must be a new key). Raw, unparsed — the forge detector
+  // reads the host from it. No remotes → `absent` (hence no forge PR concept),
+  // distinct from a failed read.
+  //
+  // Named for the repo rather than for `origin` because it no longer reads
+  // `origin` specifically — it projects `forgeRemoteUrl` over the same picked
+  // remote repoName and repoUrl use, preferring a url a forge CLI recognizes.
+  // That preference is the point: `detectForge` gates the whole PR lookup, so a
+  // browsable-but-unrecognized mirror listed first would silently decide the
+  // branch has no PR.
+  async getRepoRemoteUrl(workingDir) {
+    const remotes = await this.getRemotesAsync(workingDir);
+    if (remotes.kind !== "ok") return remotes;
+    const url = forgeRemoteUrl(remotes.value);
+    return url === null ? ABSENT : ok(url);
+  }
+  // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors
+  // execGitAsync but carries the "forge" launch category and a longer timeout
+  // (this is a network call, not a local git read). Returns the typed
+  // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
+  async execForgeAsync(bin, args, options) {
+    return this.launcher.launch({
+      bin,
+      args: [...args],
+      cwd: options.cwd,
+      timeoutMs: options.timeout,
+      category: "forge"
+    });
+  }
+  // [LAW:effects-at-boundaries] Resolve the branch's PR/MR via the forge
+  // CLI. Pure dispatch over a remote the CALLER has already read: pick the
+  // forge by host, run its CLI, fold the launch result into an Outcome. The
+  // remote is a parameter (not read here) so the cache layer can fold it into
+  // its key in the same read — no caching here; the daemon's GitDataProvider
+  // owns the PR cache + TTL (a network resource wants a longer, independent
+  // lifecycle than local git state). `absent` when the host is no recognized
+  // forge; the CLI dispatch then classifies the rest.
+  async resolvePullRequest(workingDir, remoteUrl) {
+    const forge = detectForge(remoteUrl);
+    if (forge === "github") {
+      return classifyForgePr(
+        "gh pr view",
+        await this.execForgeAsync(
+          FORGE_CLI.github,
+          ["pr", "view", "--json", "number,state,url,headRefOid"],
+          { cwd: workingDir, timeout: 5e3 }
+        ),
+        /no (open )?pull requests? found/i,
+        parseGithubPr
+      );
+    }
+    if (forge === "gitlab") {
+      return classifyForgePr(
+        "glab mr view",
+        await this.execForgeAsync(
+          FORGE_CLI.gitlab,
+          ["mr", "view", "--output", "json"],
+          {
+            cwd: workingDir,
+            timeout: 5e3
+          }
+        ),
+        /no (open )?merge requests? (found|available)/i,
+        parseGitlabMr
+      );
+    }
+    return ABSENT;
+  }
+  isWorktree(workingDir) {
+    try {
+      const gitDir = import_node_path27.default.join(workingDir, ".git");
+      if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+  // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2
+  // --branch` reports branch, short SHA, upstream, ahead/behind, and worktree
+  // status in a single subprocess — the fan-out this method replaces spawned up
+  // to six (status -b, two rev-list, a branch fallback, rev-parse HEAD, rev-parse
+  // @{u}). Parsing is delegated to the pure `parseStatusV2`.
+  async getCoreAsync(workingDir) {
+    debug(`[GIT-EXEC] Running git status --porcelain=v2 in ${workingDir}`);
+    const r = classify(
+      "git status --porcelain=v2 --branch",
+      await this.execGitAsync(["status", "--porcelain=v2", "--branch"], {
+        cwd: workingDir,
+        timeout: 2e3
+      }),
+      // `git status` has no non-zero domain answer; any failure means the
+      // core state is unknown — no fabricated "clean" on a fallback branch.
+      "failed"
+    );
+    if (r.kind !== "ok") return r;
+    return ok(parseStatusV2(r.value));
+  }
+};
+
+// src/segments/context.ts
+init_globals();
+
+// src/utils/transcript-fold.ts
+init_globals();
+
+// src/utils/observable-lru.ts
+init_globals();
+var ObservableLru = class {
+  constructor(max3) {
+    this.max = max3;
+  }
+  max;
+  values = observable.map(void 0, { deep: false });
+  // Least recently used first.
+  order = /* @__PURE__ */ new Set();
+  get(key) {
+    return this.values.get(key);
+  }
+  get size() {
+    return this.order.size;
+  }
+  // The key was used and its value stands.
+  touch(key) {
+    if (this.order.delete(key)) this.order.add(key);
+  }
+  // The key's value now, used now. A value identical to the one held wakes
+  // nobody.
+  set(key, value) {
+    this.order.delete(key);
+    this.order.add(key);
+    runInAction(() => {
+      this.values.set(key, value);
+      for (const oldest of this.order) {
+        if (this.order.size <= this.max) break;
+        this.order.delete(oldest);
+        this.values.delete(oldest);
+      }
+    });
+  }
+};
+
+// src/utils/transcript-fold.ts
+var MAX_SESSIONS3 = 256;
+var TranscriptFold = class {
+  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS3) {
+    this.empty = empty2;
+    this.step = step4;
+    this.refreshes = refreshes;
+    this.clock = clock;
+    this.log = log;
+    this.sessions = new ObservableLru(maxSessions);
+  }
+  empty;
+  step;
+  refreshes;
+  clock;
+  log;
+  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
+  // instance per projection per daemon. Observable, so a view's payload over
+  // an answer is recomputed in the turn the answer is stored.
+  sessions;
+  // [LAW:effects-at-boundaries] The session's refresh: folds what was
+  // appended since its last read, and stores what it answered.
+  async read(sessionId2, transcriptPath, by) {
+    const held2 = this.sessions.get(sessionId2);
+    const prior = held2?.folded;
+    const stamp2 = statStamp(transcriptPath);
+    if (held2?.folded && stamp2 !== "" && held2.folded.cursor.stamp === stamp2) {
+      const { folded: folded3, answer: answer2 } = held2;
+      if (answer2.kind === "ok" && answer2.value === folded3.value) {
+        this.sessions.touch(sessionId2);
+        return answer2;
+      }
+      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
+    }
+    const startedAt = this.clock.monotonic();
+    const read2 = await foldAppended(
+      transcriptPath,
+      prior,
+      this.empty,
+      (state, entries) => entries.reduce(this.step, state)
+    );
+    this.refreshes.recorded(
+      `sid=${valueOf(sessionId2)}`,
+      by,
+      read2,
+      elapsedMs(this.clock, startedAt)
+    );
+    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
+    if (read2.kind === "absent") {
+      return this.store(sessionId2, prior, {
+        kind: "ok",
+        value: prior?.value ?? this.empty
+      });
+    }
+    const { folded: folded2, longLines } = read2.value;
+    for (const line of longLineLog(longLines)) this.log("info", line);
+    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
+  }
+  // What the session's last read answered, as it stands: never read is
+  // pending, its first read the next request's.
+  answer(sessionId2) {
+    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
+  }
+  store(sessionId2, folded2, answer2) {
+    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
+    return answer2;
+  }
+};
+
+// src/segments/context.ts
+var DEFAULT_CONTEXT_WINDOW = 2e5;
+function step(state, entry) {
+  const usage = entry.message?.usage;
+  if (!usage?.input_tokens || entry.isSidechain === true) return state;
+  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+}
+var ContextProvider = class {
+  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
+  // activity: one number per session, kept incrementally, rather than every
+  // entry of the transcript re-parsed to find the last one.
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      void 0,
+      step,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "context",
+        scope: "session",
+        refresh: ["first", "period", "change"],
+        lines: []
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's context tokens, folded from the transcript's newest
+  // main-chain usage entry.
+  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
+  // boundary logs it); a transcript with no usable usage entry is `absent`.
+  async refresh(sessionId2, transcriptPath, by) {
+    return tokensFrom(await this.fold.read(sessionId2, transcriptPath, by));
+  }
+  // The session's context tokens as its last refresh left them, for a draw.
+  tokensOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : tokensFrom(answer2);
+  }
+};
+function tokensFrom(read2) {
+  if (read2.kind === "failed") {
+    return failed(`context transcript: ${read2.reason}`, read2.failedAt);
+  }
+  if (read2.value === void 0) {
+    debug("No main chain entries with usage data found");
+    return ABSENT;
+  }
+  return ok(read2.value);
+}
+function ratioPercentages(totalTokens, contextLimit) {
+  const percentage = Math.min(
+    100,
+    Math.max(0, Math.round(totalTokens / contextLimit * 100))
+  );
+  return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
+}
+function contextFromHook(hookData2) {
+  const cw = hookData2.context_window;
+  if (!cw?.current_usage) return null;
+  const currentUsage = cw.current_usage;
+  const contextLimit = cw.context_window_size;
+  const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
+  const ratio = ratioPercentages(totalTokens, contextLimit);
+  return {
+    totalTokens,
+    maxTokens: contextLimit,
+    percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
+    contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
+  };
+}
+function contextOver(tokens, hookData2) {
+  const native2 = contextFromHook(hookData2);
+  if (native2 !== null) return ok(native2);
+  if (tokens.kind !== "ok") return tokens;
+  const contextLimit = contextLimitOf(hookData2);
+  return ok({
+    totalTokens: tokens.value,
+    maxTokens: contextLimit,
+    ...ratioPercentages(tokens.value, contextLimit)
+  });
+}
+function contextLimitOf(hookData2) {
+  return hookData2.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
+}
+
+// src/segments/metrics.ts
+init_globals();
+var RECENT_WINDOW = 20;
+var EMPTY = {
+  messageCount: 0,
+  nonPrompts: 0,
+  recent: []
+};
+var NON_PROMPTS = /* @__PURE__ */ new Set([
+  "turn",
+  "interrupt",
+  "claude-code"
+]);
+function step2(state, entry) {
+  if (entry.isSidechain) return state;
+  const grown = [...state.recent, entry];
+  return {
+    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
+    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
+    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
+  };
+}
+function lastResponseTime(entries) {
+  let lastUserTime = null;
+  let best = null;
+  for (const entry of entries) {
+    const messageType = entry.type || entry.message?.role || entry.message?.type;
+    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
+      lastUserTime = entry.timestamp;
+    } else if (messageType === "assistant" && lastUserTime) {
+      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
+      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
+    }
+  }
+  return best;
+}
+var MetricsProvider = class {
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      EMPTY,
+      step2,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "metrics",
+        scope: "session",
+        refresh: ["first", "period", "change"],
+        lines: []
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // The session's metrics fold, read from its transcript.
+  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
+  // the payload boundary.
+  async refresh(sessionId2, transcriptPath, by) {
+    debug(`Getting metrics from the transcript for session: ${sessionId2}`);
+    return foldFrom(
+      sessionId2,
+      await this.fold.read(sessionId2, transcriptPath, by)
+    );
+  }
+  // The session's metrics fold as its last refresh left it, for a draw.
+  foldOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : foldFrom(sessionId2, answer2);
+  }
+};
+function foldFrom(sessionId2, folded2) {
+  if (folded2.kind === "failed") {
+    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
+  }
+  return ok({
+    lastResponseTime: lastResponseTime(folded2.value.recent),
+    messageCount: folded2.value.messageCount,
+    nonPrompts: folded2.value.nonPrompts
+  });
+}
+function metricsOver(fold, hookData2) {
+  const cost = hookData2.cost;
+  if (!cost) return ABSENT;
+  if (fold.kind !== "ok") return fold;
+  return ok({
+    ...fold.value,
+    responseTime: cost.total_api_duration_ms / 1e3,
+    sessionDuration: cost.total_duration_ms / 1e3,
+    linesAdded: cost.total_lines_added,
+    linesRemoved: cost.total_lines_removed
+  });
+}
+
+// src/segments/activity.ts
+init_globals();
+var EMPTY2 = {
+  command: null,
+  todos: [],
+  pending: [],
+  done: []
+};
+function bump2(tally, name) {
+  const at = tally.findIndex((t2) => t2.name === name);
+  if (at < 0) return [...tally, { name, count: 1 }];
+  return tally.map(
+    (t2, i2) => i2 === at ? { name: t2.name, count: t2.count + 1 } : t2
+  );
+}
+function atBoundary(state, entry) {
+  switch (entry.userEntry) {
+    case "prompt":
+      return {
+        ...state,
+        command: entry.activity?.command ?? null,
+        pending: [],
+        done: []
+      };
+    case "interrupt":
+      return { ...state, pending: [] };
+    case "turn":
+    case "tool-result":
+    case "claude-code":
+    case void 0:
+      return state;
+  }
+}
+function step3(state, entry) {
+  if (entry.isSidechain) return state;
+  const turn = atBoundary(state, entry);
+  const activity = entry.activity;
+  if (activity === void 0) return turn;
+  let pending2 = turn.pending;
+  let done = turn.done;
+  if (activity.started !== void 0) {
+    pending2 = [...pending2, ...activity.started];
+  }
+  for (const id2 of activity.finished ?? []) {
+    const at = pending2.findIndex((call) => call.id === id2);
+    if (at < 0) continue;
+    done = bump2(done, pending2[at].name);
+    pending2 = [...pending2.slice(0, at), ...pending2.slice(at + 1)];
+  }
+  return {
+    ...turn,
+    pending: pending2,
+    done,
+    todos: activity.todos ?? turn.todos
+  };
+}
+function report(state) {
+  return {
+    command: state.command,
+    todos: state.todos,
+    running: state.pending.reduce(
+      (tally, call) => bump2(tally, call.name),
+      []
+    ),
+    done: state.done
+  };
+}
+var ActivityProvider = class {
+  fold;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.fold = new TranscriptFold(
+      EMPTY2,
+      step3,
+      (opts.ledger ?? new RefreshLedger(logger)).declare({
+        name: "activity",
+        scope: "session",
+        refresh: ["first", "period", "change"],
+        lines: []
+      }),
+      opts.clock,
+      logger
+    );
+  }
+  // [LAW:no-silent-failure] A transcript read error is `failed`, carried to the
+  // payload boundary that logs it. There is no `absent` arm: a session with no
+  // transcript yet, or one that has done nothing, is a real EMPTY record — and
+  // the payload projection drops every field of an empty one, so "nothing is
+  // happening" reaches the templates as absence either way.
+  async refresh(sessionId2, transcriptPath, by) {
+    return activityFrom(
+      sessionId2,
+      await this.fold.read(sessionId2, transcriptPath, by)
+    );
+  }
+  // The session's activity as its last refresh left it, for a draw.
+  activityOf(sessionId2) {
+    const answer2 = this.fold.answer(sessionId2);
+    return answer2.kind === "pending" ? answer2 : activityFrom(sessionId2, answer2);
+  }
+};
+function activityFrom(sessionId2, folded2) {
+  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`, folded2.failedAt) : ok(report(folded2.value));
+}
+
+// src/daemon/cache/tmux.ts
+init_globals();
+
+// src/proc/tmux.ts
+init_globals();
+function invocation(hint, category, args, stdinInput) {
+  return {
+    bin: "tmux",
+    args: ["-S", hint.socket, ...args],
+    timeoutMs: 2e3,
+    category,
+    stdinInput
+  };
+}
+function tmuxRun(result, args) {
+  if (result.ok) return { kind: "ok", stdout: result.stdout };
+  if (result.reason === "rate-limited") {
+    return { kind: "rate-limited", reason: failureText(result) };
+  }
+  return {
+    kind: "failed",
+    reason: `tmux ${args[0]} failed (${failureText(result)})`
+  };
+}
+async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
+  return tmuxRun(
+    await launcher.launch(invocation(hint, category, args, stdinInput)),
+    args
+  );
+}
+
+// src/daemon/cache/tmux.ts
+var NAME_PERIOD_MS = 3e4;
+var MAX_ENTRIES = 64;
+var TmuxService = class {
+  names;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    this.names = new KeyedSource({
+      name: "tmux",
+      scope: "pane",
+      // A socket path cannot hold a newline's worth of pane id, so the pair
+      // is unambiguous.
+      keyOf: (hint) => `${hint.socket}
+${hint.pane}`,
+      fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
+      read: (hint) => askSessionName(opts.launcher, hint),
+      every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
+      watch: NO_WATCH,
+      maxEntries: MAX_ENTRIES,
+      lines: REFRESH_TRIGGERS,
+      logger,
+      ledger: opts.ledger ?? new RefreshLedger(logger),
+      clock: opts.clock
+    });
+  }
+  // ok — the session name; absent — tmux answered with an empty name; failed
+  // — the invocation itself failed, carried to the payload boundary as a
+  // value ([LAW:no-silent-failure]) and logged once, by the refresh that
+  // failed.
+  //
+  // [LAW:types-are-the-program] Takes the pane to ask about. "Not in tmux" is
+  // the caller's fact (the hint is null), so there is no pane-less call to
+  // answer.
+  declare(holds2, hint) {
+    return this.names.declare(holds2, hint);
+  }
+  getStats() {
+    return this.names.stats();
+  }
+  close() {
+    this.names.close();
+  }
+};
+async function askSessionName(launcher, hint) {
+  const run3 = await runTmuxAsync(launcher, hint, "tmux", [
+    "display-message",
+    "-p",
+    "-t",
+    hint.pane,
+    "#S"
+  ]);
+  if (run3.kind !== "ok") return failed(run3.reason, "read");
+  const name = run3.stdout.trim();
+  return name ? ok(name) : ABSENT;
+}
+
+// src/segments/host.ts
+init_globals();
+init_os();
+var HOST_PERIOD_MS = 6e4;
+var HOST_EVERY = { okMs: HOST_PERIOD_MS, failedMs: HOST_PERIOD_MS };
+function shortHostname(hostname2) {
+  const dot = hostname2.indexOf(".");
+  return dot < 0 ? hostname2 : hostname2.slice(0, dot);
+}
+function syscall(field, read2) {
+  try {
+    const value = read2();
+    return Promise.resolve(value === "" ? ABSENT : ok(value));
+  } catch (e) {
+    return Promise.resolve(failed(`host.${field}: ${String(e)}`, "read"));
+  }
+}
+var HostService = class {
+  name;
+  user;
+  constructor(opts) {
+    const logger = opts.logger ?? quietLogger;
+    const ledger = opts.ledger ?? new RefreshLedger(logger);
+    const one = {
+      scope: "daemon",
+      keyOf: () => "",
+      fields: () => "-",
+      every: () => HOST_EVERY,
+      watch: NO_WATCH,
+      maxEntries: 1,
+      lines: REFRESH_TRIGGERS,
+      logger,
+      ledger,
+      clock: opts.clock
+    };
+    this.name = new KeyedSource({
+      ...one,
+      name: "host.name",
+      read: () => syscall("name", () => shortHostname(os_default.hostname()))
+    });
+    this.user = new KeyedSource({
+      ...one,
+      name: "host.user",
+      read: () => syscall("user", () => os_default.userInfo().username)
+    });
+  }
+  declareName(holds2) {
+    return this.name.declare(holds2, null);
+  }
+  declareUser(holds2) {
+    return this.user.declare(holds2, null);
+  }
+  // How many of its two sources a view holds now.
+  held() {
+    return this.name.stats().held + this.user.stats().held;
+  }
+  close() {
+    this.name.close();
+    this.user.close();
+  }
+};
+
+// src/daemon/cache/autocompact.ts
+init_globals();
+
+// src/segments/autocompact.ts
+init_globals();
+var AUTOCOMPACT_WINDOWS = Array.from(
+  { length: 10 },
+  (_, i2) => (i2 + 1) * 1e5
+);
+var LEAST = AUTOCOMPACT_WINDOWS[0];
+var MOST = AUTOCOMPACT_WINDOWS[AUTOCOMPACT_WINDOWS.length - 1];
+function autoCompactControls(window2, contextWindow) {
+  const cap = Math.min(contextWindow ?? MOST, MOST);
+  const from = window2 === "auto" ? cap : Math.min(window2, cap);
+  return {
+    window: window2 === "auto" ? 0 : window2,
+    applied: window2 === "auto" ? 0 : from,
+    lower: AUTOCOMPACT_WINDOWS.filter((w) => w < from).at(-1) ?? 0,
+    higher: AUTOCOMPACT_WINDOWS.find((w) => w > from && w <= cap) ?? 0
+  };
+}
+
+// src/daemon/cache/autocompact.ts
+var MAX_FILES = 64;
+var AutoCompactProvider = class {
+  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
+    this.clock = clock;
+    this.refreshes = ledger.declare({
+      name: "autocompact",
+      scope: "configDir",
+      refresh: ["first", "period", "change"],
+      lines: []
+    });
+  }
+  clock;
+  // Observable, so a view's payload over a window is recomputed in the turn
+  // it is stored.
+  known = new ObservableLru(MAX_FILES);
+  refreshes;
+  window(settingsPath, by) {
+    const stamp2 = stampAt(settingsPath);
+    const known = this.known.get(settingsPath);
+    if (known !== void 0 && known.stamp === stamp2) {
+      this.known.touch(settingsPath);
+      return known.outcome;
+    }
+    const startedAt = this.clock.monotonic();
+    const outcome = readAutoCompactWindow(settingsPath);
+    this.refreshes.recorded(
+      `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
+      by,
+      outcome,
+      elapsedMs(this.clock, startedAt)
+    );
+    this.known.set(settingsPath, { stamp: stamp2, outcome });
+    return outcome;
+  }
+  // The window as the last refresh left it, for a draw: the file is not
+  // touched.
+  stored(settingsPath) {
+    return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
+  }
+  getStats() {
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
+  }
+};
+function stampAt(settingsPath) {
+  try {
+    const st = fs_default.statSync(settingsPath, { throwIfNoEntry: false });
+    return st === void 0 ? "absent" : stampOf(st);
+  } catch (e) {
+    return `unread:${e.code ?? "error"}`;
+  }
+}
+function readAutoCompactWindow(settingsPath) {
+  const read2 = readClaudeSettingsOutcome(settingsPath);
+  if (read2.kind !== "ok") return read2;
+  const window2 = read2.value.autoCompactWindow;
+  if (window2 === void 0) return ok("auto");
+  return typeof window2 === "number" && Number.isInteger(window2) && window2 >= LEAST && window2 <= MOST ? ok(window2) : failed(
+    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`,
+    "parse"
+  );
+}
+
+// src/segments/cache.ts
+init_globals();
+var CACHE_TTL_MS = 60 * 60 * 1e3;
+var TAIL_CHUNK = 64 * 1024;
+var TAIL_MAX = 1 * 1024 * 1024;
+var CACHE_HIT_RE = /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
+function cacheActivityTs(line) {
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  const usage = parsed2.message?.usage;
+  const positive2 = (usage?.cache_read_input_tokens ?? 0) > 0 || (usage?.cache_creation_input_tokens ?? 0) > 0;
+  if (!positive2) return null;
+  const ms = parsed2.timestamp != null ? Date.parse(parsed2.timestamp) : NaN;
+  return Number.isNaN(ms) ? null : ms;
+}
+var MAX_SESSIONS4 = 256;
+var CacheExpiryProvider = class {
+  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
+    this.clock = clock;
+    this.refreshes = ledger.declare({
+      name: "cache",
+      scope: "session",
+      refresh: ["first", "period", "change"],
+      lines: []
+    });
+  }
+  clock;
+  // Observable, so a view's payload over an expiry is recomputed in the turn
+  // a new one is stored.
+  known = new ObservableLru(MAX_SESSIONS4);
+  // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
+  // warn; an answer believed under its stamp reads nothing, and logs nothing.
+  refreshes;
+  // The session's refresh, which its transcript's watch and period make.
+  async refresh(sessionId2, transcriptPath, by) {
+    const stamp2 = statStamp(transcriptPath);
+    const prior = this.known.get(sessionId2);
+    if (prior !== void 0 && stamp2 !== "" && prior.stamp === stamp2 && prior.outcome.kind !== "failed") {
+      this.known.touch(sessionId2);
+      return prior.outcome;
+    }
+    const outcome = await this.read(sessionId2, transcriptPath, stamp2, by);
+    this.known.set(sessionId2, { stamp: stamp2, outcome });
+    return outcome;
+  }
+  // The expiry as the session's last refresh left it, for a draw.
+  expiryOf(sessionId2) {
+    return this.known.get(sessionId2)?.outcome ?? pendingOf("unread");
+  }
+  getStats() {
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
+  }
+  async read(sessionId2, transcriptPath, stamp2, by) {
+    const startedAt = this.clock.monotonic();
+    const outcome = await cacheExpiresAt(transcriptPath);
+    this.refreshes.recorded(
+      `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
+      by,
+      outcome,
+      elapsedMs(this.clock, startedAt)
+    );
+    return outcome;
+  }
+};
+async function cacheExpiresAt(transcriptPath) {
+  const lastCacheMs = await findLastCacheActivityTs(transcriptPath);
+  if (lastCacheMs.kind !== "ok") return lastCacheMs;
+  return ok(Math.floor((lastCacheMs.value + CACHE_TTL_MS) / 1e3));
+}
+async function findLastCacheActivityTs(transcriptPath) {
+  for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
+    const tail = await readTail(transcriptPath, maxBytes);
+    if (tail.kind !== "ok") return tail;
+    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    if (ts != null) return ok(ts);
+    if (tail.value.fromStart) return ABSENT;
+  }
+  return ABSENT;
+}
+function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
+  const text4 = buf.toString("utf8");
+  const lines2 = text4.split("\n");
+  const start = bufStartsAtFileBeginning ? 0 : 1;
+  for (let i2 = lines2.length - 1; i2 >= start; i2--) {
+    const line = lines2[i2];
+    if (!line || !CACHE_HIT_RE.test(line)) continue;
+    const ts = cacheActivityTs(line);
+    if (ts != null) return ts;
+  }
+  return null;
+}
+
+// src/daemon/refresh-faults.ts
+init_globals();
+var RefreshFaults = class {
+  bySession = observable.map(void 0, { deep: false });
+  // The lane's failure while its last refresh threw; none once one ran clean.
+  of(sessionId2, lane) {
+    const reason = this.bySession.get(sessionId2)?.get(lane);
+    return reason === void 0 ? void 0 : failed(reason, "read");
+  }
+  // What the lane's refresh just did: threw `reason`, or ran clean (null).
+  refreshed(sessionId2, lane, reason) {
+    const held2 = this.bySession.get(sessionId2);
+    if (reason === null && held2?.has(lane) !== true) return;
+    const next = new Map(held2);
+    if (reason === null) next.delete(lane);
+    else next.set(lane, reason);
+    runInAction(() => {
+      if (next.size === 0) this.bySession.delete(sessionId2);
+      else this.bySession.set(sessionId2, next);
+    });
+  }
+};
+
+// src/daemon/cache/managed-storage.ts
+init_globals();
+var import_node_path30 = __toESM(require_path_browserify(), 1);
+
+// src/renderer-interface/interface.ts
+init_globals();
+function timed(renderer, monotonic) {
+  return {
+    answer: async (input) => {
+      const from = monotonic();
+      const output = await renderer.answer(input);
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    }
+  };
+}
+function followingOf(viewers) {
+  const following = /* @__PURE__ */ new Set();
+  for (const [lane, seen2] of Object.entries(viewers?.lanes ?? {}))
+    if (seen2.drawing) following.add(lane);
+  return following;
+}
+var NOTHING_NAMED = { folders: [], loads: 0 };
+
+// src/var-system/parse.ts
+init_globals();
+var LINE_BREAK = /\r\n|\r|\n/g;
+var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
+function regexParser(regex) {
+  return (text4) => {
+    const m = regex.exec(text4);
+    const group = m?.[1];
+    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
+  };
+}
+var jsonParser = (text4) => {
+  try {
+    return ok(JSON.parse(text4));
+  } catch (e) {
+    return failed(`JSON parse failed: ${e.message}`, "parse");
+  }
+};
+
+// src/config/loader/plugins.ts
+init_globals();
+var import_node_path29 = __toESM(require_path_browserify(), 1);
+var import_json52 = __toESM(require_dist(), 1);
+
+// src/config/action.ts
+init_globals();
+
+// src/config/layer-role.ts
+init_globals();
+var LAYER_ROLES = ["user", "project", "local"];
+function layerFlags(roles) {
+  return Object.fromEntries(
+    LAYER_ROLES.map((role) => [role, roles.includes(role)])
+  );
+}
+function layerRoleOf(raw) {
+  return LAYER_ROLES.includes(raw) ? raw : null;
+}
+
+// src/config/action.ts
+var ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+  "back",
+  "rewind",
+  "save",
+  "preset",
+  "themeDefault",
+  "doctor",
+  "slash",
+  "run",
+  "do"
+];
+var LAYER_CHOICES = {
+  persist: LAYER_ROLES,
+  reset: LAYER_ROLES,
+  preset: LAYER_ROLES,
+  themeDefault: LAYER_ROLES,
+  save: [...LAYER_ROLES, "ask"]
+};
+function runDeclaration(a) {
+  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
+}
+function* actionTemplates(a) {
+  const found2 = [];
+  mapActionTemplates(a, (source, field) => {
+    found2.push([field, source]);
+    return source;
+  });
+  yield* found2;
+}
+function mapActionTemplates(a, f) {
+  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
+  if ("open" in a) return { ...a, open: f(a.open, "open") };
+  if ("preset" in a && a.preset === "delete")
+    return { ...a, name: f(a.name, "name") };
+  if ("run" in a) {
+    const run3 = a.run.map((item, i2) => f(item, `run.${i2}`));
+    return {
+      ...a,
+      run: run3,
+      env: Object.fromEntries(
+        Object.entries(a.env).map(([name, value]) => [
+          name,
+          f(value, `env.${name}`)
+        ])
+      )
+    };
+  }
+  return a;
+}
+function actionBindsTemplateValue(a) {
+  return "from" in a || "int" in a || "insertSegmentFrom" in a;
+}
+
+// src/config/loader/merge.ts
 init_globals();
 
 // src/config/root.ts
@@ -54195,7 +59373,7 @@ function insertCells(root, cells) {
         return acc;
       const held2 = placed2.find((node2) => placementId(node2) === id2);
       if (held2 !== void 0)
-        return refuse2(
+        return refuse3(
           acc,
           cell3,
           `as "${id2}", but placement "${id2}" is already segment "${held2.name}" \u2014 give the cell its own id`
@@ -54221,7 +59399,7 @@ function insertCells(root, cells) {
             rows.map(([name, row2, placed3]) => [name, placed3 ?? row2])
           )
         }
-      } : refuse2(
+      } : refuse3(
         acc,
         cell3,
         `${cell3.relation} "${cell3.anchor}", but there is no placement "${cell3.anchor}"`
@@ -54230,7 +59408,7 @@ function insertCells(root, cells) {
     { root, unplaced: [] }
   );
 }
-function refuse2(acc, cell3, reason) {
+function refuse3(acc, cell3, reason) {
   return { ...acc, unplaced: [...acc.unplaced, { cell: cell3, reason }] };
 }
 function besideRow(row2, anchor, cell3, relation) {
@@ -54287,624 +59465,280 @@ function restages(fragment) {
   return Object.values(own2).some((v) => v !== void 0) || Object.keys(rows).length > 0;
 }
 
-// src/config/presets.ts
-var PRESET_FLOOR = "default";
-var FLOOR_FRAGMENT = {};
-function presetNames(presets) {
-  return [.../* @__PURE__ */ new Set([PRESET_FLOOR, ...Object.keys(presets)])];
+// src/config/payload-inputs.ts
+init_globals();
+function effectiveInput(field, effectiveVar) {
+  const row2 = GLOBAL_FIELDS[field];
+  const kind = wireKindOf(field);
+  const floor3 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
+  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor3 };
 }
-function effectivePresetName(sessionPreset, globalsPreset, declaredPresets) {
-  return effectiveMemberName(
-    void 0,
-    sessionPreset,
-    globalsPreset,
-    PRESET_FLOOR,
-    declaredPresets
-  );
-}
-function presetByName(presets, name) {
-  const preset = { [PRESET_FLOOR]: FLOOR_FRAGMENT, ...presets }[name];
-  if (preset === void 0) {
-    throw new Error(
-      `Preset "${name}" is not declared in this config \u2014 effectivePresetName collapses unknown names to "${PRESET_FLOOR}", which always resolves; a miss here means a raw name reached this function without going through that resolution`
-    );
-  }
-  return preset;
-}
-function presetRoot(config2, name) {
-  const fragment = presetByName(config2.presets, name).root ?? EMPTY_ROWS;
-  return {
-    node: rootNode(mergeRoot(fragment, config2.root)),
-    path: restages(fragment) ? `presets.${name}.root` : "root"
-  };
-}
-function placeInserts(config2, cells, authored) {
-  if (cells.length === 0) return { config: config2, notices: [] };
-  const own2 = insertCells(config2.root, cells);
-  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => ({
-    name,
-    preset,
-    ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config2.root), cells)
-  }));
-  const missed = /* @__PURE__ */ new Map();
-  const miss = (tree) => ({ cell: cell3, reason }) => {
-    const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
-    reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
-    missed.set(cell3, reasons);
-  };
-  (authored.root ? own2.unplaced : []).forEach(miss("the root"));
-  for (const { name, unplaced } of restaged.filter(
-    ({ name: name2 }) => authored.presets.has(name2)
-  ))
-    unplaced.forEach(miss(`preset "${name}"`));
-  return {
-    config: {
-      ...config2,
-      root: own2.root,
-      presets: {
-        ...config2.presets,
-        ...Object.fromEntries(
-          restaged.map(({ name, preset, root }) => [
-            name,
-            { ...preset, root: rootNode(root) }
-          ])
-        )
-      }
-    },
-    notices: [...missed].flatMap(
-      ([cell3, reasons]) => [...reasons].map(
-        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
-      )
+var EFFECTIVE_INPUTS = Object.fromEntries(
+  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
+    effectiveVar,
+    effectiveInput(field, effectiveVar)
+  ])
+);
+var LANE_FEED_TYPES = {
+  subscribers: "number",
+  fps: "number",
+  shown: "boolean"
+};
+var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
+var TERM_COLS_FLOOR = 80;
+var PAYLOAD_INPUTS = {
+  project_dir: {
+    kind: "input",
+    path: "workspace.project_dir",
+    default: ""
+  },
+  "session.id": { kind: "input", path: "session_id", default: "" },
+  // Transcript path (a top-level hookData field, spread onto the payload
+  // root by projectPayload). Read by the quick-action tray's
+  // openTranscript action — pass-through, no projection.
+  transcript_path: {
+    kind: "input",
+    path: "transcript_path",
+    default: ""
+  },
+  // The session's resume command and the config file it renders from
+  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
+  // tray's `⎘ resume` and `↗ config`. Every payload carries a resume command,
+  // so it has no default: a payload without one is a recorded error. A config
+  // path of "" is "none", which hides `↗ config`.
+  resume_command: { kind: "input", path: "resumeCommand" },
+  config_path: { kind: "input", path: "configPath", default: "" },
+  // [LAW:one-source-of-truth] The value every setting and config-only global
+  // renders with, whichever rung produced it — the theme, style and effect as
+  // the view settles them, every other one as the daemon resolved it. A
+  // trigger's label and a picker's current-selection mark read it back, so
+  // the label and the bar trace to one resolution. The daemon always provides
+  // each; the default is the unreachable-absence floor.
+  ...EFFECTIVE_INPUTS,
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+  // file author the active preset's root, resolved alongside preset.effective
+  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
+  // customized" segment gates on this directly; a hand-authored config can
+  // read it too for its own reset affordance.
+  "preset.customized": {
+    kind: "input",
+    path: "preset.customized",
+    type: "boolean",
+    default: false
+  },
+  // Does the bundled default declare the active preset (RenderPayload
+  // .preset.bundled) — false for a preset the user authored, which the
+  // settings menu offers to delete.
+  "preset.bundled": {
+    kind: "input",
+    path: "preset.bundled",
+    type: "boolean",
+    default: true
+  },
+  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
+  // per field of LANE_FEED_TYPES.
+  ...Object.fromEntries(
+    LANE_NAMES.flatMap(
+      (lane) => LANE_FEED_FIELDS.map((field) => [
+        laneFeedVar(lane, field),
+        {
+          kind: "input",
+          path: laneFeedVar(lane, field),
+          type: LANE_FEED_TYPES[field],
+          default: UNFOLLOWED[field]
+        }
+      ])
     )
-  };
-}
-function insertNotice(cell3, what) {
-  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
-}
-function presetGlobals(config2, name) {
-  return { ...config2.globals, ...presetByName(config2.presets, name).globals };
-}
-
-// src/config/option-domain.ts
-var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
-}
-registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
-  paletteOf: (option) => paletteForThemeName(option)
-});
-var PLACEMENT_THEMES = "placementThemes";
-registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
-  paletteOf: (option, render3) => placementPalette(option, render3.palette)
-});
-for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
-  registerBuiltinDomain(name, () => members, { library, labelOf });
-}
-function perConfigDomainsFor(config2) {
-  return /* @__PURE__ */ new Map([
-    [
-      "styles",
+  ),
+  // Who this render is drawn for (Drawing): the daemon sets it beside the
+  // payload, and a caller rendering without one draws as a request does.
+  [drawingVar("by")]: {
+    kind: "input",
+    path: drawingVar("by"),
+    default: ANSWERING.by
+  },
+  [drawingVar("fps")]: {
+    kind: "input",
+    path: drawingVar("fps"),
+    type: "number",
+    default: 0
+  },
+  // The settings door's indicator (src/render/diagnostics.ts,
+  // DiagnosticsProjection): its label, "" while there is nothing to show, the
+  // colours of the worst level the draw's diagnostics hold, and the key of
+  // the message its click opens.
+  ...Object.fromEntries(
+    ["label", "fg", "bg", "open"].map((field) => [
+      `diagnostics.${field}`,
+      { kind: "input", path: `diagnostics.${field}`, default: "" }
+    ])
+  ),
+  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
+  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
+  // carries it, the same width a draw's `opts.width` holds: the value a row
+  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
+  // it and the wrap algebra can never disagree. Never cached: a resize is just
+  // a new value on the same path, re-read every render. The default only
+  // applies to compile-only callers that render without a bound width.
+  "term.cols": {
+    kind: "input",
+    path: "term.cols",
+    type: "number",
+    default: TERM_COLS_FLOOR
+  },
+  // The tmux pane this session's Claude Code runs in, as its client reported
+  // it; "" outside tmux (and for a client too old to say). It is the pane a
+  // `slash` click types into, so IN_TMUX below is the gate for one.
+  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
+  // Claude Code's auto-compact window as its `/autocompact` last wrote it
+  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
+  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
+  // to the model's context window; `lower`/`higher` are the windows − and +
+  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
+  // settings file the daemon could not read, and the only field set when it
+  // is.
+  "autocompact.window": {
+    kind: "input",
+    path: "autocompact.window",
+    type: "number",
+    default: -1
+  },
+  ...Object.fromEntries(
+    ["applied", "lower", "higher"].map((field) => [
+      `autocompact.${field}`,
       {
-        members: Object.keys(config2.styles),
-        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
-        // construction of an adapted palette is transposedPalette — the same
-        // call drawDsl makes for the style actually in force. One
-        // transposition of the BASE, never a second over an already-styled
-        // palette (see OptionPalette).
-        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
-        // so a member always names a declared style.
-        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config2.styles[option])
+        kind: "input",
+        path: `autocompact.${field}`,
+        type: "number",
+        default: 0
       }
-    ],
-    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
-    // whether or not a config declares it, and presetNames is where that is
-    // stated (once, for the gate and the render alike).
-    ["presets", { members: presetNames(config2.presets) }]
-  ]);
+    ])
+  ),
+  "autocompact.error": {
+    kind: "input",
+    path: "autocompact.error",
+    default: ""
+  },
+  // Where the session is, as the daemon read it from the checkout on the
+  // request, so these answer before the git lane does. `noRepo` is a read that found none.
+  "location.main": { kind: "input", path: "location.main", default: "" },
+  "location.worktree": {
+    kind: "input",
+    path: "location.worktree",
+    default: ""
+  },
+  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
+  "location.noRepo": {
+    kind: "input",
+    path: "location.noRepo",
+    type: "boolean",
+    default: false
+  },
+  // The repo's browsable web page, transposed from its remote by the daemon.
+  // "" is the genuine "no remote a browser can open" (local-only repo, bare
+  // path remote) — the quick-action tray's link reads that value, not a flag.
+  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
+};
+var DRAW_PROJECTIONS = {
+  today: "the day the draw is at",
+  feeds: "the frames a lane was sent up to the draw's instant",
+  drawing: "who the draw is for",
+  diagnostics: "the errors and warnings the draw owes its reader"
+};
+function drawProjectionAt(path46) {
+  const root = path46.split(".", 1)[0];
+  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
 }
-function knownOptionDomainNames(perConfigDomains) {
-  return [
-    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
-  ];
-}
-function resolveOptionDomain(from, perConfigDomains) {
-  if (typeof from !== "string") return { members: from };
-  const local = perConfigDomains.get(from);
-  if (local) return local;
-  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
-  if (entry) {
-    return {
-      members: entry.resolve(),
-      paletteOf: entry.paletteOf,
-      library: entry.library,
-      labelOf: entry.labelOf
-    };
-  }
-  throw new Error(unknownOptionDomain(from, perConfigDomains));
-}
-var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
-  ["looks", "styles"],
-  ["progressions", "variations"]
-]);
-function unknownOptionDomain(from, perConfigDomains) {
-  const renamed = RENAMED_OPTION_DOMAINS.get(from);
-  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
-  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
-}
-
-// src/config/edit-chrome.ts
-init_globals();
-var import_node_path18 = __toESM(require_path_browserify(), 1);
-
-// src/config/setting-control.ts
-init_globals();
-
-// src/config/menu-keys.ts
-init_globals();
-
-// src/config/ident.ts
-init_globals();
-function ident(name) {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
+var SLOT_PATHS = Object.fromEntries(
+  EXPRESSION_SLOTS.map((slot) => [
+    slot,
+    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
+  ])
+);
+function slotAt(path46) {
+  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path46);
 }
 
-// src/config/menu-keys.ts
-var PAGE_HOLDING_CURRENT = "-1";
-function menuMember(applyName) {
-  return applyName;
-}
-function menuStateKey(placementId2, applyName, sharedKey) {
-  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
-}
-function sharedMenuStateKey(sharedKey) {
-  return MENU_NS + ident(sharedKey);
-}
-function menuActionName(stateKey, member) {
-  return stateKey + "." + member;
-}
-function menuPageKey(stateKey) {
-  return MENU_PAGE_NS + stateKey;
-}
-var MENU_OPTION_NAMES = [
-  "closeOnPick",
-  "paged",
-  "key",
-  "distribution"
-];
-var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
-var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
-function parseMenuOptions(entries) {
-  for (const name of Object.keys(entries)) {
-    if (!isMenuOptionName(name)) {
-      throw new Error(
-        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
-      );
-    }
-  }
-  const bool = (name, def) => {
-    const v = entries[name];
-    if (v === void 0) return def;
-    if (typeof v !== "boolean") {
-      throw new Error(
-        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
-      );
-    }
-    return v;
-  };
-  const key = entries["key"];
-  if (key !== void 0 && typeof key !== "string") {
-    throw new Error(
-      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
-    );
-  }
-  if (key === "") {
-    throw new Error(
-      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
-    );
-  }
-  const distribution = entries["distribution"];
-  if (distribution !== void 0 && !isDistributionName(distribution)) {
-    throw new Error(
-      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
-    );
-  }
+// src/config/loader/merge.ts
+function mergeWithDefault(raw, dflt) {
   return {
-    closeOnPick: bool("closeOnPick", false),
-    paged: bool("paged", true),
-    key,
-    distribution: placedBy(distribution)
-  };
-}
-
-// src/config/setting-control.ts
-var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
-function controlDomainAdmits(domain, value, perConfigDomains) {
-  if (domain === "bool") return parseSessionBoolean(value) !== null;
-  if (!("min" in domain)) {
-    return resolveOptionDomain(
-      optionsOf(domain),
-      perConfigDomains
-    ).members.includes(value);
-  }
-  return parseSessionInt(value, domain) !== null;
-}
-var LISTED_MEMBERS = 8;
-var SAMPLED_MEMBERS = 3;
-function describeControlDomain(domain, perConfigDomains) {
-  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
-  if (!("min" in domain)) {
-    const from = optionsOf(domain);
-    const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
-    const named3 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
-  }
-  return `an integer from ${domain.min} to ${domain.max}`;
-}
-function controlDeclOf(decl) {
-  return { label: decl.label, domain: controlDomainOf(decl.domain) };
-}
-function controlDomainOf(domain) {
-  if (domain === "theme") return { themes: PLACEMENT_THEMES };
-  if (domain === "bool") return domain;
-  return "min" in domain ? domain : { from: domain };
-}
-function settingControl(decl, key, readVar2, name, listKey) {
-  const label2 = escapeTemplateLiteral(decl.label);
-  const { domain } = decl;
-  if (domain === "bool") {
-    return {
-      kind: "inline",
-      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
-      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
-      variables: {}
-    };
-  }
-  if ("from" in domain) {
-    return optionPicker(key, name, listKey, domain.from, (n) => ({
-      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
-      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
-    }));
-  }
-  if ("themes" in domain) {
-    return optionPicker(key, name, listKey, domain.themes, (n) => ({
-      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
-      rows: [
-        `{{ swatches "${n.apply}" "${n.page}" }}`,
-        `{{ themePreview "${n.apply}" }}`
-      ]
-    }));
-  }
-  const step4 = (by) => ({
-    set: key,
-    min: domain.min,
-    max: domain.max,
-    by
-  });
-  return {
-    kind: "inline",
-    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
-    actions: {
-      [`${name}.down`]: step4(-domain.step),
-      [`${name}.up`]: step4(domain.step)
-    },
-    variables: {}
-  };
-}
-function optionPicker(key, name, listKey, from, face) {
-  const ref = { variable: listKey, key: listKey, member: name };
-  const toggle = menuActionName(listKey, name);
-  const open2 = `${name}.open`;
-  const page2 = menuPageKey(listKey);
-  const currentPage = `${page2}.current`;
-  const { template, rows } = face({ apply: name, open: open2, page: page2 });
-  return {
-    kind: "picker",
-    template,
-    actions: {
-      [name]: { set: key, from },
-      [toggle]: disclosureCycleAction(listKey, name),
-      [page2]: { set: page2, int: true },
-      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
-      [open2]: { do: [toggle, currentPage] }
-    },
+    globals: { ...dflt.globals, ...raw.globals ?? {} },
+    // [LAW:single-enforcer] The daemon's payload inputs have the last word
+    // over every base and every layer, so no config reads another value.
     variables: {
-      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
-      [page2]: { kind: "state", key: page2, default: "0" }
+      ...dflt.variables,
+      ...raw.variables ?? {},
+      ...PAYLOAD_INPUTS
     },
-    list: { ref, rows }
+    segments: overlayByName(
+      dflt.segments,
+      segmentDeltas(dflt.segments, raw.segments ?? {})
+    ),
+    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
+    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
+    // declares only the actions that differ from the bundled default (which
+    // ships none).
+    actions: { ...dflt.actions, ...raw.actions ?? {} },
+    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
+    // overrides one adaptation by re-declaring its name; the bundled stdlib
+    // (incl. the "none" identity floor) survives every merge by construction.
+    styles: { ...dflt.styles, ...raw.styles ?? {} },
+    // [LAW:one-source-of-truth] presets merge by name then by field, the
+    // segments overlay — a user retunes one arrangement's root without
+    // restating its globals; the bundled stdlib (incl. the "default"
+    // empty-fragment floor effectivePresetName collapses to) survives every
+    // merge by construction, exactly as styles' "none" does.
+    presets: overlayByName(
+      dflt.presets,
+      presetDeltas(dflt.presets, raw.presets ?? {})
+    ),
+    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
+    // field, the presets overlay — a file setting one theme's shade keeps the
+    // variation and style the bundled entry for that theme carries.
+    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
+    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
+    // `globals` cascade above, not the by-name cascades around it, because it
+    // IS a globals fragment: a user retuning edit mode's separator says nothing
+    // about its `endcaps`, exactly as a user setting `globals.padding` says
+    // nothing about `globals.endcaps`.
+    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
+    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
+    // overrides one formatter helper by re-declaring its name; the rest inherit
+    // from the bundled default.
+    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
   };
 }
-
-// src/config/loader/persist-target.ts
-init_globals();
-
-// src/config/loader/globals.ts
-init_globals();
-
-// src/config/menu-places.ts
-init_globals();
-var TABS = [
-  { member: "session", label: "\u26A1 session" },
-  { member: "look", label: "\u{1F3A8} look" },
-  // `📐`, because `▦` is the preset control's glyph.
-  { member: "layout", label: "\u{1F4D0} layout" },
-  { member: "config", label: "\u2699 config" },
-  { member: "tools", label: "\u{1F9F0} tools" }
-];
-var TAB_LABEL = Object.fromEntries(
-  TABS.map((t2) => [t2.member, t2.label])
-);
-var SUBMENUS = {
-  gear: { beside: "theme", trigger: "\u2699" },
-  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" }
-};
-var SUBMENU_NAMES = Object.keys(SUBMENUS);
-var PLACE = perSetting(
-  (name) => SETTINGS[name].place
-);
-var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
-var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
-var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
-var settingMenuPath = (name) => placePath(PLACE[name]);
-var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
-  top,
-  ...SUBMENU_NAMES.filter((s) => within(s, top))
-]).map((place) => ({
-  path: placePath(place),
-  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
-})).filter(({ names }) => names.length > 0);
-var laneOffReason = (lane) => {
-  const { setting, on: on2, inTmux: inTmux2 } = LANES[lane].switch;
-  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}${inTmux2 ? "; it runs only for a session inside a tmux pane" : ""}`;
-};
-
-// src/config/loader/globals.ts
-var GLOBALS_FIELDS = Object.fromEntries(
-  Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
-);
-function settingControlDomain(field) {
-  return rangedDomain(GLOBAL_FIELDS[field]);
-}
-function rangedDomain(row2) {
-  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
-}
-function fragmentRejection(description, message2) {
-  return {
-    required: false,
-    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-    // the key at the same moment the validator does.
-    json: { not: {}, description: `not allowed here \u2014 ${description}` },
-    parse: (ctx, path46, field, raw) => {
-      if (raw[field] !== void 0) {
-        ctx.issues.push({
-          path: `${path46}.${field}`,
-          message: message2(`${path46}.${field}`),
-          line: findKeyLine(ctx.source, [...path46.split("."), field])
-        });
-      }
-      return void 0;
-    }
-  };
-}
-function nestedPresetSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot select a preset`,
-    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+function segmentDeltas(base, over2) {
+  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
+  return Object.fromEntries(
+    Object.entries(over2).map(([name, delta]) => [
+      name,
+      byName(name, "partials", byName(name, "settings", delta))
+    ])
   );
 }
-function nestedMenuGlyphSpec(subject) {
-  return fragmentRejection(
-    `${subject} cannot change the settings menu glyph`,
-    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+function presetDeltas(base, over2) {
+  return Object.fromEntries(
+    Object.entries(over2).map(([name, delta]) => [
+      name,
+      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
+    ])
   );
 }
-function nameOnlySpec(spec, subject, why2) {
+function overlayByName(base, over2) {
   return {
-    ...spec,
-    json: { ...spec.json, not: { pattern: "\\{\\{" } },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (typeof v === "string" && isExpression(v)) {
-        ctx.issues.push({
-          path: `${path46}.${field}`,
-          message: `${path46}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
-          line: findKeyLine(ctx.source, [...path46.split("."), field])
-        });
-        return void 0;
-      }
-      return spec.parse(ctx, path46, field, raw);
-    }
-  };
-}
-var REMOVED_GLOBALS = {
-  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
-  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
-  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
-  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
-  // because it is still a key — it names what `style` did, and an endcaps
-  // value in it is refused by value (cross-ref.ts).
-  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
-  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  // The tmux status line became a renderer the bar fully supports, so its
-  // experimental toggle is a value of the renderer setting.
-  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
-  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
-  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
-  // nerdFont check names the font that lacks them.
-  charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
-};
-var GLOBALS_SCHEMA = {
-  noun: "globals key",
-  fields: GLOBALS_FIELDS,
-  removed: REMOVED_GLOBALS
-};
-var PRESET_FRAGMENT_REJECTIONS = {
-  preset: nestedPresetSpec("a preset"),
-  menuGlyph: nestedMenuGlyphSpec("a preset")
-};
-var PRESET_GLOBALS_SCHEMA = {
-  noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
-  removed: REMOVED_GLOBALS
-};
-function isPresetGlobalsField(key) {
-  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
-}
-var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
-var EDIT_GLOBALS_SCHEMA = {
-  noun: "editGlobals key",
-  removed: REMOVED_GLOBALS,
-  fields: {
-    ...GLOBALS_FIELDS,
-    preset: nestedPresetSpec("the editGlobals fragment"),
-    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
-    palette: nameOnlySpec(
-      GLOBALS_FIELDS.palette,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    ),
-    effect: nameOnlySpec(
-      GLOBALS_FIELDS.effect,
-      "the editGlobals fragment",
-      EDIT_GLOBALS_WHY
-    )
-  }
-};
-var THEME_DEFAULT_SCHEMA = {
-  noun: "theme default key",
-  fields: {
+    ...base,
     ...Object.fromEntries(
-      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
-    ),
-    style: nameOnlySpec(
-      GLOBALS_FIELDS.style,
-      "a theme's default",
-      "is the look that theme wears by name"
+      Object.entries(over2).map(([name, delta]) => [
+        name,
+        { ...base[name], ...delta }
+      ])
     )
-  }
-};
-function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "themeDefaults",
-      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["themeDefaults"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [theme24, value] of Object.entries(raw)) {
-    const path46 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
-      ctx.issues.push({
-        path: path46,
-        message: `${path46}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
-      });
-      continue;
-    }
-    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path46, value);
-    if (parsed2 !== null) out[theme24] = parsed2;
-  }
-  return out;
-}
-function validateGlobals(ctx, path46, raw) {
-  if (raw === void 0) return {};
-  return record(ctx, GLOBALS_SCHEMA, path46, raw) ?? {};
-}
-function validatePresetGlobals(ctx, path46, raw) {
-  return record(ctx, PRESET_GLOBALS_SCHEMA, path46, raw) ?? {};
-}
-function presetGlobalsJson() {
-  return recordJson(PRESET_GLOBALS_SCHEMA);
-}
-function validateEditGlobals(ctx, path46, raw) {
-  return record(ctx, EDIT_GLOBALS_SCHEMA, path46, raw) ?? {};
-}
-var GLOBALS_FIELD_NAMES = new Set(
-  Object.keys(GLOBALS_FIELDS)
-);
-function isGlobalsField(key) {
-  return GLOBALS_FIELD_NAMES.has(key);
-}
-function removedGlobalPointer(key) {
-  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
-}
-function listGlobalsFieldNames() {
-  return [...GLOBALS_FIELD_NAMES];
-}
-var NUMERIC_GLOBALS_FLOORS = new Map(
-  Object.entries(GLOBAL_FIELDS).flatMap(
-    ([field, row2]) => "floor" in row2 && typeof row2.floor === "number" ? [[field, row2.floor]] : []
-  )
-);
-function numericGlobalsSeeds(globals) {
-  const seeds = /* @__PURE__ */ new Map();
-  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
-    const declared = globals[field];
-    seeds.set(field, typeof declared === "number" ? declared : floor3);
-  }
-  return seeds;
+  };
 }
 
-// src/config/loader/persist-target.ts
-var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
-var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
-var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
-function presetRootKey(name) {
-  return `presets.${name}.root`;
-}
-function themeDefaultKey(theme24, field) {
-  return `themeDefaults.${theme24}.${field}`;
-}
-var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
-function presetGlobalsKey(name, field) {
-  return `presets.${name}.globals.${field}`;
-}
-function parsePersistTarget(key) {
-  if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
-  if (segmentMatch)
-    return { scope: "segment-palette", segment: segmentMatch[1] };
-  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
-  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
-    return {
-      scope: "preset-globals",
-      preset: globalsMatch[1],
-      field: globalsMatch[2]
-    };
-  }
-  const themeMatch = THEME_DEFAULT_KEY.exec(key);
-  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
-    return {
-      scope: "theme-default",
-      theme: themeMatch[1],
-      field: themeMatch[2]
-    };
-  }
-  const presetMatch = PRESET_ROOT_KEY.exec(key);
-  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
-}
-function persistPath(target) {
-  switch (target.scope) {
-    case "globals":
-      return ["globals", target.field];
-    case "preset-globals":
-      return ["presets", target.preset, "globals", target.field];
-    case "segment-palette":
-      return ["segments", target.segment, "palette"];
-    case "theme-default":
-      return ["themeDefaults", target.theme, target.field];
-  }
-}
+// src/config/loader/segments.ts
+init_globals();
 
 // src/config/segment-groups.ts
 init_globals();
@@ -54931,8 +59765,2650 @@ var GROUP_LABELS = {
   other: "other"
 };
 
-// src/config/loader/edit-mode.ts
+// src/config/loader/renamed-segments.ts
 init_globals();
+var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
+  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
+  // The one-line summary became the collapsed form of `gitaculous`
+  // (brandon-git-segment-ixf.tl0).
+  ["git", { kind: "built-in", to: "gitaculous" }],
+  // The settings menu's anchor left `settings.` so `.settings` could be a
+  // placement's own settings (brandon-segment-settings-i4n).
+  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
+  // lit's ticket moved out of the bundled bar into the plugin lit's repository
+  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
+  [
+    "ticket",
+    {
+      kind: "plugin",
+      to: "plugins.lit.ticket",
+      source: "promptctl/links-issue-tracker"
+    }
+  ],
+  [
+    "ceiling",
+    {
+      kind: "removed",
+      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
+    }
+  ],
+  [
+    "themeSwitcher",
+    {
+      kind: "removed",
+      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
+    }
+  ]
+]);
+function renamedHint(name) {
+  const renamed = RENAMED_SEGMENTS.get(name);
+  if (renamed === void 0) return "";
+  switch (renamed.kind) {
+    case "built-in":
+      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
+    case "plugin":
+      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
+    case "removed":
+      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
+  }
+}
+
+// src/config/loader/variables.ts
+init_globals();
+
+// src/config/loader/cache.ts
+init_globals();
+function requireCache(ctx, path46, raw, kind) {
+  if (raw.cache === void 0) {
+    ctx.issues.push({
+      path: `${path46}.cache`,
+      message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
+      line: findKeyLine(ctx.source, path46.split("."))
+    });
+    return null;
+  }
+  return validateCache(ctx, `${path46}.cache`, raw.cache);
+}
+function requireCacheSpec(kind) {
+  return {
+    required: true,
+    json: cacheJson(),
+    parse: (ctx, path46, _field, raw) => requireCache(ctx, path46, raw, kind) ?? void 0
+  };
+}
+var CACHE_SCHEMA = {
+  noun: "cache",
+  arms: {
+    ttl: {
+      json: { type: "string" },
+      parse: (ctx, path46, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
+        ctx,
+        path46,
+        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`
+      )
+    },
+    watch_file: {
+      json: { type: "string" },
+      parse: (ctx, path46, value) => typeof value === "string" ? { watch_file: value } : reject(
+        ctx,
+        path46,
+        `cache.watch_file must be a path string, got ${describeValue(value)}`
+      )
+    },
+    depends_on: {
+      json: { type: "array", items: { type: "string" } },
+      parse: (ctx, path46, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
+        ctx,
+        path46,
+        `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`
+      )
+    },
+    key: {
+      json: { type: "string" },
+      parse: (ctx, path46, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
+        ctx,
+        path46,
+        `cache.key must be a non-empty template string, got ${describeValue(value)}`
+      )
+    },
+    never: {
+      json: { const: true },
+      parse: (ctx, path46, value) => value === true ? { never: true } : reject(
+        ctx,
+        path46,
+        `cache.never must be the literal boolean true, got ${describeValue(value)}`
+      )
+    }
+  }
+};
+function validateCache(ctx, path46, raw) {
+  return oneOfPresent(ctx, CACHE_SCHEMA, path46, raw);
+}
+function cacheJson() {
+  return oneOfPresentJson(CACHE_SCHEMA);
+}
+var DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
+function isValidDuration(s) {
+  return DURATION_RE.test(s);
+}
+
+// src/config/loader/retired-variables.ts
+init_globals();
+var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
+  // brandon-settings-coverage-g4p.lx2
+  ["session.budget.amount", { segment: "session", setting: "budget" }],
+  [
+    "session.budget.warningThreshold",
+    { segment: "session", setting: "warnAt" }
+  ],
+  ["today.budget.amount", { segment: "today", setting: "budget" }],
+  ["today.budget.warningThreshold", { segment: "today", setting: "warnAt" }],
+  ["block.budget.heatThreshold", { segment: "block", setting: "warnAt" }],
+  ["block.budget.warningThreshold", { segment: "block", setting: "errorAt" }],
+  ["weekly.budget.heatThreshold", { segment: "weekly", setting: "warnAt" }],
+  ["weekly.budget.warningThreshold", { segment: "weekly", setting: "errorAt" }],
+  ["burn.eta.errorMinutes", { segment: "burnrate", setting: "errorWithin" }],
+  ["burn.eta.warnMinutes", { segment: "burnrate", setting: "warnWithin" }]
+]);
+function replacement(to) {
+  return `it became the "${to.setting}" setting of each "${to.segment}" placement \u2014 set it on the placement where a row places "${to.segment}" ({ seg: "${to.segment}", settings: { ${to.setting}: <value> } }), or redeclare segments.${to.segment}.settings.${to.setting} with the default every placement should start from`;
+}
+function retiredVariableMessage(name) {
+  const to = RETIRED_VARIABLES.get(name);
+  return to === void 0 ? void 0 : `variables.${name} is no longer read: ${replacement(to)}`;
+}
+function retiredReadHint(ref) {
+  const to = RETIRED_VARIABLES.get(ref);
+  return to === void 0 ? "" : ` \u2014 ".${ref}" is no longer a variable: ${replacement(to)}; a "${to.segment}" template reads it as ".settings.${to.setting}"`;
+}
+var RETIRED_INPUT_PATHS = /* @__PURE__ */ new Map([
+  [
+    "git.timeSinceCommit",
+    `the payload stores the commit's date as "git.committedAt" (epoch seconds), and the bundled template variable "git.timeSinceCommit" computes its age at the draw: drop this declaration`
+  ],
+  [
+    "block.etaMinutes",
+    'the bundled template variable "block.etaMinutes" computes it at the draw: drop this declaration'
+  ],
+  [
+    "weekly.etaMinutes",
+    'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration'
+  ]
+]);
+var RETIRED_GIT_FIELDS = new Map([
+  [
+    "branch",
+    {
+      read: ".git.branch",
+      declare: { kind: "input", path: "git.branch", default: "" },
+      note: 'when HEAD is on no branch it reads "detached", where this kind read ""'
+    }
+  ],
+  [
+    "sha",
+    {
+      read: ".git.sha",
+      declare: { kind: "input", path: "git.sha", default: "" }
+    }
+  ],
+  [
+    "dirty",
+    {
+      read: '(ne .git.status "clean")',
+      declare: {
+        kind: "template",
+        template: '{{ ne .git.status "clean" }}',
+        type: "boolean"
+      }
+    }
+  ],
+  ...["ahead", "behind", "stash"].map(
+    (field) => [
+      field,
+      {
+        read: `.git.${field}`,
+        declare: {
+          kind: "input",
+          path: `git.${field}`,
+          type: "number",
+          default: 0
+        }
+      }
+    ]
+  )
+]);
+function json5Of(decl) {
+  const value = (v) => typeof v === "string" && v.includes('"') && !v.includes("'") ? `'${v}'` : JSON.stringify(v);
+  return `{ ${Object.entries(decl).map(([k, v]) => `${k}: ${value(v)}`).join(", ")} }`;
+}
+function retiredGitKindMessage(raw) {
+  const head = `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares \u2014 drop this declaration and`;
+  const field = typeof raw.field === "string" ? RETIRED_GIT_FIELDS.get(raw.field) : void 0;
+  if (field === void 0) {
+    const reads = [...RETIRED_GIT_FIELDS.values()].map(({ read: read2 }) => read2);
+    return `${head} read whichever of ${reads.slice(0, -1).join(", ")} or ${reads.at(-1)} it stood for, where it was read`;
+  }
+  const note = field.note === void 0 ? "" : ` (${field.note})`;
+  return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
+}
+
+// src/config/loader/variables.ts
+function validateVariables(ctx, pathPrefix, raw) {
+  if (raw === void 0) return {};
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: pathPrefix,
+      message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, pathPrefix.split("."))
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = taggedUnion(
+      ctx,
+      VARIABLE_SCHEMA,
+      `${pathPrefix}.${name}`,
+      decl
+    );
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function literalValueSpec() {
+  return {
+    required: true,
+    json: { type: ["string", "number", "boolean"] },
+    parse: (ctx, path46, _field, raw) => {
+      const value = raw.value;
+      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+        ctx.issues.push({
+          path: `${path46}.value`,
+          message: `literal value must be string|number|boolean, got ${describeType(value)}`,
+          line: findKeyLine(ctx.source, path46.split("."))
+        });
+        return void 0;
+      }
+      return value;
+    }
+  };
+}
+function typedDefaultSpec() {
+  return {
+    required: false,
+    json: { type: ["string", "number", "boolean"] },
+    parse: (ctx, path46, _field, raw) => {
+      const t2 = raw.type;
+      const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
+      return optionalTypedDefault(ctx, path46, raw, expected);
+    }
+  };
+}
+var PARSE_SCHEMA = {
+  noun: "parse",
+  arms: {
+    text: {
+      json: { const: true },
+      parse: (ctx, path46, value) => value === true ? { text: true } : reject(
+        ctx,
+        path46,
+        `parse.text must be the literal boolean true, got ${describeValue(value)}`
+      )
+    },
+    regex: {
+      json: { type: "string" },
+      parse: (ctx, path46, value) => typeof value === "string" ? { regex: value } : reject(
+        ctx,
+        path46,
+        `parse.regex must be a pattern string, got ${describeValue(value)}`
+      )
+    },
+    json: {
+      json: { const: true },
+      parse: (ctx, path46, value) => value === true ? { json: true } : reject(
+        ctx,
+        path46,
+        `parse.json must be the literal boolean true, got ${describeValue(value)}`
+      )
+    }
+  }
+};
+function parseSpec() {
+  return {
+    required: false,
+    json: oneOfPresentJson(PARSE_SCHEMA),
+    parse: (ctx, path46, _field, raw) => {
+      if (raw.regex !== void 0) {
+        ctx.issues.push({
+          path: `${path46}.regex`,
+          message: `${path46}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
+          line: findKeyLine(ctx.source, [...path46.split("."), "regex"])
+        });
+      }
+      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path46}.parse`, raw.parse) ?? void 0;
+    }
+  };
+}
+function sourceDefaultSpec() {
+  return {
+    required: false,
+    json: {
+      type: ["string", "number", "boolean", "array", "object"],
+      description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
+    },
+    parse: (ctx, path46, _field, raw) => isPlainObject2(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path46, raw.default) : optionalStringField(ctx, path46, raw, "default")
+  };
+}
+function jsonDefault(ctx, path46, value) {
+  if (value === void 0) return void 0;
+  return isSourceDefault(value) ? value : reject(
+    ctx,
+    `${path46}.default`,
+    `${path46}.default must be a JSON value (a json-parsed source's document), got ${describeValue(value)}`
+  ) ?? void 0;
+}
+function isSourceDefault(value) {
+  return value !== null && isJsonValue(value);
+}
+var LITERAL_FIELDS = {
+  value: literalValueSpec(),
+  default: optionalStringSpec()
+};
+function inputPathSpec() {
+  const text4 = requireStringSpec();
+  return {
+    ...text4,
+    parse: (ctx, path46, field, raw) => {
+      const value = text4.parse(ctx, path46, field, raw);
+      const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
+      return instead === void 0 ? value : reject(
+        ctx,
+        `${path46}.${field}`,
+        `${path46}.${field} "${value}" is no longer in the payload: ${instead}`
+      ) ?? void 0;
+    }
+  };
+}
+var INPUT_FIELDS = {
+  path: inputPathSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"]),
+  default: typedDefaultSpec()
+};
+var ENV_FIELDS = {
+  name: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var FILE_FIELDS = {
+  path: requireStringSpec(),
+  readMode: optionalEnumSpec(["whole", "first-line"]),
+  parse: parseSpec(),
+  cache: requireCacheSpec("file"),
+  default: sourceDefaultSpec()
+};
+var SHELL_FIELDS = {
+  command: requireStringSpec(),
+  env: optionalEnvNamesSpec(),
+  parse: parseSpec(),
+  cache: requireCacheSpec("shell"),
+  default: sourceDefaultSpec()
+};
+function noCachePolicy(why2) {
+  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
+}
+var TEMPLATE_FIELDS = {
+  template: requireStringSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"]),
+  default: typedDefaultSpec()
+};
+var TEMPLATE_VAR_REMOVED = noCachePolicy(
+  "a template variable recomputes whenever a variable it reads changes"
+);
+var TIME_FIELDS = {
+  layout: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var TIME_VAR_REMOVED = noCachePolicy(
+  "a time variable reads the instant its render is drawn at"
+);
+var STATE_FIELDS = {
+  key: requireStringSpec(),
+  default: optionalStringSpec()
+};
+var VARIABLE_TAG = "kind";
+function arm(kind, fieldMap, removed = {}) {
+  return {
+    ...armFacets(VARIABLE_TAG, kind, fieldMap),
+    parse: (ctx, path46, raw) => {
+      refuseRemoved(ctx, removed, path46, raw);
+      const body = fields(ctx, fieldMap, path46, raw);
+      return body === null ? null : { kind, ...body };
+    }
+  };
+}
+var VARIABLE_SCHEMA = {
+  tag: VARIABLE_TAG,
+  noun: "source kind",
+  // `Unknown shell variable key "readMode". Expected one of: kind, command,
+  // parse, cache, default` — a field from the wrong arm, or a typo'd one, is the
+  // loud error a segment's has always been (brandon-config-9li). The author of a
+  // config they cannot see rendered has no other signal [LAW:no-silent-failure].
+  memberNoun: "variable",
+  arms: {
+    literal: arm("literal", LITERAL_FIELDS),
+    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
+    // lives in `typedDefaultSpec` (a field spec reading its sibling), so `input`
+    // is one field map like every other arm — `arm()` derives both `parse` and
+    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
+    input: arm("input", INPUT_FIELDS),
+    env: arm("env", ENV_FIELDS),
+    file: arm("file", FILE_FIELDS),
+    shell: arm("shell", SHELL_FIELDS),
+    template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
+    time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
+    state: arm("state", STATE_FIELDS)
+  },
+  retired: { git: retiredGitKindMessage }
+};
+function variableDeclJson() {
+  return taggedUnionJson(VARIABLE_SCHEMA);
+}
+function variablesMapJson() {
+  return { type: "object", additionalProperties: variableDeclJson() };
+}
+
+// src/config/loader/settings.ts
+init_globals();
+var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
+var SETTING_VALUE_JSON = {
+  anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
+};
+var SETTING_DECL_JSON = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "domain", "default"],
+  properties: {
+    label: { type: "string", pattern: "^[^\\n\\r]+$" },
+    domain: {
+      anyOf: [
+        { const: "bool" },
+        {
+          type: "array",
+          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
+          minItems: 1,
+          uniqueItems: true
+        },
+        {
+          type: "object",
+          additionalProperties: false,
+          required: ["min", "max"],
+          properties: {
+            min: { type: "integer" },
+            max: { type: "integer" },
+            step: { type: "integer", minimum: 1 },
+            atLeast: { type: "string", ...SETTING_NAME_JSON }
+          }
+        }
+      ]
+    },
+    default: SETTING_VALUE_JSON
+  }
+};
+var DECL_KEYS = ["label", "domain", "default"];
+var RANGE_KEYS = ["min", "max", "step", "atLeast"];
+function issue(ctx, path46, message2) {
+  ctx.issues.push({
+    path: path46,
+    message: message2,
+    line: findKeyLine(ctx.source, path46.split("."))
+  });
+  return void 0;
+}
+function parseDomain(ctx, path46, raw) {
+  if (raw === "bool") return "bool";
+  if (Array.isArray(raw)) {
+    const words2 = raw.filter((m) => typeof m === "string");
+    if (raw.length === 0 || words2.length !== raw.length) {
+      return issue(
+        ctx,
+        path46,
+        `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
+      );
+    }
+    if (new Set(words2).size !== words2.length) {
+      return issue(
+        ctx,
+        path46,
+        `a list domain names each word once, got ${JSON.stringify(raw)}`
+      );
+    }
+    const unwritable2 = words2.filter(
+      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
+    );
+    if (unwritable2.length > 0) {
+      return issue(
+        ctx,
+        path46,
+        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
+      );
+    }
+    return words2;
+  }
+  if (isPlainObject2(raw)) {
+    const { min: min3, max: max3, step: step4 = 1, atLeast } = raw;
+    const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
+    if (extra.length === 0 && Number.isInteger(min3) && Number.isInteger(max3) && min3 <= max3 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
+      return {
+        min: min3,
+        max: max3,
+        step: step4,
+        ...atLeast !== void 0 && { atLeast }
+      };
+    }
+    return issue(
+      ctx,
+      path46,
+      `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
+    );
+  }
+  return issue(
+    ctx,
+    path46,
+    `domain must be "bool", a list of words, or { min, max }, got ${describeValue(raw)}`
+  );
+}
+function parseSettingDecl(ctx, path46, raw) {
+  if (!isPlainObject2(raw)) {
+    return issue(
+      ctx,
+      path46,
+      `${path46} must be { label, domain, default }, got ${describeType(raw)}`
+    );
+  }
+  for (const key of Object.keys(raw)) {
+    if (!DECL_KEYS.includes(key)) {
+      issue(
+        ctx,
+        `${path46}.${key}`,
+        `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
+      );
+    }
+  }
+  const { label: label2 } = raw;
+  const labelOk = typeof label2 === "string" && label2.length > 0 && !/[\n\r]/.test(label2);
+  if (!labelOk) {
+    issue(
+      ctx,
+      `${path46}.label`,
+      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue(label2)}`
+    );
+  }
+  const domain = parseDomain(ctx, `${path46}.domain`, raw.domain);
+  if (!labelOk || domain === void 0) return void 0;
+  const decl = { label: label2, domain, default: raw.default };
+  if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
+    return issue(
+      ctx,
+      `${path46}.default`,
+      `default must be ${describeSettingDomain(decl)}, got ${describeValue(raw.default)}`
+    );
+  }
+  return decl;
+}
+function isSettingValue(v) {
+  return typeof v === "boolean" || typeof v === "string" || typeof v === "number";
+}
+var IMPLIED_HINTS = {
+  theme: `its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
+  effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`
+};
+function isImplied(name) {
+  return IMPLIED_SETTINGS.includes(name);
+}
+function settingsDeclSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      propertyNames: {
+        ...SETTING_NAME_JSON,
+        not: { enum: [...IMPLIED_SETTINGS] }
+      },
+      additionalProperties: SETTING_DECL_JSON
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const at = `${path46}.${field}`;
+      if (!isPlainObject2(v)) {
+        return issue(
+          ctx,
+          at,
+          `${at} must be an object of name \u2192 { label, domain, default }, got ${describeType(v)}`
+        );
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const [name, decl] of Object.entries(v)) {
+        if (!SETTING_NAME.test(name)) {
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting name "${name}" is read as .settings.${name} in a template, so it must be an identifier (letters, digits, _; not starting with a digit)`
+          );
+          continue;
+        }
+        if (isImplied(name)) {
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting "${name}" is one every placement already has \u2014 ${IMPLIED_HINTS[name]}`
+          );
+          continue;
+        }
+        const parsed2 = parseSettingDecl(ctx, `${at}.${name}`, decl);
+        if (parsed2 !== void 0) out[name] = parsed2;
+      }
+      return out;
+    }
+  };
+}
+var RESERVED_ID_JSON = RESERVED_NAMESPACES.map(
+  (ns) => ns.replace(/\./g, "\\.")
+).join("|");
+function placementIdSpec() {
+  return {
+    required: false,
+    json: {
+      type: "string",
+      minLength: 1,
+      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
+        return v;
+      return issue(
+        ctx,
+        `${path46}.${field}`,
+        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
+      );
+    }
+  };
+}
+function placementSettingsSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      propertyNames: SETTING_NAME_JSON,
+      additionalProperties: SETTING_VALUE_JSON
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const at = `${path46}.${field}`;
+      if (!isPlainObject2(v)) {
+        return issue(
+          ctx,
+          at,
+          `a placement's "settings" must be an object of setting name \u2192 value, got ${describeType(v)}`
+        );
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const [name, value] of Object.entries(v)) {
+        if (isSettingValue(value)) out[name] = value;
+        else
+          issue(
+            ctx,
+            `${at}.${name}`,
+            `setting "${name}" must be a boolean, a word, or a number, got ${describeType(value)}`
+          );
+      }
+      return out;
+    }
+  };
+}
+
+// src/config/loader/segments.ts
+function inheritableSegmentNames(base) {
+  return new Set(
+    Object.keys(base.segments).filter((name) => !isReservedName(name))
+  );
+}
+function validateSegments(ctx, raw, inherited) {
+  if (raw === void 0) return {};
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "segments",
+      message: `segments must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["segments"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = record(
+      ctx,
+      inherited.has(name) ? SEGMENT_DELTA_SCHEMA : SEGMENT_SCHEMA,
+      `segments.${name}`,
+      decl
+    );
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function joinTemplateBody(ctx, path46, field, raw) {
+  const v = raw[field];
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    let ok3 = true;
+    const parts = [];
+    for (const [i2, el] of v.entries()) {
+      if (typeof el === "string") {
+        parts.push(el);
+        continue;
+      }
+      ok3 = false;
+      ctx.issues.push({
+        path: `${path46}.${field}[${i2}]`,
+        message: `${path46}.${field}[${i2}] must be a string, got ${describeType(el)}`,
+        line: findKeyLine(ctx.source, [...path46.split("."), field])
+      });
+    }
+    return ok3 ? parts.join("") : void 0;
+  }
+  ctx.issues.push({
+    path: `${path46}.${field}`,
+    message: `${path46}.${field} must be a string or an array of strings, got ${describeType(v)}`,
+    line: findKeyLine(ctx.source, [...path46.split("."), field])
+  });
+  return void 0;
+}
+var TEMPLATE_BODY_JSON = {
+  anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }]
+};
+function ownTemplateSpec() {
+  return {
+    required: true,
+    json: TEMPLATE_BODY_JSON,
+    parse: (ctx, path46, field, raw) => raw[field] === void 0 ? reject(
+      ctx,
+      `${path46}.${field}`,
+      `${path46} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path46.slice("segments.".length))}`
+    ) ?? void 0 : joinTemplateBody(ctx, path46, field, raw)
+  };
+}
+function optionalTemplateBodySpec() {
+  return {
+    required: false,
+    json: TEMPLATE_BODY_JSON,
+    parse: (ctx, path46, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path46, field, raw)
+  };
+}
+function partialsSpec() {
+  return {
+    required: false,
+    json: {
+      type: "object",
+      additionalProperties: TEMPLATE_BODY_JSON
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (!isPlainObject2(v)) {
+        ctx.issues.push({
+          path: `${path46}.${field}`,
+          message: `${path46}.${field} must be an object, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [...path46.split("."), field])
+        });
+        return void 0;
+      }
+      const out = /* @__PURE__ */ Object.create(null);
+      for (const name of Object.keys(v)) {
+        const body = joinTemplateBody(ctx, `${path46}.${field}`, name, v);
+        if (body !== void 0) out[name] = body;
+      }
+      return out;
+    }
+  };
+}
+function widthSpec() {
+  return {
+    required: false,
+    json: {
+      anyOf: [
+        { const: "auto" },
+        { const: "fill" },
+        { type: "integer", minimum: 1 }
+      ]
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (v === "auto") return "auto";
+      if (v === "fill") return "fill";
+      if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
+      ctx.issues.push({
+        path: `${path46}.${field}`,
+        message: `width must be "auto", "fill", or a positive integer, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path46.split("."), field])
+      });
+      return void 0;
+    }
+  };
+}
+function varsSpec() {
+  return {
+    required: false,
+    // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
+    // VariableDecl map the top-level `variables` block emits — one source.
+    json: variablesMapJson(),
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      return validateVariables(ctx, `${path46}.${field}`, v);
+    }
+  };
+}
+var SEGMENT_FIELDS = {
+  template: ownTemplateSpec(),
+  // [LAW:one-source-of-truth] One row is the whole change: this table is what
+  // the validator interprets AND what `segmentDefinitions()` emits into the
+  // published JSON schema, and SEGMENT_DELTA_SCHEMA reuses it, so a file may
+  // set `description` on its own segment or on a delta over a bundled name
+  // with no further edit anywhere (brandon-config-schema-qqg).
+  description: optionalStringSpec(),
+  group: optionalEnumSpec(SEGMENT_GROUPS),
+  width: widthSpec(),
+  justify: optionalEnumSpec(JUSTIFY_MODES),
+  truncate: optionalEnumSpec(TRUNCATE_MODES),
+  bg: optionalStringSpec(),
+  fg: optionalStringSpec(),
+  when: optionalStringSpec(),
+  palette: paletteSpec(),
+  vars: varsSpec(),
+  settings: settingsDeclSpec(),
+  missingData: optionalEnumSpec(MISSING_DATA),
+  partials: partialsSpec()
+};
+var SEGMENT_SCHEMA = {
+  noun: "segment key",
+  fields: SEGMENT_FIELDS
+};
+var SEGMENT_DELTA_SCHEMA = {
+  noun: "segment key",
+  fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() }
+};
+var SEGMENT_DEF_NAME = "Segment";
+var SEGMENT_DELTA_DEF_NAME = "SegmentDelta";
+var SEGMENT_REF = `#/definitions/${SEGMENT_DEF_NAME}`;
+var SEGMENT_DELTA_REF = `#/definitions/${SEGMENT_DELTA_DEF_NAME}`;
+
+// src/config/loader/helpers.ts
+init_globals();
+function validateHelpers(ctx, raw) {
+  if (raw === void 0) return {};
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "helpers",
+      message: `helpers must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["helpers"])
+    });
+    return {};
+  }
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const [name, body] of Object.entries(raw)) {
+    if (typeof body !== "string") {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
+        line: findKeyLine(ctx.source, ["helpers", name])
+      });
+      continue;
+    }
+    out[name] = body;
+  }
+  return out;
+}
+
+// src/config/loader/actions.ts
+init_globals();
+var import_node_path28 = __toESM(require_path_browserify(), 1);
+
+// src/doctor/checks.ts
+init_globals();
+
+// src/tmux-hint.ts
+init_globals();
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
+};
+var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
+
+// src/doctor/terminal.ts
+init_globals();
+var TERMINALS = {
+  kitty: {
+    label: "kitty",
+    xtversion: "kitty",
+    program: null,
+    programVersion: true,
+    term: "xterm-kitty",
+    links: { since: "0.19.0" },
+    glyphs: { kind: "bundled", since: "0.36.0" }
+  },
+  wezterm: {
+    label: "WezTerm",
+    xtversion: "WezTerm",
+    program: "WezTerm",
+    programVersion: true,
+    term: "wezterm",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: "20230712" }
+  },
+  ghostty: {
+    label: "Ghostty",
+    xtversion: "ghostty",
+    program: "ghostty",
+    programVersion: true,
+    term: "xterm-ghostty",
+    links: { since: null },
+    glyphs: { kind: "bundled", since: null }
+  },
+  iterm2: {
+    label: "iTerm2",
+    xtversion: "iTerm2",
+    program: "iTerm.app",
+    programVersion: true,
+    term: null,
+    links: { since: "3.1" },
+    glyphs: { kind: "configured" }
+  },
+  alacritty: {
+    label: "Alacritty",
+    xtversion: "alacritty",
+    program: null,
+    programVersion: true,
+    term: "alacritty",
+    links: { since: "0.11.0" },
+    glyphs: { kind: "configured" }
+  },
+  "apple-terminal": {
+    label: "Terminal",
+    xtversion: null,
+    program: "Apple_Terminal",
+    programVersion: true,
+    term: null,
+    links: null,
+    glyphs: { kind: "unread" }
+  },
+  vscode: {
+    label: "VS Code",
+    xtversion: null,
+    program: "vscode",
+    programVersion: false,
+    term: null,
+    links: { since: "1.72" },
+    glyphs: { kind: "unread" }
+  }
+};
+var row = (name) => TERMINALS[name];
+function isBundling(name) {
+  return row(name).glyphs.kind === "bundled";
+}
+function isConfigured(name) {
+  return row(name).glyphs.kind === "configured";
+}
+var terminalLabel = (name) => row(name).label;
+var ITERM_POWERLINE = [
+  { since: "3.5.0", from: 57504, to: 57507 },
+  { since: "3.5.0", from: 57520, to: 57554 },
+  { since: "3.5.0", from: 57556, to: 57556 },
+  { since: "3.5.6", from: 57558, to: 57559 }
+];
+function itermDrawsItself(version, glyph) {
+  const point = glyph.codePointAt(0);
+  return ITERM_POWERLINE.some(
+    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
+  );
+}
+var NAMES = Object.keys(TERMINALS);
+function release2(version) {
+  const lead = /^\d+(?:\.\d+)*/.exec(version);
+  return lead === null ? null : lead[0].split(".").map(Number);
+}
+function releasedSince(version, since) {
+  const have = release2(version);
+  const need2 = release2(since);
+  if (have === null) return null;
+  for (let i2 = 0; i2 < Math.max(have.length, need2.length); i2++) {
+    const a = have[i2] ?? 0;
+    const b = need2[i2] ?? 0;
+    if (a !== b) return a > b;
+  }
+  return true;
+}
+function fromXtversion(termtype) {
+  for (const name of NAMES) {
+    const prefix = row(name).xtversion;
+    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
+      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
+      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
+      return { name, version };
+    }
+  }
+  return null;
+}
+function fromTerm(term) {
+  const name = NAMES.find((n) => row(n).term === term);
+  return name === void 0 ? null : { name, version: null };
+}
+function identifyInTmux(client) {
+  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
+  if (terminal !== null) return { kind: "known", terminal };
+  const called = /^[^\s(]*/.exec(client.termtype)[0];
+  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
+}
+function identifyFromEnv(env2) {
+  const program = env2.TERM_PROGRAM;
+  const byProgram = NAMES.find((n) => row(n).program === program);
+  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
+    name: byProgram,
+    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
+  };
+  if (terminal !== null) return { kind: "known", terminal };
+  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
+}
+function sightingOf(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || null;
+  }
+}
+function identifiedAs(identified) {
+  switch (identified.kind) {
+    case "known":
+      return terminalLabel(identified.terminal.name);
+    case "unknown":
+      return identified.called;
+    case "unnamed":
+      return identified.term || "this terminal";
+  }
+}
+function linkSupport({ name, version }) {
+  const links2 = row(name).links;
+  if (links2 === null) return { kind: "none" };
+  if (links2.since === null) return { kind: "draws" };
+  if (version === null) return { kind: "unsaid", since: links2.since };
+  const drawn = releasedSince(version, links2.since);
+  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
+}
+var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
+
+// src/doctor/checks.ts
+var held = (value) => ({ kind: "held", value });
+var notJudged = (what) => `${what} is not judged here: only the running daemon sees it \u2014 the bar's \u{1FA7A} doctor judges it`;
+function statusLineOf(sources) {
+  if (sources.kind === "failed") {
+    return { kind: "unread", reason: sources.reason };
+  }
+  const lines2 = sources.value.flatMap(
+    ({ scope, path: path46, settings }) => "statusLine" in settings ? [{ from: { scope, path: path46 }, line: settings.statusLine }] : []
+  );
+  const top = lines2[0];
+  if (top === void 0) {
+    return { kind: "absent", read: sources.value.map((s) => s.path) };
+  }
+  if (!isJsonObject(top.line)) {
+    return { kind: "not-an-object", value: top.line, from: top.from };
+  }
+  for (const { from, line } of lines2) {
+    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
+    if ("refreshInterval" in line) {
+      return { kind: "present", refreshInterval: line.refreshInterval, from };
+    }
+  }
+  return { kind: "present", refreshInterval: void 0, from: top.from };
+}
+function envVarOf(sources, name) {
+  if (sources.kind === "failed") return sources;
+  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
+  return {
+    kind: "ok",
+    value: top === void 0 ? { kind: "unset" } : {
+      kind: "set",
+      value: top.env[name],
+      from: { scope: top.scope, path: top.path }
+    }
+  };
+}
+var UNWRITTEN_SCOPES = [
+  "managed",
+  "project"
+];
+var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
+var ENV_FIX_FILE = {
+  managed: () => null,
+  "project-local": (path46) => ({ scope: "project-local", path: path46 }),
+  project: (_, at) => ({
+    scope: "project-local",
+    path: projectLocalSettingsFile(at.projectDir)
+  }),
+  user: (path46) => ({ scope: "user", path: path46 })
+};
+var GLYPH_MARKS = ["drawn", "boxes"];
+var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
+var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
+var whyNoWidth = (of) => of.kind === "session" ? "no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name" : "no COLUMNS, and no terminal to ask";
+function describeFix(fix) {
+  switch (fix.kind) {
+    case "claude-settings":
+      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
+    case "post-mortems-read":
+      return `${fix.kind} through=${fix.through}`;
+  }
+}
+function problemsVerdict(problems) {
+  const [reason, ...more] = problems;
+  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
+}
+var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
+function ofTmuxClient(tmux3, decide) {
+  switch (tmux3.kind) {
+    case "unreported":
+      return {
+        ok: false,
+        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
+      };
+    case "outside":
+      return { ok: true };
+    case "inside":
+      if (tmux3.client.kind === "failed") {
+        return {
+          ok: false,
+          reason: `tmux could not be asked: ${tmux3.client.reason}`
+        };
+      }
+      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
+  }
+}
+var tmuxTruecolor = {
+  name: "tmuxTruecolor",
+  label: "tmux truecolor",
+  takesMark: false,
+  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
+    if (!client.features.includes("RGB")) return { ok: true };
+    if (hint.truecolor !== null) return { ok: true };
+    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
+    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
+    const told = staged.value;
+    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
+      return {
+        ok: false,
+        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
+      };
+    }
+    const reason = "Claude Code renders the bar in 256 colours inside tmux";
+    const fixInto = (file2) => ({
+      ok: false,
+      reason,
+      fix: {
+        kind: "claude-settings",
+        file: file2,
+        path: ["env", TMUX_TRUECOLOR_VAR],
+        value: "1"
+      }
+    });
+    if (told.kind === "unset") {
+      return fixInto({ scope: "user", path: origin.at.userFile });
+    }
+    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
+    return file === null ? {
+      ok: false,
+      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
+    } : fixInto(file);
+  })
+};
+var utf82 = {
+  name: "utf8",
+  label: "UTF-8",
+  takesMark: false,
+  probe: ({ tmux: tmux3 }) => ofTmuxClient(
+    tmux3,
+    (client) => client.utf8 ? { ok: true } : {
+      ok: false,
+      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
+    }
+  )
+};
+var termWidth = {
+  name: "termWidth",
+  label: "terminal width",
+  takesMark: false,
+  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
+    ok: true,
+    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
+  } : {
+    ok: false,
+    reason: `${whoseWidth(width.value.of)} measured no width (${whyNoWidth(width.value.of)}), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
+  }
+};
+var UNUSED = {
+  variable: "is never read",
+  action: "is never clicked",
+  helper: "is never called",
+  segment: "is in no preset"
+};
+var NAMED_BY = {
+  argument: "command argument",
+  environment: `$${CONFIG_ENV}`,
+  unknown: "source unknown"
+};
+function judgedConfig({ target, layers }) {
+  if (target.source !== "search") {
+    return `${target.path} (${NAMED_BY[target.source]})`;
+  }
+  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
+}
+function configProblems(config2) {
+  switch (config2.kind) {
+    case "failed": {
+      const problems = [
+        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
+        ...config2.warnings
+      ];
+      return problems.length === 0 ? ["the config failed to load"] : problems;
+    }
+    case "loaded":
+      return [
+        ...config2.warnings,
+        ...config2.unused.map(
+          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
+        )
+      ];
+  }
+}
+var config = {
+  name: "config",
+  label: "config",
+  takesMark: false,
+  probe: ({ config: config2 }) => {
+    const judged = judgedConfig(config2);
+    const verdict = problemsVerdict(configProblems(config2));
+    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+  }
+};
+var REINSTALL = "re-run `cc-candybar install`";
+function handlerAppProblems(opener) {
+  if (opener.kind === "failed") {
+    return [
+      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
+    ];
+  }
+  if (opener.value === null) {
+    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
+  }
+  const { app, forwarder } = opener.value;
+  return forwarder ? [] : [
+    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
+  ];
+}
+var UNDELIVERED = {
+  "tmux-status": "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler, so whether a clicked link reaches the daemon is not judged \u2014 click \u{1FA7A} doctor in the bar itself to judge it",
+  command: notJudged("whether a clicked link reaches the daemon")
+};
+var urlHandler = {
+  name: "urlHandler",
+  label: "URL handler",
+  takesMark: false,
+  probe: ({ urlHandler: urlHandler2 }) => {
+    switch (urlHandler2.kind) {
+      case "unsupported":
+        return { ok: true };
+      case "registered": {
+        const verdict = problemsVerdict(handlerAppProblems(urlHandler2.opener));
+        return verdict.ok ? {
+          ok: true,
+          note: `the forwarder app opens cc-candybar://; ${UNDELIVERED[urlHandler2.via]}`
+        } : verdict;
+      }
+      case "arrived":
+        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
+        return {
+          ok: false,
+          // What is known: a click request brought it, which is what the
+          // retired applet runs — and a hand-run `cc-candybar url-handle`,
+          // or the browser page. Which app Launch Services opens the scheme
+          // with is the opener's row to say (handlerAppProblems).
+          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
+        };
+    }
+  }
+};
+function clientStanding({ bundle, checkout }, client) {
+  return {
+    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
+    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
+      kind: "unreadable",
+      root: checkout.root,
+      reason: checkout.rustSource.reason
+    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
+  };
+}
+function remedy(daemon3, client) {
+  if (client === "frames")
+    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
+  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
+}
+function installProblems(daemon3, nativeShipped, client) {
+  const { checkout } = daemon3;
+  if (client.kind === "unreported") {
+    return [
+      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  const { bundle, source } = clientStanding(daemon3, client);
+  switch (bundle.kind) {
+    case "unresolved":
+      return [
+        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
+      ];
+    case "other":
+      return [
+        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
+      ];
+    case "same":
+      break;
+  }
+  if (client.client === "node" && (nativeShipped || checkout !== null)) {
+    return [
+      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
+    ];
+  }
+  switch (source.kind) {
+    case "uncompared":
+    case "same":
+      return [];
+    case "unreadable":
+      return [`${source.root}/rust-client could not be read: ${source.reason}`];
+    case "unstamped":
+      return [
+        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
+      ];
+    case "other":
+      return [
+        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
+      ];
+  }
+}
+var NO_RENDER = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
+var install = {
+  name: "install",
+  label: "install",
+  takesMark: false,
+  probe: ({ install: held2 }) => {
+    if (held2.kind === "not-held")
+      return { ok: true, note: notJudged("which client draws the bar") };
+    const install2 = held2.value;
+    if (install2.kind === "failed") return { ok: false, reason: install2.reason };
+    const { daemon: daemon3, nativeShipped, clients } = install2.value;
+    if (clients.length === 0) {
+      return {
+        ok: false,
+        reason: `${NO_RENDER}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn`
+      };
+    }
+    return problemsVerdict([
+      ...new Set(
+        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
+      )
+    ]);
+  }
+};
+function unreadPostMortems(postMortems, read2) {
+  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
+    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
+  ) : [];
+}
+function otherDaemons(serving, processes) {
+  return processes.filter((p2) => p2.pid !== serving.pid);
+}
+var daemonLine = (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`})`;
+function daemonsProblems({ processes, postMortems, read: read2 }) {
+  const unread2 = unreadPostMortems(postMortems, read2);
+  return {
+    unread: unread2,
+    problems: [
+      ...unread2.map(
+        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
+      ),
+      ...postMortems.kind === "failed" ? [
+        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
+      ] : [],
+      // Which were read decides nothing only while none are listed.
+      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
+      ...processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : []
+    ]
+  };
+}
+function servingProblems(serving, processes) {
+  const { pid: pid2, memory, limit } = serving;
+  return [
+    ...(processes.kind === "ok" ? otherDaemons(serving, processes.value) : []).map(
+      (p2) => `${daemonLine(p2)} runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
+    ),
+    // [LAW:no-silent-failure] RSS standing in for the platform's charge is
+    // the limit judging an estimate — or, with no gap yet read, what macOS
+    // has already reclaimed, the very misjudgment the charge exists to end —
+    // so it is a finding, near the limit or not.
+    ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
+      `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
+    ] : [],
+    ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
+      `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
+    ] : []
+  ];
+}
+function unservedProblems(processes) {
+  if (processes.kind === "failed" || processes.value.length < 2) return [];
+  return [
+    `${processes.value.length} daemons run at once, and only one serves the bar \u2014 stop all but one: ${processes.value.map(daemonLine).join("; ")}`
+  ];
+}
+var daemon = {
+  name: "daemon",
+  label: "daemon",
+  takesMark: false,
+  probe: ({ daemon: facts }) => {
+    const { serving, processes } = facts;
+    const { unread: unread2, problems } = daemonsProblems(facts);
+    const verdict = problemsVerdict([
+      ...problems,
+      ...serving.kind === "held" ? servingProblems(serving.value, processes) : unservedProblems(processes)
+    ]);
+    const newest = unread2[0];
+    if (!verdict.ok)
+      return newest === void 0 ? verdict : {
+        ...verdict,
+        fix: { kind: "post-mortems-read", through: newest.identity }
+      };
+    if (serving.kind === "not-held")
+      return { ok: true, note: notJudged("the daemon's memory") };
+    return serving.value.memory.kind === "unmeasured" ? { ok: true, note: "the daemon has not measured its memory yet" } : verdict;
+  }
+};
+var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
+function drawsLinks(identified, clicked) {
+  const id2 = sightingOf(identified);
+  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
+    return { kind: "draws" };
+  }
+  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
+}
+function linkProblems({ identified, tmuxClient }, clicked) {
+  const called = identifiedAs(identified);
+  const support = drawsLinks(identified, clicked);
+  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
+  const terminal = (() => {
+    switch (support.kind) {
+      case "draws":
+        return [];
+      case "none":
+        return [
+          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
+        ];
+      case "older":
+        return [
+          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
+        ];
+      case "unsaid":
+        return [
+          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
+        ];
+      case "unknown":
+        return [
+          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
+        ];
+    }
+  })();
+  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
+    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
+  ] : [];
+  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
+    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
+  ];
+  return [...terminal, ...remembered, ...tmux3];
+}
+var links = {
+  name: "links",
+  label: "links",
+  takesMark: false,
+  probe: ({ urlHandler: urlHandler2, terminal, clicked }) => {
+    if (urlHandler2.kind === "arrived") return { ok: true };
+    switch (terminal.kind) {
+      case "unreported":
+        return {
+          ok: false,
+          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        };
+      case "unasked":
+        return {
+          ok: false,
+          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        };
+      case "seen":
+        return problemsVerdict(linkProblems(terminal, clicked));
+    }
+  }
+};
+var EFFECT_REFRESH_INTERVAL = 1;
+var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
+var effectRefresh = {
+  name: "effectRefresh",
+  label: "effect refresh",
+  takesMark: false,
+  probe: ({ claudeSettings: { origin, elsewhere } }) => {
+    const verdicts = [origin, ...elsewhere].flatMap(
+      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
+    );
+    const [first2] = verdicts;
+    if (first2 === void 0) return unknownMotion(NO_RENDER);
+    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
+    if (lead === void 0) return first2;
+    const more = [...new Set(others.map((f) => f.reason))].filter(
+      (r) => r !== lead.reason
+    );
+    return more.length === 0 ? lead : { ...lead, more };
+  }
+};
+var barsSeen = (bars) => {
+  const drawn = refreshedFrames(bars).map((f) => f.frame);
+  if (drawn.includes("moves")) {
+    return {
+      kind: "moving",
+      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
+    };
+  }
+  if (drawn.includes("can-move")) {
+    return {
+      kind: "moving",
+      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
+    };
+  }
+  if (drawn.includes("still")) return { kind: "still" };
+  if (drawn.includes("drawing")) {
+    return {
+      kind: "unknown",
+      unseen: "the bar's latest render has not finished"
+    };
+  }
+  if (drawn.length > 0) {
+    return { kind: "unknown", unseen: "the bar's recent renders failed" };
+  }
+  if (bars.length > 0) {
+    return {
+      kind: "unknown",
+      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
+    };
+  }
+  return { kind: "none" };
+};
+var unknownMotion = (unseen) => ({
+  ok: false,
+  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
+});
+function chainVerdict(sources, seen2) {
+  const statusLine = statusLineOf(sources);
+  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
+    return {
+      ok: true,
+      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
+    };
+  }
+  switch (seen2.kind) {
+    case "none":
+      return null;
+    case "still":
+      return { ok: true };
+    case "unknown":
+      return unknownMotion(seen2.unseen);
+    case "moving":
+      break;
+  }
+  const { wearing } = seen2;
+  switch (statusLine.kind) {
+    case "unread":
+      return {
+        ok: false,
+        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
+      };
+    case "absent":
+      return {
+        ok: false,
+        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
+      };
+    case "not-an-object":
+      return {
+        ok: false,
+        // `cc-candybar install` writes the user file only, so only there
+        // does re-running it replace the line.
+        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
+      };
+    case "present": {
+      const { from, refreshInterval: interval } = statusLine;
+      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
+      return doctorWrites(from) ? {
+        ok: false,
+        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
+        fix: {
+          kind: "claude-settings",
+          file: from,
+          path: ["statusLine", "refreshInterval"],
+          value: EFFECT_REFRESH_INTERVAL
+        }
+      } : {
+        ok: false,
+        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
+      };
+    }
+  }
+}
+var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
+function terminalCalled(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return "this terminal";
+    case "unknown":
+    case "unnamed":
+      return identifiedAs(terminal);
+    case "bundling":
+    case "unread":
+    case "configured":
+      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
+  }
+}
+function sightedIn(terminal) {
+  switch (terminal.kind) {
+    case "unreported":
+    case "unasked":
+      return null;
+    case "unknown":
+    case "unnamed":
+      return sightingOf(terminal);
+    case "bundling":
+    case "unread":
+      return terminalLabel(terminal.name);
+    case "configured": {
+      const label2 = terminalLabel(terminal.name);
+      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
+    }
+  }
+}
+function glyphSighting(facts) {
+  const where = sightedIn(facts.terminal);
+  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
+}
+var NERD_FONT_CHECK = "nerdFont";
+var nerdFont = {
+  name: NERD_FONT_CHECK,
+  label: "Nerd Font",
+  takesMark: true,
+  probe: ({ nerdFont: facts, marks }) => {
+    if (facts.kind === "none") return { ok: true };
+    const sighting = glyphSighting(facts);
+    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
+      ok: false,
+      reason,
+      more: [`the mark book could not be read: ${marks.reason}`]
+    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
+    const terminal = facts.terminal;
+    const called = terminalCalled(terminal);
+    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
+    switch (mark) {
+      case "drawn":
+        return { ok: true };
+      case "boxes":
+        return failed3(
+          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
+        );
+      case null:
+        break;
+    }
+    switch (terminal.kind) {
+      case "unreported":
+        return failed3(
+          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
+        );
+      case "unasked":
+        return failed3(
+          `tmux could not be asked which terminal is attached: ${terminal.reason}`
+        );
+      case "unknown":
+      case "unnamed":
+      case "unread":
+        return failed3(`the doctor cannot read ${called}'s font`);
+      case "bundling": {
+        const since = TERMINALS[terminal.name].glyphs.since;
+        if (since === null) return { ok: true };
+        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
+        if (shipped === true) return { ok: true };
+        const label2 = terminalLabel(terminal.name);
+        return failed3(
+          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
+        );
+      }
+      case "configured": {
+        if (terminal.font.kind === "failed") {
+          return failed3(
+            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
+          );
+        }
+        const { font, from, lacks } = terminal.font.value;
+        if (lacks === null) {
+          return failed3(
+            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
+          );
+        }
+        if (lacks.length === 0) return { ok: true };
+        return failed3(
+          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
+        );
+      }
+    }
+  }
+};
+function named(segments) {
+  return segments.join(", ");
+}
+function optOut(segments) {
+  return `or set missingData: "ignore" on ${named(segments)}`;
+}
+function pullRequestProblems(need2) {
+  if (need2.kind === "unneeded") return [];
+  const { segments, fact } = need2;
+  if (fact.kind === "failed") {
+    return [
+      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
+    ];
+  }
+  if (fact.value === null) return [];
+  const { cli, host, status } = fact.value;
+  if (status === "ready") return [];
+  return status === "missing" ? [
+    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
+  ] : [
+    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
+  ];
+}
+function rateLimitProblems(seen2, segments) {
+  if (seen2.length === 0) {
+    return [
+      `${named(segments)}: ${NO_RENDER}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
+    ];
+  }
+  return seen2.includes("missing") && !seen2.includes("carried") ? [
+    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
+  ] : [];
+}
+var segmentData = {
+  name: "segmentData",
+  label: "segment data",
+  takesMark: false,
+  probe: ({ data: { pullRequests, rateLimits } }) => {
+    const verdict = problemsVerdict([
+      ...pullRequestProblems(pullRequests),
+      ...rateLimits.kind === "needed" && rateLimits.fact.kind === "held" ? rateLimitProblems(rateLimits.fact.value, rateLimits.segments) : []
+    ]);
+    return verdict.ok && rateLimits.kind === "needed" && rateLimits.fact.kind === "not-held" ? {
+      ok: true,
+      note: notJudged(
+        `whether Claude Code sends rate_limits (read by ${named(rateLimits.segments)})`
+      )
+    } : verdict;
+  }
+};
+function transcriptProblems({
+  path: path46,
+  answered,
+  read: read2
+}) {
+  switch (read2.kind) {
+    case "absent":
+      return answered ? [
+        `the transcript ${path46} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
+      ] : [];
+    case "failed":
+      return [`the transcript ${path46} cannot be read: ${read2.reason}`];
+    case "ok": {
+      const { lines: lines2, unparsed, whole } = read2.value;
+      return unparsed === 0 ? [] : [
+        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path46} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
+      ];
+    }
+  }
+}
+var sessionData = {
+  name: "sessionData",
+  label: "session data",
+  takesMark: false,
+  probe: ({ transcripts }) => {
+    if (transcripts.kind === "not-held")
+      return { ok: true, note: notJudged("which transcript the bar reads") };
+    if (transcripts.value.length === 0) {
+      return {
+        ok: false,
+        reason: `${NO_RENDER}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn`
+      };
+    }
+    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
+  }
+};
+var CHECKS = [
+  config,
+  install,
+  daemon,
+  urlHandler,
+  links,
+  tmuxTruecolor,
+  utf82,
+  termWidth,
+  effectRefresh,
+  nerdFont,
+  segmentData,
+  sessionData
+];
+var MARKED_CHECKS = CHECKS.filter(
+  (c) => c.takesMark
+);
+function runDoctor(facts) {
+  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
+}
+function checkByName(name) {
+  return CHECKS.find((c) => c.name === name);
+}
+
+// src/claude-input/slash-line.ts
+init_globals();
+var SLASH_LINE_PATTERN = "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$";
+var SLASH_LINE = new RegExp(SLASH_LINE_PATTERN);
+function parseSlashLine(raw) {
+  return typeof raw === "string" && SLASH_LINE.test(raw) ? { kind: "line", line: raw } : {
+    kind: "refused",
+    reason: `a slash command is "/" then its name, e.g. "/compact" or "/model opus", on one line with no control characters, got ${JSON.stringify(raw)}`
+  };
+}
+function slashLine(raw) {
+  const parsed2 = parseSlashLine(raw);
+  if (parsed2.kind === "refused") throw new Error(parsed2.reason);
+  return parsed2.line;
+}
+
+// src/config/loader/actions.ts
+function validateActions(ctx, raw, home) {
+  if (raw === void 0) return {};
+  if (!isPlainObject2(raw)) {
+    issue2(
+      ctx,
+      "actions",
+      `actions must be an object, got ${describeType(raw)}`
+    );
+    return {};
+  }
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed2 = validateActionDecl(ctx, `actions.${name}`, decl, home);
+    if (parsed2 !== null) out[name] = parsed2;
+  }
+  return out;
+}
+function issue2(ctx, path46, message2) {
+  ctx.issues.push({
+    path: path46,
+    message: message2,
+    line: findKeyLine(ctx.source, path46.split("."))
+  });
+}
+function validateActionDecl(ctx, path46, raw, home) {
+  if (!isPlainObject2(raw)) {
+    issue2(
+      ctx,
+      path46,
+      `${path46} must be an action object, got ${describeType(raw)}`
+    );
+    return null;
+  }
+  if ("persistWhen" in raw) {
+    issue2(
+      ctx,
+      path46,
+      `${path46}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
+    );
+    return null;
+  }
+  const present = ACTION_KEYS.filter((k) => k in raw);
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path46,
+      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
+    );
+    return null;
+  }
+  const key = present[0];
+  const { layer, ...rest2 } = raw;
+  const layers = LAYER_CHOICES[key];
+  if (layer === void 0) return actionArms(home)[key](ctx, path46, rest2);
+  if (layers === void 0) {
+    issue2(
+      ctx,
+      `${path46}.layer`,
+      `a ${key} action writes no config, so it names no layer`
+    );
+    return null;
+  }
+  if (!layers.includes(layer)) {
+    issue2(
+      ctx,
+      `${path46}.layer`,
+      `layer must be one of ${layers.join(", ")}, got ${describeValue(layer)}`
+    );
+    return null;
+  }
+  const parsed2 = actionArms(home)[key](ctx, path46, rest2);
+  return parsed2 === null ? null : { ...parsed2, layer };
+}
+function actionHomeOf(filePath2) {
+  if (filePath2 === "<default>") return { dir: null };
+  return import_node_path28.default.isAbsolute(filePath2) ? { dir: import_node_path28.default.dirname(filePath2) } : { text: filePath2 };
+}
+var actionArms = (home) => ({
+  set: (ctx, path46, raw) => valueSourceAction(ctx, path46, raw, "set", SET_ARMS),
+  persist: (ctx, path46, raw) => valueSourceAction(ctx, path46, raw, "persist", PERSIST_ARMS),
+  copy: templateArm("copy"),
+  open: templateArm("open"),
+  reset: resetArm,
+  undo: markerArm("undo"),
+  redo: markerArm("redo"),
+  back: markerArm("back"),
+  rewind: markerArm("rewind"),
+  save: markerArm("save"),
+  preset: presetArm,
+  themeDefault: themeDefaultArm,
+  doctor: doctorArm,
+  slash: slashArm,
+  run: runArm(home),
+  do: doArm
+});
+function templateArm(key) {
+  return (ctx, path46, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue2(
+          ctx,
+          `${path46}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
+        );
+    }
+    const tmpl = requireString(ctx, path46, raw, key);
+    return tmpl === null ? null : { [key]: tmpl };
+  };
+}
+function resetArm(ctx, path46, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "reset")
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a reset action. Expected only: reset`
+      );
+  }
+  const key = slashFreeString(
+    ctx,
+    path46,
+    "reset",
+    raw,
+    `reset key must be non-empty (the config globals field to clear)`,
+    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return key === null ? null : { reset: key };
+}
+var MARKER_SUBJECT = {
+  undo: "it steps the session's settings history",
+  redo: "it steps the session's settings history",
+  back: "it steps the session's navigation history",
+  rewind: "it steps the session's settings history back to where edit mode opened",
+  save: "it saves the session's unsaved settings"
+};
+function markerArm(key) {
+  return (ctx, path46, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue2(
+          ctx,
+          `${path46}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
+        );
+    }
+    if (raw[key] !== true) {
+      issue2(
+        ctx,
+        `${path46}.${key}`,
+        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
+      );
+      return null;
+    }
+    return { [key]: true };
+  };
+}
+function presetArm(ctx, path46, raw) {
+  const verb = raw.preset;
+  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
+      );
+  }
+  if (verb !== "save" && verb !== "delete") {
+    issue2(
+      ctx,
+      `${path46}.preset`,
+      `preset must be "save" or "delete", got ${describeValue(verb)}`
+    );
+    return null;
+  }
+  if (verb === "save") return { preset: "save" };
+  const name = requireString(ctx, path46, raw, "name");
+  return name === null ? null : { preset: "delete", name };
+}
+function themeDefaultArm(ctx, path46, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "themeDefault")
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
+      );
+  }
+  if (raw.themeDefault !== "save") {
+    issue2(
+      ctx,
+      `${path46}.themeDefault`,
+      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
+    );
+    return null;
+  }
+  return { themeDefault: "save" };
+}
+var DOCTOR_KEYS = {
+  run: ["doctor"],
+  fix: ["doctor", "check"],
+  mark: ["doctor", "check", "mark"]
+};
+function doctorArm(ctx, path46, raw) {
+  const verb = raw.doctor;
+  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
+  const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
+      );
+  }
+  if (!known) {
+    issue2(
+      ctx,
+      `${path46}.doctor`,
+      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue(verb)}`
+    );
+    return null;
+  }
+  if (verb === "run") return { doctor: "run" };
+  const check = raw.check;
+  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
+  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
+    issue2(
+      ctx,
+      `${path46}.check`,
+      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`
+    );
+    return null;
+  }
+  if (verb === "fix") return { doctor: "fix", check };
+  const mark = raw.mark;
+  if (!GLYPH_MARKS.includes(mark)) {
+    issue2(
+      ctx,
+      `${path46}.mark`,
+      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`
+    );
+    return null;
+  }
+  return { doctor: "mark", check, mark };
+}
+function slashArm(ctx, path46, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "slash")
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a slash action. Expected only: slash`
+      );
+  }
+  const parsed2 = parseSlashLine(raw.slash);
+  if (parsed2.kind === "refused") {
+    issue2(ctx, `${path46}.slash`, parsed2.reason);
+    return null;
+  }
+  return { slash: parsed2.line };
+}
+var RUN_KEYS = ["run", "env", "refreshes"];
+function runArm(home) {
+  return (ctx, path46, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (!RUN_KEYS.includes(k))
+        issue2(
+          ctx,
+          `${path46}.${k}`,
+          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
+        );
+    }
+    const before = ctx.issues.length;
+    const run3 = raw.run;
+    if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
+      issue2(
+        ctx,
+        `${path46}.run`,
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
+      );
+    }
+    const env2 = raw.env ?? {};
+    if (!isPlainObject2(env2) || Object.entries(env2).some(
+      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
+    )) {
+      issue2(
+        ctx,
+        `${path46}.env`,
+        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
+      );
+    }
+    const refreshes = raw.refreshes ?? [];
+    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
+      issue2(
+        ctx,
+        `${path46}.refreshes`,
+        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
+      );
+    }
+    if (!("dir" in home)) {
+      issue2(
+        ctx,
+        `${path46}.run`,
+        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
+      );
+    }
+    if (ctx.issues.length > before || !("dir" in home)) return null;
+    return {
+      run: run3,
+      env: env2,
+      refreshes,
+      cwd: home.dir
+    };
+  };
+}
+var RUN_ARM_JSON = {
+  type: "object",
+  properties: {
+    run: { type: "array", items: { type: "string" }, minItems: 1 },
+    env: {
+      type: "object",
+      propertyNames: { pattern: ENV_NAME.source },
+      additionalProperties: { type: "string" }
+    },
+    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
+  },
+  required: ["run"],
+  additionalProperties: false
+};
+function doArm(ctx, path46, raw) {
+  for (const k of Object.keys(raw)) {
+    if (k !== "do")
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on a do action. Expected only: do`
+      );
+  }
+  const members = raw.do;
+  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
+    issue2(
+      ctx,
+      `${path46}.do`,
+      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
+    );
+    return null;
+  }
+  return { do: members };
+}
+function slashFreeString(ctx, path46, field, raw, emptyMessage, slashMessage) {
+  const v = requireString(ctx, path46, raw, field);
+  if (v === null) return null;
+  const at = `${path46}.${field}`;
+  if (v === "") {
+    issue2(ctx, at, emptyMessage);
+    return null;
+  }
+  if (v.includes("/")) {
+    issue2(ctx, at, slashMessage(v));
+    return null;
+  }
+  return v;
+}
+var DISCRIMINATOR_NOUN = {
+  set: "the SessionState key to write",
+  persist: "the config globals field to write"
+};
+function validateDiscriminatorKey(ctx, path46, raw, discriminator) {
+  const noun = DISCRIMINATOR_NOUN[discriminator];
+  const value = slashFreeString(
+    ctx,
+    path46,
+    discriminator,
+    raw,
+    `${discriminator} key must be non-empty (${noun})`,
+    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
+  );
+  return value === null ? null : { [discriminator]: value };
+}
+function wireName(discriminator) {
+  return discriminator === "set" ? "set-state" : "set-config";
+}
+var TO_FIELDS_SET = {
+  to: setLiteralSpec("set")
+};
+var TO_FIELDS_PERSIST = {
+  to: setLiteralSpec("persist")
+};
+var FROM_FIELDS_SET = {
+  from: fromSpec("set")
+};
+var FROM_FIELDS_PERSIST = {
+  from: fromSpec("persist")
+};
+var BOUNDED_FIELDS = {
+  min: requireIntSpec(),
+  max: requireIntSpec(),
+  by: requireIntSpec()
+};
+var INT_FIELDS = { int: intMarkerSpec() };
+var CYCLE_FIELDS_SET = {
+  cycle: cycleSpec("set")
+};
+var CYCLE_FIELDS_PERSIST = {
+  cycle: cycleSpec("persist")
+};
+var REMOVE_SEGMENT_FIELDS = {
+  removeSegment: layoutNameSpec("removeSegment")
+};
+var INSERT_SEGMENT_FIELDS = {
+  insertSegment: layoutNameSpec("insertSegment"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
+};
+var INSERT_SEGMENT_FROM_FIELDS = {
+  insertSegmentFrom: fromSpec("persist"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec()
+};
+var minLessThanMax = {
+  ok: (v) => v.min < v.max,
+  issue: (v) => ({
+    field: "min",
+    message: `min (${v.min}) must be less than max (${v.max})`
+  })
+};
+var byNonZero = {
+  ok: (v) => v.by !== 0,
+  issue: () => ({
+    field: "by",
+    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
+  })
+};
+function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
+  const fullKeys = Object.keys(fieldMap);
+  const detect = detectKeys ?? fullKeys;
+  const keys2 = [discriminator];
+  const inner = (ctx, path46, raw) => fields(ctx, fieldMap, path46, raw);
+  const source = objectJson(fieldMap);
+  return {
+    detect,
+    allowed: [...keys2, ...fullKeys],
+    label: fullKeys.join("/"),
+    json: {
+      type: "object",
+      properties: {
+        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
+        ...source.properties
+      },
+      required: [...keys2, ...source.required ?? []],
+      additionalProperties: false
+    },
+    parse: checks.length ? refine(inner, ...checks) : inner
+  };
+}
+var SET_ARMS = [
+  valueSourceArm("set", TO_FIELDS_SET),
+  valueSourceArm("set", FROM_FIELDS_SET),
+  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("set", INT_FIELDS),
+  valueSourceArm("set", CYCLE_FIELDS_SET)
+];
+var PERSIST_ARMS = [
+  valueSourceArm("persist", TO_FIELDS_PERSIST),
+  valueSourceArm("persist", FROM_FIELDS_PERSIST),
+  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
+  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
+  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
+  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
+  // their own discriminating field — see valueSourceArm's own comment. They
+  // share "anchor"/"relation" (same position shape, different segment-name
+  // source), so dispatching on the full field set would make EITHER arm
+  // spuriously match an action declaring the other.
+  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
+  valueSourceArm(
+    "persist",
+    INSERT_SEGMENT_FROM_FIELDS,
+    [],
+    ["insertSegmentFrom"]
+  )
+];
+function valueSourceClauses(discriminator) {
+  const clauses = [
+    `"to" (a literal value)`,
+    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
+    `"min"/"max"/"by" (a bounded step)`
+  ];
+  if (discriminator === "set")
+    clauses.push(`"int" (an unbounded integer cursor)`);
+  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
+  if (discriminator === "persist") {
+    clauses.push(
+      `"removeSegment" (remove a named segment from the layout)`,
+      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
+      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
+    );
+  }
+  return clauses;
+}
+function VALUE_SOURCE_MESSAGE(discriminator) {
+  const clauses = valueSourceClauses(discriminator);
+  const last2 = clauses[clauses.length - 1];
+  const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
+  return `a ${discriminator} action declares exactly one value source: ${list2}`;
+}
+function valueSourceAction(ctx, path46, raw, discriminator, arms) {
+  const keys2 = validateDiscriminatorKey(ctx, path46, raw, discriminator);
+  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
+  if (present.length !== 1) {
+    issue2(
+      ctx,
+      path46,
+      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
+    );
+    return null;
+  }
+  const arm2 = present[0];
+  for (const k of Object.keys(raw)) {
+    if (!arm2.allowed.includes(k))
+      issue2(
+        ctx,
+        `${path46}.${k}`,
+        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
+      );
+  }
+  const payload = arm2.parse(ctx, path46, raw);
+  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
+}
+function setLiteralSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path46, field, raw) => slashFreeString(
+      ctx,
+      path46,
+      field,
+      raw,
+      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
+      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
+    ) ?? void 0
+  };
+}
+function fromSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      anyOf: [
+        { type: "string", minLength: 1 },
+        {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+          minItems: 1,
+          uniqueItems: true
+        }
+      ]
+    },
+    parse: (ctx, path46, field, raw) => {
+      const from = raw[field];
+      const at = `${path46}.${field}`;
+      if (typeof from === "string") {
+        if (from === "") {
+          issue2(ctx, at, `${field} must be a non-empty domain name`);
+          return void 0;
+        }
+        return from;
+      }
+      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
+        const members = from;
+        if (members.length === 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
+          );
+          return void 0;
+        }
+        if (members.some((m) => m === "")) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+          );
+          return void 0;
+        }
+        const slashed = members.filter((m) => m.includes("/"));
+        if (slashed.length > 0) {
+          issue2(
+            ctx,
+            at,
+            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+          );
+          return void 0;
+        }
+        if (new Set(members).size !== members.length) {
+          issue2(
+            ctx,
+            at,
+            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
+          );
+          return void 0;
+        }
+        return members;
+      }
+      issue2(
+        ctx,
+        at,
+        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
+      );
+      return void 0;
+    }
+  };
+}
+function cycleSpec(discriminator) {
+  const wire = wireName(discriminator);
+  return {
+    required: true,
+    json: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      minItems: 2,
+      uniqueItems: true
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      const at = `${path46}.${field}`;
+      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
+        issue2(
+          ctx,
+          at,
+          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
+        );
+        return void 0;
+      }
+      const members = v;
+      if (members.length < 2) {
+        issue2(
+          ctx,
+          at,
+          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
+        );
+        return void 0;
+      }
+      const empty2 = members.some((m) => m === "");
+      const slashed = members.filter((m) => m.includes("/"));
+      if (empty2) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
+        );
+        return void 0;
+      }
+      if (slashed.length > 0) {
+        issue2(
+          ctx,
+          at,
+          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
+        );
+        return void 0;
+      }
+      if (new Set(members).size !== members.length) {
+        issue2(
+          ctx,
+          at,
+          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
+        );
+        return void 0;
+      }
+      return members;
+    }
+  };
+}
+function intMarkerSpec() {
+  return {
+    required: true,
+    json: { const: true },
+    parse: (ctx, path46, field, raw) => {
+      if (raw[field] !== true) {
+        issue2(
+          ctx,
+          `${path46}.${field}`,
+          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
+        );
+        return void 0;
+      }
+      return true;
+    }
+  };
+}
+function layoutNameSpec(field) {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path46, f, raw) => {
+      const v = requireString(ctx, path46, raw, f);
+      if (v === null) return void 0;
+      const at = `${path46}.${f}`;
+      if (v === "") {
+        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
+        return void 0;
+      }
+      if (v.includes("/") || v.includes(":")) {
+        issue2(
+          ctx,
+          at,
+          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function relationSpec() {
+  return {
+    required: true,
+    json: { enum: ["before", "after"] },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v !== "before" && v !== "after") {
+        issue2(
+          ctx,
+          `${path46}.${field}`,
+          `relation must be "before" or "after", got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function requireIntSpec() {
+  return {
+    required: true,
+    json: { type: "integer" },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (typeof v !== "number" || !Number.isInteger(v)) {
+        issue2(
+          ctx,
+          `${path46}.${field}`,
+          `${field} must be an integer, got ${describeValue(v)}`
+        );
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
 
 // src/config/loader/syntax-engine.ts
 init_globals();
@@ -58445,7 +65921,7 @@ function staticDictEntries(arg) {
   }
   return dict(...values2);
 }
-function get(d, key) {
+function get2(d, key) {
   return d[key];
 }
 function hasKey(d, key) {
@@ -58502,7 +65978,7 @@ function sprigDicts() {
       }
     },
     get: {
-      fn: (d, k) => get(d, k),
+      fn: (d, k) => get2(d, k),
       argTypes: ["dict", "string"],
       arity: { kind: "exact" }
     },
@@ -59299,7 +66775,7 @@ function initials(s) {
   const enc = new TextEncoder();
   return s.split(/\s+/).filter((w) => w.length > 0).map((w) => String.fromCharCode(...enc.encode(w).slice(0, 1))).join("");
 }
-function join(sep2, list2) {
+function join3(sep2, list2) {
   const parts = [];
   for (const v of list2) {
     if (v !== null && v !== void 0 && typeof v === "object") throw bodyTypeMismatch("join", 2, "list of strings/primitives", `list element of type ${describe2(v)}`);
@@ -59502,7 +66978,7 @@ function sprigStrings() {
       arity: { kind: "exact" }
     },
     join: {
-      fn: (sep2, list2) => join(sep2, list2),
+      fn: (sep2, list2) => join3(sep2, list2),
       argTypes: ["string", "list"],
       arity: { kind: "exact" }
     },
@@ -59669,7 +67145,86 @@ function sprigStrings() {
 // src/config/loader/syntax-engine.ts
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
-// src/config/loader/reserved-namespace.ts
+// src/config/presets.ts
+init_globals();
+var PRESET_FLOOR = "default";
+var FLOOR_FRAGMENT = {};
+function presetNames(presets) {
+  return [.../* @__PURE__ */ new Set([PRESET_FLOOR, ...Object.keys(presets)])];
+}
+function effectivePresetName(sessionPreset, globalsPreset, declaredPresets) {
+  return effectiveMemberName(
+    void 0,
+    sessionPreset,
+    globalsPreset,
+    PRESET_FLOOR,
+    declaredPresets
+  );
+}
+function presetByName(presets, name) {
+  const preset = { [PRESET_FLOOR]: FLOOR_FRAGMENT, ...presets }[name];
+  if (preset === void 0) {
+    throw new Error(
+      `Preset "${name}" is not declared in this config \u2014 effectivePresetName collapses unknown names to "${PRESET_FLOOR}", which always resolves; a miss here means a raw name reached this function without going through that resolution`
+    );
+  }
+  return preset;
+}
+function presetRoot(config2, name) {
+  const fragment = presetByName(config2.presets, name).root ?? EMPTY_ROWS;
+  return {
+    node: rootNode(mergeRoot(fragment, config2.root)),
+    path: restages(fragment) ? `presets.${name}.root` : "root"
+  };
+}
+function placeInserts(config2, cells, authored) {
+  if (cells.length === 0) return { config: config2, notices: [] };
+  const own2 = insertCells(config2.root, cells);
+  const restaged = Object.entries(config2.presets).filter(([, preset]) => restages(preset.root ?? EMPTY_ROWS)).map(([name, preset]) => ({
+    name,
+    preset,
+    ...insertCells(mergeRoot(preset.root ?? EMPTY_ROWS, config2.root), cells)
+  }));
+  const missed = /* @__PURE__ */ new Map();
+  const miss = (tree) => ({ cell: cell3, reason }) => {
+    const reasons = missed.get(cell3) ?? /* @__PURE__ */ new Map();
+    reasons.set(reason, [...reasons.get(reason) ?? [], tree]);
+    missed.set(cell3, reasons);
+  };
+  (authored.root ? own2.unplaced : []).forEach(miss("the root"));
+  for (const { name, unplaced } of restaged.filter(
+    ({ name: name2 }) => authored.presets.has(name2)
+  ))
+    unplaced.forEach(miss(`preset "${name}"`));
+  return {
+    config: {
+      ...config2,
+      root: own2.root,
+      presets: {
+        ...config2.presets,
+        ...Object.fromEntries(
+          restaged.map(({ name, preset, root }) => [
+            name,
+            { ...preset, root: rootNode(root) }
+          ])
+        )
+      }
+    },
+    notices: [...missed].flatMap(
+      ([cell3, reasons]) => [...reasons].map(
+        ([reason, trees]) => insertNotice(cell3, `${reason} (in ${trees.join(", ")})`)
+      )
+    )
+  };
+}
+function insertNotice(cell3, what) {
+  return `${cell3.by.file}: ${cell3.by.entry} places "${cell3.seg}" ${what}`;
+}
+function presetGlobals(config2, name) {
+  return { ...config2.globals, ...presetByName(config2.presets, name).globals };
+}
+
+// src/config/loader/refs.ts
 init_globals();
 
 // src/config/loader/plugin-scope.ts
@@ -59692,10382 +67247,7 @@ function otherScopeHint(name, declared) {
   return other === void 0 ? "" : ` ("${other}" is declared: a repository's own plugins are named under repo., installed ones under plugins., and a name in one is never looked up in the other)`;
 }
 
-// src/config/payload-inputs.ts
-init_globals();
-function effectiveInput(field, effectiveVar) {
-  const row2 = GLOBAL_FIELDS[field];
-  const kind = wireKindOf(field);
-  const floor3 = row2.kind === "session" || row2.kind === "config" ? row2.floor : "";
-  return kind === "string" ? { kind: "input", path: effectiveVar, default: "" } : { kind: "input", path: effectiveVar, type: kind, default: floor3 };
-}
-var EFFECTIVE_INPUTS = Object.fromEntries(
-  [...CONFIG_KEY_TO_EFFECTIVE_VAR].map(([field, effectiveVar]) => [
-    effectiveVar,
-    effectiveInput(field, effectiveVar)
-  ])
-);
-var LANE_FEED_TYPES = {
-  subscribers: "number",
-  fps: "number",
-  shown: "boolean"
-};
-var LANE_FEED_FIELDS = Object.keys(LANE_FEED_TYPES);
-var TERM_COLS_FLOOR = 80;
-var PAYLOAD_INPUTS = {
-  project_dir: {
-    kind: "input",
-    path: "workspace.project_dir",
-    default: ""
-  },
-  "session.id": { kind: "input", path: "session_id", default: "" },
-  // Transcript path (a top-level hookData field, spread onto the payload
-  // root by projectPayload). Read by the quick-action tray's
-  // openTranscript action — pass-through, no projection.
-  transcript_path: {
-    kind: "input",
-    path: "transcript_path",
-    default: ""
-  },
-  // The session's resume command and the config file it renders from
-  // (RenderPayload.resumeCommand / .configPath), read by the quick-action
-  // tray's `⎘ resume` and `↗ config`. Every payload carries a resume command,
-  // so it has no default: a payload without one is a recorded error. A config
-  // path of "" is "none", which hides `↗ config`.
-  resume_command: { kind: "input", path: "resumeCommand" },
-  config_path: { kind: "input", path: "configPath", default: "" },
-  // [LAW:one-source-of-truth] The value every setting and config-only global
-  // renders with, whichever rung produced it — the theme, style and effect as
-  // the view settles them, every other one as the daemon resolved it. A
-  // trigger's label and a picker's current-selection mark read it back, so
-  // the label and the bar trace to one resolution. The daemon always provides
-  // each; the default is the unreachable-absence floor.
-  ...EFFECTIVE_INPUTS,
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
-  // file author the active preset's root, resolved alongside preset.effective
-  // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
-  // customized" segment gates on this directly; a hand-authored config can
-  // read it too for its own reset affordance.
-  "preset.customized": {
-    kind: "input",
-    path: "preset.customized",
-    type: "boolean",
-    default: false
-  },
-  // Does the bundled default declare the active preset (RenderPayload
-  // .preset.bundled) — false for a preset the user authored, which the
-  // settings menu offers to delete.
-  "preset.bundled": {
-    kind: "input",
-    path: "preset.bundled",
-    type: "boolean",
-    default: true
-  },
-  // Each lane's feed of this session's frames (RenderPayload.feeds), one input
-  // per field of LANE_FEED_TYPES.
-  ...Object.fromEntries(
-    LANE_NAMES.flatMap(
-      (lane) => LANE_FEED_FIELDS.map((field) => [
-        laneFeedVar(lane, field),
-        {
-          kind: "input",
-          path: laneFeedVar(lane, field),
-          type: LANE_FEED_TYPES[field],
-          default: UNFOLLOWED[field]
-        }
-      ])
-    )
-  ),
-  // Who this render is drawn for (Drawing): the daemon sets it beside the
-  // payload, and a caller rendering without one draws as a request does.
-  [drawingVar("by")]: {
-    kind: "input",
-    path: drawingVar("by"),
-    default: ANSWERING.by
-  },
-  [drawingVar("fps")]: {
-    kind: "input",
-    path: drawingVar("fps"),
-    type: "number",
-    default: 0
-  },
-  // The settings door's indicator (src/render/diagnostics.ts,
-  // DiagnosticsProjection): its label, "" while there is nothing to show, the
-  // colours of the worst level the draw's diagnostics hold, and the key of
-  // the message its click opens.
-  ...Object.fromEntries(
-    ["label", "fg", "bg", "open"].map((field) => [
-      `diagnostics.${field}`,
-      { kind: "input", path: `diagnostics.${field}`, default: "" }
-    ])
-  ),
-  // [LAW:one-source-of-truth] The usable terminal width for THIS render —
-  // the exact post-reserve cell count FlexStrip wraps to. The bound payload
-  // carries it, the same width a draw's `opts.width` holds: the value a row
-  // fits to (RenderBinding.width) and the strip wraps to, so a template reading
-  // it and the wrap algebra can never disagree. Never cached: a resize is just
-  // a new value on the same path, re-read every render. The default only
-  // applies to compile-only callers that render without a bound width.
-  "term.cols": {
-    kind: "input",
-    path: "term.cols",
-    type: "number",
-    default: TERM_COLS_FLOOR
-  },
-  // The tmux pane this session's Claude Code runs in, as its client reported
-  // it; "" outside tmux (and for a client too old to say). It is the pane a
-  // `slash` click types into, so IN_TMUX below is the gate for one.
-  "tmux.pane": { kind: "input", path: "tmux.pane", default: "" },
-  // Claude Code's auto-compact window as its `/autocompact` last wrote it
-  // (src/segments/autocompact.ts, autoCompactControls): `window` in tokens,
-  // 0 under `auto`, -1 (default) ⇒ not read; `applied` is that window capped
-  // to the model's context window; `lower`/`higher` are the windows − and +
-  // type, 0 where there is none. [LAW:no-silent-failure] `error` is the
-  // settings file the daemon could not read, and the only field set when it
-  // is.
-  "autocompact.window": {
-    kind: "input",
-    path: "autocompact.window",
-    type: "number",
-    default: -1
-  },
-  ...Object.fromEntries(
-    ["applied", "lower", "higher"].map((field) => [
-      `autocompact.${field}`,
-      {
-        kind: "input",
-        path: `autocompact.${field}`,
-        type: "number",
-        default: 0
-      }
-    ])
-  ),
-  "autocompact.error": {
-    kind: "input",
-    path: "autocompact.error",
-    default: ""
-  },
-  // Where the session is, as the daemon read it from the checkout on the
-  // request, so these answer before the git lane does. `noRepo` is a read that found none.
-  "location.main": { kind: "input", path: "location.main", default: "" },
-  "location.worktree": {
-    kind: "input",
-    path: "location.worktree",
-    default: ""
-  },
-  "location.subpath": { kind: "input", path: "location.subpath", default: "" },
-  "location.noRepo": {
-    kind: "input",
-    path: "location.noRepo",
-    type: "boolean",
-    default: false
-  },
-  // The repo's browsable web page, transposed from its remote by the daemon.
-  // "" is the genuine "no remote a browser can open" (local-only repo, bare
-  // path remote) — the quick-action tray's link reads that value, not a flag.
-  "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" }
-};
-var DRAW_PROJECTIONS = {
-  today: "the day the draw is at",
-  feeds: "the frames a lane was sent up to the draw's instant",
-  drawing: "who the draw is for",
-  diagnostics: "the errors and warnings the draw owes its reader"
-};
-function drawProjectionAt(path46) {
-  const root = path46.split(".", 1)[0];
-  return Object.hasOwn(DRAW_PROJECTIONS, root) ? root : void 0;
-}
-var SLOT_PATHS = Object.fromEntries(
-  EXPRESSION_SLOTS.map((slot) => [
-    slot,
-    CONFIG_KEY_TO_EFFECTIVE_VAR.get(slot)
-  ])
-);
-function slotAt(path46) {
-  return EXPRESSION_SLOTS.find((slot) => SLOT_PATHS[slot] === path46);
-}
-
-// src/config/loader/reserved-namespace.ts
-function reservedNamespaceOf(name) {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
-function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
-  for (const section of ["variables", "actions", "segments"]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(ns)) {
-        ctx.issues.push({
-          path: `${section}.${name}`,
-          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
-          line: findKeyLine(ctx.source, ["root"])
-        });
-      }
-    }
-  }
-}
-function pluginScopeCollisions(ctx, out, inherited) {
-  for (const section of [
-    "variables",
-    "actions",
-    "helpers",
-    "segments"
-  ]) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      const scope = scopeOf(name);
-      if (scope === void 0) continue;
-      if (section !== "variables" && name === scope) continue;
-      if (section === "segments" && inherited.has(name)) continue;
-      ctx.issues.push({
-        path: `${section}.${name}`,
-        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
-        line: findKeyLine(ctx.source, [section, name])
-      });
-    }
-  }
-  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
-    for (const v of Object.keys(decl.vars ?? {})) {
-      const name = `${segment}.${v}`;
-      const at = () => ({
-        path: `segments.${segment}.vars.${v}`,
-        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
-      });
-      if (isPayloadInput(name)) {
-        ctx.issues.push({
-          ...at(),
-          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
-        });
-        continue;
-      }
-      const scope = scopeOf(name);
-      if (scope === void 0 || inherited.has(segment)) continue;
-      ctx.issues.push({
-        ...at(),
-        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
-      });
-    }
-  }
-}
-var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
-function payloadDeclarationNotices(filePath2, source, declared) {
-  const lineOf = keyLocator(source);
-  return declared.filter(isPayloadInput).map((name) => {
-    const line = lineOf(["variables", name]);
-    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
-    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
-  });
-}
-function isPayloadInput(name) {
-  return Object.hasOwn(PAYLOAD_INPUTS, name);
-}
-
-// src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
-var EDIT_CONFIGURE_KEY = "edit.configure";
-var EDIT_TOGGLE_ACTION = "edit.toggle";
-var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
-var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
-function configureMember(presetIdent, id2) {
-  return `${presetIdent}:${id2}`;
-}
-var EDIT_MODE_REF = {
-  variable: EDIT_MODE_KEY,
-  key: EDIT_MODE_KEY,
-  member: EDIT_MODE_ARRANGE
-};
-var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
-function referencesEditToggle(template) {
-  try {
-    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
-  } catch {
-    return false;
-  }
-}
-function fileWantsEditMode(out) {
-  if (Object.values(out.actions ?? {}).some(
-    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
-  )) {
-    return true;
-  }
-  for (const seg2 of Object.values(out.segments ?? {})) {
-    const fields2 = [
-      seg2.template,
-      seg2.bg,
-      seg2.fg,
-      ...Object.values(seg2.partials ?? {})
-    ];
-    for (const field of fields2) {
-      if (typeof field === "string" && referencesEditToggle(field)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-function synthesizeEditModeToggle(ctx, out) {
-  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
-  if (!fileWantsEditMode(out)) return;
-  const { variables, actions } = editModeArtifacts();
-  out.variables = { ...out.variables ?? {}, ...variables };
-  out.actions = { ...out.actions ?? {}, ...actions };
-}
-function editModeArtifacts() {
-  return {
-    variables: {
-      // Arranging lives inside the door: closing the menu leaves edit mode
-      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
-      // close the main menu").
-      [EDIT_MODE_KEY]: {
-        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
-        within: [SETTINGS_REF]
-      },
-      // Configuring is a level inside arranging, so leaving edit mode by any
-      // control closes it (src/config/disclosure-nest.ts).
-      [EDIT_CONFIGURE_KEY]: {
-        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
-        within: [EDIT_MODE_REF]
-      }
-    },
-    actions: {
-      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
-        EDIT_MODE_KEY,
-        EDIT_MODE_ARRANGE
-      ),
-      [EDIT_UNCONFIGURE_ACTION]: {
-        set: EDIT_CONFIGURE_KEY,
-        to: DISCLOSURE_CLOSED
-      }
-    }
-  };
-}
-
-// src/config/help.ts
-init_globals();
-var HELP_GLYPH_CLOSED = "(?)";
-function declareHelp(name, lines2, within4, out) {
-  const self2 = {
-    variable: name,
-    key: name,
-    member: DISCLOSURE_OPEN
-  };
-  out.variables[name] = {
-    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
-    ...within4.length > 0 && { within: within4 }
-  };
-  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
-  out.segments[name] = {
-    template: disclosureTrigger(
-      name,
-      HELP_GLYPH_CLOSED,
-      DISCLOSURE_GLYPH_CLOSE
-    ),
-    // The trigger is visible wherever its host surface is. An unnested `(?)`
-    // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within4)
-  };
-  const children2 = lines2.map((line, i2) => {
-    const lineName = `${name}.${i2}`;
-    out.segments[lineName] = { template: line };
-    return { kind: "segment", name: lineName };
-  });
-  return disclosureNode(
-    name,
-    self2,
-    { kind: "container", direction: "horizontal", children: children2 },
-    "drop"
-  );
-}
-function gateOf(within4) {
-  const [first2, ...rest2] = within4;
-  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
-}
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
-}
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
-}
-
-// src/help-text.ts
-init_globals();
-
-// src/config/edit-glyphs.ts
-init_globals();
-var REMOVE_GLYPH = "\u2716";
-var ADD_GLYPH = "\u271A";
-var CONFIGURE_GLYPH = "\u{1F527}";
-
-// src/cli-flags.ts
-init_globals();
-var NODE_FLAGS = {
-  help: ["-h", "--help"],
-  version: ["-V", "--version"]
-};
-
-// src/help-text.ts
-var LANE_PLACES = [
-  ...new Set(
-    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
-  )
-].join(" or ");
-var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
-var EDIT_MODE_HELP = [
-  `${ADD_GLYPH} inserts`,
-  `${REMOVE_GLYPH} removes`,
-  `${CONFIGURE_GLYPH} configures`,
-  "\u21BA resets layout"
-];
-var LANE_HELP = {
-  band: [
-    "animates the bar in the band above the prompt, through a Claude Code mod",
-    "on: installs the candybar-band mod from this checkout and types /reload-plugins"
-  ],
-  statusline: [
-    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
-    "on: exits this Claude Code and starts it again under that launcher, on this session",
-    "or start one yourself: cc-candybar --help prints the line to type"
-  ],
-  pane: [
-    "animates the bar in a tmux pane under this session's",
-    "on: opens that pane \xB7 off: closes it"
-  ],
-  tmuxStatus: [
-    "draws the bar in the tmux status line, while this session's pane is the one it shows",
-    "tmux: the daemon draws it there \xB7 claude: puts the status line back as it was"
-  ]
-};
-var HELP_TEXT = `
-cc-candybar - Beautiful powerline statusline for Claude Code
-
-Usage: cc-candybar [options]
-
-Standalone Commands:
-  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
-  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
-
-Debugging:
-  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
-
-Configuration:
-  Layout and segment options are defined in .cc-candybar.json5 (place in your
-  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. To see the effective merged config:
-    cc-candybar config
-
-  Every bar carries a settings menu, whatever your config says \u2014 no config
-  needed, and writing your own \`root\` cannot delete it. Click
-  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
-  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
-  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
-  your config file. Under it are its
-  tabs, ${TABS.map((t2) => t2.label).join(", ")};
-  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
-  A change applies to this session at once.
-  Where each setting is in the menu: the globals field that sets it in a
-  config file, then the control's label.
-${settingsByPlace().flatMap(({ path: path46, names }) => [
-  `    ${path46}`,
-  ...names.map(
-    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
-  )
-]).join("\n")}
-  The \u{1F9F0} tools tab holds \u{1FA7A} doctor: click it to check your setup, and click a
-  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
-
-  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
-  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
-
-Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
-${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
-${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
-
-Subcommands:
-  install                  One-shot setup: stages the runtime (native render
-                           binary + dist bundle) at a stable path, creates the
-                           URL handler app + cc-candybar:// scheme (macOS), and
-                           writes the staged entry as the statusLine command in
-                           ~/.claude/settings.json. Re-run to update.
-  install-url-handler      Just stage the runtime and create + register the URL
-                           handler app (macOS only).
-  url-handle URL           Internal \u2014 the tmux status line's click binding
-                           runs it. Sends a cc-candybar:// link to the daemon
-                           as a click. A link clicked in a terminal goes
-                           through the URL handler app instead.
-  plugin install SOURCE    Install a repository's plugins into
-                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
-                           local path, a GitHub slug (owner/repo) or a git URL,
-                           and its plugins are the folders under
-                           .cc-candybar/plugins/. A definition the bar would
-                           drop installs nothing. Re-run to update.
-  daemon-stats [--json]    Query the running daemon for runtime stats:
-                           uptime, RSS, cache hit rates, watcher count,
-                           request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH]
-                           One session's bar as the daemon pushes it \u2014 up to
-                           30 frames a second while it moves, at once on a
-                           click \u2014 one JSON message per stdout line. Reads
-                           Claude Code's statusline JSON from stdin (one object
-                           a line) and sends it as the session's data
-                           (--config rides with it). LANE is one of
-                           ${LANE_NAMES.join(", ")}:
-                           the experimental lane this stream serves,
-                           which streams only while its toggle in the settings
-                           menu's ${LANE_PLACES} is on.
-  bar-pane PANE            Draw the bar of the Claude Code session in tmux
-                           pane PANE (e.g. %3) in this pane, as the daemon
-                           pushes it, while this pane is shown. The bar is
-                           drawn at PANE's width, so split PANE with -v for a
-                           pane under it that fits. Experimental:
-                           runs while ${LANES.pane.label} is on in the settings
-                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
-
-Config tooling:
-  doctor [file]            Check your setup the way the bar's \u{1FA7A} doctor does \u2014
-                           one line per check. Exit 0 all ok, 1 any failed,
-                           2 usage error / unreadable settings. Run it from a
-                           Claude Code shell (or inside the same tmux pane) so
-                           it sees Claude Code's own environment. [file] is
-                           the config to check, when the statusline command
-                           names one with --config.
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
-                           every preset) with no daemon. With no path, checks
-                           the same file the daemon would load from here. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
-  schema                   Print the JSON Schema for the config file shape
-                           (.cc-candybar.json5). Point an editor's $schema at it
-                           for autocomplete + structural validation.
-  vars [--json]            Declared variables: source kind, value, last error.
-  segments [--json]        Segment templates and their last rendered output.
-  config [--json]          The effective merged config. (All three query the
-                           running daemon; none spawn one.)
-
-`;
-
-// src/config/settings-menu.ts
-init_globals();
-
-// src/config/quiet-text.ts
-init_globals();
-var QUIET_PCT = 60;
-var QUIET_MIN_CONTRAST = 3;
-var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
-
-// src/doctor/checks.ts
-init_globals();
-
-// src/tmux-hint.ts
-init_globals();
-var TMUX_ENV = {
-  // `socket,server-pid,session-id` — the socket is the part before the first
-  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
-  socket: "TMUX",
-  pane: "TMUX_PANE",
-  // Claude Code's own switch: when this is truthy in ITS environment, it stops
-  // re-encoding the statusline at 256 colours inside tmux (verified against the
-  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
-  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
-};
-var inTmux = (tmux3) => tmux3 !== null && tmux3 !== void 0;
-
-// src/daemon/foundations/memory-limit.ts
-init_globals();
-var BYTES_PER_MB = 1024 * 1024;
-var mb = (bytes) => Math.round(bytes / BYTES_PER_MB);
-function laterIdentity(a, b) {
-  return a > b;
-}
-var NEAR_LIMIT = 0.75;
-function approachingLimit(bytes, limit) {
-  return bytes > limit * NEAR_LIMIT;
-}
-function chargeWords(charge) {
-  return charge.kind === "charged" ? `${charge.measure} ${mb(charge.bytes)} MB` : `rss ${mb(charge.bytes + charge.gap)} MB${charge.gap === 0 ? "" : ` less its last ${mb(charge.gap)} MB gap`} (standing in: ${charge.unread})`;
-}
-function measureOf(charge) {
-  return charge.kind === "charged" ? charge.measure : "rss-stand-in";
-}
-var BREACH_ARTIFACTS = {
-  memoryReport: { prefix: "memory-", suffix: ".txt" },
-  rendererHeapSnapshot: { prefix: "renderer-heap-", suffix: ".heapsnapshot" },
-  heapSnapshot: { prefix: "heap-", suffix: ".heapsnapshot" }
-};
-
-// src/doctor/terminal.ts
-init_globals();
-var TERMINALS = {
-  kitty: {
-    label: "kitty",
-    xtversion: "kitty",
-    program: null,
-    programVersion: true,
-    term: "xterm-kitty",
-    links: { since: "0.19.0" },
-    glyphs: { kind: "bundled", since: "0.36.0" }
-  },
-  wezterm: {
-    label: "WezTerm",
-    xtversion: "WezTerm",
-    program: "WezTerm",
-    programVersion: true,
-    term: "wezterm",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: "20230712" }
-  },
-  ghostty: {
-    label: "Ghostty",
-    xtversion: "ghostty",
-    program: "ghostty",
-    programVersion: true,
-    term: "xterm-ghostty",
-    links: { since: null },
-    glyphs: { kind: "bundled", since: null }
-  },
-  iterm2: {
-    label: "iTerm2",
-    xtversion: "iTerm2",
-    program: "iTerm.app",
-    programVersion: true,
-    term: null,
-    links: { since: "3.1" },
-    glyphs: { kind: "configured" }
-  },
-  alacritty: {
-    label: "Alacritty",
-    xtversion: "alacritty",
-    program: null,
-    programVersion: true,
-    term: "alacritty",
-    links: { since: "0.11.0" },
-    glyphs: { kind: "configured" }
-  },
-  "apple-terminal": {
-    label: "Terminal",
-    xtversion: null,
-    program: "Apple_Terminal",
-    programVersion: true,
-    term: null,
-    links: null,
-    glyphs: { kind: "unread" }
-  },
-  vscode: {
-    label: "VS Code",
-    xtversion: null,
-    program: "vscode",
-    programVersion: false,
-    term: null,
-    links: { since: "1.72" },
-    glyphs: { kind: "unread" }
-  }
-};
-var row = (name) => TERMINALS[name];
-function isBundling(name) {
-  return row(name).glyphs.kind === "bundled";
-}
-function isConfigured(name) {
-  return row(name).glyphs.kind === "configured";
-}
-var terminalLabel = (name) => row(name).label;
-var ITERM_POWERLINE = [
-  { since: "3.5.0", from: 57504, to: 57507 },
-  { since: "3.5.0", from: 57520, to: 57554 },
-  { since: "3.5.0", from: 57556, to: 57556 },
-  { since: "3.5.6", from: 57558, to: 57559 }
-];
-function itermDrawsItself(version, glyph) {
-  const point = glyph.codePointAt(0);
-  return ITERM_POWERLINE.some(
-    ({ since, from, to }) => from <= point && point <= to && version !== null && releasedSince(version, since) === true
-  );
-}
-var NAMES = Object.keys(TERMINALS);
-function release2(version) {
-  const lead = /^\d+(?:\.\d+)*/.exec(version);
-  return lead === null ? null : lead[0].split(".").map(Number);
-}
-function releasedSince(version, since) {
-  const have = release2(version);
-  const need2 = release2(since);
-  if (have === null) return null;
-  for (let i2 = 0; i2 < Math.max(have.length, need2.length); i2++) {
-    const a = have[i2] ?? 0;
-    const b = need2[i2] ?? 0;
-    if (a !== b) return a > b;
-  }
-  return true;
-}
-function fromXtversion(termtype) {
-  for (const name of NAMES) {
-    const prefix = row(name).xtversion;
-    if (prefix !== null && termtype.toLowerCase().startsWith(prefix.toLowerCase())) {
-      const rest2 = termtype.slice(prefix.length).replace(/^[\s(]+/, "");
-      const version = /^[^\s)]+/.exec(rest2)?.[0] ?? null;
-      return { name, version };
-    }
-  }
-  return null;
-}
-function fromTerm(term) {
-  const name = NAMES.find((n) => row(n).term === term);
-  return name === void 0 ? null : { name, version: null };
-}
-function identifyInTmux(client) {
-  const terminal = fromXtversion(client.termtype) ?? fromTerm(client.termname);
-  if (terminal !== null) return { kind: "known", terminal };
-  const called = /^[^\s(]*/.exec(client.termtype)[0];
-  return called === "" ? { kind: "unnamed", term: client.termname } : { kind: "unknown", called };
-}
-function identifyFromEnv(env2) {
-  const program = env2.TERM_PROGRAM;
-  const byProgram = NAMES.find((n) => row(n).program === program);
-  const terminal = byProgram === void 0 ? fromTerm(env2.TERM) : {
-    name: byProgram,
-    version: row(byProgram).programVersion ? env2.TERM_PROGRAM_VERSION ?? null : null
-  };
-  if (terminal !== null) return { kind: "known", terminal };
-  return program === void 0 || program === "tmux" ? { kind: "unnamed", term: env2.TERM ?? "" } : { kind: "unknown", called: program };
-}
-function sightingOf(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || null;
-  }
-}
-function identifiedAs(identified) {
-  switch (identified.kind) {
-    case "known":
-      return terminalLabel(identified.terminal.name);
-    case "unknown":
-      return identified.called;
-    case "unnamed":
-      return identified.term || "this terminal";
-  }
-}
-function linkSupport({ name, version }) {
-  const links2 = row(name).links;
-  if (links2 === null) return { kind: "none" };
-  if (links2.since === null) return { kind: "draws" };
-  if (version === null) return { kind: "unsaid", since: links2.since };
-  const drawn = releasedSince(version, links2.since);
-  return drawn === null ? { kind: "unsaid", since: links2.since } : drawn ? { kind: "draws" } : { kind: "older", since: links2.since, version };
-}
-var LINK_TERMINALS = NAMES.filter((n) => row(n).links !== null).map(terminalLabel).join(", ");
-
-// src/doctor/checks.ts
-var held = (value) => ({ kind: "held", value });
-var notJudged = (what) => `${what} is not judged here: only the running daemon sees it \u2014 the bar's \u{1FA7A} doctor judges it`;
-function statusLineOf(sources) {
-  if (sources.kind === "failed") {
-    return { kind: "unread", reason: sources.reason };
-  }
-  const lines2 = sources.value.flatMap(
-    ({ scope, path: path46, settings }) => "statusLine" in settings ? [{ from: { scope, path: path46 }, line: settings.statusLine }] : []
-  );
-  const top = lines2[0];
-  if (top === void 0) {
-    return { kind: "absent", read: sources.value.map((s) => s.path) };
-  }
-  if (!isJsonObject(top.line)) {
-    return { kind: "not-an-object", value: top.line, from: top.from };
-  }
-  for (const { from, line } of lines2) {
-    if (from.scope !== top.from.scope || !isJsonObject(line)) break;
-    if ("refreshInterval" in line) {
-      return { kind: "present", refreshInterval: line.refreshInterval, from };
-    }
-  }
-  return { kind: "present", refreshInterval: void 0, from: top.from };
-}
-function envVarOf(sources, name) {
-  if (sources.kind === "failed") return sources;
-  const top = sources.value.find((s) => Object.hasOwn(s.env, name));
-  return {
-    kind: "ok",
-    value: top === void 0 ? { kind: "unset" } : {
-      kind: "set",
-      value: top.env[name],
-      from: { scope: top.scope, path: top.path }
-    }
-  };
-}
-var UNWRITTEN_SCOPES = [
-  "managed",
-  "project"
-];
-var doctorWrites = (from) => !UNWRITTEN_SCOPES.includes(from.scope);
-var ENV_FIX_FILE = {
-  managed: () => null,
-  "project-local": (path46) => ({ scope: "project-local", path: path46 }),
-  project: (_, at) => ({
-    scope: "project-local",
-    path: projectLocalSettingsFile(at.projectDir)
-  }),
-  user: (path46) => ({ scope: "user", path: path46 })
-};
-var GLYPH_MARKS = ["drawn", "boxes"];
-var TRANSCRIPT_WINDOW_BYTES = 1024 * 1024;
-var whoseWidth = (of) => of.kind === "session" ? `session ${of.sessionId}'s statusline client` : "this command's terminal";
-var whyNoWidth = (of) => of.kind === "session" ? "no COLUMNS, and no terminal to ask \u2014 or the daemon refused the width sent, which the bar's diagnostics name" : "no COLUMNS, and no terminal to ask";
-function describeFix(fix) {
-  switch (fix.kind) {
-    case "claude-settings":
-      return `${fix.kind} ${fix.path.join(".")}=${JSON.stringify(fix.value)} file=${JSON.stringify(fix.file.path)} scope=${fix.file.scope}`;
-    case "post-mortems-read":
-      return `${fix.kind} through=${fix.through}`;
-  }
-}
-function problemsVerdict(problems) {
-  const [reason, ...more] = problems;
-  return reason === void 0 ? { ok: true } : { ok: false, reason, more };
-}
-var TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
-function ofTmuxClient(tmux3, decide) {
-  switch (tmux3.kind) {
-    case "unreported":
-      return {
-        ok: false,
-        reason: "the client reported no tmux facts \u2014 re-run `cc-candybar install` to stage a current client"
-      };
-    case "outside":
-      return { ok: true };
-    case "inside":
-      if (tmux3.client.kind === "failed") {
-        return {
-          ok: false,
-          reason: `tmux could not be asked: ${tmux3.client.reason}`
-        };
-      }
-      return tmux3.client.value === null ? { ok: true } : decide(tmux3.client.value, tmux3.hint);
-  }
-}
-var tmuxTruecolor = {
-  name: "tmuxTruecolor",
-  label: "tmux truecolor",
-  takesMark: false,
-  probe: ({ tmux: tmux3, claudeSettings: { origin } }) => ofTmuxClient(tmux3, (client, hint) => {
-    if (!client.features.includes("RGB")) return { ok: true };
-    if (hint.truecolor !== null) return { ok: true };
-    const staged = envVarOf(origin.sources, TMUX_TRUECOLOR_VAR);
-    if (staged.kind === "failed") return { ok: false, reason: staged.reason };
-    const told = staged.value;
-    if (told.kind === "set" && typeof told.value === "string" && told.value !== "") {
-      return {
-        ok: false,
-        reason: `${TMUX_TRUECOLOR_VAR} is set in ${told.from.path} \u2014 restart Claude Code to apply`
-      };
-    }
-    const reason = "Claude Code renders the bar in 256 colours inside tmux";
-    const fixInto = (file2) => ({
-      ok: false,
-      reason,
-      fix: {
-        kind: "claude-settings",
-        file: file2,
-        path: ["env", TMUX_TRUECOLOR_VAR],
-        value: "1"
-      }
-    });
-    if (told.kind === "unset") {
-      return fixInto({ scope: "user", path: origin.at.userFile });
-    }
-    const file = ENV_FIX_FILE[told.from.scope](told.from.path, origin.at);
-    return file === null ? {
-      ok: false,
-      reason: `${reason} \u2014 the value that counts is in managed settings, ${told.from.path}: set ${TMUX_TRUECOLOR_VAR} to "1" there`
-    } : fixInto(file);
-  })
-};
-var utf82 = {
-  name: "utf8",
-  label: "UTF-8",
-  takesMark: false,
-  probe: ({ tmux: tmux3 }) => ofTmuxClient(
-    tmux3,
-    (client) => client.utf8 ? { ok: true } : {
-      ok: false,
-      reason: "tmux draws this terminal without UTF-8, so every glyph on the bar arrives as `_` \u2014 attach with `tmux -u`, or set a UTF-8 LC_ALL/LC_CTYPE/LANG in the shell that runs tmux"
-    }
-  )
-};
-var termWidth = {
-  name: "termWidth",
-  label: "terminal width",
-  takesMark: false,
-  probe: ({ width }) => width.kind === "failed" ? { ok: false, reason: width.reason } : width.value.columns !== null ? {
-    ok: true,
-    note: `${width.value.columns} columns, as ${whoseWidth(width.value.of)} measured`
-  } : {
-    ok: false,
-    reason: `${whoseWidth(width.value.of)} measured no width (${whyNoWidth(width.value.of)}), so the bar is laid out as if the terminal were ${DEFAULT_TERMINAL_WIDTH} columns wide`
-  }
-};
-var UNUSED = {
-  variable: "is never read",
-  action: "is never clicked",
-  helper: "is never called",
-  segment: "is in no preset"
-};
-var NAMED_BY = {
-  argument: "command argument",
-  environment: `$${CONFIG_ENV}`,
-  unknown: "source unknown"
-};
-function judgedConfig({ target, layers }) {
-  if (target.source !== "search") {
-    return `${target.path} (${NAMED_BY[target.source]})`;
-  }
-  return layers.length === 0 ? chainName(layers) : `${chainName(layers)} (searched)`;
-}
-function configProblems(config2) {
-  switch (config2.kind) {
-    case "failed": {
-      const problems = [
-        ...config2.error.split("\n").map((line) => line.trim()).filter((line) => line !== ""),
-        ...config2.warnings
-      ];
-      return problems.length === 0 ? ["the config failed to load"] : problems;
-    }
-    case "loaded":
-      return [
-        ...config2.warnings,
-        ...config2.unused.map(
-          ({ kind, name }) => `${kind} "${name}" ${UNUSED[kind]}`
-        )
-      ];
-  }
-}
-var config = {
-  name: "config",
-  label: "config",
-  takesMark: false,
-  probe: ({ config: config2 }) => {
-    const judged = judgedConfig(config2);
-    const verdict = problemsVerdict(configProblems(config2));
-    return verdict.ok ? { ok: true, note: judged } : { ...verdict, reason: `${judged}: ${verdict.reason}` };
-  }
-};
-var REINSTALL = "re-run `cc-candybar install`";
-function handlerAppProblems(opener) {
-  if (opener.kind === "failed") {
-    return [
-      `Launch Services could not be asked which app opens cc-candybar:// \u2014 ${opener.reason}`
-    ];
-  }
-  if (opener.value === null) {
-    return [`no app is registered for cc-candybar:// \u2014 ${REINSTALL}`];
-  }
-  const { app, forwarder } = opener.value;
-  return forwarder ? [] : [
-    `${app} opens cc-candybar://, but it is not the forwarder app \`cc-candybar install\` builds \u2014 ${REINSTALL}`
-  ];
-}
-var UNDELIVERED = {
-  "tmux-status": "this run was asked from the tmux status line, whose clicks tmux runs rather than the URL handler, so whether a clicked link reaches the daemon is not judged \u2014 click \u{1FA7A} doctor in the bar itself to judge it",
-  command: notJudged("whether a clicked link reaches the daemon")
-};
-var urlHandler = {
-  name: "urlHandler",
-  label: "URL handler",
-  takesMark: false,
-  probe: ({ urlHandler: urlHandler2 }) => {
-    switch (urlHandler2.kind) {
-      case "unsupported":
-        return { ok: true };
-      case "registered": {
-        const verdict = problemsVerdict(handlerAppProblems(urlHandler2.opener));
-        return verdict.ok ? {
-          ok: true,
-          note: `the forwarder app opens cc-candybar://; ${UNDELIVERED[urlHandler2.via]}`
-        } : verdict;
-      }
-      case "arrived":
-        if (urlHandler2.delivery.kind === "forwarder") return { ok: true };
-        return {
-          ok: false,
-          // What is known: a click request brought it, which is what the
-          // retired applet runs — and a hand-run `cc-candybar url-handle`,
-          // or the browser page. Which app Launch Services opens the scheme
-          // with is the opener's row to say (handlerAppProblems).
-          reason: `the link was delivered by a click request (\`cc-candybar url-handle\`), not the forwarder app \u2014 ${REINSTALL}`
-        };
-    }
-  }
-};
-function clientStanding({ bundle, checkout }, client) {
-  return {
-    bundle: client.bundle.kind === "failed" ? { kind: "unresolved", reason: client.bundle.reason } : client.bundle.value === bundle ? { kind: "same" } : { kind: "other", path: client.bundle.value },
-    source: client.client !== "native" || checkout === null ? { kind: "uncompared" } : checkout.rustSource.kind === "failed" ? {
-      kind: "unreadable",
-      root: checkout.root,
-      reason: checkout.rustSource.reason
-    } : client.source === null ? { kind: "unstamped" } : client.source === checkout.rustSource.value ? { kind: "same" } : { kind: "other", root: checkout.root }
-  };
-}
-function remedy(daemon3, client) {
-  if (client === "frames")
-    return `run \`node ${daemon3.bundle} frames --lane <${LANE_NAMES.join("|")}>\``;
-  return daemon3.checkout === null ? REINSTALL : `run \`just install-rust\` and point the statusLine command at ${daemon3.checkout.root}/bin/cc-candybar-native`;
-}
-function installProblems(daemon3, nativeShipped, client) {
-  const { checkout } = daemon3;
-  if (client.kind === "unreported") {
-    return [
-      `the bar is drawn by a statusline client too old to say what it is \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  const { bundle, source } = clientStanding(daemon3, client);
-  switch (bundle.kind) {
-    case "unresolved":
-      return [
-        `the statusline client's bundle cannot be resolved: ${bundle.reason}`
-      ];
-    case "other":
-      return [
-        `the statusline client runs ${bundle.path}, not the daemon's ${daemon3.bundle} \u2014 ${remedy(daemon3, client.client)}`
-      ];
-    case "same":
-      break;
-  }
-  if (client.client === "node" && (nativeShipped || checkout !== null)) {
-    return [
-      `the bar is drawn by the Node fallback, which starts node on every render \u2014 ${remedy(daemon3, "native")}`
-    ];
-  }
-  switch (source.kind) {
-    case "uncompared":
-    case "same":
-      return [];
-    case "unreadable":
-      return [`${source.root}/rust-client could not be read: ${source.reason}`];
-    case "unstamped":
-      return [
-        "the native client carries no source stamp, so which source it was built from is unknown \u2014 run `just install-rust`"
-      ];
-    case "other":
-      return [
-        `the native client was built from other source than ${source.root}/rust-client holds \u2014 run \`just install-rust\``
-      ];
-  }
-}
-var NO_RENDER = `this daemon holds no render of this bar (it restarted since the bar was drawn, or has served ${SIGHTINGS_KEPT} newer sessions)`;
-var install = {
-  name: "install",
-  label: "install",
-  takesMark: false,
-  probe: ({ install: held2 }) => {
-    if (held2.kind === "not-held")
-      return { ok: true, note: notJudged("which client draws the bar") };
-    const install2 = held2.value;
-    if (install2.kind === "failed") return { ok: false, reason: install2.reason };
-    const { daemon: daemon3, nativeShipped, clients } = install2.value;
-    if (clients.length === 0) {
-      return {
-        ok: false,
-        reason: `${NO_RENDER}, so which client draws it is unknown \u2014 run the doctor again once the bar has redrawn`
-      };
-    }
-    return problemsVerdict([
-      ...new Set(
-        clients.flatMap((c) => installProblems(daemon3, nativeShipped, c))
-      )
-    ]);
-  }
-};
-function unreadPostMortems(postMortems, read2) {
-  return postMortems.kind === "ok" && read2.kind === "ok" ? postMortems.value.filter(
-    (m) => read2.value.through === null || laterIdentity(m.identity, read2.value.through)
-  ) : [];
-}
-function otherDaemons(serving, processes) {
-  return processes.filter((p2) => p2.pid !== serving.pid);
-}
-var daemonLine = (p2) => `daemon ${p2.pid} (started ${p2.started}, rss ${mb(p2.rss)} MB${p2.ppid === 1 ? "" : `, child of ${p2.ppid}`})`;
-function daemonsProblems({ processes, postMortems, read: read2 }) {
-  const unread2 = unreadPostMortems(postMortems, read2);
-  return {
-    unread: unread2,
-    problems: [
-      ...unread2.map(
-        (m) => `the daemon ran out of memory and restarted (${m.identity}) \u2014 post-mortem: ${Object.values(m.artifacts).join(", ")}`
-      ),
-      ...postMortems.kind === "failed" ? [
-        `the daemon's post-mortems could not be listed: ${postMortems.reason}`
-      ] : [],
-      // Which were read decides nothing only while none are listed.
-      ...read2.kind === "failed" && !(postMortems.kind === "ok" && postMortems.value.length === 0) ? [`which post-mortems were read could not be read: ${read2.reason}`] : [],
-      ...processes.kind === "failed" ? [`the process table could not be read: ${processes.reason}`] : []
-    ]
-  };
-}
-function servingProblems(serving, processes) {
-  const { pid: pid2, memory, limit } = serving;
-  return [
-    ...(processes.kind === "ok" ? otherDaemons(serving, processes.value) : []).map(
-      (p2) => `${daemonLine(p2)} runs beside the one serving the bar (${pid2}) \u2014 \`kill ${p2.pid}\``
-    ),
-    // [LAW:no-silent-failure] RSS standing in for the platform's charge is
-    // the limit judging an estimate — or, with no gap yet read, what macOS
-    // has already reclaimed, the very misjudgment the charge exists to end —
-    // so it is a finding, near the limit or not.
-    ...memory.kind === "measured" && memory.charge.kind === "stand-in" ? [
-      `the daemon could not read what macOS charges it (${memory.charge.unread}), so its memory limit judges ${memory.charge.gap !== 0 ? `RSS less the ${mb(memory.charge.gap)} MB it last ran over that charge, an estimate` : "RSS, which counts pages macOS has reclaimed"}`
-    ] : [],
-    ...memory.kind === "measured" && approachingLimit(memory.charge.bytes, limit) ? [
-      `the daemon holds ${chargeWords(memory.charge)} of its ${mb(limit)} MB limit \u2014 at the limit it records a post-mortem and restarts`
-    ] : []
-  ];
-}
-function unservedProblems(processes) {
-  if (processes.kind === "failed" || processes.value.length < 2) return [];
-  return [
-    `${processes.value.length} daemons run at once, and only one serves the bar \u2014 stop all but one: ${processes.value.map(daemonLine).join("; ")}`
-  ];
-}
-var daemon = {
-  name: "daemon",
-  label: "daemon",
-  takesMark: false,
-  probe: ({ daemon: facts }) => {
-    const { serving, processes } = facts;
-    const { unread: unread2, problems } = daemonsProblems(facts);
-    const verdict = problemsVerdict([
-      ...problems,
-      ...serving.kind === "held" ? servingProblems(serving.value, processes) : unservedProblems(processes)
-    ]);
-    const newest = unread2[0];
-    if (!verdict.ok)
-      return newest === void 0 ? verdict : {
-        ...verdict,
-        fix: { kind: "post-mortems-read", through: newest.identity }
-      };
-    if (serving.kind === "not-held")
-      return { ok: true, note: notJudged("the daemon's memory") };
-    return serving.value.memory.kind === "unmeasured" ? { ok: true, note: "the daemon has not measured its memory yet" } : verdict;
-  }
-};
-var CLICK_TO_SEE = "click \u{1FA7A} doctor in the bar's settings menu: if it runs, links work";
-function drawsLinks(identified, clicked) {
-  const id2 = sightingOf(identified);
-  if (clicked.kind === "ok" && id2 !== null && clicked.value.includes(id2)) {
-    return { kind: "draws" };
-  }
-  return identified.kind === "known" ? linkSupport(identified.terminal) : { kind: "unknown" };
-}
-function linkProblems({ identified, tmuxClient }, clicked) {
-  const called = identifiedAs(identified);
-  const support = drawsLinks(identified, clicked);
-  const prove = sightingOf(identified) === null ? CLICK_TO_SEE : `${CLICK_TO_SEE}, and the doctor remembers it for this terminal`;
-  const terminal = (() => {
-    switch (support.kind) {
-      case "draws":
-        return [];
-      case "none":
-        return [
-          `${called} draws no links (OSC 8), so nothing on the bar can be clicked \u2014 run Claude Code in a terminal that draws them: ${LINK_TERMINALS}`
-        ];
-      case "older":
-        return [
-          `${called} ${support.version} draws no links (OSC 8 came in ${support.since}) \u2014 update ${called}`
-        ];
-      case "unsaid":
-        return [
-          `${called} draws links (OSC 8) since ${support.since}, and did not say which release this is \u2014 ${prove}`
-        ];
-      case "unknown":
-        return [
-          `the doctor does not know whether ${called} draws links (OSC 8) \u2014 ${prove}`
-        ];
-    }
-  })();
-  const remembered = clicked.kind === "failed" && support.kind !== "draws" ? [
-    `the terminals a doctor click came back from could not be read: ${clicked.reason}`
-  ] : [];
-  const tmux3 = support.kind === "none" || tmuxClient === null || tmuxClient.features.includes("hyperlinks") ? [] : [
-    `tmux does not pass links through to ${called} \u2014 add \`set -as terminal-features ",${tmuxClient.termname}:hyperlinks"\` to tmux.conf, then detach and reattach (tmux 3.4 or later)`
-  ];
-  return [...terminal, ...remembered, ...tmux3];
-}
-var links = {
-  name: "links",
-  label: "links",
-  takesMark: false,
-  probe: ({ urlHandler: urlHandler2, terminal, clicked }) => {
-    if (urlHandler2.kind === "arrived") return { ok: true };
-    switch (terminal.kind) {
-      case "unreported":
-        return {
-          ok: false,
-          reason: "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        };
-      case "unasked":
-        return {
-          ok: false,
-          reason: `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        };
-      case "seen":
-        return problemsVerdict(linkProblems(terminal, clicked));
-    }
-  }
-};
-var EFFECT_REFRESH_INTERVAL = 1;
-var refreshedFrames = (frames) => frames.filter((f) => f.role === "statusline");
-var effectRefresh = {
-  name: "effectRefresh",
-  label: "effect refresh",
-  takesMark: false,
-  probe: ({ claudeSettings: { origin, elsewhere } }) => {
-    const verdicts = [origin, ...elsewhere].flatMap(
-      ({ sources, bars }) => chainVerdict(sources, barsSeen(bars)) ?? []
-    );
-    const [first2] = verdicts;
-    if (first2 === void 0) return unknownMotion(NO_RENDER);
-    const [lead, ...others] = verdicts.flatMap((v) => v.ok ? [] : [v]);
-    if (lead === void 0) return first2;
-    const more = [...new Set(others.map((f) => f.reason))].filter(
-      (r) => r !== lead.reason
-    );
-    return more.length === 0 ? lead : { ...lead, more };
-  }
-};
-var barsSeen = (bars) => {
-  const drawn = refreshedFrames(bars).map((f) => f.frame);
-  if (drawn.includes("moves")) {
-    return {
-      kind: "moving",
-      wearing: "the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)"
-    };
-  }
-  if (drawn.includes("can-move")) {
-    return {
-      kind: "moving",
-      wearing: "the bar can start moving (an open menu, which flashes and closes on its own, a globals.effect rule, placements that fade in and out, a placement with an effect of its own that is not drawn now, or a moving bar handed off to another lane, which comes back here when the handoff ends)"
-    };
-  }
-  if (drawn.includes("still")) return { kind: "still" };
-  if (drawn.includes("drawing")) {
-    return {
-      kind: "unknown",
-      unseen: "the bar's latest render has not finished"
-    };
-  }
-  if (drawn.length > 0) {
-    return { kind: "unknown", unseen: "the bar's recent renders failed" };
-  }
-  if (bars.length > 0) {
-    return {
-      kind: "unknown",
-      unseen: "only a `cc-candybar frames` display has drawn this bar, not Claude Code's statusline"
-    };
-  }
-  return { kind: "none" };
-};
-var unknownMotion = (unseen) => ({
-  ok: false,
-  reason: `${unseen}, so whether it moves is unknown \u2014 run the doctor again once the bar has redrawn`
-});
-function chainVerdict(sources, seen2) {
-  const statusLine = statusLineOf(sources);
-  if (statusLine.kind === "present" && statusLine.refreshInterval === EFFECT_REFRESH_INTERVAL) {
-    return {
-      ok: true,
-      note: `statusLine.refreshInterval is ${EFFECT_REFRESH_INTERVAL} in ${statusLine.from.path}`
-    };
-  }
-  switch (seen2.kind) {
-    case "none":
-      return null;
-    case "still":
-      return { ok: true };
-    case "unknown":
-      return unknownMotion(seen2.unseen);
-    case "moving":
-      break;
-  }
-  const { wearing } = seen2;
-  switch (statusLine.kind) {
-    case "unread":
-      return {
-        ok: false,
-        reason: `${wearing}, and Claude Code's settings could not be read: ${statusLine.reason}`
-      };
-    case "absent":
-      return {
-        ok: false,
-        reason: `${wearing}, and no settings file Claude Code reads here sets a statusLine (read: ${statusLine.read.join(", ") || "none"}) \u2014 the one that runs the bar comes from --settings, MDM or server-managed settings, which the doctor cannot read; set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} beside its command there`
-      };
-    case "not-an-object":
-      return {
-        ok: false,
-        // `cc-candybar install` writes the user file only, so only there
-        // does re-running it replace the line.
-        reason: `${wearing}, and ${statusLine.from.path} sets statusLine to ${JSON.stringify(statusLine.value)}, not a statusLine object \u2014 ${statusLine.from.scope === "user" ? "re-run `cc-candybar install` to write one" : "replace it there with the statusLine object that runs cc-candybar"}`
-      };
-    case "present": {
-      const { from, refreshInterval: interval } = statusLine;
-      const why2 = interval === void 0 ? "its statusLine sets no refreshInterval, so Claude Code redraws it only on events" : typeof interval === "number" && interval > EFFECT_REFRESH_INTERVAL ? `its statusLine redraws it only every ${interval} s` : `its statusLine.refreshInterval is ${JSON.stringify(interval)}, not a number of seconds Claude Code accepts (its minimum is ${EFFECT_REFRESH_INTERVAL})`;
-      return doctorWrites(from) ? {
-        ok: false,
-        reason: `${wearing}, but ${why2} (statusLine from ${from.path})`,
-        fix: {
-          kind: "claude-settings",
-          file: from,
-          path: ["statusLine", "refreshInterval"],
-          value: EFFECT_REFRESH_INTERVAL
-        }
-      } : {
-        ok: false,
-        reason: `${wearing}, but ${why2} \u2014 its statusLine is in ${from.scope === "managed" ? "managed settings" : "the project's shared settings"}, ${from.path}: set "refreshInterval": ${EFFECT_REFRESH_INTERVAL} there`
-      };
-    }
-  }
-}
-var codePoints = (glyphs) => [...glyphs].map((g) => `U+${g.codePointAt(0).toString(16).toUpperCase()}`).join(" ");
-function terminalCalled(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return "this terminal";
-    case "unknown":
-    case "unnamed":
-      return identifiedAs(terminal);
-    case "bundling":
-    case "unread":
-    case "configured":
-      return [terminalLabel(terminal.name), terminal.version].filter((part) => part !== null).join(" ");
-  }
-}
-function sightedIn(terminal) {
-  switch (terminal.kind) {
-    case "unreported":
-    case "unasked":
-      return null;
-    case "unknown":
-    case "unnamed":
-      return sightingOf(terminal);
-    case "bundling":
-    case "unread":
-      return terminalLabel(terminal.name);
-    case "configured": {
-      const label2 = terminalLabel(terminal.name);
-      return terminal.font.kind === "ok" ? `${label2} with ${terminal.font.value.font} (${terminal.font.value.from})` : `${label2}, its font unread: ${terminal.font.reason}`;
-    }
-  }
-}
-function glyphSighting(facts) {
-  const where = sightedIn(facts.terminal);
-  return where === null ? void 0 : { glyphs: facts.glyphs, id: `${where}|${codePoints(facts.glyphs)}` };
-}
-var NERD_FONT_CHECK = "nerdFont";
-var nerdFont = {
-  name: NERD_FONT_CHECK,
-  label: "Nerd Font",
-  takesMark: true,
-  probe: ({ nerdFont: facts, marks }) => {
-    if (facts.kind === "none") return { ok: true };
-    const sighting = glyphSighting(facts);
-    const failed3 = (reason) => marks.kind === "failed" && sighting !== void 0 ? {
-      ok: false,
-      reason,
-      more: [`the mark book could not be read: ${marks.reason}`]
-    } : { ok: false, reason, ...sighting !== void 0 && { sighting } };
-    const terminal = facts.terminal;
-    const called = terminalCalled(terminal);
-    const mark = sighting === void 0 || marks.kind === "failed" ? null : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? null;
-    switch (mark) {
-      case "drawn":
-        return { ok: true };
-      case "boxes":
-        return failed3(
-          `${called} draws ${codePoints(facts.glyphs)} as boxes \u2014 set a Nerd Font as its font`
-        );
-      case null:
-        break;
-    }
-    switch (terminal.kind) {
-      case "unreported":
-        return failed3(
-          "the client reported no terminal \u2014 re-run `cc-candybar install` to stage a current client"
-        );
-      case "unasked":
-        return failed3(
-          `tmux could not be asked which terminal is attached: ${terminal.reason}`
-        );
-      case "unknown":
-      case "unnamed":
-      case "unread":
-        return failed3(`the doctor cannot read ${called}'s font`);
-      case "bundling": {
-        const since = TERMINALS[terminal.name].glyphs.since;
-        if (since === null) return { ok: true };
-        const shipped = terminal.version === null ? null : releasedSince(terminal.version, since);
-        if (shipped === true) return { ok: true };
-        const label2 = terminalLabel(terminal.name);
-        return failed3(
-          shipped === null ? `${label2} ships Nerd Font symbols since ${since}, and did not say which release this is` : `${called} ships no Nerd Font symbols (they came in ${since}) \u2014 update ${label2}, or set a Nerd Font as its font`
-        );
-      }
-      case "configured": {
-        if (terminal.font.kind === "failed") {
-          return failed3(
-            `the doctor cannot read ${called}'s font: ${terminal.font.reason}`
-          );
-        }
-        const { font, from, lacks } = terminal.font.value;
-        if (lacks === null) {
-          return failed3(
-            `${called} is set to ${font} (${from}), which is not installed \u2014 install it or set a Nerd Font`
-          );
-        }
-        if (lacks.length === 0) return { ok: true };
-        return failed3(
-          `${called} draws with ${font} (${from}), which has no ${codePoints(lacks)} \u2014 set a Nerd Font as its font`
-        );
-      }
-    }
-  }
-};
-function named(segments) {
-  return segments.join(", ");
-}
-function optOut(segments) {
-  return `or set missingData: "ignore" on ${named(segments)}`;
-}
-function pullRequestProblems(need2) {
-  if (need2.kind === "unneeded") return [];
-  const { segments, fact } = need2;
-  if (fact.kind === "failed") {
-    return [
-      `${named(segments)}: whether the forge CLI is ready could not be asked: ${fact.reason}`
-    ];
-  }
-  if (fact.value === null) return [];
-  const { cli, host, status } = fact.value;
-  if (status === "ready") return [];
-  return status === "missing" ? [
-    `${named(segments)}: ${cli} is not installed, so no pull request is ever shown \u2014 install it, ${optOut(segments)}`
-  ] : [
-    `${named(segments)}: ${cli} is not logged in to ${host} (${status.loggedOut}) \u2014 run \`${cli} auth login --hostname ${host}\`, ${optOut(segments)}`
-  ];
-}
-function rateLimitProblems(seen2, segments) {
-  if (seen2.length === 0) {
-    return [
-      `${named(segments)}: ${NO_RENDER}, so whether Claude Code sends rate_limits is unseen \u2014 run the doctor again once the bar has redrawn`
-    ];
-  }
-  return seen2.includes("missing") && !seen2.includes("carried") ? [
-    `${named(segments)}: Claude Code sent no rate_limits \u2014 it sends them only to Claude.ai subscription sessions; on any other account, set missingData: "ignore" on ${named(segments)}`
-  ] : [];
-}
-var segmentData = {
-  name: "segmentData",
-  label: "segment data",
-  takesMark: false,
-  probe: ({ data: { pullRequests, rateLimits } }) => {
-    const verdict = problemsVerdict([
-      ...pullRequestProblems(pullRequests),
-      ...rateLimits.kind === "needed" && rateLimits.fact.kind === "held" ? rateLimitProblems(rateLimits.fact.value, rateLimits.segments) : []
-    ]);
-    return verdict.ok && rateLimits.kind === "needed" && rateLimits.fact.kind === "not-held" ? {
-      ok: true,
-      note: notJudged(
-        `whether Claude Code sends rate_limits (read by ${named(rateLimits.segments)})`
-      )
-    } : verdict;
-  }
-};
-function transcriptProblems({
-  path: path46,
-  answered,
-  read: read2
-}) {
-  switch (read2.kind) {
-    case "absent":
-      return answered ? [
-        `the transcript ${path46} does not exist, though Claude Code has answered in its session \u2014 the bar's session cost, metrics and activity read nothing`
-      ] : [];
-    case "failed":
-      return [`the transcript ${path46} cannot be read: ${read2.reason}`];
-    case "ok": {
-      const { lines: lines2, unparsed, whole } = read2.value;
-      return unparsed === 0 ? [] : [
-        `${unparsed} of the ${lines2} lines ${whole ? "in" : `in the last ${TRANSCRIPT_WINDOW_BYTES / 1024 / 1024} MiB of`} the transcript ${path46} are not JSON objects \u2014 the bar skips them, so what it counts from them is missing`
-      ];
-    }
-  }
-}
-var sessionData = {
-  name: "sessionData",
-  label: "session data",
-  takesMark: false,
-  probe: ({ transcripts }) => {
-    if (transcripts.kind === "not-held")
-      return { ok: true, note: notJudged("which transcript the bar reads") };
-    if (transcripts.value.length === 0) {
-      return {
-        ok: false,
-        reason: `${NO_RENDER}, so which transcript it reads is unknown \u2014 run the doctor again once the bar has redrawn`
-      };
-    }
-    return problemsVerdict(transcripts.value.flatMap(transcriptProblems));
-  }
-};
-var CHECKS = [
-  config,
-  install,
-  daemon,
-  urlHandler,
-  links,
-  tmuxTruecolor,
-  utf82,
-  termWidth,
-  effectRefresh,
-  nerdFont,
-  segmentData,
-  sessionData
-];
-var MARKED_CHECKS = CHECKS.filter(
-  (c) => c.takesMark
-);
-function runDoctor(facts) {
-  return CHECKS.map((check) => ({ check, verdict: check.probe(facts) }));
-}
-function checkByName(name) {
-  return CHECKS.find((c) => c.name === name);
-}
-
-// src/doctor/report.ts
-init_globals();
-var DOCTOR_NS = `${SETTINGS_NS}doctor.`;
-var VERDICT_OK = "ok";
-var VERDICT_FAILED = "failed";
-var VERDICT_UNRUN = "";
-function doctorReportKeys(checkName) {
-  const base = `${DOCTOR_NS}${checkName}.`;
-  return {
-    verdict: `${base}verdict`,
-    reason: `${base}reason`,
-    fixable: `${base}fixable`,
-    sighting: `${base}sighting`
-  };
-}
-function configFields({ target }) {
-  return [["configTarget", target.source]];
-}
-function linkFields(terminal, clicked) {
-  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
-  const from = clicked.kind === "failed" ? "unread" : sighting === null ? "-" : clicked.value.includes(sighting) ? "yes" : "no";
-  return [
-    [
-      "tmuxLinks",
-      client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"
-    ],
-    ["clicked", from]
-  ];
-}
-function terminalFeatureFields(terminal, width) {
-  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  return [
-    ...width.kind === "failed" ? [
-      ["cols", "failed"],
-      ["widthOf", "-"]
-    ] : [
-      ["cols", String(width.value.columns ?? "-")],
-      ["widthOf", width.value.of.kind]
-    ],
-    ["clientUtf8", client === null ? "-" : client.utf8 ? "yes" : "no"]
-  ];
-}
-function installFields(install2) {
-  if (install2.kind === "not-held") return [["clients", "unheld"]];
-  if (install2.value.kind === "failed") return [["clients", "failed"]];
-  const { daemon: daemon3, clients } = install2.value.value;
-  const described = clients.map((c) => {
-    if (c.kind === "unreported") return "unreported/-/-";
-    const { bundle, source } = clientStanding(daemon3, c);
-    return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
-  });
-  return [["clients", described.join(",") || "-"]];
-}
-var signedMb = (bytes) => `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
-function daemonFields({
-  serving,
-  processes,
-  postMortems,
-  read: read2
-}) {
-  const others = serving.kind === "not-held" ? "unheld" : processes.kind === "failed" ? "-" : otherDaemons(serving.value, processes.value).map((p2) => p2.pid).join(",") || "-";
-  const running = [
-    [
-      "daemons",
-      processes.kind === "failed" ? "unread" : String(processes.value.length)
-    ],
-    ["others", others]
-  ];
-  const told = [
-    "postMortems",
-    postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(postMortems, read2).length}/${postMortems.value.length}`
-  ];
-  if (serving.kind === "not-held")
-    return [...running, ["memory", "unheld"], told];
-  const { memory, limit } = serving.value;
-  const held2 = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
-  const shares2 = memory.kind === "unmeasured" ? "-" : memory.processes.map(
-    (p2) => `${p2.role}:${p2.pid}:${p2.sizes === null ? "-" : mb(p2.sizes.rss)}`
-  ).join(",");
-  return [
-    ...running,
-    ["memory", `${held2}/${mb(limit)}`],
-    ["processes", shares2],
-    told
-  ];
-}
-function dataFields(data) {
-  const pr = () => {
-    if (data.pullRequests.kind === "unneeded") return "-";
-    const fact = data.pullRequests.fact;
-    if (fact.kind === "failed") return "failed";
-    if (fact.value === null) return "no-forge";
-    const { status } = fact.value;
-    return typeof status === "string" ? status : "logged-out";
-  };
-  const rateLimits = () => {
-    if (data.rateLimits.kind === "unneeded") return "-";
-    const fact = data.rateLimits.fact;
-    if (fact.kind === "not-held") return "unheld";
-    const count = (seen2) => fact.value.filter((v) => v === seen2).length;
-    return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
-  };
-  return [["data", `pr:${pr()},rateLimits:${rateLimits()}`]];
-}
-function frameFields({
-  origin,
-  elsewhere
-}) {
-  const chains = [origin, ...elsewhere];
-  const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
-  const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
-  const count = (seen2) => drawn.filter((f) => f.frame === seen2).length;
-  return [
-    ["frames", FRAMES_SEEN.map(count).join("/")],
-    ["chains", lines2]
-  ];
-}
-function statusLineValue(sources) {
-  const line = statusLineOf(sources);
-  switch (line.kind) {
-    case "unread":
-      return "failed";
-    case "absent":
-    case "not-an-object":
-      return line.kind;
-    case "present":
-      return `${line.from.scope}:${line.refreshInterval === void 0 ? "-" : JSON.stringify(line.refreshInterval)}`;
-  }
-}
-function truecolorEnvFields(sources) {
-  const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
-  return [
-    [
-      "truecolorEnv",
-      told.kind === "failed" ? "failed" : told.value.kind === "unset" ? "unset" : `${told.value.from.scope}:${JSON.stringify(told.value.value)}`
-    ]
-  ];
-}
-function transcriptFields(transcripts) {
-  if (transcripts.kind === "not-held") return [["transcripts", "unheld"]];
-  const count = (kind) => transcripts.value.filter((t2) => t2.read.kind === kind).length;
-  const unparsed = transcripts.value.reduce(
-    (n, t2) => n + (t2.read.kind === "ok" ? t2.read.value.unparsed : 0),
-    0
-  );
-  return [
-    ["transcripts", `${count("ok")}/${count("absent")}/${count("failed")}`],
-    ["unparsed", String(unparsed)]
-  ];
-}
-function nerdFontFields(facts, marks) {
-  if (facts.kind === "none")
-    return [
-      ["glyphs", "-"],
-      ["terminal", "-"],
-      ["font", "-"],
-      ["mark", "-"]
-    ];
-  const { glyphs, terminal } = facts;
-  const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
-  const found2 = (() => {
-    switch (terminal.kind) {
-      case "unreported":
-      case "unasked":
-        return terminal.kind;
-      case "unknown":
-        return `unknown:${terminal.called}`;
-      case "unnamed":
-        return `unnamed:${terminal.term}`;
-      case "bundling":
-      case "unread":
-      case "configured":
-        return `${terminal.name}@${terminal.version ?? "-"}`;
-    }
-  })();
-  const font = (() => {
-    if (terminal.kind !== "configured") return "-";
-    if (terminal.font.kind === "failed") return "failed";
-    const { font: name, lacks } = terminal.font.value;
-    return `${name}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
-  })();
-  const sighting = glyphSighting(facts);
-  const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
-  return [
-    ["glyphs", codes.join(",")],
-    ["terminal", found2],
-    ["font", font],
-    ["mark", mark]
-  ];
-}
-var doctorFields = (facts) => [
-  ...configFields(facts.config),
-  ...nerdFontFields(facts.nerdFont, facts.marks),
-  ...linkFields(facts.terminal, facts.clicked),
-  ...terminalFeatureFields(facts.terminal, facts.width),
-  ...installFields(facts.install),
-  ...daemonFields(facts.daemon),
-  ...dataFields(facts.data),
-  ...transcriptFields(facts.transcripts),
-  ...frameFields(facts.claudeSettings),
-  ...truecolorEnvFields(facts.claudeSettings.origin.sources)
-];
-var notedReports = (reports) => reports.map(({ check, verdict }) => ({
-  name: check.name,
-  label: check.label,
-  verdict: verdict.ok ? {
-    ok: true,
-    ...verdict.note === void 0 ? {} : { note: verdict.note }
-  } : {
-    ok: false,
-    reason: verdict.reason,
-    more: verdict.more ?? [],
-    fixable: verdict.fix !== void 0,
-    ...verdict.sighting === void 0 ? {} : { look: verdict.sighting.glyphs }
-  }
-}));
-function rowReason(reason, more = []) {
-  return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
-}
-function doctorReportPairs(reports) {
-  return reports.flatMap(({ check, verdict }) => {
-    const keys2 = doctorReportKeys(check.name);
-    return verdict.ok ? [
-      { key: keys2.verdict, value: VERDICT_OK },
-      { key: keys2.reason, value: verdict.note ?? "" },
-      { key: keys2.fixable, value: BOOLEAN_FALSE },
-      { key: keys2.sighting, value: "" }
-    ] : [
-      { key: keys2.verdict, value: VERDICT_FAILED },
-      { key: keys2.reason, value: rowReason(verdict.reason, verdict.more) },
-      {
-        key: keys2.fixable,
-        value: verdict.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
-      },
-      { key: keys2.sighting, value: verdict.sighting?.glyphs ?? "" }
-    ];
-  });
-}
-
-// src/config/quick-actions.ts
-init_globals();
-var QUICK_ACTIONS = {
-  copySession: { copy: "{{ .session.id }}" },
-  copyResume: { copy: "{{ .resume_command }}" },
-  openProject: { open: "{{ .project_dir }}" },
-  openTranscript: { open: "{{ .transcript_path }}" },
-  openConfig: { open: "{{ .config_path }}" }
-};
-function quickActions(prefix) {
-  const name = (action2) => `${prefix}${action2}`;
-  return {
-    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
-    // their values: a local-only repo has no page and a bar on the bundled
-    // default no file, and the glyph is absent. Every payload carries a
-    // resume command, so `⎘ resume` is not gated.
-    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
-    actions: Object.fromEntries(
-      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
-        `${prefix}${action2}`,
-        decl
-      ])
-    )
-  };
-}
-
-// src/config/command-tray.ts
-init_globals();
-
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf3 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
-  const actions = {};
-  for (let held2 = 0; held2 < 2 ** gates.length; held2++)
-    actions[nameOf3(held2)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held2 & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i2, held2) => i2 === gates.length ? `"${nameOf3(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
-// src/claude-input/slash-line.ts
-init_globals();
-var SLASH_LINE_PATTERN = "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$";
-var SLASH_LINE = new RegExp(SLASH_LINE_PATTERN);
-function parseSlashLine(raw) {
-  return typeof raw === "string" && SLASH_LINE.test(raw) ? { kind: "line", line: raw } : {
-    kind: "refused",
-    reason: `a slash command is "/" then its name, e.g. "/compact" or "/model opus", on one line with no control characters, got ${JSON.stringify(raw)}`
-  };
-}
-function slashLine(raw) {
-  const parsed2 = parseSlashLine(raw);
-  if (parsed2.kind === "refused") throw new Error(parsed2.reason);
-  return parsed2.line;
-}
-
-// src/config/command-tray.ts
-var COMMANDS = ["/compact", "/model"];
-var CLEAR = "/clear";
-function commandTray(prefix) {
-  const commandAction = (line) => `${prefix}${line.slice(1)}`;
-  const typeClear = `${prefix}clear.slash`;
-  const clear = confirmStep(
-    `${prefix}clear`,
-    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
-    [{ action: typeClear, when: "true" }]
-  );
-  return {
-    template: COMMANDS.map(
-      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
-    ).join("") + clear.template,
-    when: `{{ ${IN_TMUX} }}`,
-    actions: {
-      ...Object.fromEntries(
-        COMMANDS.map((line) => [
-          commandAction(line),
-          { slash: slashLine(line) }
-        ])
-      ),
-      ...clear.actions,
-      [typeClear]: { slash: slashLine(CLEAR) }
-    },
-    variables: clear.variables,
-    disarm: clear.disarm
-  };
-}
-
-// src/config/autocompact-control.ts
-init_globals();
-
-// src/segments/autocompact.ts
-init_globals();
-var AUTOCOMPACT_WINDOWS = Array.from(
-  { length: 10 },
-  (_, i2) => (i2 + 1) * 1e5
-);
-var LEAST = AUTOCOMPACT_WINDOWS[0];
-var MOST = AUTOCOMPACT_WINDOWS[AUTOCOMPACT_WINDOWS.length - 1];
-function autoCompactControls(window2, contextWindow) {
-  const cap = Math.min(contextWindow ?? MOST, MOST);
-  const from = window2 === "auto" ? cap : Math.min(window2, cap);
-  return {
-    window: window2 === "auto" ? 0 : window2,
-    applied: window2 === "auto" ? 0 : from,
-    lower: AUTOCOMPACT_WINDOWS.filter((w) => w < from).at(-1) ?? 0,
-    higher: AUTOCOMPACT_WINDOWS.find((w) => w > from && w <= cap) ?? 0
-  };
-}
-
-// src/config/autocompact-control.ts
-function autocompactControl(prefix, formatCount) {
-  return {
-    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
-    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
-    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
-    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
-    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
-    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
-    // picks one by name.
-    actions: {
-      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
-      ...Object.fromEntries(
-        AUTOCOMPACT_WINDOWS.map((w) => [
-          `${prefix}${w}`,
-          { slash: slashLine(`/autocompact ${w}`) }
-        ])
-      )
-    }
-  };
-}
-
-// src/config/format-token-count.ts
-init_globals();
-var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
-
-// src/config/layer-role.ts
-init_globals();
-var LAYER_ROLES = ["user", "project", "local"];
-function layerFlags(roles) {
-  return Object.fromEntries(
-    LAYER_ROLES.map((role) => [role, roles.includes(role)])
-  );
-}
-function layerRoleOf(raw) {
-  return LAYER_ROLES.includes(raw) ? raw : null;
-}
-
-// src/config/settings-menu.ts
-var EDIT_SEG = `${SETTINGS_NS}edit`;
-var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
-var TOOLBAR = quickActions(SETTINGS_NS);
-var COMMANDS_SEG = `${SETTINGS_NS}commands`;
-var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
-var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
-var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
-var seg = (name) => ({ kind: "segment", name });
-var TAB_KEY = `${SETTINGS_NS}tab`;
-var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
-var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
-var tabRef = (tab) => ({
-  variable: TAB_KEY,
-  key: TAB_KEY,
-  member: tab
-});
-var SAVE_SEG = `${SETTINGS_NS}save`;
-var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
-var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
-var PRESET_DELETE_GLYPH = "\u{1F6AE}";
-var controlSeg = (name) => `${SETTINGS_NS}${name}`;
-var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
-var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
-var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
-var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
-var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
-var THEME_DEFAULT_CELL = {
-  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
-  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
-};
-var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
-var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
-var UNDO_ACTION = `${SETTINGS_NS}undo`;
-var BACK_ACTION = `${SETTINGS_NS}back`;
-var BACK_STEP = `${BACK_ACTION}.step`;
-var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
-var BACK_SEG = BACK_ACTION;
-var BACK_GLYPH = "\u25C1";
-var BACK_CELL = {
-  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
-};
-var REDO_ACTION = `${SETTINGS_NS}redo`;
-var DOCTOR_SEG = `${SETTINGS_NS}doctor`;
-var DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
-var doctorFixAction = (check) => `${DOCTOR_SEG}.fix.${check}`;
-var doctorMarkAction = (check, mark) => `${DOCTOR_SEG}.mark.${check}.${mark}`;
-var doctorRowSeg = (check) => `${DOCTOR_SEG}.${check}`;
-var MARK_GLYPH = {
-  drawn: "[\u2713 shapes]",
-  boxes: "[\u2717 boxes]"
-};
-var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
-var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
-var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
-var submenuRef = (name) => {
-  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
-  return { variable: key, key, member: name };
-};
-var PREVIEWS = {
-  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
-  // segment, named, each block in the tint the bar's variation and shade deal
-  // it — so it shows what a preset, a variation or a shade changes.
-  layout: { template: "{{ layoutPreview }}" },
-  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
-  // samples exactly the palette the bar is drawn in. (The theme picker carries
-  // its own demo of the theme it has selected.)
-  palette: { template: "{{ themePreview }}" },
-  // While the preset ring is on a preset the user made
-  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
-  // 📐 layout tab makes one.
-  presetDelete: {
-    when: "{{ not .preset.bundled }}",
-    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
-  }
-};
-var controlRow = (name, row2) => `${SETTINGS_NS}list.${name}.${row2}`;
-var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
-var DRIFT_MARK = " \u2022";
-var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
-var laneSettings = LANE_NAMES.map(
-  (lane) => [LANES[lane].switch.setting, lane]
-);
-var HELP_ARTIFACTS = {
-  variables: {},
-  actions: {},
-  segments: {}
-};
-var HELP = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => {
-    const name = `${SETTINGS_NS}help.${setting}`;
-    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
-  })
-);
-var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-var laneReadout = (lane) => {
-  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
-  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
-    " "
-  );
-  return (
-    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
-    // the renderer's: the setting's value against the one that turns the lane
-    // on, each spelled as a template literal of its own type.
-    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
-  );
-};
-var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
-var FPS_SEG = `${SETTINGS_NS}fps`;
-var POLLED = "polled";
-var AT_MOST = "\u2264";
-var FPS_UNIT = " fps";
-var RATE_WIDTH = Math.max(
-  POLLED.length,
-  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
-);
-var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
-var TRAIL = Object.fromEntries(
-  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
-);
-var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
-var menuControl = (name) => {
-  const row2 = SETTINGS[name];
-  const place = PLACE[name];
-  return {
-    ...row2,
-    name,
-    place,
-    control: settingControl(
-      {
-        label: row2.label,
-        domain: settingControlDomain(row2.configKey)
-      },
-      row2.sessionKey,
-      row2.effectiveVar,
-      controlApply(name),
-      accordionOf(place)
-    ),
-    beneath: row2.previews.map((preview) => PREVIEWS[preview]),
-    help: [HELP[name]].filter((h) => h !== void 0),
-    submenus: submenusBeside(name)
-  };
-};
-var CONTROLS = Object.keys(SETTINGS).map(menuControl);
-var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
-var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
-var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
-  controlsUnder(place)
-)}))`;
-var controlsAt = (place) => controlsIn(place).flatMap(
-  (c) => [
-    controlNode(c),
-    ...c.help,
-    ...c.submenus.map(
-      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
-    )
-  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
-);
-var SETTINGS_WRITTEN_KEYS = new Set(
-  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
-);
-var RESET_ALL = confirmStep(
-  RESET_ALL_SEG,
-  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
-  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
-);
-var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
-var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
-var UNSAVED_VAR = saveCountVar("unsaved");
-var counted = (count, body) => ({
-  body,
-  shown: `(gt .${saveCountVar(count)} 0)`
-});
-var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
-var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
-var SAVE_TO = LAYER_ROLES.map(
-  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
-).join("");
-var SAVE_BODY = `{{ if or .${layerVar("project")} .${layerVar("local")} }}{{ ${SAVE_LABEL} }}:${SAVE_TO}{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
-var SAVE_PARTS = [
-  counted("unsaved", SAVE_BODY),
-  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
-  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
-  {
-    body: RESET_ALL.template,
-    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
-  }
-];
-var SAVE_CELL = {
-  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
-  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
-    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
-  ).join("")
-};
-var CONFIRMS = [
-  { step: RESET_ALL, place: "door" },
-  { step: COMMANDS2, place: "session" }
-];
-var disarms = (out) => out.map((c) => c.step.disarm);
-var DOOR_DISARMS = disarms(CONFIRMS);
-var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
-function controlNode(c) {
-  const self2 = controlSeg(c.name);
-  if (c.control.kind === "inline") return seg(self2);
-  return disclosureNode(
-    self2,
-    c.control.list.ref,
-    {
-      kind: "container",
-      direction: "vertical",
-      children: [...c.control.list.rows, ...c.beneath].map(
-        (_, row2) => seg(controlRow(c.name, row2))
-      )
-    },
-    "drop"
-  );
-}
-function isSettingsAnchor(segmentName) {
-  return segmentName === SETTINGS_ANCHOR;
-}
-function prependAnchor(node) {
-  const anchorRef = seg(SETTINGS_ANCHOR);
-  if (node.kind === "container" && node.direction === "vertical") {
-    const [first2, ...rest2] = node.children;
-    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
-      kind: "container",
-      direction: "vertical",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [anchorRef, node]
-    };
-  }
-  if (node.when === void 0) {
-    return { ...node, children: [anchorRef, ...node.children] };
-  }
-  const { when: when2, children: children2, ...row2 } = node;
-  return {
-    ...row2,
-    children: [
-      anchorRef,
-      { kind: "container", direction: row2.direction, when: when2, children: children2 }
-    ]
-  };
-}
-function withAnchor(node) {
-  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
-  return placed2;
-}
-function countAnchors(node) {
-  let n = 0;
-  for (const each of walkNodes(node)) {
-    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
-  }
-  return n;
-}
-function anchorUnderGate(node, gated2 = false) {
-  const here = gated2 || node.when !== void 0;
-  if (node.kind === "segment") {
-    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
-  }
-  return node.children.some((child) => anchorUnderGate(child, here));
-}
-var PLACE_BODY = {
-  // `◁ back`, the controls one click from the door — theme, preset — then
-  // arranging the bar, then the save cell whenever it has something to do.
-  door: {
-    direction: "horizontal",
-    content: [seg(BACK_SEG)],
-    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
-  },
-  // The quick actions, then the commands typed into Claude Code beside the
-  // auto-compact window they would summarize at.
-  session: {
-    direction: "vertical",
-    content: [
-      seg(TOOLBAR_SEG),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
-      }
-    ],
-    after: []
-  },
-  look: { direction: "horizontal", content: [], after: [] },
-  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
-  config: { direction: "horizontal", content: [], after: [] },
-  tools: {
-    direction: "vertical",
-    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
-    after: []
-  },
-  // The settings that adapt the theme, then — while the look they make
-  // differs from the theme's own default — the cell that saves it as that
-  // default.
-  gear: {
-    direction: "horizontal",
-    content: [],
-    after: [seg(THEME_DEFAULT_SEG)]
-  },
-  toggles: { direction: "horizontal", content: [], after: [] }
-};
-function placeBody(place) {
-  const { direction, content, after } = PLACE_BODY[place];
-  return {
-    kind: "container",
-    direction,
-    children: [...content, ...controlsAt(place), ...after]
-  };
-}
-function expandAnchor(node) {
-  if (node.kind === "segment") {
-    return isSettingsAnchor(node.name) ? {
-      kind: "container",
-      direction: "horizontal",
-      children: [
-        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
-        seg(FPS_SEG)
-      ]
-    } : node;
-  }
-  return expandContainer(node);
-}
-function doorBody() {
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      placeBody("door"),
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: TABS.map(
-          ({ member }) => disclosureNode(
-            tabSeg(member),
-            tabRef(member),
-            placeBody(member),
-            "drop"
-          )
-        )
-      }
-    ]
-  };
-}
-var DOOR_BODY = doorBody();
-function expandContainer(node) {
-  return {
-    ...node,
-    children: node.children.map((child) => expandAnchor(child))
-  };
-}
-function settingsArtifacts(doorGlyph) {
-  const artifacts = {
-    variables: {
-      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
-      [DIAGNOSTICS_VIEWING]: {
-        kind: "state",
-        key: DIAGNOSTICS_VIEWING,
-        default: "0"
-      }
-    },
-    actions: {
-      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
-      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
-      [DOCTOR_RUN_ACTION]: { doctor: "run" },
-      ...TOOLBAR.actions,
-      ...COMMANDS2.actions,
-      ...AUTOCOMPACT.actions,
-      [SAVE_SEG]: { save: true, layer: "ask" },
-      [UNDO_ACTION]: { undo: true },
-      // [LAW:composability] Going back can reopen a view a confirm sits in, so
-      // it disarms every confirm as the door does: a confirm is only ever
-      // clicked in the view its own arming click was made in.
-      [BACK_STEP]: { back: true },
-      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
-      [REDO_ACTION]: { redo: true },
-      [PRESET_SAVE]: { preset: "save" },
-      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
-      [PRESET_DELETE]: {
-        preset: "delete",
-        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
-      }
-    },
-    segments: {
-      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
-      // below, which are a word plus the ▸/▾ that gates it. The door has no
-      // label to gate: it is a glyph, so a second glyph beside it would be the
-      // only thing on the bar that spells its state twice. The door's glyph
-      // names what it opens, `✖` names what the click does.
-      //
-      // Two displays through the same `[closed, member]` cycle every other
-      // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
-      // gives it (`roleTextOn`): the theme's text-red where that reads on the
-      // pressed state, otherwise the role's own red or the nearest rung of its
-      // ladder out toward the pole the pressed state stands farther from that
-      // does, and where none does, the named red standing farthest off. It
-      // never slides lightness: a slid red stops reading as red, and the ✖
-      // must be red on every theme. `keptOn` only stops the terminal's
-      // rounding from costing it the contrast it has. Closed, the author's
-      // glyph keeps the cell's own text.
-      [SETTINGS_ANCHOR]: {
-        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
-      },
-      [FPS_SEG]: { template: FRAME_RATE },
-      [TOOLBAR_SEG]: { template: TOOLBAR.template },
-      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
-      [AUTOCOMPACT_SEG]: {
-        template: AUTOCOMPACT.template,
-        bg: AUTOCOMPACT.bg,
-        when: AUTOCOMPACT.when
-      },
-      [BACK_SEG]: BACK_CELL,
-      [SAVE_SEG]: SAVE_CELL,
-      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
-      [PRESET_SAVE]: {
-        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
-      },
-      [DOCTOR_SEG]: {
-        template: `{{ action "${DOCTOR_RUN_ACTION}" "\u{1FA7A} doctor" }}`
-      },
-      [EDIT_SEG]: {
-        // Entering or leaving edit mode is a click like every other in the
-        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
-        // reach while the bar is arranged.
-        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
-      }
-    }
-  };
-  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
-    kind: "input",
-    path: "themeDefault.differs",
-    type: "boolean",
-    default: false
-  };
-  artifacts.variables[THEME_DEFAULT_THEME] = {
-    kind: "input",
-    path: "themeDefault.theme",
-    type: "string",
-    default: ""
-  };
-  artifacts.variables[BACK_COUNT] = {
-    kind: "input",
-    path: "navigation.back",
-    type: "number",
-    default: 0
-  };
-  for (const role of LAYER_ROLES) {
-    artifacts.variables[layerVar(role)] = {
-      kind: "input",
-      path: `layers.${role}`,
-      type: "boolean",
-      default: false
-    };
-  }
-  for (const count of SAVE_COUNTS) {
-    artifacts.variables[saveCountVar(count)] = {
-      kind: "input",
-      path: count,
-      type: "number",
-      default: 0
-    };
-  }
-  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
-  for (const { member, label: label2 } of TABS) {
-    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
-      TAB_KEY,
-      member
-    );
-    artifacts.actions[tabSeg(member)] = {
-      do: [tabToggle(member), ...TAB_DISARMS]
-    };
-    const display = markedDisplay(member);
-    artifacts.segments[tabSeg(member)] = {
-      template: `{{ ${disclosureTriggerCall(
-        tabSeg(member),
-        display(label2),
-        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
-      )} }}`
-    };
-  }
-  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
-  declareSettingControls(artifacts);
-  declareDoctorRows(artifacts);
-  return artifacts;
-}
-function declareDoctorRows(artifacts) {
-  for (const c of CHECKS) {
-    const keys2 = doctorReportKeys(c.name);
-    const fix = doctorFixAction(c.name);
-    for (const key of Object.values(keys2)) {
-      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
-    }
-    artifacts.actions[fix] = { doctor: "fix", check: c.name };
-    const marks = c.takesMark ? GLYPH_MARKS : [];
-    for (const mark of marks) {
-      artifacts.actions[doctorMarkAction(c.name, mark)] = {
-        doctor: "mark",
-        check: c.name,
-        mark
-      };
-    }
-    const markCells = marks.map(
-      (mark) => ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`
-    ).join("");
-    artifacts.segments[doctorRowSeg(c.name)] = {
-      when: `{{ ne .${keys2.verdict} "${VERDICT_UNRUN}" }}`,
-      template: `{{ if eq .${keys2.verdict} "${VERDICT_OK}" }}\u2713 ${c.label}{{ if ne .${keys2.reason} "" }} \u2014 {{ .${keys2.reason} }}{{ end }}{{ else }}\u2717 ${c.label} \u2014 {{ .${keys2.reason} }}{{ if eq .${keys2.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` + (markCells === "" ? "" : `{{ if ne .${keys2.sighting} "" }} {{ .${keys2.sighting} }}${markCells}{{ end }}`) + `{{ end }}`
-    };
-  }
-}
-function declareSettingControls(artifacts) {
-  for (const c of CONTROLS) {
-    Object.assign(artifacts.actions, c.control.actions);
-    const reset = controlReset(c.name);
-    artifacts.actions[reset] = { reset: c.configKey };
-    artifacts.variables[controlResettable(c.name)] = {
-      kind: "input",
-      path: `resettable.${c.name}`,
-      type: "boolean",
-      default: false
-    };
-    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
-    Object.assign(artifacts.variables, c.control.variables);
-    artifacts.segments[controlSeg(c.name)] = {
-      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
-    };
-    if (c.control.kind === "picker") {
-      [
-        ...c.control.list.rows.map((template) => ({ template })),
-        ...c.beneath
-      ].forEach((row2, i2) => {
-        artifacts.segments[controlRow(c.name, i2)] = row2;
-      });
-    }
-  }
-  Object.assign(artifacts.actions, RESET_ALL.actions);
-  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
-  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
-  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
-  for (const name of SUBMENU_NAMES) {
-    const ref = submenuRef(name);
-    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
-      ref.key,
-      ref.member
-    );
-    artifacts.segments[submenuSeg(name)] = {
-      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
-    };
-  }
-}
-function ensureEditToggle(artifacts) {
-  const { variables, actions } = editModeArtifacts();
-  Object.assign(artifacts.variables, variables);
-  Object.assign(artifacts.actions, actions);
-}
-function synthesizeSettingsMenu(config2) {
-  const artifacts = settingsArtifacts(config2.globals.menuGlyph ?? DOOR_GLYPH);
-  ensureEditToggle(artifacts);
-  const presets = { ...config2.presets };
-  for (const name of presetNames(config2.presets)) {
-    const { node } = presetRoot(config2, name);
-    const root = expandAnchor(withAnchor(node));
-    presets[name] = { ...presetByName(config2.presets, name), root };
-  }
-  return {
-    ...config2,
-    variables: { ...config2.variables, ...artifacts.variables },
-    actions: { ...config2.actions, ...artifacts.actions },
-    segments: { ...config2.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/edit-chrome.ts
-var EDIT_LIVE_KEY = `${EDIT_NS}live`;
-var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
-var EDIT_DONE_SEG = `${EDIT_NS}done`;
-var EDIT_SAVE_ACTION = `${EDIT_NS}save`;
-var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-var EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
-var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
-var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
-var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
-var EDIT_LIVE_REF = {
-  variable: EDIT_LIVE_KEY,
-  key: EDIT_LIVE_KEY,
-  member: DISCLOSURE_OPEN
-};
-function configuringVar(presetIdent) {
-  return `${EDIT_NS}configuring.p${presetIdent}`;
-}
-function namesView(presetIdent) {
-  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
-}
-function configuringDecl(members) {
-  const terms = members.map(
-    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
-  );
-  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
-}
-function inNamesView(presetIdent, verdict, when2) {
-  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
-}
-var PRESET_CUSTOMIZED_VAR = "preset.customized";
-var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
-var isChromeExempt = isReservedName;
-function configOptionDomains(config2) {
-  return new Map([
-    ...perConfigDomainsFor(config2),
-    ...addableSegmentDomains(config2)
-  ]);
-}
-var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
-function addableSegmentDomains(config2) {
-  return /* @__PURE__ */ new Map([
-    [
-      ADDABLE_DOMAIN,
-      {
-        members: Object.keys(config2.segments).filter((n) => !isChromeExempt(n)),
-        library: {
-          groups: LIBRARY_GROUPS.map((id2) => ({
-            id: id2,
-            label: GROUP_LABELS[id2]
-          })),
-          entry: (option) => {
-            const decl = config2.segments[option];
-            return {
-              group: decl.group ?? OTHER_GROUP,
-              ...decl.description !== void 0 && {
-                description: decl.description
-              }
-            };
-          }
-        }
-      }
-    ]
-  ]);
-}
-function chromeCell(name, template, artifacts) {
-  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
-  return { kind: "segment", name };
-}
-function removeTerm(ctx, posIdent, id2) {
-  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
-  ctx.artifacts.actions[actionName] = {
-    persist: ctx.rootKey,
-    removeSegment: id2
-  };
-  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
-}
-function inArrangeMode(term) {
-  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
-}
-function shownWhile(refs, when2) {
-  return refs.reduce(
-    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
-    when2
-  );
-}
-function configureRefsIn(nodes) {
-  return nodes.flatMap(
-    (node) => [...walkNodes(node)].flatMap(
-      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
-    )
-  );
-}
-function placementDraftKey(presetIdent, id2, setting) {
-  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
-}
-function configureParts(ctx, posIdent, node, decls) {
-  const id2 = placementId(node);
-  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
-  const member = configureMember(ctx.presetIdent, id2);
-  ctx.configured.push(member);
-  const enter = `${prefix}.configure.${posIdent}`;
-  const listKey = sharedMenuStateKey(enter);
-  const fold = `${enter}.fold`;
-  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
-  ctx.artifacts.actions[enter] = {
-    do: [`${enter}.open`, fold]
-  };
-  ctx.artifacts.actions[`${enter}.open`] = {
-    set: EDIT_CONFIGURE_KEY,
-    to: member
-  };
-  const drafts = {};
-  const controls = Object.entries(decls).map(([name, decl]) => {
-    const key = placementDraftKey(ctx.presetIdent, id2, name);
-    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
-    ctx.artifacts.variables[variable] = {
-      kind: "state",
-      key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
-    };
-    drafts[name] = { id: id2, key, variable };
-    const segName = `${prefix}.setting.${posIdent}.${name}`;
-    const control2 = settingControl(
-      controlDeclOf(decl),
-      key,
-      variable,
-      segName,
-      listKey
-    );
-    Object.assign(ctx.artifacts.actions, control2.actions);
-    Object.assign(ctx.artifacts.variables, control2.variables);
-    if (control2.kind === "inline") {
-      ctx.artifacts.segments[segName] = { template: control2.template };
-      return { kind: "segment", name: segName };
-    }
-    ctx.artifacts.segments[segName] = { template: control2.template };
-    const rows = control2.list.rows.map((template, row2) => {
-      const listSeg = `${segName}.list.${row2}`;
-      ctx.artifacts.segments[listSeg] = { template };
-      return { kind: "segment", name: listSeg };
-    });
-    return disclosureNode(
-      segName,
-      control2.list.ref,
-      { kind: "container", direction: "vertical", children: rows },
-      "drop"
-    );
-  });
-  return {
-    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
-    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
-    // One control per row, its list dropping below it when opened.
-    body: { kind: "container", direction: "vertical", children: controls },
-    drafts
-  };
-}
-var LABEL_NS = `${EDIT_NS}label:`;
-function arrangedSegment(name) {
-  if (name.startsWith(LABEL_NS)) {
-    const label2 = name.slice(LABEL_NS.length);
-    return label2.slice(label2.indexOf(":") + 1);
-  }
-  return name.startsWith(EDIT_NS) ? void 0 : name;
-}
-function labelChrome(child, decl, ctx, configure) {
-  const id2 = placementId(child);
-  const name = labelSegment(ctx, id2, child, decl, id2);
-  const settings = Object.fromEntries(
-    IMPLIED_SETTINGS.flatMap((setting) => {
-      const value = child.settings?.[setting];
-      return value === void 0 ? [] : [[setting, value]];
-    })
-  );
-  return {
-    ...disclosureNode(
-      name,
-      configure.ref,
-      configure.body,
-      "drop",
-      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
-    ),
-    ...Object.keys(settings).length > 0 && { settings },
-    drafts: Object.fromEntries(
-      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
-    )
-  };
-}
-function labelSegment(ctx, key, child, decl, text4) {
-  const name = `${LABEL_NS}${key}:${child.name}`;
-  ctx.artifacts.segments[name] = {
-    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
-    ...decl.palette !== void 0 && { palette: decl.palette }
-  };
-  return name;
-}
-function editableUnit(child, spliced, first2, ctx) {
-  const id2 = placementId(child);
-  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
-  const afterPos = String(ctx.posCounter.n++);
-  const after = insertTerm(ctx, afterPos, id2, "after");
-  const remove = removeTerm(ctx, afterPos, id2);
-  const decl = ctx.segments[child.name];
-  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
-  const lead = inArrangeMode(remove);
-  const trail = inArrangeMode(configure.term);
-  return [
-    ...leading.map(
-      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
-    ),
-    // Labelled by the placement's id: two placements of one segment are
-    // told apart by it, and a bare placement's id is its segment's name.
-    { ...labelChrome(child, decl, ctx, configure), lead, trail },
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
-      lead,
-      trail,
-      drafts: configure.drafts
-    },
-    chromeCell(after.host, after.template, ctx.artifacts)
-  ];
-}
-function fileLabel(file) {
-  return import_node_path18.default.join(import_node_path18.default.basename(import_node_path18.default.dirname(file)), import_node_path18.default.basename(file));
-}
-function insertedUnit(child, insertedBy, spliced, ctx) {
-  const decl = ctx.segments[child.name];
-  const id2 = placementId(child);
-  const label2 = {
-    kind: "segment",
-    // Keyed by the preset too: another preset may hold the same id as an
-    // editable placement, whose label reads only the id. An id holds no
-    // `/` and a preset ident no `:`, so the two names never meet.
-    name: labelSegment(
-      ctx,
-      `${id2}/${ctx.presetIdent}`,
-      child,
-      decl,
-      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
-    ),
-    when: `{{ ${namesView(ctx.presetIdent)} }}`
-  };
-  return [
-    label2,
-    {
-      ...spliced,
-      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
-    }
-  ];
-}
-function insertTerm(ctx, posIdent, anchor, relation) {
-  const { presetIdent, artifacts } = ctx;
-  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
-  artifacts.actions[applyName] = {
-    persist: ctx.rootKey,
-    insertSegmentFrom: ADDABLE_DOMAIN,
-    anchor,
-    relation
-  };
-  const member = menuMember(applyName);
-  const stateKey = menuStateKey(chromeSegName, applyName, void 0);
-  const pageKey = menuPageKey(stateKey);
-  const identity2 = menuActionName(stateKey, member);
-  artifacts.variables[stateKey] = {
-    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
-    within: [EDIT_MODE_REF]
-  };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
-  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
-  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
-  return {
-    host: chromeSegName,
-    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
-  };
-}
-function spliceContainer(node, ctx) {
-  const children2 = [];
-  const firstContent = node.children.findIndex(
-    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
-  );
-  const splice2 = (body) => spliceContainer(body, ctx);
-  for (const [i2, child] of node.children.entries()) {
-    if (child.kind === "container") {
-      children2.push(splice2(child));
-      continue;
-    }
-    const spliced = mapOpens(child, splice2);
-    if (isChromeExempt(child.name)) {
-      children2.push(spliced);
-      continue;
-    }
-    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
-    const unit = {
-      kind: "container",
-      direction: "horizontal",
-      children: cells,
-      unit: true
-    };
-    children2.push(
-      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
-    );
-  }
-  return {
-    ...node,
-    children: children2,
-    ...node.when !== void 0 && {
-      when: shownWhile(
-        configureRefsIn(children2),
-        inNamesView(ctx.presetIdent, "true", node.when)
-      )
-    }
-  };
-}
-function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
-  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
-  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  artifacts.actions[actionName] = { reset: rootKey };
-  artifacts.segments[chromeSegName] = {
-    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
-    when: CUSTOMIZED_BANNER_GATE
-  };
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      // The ways out lead the top row, top left, where they are found without
-      // reopening the menu edit mode was entered from: keep or discard what
-      // was changed, restore the bundled layout, and the view toggle.
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [...lead, { kind: "segment", name: chromeSegName }, live]
-      },
-      // The `(?)`'s body drops BELOW the row the trigger rides while the
-      // disclosure is open, like every other disclosure body in this codebase.
-      withTrailingCell(splicedRoot, tail)
-    ]
-  };
-}
-function withTrailingCell(node, cell3) {
-  if (node.kind === "segment") {
-    return {
-      kind: "container",
-      direction: "horizontal",
-      children: [node, cell3]
-    };
-  }
-  const last2 = node.children.at(-1);
-  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
-    return {
-      ...node,
-      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
-    };
-  }
-  return { ...node, children: [...node.children, cell3] };
-}
-function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
-  const { node } = presetRoot(config2, presetName);
-  const ctx = {
-    presetIdent: ident(presetName),
-    rootKey: presetRootKey(presetName),
-    segments: config2.segments,
-    artifacts,
-    posCounter: { n: 0 },
-    configured: []
-  };
-  const spliced = spliceContainer(node, ctx);
-  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
-    ctx.configured
-  );
-  return wrapWithPresetRows(
-    spliced,
-    ctx.presetIdent,
-    ctx.rootKey,
-    artifacts,
-    lead,
-    live,
-    tail
-  );
-}
-function synthesizeEditChrome(config2) {
-  const artifacts = {
-    variables: {},
-    actions: {},
-    segments: {}
-  };
-  const help = declareHelp(
-    `${EDIT_NS}help`,
-    EDIT_MODE_HELP,
-    [EDIT_MODE_REF],
-    artifacts
-  );
-  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
-    EDIT_LIVE_KEY,
-    DISCLOSURE_CLOSED
-  );
-  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
-    EDIT_LIVE_KEY,
-    EDIT_LIVE_REF.member
-  );
-  artifacts.segments[EDIT_LIVE_KEY] = {
-    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
-    when: EDIT_MODE_GATE
-  };
-  const live = { kind: "segment", name: EDIT_LIVE_KEY };
-  const tail = help;
-  artifacts.variables[EDIT_CHANGES_VAR] = {
-    kind: "input",
-    path: "history.sinceEdit",
-    type: "number",
-    default: 0
-  };
-  artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
-  artifacts.actions[EDIT_DONE_SEG] = {
-    do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION]
-  };
-  artifacts.segments[EDIT_DONE_SEG] = {
-    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
-    when: EDIT_MODE_GATE
-  };
-  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
-  artifacts.actions[EDIT_CANCEL_SEG] = {
-    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION]
-  };
-  artifacts.segments[EDIT_CANCEL_SEG] = {
-    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
-  };
-  const lead = [
-    { kind: "segment", name: EDIT_DONE_SEG },
-    { kind: "segment", name: EDIT_CANCEL_SEG }
-  ];
-  const presets = { ...config2.presets };
-  for (const name of presetNames(config2.presets)) {
-    const root = spliceEditChromeForPreset(
-      config2,
-      name,
-      artifacts,
-      lead,
-      live,
-      tail
-    );
-    presets[name] = { ...presetByName(config2.presets, name), root };
-  }
-  return {
-    ...config2,
-    variables: { ...config2.variables, ...artifacts.variables },
-    actions: { ...config2.actions, ...artifacts.actions },
-    segments: { ...config2.segments, ...artifacts.segments },
-    presets
-  };
-}
-
-// src/config/layout-ops.ts
-init_globals();
-function encodeLayoutOp(op) {
-  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
-}
-function decodeLayoutOp(token) {
-  const parts = token.split(":");
-  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
-    return { op: "remove", target: parts[1] };
-  }
-  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
-    return {
-      op: "insert",
-      segment: parts[1],
-      anchor: parts[2],
-      relation: parts[3]
-    };
-  }
-  return null;
-}
-function mintPlacement(segment, anchor, trees) {
-  const taken = new Set(
-    trees.map(placementIds).filter((held2) => held2.includes(anchor)).flat()
-  );
-  const id2 = freePlacementId(segment, taken);
-  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
-}
-
-// src/daemon/foundations/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min3, max3, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min3 = Math.min(...ranges.map((r) => r.min));
-    const max3 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min3 || n > max3;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min3, max: max3 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config2) {
-      const held2 = gates.get(config2);
-      if (held2?.epoch === epoch) return held2.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
-      gates.set(config2, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/foundations/config-validators.ts
-function makeConfigKeyspace() {
-  return createKeyspace({}, "config", deriveConfigActionValidators);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function clearableContributions(config2) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config2.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions(config2) {
-  const perConfigDomains = configOptionDomains(config2);
-  return [
-    ...clearableContributions(config2),
-    ...Object.values(config2.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config2) {
-  return mergeContributions(actionContributions(config2), "config");
-}
-
-// src/daemon/foundations/state-validators.ts
-init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme
-};
-function makeStateKeyspace() {
-  return createKeyspace(BASELINE, "state", deriveActionValidators);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
-function actionContributions2(config2) {
-  const perConfigDomains = configOptionDomains(config2);
-  return dropBaselineAllowLists(
-    Object.values(config2.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config2) {
-  return mergeContributions(actionContributions2(config2));
-}
-
-// src/daemon/foundations/gates.ts
-function createGates(held2) {
-  const state = makeStateKeyspace();
-  const config2 = makeConfigKeyspace();
-  for (const { key, allowed } of held2.state) state.register(key, allowed);
-  for (const { key, allowed } of held2.config) config2.register(key, allowed);
-  return { state, config: config2 };
-}
-
-// src/daemon/foundations/update-keys.ts
-var UPDATE_DISMISSED_KEY = "update.dismissed";
-var UPDATE_NOTICE_FIELD = "updateNotice";
-var UPDATE_NOTICE_SESSION_KEY = SETTINGS.updateNotice.sessionKey;
-var DAEMON_HELD_KEYS = {
-  config: [{ key: UPDATE_NOTICE_FIELD, allowed: ["false"] }],
-  state: [
-    { key: UPDATE_NOTICE_SESSION_KEY, allowed: ["false"] },
-    { key: UPDATE_DISMISSED_KEY, allowed: [] }
-  ]
-};
-
-// src/daemon/foundations/update-offer.ts
-function updateIdentity(update) {
-  return update.kind === "source" ? update.newer.digest : formatVersion(update.newer);
-}
-var describeStamp = (s) => `${s.version} [${shortDigest(s.digest)}]`;
-function wordsOf(update) {
-  switch (update.kind) {
-    case "source":
-      return {
-        headline: "Newer source",
-        newer: describeStamp(update.newer),
-        running: describeStamp(update.running),
-        act: "rebuild",
-        busy: "rebuilding\u2026"
-      };
-    case "release":
-      return {
-        headline: "Newer release",
-        newer: formatVersion(update.newer),
-        running: formatVersion(update.running),
-        act: "upgrade",
-        busy: "upgrading\u2026"
-      };
-  }
-}
-var NO_NOTICE = { offer: [], failure: [] };
-function updateNotice(update, act2, ctx) {
-  if (update === null) return NO_NOTICE;
-  const identity2 = updateIdentity(update);
-  if (!ctx.enabled || ctx.dismissed === identity2) return NO_NOTICE;
-  const words2 = wordsOf(update);
-  const sentence = `${words2.headline}: ${words2.newer}. You're on ${words2.running}.`;
-  const failedText = (text4) => ({
-    about: `update-failed\0${identity2}`,
-    text: text4,
-    copy: text4
-  });
-  const failure = act2.kind === "failed" && act2.identity === identity2 ? [failedText(`${words2.act} failed: ${act2.reason}`)] : [];
-  const actSpan = act2.kind === "running" ? diagnosticSpan(`[${words2.busy}]`, null) : diagnosticSpan(
-    `[${words2.act}]`,
-    effectsUrl([{ verb: VERB_APPLY_UPDATE, args: [ctx.sessionId] }])
-  );
-  const first2 = [
-    diagnosticSpan(sentence, null),
-    actSpan,
-    diagnosticSpan(
-      "[dismiss]",
-      effectsUrl([
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_DISMISSED_KEY, identity2]
-        }
-      ])
-    ),
-    diagnosticSpan(
-      "[disable]",
-      effectsUrl([
-        {
-          verb: VERB_SET_CONFIG,
-          // The user's own file: the notice is the user's to turn off.
-          args: [ctx.sessionId, "user", UPDATE_NOTICE_FIELD, "false"]
-        },
-        {
-          verb: VERB_SET_STATE,
-          args: [ctx.sessionId, UPDATE_NOTICE_SESSION_KEY, "false"]
-        }
-      ])
-    )
-  ];
-  return {
-    offer: [
-      {
-        severity: UPDATE_SEVERITY,
-        about: `update\0${identity2}`,
-        message: sentence,
-        copy: sentence,
-        lines: [first2]
-      }
-    ],
-    failure
-  };
-}
-
-// src/daemon/update-notice.ts
-function commandOf(update) {
-  switch (update.kind) {
-    case "source":
-      return { bin: "pnpm", args: ["build"], cwd: update.root };
-    case "release":
-      return {
-        bin: "pnpm",
-        args: [
-          "dlx",
-          `${PACKAGE_NAME}@${formatVersion(update.newer)}`,
-          "install"
-        ]
-      };
-  }
-}
-function updateReading(build2, release4) {
-  if (build2.kind === "pending") return build2;
-  const b = build2.value;
-  switch (b.kind) {
-    case "stale":
-      return ok({
-        kind: "source",
-        root: b.root,
-        newer: b.source,
-        running: b.running
-      });
-    case "current":
-      return ABSENT;
-    case "unchecked":
-      return failed(`build: unchecked: ${b.reason}`, "read");
-    case "not-source-checkout":
-      return releaseReading(release4);
-  }
-}
-function releaseReading(release4) {
-  if (release4.kind === "pending") return release4;
-  const c = release4.value;
-  switch (c.kind) {
-    case "stale":
-      return ok({ kind: "release", newer: c.latest, running: c.installed });
-    case "current":
-    case "ahead":
-      return ABSENT;
-    case "unchecked":
-      return failed(`release: unchecked: ${c.reason}`, "read");
-  }
-}
-var ACT_TIMEOUT_MS = 10 * 60 * 1e3;
-var ACT_POLL_MS = 2e3;
-function describeBuild(b) {
-  switch (b.kind) {
-    case "current":
-      return ["info", `build: current ${describeStamp(b.stamp)}`];
-    case "stale":
-      return [
-        "info",
-        `build: stale \u2014 source ${describeStamp(b.source)}, running ${describeStamp(b.running)}`
-      ];
-    case "not-source-checkout":
-      return ["info", "build: not a source checkout"];
-    case "unchecked":
-      return ["warn", `build: unchecked: ${b.reason}`];
-  }
-}
-function describeRelease(c) {
-  switch (c.kind) {
-    case "current":
-      return ["info", `release: current ${formatVersion(c.installed)}`];
-    case "stale":
-      return [
-        "info",
-        `release: stale \u2014 latest ${formatVersion(c.latest)}, running ${formatVersion(c.installed)}`
-      ];
-    case "ahead":
-      return [
-        "info",
-        `release: ahead \u2014 running ${formatVersion(c.installed)}, latest ${formatVersion(c.latest)}`
-      ];
-    case "unchecked":
-      return ["warn", `release: unchecked: ${c.reason}`];
-  }
-}
-function makeUpdateWatch(opts) {
-  const {
-    fact,
-    clock,
-    launcher,
-    probe: probe2,
-    entryUrl,
-    digest: digest2,
-    actsDir: actsDir2,
-    intervalMs,
-    releaseIntervalMs,
-    registryUrl,
-    fetchImpl,
-    onApplied,
-    log
-  } = opts;
-  let build2 = pendingOf("unread");
-  let release4 = pendingOf("unread");
-  const readStart = async (pid2) => {
-    const read2 = await probe2.startTime(pid2);
-    if (closed) throw new DaemonClosing("apply-update");
-    return read2;
-  };
-  const acts = makeActReader(actsDir2, readStart, launcher, clock);
-  let seen2 = null;
-  let unreadable = null;
-  const actsRead = observable.box(
-    { act: IDLE, actsError: null },
-    { deep: false, equals: compareStructural }
-  );
-  const publishActs = () => runInAction(
-    () => actsRead.set({ act: seen2 ?? IDLE, actsError: unreadable })
-  );
-  const logBuild = changeLogger(log);
-  const logRelease = changeLogger(log);
-  const actQueue = new KeyedSerialQueue();
-  const actTurn = (body) => actQueue.run("acts", body);
-  let closed = false;
-  const armed = [];
-  const every = (run3, ms) => {
-    armed.push(clock.every(ms, run3, { unref: true }));
-  };
-  const current2 = () => {
-    const held2 = fact.get();
-    return held2.kind === "ok" ? held2.value : null;
-  };
-  function publish() {
-    const reading = closed ? ABSENT : updateReading(build2, release4);
-    const next = restamp(fact.get(), reading, instantAt(clock));
-    runInAction(() => fact.set(next));
-  }
-  function sampleBuild() {
-    const sampled = assessBuild(entryUrl, () => bundleStamp(digest2));
-    build2 = ok(sampled);
-    logBuild(describeBuild(sampled));
-    publish();
-    return sampled;
-  }
-  async function pollRelease() {
-    const latest = await fetchLatestVersion(
-      PACKAGE_NAME,
-      fetchImpl,
-      registryUrl,
-      clock
-    );
-    const assessed = assessCurrency(PACKAGE_VERSION, latest);
-    release4 = ok(assessed);
-    logRelease(describeRelease(assessed));
-    publish();
-  }
-  const logUnreadable = changeLogger(log);
-  async function touchActs(touch) {
-    try {
-      const value = await touch();
-      unreadable = null;
-      publishActs();
-      return { ok: true, value };
-    } catch (err) {
-      if (err instanceof DaemonClosing) {
-        return { ok: false, error: err.message };
-      }
-      unreadable = `update act files (${actsDir2}): ${err.message}`;
-      publishActs();
-      logUnreadable(["error", unreadable]);
-      return { ok: false, error: unreadable };
-    }
-  }
-  function endIfOverdue(facts) {
-    if (!facts?.alive || clock.now() <= facts.record.deadline) return;
-    const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
-    const why2 = stands ? "timed out" : "outlived its verdict";
-    const ending = signalled ? "ending it" : "its group took no signal";
-    log("error", `apply-update: act ${facts.act} ${why2}; ${ending}`);
-  }
-  async function watchAct() {
-    const read2 = await touchActs(async () => {
-      const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
-      return facts;
-    });
-    if (closed || !read2.ok) return;
-    const next = judgeAct(read2.value);
-    const was = seen2;
-    seen2 = next;
-    if (was === null && next.kind === "running") {
-      log("info", `apply-update: act ${next.act} is running; watching it`);
-    }
-    const ended = was?.kind === "running" && next.kind !== "running";
-    const succeeded = ended && next.kind === "succeeded";
-    if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
-    if (ended && next.kind === "failed") {
-      log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
-    }
-    runInAction(() => {
-      if (succeeded) sampleBuild();
-      publishActs();
-    });
-    if (succeeded) onApplied();
-  }
-  let clearTick;
-  async function tick() {
-    await actTurn(watchAct);
-    if (closed) return;
-    clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
-  }
-  return {
-    arm() {
-      const sampled = sampleBuild();
-      every(sampleBuild, intervalMs);
-      armed.push(() => clearTick?.());
-      void tick();
-      if (sampled.kind === "not-source-checkout") {
-        void pollRelease();
-        every(() => void pollRelease(), releaseIntervalMs);
-      }
-    },
-    close() {
-      closed = true;
-      publish();
-      armed.forEach((release5) => release5());
-    },
-    acts: () => actsRead.get(),
-    running: () => actTurn(async () => {
-      const read2 = await touchActs(() => acts.read());
-      return read2.ok && judgeAct(read2.value).kind === "running";
-    }),
-    act: () => actTurn(async () => {
-      if (closed) throw new DaemonClosing("apply-update");
-      const read2 = await touchActs(() => acts.read());
-      if (closed) throw new DaemonClosing("apply-update");
-      if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const update = current2();
-      if (update === null) {
-        throw new BadVerbArgs(
-          "apply-update: nothing newer is known to apply"
-        );
-      }
-      const words2 = wordsOf(update);
-      const command = commandOf(update);
-      const newest = read2.value;
-      if (judgeAct(newest).kind === "running") {
-        throw new BadVerbArgs(`apply-update: already ${words2.busy}`);
-      }
-      const claim = await claimAct(
-        launcher,
-        actsDir2,
-        newest === null ? null : newest.act,
-        updateIdentity(update),
-        { ...command, category: "update.apply" },
-        ACT_TIMEOUT_MS,
-        clock.now(),
-        readStart
-      );
-      if (!claim.ok) {
-        throw new BadVerbArgs(`apply-update: ${claim.reason}`);
-      }
-      log(
-        "info",
-        `apply-update: act ${claim.act}: ${words2.act} \u2014 ${command.bin} ${command.args?.join(" ") ?? ""}`
-      );
-      seen2 = { kind: "running", act: claim.act };
-      publishActs();
-    })
-  };
-}
-
-// src/daemon/update-fact.ts
-init_globals();
-function newUpdateFact() {
-  return observable.box(pendingOf("unread"), { deep: false });
-}
-
-// src/daemon/binary-watch.ts
-init_globals();
-function mtimeOf(path46, stat3) {
-  try {
-    return ok(stat3(path46).mtimeMs);
-  } catch (e) {
-    const code2 = e.code;
-    return code2 === "ENOENT" || code2 === "ENOTDIR" ? ABSENT : failed(e.message, "read");
-  }
-}
-function sameStamp(a, b) {
-  return a.kind === "ok" && b.kind === "ok" ? a.value === b.value : a.kind === b.kind;
-}
-function makeBinaryWatch(opts) {
-  const { targets, intervalMs, stat: stat3, held: held2, exit: exit2, log, clock } = opts;
-  const logHeld = changeLogger(log);
-  const boot = targets.map((path46) => ({ path: path46, stamp: mtimeOf(path46, stat3) }));
-  const watched = boot.filter(({ stamp: stamp2 }) => stamp2.kind !== "failed");
-  let stopSampling = null;
-  let ended = false;
-  const end = () => {
-    ended = true;
-    stopSampling?.();
-  };
-  const sample = async () => {
-    if (ended) return;
-    for (const { path: path46, stamp: stamp2 } of watched) {
-      const now2 = mtimeOf(path46, stat3);
-      if (now2.kind === "failed") {
-        log("warn", `binary stat failed (${path46}): ${now2.reason}`);
-        continue;
-      }
-      if (!sameStamp(stamp2, now2)) {
-        const what = `binary ${now2.kind === "absent" ? "gone" : "changed"} (${path46})`;
-        const waiting = await held2();
-        if (ended) return;
-        if (waiting) {
-          logHeld([
-            "info",
-            `${what}; the restart waits for the running update`
-          ]);
-          return;
-        }
-        log("info", `${what}; shutting down`);
-        end();
-        exit2();
-        return;
-      }
-    }
-  };
-  const check = () => sample().catch((e) => {
-    log("error", `binary check failed: ${e.message}`);
-  });
-  return {
-    arm() {
-      for (const { path: path46, stamp: stamp2 } of boot) {
-        if (stamp2.kind === "failed") {
-          log(
-            "warn",
-            `binary stat failed at boot (${path46}): ${stamp2.reason}; not watched`
-          );
-        }
-      }
-      stopSampling = clock.every(intervalMs, () => void check(), {
-        unref: true
-      });
-    },
-    checkNow: check,
-    close: end
-  };
-}
-
-// src/install/index.ts
-init_globals();
-
-// src/attach-launcher.ts
-init_globals();
-var import_node_path19 = __toESM(require_path_browserify(), 1);
-
-// src/claude-command-line.ts
-init_globals();
-
-// src/shell-word.ts
-init_globals();
-var SHELL_SAFE = /^[A-Za-z0-9_./,:@%+-][A-Za-z0-9_./,:@%+=-]*$/;
-function singleQuoted(s) {
-  return `'${s.replaceAll("'", `'\\''`)}'`;
-}
-function shellWord(s) {
-  return SHELL_SAFE.test(s) ? s : singleQuoted(s);
-}
-
-// src/claude-command-line.ts
-function claudeCommandLine(command) {
-  const cd = command.dir === void 0 ? "" : `cd ${shellWord(command.dir)} && `;
-  const env2 = command.env.map(([name, value]) => `${name}=${shellWord(value)} `).join("");
-  return `${cd}${env2}${[command.program, ...command.args].map(shellWord).join(" ")}`;
-}
-
-// src/attach-launcher.ts
-var ATTACH_DIR = "cc-extra";
-function attachLauncherOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_DIR, "src", "bun-attach.js");
-}
-function moduleGraphReaderOf(launcher) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(launcher), "bun-graph.js");
-}
-var ATTACH_PRELOAD = "attach-preload.cjs";
-function attachPreloadOf(bundle) {
-  return import_node_path19.default.join(import_node_path19.default.dirname(bundle), ATTACH_PRELOAD);
-}
-var PRELOAD_VARIABLE = "BUN_OPTIONS";
-function attachCommandLine(preload, command) {
-  return claudeCommandLine({
-    ...command,
-    env: [
-      ...command.env,
-      [PRELOAD_VARIABLE, `--preload ${preload.replace(/[\\\s]/g, "\\$&")}`]
-    ]
-  });
-}
-
-// src/install/index.ts
-var import_node_path23 = __toESM(require_path_browserify(), 1);
-
-// site/shims/unavailable.ts
-init_globals();
-var refuse3 = (name) => () => {
-  throw new Error(`${name} is not available in the page`);
-};
-var connect = refuse3("net.connect");
-var createServer = refuse3("net.createServer");
-var createConnection = refuse3("net.createConnection");
-var get2 = refuse3("https.get");
-var request = refuse3("https.request");
-var createInterface = refuse3("readline.createInterface");
-var createRequire = refuse3("module.createRequire");
-var json = refuse3("stream/consumers.json");
-var text3 = refuse3("stream/consumers.text");
-var writeHeapSnapshot = refuse3("v8.writeHeapSnapshot");
-var getHeapStatistics = () => ({ used_heap_size: 0, total_heap_size: 0, heap_size_limit: 0 });
-var unavailable_default = { connect, createServer, createConnection, get: get2, request, createInterface, createRequire, json, text: text3, writeHeapSnapshot, getHeapStatistics };
-
-// src/daemon/client.ts
-init_globals();
-
-// src/daemon/client-transport.ts
-init_globals();
-
-// src/daemon/client.ts
-var CLICK_BUDGETS = {
-  connectMs: CONNECT_TIMEOUT_MS,
-  budgetMs: REQUEST_TIMEOUT_MS + TOTAL_BUDGET_MS
-};
-
-// src/daemon/acquire.ts
-init_globals();
-var import_node_path21 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/limits.ts
-init_globals();
-var import_node_path20 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/memory-report.ts
-init_globals();
-var PROBE_TIMEOUT_MS = 5e3;
-async function memoryReport(probes) {
-  const refusals = [];
-  for (const probe2 of probes) {
-    const outcome = await probe2.read();
-    if (outcome.kind === "text") {
-      return `# memory report from: ${probe2.name}
-${outcome.text}`;
-    }
-    refusals.push(`# ${probe2.name}: unavailable \u2014 ${outcome.reason}`);
-  }
-  return [
-    "# memory report: no probe answered",
-    ...refusals.length > 0 ? refusals : ["# no probe is known for this platform"]
-  ].join("\n");
-}
-async function memoryReports(each) {
-  return (await Promise.all(each.map(memoryReport))).join("\n\n");
-}
-var FOOTPRINT = "/usr/bin/footprint";
-var VMMAP = "/usr/bin/vmmap";
-function platformProbes(launcher, platform3, pid2) {
-  if (platform3 === "darwin") {
-    return [
-      // The whole-process category table: V8's mappings, the MALLOC_* regions
-      // with their reclaimable share, and page tables, each with a size.
-      commandProbe(launcher, FOOTPRINT, ["-p", String(pid2)]),
-      // Same mappings, coarser, but present on hosts where `footprint` is not.
-      commandProbe(launcher, VMMAP, ["--summary", String(pid2)])
-    ];
-  }
-  if (platform3 === "linux") {
-    return [
-      // One line per accounting class for the whole address space — Linux's
-      // answer to `footprint`, and free (no subprocess). A process may read
-      // its own child's.
-      fileProbe(`/proc/${pid2}/smaps_rollup`),
-      // Always present, coarser: VmRSS and friends, so Linux never falls all
-      // the way through to "no probe answered".
-      fileProbe(`/proc/${pid2}/status`)
-    ];
-  }
-  return [];
-}
-function chargeProbe(launcher, platform3) {
-  return platform3 === "darwin" ? footprintCharge(
-    (args) => launcher.launch({
-      bin: FOOTPRINT,
-      args,
-      timeoutMs: PROBE_TIMEOUT_MS,
-      category: "limits.charge"
-    })
-  ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
-}
-function footprintCharge(run3) {
-  return async (pids, rss) => {
-    const result = await run3([
-      ...pids.flatMap((pid2) => ["-p", String(pid2)]),
-      "--noCategories",
-      "-f",
-      "bytes"
-    ]);
-    if (!result.ok) {
-      return {
-        kind: "stand-in",
-        bytes: rss,
-        unread: `footprint ${failureText(result)}`
-      };
-    }
-    const each = physFootprintsOf(result.stdout);
-    return each.length !== pids.length ? {
-      kind: "stand-in",
-      bytes: rss,
-      unread: `footprint printed ${each.length} phys_footprint lines for ${pids.length} processes`
-    } : {
-      kind: "charged",
-      measure: "phys_footprint",
-      bytes: each.reduce((total, bytes) => total + bytes, 0)
-    };
-  };
-}
-function physFootprintsOf(text4) {
-  return [...text4.matchAll(/^\s*phys_footprint:\s+(\d+) B\s*$/gm)].map(
-    (m) => Number(m[1])
-  );
-}
-function commandProbe(launcher, bin, args) {
-  return {
-    name: `${bin} ${args.join(" ")}`,
-    read: async () => {
-      const result = await launcher.launch({
-        bin,
-        args: [...args],
-        timeoutMs: PROBE_TIMEOUT_MS,
-        category: "limits.memory-report"
-      });
-      if (!result.ok) {
-        return {
-          kind: "unavailable",
-          reason: failureText(result)
-        };
-      }
-      return result.stdout.trim().length > 0 ? { kind: "text", text: result.stdout } : { kind: "unavailable", reason: "exited 0 but printed nothing" };
-    }
-  };
-}
-function fileProbe(path46) {
-  return {
-    name: path46,
-    read: async () => {
-      try {
-        const text4 = fs_default.readFileSync(path46, "utf8");
-        return text4.trim().length > 0 ? { kind: "text", text: text4 } : { kind: "unavailable", reason: "empty file" };
-      } catch (e) {
-        return { kind: "unavailable", reason: e.message };
-      }
-    }
-  };
-}
-
-// src/daemon/limits.ts
-var RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-var DEFAULT_RSS_LIMIT_MB = 1024;
-function memoryLimitMb(env2) {
-  const raw = env2[RSS_LIMIT_ENV];
-  if (raw === void 0) return DEFAULT_RSS_LIMIT_MB;
-  const mb2 = /^\d+$/.test(raw) ? Number(raw) : NaN;
-  if (!Number.isSafeInteger(mb2) || mb2 <= 0) {
-    throw new Error(
-      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`
-    );
-  }
-  return mb2;
-}
-function memoryLimitBytes(env2) {
-  return memoryLimitMb(env2) * BYTES_PER_MB;
-}
-var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
-var HEAP_SNAPSHOT_KEEP = 3;
-function readCharge(probed, previous) {
-  if (probed.kind === "charged") return probed;
-  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
-  return { ...probed, bytes: probed.bytes - gap, gap };
-}
-function artifactFile(dir, kind, identity2) {
-  const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-  return import_node_path20.default.join(dir, `${prefix}${identity2}${suffix}`);
-}
-function breachArtifactOf(base) {
-  for (const kind of Object.keys(BREACH_ARTIFACTS)) {
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    if (base.startsWith(prefix) && base.endsWith(suffix)) return kind;
-  }
-  return null;
-}
-function makeLimits(deps) {
-  const limit = deps.limitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
-  const keep2 = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
-  let triggered = false;
-  let latest = { kind: "unmeasured" };
-  let inFlight = null;
-  let disarmed = false;
-  let clearTimer;
-  function check() {
-    inFlight ??= measure3().finally(() => {
-      inFlight = null;
-    });
-    return inFlight;
-  }
-  async function measure3() {
-    if (triggered) return true;
-    const own2 = deps.memoryBytes();
-    const renderer = deps.renderer();
-    const processes = [
-      { role: "host", pid: deps.pid, sizes: own2 },
-      ...renderer === null ? [] : [
-        {
-          role: "renderer",
-          pid: renderer.pid,
-          sizes: renderer.usage
-        }
-      ]
-    ];
-    const pids = processes.map((p2) => p2.pid);
-    const rss = sum(processes, (s) => s.rss);
-    const heapTotal = sum(processes, (s) => s.heapTotal);
-    const charge = readCharge(await deps.memoryCharge(pids, rss), latest);
-    const reading = {
-      kind: "measured",
-      charge,
-      rss,
-      heapTotal,
-      processes
-    };
-    latest = reading;
-    deps.log("info", `memory ${readingFields(reading, limit)}`);
-    if (disarmed || charge.bytes <= limit) return false;
-    triggered = true;
-    deps.log(
-      "warn",
-      `${chargeWords(charge)} > limit ${mb(limit)} MB (rss ${mb(rss)} MB, v8 heap ${mb(heapTotal)} MB); recording memory then shutting down`
-    );
-    const stamp2 = new Date(deps.clock.now()).toISOString().replace(/[:.]/g, "-");
-    const identity2 = `${stamp2}-${deps.pid}`;
-    await attempt2(deps.log, "memory report", async () => {
-      const file = artifactFile(deps.snapshotDir, "memoryReport", identity2);
-      const report2 = await deps.captureMemoryReport(pids);
-      if (disarmed) return;
-      deps.writeMemoryReport(file, report2);
-      deps.log("info", `memory report written: ${file}`);
-    });
-    const closedDuring = () => {
-      if (disarmed)
-        deps.log(
-          "info",
-          "daemon closed during the breach: no snapshot, no exit"
-        );
-      return disarmed;
-    };
-    if (closedDuring()) return false;
-    if (renderer !== null)
-      await attempt2(deps.log, "renderer heap snapshot", async () => {
-        const file = artifactFile(
-          deps.snapshotDir,
-          "rendererHeapSnapshot",
-          identity2
-        );
-        await renderer.heapSnapshot(file);
-        deps.log("info", `renderer heap snapshot written: ${file}`);
-      });
-    if (closedDuring()) return false;
-    await attempt2(deps.log, "heap snapshot", () => {
-      deps.writeLogNow();
-      const file = artifactFile(deps.snapshotDir, "heapSnapshot", identity2);
-      deps.log(
-        "info",
-        `heap snapshot written: ${deps.writeHeapSnapshot(file)}`
-      );
-    });
-    await attempt2(deps.log, "artifact rotation", async () => {
-      for (const { artifacts } of postMortemsOf(deps.listArtifacts()).slice(
-        keep2
-      )) {
-        for (const file of Object.values(artifacts)) {
-          await attempt2(
-            deps.log,
-            `evicting ${file}`,
-            () => deps.removeFile(file)
-          );
-        }
-      }
-    });
-    deps.shutdown(0);
-    return true;
-  }
-  function describeNextRestart() {
-    return latest.kind === "measured" && approachingLimit(latest.charge.bytes, limit) ? `${chargeWords(latest.charge)} approaching limit ${mb(limit)} MB (v8 heap ${mb(latest.heapTotal)} MB)` : null;
-  }
-  function serving() {
-    return { pid: deps.pid, memory: latest, limit };
-  }
-  function arm2(intervalMs = DEFAULT_CHECK_INTERVAL) {
-    const tick = async () => {
-      try {
-        if (await check()) return;
-      } catch (e) {
-        deps.log("warn", `memory check failed: ${e.message}`);
-      }
-      if (disarmed) return;
-      clearTimer = deps.clock.after(intervalMs, () => void tick(), {
-        unref: true
-      });
-    };
-    void tick();
-  }
-  function disarm() {
-    disarmed = true;
-    clearTimer?.();
-  }
-  return { check, describeNextRestart, serving, arm: arm2, disarm };
-}
-function sum(processes, size) {
-  return processes.reduce(
-    (total, p2) => total + (p2.sizes === null ? 0 : size(p2.sizes)),
-    0
-  );
-}
-function readingFields({
-  charge,
-  rss,
-  heapTotal,
-  processes
-}, limit) {
-  const unread2 = charge.kind === "stand-in" ? ` unread=${JSON.stringify(charge.unread)} gap=${mb(charge.gap)}MB` : "";
-  const each = processes.map(
-    (p2) => ` ${p2.role}=${p2.pid}:${p2.sizes === null ? "unread" : `rss${mb(p2.sizes.rss)}MB/heap${mb(p2.sizes.heapTotal)}MB`}`
-  ).join("");
-  return `measure=${measureOf(charge)} charge=${mb(charge.bytes)}MB rss=${mb(rss)}MB heap=${mb(heapTotal)}MB limit=${mb(limit)}MB${unread2}${each}`;
-}
-async function attempt2(log, what, body) {
-  try {
-    await body();
-  } catch (e) {
-    log("warn", `${what} failed: ${e.message}`);
-  }
-}
-function breachArtifacts(dir) {
-  let names;
-  try {
-    names = fs_default.readdirSync(dir);
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw e;
-  }
-  return names.filter((f) => breachArtifactOf(f) !== null).map((f) => import_node_path20.default.join(dir, f));
-}
-function listPostMortems(dir) {
-  try {
-    return { kind: "ok", value: postMortemsOf(breachArtifacts(dir)) };
-  } catch (e) {
-    return { kind: "failed", reason: e.message };
-  }
-}
-function postMortemsOf(files) {
-  const byIdentity = /* @__PURE__ */ new Map();
-  for (const file of files) {
-    const base = import_node_path20.default.basename(file);
-    const kind = breachArtifactOf(base);
-    if (kind === null) continue;
-    const { prefix, suffix } = BREACH_ARTIFACTS[kind];
-    const identity2 = base.slice(prefix.length, base.length - suffix.length);
-    byIdentity.set(identity2, { ...byIdentity.get(identity2), [kind]: file });
-  }
-  const kinds = Object.keys(BREACH_ARTIFACTS);
-  return [...byIdentity].sort(([a], [b]) => laterIdentity(a, b) ? -1 : 1).map(([identity2, found2]) => ({
-    identity: identity2,
-    artifacts: Object.fromEntries(
-      kinds.flatMap((k) => found2[k] === void 0 ? [] : [[k, found2[k]]])
-    )
-  }));
-}
-function realLimitsDeps(startedAtMs, shutdown, owner, overrides = {}) {
-  const dir = owner.snapshotDir;
-  return {
-    clock: owner.clock,
-    pid: process.pid,
-    snapshotDir: dir,
-    log: owner.log,
-    memoryBytes: () => {
-      const mem = process.memoryUsage();
-      return { rss: mem.rss, heapTotal: mem.heapTotal };
-    },
-    memoryCharge: chargeProbe(owner.launcher, process.platform),
-    captureMemoryReport: (pids) => memoryReports(
-      pids.map(
-        (pid2) => platformProbes(owner.launcher, process.platform, pid2)
-      )
-    ),
-    // 0600 like the heap snapshot v8 writes beside it: the pair shares an
-    // identity, so it shares a permission — a post-mortem pair where one half is
-    // world-readable and the other is not invites exactly the "is this
-    // sensitive?" question at the worst moment to be asking it.
-    writeMemoryReport: (file, text4) => fs_default.writeFileSync(file, text4, { mode: 384 }),
-    writeHeapSnapshot: (file) => unavailable_default.writeHeapSnapshot(file),
-    writeLogNow: owner.writeLogNow,
-    listArtifacts: () => breachArtifacts(dir),
-    removeFile: (file) => fs_default.unlinkSync(file),
-    shutdown,
-    startedAtMs,
-    ...overrides
-  };
-}
-
-// src/daemon/acquire.ts
-init_process();
-
-// src/claude-settings-read.ts
-init_globals();
-var import_node_path22 = __toESM(require_path_browserify(), 1);
-function readSettingsFile(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return { text: read2.value.buf.toString("utf8"), file: read2.value.file };
-  }
-}
-var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
-function readClaudeSettingsText(settingsPath) {
-  return readSettingsFile(settingsPath)?.text ?? "";
-}
-function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
-  let text4;
-  try {
-    text4 = readClaudeSettingsText(settingsPath);
-  } catch (e) {
-    return failed(reason(e), "read");
-  }
-  try {
-    return ok(parseSettings(settingsPath, text4));
-  } catch (e) {
-    return failed(reason(e), "parse");
-  }
-}
-function parseSettings(settingsPath, text4) {
-  let parsed2;
-  try {
-    if (/^\s*$/.test(text4)) return {};
-    parsed2 = JSON_DIALECT.parse(text4);
-  } catch (e) {
-    throw cannotRead(settingsPath, e);
-  }
-  if (!isJsonObject(parsed2)) {
-    throw new Error(`cannot read ${settingsPath}: not a JSON object`);
-  }
-  return parsed2;
-}
-function readSettingsChain(at) {
-  const dropIns = import_node_path22.default.join(at.managedDir, "managed-settings.d");
-  const located2 = [
-    ...visibleJsonFiles(dropIns).reverse().map((name) => ({
-      scope: "managed",
-      path: import_node_path22.default.join(dropIns, name)
-    })),
-    {
-      scope: "managed",
-      path: import_node_path22.default.join(at.managedDir, "managed-settings.json")
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir)
-    },
-    {
-      scope: "project",
-      path: import_node_path22.default.join(at.projectDir, ".claude", "settings.json")
-    },
-    { scope: "user", path: at.userFile }
-  ];
-  const read2 = located2.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env: env2 = {} } = settings;
-    if (!isJsonObject(env2)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env: env2 }, file: file.file }];
-  });
-  const user = read2.find((r) => r.source.scope === "user");
-  return read2.filter((r) => r.source.scope !== "project" || r.file !== user?.file).map((r) => r.source);
-}
-function visibleJsonFiles(dir) {
-  try {
-    return fs_default.readdirSync(dir).filter((name) => !name.startsWith(".") && name.endsWith(".json")).sort();
-  } catch (e) {
-    if (e.code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
-}
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
-
-// src/install/platforms.ts
-init_globals();
-var PLATFORM_PACKAGES = {
-  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
-  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
-  "linux-x64": "@promptctl/cc-candybar-linux-x64",
-  "linux-arm64": "@promptctl/cc-candybar-linux-arm64"
-};
-function shipsNative(platform3, arch2) {
-  return `${platform3}-${arch2}` in PLATFORM_PACKAGES;
-}
-
-// src/install/index.ts
-function supportDir(host) {
-  if (process.platform === "darwin") {
-    return import_node_path23.default.join(host.home, "Library", "Application Support", "CCCandybar");
-  }
-  return import_node_path23.default.join(locations(host).dataHome, "cc-candybar");
-}
-function stagedDistPath(dir) {
-  return import_node_path23.default.join(dir, "dist", "index.mjs");
-}
-function stableAttachPreload(runningBundle, host) {
-  const checkout = sourceCheckoutOf(runningBundle);
-  return attachPreloadOf(
-    checkout === null ? stagedDistPath(supportDir(host)) : import_node_path23.default.join(checkout, "dist", "index.mjs")
-  );
-}
-function forwarderExecutable(app) {
-  return import_node_path23.default.join(app, "Contents", "MacOS", APP_NAME);
-}
-
-// src/daemon/payload-providers.ts
-init_globals();
-
-// src/daemon/cache/git.ts
-init_globals();
-var import_node_path24 = __toESM(require_path_browserify(), 1);
-
-// src/segments/git.ts
-init_globals();
-function trackingOf(upstream, aheadBehind) {
-  if (upstream.kind === "absent") return ok("none");
-  if (upstream.kind === "failed") return upstream;
-  if (aheadBehind.kind === "failed") return aheadBehind;
-  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
-}
-var PR_FIELDS = {
-  prNumber: true,
-  prState: true,
-  prUrl: true,
-  prError: true,
-  prEarlier: true
-};
-function prOfHead(pr, head) {
-  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  if (head.kind === "failed")
-    return failed(`HEAD: ${head.reason}`, head.failedAt);
-  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
-}
-var GITHUB_PR_STATES = {
-  OPEN: "open",
-  MERGED: "merged",
-  CLOSED: "closed"
-};
-var GITLAB_MR_STATES = {
-  opened: "open",
-  locked: "open",
-  merged: "merged",
-  closed: "closed"
-};
-function prStateOf(cli, states, word) {
-  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
-}
-var READ_FIELD_NAMES = {
-  aheadBehind: "aheadBehind",
-  head: "head",
-  sha: "sha",
-  operation: "operation",
-  committedAt: "committedAt",
-  stashCount: "stash",
-  upstream: "upstream",
-  repoName: "repoName",
-  repoUrl: "repoUrl"
-};
-function gitInfoFailures(info) {
-  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
-    const outcome = info[field];
-    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
-  });
-}
-function classify(label2, result, nonZero) {
-  if (result.ok) return ok(result.stdout);
-  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
-  if (result.reason === "non-zero" && nonZero === result.exitCode)
-    return ABSENT;
-  return failed(launchFailure(label2, result), "read");
-}
-function launchFailure(label2, result) {
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return `${label2}: ${detail}`;
-}
-function firstLine(s) {
-  return s.trim().split("\n", 1)[0] ?? "";
-}
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
-function isMissingCommand(result) {
-  return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
-}
-var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
-function parseRemoteRef(raw) {
-  const trimmed = raw.trim();
-  if (DOS_DRIVE_PATH.test(trimmed)) return null;
-  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
-  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
-  let url;
-  try {
-    url = new URL(candidate);
-  } catch {
-    return null;
-  }
-  return {
-    scheme: url.protocol.replace(/:$/, ""),
-    host: url.hostname.toLowerCase(),
-    port: url.port,
-    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
-  };
-}
-function remoteHost(remoteUrl) {
-  return parseRemoteRef(remoteUrl)?.host || null;
-}
-function detectForge(remoteUrl) {
-  const host = remoteHost(remoteUrl);
-  if (!host) return null;
-  if (host === "github.com" || host.endsWith(".github.com")) return "github";
-  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
-  return null;
-}
-var REMOTES_ARGS = [
-  "config",
-  "--local",
-  "--get-regexp",
-  "^remote\\..*\\.url$"
-];
-function remotesOf(result) {
-  const r = classify("git config --get-regexp remote url", result, 1);
-  if (r.kind === "failed") return r;
-  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
-}
-function parseRemotes(stdout2) {
-  const urlsByName = /* @__PURE__ */ new Map();
-  for (const line of stdout2.split("\n")) {
-    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
-    if (!match) continue;
-    const urls = urlsByName.get(match[1]) ?? [];
-    urls.push(match[2].trim());
-    urlsByName.set(match[1], urls);
-  }
-  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
-}
-function identifyingUrl(remote) {
-  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
-}
-function pickRepoRemote(remotes) {
-  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
-}
-function repoRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  return remote ? identifyingUrl(remote) : null;
-}
-function forgeRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  if (!remote) return null;
-  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
-}
-function repoNameFromUrl(url) {
-  const parsed2 = parseRemoteRef(url);
-  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
-  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
-  return name || null;
-}
-function remoteWebUrl(raw) {
-  const ref = parseRemoteRef(raw);
-  if (!ref) return null;
-  const web = (() => {
-    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
-    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
-    if (ref.scheme === "ssh" || ref.scheme === "git")
-      return { scheme: "https", port: "" };
-    return null;
-  })();
-  if (!web || !ref.host) return null;
-  const repoPath = ref.path.replace(/\.git$/, "");
-  if (!repoPath) return null;
-  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
-  return `${web.scheme}://${authority}/${repoPath}`;
-}
-function repoWebUrl(remotes) {
-  const url = repoRemoteUrl(remotes);
-  return url === null ? null : remoteWebUrl(url);
-}
-function classifyForgePr(label2, result, noPrPattern, parse4) {
-  if (result.ok) return parse4(result.stdout);
-  if (isMissingCommand(result)) return ABSENT;
-  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
-    return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
-}
-function isRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function parseStatusV2(stdout2) {
-  let branch2 = "detached";
-  let oid = ABSENT;
-  let upstream = ABSENT;
-  let aheadBehind = ABSENT;
-  let staged = 0;
-  let unstaged = 0;
-  let untracked2 = 0;
-  let conflicts = 0;
-  for (const line of stdout2.split("\n")) {
-    if (!line) continue;
-    if (line.startsWith("# ")) {
-      const rest2 = line.slice(2);
-      if (rest2.startsWith("branch.oid ")) {
-        const v = rest2.slice("branch.oid ".length).trim();
-        oid = v === "(initial)" ? ABSENT : ok(v);
-      } else if (rest2.startsWith("branch.head ")) {
-        const v = rest2.slice("branch.head ".length).trim();
-        branch2 = v === "(detached)" ? "detached" : v;
-      } else if (rest2.startsWith("branch.upstream ")) {
-        upstream = ok(rest2.slice("branch.upstream ".length).trim());
-      } else if (rest2.startsWith("branch.ab ")) {
-        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
-        if (m) {
-          aheadBehind = ok({
-            ahead: parseInt(m[1], 10),
-            behind: parseInt(m[2], 10)
-          });
-        }
-      }
-      continue;
-    }
-    const kind = line[0];
-    if (kind === "1" || kind === "2") {
-      const xy = line.slice(2, 4);
-      if (xy[0] !== ".") staged++;
-      if (xy[1] !== ".") unstaged++;
-    } else if (kind === "u") {
-      conflicts++;
-    } else if (kind === "?") {
-      untracked2++;
-    }
-  }
-  let status = "clean";
-  if (conflicts > 0) status = "conflicts";
-  else if (staged || unstaged || untracked2) status = "dirty";
-  return {
-    branch: branch2,
-    status,
-    aheadBehind,
-    oid,
-    upstream,
-    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
-  };
-}
-function parseGithubPr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("gh pr view: JSON is not an object", "parse");
-  const { number, state, url, headRefOid: head } = json2;
-  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
-  }
-  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
-  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
-}
-function parseGitlabMr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("glab mr view: JSON is not an object", "parse");
-  const iid = json2.iid;
-  const state = json2.state;
-  const url = json2.web_url;
-  const head = json2.sha;
-  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
-  }
-  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
-  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
-}
-
-// src/utils/trailing-edge.ts
-init_globals();
-var TrailingEdge = class {
-  // The keys whose loop is currently executing, each with its completion.
-  running = /* @__PURE__ */ new Map();
-  // The keys a trigger arrived for while their loop was mid-pass. A Set, not a
-  // count: ten triggers during one pass mean the same thing as one — the work
-  // must be done once more with current inputs.
-  again = /* @__PURE__ */ new Set();
-  run(key, work) {
-    this.again.add(key);
-    if (this.running.has(key)) return { kind: "queued" };
-    return { kind: "started", done: this.start(key, work) };
-  }
-  // A trigger that only ASKS for a reading — a period's tick, a first read —
-  // and carries no news that the answer changed: the loop in flight already
-  // answers it, so it shares that loop's completion rather than queueing a
-  // pass (brandon-unfiled-3248.8ro6, step 1: a trigger's kind decides what it
-  // does mid-read). Idle, it starts a loop exactly as `run` does.
-  share(key, work) {
-    const running = this.running.get(key);
-    if (running !== void 0) return running;
-    this.again.add(key);
-    return this.start(key, work);
-  }
-  start(key, work) {
-    const done = this.loop(key, work);
-    this.running.set(key, done);
-    return done;
-  }
-  async loop(key, work) {
-    try {
-      do {
-        this.again.delete(key);
-        await work();
-      } while (this.again.has(key));
-    } finally {
-      this.running.delete(key);
-      this.again.delete(key);
-    }
-  }
-  // Drop every record of running and pending work — the teardown path of an
-  // owner being disposed. In-flight passes cannot be cancelled from here (the
-  // await belongs to `work`), so they run to completion; what this guarantees is
-  // that no QUEUED trigger is honoured after teardown, and that an owner
-  // rebuilt with the same keys starts clean.
-  clear() {
-    this.running.clear();
-    this.again.clear();
-  }
-  // Number of keys whose loop is executing — a read-only observability surface
-  // for tests asserting the serialization contract. Never read as control flow.
-  get size() {
-    return this.running.size;
-  }
-};
-
-// src/daemon/cache/git.ts
-var GIT_PERIOD_MS = 3e4;
-var RESOLUTION_TTL_MS = 3e4;
-var DEFAULT_MAX_REPOS = 64;
-var PASS = "pass";
-var PR_PERIOD = { okMs: 5 * 6e4, failedMs: 45e3 };
-var PR_BACKOFF_CEILING_MS = PR_PERIOD.okMs;
-var DEFAULT_PR_LOOKUPS = 2;
-var PR_KEYS_KEPT = 16;
-function prPeriodOf({ failures }) {
-  return backedOffMs(PR_PERIOD, failures, PR_BACKOFF_CEILING_MS);
-}
-function triggerOf(asked2) {
-  if (asked2.includes("first")) return "first";
-  return asked2.length === 0 ? "period" : "change";
-}
-function holdKey(root) {
-  return `git:${root}`;
-}
-function watchSpec(root, gitDir, commonDir) {
-  const dirs = [
-    { path: gitDir, filenames: ["HEAD", "index"] },
-    { path: import_node_path24.default.join(commonDir, "refs", "heads"), recursive: true }
-  ];
-  const bounds = dirs.map((d) => boundOf(d.path));
-  const named3 = dirs.map((d, i2) => `${d.path}@${boundKey(bounds[i2])}`);
-  return {
-    key: `git:${root}:${named3.join("|")}`,
-    targets: { dirs },
-    unbound: bounds.some((b) => typeof b === "string" || "unreadable" in b)
-  };
-}
-function branchOf(outcome) {
-  return outcome.kind === "ok" ? outcome.value.branch : void 0;
-}
-function owe(pr) {
-  pr.missed = true;
-  renew(pr, "unread");
-}
-function unkeyedPr(pr, failures) {
-  if (pr.missed && pr.reading.get().kind === "pending") {
-    settle(
-      pr,
-      failures.size > 0 ? failed([...failures].join("; "), "read") : ABSENT
-    );
-  }
-  return "unkeyed";
-}
-function composed({ value, pr }) {
-  const info = currentOf(value);
-  if (info.kind !== "ok") return info;
-  return ok({ ...info.value, pullRequest: currentOf(pr) });
-}
-var CLOSED = failed("git cache closed", "read");
-function threw(label2) {
-  return (e) => failed(`${label2} threw: ${String(e)}`, "read");
-}
-var GitDataProvider = class {
-  repos = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] The gitDir-resolution cache, keyed by the two
-  // inputs resolution reads — `workingDir|projectDir`. It answers WHICH repo
-  // (if any) a directory belongs to, which `repos` cannot: a state exists only
-  // once something asks for its repo. Untracked, the question is re-asked on
-  // every render — a walk to the filesystem root outside a repo
-  // (brandon-git-cache-y2t, -y9h) — and it coalesces concurrent resolutions
-  // of one directory into one.
-  resolutions = /* @__PURE__ */ new Map();
-  closed = false;
-  hits = 0;
-  misses = 0;
-  changes = 0;
-  gitRefreshes;
-  prRefreshes;
-  inner;
-  periodMs;
-  maxRepos;
-  forgeLookups;
-  watchers;
-  ownsWatchers;
-  logger;
-  clock;
-  constructor(opts) {
-    this.inner = opts.inner;
-    this.clock = opts.clock;
-    this.periodMs = opts.periodMs ?? GIT_PERIOD_MS;
-    this.maxRepos = opts.maxRepos ?? DEFAULT_MAX_REPOS;
-    this.forgeLookups = new Limiter(opts.maxPrLookups ?? DEFAULT_PR_LOOKUPS);
-    this.logger = opts.logger ?? quietLogger;
-    const ledger = opts.ledger ?? new RefreshLedger(this.logger);
-    this.gitRefreshes = ledger.declare({
-      name: "git",
-      scope: "repo",
-      refresh: ["first", "period", "change"],
-      lines: ["first", "period", "change"]
-    });
-    this.prRefreshes = ledger.declare({
-      name: "pr",
-      scope: "repo",
-      refresh: ["first", "period"],
-      lines: ["first", "period"]
-    });
-    if (opts.watchers) {
-      this.watchers = opts.watchers;
-      this.ownsWatchers = false;
-    } else {
-      this.watchers = new WatcherRegistry({
-        clock: this.clock,
-        logger: this.logger
-      });
-      this.ownsWatchers = true;
-    }
-  }
-  getWatcherRegistry() {
-    return this.watchers;
-  }
-  getStats() {
-    let held2 = 0;
-    for (const state of this.repos.values()) if (state.holders > 0) held2++;
-    return {
-      size: this.repos.size,
-      held: held2,
-      hits: this.hits,
-      misses: this.misses,
-      changes: this.changes,
-      watchers: this.watchers.size()
-    };
-  }
-  // One TTL over ALL THREE outcome kinds [LAW:one-type-per-behavior]: being
-  // that stale about "is this a repo" promises nothing new. The walk is
-  // synchronous fs (`GitService.resolveEffectiveGitDir`), so a declaration
-  // knows its repo in the turn it asks and takes its hold then; the window
-  // bounds the walk to one per directory per window (brandon-git-cache-y2t),
-  // and only a declaration consults it — a draw reads the lane it was handed
-  // and never resolves.
-  resolution(workingDir, projectDir) {
-    const key = `${workingDir}|${projectDir ?? ""}`;
-    const now2 = this.clock.monotonic();
-    const existing = this.resolutions.get(key);
-    if (existing && now2 - existing.computedAt < RESOLUTION_TTL_MS) {
-      this.resolutions.delete(key);
-      this.resolutions.set(key, existing);
-      return existing.known;
-    }
-    let known;
-    try {
-      known = this.inner.resolveEffectiveGitDir(workingDir, projectDir);
-    } catch (e) {
-      known = failed(`resolver threw: ${String(e)}`, "read");
-    }
-    this.resolutions.set(key, { known, computedAt: now2 });
-    if (known.kind === "failed") {
-      this.logger(
-        "warn",
-        `git resolve failed (${workingDir}): ${known.reason}`
-      );
-    }
-    while (this.resolutions.size > this.maxRepos) {
-      const oldest = this.resolutions.keys().next().value;
-      if (oldest === void 0) break;
-      this.resolutions.delete(oldest);
-    }
-    return known;
-  }
-  // [LAW:single-enforcer] The one way into a repo: a home's declaration of
-  // what its draws read. `holds` takes the repo, its value and its PR — held
-  // until a declaration of the home's takes them no more, or the home is
-  // disposed, which is what keeps the repo on its periods — and the lane reads
-  // them as they stand, never awaited and taking nothing. A value never read
-  // is pending, its first pass queued; the PR is composed from its own source,
-  // pending on its own while its key is not answered, so the rest of the value
-  // draws as it stands.
-  //
-  // [LAW:no-silent-failure] Git logs its own failures — a refresh's by the
-  // refresh, a resolution's by the resolution — so its caller logs none. A
-  // declaration that THROWS is a bug none of those saw, reported by the view's
-  // declaration (declareLanes).
-  declare(holds2, workingDir, projectDir) {
-    const asked2 = this.asked(holds2, workingDir, projectDir);
-    if (asked2.kind === "settled") return settledLane(asked2.outcome);
-    const { state } = asked2;
-    if (state.value.reading.get().kind === "pending") this.misses++;
-    else this.hits++;
-    return { current: () => composed(state) };
-  }
-  // [LAW:one-source-of-truth] The one place a home asks a repo by directory:
-  // the effective gitDir is the state + watch identity, and an absent (not a
-  // repo) or failed resolution is the answer. [LAW:single-enforcer] A closed
-  // provider builds no state: a declaration landing after close (a render
-  // that was mid-wait) would otherwise build a repo, and its watch, that
-  // nothing drops, whose period re-arms after every pass while that home
-  // holds it.
-  asked(holds2, workingDir, projectDir) {
-    if (this.closed) return { kind: "settled", outcome: CLOSED };
-    const dir = this.resolution(workingDir, projectDir);
-    if (dir.kind !== "ok") return { kind: "settled", outcome: dir };
-    return { kind: "asked", state: this.ask(dir.value, holds2) };
-  }
-  // A watch's window, whatever it says: the repo changed since any read in
-  // flight began.
-  changed(root) {
-    const state = this.repos.get(root);
-    if (!state) return;
-    this.changes++;
-    if (state.holders === 0) {
-      state.value.missed = true;
-      return;
-    }
-    this.changedPass(state, "watch");
-  }
-  // LRU touch: re-inserting moves the repo to the newest end. A state the
-  // cache has dropped is not put back.
-  touch(state) {
-    if (this.repos.get(state.root) !== state) return;
-    this.repos.delete(state.root);
-    this.repos.set(state.root, state);
-  }
-  // A repo's state, built pending on its first ask: its value is unread and
-  // its PR has no key until the first pass reads the branch it pairs with
-  // ([LAW:single-enforcer] the key moves only in a pass).
-  built(root) {
-    const pr = {
-      period: new Period(() => {
-        void this.readPr(state, pr, "period");
-      }, this.clock),
-      seen: /* @__PURE__ */ new Map(),
-      // Its key is the first pass's to set.
-      missed: true,
-      key: "",
-      remote: ABSENT,
-      reading: unread(),
-      inFlight: null
-    };
-    const state = {
-      root,
-      refresh: new TrailingEdge(),
-      watch: this.followWatch(root, null).watch,
-      period: new Period(() => {
-        void state.refresh.share(PASS, () => this.refreshPass(state));
-      }, this.clock),
-      value: { reading: unread(), missed: false },
-      pr,
-      holders: 0,
-      asked: /* @__PURE__ */ new Set()
-    };
-    this.repos.set(root, state);
-    return state;
-  }
-  // [LAW:one-source-of-truth] The one derivation of a repo's watch, for the
-  // state's build and for every pass: the git directories resolved from the
-  // root as they stand now, followed by the registry's one rule. A pass calls
-  // it first, before any await, so the watch follows the repo's paths.
-  followWatch(root, held2) {
-    const gitDir = this.inner.resolveGitDir(root);
-    const spec = watchSpec(
-      root,
-      gitDir,
-      this.inner.resolveCommonGitDir(gitDir)
-    );
-    const followed = this.watchers.follow(held2, spec, () => this.changed(root));
-    if (followed.move === "rebound") {
-      this.logger(
-        "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} deaf=${followed.watch.handle.deaf.length}`
-      );
-    }
-    return followed;
-  }
-  changedPass(state, reason) {
-    state.asked.add(reason);
-    state.refresh.run(PASS, () => this.refreshPass(state));
-  }
-  // The loop's work. Nobody awaits it — a watch fire or a tick starts it — so
-  // [LAW:no-silent-failure] a throw is logged here as the bug it is, never an
-  // unhandled rejection. [LAW:no-ambient-temporal-coupling] The period lands
-  // when the pass ENDS, after its every await, so a tick that shares a running
-  // pass is always followed by the landing that schedules the next one.
-  async refreshPass(state) {
-    try {
-      await this.pass(state);
-    } catch (e) {
-      this.logger("error", `git refresh threw (${state.root}): ${String(e)}`);
-    } finally {
-      state.period.landed(this.periodMs);
-    }
-  }
-  // One hold of a home: the repo, its value and its PR. A value or a PR key a
-  // change went by is read by the pass `ask` queues, while this reader takes
-  // what is stored. [LAW:one-source-of-truth] A PR read beside a value a
-  // change went by would answer the branch the latest pass read, not the one
-  // the repo is on now, so it is owed: the reader waits for the pass that
-  // reads the value and keys the PR in one turn ([LAW:single-enforcer]
-  // `movePr`).
-  hold(state) {
-    state.holders++;
-    if (state.value.missed) {
-      owe(state.pr);
-      state.asked.add("resume");
-    }
-    if (state.pr.missed && state.pr.key !== "") state.asked.add("owed");
-    this.held(state);
-    this.evict();
-    return () => {
-      state.holders--;
-      this.held(state);
-    };
-  }
-  // Whatever an ask added to `asked` is read by ONE pass, queued once it is all
-  // in place. A new one must be read even if a pass is in flight that does not
-  // include it, so it queues a pass rather than sharing one; a reason already
-  // in `asked` means such a pass is queued, and it will see this one too.
-  queue(state, before) {
-    if (state.asked.size > before) {
-      state.refresh.run(PASS, () => this.refreshPass(state));
-    }
-  }
-  held(state) {
-    state.period.hold(state.holders > 0);
-    state.pr.period.hold(state.holders > 0 && !state.pr.missed);
-  }
-  // What one read asks of its repo: the repo's state, built pending on its
-  // first ask, held by `holds` before any pass is queued, so the pass sees its
-  // reader, and a first value and the PR's first key ride one pass (which reads
-  // the remote beside the value).
-  ask(root, holds2) {
-    const known = this.repos.get(root);
-    if (known !== void 0) this.touch(known);
-    const state = known ?? this.built(root);
-    const before = state.asked.size;
-    if (known === void 0) state.asked.add("first");
-    holds2.take(holdKey(root), () => this.hold(state));
-    this.queue(state, before);
-    return state;
-  }
-  // One pass: read the repo and the remote beside the branch it read; store
-  // the outcome, log each failure once, and move the PR's key — all in one
-  // turn once the reads land, so no read sees a branch's value beside another
-  // branch's PR. Each pass that lands writes one refresh event.
-  async pass(state) {
-    if (this.repos.get(state.root) !== state) return;
-    const startedAt = this.clock.monotonic();
-    const asked2 = [...state.asked];
-    state.asked.clear();
-    const followed = this.followWatch(state.root, state.watch);
-    state.watch = followed.watch;
-    const [outcome, remote] = await Promise.all([
-      this.inner.getGitInfo(state.root).catch(threw("git fetch")),
-      this.remoteOf(state)
-    ]);
-    if (this.repos.get(state.root) !== state) return;
-    const failures = /* @__PURE__ */ new Set();
-    state.value.missed = false;
-    settle(state.value, outcome);
-    if (outcome.kind === "failed") failures.add(outcome.reason);
-    if (outcome.kind === "ok") {
-      for (const f of gitInfoFailures(outcome.value)) failures.add(f);
-    }
-    const branch2 = branchOf(outcome);
-    const prMove = branch2 === void 0 ? unkeyedPr(state.pr, failures) : this.movePr(state, branch2, remote);
-    this.held(state);
-    this.gitRefreshes.recorded(
-      `${state.root} asked=${asked2.join(",") || "-"} pr=${prMove} watch=${followed.move}`,
-      triggerOf(asked2),
-      failures.size === 0 ? ok(null) : failed([...failures].join("; "), "read"),
-      elapsedMs(this.clock, startedAt)
-    );
-  }
-  // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) is the
-  // PR's failure; only `absent` (no remote configured) means "no forge PR".
-  remoteOf(state) {
-    return this.inner.getRepoRemoteUrl(state.root).catch(threw("git remote"));
-  }
-  // [LAW:one-source-of-truth] The PR's key is every input its value depends on
-  // — the branch and the remote — so a branch switch or a re-pointed origin is
-  // a new key: its reading is pending until the new lookup lands, and an old
-  // key's answer is never stored for a new one. The same key is left to its
-  // own period. [LAW:decomposition] The lookup is the PR source's own work,
-  // started here and never awaited by a git pass, so a slow forge never holds
-  // back the next local refresh.
-  movePr(state, branch2, remote) {
-    const { pr } = state;
-    const key = `${branch2}|${remote.kind === "ok" ? remote.value : remote.kind}`;
-    if (key === pr.key && !pr.missed) return "kept";
-    pr.key = key;
-    pr.remote = remote;
-    const known = pr.seen.get(key);
-    if (known !== void 0) {
-      pr.seen.delete(key);
-      pr.seen.set(key, known);
-      pr.missed = false;
-      settle(pr, known.outcome);
-      pr.period.landed(prPeriodOf(known), known.at);
-      return "recalled";
-    }
-    if (state.holders === 0) {
-      owe(pr);
-      return "owed";
-    }
-    renew(pr, "unread");
-    pr.missed = false;
-    void this.readPr(state, pr, "first");
-    return "looked-up";
-  }
-  // One lookup for the PR's current key; an ask for a key already being looked
-  // up shares that lookup. The forge dispatch delegates to
-  // inner.resolvePullRequest — this layer is the source's lifecycle only.
-  readPr(state, pr, by) {
-    const key = pr.key;
-    if (pr.inFlight?.key === key) return pr.inFlight.done;
-    const remote = pr.remote;
-    let startedAt = this.clock.monotonic();
-    const lookup2 = remote.kind === "ok" ? this.forgeLookups.run(() => {
-      startedAt = this.clock.monotonic();
-      return this.inner.resolvePullRequest(state.root, remote.value);
-    }).catch(threw("PR lookup")) : Promise.resolve(remote.kind === "failed" ? remote : ABSENT);
-    const done = lookup2.then((outcome) => {
-      if (pr.inFlight?.key === key) pr.inFlight = null;
-      if (this.repos.get(state.root) !== state) return;
-      this.prRefreshes.recorded(
-        `${state.root} key=${valueOf(key)}`,
-        by,
-        outcome,
-        elapsedMs(this.clock, startedAt)
-      );
-      const at = this.clock.monotonic();
-      const answer2 = {
-        outcome,
-        at,
-        failures: outcome.kind === "failed" ? (pr.seen.get(key)?.failures ?? 0) + 1 : 0
-      };
-      pr.seen.delete(key);
-      pr.seen.set(key, answer2);
-      for (const oldest of pr.seen.keys()) {
-        if (pr.seen.size <= PR_KEYS_KEPT) break;
-        pr.seen.delete(oldest);
-      }
-      if (pr.key !== key || pr.missed) return;
-      settle(pr, outcome);
-      pr.period.landed(prPeriodOf(answer2), at);
-    });
-    pr.inFlight = { key, done };
-    return done;
-  }
-  drop(state) {
-    const gone = failed(`git state dropped: ${state.root}`, "read");
-    answerPending(state.value, gone);
-    answerPending(state.pr, gone);
-    this.repos.delete(state.root);
-    state.refresh.clear();
-    state.watch.handle.release();
-    state.period.dispose();
-    state.pr.period.dispose();
-  }
-  // The LRU bounds the repos nothing holds; a held repo is never evicted, so
-  // those are bounded by their holders (the render cache's budget).
-  evict() {
-    for (const state of this.repos.values()) {
-      if (this.repos.size <= this.maxRepos) return;
-      if (state.holders > 0) continue;
-      this.drop(state);
-      this.logger("info", `gitCache evict ${state.root}`);
-    }
-  }
-  close() {
-    this.closed = true;
-    for (const state of this.repos.values()) this.drop(state);
-    this.repos.clear();
-    this.resolutions.clear();
-    if (this.ownsWatchers) this.watchers.closeAll();
-  }
-};
-
-// src/daemon/cache/session-usage-store.ts
-init_globals();
-var import_node_path27 = __toESM(require_path_browserify(), 1);
-
-// src/segments/pricing.ts
-init_globals();
-init_url();
-
-// src/utils/cache.ts
-init_globals();
-var import_node_path25 = __toESM(require_path_browserify(), 1);
-var CacheManager = class {
-  // [LAW:one-source-of-truth] Every method takes the cache's root directory
-  // (the host's `cacheDir`), so the layout under it is derived here alone.
-  static usageDir(root) {
-    return import_node_path25.default.join(root, "usage");
-  }
-  static locksDir(root) {
-    return import_node_path25.default.join(root, "locks");
-  }
-  static isLocked(root, name) {
-    const lockFile = import_node_path25.default.join(this.locksDir(root), name);
-    if (!fs_default.existsSync(lockFile)) {
-      return false;
-    }
-    try {
-      const lockContent = fs_default.readFileSync(lockFile, "utf-8");
-      const pid2 = parseInt(lockContent.trim(), 10);
-      if (isNaN(pid2)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs_default.unlinkSync(lockFile);
-        return false;
-      }
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (error) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid2}`);
-          fs_default.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid2} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
-  }
-  static async acquireLock(root, clock, name, timeout = 5e3) {
-    const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = "wx";
-    await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path25.default.join(this.locksDir(root), name);
-    const startTime = clock.monotonic();
-    const lockContent = String(process.pid);
-    while (clock.monotonic() - startTime < timeout) {
-      try {
-        await fs_default.promises.writeFile(lockFile, lockContent, {
-          flag: FILE_CREATE_FLAG
-        });
-        debug(`Lock acquired for ${name}`);
-        return true;
-      } catch (error) {
-        if (error.code === "EEXIST") {
-          await sleep(clock, RETRY_DELAY_MS);
-        } else {
-          throw error;
-        }
-      }
-    }
-    debug(`Failed to acquire lock for ${name} within ${timeout}ms`);
-    return false;
-  }
-  static async releaseLock(root, name) {
-    const lockFile = import_node_path25.default.join(this.locksDir(root), name);
-    try {
-      await fs_default.promises.unlink(lockFile);
-      debug(`Lock released for ${name}`);
-    } catch (error) {
-      if (error.code !== "ENOENT") {
-        debug(`Error releasing lock for ${name}:`, error);
-      }
-    }
-  }
-  static async ensureCacheDirectories(root) {
-    try {
-      await Promise.all([
-        fs_default.promises.mkdir(root, { recursive: true }),
-        fs_default.promises.mkdir(this.usageDir(root), { recursive: true }),
-        fs_default.promises.mkdir(this.locksDir(root), { recursive: true })
-      ]);
-    } catch (error) {
-      debug("Failed to create cache directories:", error);
-    }
-  }
-  static createProjectHash(projectPath) {
-    return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
-  }
-  static async getUsageCache(root, clock, cacheType, latestMtime) {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 75;
-    const FILE_ENCODING = "utf-8";
-    await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path25.default.join(this.usageDir(root), `${cacheType}.json`);
-    const lockName = `${cacheType}.usage.lock`;
-    for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
-      const isCurrentlyLocked = this.isLocked(root, lockName);
-      if (isCurrentlyLocked) {
-        debug(`Cache for ${cacheType} is locked, waiting...`);
-        await sleep(clock, RETRY_DELAY_MS);
-        continue;
-      }
-      try {
-        const content = await fs_default.promises.readFile(cachePath, FILE_ENCODING);
-        const cached = JSON.parse(content);
-        const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        if (cacheIsValid) {
-          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
-          return this.deserializeDates(cached.data);
-        } else {
-          debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
-          );
-          return null;
-        }
-      } catch (error) {
-        if (error.code === "ENOENT") {
-          debug(`No shared ${cacheType} usage cache found`);
-          return null;
-        }
-        const attemptNumber = attempt4 + 1;
-        debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
-        );
-        await sleep(clock, RETRY_DELAY_MS);
-      }
-    }
-    debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
-    return null;
-  }
-  static deserializeDates(data) {
-    if (Array.isArray(data)) {
-      return data.map((entry) => ({
-        ...entry,
-        timestamp: new Date(entry.timestamp)
-      }));
-    }
-    return data;
-  }
-  static async setUsageCache(root, clock, cacheType, data, latestMtime) {
-    const lockName = `${cacheType}.usage.lock`;
-    const lockAcquired = await this.acquireLock(root, clock, lockName);
-    if (!lockAcquired) {
-      debug(`Could not acquire lock to set usage cache for ${cacheType}`);
-      return;
-    }
-    try {
-      await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path25.default.join(this.usageDir(root), `${cacheType}.json`);
-      const cacheTimestamp = latestMtime || clock.now();
-      const cacheEntry = {
-        data,
-        timestamp: cacheTimestamp
-      };
-      const cacheContent = JSON.stringify(cacheEntry);
-      await fs_default.promises.writeFile(cachePath, cacheContent, "utf-8");
-      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
-    } catch (error) {
-      debug(`Failed to save ${cacheType} usage cache:`, error);
-    } finally {
-      await this.releaseLock(root, lockName);
-    }
-  }
-};
-
-// src/segments/pricing.ts
-var OFFLINE_PRICING_DATA = {
-  "claude-haiku-4-5-20251001": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-haiku-4-5": {
-    name: "Claude Haiku 4.5",
-    input: 1,
-    output: 5,
-    cache_write_5m: 1.25,
-    cache_write_1h: 2,
-    cache_read: 0.1
-  },
-  "claude-opus-4-20250514": {
-    name: "Claude Opus 4",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-opus-4-1-20250805": {
-    name: "Claude Opus 4.1",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-sonnet-4-20250514": {
-    name: "Claude Sonnet 4",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-4-opus-20250514": {
-    name: "Claude 4 Opus",
-    input: 15,
-    output: 75,
-    cache_write_5m: 18.75,
-    cache_write_1h: 30,
-    cache_read: 1.5
-  },
-  "claude-4-sonnet-20250514": {
-    name: "Claude 4 Sonnet",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-sonnet-4-5-20250929": {
-    name: "Claude Sonnet 4.5",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  },
-  "claude-opus-4-5": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-5-20251101": {
-    name: "Claude Opus 4.5",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-opus-4-6-20260205": {
-    name: "Claude Opus 4.6",
-    input: 5,
-    output: 25,
-    cache_write_5m: 6.25,
-    cache_write_1h: 10,
-    cache_read: 0.5
-  },
-  "claude-sonnet-4-6": {
-    name: "Claude Sonnet 4.6",
-    input: 3,
-    output: 15,
-    cache_write_5m: 3.75,
-    cache_write_1h: 6,
-    cache_read: 0.3
-  }
-};
-var PricingService = class {
-  static executionCache = null;
-  static modelPricingCache = /* @__PURE__ */ new Map();
-  static GITHUB_PRICING_URL = "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
-  static async loadDiskCache(cacheRoot, clock) {
-    const TTL_24H = 24 * 60 * 60 * 1e3;
-    const minValidTime = clock.now() - TTL_24H;
-    return await CacheManager.getUsageCache(
-      cacheRoot,
-      clock,
-      "pricing",
-      minValidTime
-    );
-  }
-  static async saveDiskCache(cacheRoot, clock, data) {
-    await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
-  }
-  static async fetchPricingData() {
-    return new Promise((resolve) => {
-      const parsedUrl = new U(this.GITHUB_PRICING_URL);
-      const request2 = get2(
-        {
-          hostname: parsedUrl.hostname,
-          path: parsedUrl.pathname,
-          headers: {
-            "User-Agent": "cc-candybar",
-            "Cache-Control": "no-cache"
-          },
-          timeout: 5e3
-        },
-        (response) => {
-          if (response.statusCode !== 200) {
-            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
-            return;
-          }
-          let data = "";
-          let size = 0;
-          const MAX_SIZE = 1024 * 1024;
-          response.setEncoding("utf8");
-          response.on("data", (chunk3) => {
-            size += import_buffer.Buffer.byteLength(chunk3);
-            if (size > MAX_SIZE) {
-              debug("Response too large");
-              request2.destroy();
-              resolve(null);
-              return;
-            }
-            data += chunk3;
-          });
-          response.on("end", () => {
-            try {
-              const json2 = JSON.parse(data);
-              const dataObj = json2;
-              const meta = dataObj._meta;
-              const pricingData = {};
-              for (const [key, value] of Object.entries(dataObj)) {
-                if (key !== "_meta") {
-                  pricingData[key] = value;
-                }
-              }
-              if (this.validatePricingData(pricingData)) {
-                debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-                );
-                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
-              } else {
-                debug("Invalid pricing data structure");
-                resolve(null);
-              }
-            } catch (error) {
-              debug("Failed to parse JSON:", error);
-              resolve(null);
-            }
-          });
-          response.on("error", (error) => {
-            debug("Response error:", error);
-            resolve(null);
-          });
-        }
-      );
-      request2.on("error", (error) => {
-        debug("Request error:", error);
-        resolve(null);
-      });
-      request2.on("timeout", () => {
-        debug("Request timeout");
-        request2.destroy();
-        resolve(null);
-      });
-      request2.end();
-    });
-  }
-  static async getCurrentPricing(cacheRoot, clock) {
-    if (this.executionCache !== null) {
-      debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
-      );
-      return this.executionCache;
-    }
-    const diskCached = await this.loadDiskCache(cacheRoot, clock);
-    if (diskCached) {
-      debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
-      );
-      this.executionCache = diskCached;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
-    }
-    const freshData = await this.fetchPricingData();
-    if (freshData) {
-      await this.saveDiskCache(cacheRoot, clock, freshData);
-      debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
-      );
-      this.executionCache = freshData;
-      debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
-      );
-      return freshData;
-    }
-    debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    this.executionCache = OFFLINE_PRICING_DATA;
-    debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
-    );
-    return OFFLINE_PRICING_DATA;
-  }
-  static validatePricingData(data) {
-    if (!data || typeof data !== "object") return false;
-    for (const [, value] of Object.entries(data)) {
-      if (!value || typeof value !== "object") return false;
-      const pricing = value;
-      if (typeof pricing.input !== "number" || typeof pricing.output !== "number" || typeof pricing.cache_read !== "number") {
-        return false;
-      }
-    }
-    return true;
-  }
-  static async getModelPricing(modelId, cacheRoot, clock) {
-    if (this.modelPricingCache.has(modelId)) {
-      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
-      return this.modelPricingCache.get(modelId);
-    }
-    const allPricing = await this.getCurrentPricing(cacheRoot, clock);
-    let pricing;
-    if (allPricing[modelId]) {
-      pricing = allPricing[modelId];
-    } else {
-      pricing = this.fuzzyMatchModel(modelId, allPricing);
-    }
-    this.modelPricingCache.set(modelId, pricing);
-    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
-    return pricing;
-  }
-  static fuzzyMatchModel(modelId, allPricing) {
-    const lowerModelId = modelId.toLowerCase();
-    for (const [key, pricing] of Object.entries(allPricing)) {
-      if (key.toLowerCase() === lowerModelId) {
-        return pricing;
-      }
-    }
-    const patterns = [
-      {
-        pattern: ["opus-4-6", "claude-opus-4-6"],
-        fallback: "claude-opus-4-6-20260205"
-      },
-      {
-        pattern: ["opus-4-5", "claude-opus-4-5"],
-        fallback: "claude-opus-4-5-20251101"
-      },
-      {
-        pattern: ["opus-4-1", "claude-opus-4-1"],
-        fallback: "claude-opus-4-1-20250805"
-      },
-      {
-        pattern: ["opus-4", "claude-opus-4"],
-        fallback: "claude-opus-4-20250514"
-      },
-      {
-        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
-        fallback: "claude-sonnet-4-6"
-      },
-      {
-        pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
-        fallback: "claude-sonnet-4-5-20250929"
-      },
-      {
-        pattern: ["sonnet-4", "claude-sonnet-4"],
-        fallback: "claude-sonnet-4-20250514"
-      },
-      {
-        pattern: ["haiku-4.5", "4-5-haiku", "haiku-4-5"],
-        fallback: "claude-haiku-4-5-20251001"
-      },
-      { pattern: ["haiku"], fallback: "claude-haiku-4-5-20251001" },
-      { pattern: ["opus"], fallback: "claude-opus-4-20250514" },
-      { pattern: ["sonnet"], fallback: "claude-sonnet-4-5-20250929" }
-    ];
-    for (const { pattern: pattern2, fallback } of patterns) {
-      if (pattern2.some((p2) => lowerModelId.includes(p2))) {
-        if (allPricing[fallback]) {
-          return allPricing[fallback];
-        }
-      }
-    }
-    return allPricing["claude-sonnet-4-5-20250929"] || {
-      name: `${modelId} (Unknown Model)`,
-      input: 3,
-      cache_write_5m: 3.75,
-      cache_write_1h: 6,
-      cache_read: 0.3,
-      output: 15
-    };
-  }
-  static async calculateCostForEntry(entry, cacheRoot, clock) {
-    const usage = entry.message?.usage;
-    if (!usage) {
-      return 0;
-    }
-    const modelId = this.extractModelId(entry);
-    const pricing = await this.getModelPricing(modelId, cacheRoot, clock);
-    const inputTokens = usage.input_tokens || 0;
-    const outputTokens = usage.output_tokens || 0;
-    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
-    const cacheReadTokens = usage.cache_read_input_tokens || 0;
-    const inputCost = inputTokens / 1e6 * pricing.input;
-    const outputCost = outputTokens / 1e6 * pricing.output;
-    const cacheReadCost = cacheReadTokens / 1e6 * pricing.cache_read;
-    const cacheCreationCost = cacheCreationTokens / 1e6 * pricing.cache_write_5m;
-    return inputCost + outputCost + cacheCreationCost + cacheReadCost;
-  }
-  static extractModelId(entry) {
-    if (entry.model && typeof entry.model === "string") {
-      return entry.model;
-    }
-    const message2 = entry.message;
-    if (message2?.model) {
-      const model = message2.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model;
-      return (typeof modelObj?.id === "string" ? modelObj.id : null) || "claude-sonnet-4-5-20250929";
-    }
-    if (entry.model_id && typeof entry.model_id === "string") {
-      return entry.model_id;
-    }
-    return "claude-sonnet-4-5-20250929";
-  }
-};
-
-// src/utils/claude.ts
-init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
-
-// src/utils/transcript-activity.ts
-init_globals();
-var COMMAND_NAME = /<command-name>\s*([^<\s][^<]*?)\s*<\/command-name>/;
-function slashCommand(text4) {
-  if (typeof text4 !== "string") return void 0;
-  return COMMAND_NAME.exec(text4)?.[1];
-}
-function todoItems(input) {
-  const todos2 = input?.todos;
-  if (!Array.isArray(todos2)) return void 0;
-  const items = [];
-  for (const raw of todos2) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const { content, activeForm, status } = raw;
-    const active2 = status === "in_progress";
-    const text4 = active2 && typeof activeForm === "string" ? activeForm : content;
-    if (typeof text4 !== "string") continue;
-    items.push({ text: text4, active: active2, done: status === "completed" });
-  }
-  return items;
-}
-function turnText(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const block = content.find(
-    (b) => typeof b === "object" && b !== null && b.type === "text" && typeof b.text === "string"
-  );
-  return block?.text ?? "";
-}
-function entryActivity(parsed2, userEntry) {
-  const msg = parsed2.message;
-  const content = msg?.content;
-  const started2 = [];
-  const finished = [];
-  let todos2;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block;
-      switch (b.type) {
-        case "tool_use": {
-          const { id: id2, name } = b;
-          if (typeof id2 !== "string" || typeof name !== "string") break;
-          started2.push({ id: id2, name });
-          if (name === "TodoWrite") todos2 = todoItems(b.input) ?? todos2;
-          break;
-        }
-        case "tool_result": {
-          const id2 = b.tool_use_id;
-          if (typeof id2 === "string") finished.push(id2);
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  const command = userEntry === "prompt" ? slashCommand(turnText(content)) : void 0;
-  if (started2.length === 0 && finished.length === 0 && todos2 === void 0 && command === void 0) {
-    return void 0;
-  }
-  return {
-    ...started2.length > 0 && { started: started2 },
-    ...finished.length > 0 && { finished },
-    ...todos2 !== void 0 && { todos: todos2 },
-    ...command !== void 0 && { command }
-  };
-}
-
-// src/utils/claude.ts
-function getClaudePaths(detected, homeDir) {
-  if (detected !== void 0) return [detected];
-  return [(0, import_node_path26.join)(homeDir, ".config", "claude"), (0, import_node_path26.join)(homeDir, ".claude")].filter(
-    (dir) => existsSync(dir)
-  );
-}
-async function findProjectPaths(claudePaths) {
-  const projectPaths = [];
-  for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path26.join)(claudePath, "projects");
-    const entries = await unlessGone(
-      readdir2(projectsDir, { withFileTypes: true })
-    );
-    for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path26.join)(projectsDir, entry.name));
-    }
-  }
-  return projectPaths;
-}
-async function unlessGone(read2) {
-  try {
-    return await read2;
-  } catch (e) {
-    if (e.code === "ENOENT") return void 0;
-    throw e;
-  }
-}
-async function findAgentTranscripts(sessionId2, projectPath, verified) {
-  const paths2 = [];
-  let longLines = [];
-  const subagentsDir = (0, import_node_path26.join)(projectPath, sessionId2, "subagents");
-  try {
-    const files = await readdir2(subagentsDir);
-    const agentFileNames = files.filter(
-      (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
-    );
-    for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path26.join)(subagentsDir, fileName2);
-      if (verified?.has(filePath2)) {
-        paths2.push(filePath2);
-        continue;
-      }
-      const read2 = await readAppended(filePath2, void 0, void 0);
-      if (read2.kind !== "ok") {
-        debug(`Failed to check agent file ${filePath2}`);
-        continue;
-      }
-      longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
-      if (line.kind === "object" && line.value.sessionId === sessionId2) {
-        paths2.push(filePath2);
-      }
-    }
-  } catch (error) {
-    debug(`Failed to read subagents directory ${subagentsDir}:`, error);
-  }
-  return { paths: paths2, longLines };
-}
-function userEntryOf(parsed2) {
-  const msg = parsed2.message;
-  const messageType = parsed2.type || msg?.role || msg?.type;
-  if (messageType !== "user") return void 0;
-  if (firstBlockType(msg) === "tool_result") return "tool-result";
-  const origin = typeof parsed2.origin === "object" && parsed2.origin !== null ? parsed2.origin.kind : void 0;
-  if (origin !== void 0 && origin !== "human") return "turn";
-  const text4 = turnText(msg?.content).trimStart();
-  if (text4.startsWith("[Request interrupted by user")) return "interrupt";
-  return parsed2.isMeta === true || parsed2.isCompactSummary === true || CLAUDE_CODE_TEXT.test(text4) ? "claude-code" : "prompt";
-}
-var TURN_GOES_ON = /* @__PURE__ */ new Set([
-  void 0,
-  "tool_use",
-  "pause_turn"
-]);
-function turnOpenAfter(open2, entry) {
-  if (entry.isSidechain) return open2;
-  switch (entry.userEntry) {
-    case "prompt":
-    case "turn":
-      return true;
-    case "interrupt":
-      return false;
-    case "tool-result":
-    case "claude-code":
-      return open2;
-    case void 0:
-      return entry.type === "assistant" ? TURN_GOES_ON.has(entry.message?.stopReason) : open2;
-  }
-}
-var CLAUDE_CODE_TEXT = /^<(?:command-name|local-command-std(?:out|err)|bash-(?:input|stdout|stderr))>/;
-function firstBlockType(msg) {
-  const content = msg?.content;
-  return Array.isArray(content) && typeof content[0] === "object" && content[0] ? content[0].type : void 0;
-}
-function makeEntry(parsed2) {
-  if (!parsed2.timestamp) return null;
-  const msg = parsed2.message;
-  const usage = msg?.usage;
-  const userEntry = userEntryOf(parsed2);
-  return {
-    timestamp: new Date(parsed2.timestamp),
-    type: typeof parsed2.type === "string" ? parsed2.type : void 0,
-    message: msg ? {
-      id: typeof msg.id === "string" ? msg.id : void 0,
-      model: typeof msg.model === "string" ? msg.model : void 0,
-      usage,
-      role: typeof msg.role === "string" ? msg.role : void 0,
-      type: typeof msg.type === "string" ? msg.type : void 0,
-      stopReason: typeof msg.stop_reason === "string" ? msg.stop_reason : void 0
-    } : void 0,
-    costUSD: typeof parsed2.costUSD === "number" ? parsed2.costUSD : void 0,
-    isSidechain: parsed2.isSidechain === true,
-    userEntry,
-    activity: entryActivity(parsed2, userEntry),
-    raw: {
-      model: typeof parsed2.model === "string" ? parsed2.model : void 0,
-      message: msg ? {
-        id: typeof msg.id === "string" ? msg.id : void 0,
-        model: typeof msg.model === "string" ? msg.model : void 0,
-        usage
-      } : void 0,
-      requestId: typeof parsed2.requestId === "string" ? parsed2.requestId : void 0
-    }
-  };
-}
-function jsonLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return { kind: "blank" };
-  try {
-    const value = JSON.parse(trimmed);
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? { kind: "object", value } : { kind: "unparsed", reason: "not a JSON object" };
-  } catch (parseError) {
-    return { kind: "unparsed", reason: String(parseError) };
-  }
-}
-function entryOf3(line) {
-  const read2 = jsonLine(line);
-  if (read2.kind === "unparsed") {
-    debug(`Failed to parse JSONL line: ${read2.reason}`);
-    return null;
-  }
-  if (read2.kind === "blank") return null;
-  try {
-    return makeEntry(read2.value);
-  } catch (projectionError) {
-    debug(`Failed to project JSONL line: ${projectionError}`);
-    return null;
-  }
-}
-function parseJsonlLines(text4) {
-  const entries = [];
-  for (const line of text4.split("\n")) {
-    const entry = entryOf3(line);
-    if (entry) entries.push(entry);
-  }
-  return entries;
-}
-function longLinesWith(longLines, path46, read2) {
-  return read2.longLine === 0 ? longLines : [...longLines, { path: path46, offset: read2.start, bytes: read2.longLine }];
-}
-function longLineLog(longLines) {
-  return longLines.map(
-    (l) => `transcript long line path=${JSON.stringify(l.path)} offset=${l.offset} bytes=${l.bytes}`
-  );
-}
-async function foldAppended(filePath2, prior, empty2, step4) {
-  let longLines = [];
-  let cursor = prior?.cursor;
-  let value = prior?.value ?? empty2;
-  let end;
-  for (; ; ) {
-    const read2 = await readAppended(
-      filePath2,
-      cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
-      end?.size
-    );
-    if (read2.kind !== "ok") return read2;
-    const window2 = read2.value;
-    if (window2.reset) value = empty2;
-    longLines = longLinesWith(window2.reset ? [] : longLines, filePath2, window2);
-    if (end === void 0 || window2.reset) {
-      end = { size: window2.size, stamp: window2.stamp };
-    }
-    const next = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
-    cursor = {
-      offset: next,
-      stamp: end.stamp,
-      ino: window2.ino
-    };
-    if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
-  }
-}
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
-
-// src/var-system/store.ts
-init_globals();
-var unwritten = (value) => isPending(value);
-var BoxNode = class {
-  constructor(name, type3, initial2, clock) {
-    this.name = name;
-    this.type = type3;
-    this.clock = clock;
-    if (!unwritten(initial2)) assertType(name, type3, initial2, "initial value");
-    this.cell = observable.box(initial2, { deep: false });
-    this.lastChangedAt = unwritten(initial2) ? null : clock.now();
-  }
-  name;
-  type;
-  clock;
-  kind = "box";
-  cell;
-  // [LAW:single-enforcer] One write path (`set`) updates both the value and
-  // the timestamp; introspection reads from the same place renderers do.
-  //
-  // It records when the value last CHANGED, which is what debug.ts calls the
-  // node's age and what anyone reading that age is asking (brandon-var-system-
-  // 1tl). Stamping every write instead reported attempts, and reported them most
-  // misleadingly in the one situation where the age is consulted: a source
-  // re-running with no effect.
-  lastChangedAt;
-  // [LAW:types-are-the-program] Not written yet is not a value: it is read as
-  // THE pending signal, which every place a template is evaluated takes as its
-  // own outcome.
-  read() {
-    const value = this.cell.get();
-    if (unwritten(value)) {
-      throw new PendingValueError(
-        this.name,
-        `variable "${this.name}" has no value yet: nothing has written it`
-      );
-    }
-    return value;
-  }
-  // A box written pending is not answered yet again: what its payload holds
-  // is a source that has not answered (src/renderer/render-payload.ts).
-  set(value) {
-    if (!unwritten(value)) assertType(this.name, this.type, value, "set value");
-    if (compareStructural(this.cell.get(), value)) return;
-    this.cell.set(value);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-  // The cell as written, pending included: what `stored` reads.
-  stored() {
-    return this.cell.get();
-  }
-};
-var Kept = class {
-  cell;
-  // `what` names the value in a refusal: `Variable "x"`, `Derived value "x"`.
-  // `equals` is what counts as a change: MobX's own comparison unless given.
-  constructor(what, deriver, equals) {
-    this.cell = computed(deriver, {
-      keepAlive: true,
-      ...equals !== void 0 && { equals }
-    });
-    if (typeof this.cell.suspend_ !== "function") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no suspend_; release() cannot unsubscribe it`
-      );
-    }
-    if (typeof this.cell.keepAlive_ !== "boolean") {
-      throw new TypeError(
-        `${what}: this MobX's computed has no keepAlive_ flag; release() cannot lift it`
-      );
-    }
-  }
-  read() {
-    return this.cell.get();
-  }
-  // Unsubscribe from every dependency and drop the cached value. A keepAlive
-  // computed never does this on its own — MobX keeps it subscribed to whatever
-  // it read for as long as those observables live, which for a daemon-wide
-  // observable (the SessionState atom) is the life of the daemon, and that
-  // subscription kept every disposed config's whole store reachable
-  // (brandon-unfiled-3248.t14). MobX offers no public release for a keepAlive
-  // computed, so this lifts the guard its own teardown checks and runs that
-  // teardown. Must run inside an action: the unobservation it cascades is
-  // settled when the outermost batch ends.
-  // [LAW:single-enforcer] exception: two MobX internals (`keepAlive_`,
-  // `suspend_`) are reached here and nowhere else; the constructor refuses a
-  // MobX without them, and test/var-store-dispose.test.ts pins the effect.
-  release() {
-    this.cell.keepAlive_ = false;
-    this.cell.suspend_();
-  }
-};
-var Projected = class {
-  constructor(deriver) {
-    this.deriver = deriver;
-  }
-  deriver;
-  read() {
-    return this.deriver();
-  }
-};
-var ComputedNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Kept(`Variable "${name}"`, () => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "computed result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "computed";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var ProjectionNode = class {
-  constructor(name, type3, deriver) {
-    this.name = name;
-    this.type = type3;
-    this.cell = new Projected(() => {
-      const v = deriver();
-      assertType(this.name, this.type, v, "projection result");
-      return v;
-    });
-  }
-  name;
-  type;
-  kind = "projection";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-var DocumentCell = class {
-  constructor(name, initial2, clock) {
-    this.name = name;
-    this.clock = clock;
-    this.cell = observable.box(shaped(initial2), { deep: false });
-    this.lastChangedAt = initial2.kind === "pending" ? null : clock.now();
-  }
-  name;
-  clock;
-  kind = "document";
-  cell;
-  lastChangedAt;
-  read() {
-    return this.cell.get();
-  }
-  set(value) {
-    const next = shaped(value);
-    if (sameDocument(this.cell.get(), next)) return;
-    this.cell.set(next);
-    this.lastChangedAt = this.clock.now();
-  }
-  lastUpdatedMs() {
-    return this.lastChangedAt;
-  }
-};
-var DerivedDocument = class {
-  constructor(name, deriver) {
-    this.name = name;
-    this.cell = new Kept(
-      `Variable "${name}"`,
-      () => shaped(deriver()),
-      sameDocument
-    );
-  }
-  name;
-  kind = "document";
-  cell;
-  read() {
-    return this.cell.read();
-  }
-  release() {
-    this.cell.release();
-  }
-  lastUpdatedMs() {
-    return null;
-  }
-};
-function documentKey(outcome) {
-  return JSON.stringify(outcome);
-}
-function sameDocument(a, b) {
-  return documentKey(a) === documentKey(b);
-}
-function shaped(outcome) {
-  return outcome.kind === "ok" ? { kind: "ok", value: toDocument(outcome.value) } : outcome;
-}
-function assertType(name, declared, value, context) {
-  const actual = typeOf(value);
-  if (actual !== declared) {
-    throw new TypeError(
-      `Variable "${name}": ${context} type ${actual} does not match declared type ${declared}`
-    );
-  }
-}
-var VariableStore = class {
-  // [LAW:one-source-of-truth] `clock` stamps when each box and document last
-  // changed; a child store reads the same one as its parent.
-  constructor(clock, parent = null) {
-    this.clock = clock;
-    this.parent = parent;
-  }
-  clock;
-  parent;
-  // [LAW:no-ambient-temporal-coupling] Which names are declared is itself
-  // observable: a reaction that read a name before its declaration (a cache
-  // key over a variable declared after it) re-runs when it is declared, so
-  // what it sees does not depend on the order the config lists variables in.
-  // `deep: false` keeps each node the object it was declared as.
-  nodes = observable.map(void 0, {
-    deep: false
-  });
-  defineBox(name, type3, initial2) {
-    this.declare(name, new BoxNode(name, type3, initial2, this.clock));
-  }
-  defineDocument(name, initial2) {
-    this.declare(name, new DocumentCell(name, initial2, this.clock));
-  }
-  // A document whose reading the deriver computes from what it reads.
-  defineDerivedDocument(name, deriver) {
-    this.declare(name, new DerivedDocument(name, deriver));
-  }
-  // Computed deriver receives a `read` function that returns the value
-  // of any variable in the store. Calling `read(other)` from inside the
-  // deriver is what registers the dependency with MobX — the deriver's
-  // body is the dep graph.
-  defineComputed(name, type3, deriver) {
-    this.defineDerived(name, type3, "computed", deriver);
-  }
-  defineDerived(name, type3, derivation, deriver) {
-    const reader = (other) => this.read(other);
-    const Node = derivation === "computed" ? ComputedNode : ProjectionNode;
-    this.declare(name, new Node(name, type3, () => deriver(reader)));
-  }
-  // A derived value of this store that is no variable — a template a draw
-  // evaluates (src/dsl/parts.ts) — held as a variable's would be: kept until
-  // what it read changes, or derived at every read, and released with them.
-  derive(name, derivation, deriver) {
-    this.refuseDisposed(`Derived value "${name}"`);
-    if (derivation === "projection") return new Projected(deriver);
-    const kept = new Kept(`Derived value "${name}"`, deriver);
-    this.kept.push(kept);
-    return kept;
-  }
-  kept = [];
-  read(name) {
-    return this.requireVar(name).read();
-  }
-  readDocument(name) {
-    const node = this.requireNode(name);
-    if (node.kind !== "document") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a document`
-      );
-    }
-    return node.read();
-  }
-  // A written node's value as stored, pending included and nothing
-  // serialized: a box's value or a document's reading. Read in a reaction, it
-  // moves exactly when the node is written, which its own compare decides.
-  stored(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") return node.read();
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a written node`
-      );
-    }
-    return node.stored();
-  }
-  setDocument(name, value) {
-    const node = this.requireOwn(name);
-    if (!(node instanceof DocumentCell)) {
-      throw new TypeError(
-        node.kind === "document" ? `Variable "${name}" is a derived document: what it reads decides it, and nothing writes it` : `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  setBox(name, value) {
-    const node = this.requireOwn(name);
-    if (node.kind !== "box") {
-      throw new TypeError(
-        `Variable "${name}" is a ${node.kind}, not a box (use defineBox to create a settable variable)`
-      );
-    }
-    runInAction(() => node.set(value));
-  }
-  // Wrap multi-variable updates so dependents only invalidate once per
-  // batch. Used by the render path to push a whole input payload before
-  // any computed re-evaluates.
-  runInAction(fn) {
-    runInAction(fn);
-  }
-  has(name) {
-    return this.nodes.has(name) || (this.parent?.has(name) ?? false);
-  }
-  getType(name) {
-    return this.requireVar(name).type;
-  }
-  getKind(name) {
-    return this.requireNode(name).kind;
-  }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
-  changeKey(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
-    }
-    try {
-      return ok(String(node.read()));
-    } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
-  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
-  // returning the BoxNode directly would leak `.set` structurally even
-  // though VarNode does not advertise it. The returned wrapper is a fresh
-  // object exposing only the VarNode surface — `.set` is unreachable at
-  // any level (no structural escape, no plain-JS reach-through). The
-  // mutation path remains gated behind `setBox`, which wraps in
-  // runInAction to satisfy MobX strict-mode.
-  //
-  // [LAW:single-enforcer] One requireNode call per consumer-row — the
-  // round-1 dedup fix in introspectVars relies on the caller getting both
-  // type/kind and a read() in one go without paying for a second
-  // requireNode. The wrapper preserves that.
-  getNode(name) {
-    const node = this.requireNode(name);
-    return node.kind === "document" ? {
-      name: node.name,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    } : {
-      name: node.name,
-      type: node.type,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs()
-    };
-  }
-  names() {
-    return [...this.parent?.names() ?? [], ...this.nodes.keys()];
-  }
-  // Release every computed's subscriptions, so nothing outliving this store
-  // (the daemon-wide SessionState atom) keeps it reachable. The store's own
-  // boxes and documents die with it; only the computeds hold references
-  // outward. Reads after dispose still answer — a released computed recomputes
-  // uncached, and outside a batch subscribes to nothing (inside one, MobX
-  // tracks it for the batch and unobserves again as the batch ends) — so a
-  // late reader cannot resubscribe the store to the world for good. A
-  // declaration after dispose would: it would mint a keepAlive computed with
-  // no release to come, so `declare` and `derive` refuse it. Returns how many computeds it
-  // released, the fact the caller's log line carries (0 on a second call). One action, so the
-  // cascading unobservation settles once, when it ends. [LAW:single-enforcer]
-  // called by SourceRegistry.dispose, the one teardown of everything a config
-  // holds.
-  dispose() {
-    if (this.disposed) return 0;
-    this.disposed = true;
-    let released = 0;
-    runInAction(() => {
-      for (const node of this.nodes.values()) {
-        if (node instanceof ComputedNode || node instanceof DerivedDocument) {
-          node.release();
-          released++;
-        }
-      }
-      for (const kept of this.kept) kept.release();
-    });
-    return released + this.kept.length;
-  }
-  disposed = false;
-  requireNode(name) {
-    const node = this.nodes.get(name) ?? this.parent?.requireNode(name);
-    if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
-    return node;
-  }
-  // [LAW:single-enforcer] The one door a write takes: a node of this store.
-  // A view writing its directory's node would write every session's value.
-  requireOwn(name) {
-    const node = this.nodes.get(name);
-    if (node !== void 0) return node;
-    if (this.parent?.has(name)) {
-      throw new Error(
-        `Variable "${name}" lives in the directory's store; a session's view cannot write it`
-      );
-    }
-    throw new ReferenceError(`Unknown variable "${name}"`);
-  }
-  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
-  // VarNode; a document reached through them is a caller asking a namespace
-  // for a scalar, said so by name rather than coerced to text.
-  requireVar(name) {
-    const node = this.requireNode(name);
-    if (node.kind === "document") {
-      throw new TypeError(
-        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`
-      );
-    }
-    return node;
-  }
-  // [LAW:no-silent-failure] A computed declared after dispose has no release
-  // to come: it would subscribe to the world and hold this store exactly as
-  // before brandon-unfiled-3248.t14.
-  refuseDisposed(what) {
-    if (this.disposed) {
-      throw new Error(`${what}: cannot declare on a disposed store`);
-    }
-  }
-  declare(name, node) {
-    this.refuseDisposed(`Variable "${name}"`);
-    if (this.has(name)) {
-      throw new Error(`Variable "${name}" is already declared`);
-    }
-    runInAction(() => this.nodes.set(name, node));
-  }
-};
-
-// src/daemon/foundations/today-facts.ts
-init_globals();
-var EMPTY_DAY = {
-  cost: 0,
-  input: 0,
-  output: 0,
-  cacheCreation: 0,
-  cacheRead: 0
-};
-function addDay(into, d) {
-  into.cost += d.cost;
-  into.input += d.input;
-  into.output += d.output;
-  into.cacheCreation += d.cacheCreation;
-  into.cacheRead += d.cacheRead;
-}
-function dayKey(date2) {
-  const year = date2.getFullYear();
-  const month = String(date2.getMonth() + 1).padStart(2, "0");
-  const day = String(date2.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-function projectToday(facts, at) {
-  const today = dayKey(dateOf(at));
-  const inSet = facts.sums[today];
-  const own2 = facts.own[today];
-  if (inSet === void 0 && own2 === void 0) return ABSENT;
-  const total = { ...EMPTY_DAY };
-  if (inSet !== void 0) addDay(total, inSet);
-  if (own2 !== void 0) addDay(total, own2);
-  return ok({
-    cost: total.cost,
-    tokens: total.input + total.output + total.cacheCreation + total.cacheRead,
-    tokenBreakdown: {
-      input: total.input,
-      output: total.output,
-      cacheCreation: total.cacheCreation,
-      cacheRead: total.cacheRead
-    },
-    date: today
-  });
-}
-
-// src/daemon/cache/session-usage-store.ts
-var SPEED_RING_CAPACITY = 64;
-function speedSampleOf(breakdown, turnOpen, atMs) {
-  const input = breakdown ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead : 0;
-  const output = breakdown ? breakdown.output : 0;
-  return { input, output, total: input + output, atMs, turnOpen };
-}
-var DEFAULT_STALE_AGE_MS = 24 * 60 * 60 * 1e3;
-var DEFAULT_SWEEP_INTERVAL_MS = 5 * 60 * 1e3;
-var DEFAULT_RESCAN = { okMs: 60 * 1e3, failedMs: 10 * 1e3 };
-var MAX_UNHELD_SCANS = 8;
-var SEED_CONCURRENCY = 8;
-var EMPTY_USAGE = {
-  calculatedCost: null,
-  tokens: null,
-  tokenBreakdown: null
-};
-function seedCutoffMs(now2) {
-  const d = new Date(now2);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - 1);
-  return d.getTime();
-}
-function emptyBreakdown() {
-  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
-}
-var EMPTY_FILE_FOLD = {
-  entries: 0,
-  cost: 0,
-  breakdown: emptyBreakdown(),
-  days: /* @__PURE__ */ new Map(),
-  turnOpen: false,
-  response: void 0
-};
-function responseOf(entry) {
-  const id2 = entry.message?.id;
-  return id2 === void 0 ? void 0 : `${id2}:${entry.raw.requestId ?? ""}`;
-}
-async function foldFile(state, entries, cacheRoot, clock) {
-  const keep2 = dayKey(new Date(seedCutoffMs(clock.now())));
-  let count = state.entries;
-  let cost = state.cost;
-  let turnOpen = state.turnOpen;
-  let last2 = state.response;
-  const breakdown = { ...state.breakdown };
-  const days = /* @__PURE__ */ new Map();
-  for (const [k, v] of state.days) if (k >= keep2) days.set(k, { ...v });
-  for (const entry of entries) {
-    turnOpen = turnOpenAfter(turnOpen, entry);
-    const u = entry.message?.usage;
-    if (!u) continue;
-    const response = responseOf(entry);
-    if (response !== void 0 && response === last2) continue;
-    last2 = response;
-    count++;
-    const priced = entry.costUSD ?? await PricingService.calculateCostForEntry(entry.raw, cacheRoot, clock);
-    cost += priced;
-    breakdown.input += u.input_tokens || 0;
-    breakdown.output += u.output_tokens || 0;
-    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
-    breakdown.cacheRead += u.cache_read_input_tokens || 0;
-    const key = dayKey(new Date(entry.timestamp));
-    if (key < keep2) continue;
-    const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += priced;
-    d.input += u.input_tokens || 0;
-    d.output += u.output_tokens || 0;
-    d.cacheCreation += u.cache_creation_input_tokens || 0;
-    d.cacheRead += u.cache_read_input_tokens || 0;
-    days.set(key, d);
-  }
-  return { entries: count, cost, breakdown, days, turnOpen, response: last2 };
-}
-function mergeFolds(files) {
-  let count = 0;
-  let cost = 0;
-  const bd = emptyBreakdown();
-  const days = /* @__PURE__ */ new Map();
-  for (const { value: f } of files.values()) {
-    count += f.entries;
-    cost += f.cost;
-    bd.input += f.breakdown.input;
-    bd.output += f.breakdown.output;
-    bd.cacheCreation += f.breakdown.cacheCreation;
-    bd.cacheRead += f.breakdown.cacheRead;
-    for (const [k, v] of f.days) {
-      const d = days.get(k) ?? { ...EMPTY_DAY };
-      addDay(d, v);
-      days.set(k, d);
-    }
-  }
-  if (count === 0) return { usage: EMPTY_USAGE, days };
-  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
-  return {
-    usage: {
-      calculatedCost: cost,
-      tokens,
-      tokenBreakdown: bd
-    },
-    days
-  };
-}
-function under(path46, roots) {
-  return path46 !== void 0 && roots.some((root) => path46.startsWith(root));
-}
-function daySumsOver(slots, roots) {
-  const sums = /* @__PURE__ */ new Map();
-  for (const { record: record2 } of slots) {
-    if (record2 === void 0 || !under(record2.transcriptPath, roots)) continue;
-    for (const [day, d] of record2.days) {
-      const sum2 = sums.get(day) ?? { ...EMPTY_DAY };
-      addDay(sum2, d);
-      sums.set(day, sum2);
-    }
-  }
-  return Object.fromEntries(sums);
-}
-async function mapPool(items, limit, fn) {
-  let cursor = 0;
-  const worker = async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await fn(item);
-    }
-  };
-  const width = Math.min(limit, items.length);
-  await Promise.all(Array.from({ length: width }, worker));
-}
-function answer(box, value) {
-  runInAction(() => box.set(value));
-}
-var SessionUsageStore = class {
-  // No count cap: `today` is a fold over every record, so a cap smaller than
-  // the day's sessions would drop work from it unseen. A record is a few
-  // scalars per file and retained day, and `sweepStale` bounds the map to the
-  // sessions seen within `staleAgeMs` plus those holding work done today.
-  // Observable, shallowly: a slot replaced is the change the day sums read.
-  sessions = observable.map(
-    void 0,
-    {
-      deep: false
-    }
-  );
-  // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
-  // (session, observed stamp) onto one parse; cleared on settle (a coalescer,
-  // not a cache — the records map IS the cache).
-  flight = new SingleFlight();
-  // [LAW:single-enforcer] The one owner of when a directory set is scanned:
-  // its first read is the seed, and its period, which runs only while a home
-  // holds the set, is the rescan. Keyed by the directories themselves, so a
-  // default that resolves to one directory shares a scan with that directory
-  // named outright. Its answer is `today`'s, a failed scan included.
-  scans;
-  // Each directory set's day sums, derived from the records, kept for the
-  // store's life: there are as few as the Claude Code directories rendered
-  // from, and each reads only this store's own map.
-  daySets = /* @__PURE__ */ new Map();
-  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
-  // for the speed sample. Concurrent renders observing the SAME transcript state
-  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
-  // exactly once — so they return the same prev+cur and render identical,
-  // deterministic throughput instead of the second clobbering the first.
-  speedFlight = new SingleFlight();
-  // [LAW:single-enforcer] A refresh of a session is one unit of work per
-  // (session, observed stamp): the lanes that read the record (session,
-  // speed) share it, so it records and logs once.
-  refreshFlight = new SingleFlight();
-  staleAgeMs;
-  // The machine the store reads: where transcripts live, and where the
-  // pricing table is cached.
-  host;
-  log;
-  refreshTally = { hits: 0, misses: 0 };
-  ledger;
-  // The session record's refresh, which its transcript lanes make; a
-  // rescan's reads are its `today` scan's.
-  usage;
-  sweeps = 0;
-  stopSweep = null;
-  closed = false;
-  clock;
-  constructor(opts) {
-    this.host = opts.host;
-    this.clock = opts.clock;
-    this.log = opts.logger ?? quietLogger;
-    this.ledger = opts.ledger ?? new RefreshLedger(this.log);
-    this.usage = this.ledger.declare({
-      name: "usage",
-      scope: "session",
-      refresh: ["first", "period", "change"],
-      lines: []
-    });
-    this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;
-    this.scans = new KeyedSource({
-      name: "today",
-      scope: "configDir",
-      keyOf: (paths2) => paths2.join("\0"),
-      fields: (paths2) => `dirs=${valueOf(paths2.join(","))}`,
-      read: (paths2) => this.scan(paths2),
-      every: () => opts.rescan ?? DEFAULT_RESCAN,
-      watch: NO_WATCH,
-      maxEntries: MAX_UNHELD_SCANS,
-      lines: REFRESH_TRIGGERS,
-      logger: this.log,
-      ledger: this.ledger,
-      clock: this.clock
-    });
-    const interval = opts.sweepIntervalMs ?? DEFAULT_SWEEP_INTERVAL_MS;
-    if (interval > 0) {
-      this.stopSweep = this.clock.every(interval, () => this.sweepStale(), {
-        unref: true
-      });
-    }
-  }
-  getStats() {
-    return {
-      size: this.sessions.size,
-      hits: this.refreshTally.hits,
-      misses: this.refreshTally.misses,
-      sweeps: this.sweeps
-    };
-  }
-  // The scans as a source: the directory sets kept, those a home holds, the
-  // seeds (`first`) and rescans (`period`), and how many failed.
-  scanStats() {
-    return this.scans.stats();
-  }
-  // [LAW:no-ambient-temporal-coupling] One refresh of a session, as a value:
-  // its session and speed lanes read the one ingest it starts, whichever asks
-  // first and whenever the other lands, so it reads, records and logs once.
-  // `by` is what asked for it (src/daemon/cache/transcript-lanes.ts).
-  refresh(sessionId2, transcriptPath, by) {
-    let refresh = null;
-    const once2 = () => {
-      if (refresh !== null) return refresh;
-      const stamp2 = statStamp(transcriptPath);
-      refresh = {
-        stamp: stamp2,
-        record: this.refreshed(sessionId2, transcriptPath, stamp2, by)
-      };
-      return refresh;
-    };
-    return {
-      // [LAW:no-silent-failure] A failed transcript parse flows out as
-      // `failed`; an unknown or empty session is the all-null totals, whose
-      // fields the payload drops one by one, so the hook's cost still lands
-      // over a session with no record.
-      usage: async () => {
-        const record2 = await once2().record;
-        if (record2.kind === "failed") return record2;
-        return ok(record2.kind === "ok" ? record2.value.usage : EMPTY_USAGE);
-      },
-      speed: (nowMs) => this.observed(sessionId2, once2, nowMs)
-    };
-  }
-  // The `session` projection as the session's last refresh left it, for a
-  // draw: no I/O, no fold. A session no refresh has answered (or one the sweep
-  // dropped) is not answered yet; one whose refresh found no transcript is the
-  // empty record its refresh answers for it.
-  usageOf(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return pendingOf("unread");
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    return ok(slot.record?.usage ?? EMPTY_USAGE);
-  }
-  // A refresh's ingest of its session, whose outcome the session's slot keeps
-  // for the draws until the next one.
-  refreshed(sessionId2, transcriptPath, stamp2, by) {
-    return this.refreshFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const tally = { hits: 0, misses: 0 };
-      const startedAt = this.clock.monotonic();
-      const record2 = await this.ingest(sessionId2, transcriptPath, tally, stamp2);
-      this.refreshTally.hits += tally.hits;
-      this.refreshTally.misses += tally.misses;
-      if (tally.misses > 0) {
-        this.usage.recorded(
-          `sid=${valueOf(sessionId2)}`,
-          by,
-          record2,
-          elapsedMs(this.clock, startedAt)
-        );
-      }
-      answer(
-        this.hold(sessionId2).failure,
-        record2.kind === "failed" ? record2.reason : null
-      );
-      return record2;
-    });
-  }
-  // The `today` projection, which declareToday and daysOutside below answer
-  // together: the cross-session sum of every record's today bucket.
-  // [LAW:no-silent-failure] A failed scan or a failed active-session ingest
-  // makes the whole projection `failed` — a total silently missing today's
-  // main work would be a confident wrong number, worse than a loud gap.
-  //
-  // `claudeConfigDir` is the rendering session's `claudeConfigDir` hint, and
-  // the sum is that session plus every session whose transcript lives in THAT
-  // directory — the daemon's own env names none.
-  // [LAW:no-ambient-temporal-coupling] Whose `today` a record is in is read
-  // off where its transcript lives: a sum over every directory seen so far, or
-  // over the sessions that had asked, would move with which other sessions
-  // happened to have rendered.
-  // [LAW:single-enforcer] A session's declaration of `today` (declareLanes in
-  // src/renderer/render-payload.ts): the directory set's scans, held, so a set
-  // no scan has answered starts its first one now — before the request or the
-  // frame that reads it. The lane answers the set's day sums once a scan has
-  // answered; which day of them is the draw's (`projectToday`).
-  declareToday(holds2, claudeConfigDir2) {
-    if (this.closed) return settledLane(failed("usage store closed", "read"));
-    const claudePaths = getClaudePaths(claudeConfigDir2, this.host.home);
-    const scans = this.scans.declare(holds2, claudePaths);
-    const set2 = this.daySet(claudePaths);
-    return {
-      current: () => {
-        const scan = scans.current();
-        return scan.kind === "ok" ? ok({ roots: set2.roots, sums: set2.sums.read() }) : scan;
-      }
-    };
-  }
-  // The rendering session's own days the set's sums do not hold, as the
-  // records stand, for the `today` fact: no I/O, no fold. A record under the
-  // set's roots is in its sums already, so it has none beyond them.
-  // [LAW:no-silent-failure] The session's last ingest failing is this read
-  // failing, so the fact fails with it and the draw shows a gap, never a total
-  // silently missing the session's own work.
-  daysOutside(sessionId2, roots) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot === void 0) return ABSENT;
-    const failure = slot.failure.get();
-    if (failure !== null) return failed(failure, "read");
-    const record2 = slot.record;
-    if (record2 === void 0 || under(record2.transcriptPath, roots)) {
-      return ABSENT;
-    }
-    return ok(Object.fromEntries(record2.days));
-  }
-  // A refresh's speed sample, over its one ingest of the session: its current
-  // cumulative counts and whether its turn is open, added to the session's
-  // ring — taken only at a stamp no sample was taken at, so a period over an
-  // unchanged transcript keeps the observation standing. [LAW:no-silent-failure] A failed transcript parse flows out
-  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
-  // session yields a zero-count sample, so a first-ever render establishes a
-  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
-  // clock instant — the store never reads the clock for tok/s timing itself.
-  async observed(sessionId2, refresh, nowMs) {
-    const { stamp: stamp2, record: refreshed } = refresh();
-    return this.speedFlight.run(`${sessionId2}:${stamp2}`, async () => {
-      const record2 = await refreshed;
-      if (record2.kind === "failed") {
-        answer(this.hold(sessionId2).speed, record2);
-        return record2;
-      }
-      const slot = this.hold(sessionId2);
-      const standing2 = slot.speed.get();
-      if (slot.sampledAt === stamp2 && standing2?.kind === "ok") return standing2;
-      const cur = record2.kind === "ok" ? speedSampleOf(
-        record2.value.usage.tokenBreakdown,
-        record2.value.turnOpen,
-        nowMs
-      ) : speedSampleOf(null, false, nowMs);
-      const { ring } = slot;
-      ring.push(cur);
-      ring.sort((a, b) => a.atMs - b.atMs);
-      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
-      if (ring.at(-1) === cur) slot.sampledAt = stamp2;
-      const observed = ok({ samples: [...ring] });
-      answer(slot.speed, observed);
-      return observed;
-    });
-  }
-  // The session's speed as its last refresh observed it, for a draw: a frame
-  // takes no sample, so how often the bar is drawn moves no rate.
-  speedOf(sessionId2) {
-    return this.sessions.get(sessionId2)?.speed.get() ?? pendingOf("unread");
-  }
-  // stamp-gated, coalesced re-parse of ONE session. `ok` is its record,
-  // `absent` is a session with no transcript to read, `failed` is a
-  // transcript that exists but couldn't be parsed — NOT cached (only ok
-  // records are stored; the next render retries, same rule as the git
-  // cache). This is the single write-path of a slot's record.
-  async ingest(sessionId2, transcriptPath, tally, stamp2) {
-    const existing = this.see(sessionId2)?.record;
-    if (existing && stamp2 !== "" && existing.transcriptStamp === stamp2) {
-      tally.hits++;
-      return ok(existing);
-    }
-    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
-    tally.misses++;
-    let refolded;
-    try {
-      refolded = await this.flight.run(`${sessionId2}:${stamp2}`, async () => {
-        const prior2 = this.sessions.get(sessionId2)?.record;
-        return {
-          prior: prior2,
-          outcome: await this.refold(sessionId2, transcriptPath, prior2)
-        };
-      });
-    } catch (error) {
-      return failed(
-        `usage refold (${sessionId2}): ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-    const { prior, outcome } = refolded;
-    if (outcome.kind !== "ok") return outcome;
-    const { mainStamp, ...folded2 } = outcome.value;
-    const record2 = {
-      ...folded2,
-      transcriptStamp: mainStamp,
-      transcriptPath
-    };
-    const landed = this.sessions.get(sessionId2)?.record;
-    if (landed === prior) {
-      this.stored(sessionId2, record2);
-      return ok(record2);
-    }
-    if (landed === void 0) return ok(record2);
-    return this.ingest(sessionId2, transcriptPath, tally, stamp2);
-  }
-  // [LAW:single-enforcer] The one write of a slot's record: the slot is
-  // replaced in the observable map, which is the change the day sums derive
-  // from.
-  stored(sessionId2, record2) {
-    const slot = this.hold(sessionId2);
-    runInAction(() => this.sessions.set(sessionId2, { ...slot, record: record2 }));
-  }
-  // The one write of `lastSeenAt`: the session's slot, refreshed as seen, or
-  // undefined while the store holds nothing for it — asking stores nothing.
-  see(sessionId2) {
-    const slot = this.sessions.get(sessionId2);
-    if (slot) slot.lastSeenAt = this.clock.now();
-    return slot;
-  }
-  // The slot something is about to be stored in, created on the first store.
-  hold(sessionId2) {
-    const seen2 = this.see(sessionId2);
-    if (seen2) return seen2;
-    const slot = {
-      lastSeenAt: this.clock.now(),
-      record: void 0,
-      ring: [],
-      sampledAt: null,
-      failure: observable.box(null),
-      speed: observable.box(void 0, {
-        deep: false
-      })
-    };
-    runInAction(() => this.sessions.set(sessionId2, slot));
-    return slot;
-  }
-  // A directory set's day sums, derived on first ask and kept with the store.
-  daySet(claudePaths) {
-    const key = claudePaths.join("\0");
-    const known = this.daySets.get(key);
-    if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path27.join)(dir, "projects") + import_node_path27.sep);
-    const set2 = {
-      roots,
-      sums: new Kept(
-        `today over ${claudePaths.join(",")}`,
-        () => daySumsOver(this.sessions.values(), roots)
-      )
-    };
-    this.daySets.set(key, set2);
-    return set2;
-  }
-  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
-  // prior record — the transcript (and each agent sidechain) is append-only, so
-  // per-render work is O(new bytes), not O(file). The whole-file case (cold
-  // record, or a first-ever read) is the same path with an empty prior: the
-  // reader yields the whole file from offset 0. A `failed` read on any file
-  // fails the fold (the boundary logs it); an `absent` file (not yet written /
-  // agent removed) keeps its prior fold and contributes nothing new.
-  async refold(sessionId2, transcriptPath, prior) {
-    const agents = await findAgentTranscripts(
-      sessionId2,
-      (0, import_node_path27.dirname)(transcriptPath),
-      prior === void 0 ? void 0 : new Set(prior.files.keys())
-    );
-    for (const line of longLineLog(agents.longLines)) this.log("info", line);
-    const newFiles = /* @__PURE__ */ new Map();
-    let mainStamp = "";
-    for (const filePath2 of [transcriptPath, ...agents.paths]) {
-      const priorFold = prior?.files.get(filePath2);
-      const read2 = await foldAppended(
-        filePath2,
-        priorFold,
-        EMPTY_FILE_FOLD,
-        (state, entries) => foldFile(state, entries, cacheDir(this.host), this.clock)
-      );
-      if (read2.kind === "failed") return read2;
-      if (read2.kind === "absent") {
-        if (priorFold) newFiles.set(filePath2, priorFold);
-        continue;
-      }
-      const { folded: folded2, longLines } = read2.value;
-      for (const line of longLineLog(longLines)) this.log("info", line);
-      newFiles.set(filePath2, folded2);
-      if (filePath2 === transcriptPath) mainStamp = folded2.cursor.stamp;
-    }
-    return ok({
-      files: newFiles,
-      ...mergeFolds(newFiles),
-      mainStamp,
-      turnOpen: newFiles.get(transcriptPath)?.value.turnOpen ?? false
-    });
-  }
-  // The one whole-tree scan of a directory set — its seed, or a rescan:
-  // ingest every session whose transcript was touched recently enough to hold
-  // a today entry. A rescan is the same scan over warm records, so it costs a
-  // stat per transcript plus the bytes appended since the last one.
-  // [LAW:no-silent-failure] A scan that throws, or that could not read a
-  // session it found, answers as failed, which is `today`'s failure until a
-  // scan lands — never a sum silently missing the sessions it did not reach.
-  // Only a file or directory gone between the listing and its read (ENOENT) is
-  // absence.
-  async scan(claudePaths) {
-    try {
-      const cutoff = seedCutoffMs(this.clock.now());
-      const projectPaths = await findProjectPaths(claudePaths);
-      const candidates = [];
-      for (const dir of projectPaths) {
-        const files = await unlessGone(readdir2(dir));
-        for (const file of files ?? []) {
-          if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path27.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
-          const id2 = parseSessionId(file.slice(0, -".jsonl".length));
-          if (!id2.ok) {
-            this.log(
-              "warn",
-              `usageStore scan: transcript ${JSON.stringify(file)} names no session: session id ${id2.problem}`
-            );
-            continue;
-          }
-          candidates.push({
-            sessionId: id2.id,
-            path: filePath2,
-            stamp: stampOf(st)
-          });
-        }
-      }
-      const failures = [];
-      const tally = { hits: 0, misses: 0 };
-      await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
-        const outcome = await this.ingest(c.sessionId, c.path, tally, c.stamp);
-        if (outcome.kind === "failed") {
-          failures.push(outcome.reason);
-          this.log("warn", `usageStore scan: ${outcome.reason}`);
-        }
-      });
-      this.log(
-        "info",
-        `usageStore scan dirs=${valueOf(claudePaths.join(","))} sessions=${candidates.length} read=${tally.misses} failed=${failures.length}`
-      );
-      if (failures.length > 0) {
-        return failed(
-          `usage scan: ${failures.length} of ${candidates.length} sessions could not be read \u2014 ${failures[0]}`,
-          "read"
-        );
-      }
-      return ok({ sessions: candidates.length, read: tally.misses });
-    } catch (error) {
-      return failed(
-        `usage scan: ${error instanceof Error ? error.message : String(error)}`,
-        "read"
-      );
-    }
-  }
-  // Public for tests; called periodically from the timer. Drops what nothing
-  // reads any more: a session unseen for `staleAgeMs` holding no bucket for
-  // today. A stale record holding one is `held`, since `today` sums it — a
-  // session whose transcript the scans have stopped visiting is seen no more,
-  // and a day can run past `staleAgeMs` (a 25-hour DST day).
-  // [LAW:one-source-of-truth] Today is the day of the sweep's own `now`: the
-  // wall clock a frame's instant and the scan's cutoff read too.
-  sweepStale() {
-    const now2 = this.clock.now();
-    const today = dayKey(new Date(now2));
-    let dropped = 0;
-    let held2 = 0;
-    let noRecord = 0;
-    runInAction(() => {
-      for (const [sid, { lastSeenAt, record: record2 }] of [...this.sessions]) {
-        if (now2 - lastSeenAt <= this.staleAgeMs) continue;
-        if (record2?.days.has(today)) {
-          held2++;
-          continue;
-        }
-        this.sessions.delete(sid);
-        dropped++;
-        if (record2 === void 0) noRecord++;
-      }
-    });
-    if (dropped > 0) this.sweeps++;
-    if (dropped > 0 || held2 > 0) {
-      this.log(
-        "info",
-        `usageStore sweep dropped=${dropped} noRecord=${noRecord} held=${held2}`
-      );
-    }
-    return dropped;
-  }
-  close() {
-    this.closed = true;
-    this.stopSweep?.();
-    this.stopSweep = null;
-    this.scans.close();
-    runInAction(() => {
-      for (const { sums } of this.daySets.values()) sums.release();
-      this.sessions.clear();
-    });
-    this.daySets.clear();
-  }
-};
-
-// src/daemon/cache/git-service.ts
-init_globals();
-var import_node_path28 = __toESM(require_path_browserify(), 1);
-function derived2(from, project) {
-  if (from.kind !== "ok") return from;
-  const value = project(from.value);
-  return value === null ? ABSENT : ok(value);
-}
-function nonEmpty(o) {
-  if (o.kind !== "ok") return o;
-  const v = o.value.trim();
-  return v ? ok(v) : ABSENT;
-}
-var COMMIT_TIME_CACHE_MAX = 256;
-var REMOTES_CACHE_MAX = 256;
-function configIdentity(configPath) {
-  try {
-    const st = fs_default.statSync(configPath);
-    return { key: `${st.dev}:${st.ino}`, stamp: `${st.mtimeMs}:${st.size}` };
-  } catch {
-    return null;
-  }
-}
-var GitService = class {
-  // [LAW:locality-or-seam] Who a read's program belongs to: the daemon's, so its
-  // close refuses the next read of a pass under way.
-  constructor(launcher) {
-    this.launcher = launcher;
-  }
-  launcher;
-  isGitRepo(workingDir) {
-    return holdsGit(workingDir);
-  }
-  // [LAW:types-are-the-program] args is a string[] so the boundary type
-  // forbids the only-space-free-arguments contract the prior whitespace-split
-  // implementation relied on. Returns the full LaunchResult — the typed
-  // termination cause `launch` already computed — so `classify` can map it to
-  // an Outcome without a thrown Error flattening that information away.
-  // [LAW:locality-or-seam] `protected`, not private: the per-fetch spawn COUNT
-  // is a property this class is now accountable for (brandon-git-cache-y9h), and
-  // the only way to assert it is to be able to see every invocation go past. A
-  // counting subclass in test/git-spawn-budget.test.ts is that seam; the
-  // daemon's own GitDataProvider already extends this class.
-  async execGitAsync(args, options) {
-    return this.launcher.launch({
-      bin: "git",
-      args: [...args],
-      cwd: options.cwd,
-      envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
-      timeoutMs: options.timeout,
-      category: "git"
-    });
-  }
-  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can key its
-  // cache + watcher on the *effective* git directory — the same directory the
-  // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
-  // alone is wrong when `projectDir` is set and is itself a git repo: the
-  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
-  // below), but a workingDir-keyed cache would store that data under a
-  // different key and wire invalidation to the wrong watcher. The contract:
-  // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
-  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
-  resolveEffectiveGitDir(workingDir, projectDir) {
-    if (this.isWorktree(workingDir)) return ok(workingDir);
-    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
-    if (this.isGitRepo(workingDir)) return ok(workingDir);
-    return this.findGitRoot(workingDir);
-  }
-  // [LAW:locality-or-seam] public so daemon-side caches can key on the
-  // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
-  // "not in a git repository", the everyday domain answer.
-  //
-  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
-  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
-  // already short-circuit on, now asked at every level instead of only at
-  // `workingDir`. Before this, two resolvers answered one question and disagreed
-  // — measured on a repo whose config sets `core.worktree = /elsewhere`:
-  //
-  //   cwd         git's answer   the short-circuit   the old rev-parse
-  //   /repo       /elsewhere     /repo               /private/tmp/…/elsewhere
-  //   /repo/sub   /elsewhere     (falls through)     /private/tmp/…/elsewhere
-  //
-  // so the bar rendered /repo's state while sitting in /repo and a completely
-  // different tree's state one directory down. `rev-parse` also answers with the
-  // PHYSICAL path where the short-circuit answers with the logical one, so ONE
-  // repo could occupy two cache keys depending on which arm replied. The ascent
-  // collapses both onto the rule the short-circuits already commit to: one
-  // predicate, one spelling of a path.
-  //
-  // [LAW:effects-at-boundaries] Pure synchronous fs — the shape
-  // `getOngoingOperation` and `resolveGitDir` in this same class already have —
-  // so a declaration knows its repo in the turn it asks (brandon-unfiled-3248.
-  // 8ro6, step 4). Observable effect: a session whose cwd is outside any repo
-  // spawns no `git` at all, where before it spawned one per render forever —
-  // `getGitInfo`'s `absent` is deliberately not cached, so nothing bounded it.
-  //
-  // Two deliberate differences from `git rev-parse --show-toplevel`, both making
-  // the ascent find MORE repos rather than fewer, neither reachable without an
-  // unusual configuration: `core.worktree` is not honoured (the short-circuit
-  // never honoured it either), and the ascent does not stop at a filesystem
-  // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
-  //
-  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
-  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
-  // through `classify(…, "absent")` — a state this never produced, so inventing
-  // one here would be a new answer for an unchanged question.
-  findGitRoot(workingDir) {
-    const root = gitRootOf(workingDir);
-    return root === void 0 ? ABSENT : ok(root);
-  }
-  // [LAW:one-source-of-truth] No inner cache here. The daemon-side
-  // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
-  // a per-process cache on top of an already-cached call would double the
-  // invalidation surface — exactly the trap that kz8.3 collapses.
-  //
-  // [LAW:no-silent-failure] Never rejects: helpers return outcomes by
-  // construction, and an unexpected throw (a bug) is surfaced as a `failed`
-  // outcome whose reason reaches the consuming boundary's log — not a blank
-  // bar, not a swallowed branch.
-  async getGitInfo(workingDir, projectDir) {
-    try {
-      return await this.computeGitInfo(workingDir, projectDir);
-    } catch (e) {
-      return failed(
-        `git: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    }
-  }
-  async computeGitInfo(workingDir, projectDir) {
-    let gitDir;
-    if (this.isWorktree(workingDir)) {
-      gitDir = workingDir;
-    } else if (projectDir && this.isGitRepo(projectDir)) {
-      gitDir = projectDir;
-    } else if (this.isGitRepo(workingDir)) {
-      gitDir = workingDir;
-    } else {
-      const foundGitRoot = this.findGitRoot(workingDir);
-      if (foundGitRoot.kind !== "ok") return foundGitRoot;
-      gitDir = foundGitRoot.value;
-    }
-    const core = await this.getCoreAsync(gitDir);
-    if (core.kind !== "ok") return core;
-    const committedAt = await this.committedAt(gitDir, core.value.oid);
-    const remotes = await this.getRemotesAsync(gitDir);
-    return ok({
-      branch: core.value.branch,
-      status: core.value.status,
-      aheadBehind: core.value.aheadBehind,
-      head: core.value.oid,
-      // sha, upstream, and the worktree counts all rode in on the core call —
-      // attaching them here is a memory read, not another spawn.
-      workingTree: core.value.workingTree,
-      // [LAW:locality-or-seam] The 7-char truncation is a DISPLAY policy, so it
-      // lives with the display field rather than in the parser: `CoreStatus`
-      // keeps the one fact git reported. `git rev-parse --short` auto-lengthens
-      // on collision, but re-spawning it to recover that would undo this
-      // segment's whole point — one porcelain=v2 read instead of a fan-out — and
-      // this value is display-only. The full oid is what keys the
-      // commit-timestamp cache, so ambiguity here stays cosmetic instead of
-      // becoming a wrong lookup.
-      sha: derived2(core.value.oid, (o) => o.slice(0, 7)),
-      upstream: core.value.upstream,
-      committedAt,
-      stashCount: this.getStashCount(gitDir),
-      repoName: derived2(remotes, (r) => this.repoNameFrom(r, gitDir)),
-      repoUrl: derived2(remotes, repoWebUrl),
-      operation: this.getOngoingOperation(gitDir)
-    });
-  }
-  // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
-  // real HEAD/index files even for git worktrees. For a regular repo this is
-  // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
-  // naming the worktree-metadata dir, where HEAD and index live — watching
-  // `<workingDir>/.git/HEAD` would fail (no such path) and the cache would
-  // never invalidate.
-  //
-  // [LAW:no-silent-failure] exception: this is a watch target, not an answer.
-  // A `.git` that names nothing readable (a directory, an unreadable or
-  // malformed file) watches the dotGit path, so callers always get a string.
-  resolveGitDir(workingDir) {
-    return orElse(gitDirNamed(workingDir), import_node_path28.default.join(workingDir, ".git"));
-  }
-  getOngoingOperation(workingDir) {
-    try {
-      const gitDir = this.resolveGitDir(workingDir);
-      if (fs_default.existsSync(import_node_path28.default.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
-      if (fs_default.existsSync(import_node_path28.default.join(gitDir, "CHERRY_PICK_HEAD")))
-        return ok("CHERRY-PICK");
-      if (fs_default.existsSync(import_node_path28.default.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
-      if (fs_default.existsSync(import_node_path28.default.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
-      if (fs_default.existsSync(import_node_path28.default.join(gitDir, "rebase-merge")) || fs_default.existsSync(import_node_path28.default.join(gitDir, "rebase-apply")))
-        return ok("REBASE");
-      return ABSENT;
-    } catch (e) {
-      return failed(
-        `git operation probe: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    }
-  }
-  // [LAW:decomposition] Two facts were folded into one call, and only one of them
-  // is a property of the repo. The commit's TIMESTAMP never changes — a sha names
-  // one commit forever — while "how long ago" is that timestamp minus a clock
-  // read. Split apart, the repo fact becomes cacheable with no TTL at all (the
-  // daemon's GitDataProvider keys it on the oid) and the clock read belongs to
-  // the render: `git.timeSinceCommit`, a projection, subtracts this from the instant the bar is
-  // drawn at, so a GitInfo cached for a whole TTL window never carries an age
-  // frozen at its fetch. Folded together, the spawn could only ever be cached
-  // for as long as the answer was allowed to be wrong.
-  //
-  // An unborn HEAD has no commit to time, and says so without spawning anything:
-  // `oid` is already absent, and that absence IS the answer the old non-zero
-  // `git log` exit was translated into.
-  async committedAt(gitDir, oid) {
-    if (oid.kind !== "ok") return oid;
-    return this.commitTimestamp(gitDir, oid.value);
-  }
-  // [LAW:one-source-of-truth] exception: the class header rules out a cache here,
-  // and this is one — with the reason that rule exists absent. The rule forbids
-  // layering a per-process cache over an already-cached call because it "would
-  // double the invalidation surface"; this map has NO invalidation surface. An oid
-  // is content-addressed, so the commit it names has one committer date, the same
-  // one forever and in every repo holding the object. There is no staleness to
-  // coordinate, so there is no second invalidation to get wrong.
-  //
-  // It lives here rather than in the daemon's GitDataProvider, where the design
-  // doc put it, because the provider computes GitInfo on a SEPARATE inner
-  // GitService: an override on the provider would never be called. The cache has
-  // to be where the spawn is.
-  //
-  // What it buys: `git log -1` fired once per cache miss — once per 30 s TTL
-  // window on an active repo — to answer a question that had not changed since the
-  // last commit. It now fires once per commit. The age is this timestamp
-  // subtracted from each draw's instant, which is why splitting that
-  // derivation out is what made this cacheable at all.
-  //
-  // Only `ok` is stored: `absent`/`failed` are transient (a commit the status call
-  // just named should be readable), and pinning one under a key that never expires
-  // would make a blip permanent. The promise is the value, so caching and
-  // coalescing are one fact.
-  commitTimes = /* @__PURE__ */ new Map();
-  async commitTimestamp(gitDir, oid) {
-    const hit = this.commitTimes.get(oid);
-    if (hit !== void 0) {
-      this.commitTimes.delete(oid);
-      this.commitTimes.set(oid, hit);
-      return hit;
-    }
-    const pending2 = this.readCommitTimestamp(gitDir, oid);
-    this.commitTimes.set(oid, pending2);
-    void pending2.then(
-      (outcome) => {
-        if (outcome.kind !== "ok" && this.commitTimes.get(oid) === pending2) {
-          this.commitTimes.delete(oid);
-        }
-      },
-      () => {
-        if (this.commitTimes.get(oid) === pending2) {
-          this.commitTimes.delete(oid);
-        }
-      }
-    );
-    while (this.commitTimes.size > COMMIT_TIME_CACHE_MAX) {
-      const oldest = this.commitTimes.keys().next().value;
-      if (oldest === void 0) break;
-      this.commitTimes.delete(oldest);
-    }
-    return pending2;
-  }
-  // The spawn itself. Naming the commit rather than leaving it implicit in HEAD is
-  // what makes the value content-addressed, and it closes a race the implicit form
-  // had: HEAD could move between the status call that reported the oid and this
-  // one, so the timestamp could describe a different commit than the sha shown
-  // beside it.
-  async readCommitTimestamp(gitDir, oid) {
-    const r = nonEmpty(
-      classify(
-        "git log -1",
-        await this.execGitAsync(["log", "-1", "--format=%ct", oid, "--"], {
-          cwd: gitDir,
-          timeout: 2e3
-        }),
-        "absent"
-      )
-    );
-    if (r.kind !== "ok") return r;
-    const committedAt = parseInt(r.value, 10);
-    if (Number.isNaN(committedAt)) {
-      return failed(`git log -1: unparseable timestamp "${r.value}"`, "parse");
-    }
-    return ok(committedAt);
-  }
-  // [LAW:decomposition] The COMMON git directory — where refs shared between a
-  // repo and its linked worktrees live. `resolveGitDir` answers the other,
-  // per-worktree question, which is the right one for HEAD and index and exactly
-  // why it exists. `refs/stash` is not of that kind: measured, a linked
-  // worktree's `git stash list` reports the MAIN repo's stashes, and the reflog
-  // backing them exists ONLY under the common dir. Reading the per-worktree
-  // gitdir would answer zero stashes for every worktree, silently.
-  resolveCommonGitDir(gitDir) {
-    return orElse(commonDirOf(gitDir), gitDir);
-  }
-  // [LAW:one-source-of-truth] `git stash list` counts REFLOG ENTRIES for
-  // `refs/stash`, not the ref — measured two ways: a hand-written
-  // `logs/refs/stash` is precisely what `git stash list` reports, and a
-  // `refs/stash` that exists with no reflog counts zero from both. libgit2
-  // spells the same fact as `git_reflog_read` + `git_reflog_entrycount`. So the
-  // count is this file's line count, and the counting expression below is the one
-  // the `stash list` output already went through — only its input changed. A
-  // reflog message cannot contain a newline, so lines and entries agree.
-  //
-  // [LAW:no-silent-failure] The three states survive the swap. ENOENT is a REAL
-  // count of 0 — no stash was ever pushed here — while any other read error is
-  // `failed`, so the meaning-erasure the old catch-to-0 created stays
-  // unrepresentable. Sync, because reading one small file is not worth a
-  // microtask: its former `Promise.all` partner is the only spawn left.
-  getStashCount(workingDir) {
-    const reflog = import_node_path28.default.join(
-      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
-      "logs",
-      "refs",
-      "stash"
-    );
-    let text4;
-    try {
-      text4 = fs_default.readFileSync(reflog, "utf-8");
-    } catch (e) {
-      if (e.code === "ENOENT") return ok(0);
-      return failed(
-        `git stash reflog ${reflog}: ${e instanceof Error ? e.message : String(e)}`,
-        "read"
-      );
-    }
-    const entries = text4.trim();
-    return ok(entries ? entries.split("\n").length : 0);
-  }
-  // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
-  // `repoName` and `repoUrl` share a single call from `computeGitInfo`, so those
-  // two can never disagree about which remote is origin — that pair used to be
-  // one `config --get remote.origin.url` each.
-  //
-  // The PR cache deliberately keeps its OWN call (`getRepoRemoteUrl`, from
-  // src/daemon/cache/git.ts): the forge lookup is a network resource cached
-  // under its own longer TTL, keyed `repoRoot|branch|remote`, and folding its
-  // remote read into GitInfo would tie a network cache's input to the local
-  // cache's fs-watched refresh cycle — the separation those two TTLs exist to
-  // create. So this is one read per lifecycle, not one read overall.
-  //
-  // `--local` scopes the read to THIS repository's config. Without it the read
-  // merges system → global → local, so a stray `remote.origin.url` in
-  // ~/.gitconfig sorts FIRST and would hijack repoUrl, repoName and the PR cache
-  // key for every repo on the machine — a regression against the `git config
-  // --get` this replaced, whose last-wins was really scope precedence. Scoping
-  // also makes config order unambiguous, so "first url" is a fact rather than a
-  // bet about which scope won.
-  //
-  // `--get-regexp` exits 1 when NOTHING matches, which is a repo with no remotes
-  // configured — a domain answer, so it lands as an EMPTY LIST rather than an
-  // `absent` arm. [LAW:dataflow-not-control-flow] Every projection then reads
-  // "no remotes" off the empty set (no repoUrl, basename repoName) instead of
-  // carrying a second no-value state through three consumers. Exit 128 (an
-  // unreadable or corrupt config) is NOT that answer and stays `failed`, so a
-  // broken repo never renders as an empty one. [LAW:no-silent-failure]
-  // [LAW:one-source-of-truth] The memo is keyed by the CONFIG FILE's identity, not
-  // by the working directory and not by a path, because the file is what the answer
-  // depends on: two worktrees of one repo share one config, so they share one memo,
-  // and one repo cannot hold two answers. See `configIdentity` for why a path would
-  // not have been enough.
-  //
-  // Remotes change roughly never, and this was re-read on every cache miss. The
-  // stamp is the config's `mtimeMs:size` rather than its mtime alone — a real `git
-  // remote add` was measured leaving the mtime unchanged at one-second resolution
-  // while the size moved, and a missed change is the costly direction here (a
-  // false one costs a single spawn). Deliberately NOT parsing .git/config: `git
-  // config` honours `include` and `includeIf`, so a hand-rolled INI reader is an
-  // enumeration gap with a wrong answer at the end of it. Keeping the spawn behind
-  // the memo gets the saving with none of that exposure.
-  //
-  // The honest edges, both of which the spawn itself would not have: a remote added
-  // through an INCLUDED file whose own mtime changed is not seen, and neither is
-  // one in a `config.worktree` under `extensions.worktreeConfig`. A stat that fails
-  // yields no stamp and therefore no memo, so an unreadable config re-reads rather
-  // than freezing an answer.
-  async getRemotesAsync(workingDir) {
-    const configPath = import_node_path28.default.join(
-      this.resolveCommonGitDir(this.resolveGitDir(workingDir)),
-      "config"
-    );
-    const identity2 = configIdentity(configPath);
-    if (identity2 === null) return this.readRemotes(workingDir);
-    const { key, stamp: stamp2 } = identity2;
-    const memo = this.remotesByConfig.get(key);
-    if (memo !== void 0 && memo.stamp === stamp2) {
-      this.remotesByConfig.delete(key);
-      this.remotesByConfig.set(key, memo);
-      return memo.remotes;
-    }
-    const remotes = this.readRemotes(workingDir);
-    this.remotesByConfig.set(key, { stamp: stamp2, remotes });
-    void remotes.then(
-      (outcome) => {
-        const held2 = this.remotesByConfig.get(key);
-        if (outcome.kind !== "ok" && held2?.remotes === remotes) {
-          this.remotesByConfig.delete(key);
-        }
-      },
-      () => {
-        const held2 = this.remotesByConfig.get(key);
-        if (held2?.remotes === remotes) this.remotesByConfig.delete(key);
-      }
-    );
-    while (this.remotesByConfig.size > REMOTES_CACHE_MAX) {
-      const oldest = this.remotesByConfig.keys().next().value;
-      if (oldest === void 0) break;
-      this.remotesByConfig.delete(oldest);
-    }
-    return remotes;
-  }
-  remotesByConfig = /* @__PURE__ */ new Map();
-  async readRemotes(workingDir) {
-    return remotesOf(
-      await this.execGitAsync(REMOTES_ARGS, { cwd: workingDir, timeout: 2e3 })
-    );
-  }
-  // [LAW:effects-at-boundaries] Pure projection over remotes the caller already
-  // read — no spawn of its own, so it cannot disagree with the sibling repoUrl
-  // projection about what origin is.
-  //
-  // A local-only repo's name is its directory name BY POLICY (the display
-  // contract for repos without a remote) — never as an error fallback; a failed
-  // remotes read stays failed at the call site instead of borrowing this rule.
-  repoNameFrom(remotes, workingDir) {
-    const url = repoRemoteUrl(remotes);
-    return (url === null ? null : repoNameFromUrl(url)) ?? import_node_path28.default.basename(workingDir);
-  }
-  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
-  // remote to fold into its PR cache key (the PR value depends on the remote; a
-  // re-pointed remote must be a new key). Raw, unparsed — the forge detector
-  // reads the host from it. No remotes → `absent` (hence no forge PR concept),
-  // distinct from a failed read.
-  //
-  // Named for the repo rather than for `origin` because it no longer reads
-  // `origin` specifically — it projects `forgeRemoteUrl` over the same picked
-  // remote repoName and repoUrl use, preferring a url a forge CLI recognizes.
-  // That preference is the point: `detectForge` gates the whole PR lookup, so a
-  // browsable-but-unrecognized mirror listed first would silently decide the
-  // branch has no PR.
-  async getRepoRemoteUrl(workingDir) {
-    const remotes = await this.getRemotesAsync(workingDir);
-    if (remotes.kind !== "ok") return remotes;
-    const url = forgeRemoteUrl(remotes.value);
-    return url === null ? ABSENT : ok(url);
-  }
-  // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors
-  // execGitAsync but carries the "forge" launch category and a longer timeout
-  // (this is a network call, not a local git read). Returns the typed
-  // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
-  async execForgeAsync(bin, args, options) {
-    return this.launcher.launch({
-      bin,
-      args: [...args],
-      cwd: options.cwd,
-      timeoutMs: options.timeout,
-      category: "forge"
-    });
-  }
-  // [LAW:effects-at-boundaries] Resolve the branch's PR/MR via the forge
-  // CLI. Pure dispatch over a remote the CALLER has already read: pick the
-  // forge by host, run its CLI, fold the launch result into an Outcome. The
-  // remote is a parameter (not read here) so the cache layer can fold it into
-  // its key in the same read — no caching here; the daemon's GitDataProvider
-  // owns the PR cache + TTL (a network resource wants a longer, independent
-  // lifecycle than local git state). `absent` when the host is no recognized
-  // forge; the CLI dispatch then classifies the rest.
-  async resolvePullRequest(workingDir, remoteUrl) {
-    const forge = detectForge(remoteUrl);
-    if (forge === "github") {
-      return classifyForgePr(
-        "gh pr view",
-        await this.execForgeAsync(
-          FORGE_CLI.github,
-          ["pr", "view", "--json", "number,state,url,headRefOid"],
-          { cwd: workingDir, timeout: 5e3 }
-        ),
-        /no (open )?pull requests? found/i,
-        parseGithubPr
-      );
-    }
-    if (forge === "gitlab") {
-      return classifyForgePr(
-        "glab mr view",
-        await this.execForgeAsync(
-          FORGE_CLI.gitlab,
-          ["mr", "view", "--output", "json"],
-          {
-            cwd: workingDir,
-            timeout: 5e3
-          }
-        ),
-        /no (open )?merge requests? (found|available)/i,
-        parseGitlabMr
-      );
-    }
-    return ABSENT;
-  }
-  isWorktree(workingDir) {
-    try {
-      const gitDir = import_node_path28.default.join(workingDir, ".git");
-      if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
-  // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2
-  // --branch` reports branch, short SHA, upstream, ahead/behind, and worktree
-  // status in a single subprocess — the fan-out this method replaces spawned up
-  // to six (status -b, two rev-list, a branch fallback, rev-parse HEAD, rev-parse
-  // @{u}). Parsing is delegated to the pure `parseStatusV2`.
-  async getCoreAsync(workingDir) {
-    debug(`[GIT-EXEC] Running git status --porcelain=v2 in ${workingDir}`);
-    const r = classify(
-      "git status --porcelain=v2 --branch",
-      await this.execGitAsync(["status", "--porcelain=v2", "--branch"], {
-        cwd: workingDir,
-        timeout: 2e3
-      }),
-      // `git status` has no non-zero domain answer; any failure means the
-      // core state is unknown — no fabricated "clean" on a fallback branch.
-      "failed"
-    );
-    if (r.kind !== "ok") return r;
-    return ok(parseStatusV2(r.value));
-  }
-};
-
-// src/segments/context.ts
-init_globals();
-
-// src/utils/transcript-fold.ts
-init_globals();
-
-// src/utils/observable-lru.ts
-init_globals();
-var ObservableLru = class {
-  constructor(max3) {
-    this.max = max3;
-  }
-  max;
-  values = observable.map(void 0, { deep: false });
-  // Least recently used first.
-  order = /* @__PURE__ */ new Set();
-  get(key) {
-    return this.values.get(key);
-  }
-  get size() {
-    return this.order.size;
-  }
-  // The key was used and its value stands.
-  touch(key) {
-    if (this.order.delete(key)) this.order.add(key);
-  }
-  // The key's value now, used now. A value identical to the one held wakes
-  // nobody.
-  set(key, value) {
-    this.order.delete(key);
-    this.order.add(key);
-    runInAction(() => {
-      this.values.set(key, value);
-      for (const oldest of this.order) {
-        if (this.order.size <= this.max) break;
-        this.order.delete(oldest);
-        this.values.delete(oldest);
-      }
-    });
-  }
-};
-
-// src/utils/transcript-fold.ts
-var MAX_SESSIONS3 = 256;
-var TranscriptFold = class {
-  constructor(empty2, step4, refreshes, clock, log = quietLogger, maxSessions = MAX_SESSIONS3) {
-    this.empty = empty2;
-    this.step = step4;
-    this.refreshes = refreshes;
-    this.clock = clock;
-    this.log = log;
-    this.sessions = new ObservableLru(maxSessions);
-  }
-  empty;
-  step;
-  refreshes;
-  clock;
-  log;
-  // [LAW:no-shared-mutable-globals] Single owner, hard cap, LRU eviction. One
-  // instance per projection per daemon. Observable, so a view's payload over
-  // an answer is recomputed in the turn the answer is stored.
-  sessions;
-  // [LAW:effects-at-boundaries] The session's refresh: folds what was
-  // appended since its last read, and stores what it answered.
-  async read(sessionId2, transcriptPath, by) {
-    const held2 = this.sessions.get(sessionId2);
-    const prior = held2?.folded;
-    const stamp2 = statStamp(transcriptPath);
-    if (held2?.folded && stamp2 !== "" && held2.folded.cursor.stamp === stamp2) {
-      const { folded: folded3, answer: answer2 } = held2;
-      if (answer2.kind === "ok" && answer2.value === folded3.value) {
-        this.sessions.touch(sessionId2);
-        return answer2;
-      }
-      return this.store(sessionId2, folded3, { kind: "ok", value: folded3.value });
-    }
-    const startedAt = this.clock.monotonic();
-    const read2 = await foldAppended(
-      transcriptPath,
-      prior,
-      this.empty,
-      (state, entries) => entries.reduce(this.step, state)
-    );
-    this.refreshes.recorded(
-      `sid=${valueOf(sessionId2)}`,
-      by,
-      read2,
-      elapsedMs(this.clock, startedAt)
-    );
-    if (read2.kind === "failed") return this.store(sessionId2, prior, read2);
-    if (read2.kind === "absent") {
-      return this.store(sessionId2, prior, {
-        kind: "ok",
-        value: prior?.value ?? this.empty
-      });
-    }
-    const { folded: folded2, longLines } = read2.value;
-    for (const line of longLineLog(longLines)) this.log("info", line);
-    return this.store(sessionId2, folded2, { kind: "ok", value: folded2.value });
-  }
-  // What the session's last read answered, as it stands: never read is
-  // pending, its first read the next request's.
-  answer(sessionId2) {
-    return this.sessions.get(sessionId2)?.answer ?? pendingOf("unread");
-  }
-  store(sessionId2, folded2, answer2) {
-    this.sessions.set(sessionId2, { folded: folded2, answer: answer2 });
-    return answer2;
-  }
-};
-
-// src/segments/context.ts
-var DEFAULT_CONTEXT_WINDOW = 2e5;
-function step(state, entry) {
-  const usage = entry.message?.usage;
-  if (!usage?.input_tokens || entry.isSidechain === true) return state;
-  return usage.input_tokens + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
-}
-var ContextProvider = class {
-  // [LAW:one-source-of-truth] The context fallback is a fold like metrics and
-  // activity: one number per session, kept incrementally, rather than every
-  // entry of the transcript re-parsed to find the last one.
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      void 0,
-      step,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "context",
-        scope: "session",
-        refresh: ["first", "period", "change"],
-        lines: []
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // The session's context tokens, folded from the transcript's newest
-  // main-chain usage entry.
-  // [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
-  // boundary logs it); a transcript with no usable usage entry is `absent`.
-  async refresh(sessionId2, transcriptPath, by) {
-    return tokensFrom(await this.fold.read(sessionId2, transcriptPath, by));
-  }
-  // The session's context tokens as its last refresh left them, for a draw.
-  tokensOf(sessionId2) {
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : tokensFrom(answer2);
-  }
-};
-function tokensFrom(read2) {
-  if (read2.kind === "failed") {
-    return failed(`context transcript: ${read2.reason}`, read2.failedAt);
-  }
-  if (read2.value === void 0) {
-    debug("No main chain entries with usage data found");
-    return ABSENT;
-  }
-  return ok(read2.value);
-}
-function ratioPercentages(totalTokens, contextLimit) {
-  const percentage = Math.min(
-    100,
-    Math.max(0, Math.round(totalTokens / contextLimit * 100))
-  );
-  return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
-}
-function contextFromHook(hookData2) {
-  const cw = hookData2.context_window;
-  if (!cw?.current_usage) return null;
-  const currentUsage = cw.current_usage;
-  const contextLimit = cw.context_window_size;
-  const totalTokens = (currentUsage.input_tokens || 0) + (currentUsage.cache_creation_input_tokens || 0) + (currentUsage.cache_read_input_tokens || 0);
-  const ratio = ratioPercentages(totalTokens, contextLimit);
-  return {
-    totalTokens,
-    maxTokens: contextLimit,
-    percentage: cw.used_percentage != null ? Math.round(cw.used_percentage) : ratio.percentage,
-    contextLeftPercentage: cw.remaining_percentage != null ? Math.round(cw.remaining_percentage) : ratio.contextLeftPercentage
-  };
-}
-function contextOver(tokens, hookData2) {
-  const native2 = contextFromHook(hookData2);
-  if (native2 !== null) return ok(native2);
-  if (tokens.kind !== "ok") return tokens;
-  const contextLimit = contextLimitOf(hookData2);
-  return ok({
-    totalTokens: tokens.value,
-    maxTokens: contextLimit,
-    ...ratioPercentages(tokens.value, contextLimit)
-  });
-}
-function contextLimitOf(hookData2) {
-  return hookData2.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
-}
-
-// src/segments/metrics.ts
-init_globals();
-var RECENT_WINDOW = 20;
-var EMPTY = {
-  messageCount: 0,
-  nonPrompts: 0,
-  recent: []
-};
-var NON_PROMPTS = /* @__PURE__ */ new Set([
-  "turn",
-  "interrupt",
-  "claude-code"
-]);
-function step2(state, entry) {
-  if (entry.isSidechain) return state;
-  const grown = [...state.recent, entry];
-  return {
-    messageCount: state.messageCount + (entry.userEntry === "prompt" ? 1 : 0),
-    nonPrompts: state.nonPrompts + (NON_PROMPTS.has(entry.userEntry) ? 1 : 0),
-    recent: grown.length > RECENT_WINDOW ? grown.slice(-RECENT_WINDOW) : grown
-  };
-}
-function lastResponseTime(entries) {
-  let lastUserTime = null;
-  let best = null;
-  for (const entry of entries) {
-    const messageType = entry.type || entry.message?.role || entry.message?.type;
-    if (entry.userEntry === "prompt" || entry.userEntry === "turn") {
-      lastUserTime = entry.timestamp;
-    } else if (messageType === "assistant" && lastUserTime) {
-      const elapsed = (entry.timestamp.getTime() - lastUserTime.getTime()) / 1e3;
-      if (elapsed > 0.1 && elapsed < 300) best = elapsed;
-    }
-  }
-  return best;
-}
-var MetricsProvider = class {
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      EMPTY,
-      step2,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "metrics",
-        scope: "session",
-        refresh: ["first", "period", "change"],
-        lines: []
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // The session's metrics fold, read from its transcript.
-  // [LAW:no-silent-failure] A transcript parse error is `failed`, carried to
-  // the payload boundary.
-  async refresh(sessionId2, transcriptPath, by) {
-    debug(`Getting metrics from the transcript for session: ${sessionId2}`);
-    return foldFrom(
-      sessionId2,
-      await this.fold.read(sessionId2, transcriptPath, by)
-    );
-  }
-  // The session's metrics fold as its last refresh left it, for a draw.
-  foldOf(sessionId2) {
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : foldFrom(sessionId2, answer2);
-  }
-};
-function foldFrom(sessionId2, folded2) {
-  if (folded2.kind === "failed") {
-    return failed(`metrics (${sessionId2}): ${folded2.reason}`, folded2.failedAt);
-  }
-  return ok({
-    lastResponseTime: lastResponseTime(folded2.value.recent),
-    messageCount: folded2.value.messageCount,
-    nonPrompts: folded2.value.nonPrompts
-  });
-}
-function metricsOver(fold, hookData2) {
-  const cost = hookData2.cost;
-  if (!cost) return ABSENT;
-  if (fold.kind !== "ok") return fold;
-  return ok({
-    ...fold.value,
-    responseTime: cost.total_api_duration_ms / 1e3,
-    sessionDuration: cost.total_duration_ms / 1e3,
-    linesAdded: cost.total_lines_added,
-    linesRemoved: cost.total_lines_removed
-  });
-}
-
-// src/segments/activity.ts
-init_globals();
-var EMPTY2 = {
-  command: null,
-  todos: [],
-  pending: [],
-  done: []
-};
-function bump2(tally, name) {
-  const at = tally.findIndex((t2) => t2.name === name);
-  if (at < 0) return [...tally, { name, count: 1 }];
-  return tally.map(
-    (t2, i2) => i2 === at ? { name: t2.name, count: t2.count + 1 } : t2
-  );
-}
-function atBoundary(state, entry) {
-  switch (entry.userEntry) {
-    case "prompt":
-      return {
-        ...state,
-        command: entry.activity?.command ?? null,
-        pending: [],
-        done: []
-      };
-    case "interrupt":
-      return { ...state, pending: [] };
-    case "turn":
-    case "tool-result":
-    case "claude-code":
-    case void 0:
-      return state;
-  }
-}
-function step3(state, entry) {
-  if (entry.isSidechain) return state;
-  const turn = atBoundary(state, entry);
-  const activity = entry.activity;
-  if (activity === void 0) return turn;
-  let pending2 = turn.pending;
-  let done = turn.done;
-  if (activity.started !== void 0) {
-    pending2 = [...pending2, ...activity.started];
-  }
-  for (const id2 of activity.finished ?? []) {
-    const at = pending2.findIndex((call) => call.id === id2);
-    if (at < 0) continue;
-    done = bump2(done, pending2[at].name);
-    pending2 = [...pending2.slice(0, at), ...pending2.slice(at + 1)];
-  }
-  return {
-    ...turn,
-    pending: pending2,
-    done,
-    todos: activity.todos ?? turn.todos
-  };
-}
-function report(state) {
-  return {
-    command: state.command,
-    todos: state.todos,
-    running: state.pending.reduce(
-      (tally, call) => bump2(tally, call.name),
-      []
-    ),
-    done: state.done
-  };
-}
-var ActivityProvider = class {
-  fold;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.fold = new TranscriptFold(
-      EMPTY2,
-      step3,
-      (opts.ledger ?? new RefreshLedger(logger)).declare({
-        name: "activity",
-        scope: "session",
-        refresh: ["first", "period", "change"],
-        lines: []
-      }),
-      opts.clock,
-      logger
-    );
-  }
-  // [LAW:no-silent-failure] A transcript read error is `failed`, carried to the
-  // payload boundary that logs it. There is no `absent` arm: a session with no
-  // transcript yet, or one that has done nothing, is a real EMPTY record — and
-  // the payload projection drops every field of an empty one, so "nothing is
-  // happening" reaches the templates as absence either way.
-  async refresh(sessionId2, transcriptPath, by) {
-    return activityFrom(
-      sessionId2,
-      await this.fold.read(sessionId2, transcriptPath, by)
-    );
-  }
-  // The session's activity as its last refresh left it, for a draw.
-  activityOf(sessionId2) {
-    const answer2 = this.fold.answer(sessionId2);
-    return answer2.kind === "pending" ? answer2 : activityFrom(sessionId2, answer2);
-  }
-};
-function activityFrom(sessionId2, folded2) {
-  return folded2.kind === "failed" ? failed(`activity (${sessionId2}): ${folded2.reason}`, folded2.failedAt) : ok(report(folded2.value));
-}
-
-// src/daemon/cache/tmux.ts
-init_globals();
-
-// src/proc/tmux.ts
-init_globals();
-function invocation(hint, category, args, stdinInput) {
-  return {
-    bin: "tmux",
-    args: ["-S", hint.socket, ...args],
-    timeoutMs: 2e3,
-    category,
-    stdinInput
-  };
-}
-function tmuxRun(result, args) {
-  if (result.ok) return { kind: "ok", stdout: result.stdout };
-  if (result.reason === "rate-limited") {
-    return { kind: "rate-limited", reason: failureText(result) };
-  }
-  return {
-    kind: "failed",
-    reason: `tmux ${args[0]} failed (${failureText(result)})`
-  };
-}
-async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
-  return tmuxRun(
-    await launcher.launch(invocation(hint, category, args, stdinInput)),
-    args
-  );
-}
-
-// src/daemon/cache/tmux.ts
-var NAME_PERIOD_MS = 3e4;
-var MAX_ENTRIES = 64;
-var TmuxService = class {
-  names;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    this.names = new KeyedSource({
-      name: "tmux",
-      scope: "pane",
-      // A socket path cannot hold a newline's worth of pane id, so the pair
-      // is unambiguous.
-      keyOf: (hint) => `${hint.socket}
-${hint.pane}`,
-      fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
-      read: (hint) => askSessionName(opts.launcher, hint),
-      every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
-      watch: NO_WATCH,
-      maxEntries: MAX_ENTRIES,
-      lines: REFRESH_TRIGGERS,
-      logger,
-      ledger: opts.ledger ?? new RefreshLedger(logger),
-      clock: opts.clock
-    });
-  }
-  // ok — the session name; absent — tmux answered with an empty name; failed
-  // — the invocation itself failed, carried to the payload boundary as a
-  // value ([LAW:no-silent-failure]) and logged once, by the refresh that
-  // failed.
-  //
-  // [LAW:types-are-the-program] Takes the pane to ask about. "Not in tmux" is
-  // the caller's fact (the hint is null), so there is no pane-less call to
-  // answer.
-  declare(holds2, hint) {
-    return this.names.declare(holds2, hint);
-  }
-  getStats() {
-    return this.names.stats();
-  }
-  close() {
-    this.names.close();
-  }
-};
-async function askSessionName(launcher, hint) {
-  const run3 = await runTmuxAsync(launcher, hint, "tmux", [
-    "display-message",
-    "-p",
-    "-t",
-    hint.pane,
-    "#S"
-  ]);
-  if (run3.kind !== "ok") return failed(run3.reason, "read");
-  const name = run3.stdout.trim();
-  return name ? ok(name) : ABSENT;
-}
-
-// src/segments/host.ts
-init_globals();
-init_os();
-var HOST_PERIOD_MS = 6e4;
-var HOST_EVERY = { okMs: HOST_PERIOD_MS, failedMs: HOST_PERIOD_MS };
-function shortHostname(hostname2) {
-  const dot = hostname2.indexOf(".");
-  return dot < 0 ? hostname2 : hostname2.slice(0, dot);
-}
-function syscall(field, read2) {
-  try {
-    const value = read2();
-    return Promise.resolve(value === "" ? ABSENT : ok(value));
-  } catch (e) {
-    return Promise.resolve(failed(`host.${field}: ${String(e)}`, "read"));
-  }
-}
-var HostService = class {
-  name;
-  user;
-  constructor(opts) {
-    const logger = opts.logger ?? quietLogger;
-    const ledger = opts.ledger ?? new RefreshLedger(logger);
-    const one = {
-      scope: "daemon",
-      keyOf: () => "",
-      fields: () => "-",
-      every: () => HOST_EVERY,
-      watch: NO_WATCH,
-      maxEntries: 1,
-      lines: REFRESH_TRIGGERS,
-      logger,
-      ledger,
-      clock: opts.clock
-    };
-    this.name = new KeyedSource({
-      ...one,
-      name: "host.name",
-      read: () => syscall("name", () => shortHostname(os_default.hostname()))
-    });
-    this.user = new KeyedSource({
-      ...one,
-      name: "host.user",
-      read: () => syscall("user", () => os_default.userInfo().username)
-    });
-  }
-  declareName(holds2) {
-    return this.name.declare(holds2, null);
-  }
-  declareUser(holds2) {
-    return this.user.declare(holds2, null);
-  }
-  // How many of its two sources a view holds now.
-  held() {
-    return this.name.stats().held + this.user.stats().held;
-  }
-  close() {
-    this.name.close();
-    this.user.close();
-  }
-};
-
-// src/daemon/cache/autocompact.ts
-init_globals();
-var MAX_FILES = 64;
-var AutoCompactProvider = class {
-  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
-    this.clock = clock;
-    this.refreshes = ledger.declare({
-      name: "autocompact",
-      scope: "configDir",
-      refresh: ["first", "period", "change"],
-      lines: []
-    });
-  }
-  clock;
-  // Observable, so a view's payload over a window is recomputed in the turn
-  // it is stored.
-  known = new ObservableLru(MAX_FILES);
-  refreshes;
-  window(settingsPath, by) {
-    const stamp2 = stampAt(settingsPath);
-    const known = this.known.get(settingsPath);
-    if (known !== void 0 && known.stamp === stamp2) {
-      this.known.touch(settingsPath);
-      return known.outcome;
-    }
-    const startedAt = this.clock.monotonic();
-    const outcome = readAutoCompactWindow(settingsPath);
-    this.refreshes.recorded(
-      `path=${valueOf(settingsPath)} stamp=${valueOf(stamp2)}`,
-      by,
-      outcome,
-      elapsedMs(this.clock, startedAt)
-    );
-    this.known.set(settingsPath, { stamp: stamp2, outcome });
-    return outcome;
-  }
-  // The window as the last refresh left it, for a draw: the file is not
-  // touched.
-  stored(settingsPath) {
-    return this.known.get(settingsPath)?.outcome ?? pendingOf("unread");
-  }
-  getStats() {
-    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
-  }
-};
-function stampAt(settingsPath) {
-  try {
-    const st = fs_default.statSync(settingsPath, { throwIfNoEntry: false });
-    return st === void 0 ? "absent" : stampOf(st);
-  } catch (e) {
-    return `unread:${e.code ?? "error"}`;
-  }
-}
-function readAutoCompactWindow(settingsPath) {
-  const read2 = readClaudeSettingsOutcome(settingsPath);
-  if (read2.kind !== "ok") return read2;
-  const window2 = read2.value.autoCompactWindow;
-  if (window2 === void 0) return ok("auto");
-  return typeof window2 === "number" && Number.isInteger(window2) && window2 >= LEAST && window2 <= MOST ? ok(window2) : failed(
-    `${settingsPath}: autoCompactWindow is ${JSON.stringify(window2)}, not a window /autocompact accepts (${LEAST}\u2013${MOST} tokens)`,
-    "parse"
-  );
-}
-
-// src/segments/cache.ts
-init_globals();
-var CACHE_TTL_MS = 60 * 60 * 1e3;
-var TAIL_CHUNK = 64 * 1024;
-var TAIL_MAX = 1 * 1024 * 1024;
-var CACHE_HIT_RE = /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
-function cacheActivityTs(line) {
-  let parsed2;
-  try {
-    parsed2 = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  const usage = parsed2.message?.usage;
-  const positive2 = (usage?.cache_read_input_tokens ?? 0) > 0 || (usage?.cache_creation_input_tokens ?? 0) > 0;
-  if (!positive2) return null;
-  const ms = parsed2.timestamp != null ? Date.parse(parsed2.timestamp) : NaN;
-  return Number.isNaN(ms) ? null : ms;
-}
-var MAX_SESSIONS4 = 256;
-var CacheExpiryProvider = class {
-  constructor(clock, logger = quietLogger, ledger = new RefreshLedger(logger)) {
-    this.clock = clock;
-    this.refreshes = ledger.declare({
-      name: "cache",
-      scope: "session",
-      refresh: ["first", "period", "change"],
-      lines: []
-    });
-  }
-  clock;
-  // Observable, so a view's payload over an expiry is recomputed in the turn
-  // a new one is stored.
-  known = new ObservableLru(MAX_SESSIONS4);
-  // [LAW:no-silent-failure] Each read of the tail is one event, a failed one at
-  // warn; an answer believed under its stamp reads nothing, and logs nothing.
-  refreshes;
-  // The session's refresh, which its transcript's watch and period make.
-  async refresh(sessionId2, transcriptPath, by) {
-    const stamp2 = statStamp(transcriptPath);
-    const prior = this.known.get(sessionId2);
-    if (prior !== void 0 && stamp2 !== "" && prior.stamp === stamp2 && prior.outcome.kind !== "failed") {
-      this.known.touch(sessionId2);
-      return prior.outcome;
-    }
-    const outcome = await this.read(sessionId2, transcriptPath, stamp2, by);
-    this.known.set(sessionId2, { stamp: stamp2, outcome });
-    return outcome;
-  }
-  // The expiry as the session's last refresh left it, for a draw.
-  expiryOf(sessionId2) {
-    return this.known.get(sessionId2)?.outcome ?? pendingOf("unread");
-  }
-  getStats() {
-    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
-    return { entries: this.known.size, refreshes, failures, abandoned, lastMs };
-  }
-  async read(sessionId2, transcriptPath, stamp2, by) {
-    const startedAt = this.clock.monotonic();
-    const outcome = await cacheExpiresAt(transcriptPath);
-    this.refreshes.recorded(
-      `sid=${valueOf(sessionId2)} stamp=${valueOf(stamp2)}`,
-      by,
-      outcome,
-      elapsedMs(this.clock, startedAt)
-    );
-    return outcome;
-  }
-};
-async function cacheExpiresAt(transcriptPath) {
-  const lastCacheMs = await findLastCacheActivityTs(transcriptPath);
-  if (lastCacheMs.kind !== "ok") return lastCacheMs;
-  return ok(Math.floor((lastCacheMs.value + CACHE_TTL_MS) / 1e3));
-}
-async function findLastCacheActivityTs(transcriptPath) {
-  for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
-    if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
-    if (ts != null) return ok(ts);
-    if (tail.value.fromStart) return ABSENT;
-  }
-  return ABSENT;
-}
-function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text4 = buf.toString("utf8");
-  const lines2 = text4.split("\n");
-  const start = bufStartsAtFileBeginning ? 0 : 1;
-  for (let i2 = lines2.length - 1; i2 >= start; i2--) {
-    const line = lines2[i2];
-    if (!line || !CACHE_HIT_RE.test(line)) continue;
-    const ts = cacheActivityTs(line);
-    if (ts != null) return ts;
-  }
-  return null;
-}
-
-// src/daemon/refresh-faults.ts
-init_globals();
-var RefreshFaults = class {
-  bySession = observable.map(void 0, { deep: false });
-  // The lane's failure while its last refresh threw; none once one ran clean.
-  of(sessionId2, lane) {
-    const reason = this.bySession.get(sessionId2)?.get(lane);
-    return reason === void 0 ? void 0 : failed(reason, "read");
-  }
-  // What the lane's refresh just did: threw `reason`, or ran clean (null).
-  refreshed(sessionId2, lane, reason) {
-    const held2 = this.bySession.get(sessionId2);
-    if (reason === null && held2?.has(lane) !== true) return;
-    const next = new Map(held2);
-    if (reason === null) next.delete(lane);
-    else next.set(lane, reason);
-    runInAction(() => {
-      if (next.size === 0) this.bySession.delete(sessionId2);
-      else this.bySession.set(sessionId2, next);
-    });
-  }
-};
-
-// src/daemon/cache/managed-storage.ts
-init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
-
-// src/var-system/parse.ts
-init_globals();
-var LINE_BREAK = /\r\n|\r|\n/g;
-var textParser = (text4) => ok(text4.replace(LINE_BREAK, " ").trim());
-function regexParser(regex) {
-  return (text4) => {
-    const m = regex.exec(text4);
-    const group = m?.[1];
-    return group === void 0 ? failed("regex no-match", "parse") : ok(group.replace(LINE_BREAK, " "));
-  };
-}
-var jsonParser = (text4) => {
-  try {
-    return ok(JSON.parse(text4));
-  } catch (e) {
-    return failed(`JSON parse failed: ${e.message}`, "parse");
-  }
-};
-
-// src/config/loader/plugins.ts
-init_globals();
-var import_node_path30 = __toESM(require_path_browserify(), 1);
-var import_json52 = __toESM(require_dist(), 1);
-
-// src/config/action.ts
-init_globals();
-var ACTION_KEYS = [
-  "set",
-  "persist",
-  "copy",
-  "open",
-  "reset",
-  "undo",
-  "redo",
-  "back",
-  "rewind",
-  "save",
-  "preset",
-  "themeDefault",
-  "doctor",
-  "slash",
-  "run",
-  "do"
-];
-var LAYER_CHOICES = {
-  persist: LAYER_ROLES,
-  reset: LAYER_ROLES,
-  preset: LAYER_ROLES,
-  themeDefault: LAYER_ROLES,
-  save: [...LAYER_ROLES, "ask"]
-};
-function runDeclaration(a) {
-  return JSON.stringify([a.run, Object.entries(a.env), a.cwd, a.refreshes]);
-}
-function* actionTemplates(a) {
-  const found2 = [];
-  mapActionTemplates(a, (source, field) => {
-    found2.push([field, source]);
-    return source;
-  });
-  yield* found2;
-}
-function mapActionTemplates(a, f) {
-  if ("copy" in a) return { ...a, copy: f(a.copy, "copy") };
-  if ("open" in a) return { ...a, open: f(a.open, "open") };
-  if ("preset" in a && a.preset === "delete")
-    return { ...a, name: f(a.name, "name") };
-  if ("run" in a) {
-    const run3 = a.run.map((item, i2) => f(item, `run.${i2}`));
-    return {
-      ...a,
-      run: run3,
-      env: Object.fromEntries(
-        Object.entries(a.env).map(([name, value]) => [
-          name,
-          f(value, `env.${name}`)
-        ])
-      )
-    };
-  }
-  return a;
-}
-function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a;
-}
-
-// src/config/loader/merge.ts
-init_globals();
-function mergeWithDefault(raw, dflt) {
-  return {
-    globals: { ...dflt.globals, ...raw.globals ?? {} },
-    // [LAW:single-enforcer] The daemon's payload inputs have the last word
-    // over every base and every layer, so no config reads another value.
-    variables: {
-      ...dflt.variables,
-      ...raw.variables ?? {},
-      ...PAYLOAD_INPUTS
-    },
-    segments: overlayByName(
-      dflt.segments,
-      segmentDeltas(dflt.segments, raw.segments ?? {})
-    ),
-    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
-    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
-    // declares only the actions that differ from the bundled default (which
-    // ships none).
-    actions: { ...dflt.actions, ...raw.actions ?? {} },
-    // [LAW:one-source-of-truth] styles merge by name, same cascade — a user
-    // overrides one adaptation by re-declaring its name; the bundled stdlib
-    // (incl. the "none" identity floor) survives every merge by construction.
-    styles: { ...dflt.styles, ...raw.styles ?? {} },
-    // [LAW:one-source-of-truth] presets merge by name then by field, the
-    // segments overlay — a user retunes one arrangement's root without
-    // restating its globals; the bundled stdlib (incl. the "default"
-    // empty-fragment floor effectivePresetName collapses to) survives every
-    // merge by construction, exactly as styles' "none" does.
-    presets: overlayByName(
-      dflt.presets,
-      presetDeltas(dflt.presets, raw.presets ?? {})
-    ),
-    // [LAW:one-source-of-truth] themeDefaults merge by theme name then by
-    // field, the presets overlay — a file setting one theme's shade keeps the
-    // variation and style the bundled entry for that theme carries.
-    themeDefaults: overlayByName(dflt.themeDefaults, raw.themeDefaults ?? {}),
-    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
-    // `globals` cascade above, not the by-name cascades around it, because it
-    // IS a globals fragment: a user retuning edit mode's separator says nothing
-    // about its `endcaps`, exactly as a user setting `globals.padding` says
-    // nothing about `globals.endcaps`.
-    editGlobals: { ...dflt.editGlobals, ...raw.editGlobals ?? {} },
-    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
-    // overrides one formatter helper by re-declaring its name; the rest inherit
-    // from the bundled default.
-    helpers: { ...dflt.helpers, ...raw.helpers ?? {} }
-  };
-}
-function segmentDeltas(base, over2) {
-  const byName = (name, field, delta) => delta[field] === void 0 ? delta : { ...delta, [field]: { ...base[name]?.[field], ...delta[field] } };
-  return Object.fromEntries(
-    Object.entries(over2).map(([name, delta]) => [
-      name,
-      byName(name, "partials", byName(name, "settings", delta))
-    ])
-  );
-}
-function presetDeltas(base, over2) {
-  return Object.fromEntries(
-    Object.entries(over2).map(([name, delta]) => [
-      name,
-      delta.globals === void 0 ? delta : { ...delta, globals: { ...base[name]?.globals, ...delta.globals } }
-    ])
-  );
-}
-function overlayByName(base, over2) {
-  return {
-    ...base,
-    ...Object.fromEntries(
-      Object.entries(over2).map(([name, delta]) => [
-        name,
-        { ...base[name], ...delta }
-      ])
-    )
-  };
-}
-
-// src/config/loader/segments.ts
-init_globals();
-
-// src/config/loader/renamed-segments.ts
-init_globals();
-var RENAMED_SEGMENTS = /* @__PURE__ */ new Map([
-  ["gitTaculous", { kind: "built-in", to: "gitaculous" }],
-  // The one-line summary became the collapsed form of `gitaculous`
-  // (brandon-git-segment-ixf.tl0).
-  ["git", { kind: "built-in", to: "gitaculous" }],
-  // The settings menu's anchor left `settings.` so `.settings` could be a
-  // placement's own settings (brandon-segment-settings-i4n).
-  ["settings.menu", { kind: "built-in", to: "candybar.menu" }],
-  // lit's ticket moved out of the bundled bar into the plugin lit's repository
-  // ships, which reads lit's own statusline file (brandon-plugins-ktag.d6f).
-  [
-    "ticket",
-    {
-      kind: "plugin",
-      to: "plugins.lit.ticket",
-      source: "promptctl/links-issue-tracker"
-    }
-  ],
-  [
-    "ceiling",
-    {
-      kind: "removed",
-      why: "the program it showed draws it through a cc-candybar plugin of its own now \u2014 delete this reference, or place that plugin's segment"
-    }
-  ],
-  [
-    "themeSwitcher",
-    {
-      kind: "removed",
-      why: 'the settings menu\'s \u{1F3A8} theme control steps themes \u2014 delete this reference, or write your own `{{ carousel "apply" "open" "label" }}`'
-    }
-  ]
-]);
-function renamedHint(name) {
-  const renamed = RENAMED_SEGMENTS.get(name);
-  if (renamed === void 0) return "";
-  switch (renamed.kind) {
-    case "built-in":
-      return ` (the built-in segment "${name}" was renamed to "${renamed.to}" \u2014 update this reference)`;
-    case "plugin":
-      return ` (the built-in segment "${name}" became "${renamed.to}", a segment of the plugin \`cc-candybar plugin install ${renamed.source}\` installs \u2014 update this reference)`;
-    case "removed":
-      return ` (the built-in segment "${name}" was removed: ${renamed.why})`;
-  }
-}
-
-// src/config/loader/variables.ts
-init_globals();
-
-// src/config/loader/cache.ts
-init_globals();
-function requireCache(ctx, path46, raw, kind) {
-  if (raw.cache === void 0) {
-    ctx.issues.push({
-      path: `${path46}.cache`,
-      message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-      line: findKeyLine(ctx.source, path46.split("."))
-    });
-    return null;
-  }
-  return validateCache(ctx, `${path46}.cache`, raw.cache);
-}
-function requireCacheSpec(kind) {
-  return {
-    required: true,
-    json: cacheJson(),
-    parse: (ctx, path46, _field, raw) => requireCache(ctx, path46, raw, kind) ?? void 0
-  };
-}
-var CACHE_SCHEMA = {
-  noun: "cache",
-  arms: {
-    ttl: {
-      json: { type: "string" },
-      parse: (ctx, path46, value) => typeof value === "string" && isValidDuration(value) ? { ttl: value } : reject(
-        ctx,
-        path46,
-        `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`
-      )
-    },
-    watch_file: {
-      json: { type: "string" },
-      parse: (ctx, path46, value) => typeof value === "string" ? { watch_file: value } : reject(
-        ctx,
-        path46,
-        `cache.watch_file must be a path string, got ${describeValue(value)}`
-      )
-    },
-    depends_on: {
-      json: { type: "array", items: { type: "string" } },
-      parse: (ctx, path46, value) => Array.isArray(value) && value.every((v) => typeof v === "string") ? { depends_on: value } : reject(
-        ctx,
-        path46,
-        `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`
-      )
-    },
-    key: {
-      json: { type: "string" },
-      parse: (ctx, path46, value) => typeof value === "string" && value !== "" ? { key: value } : reject(
-        ctx,
-        path46,
-        `cache.key must be a non-empty template string, got ${describeValue(value)}`
-      )
-    },
-    never: {
-      json: { const: true },
-      parse: (ctx, path46, value) => value === true ? { never: true } : reject(
-        ctx,
-        path46,
-        `cache.never must be the literal boolean true, got ${describeValue(value)}`
-      )
-    }
-  }
-};
-function validateCache(ctx, path46, raw) {
-  return oneOfPresent(ctx, CACHE_SCHEMA, path46, raw);
-}
-function cacheJson() {
-  return oneOfPresentJson(CACHE_SCHEMA);
-}
-var DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
-function isValidDuration(s) {
-  return DURATION_RE.test(s);
-}
-
-// src/config/loader/retired-variables.ts
-init_globals();
-var RETIRED_VARIABLES = /* @__PURE__ */ new Map([
-  // brandon-settings-coverage-g4p.lx2
-  ["session.budget.amount", { segment: "session", setting: "budget" }],
-  [
-    "session.budget.warningThreshold",
-    { segment: "session", setting: "warnAt" }
-  ],
-  ["today.budget.amount", { segment: "today", setting: "budget" }],
-  ["today.budget.warningThreshold", { segment: "today", setting: "warnAt" }],
-  ["block.budget.heatThreshold", { segment: "block", setting: "warnAt" }],
-  ["block.budget.warningThreshold", { segment: "block", setting: "errorAt" }],
-  ["weekly.budget.heatThreshold", { segment: "weekly", setting: "warnAt" }],
-  ["weekly.budget.warningThreshold", { segment: "weekly", setting: "errorAt" }],
-  ["burn.eta.errorMinutes", { segment: "burnrate", setting: "errorWithin" }],
-  ["burn.eta.warnMinutes", { segment: "burnrate", setting: "warnWithin" }]
-]);
-function replacement(to) {
-  return `it became the "${to.setting}" setting of each "${to.segment}" placement \u2014 set it on the placement where a row places "${to.segment}" ({ seg: "${to.segment}", settings: { ${to.setting}: <value> } }), or redeclare segments.${to.segment}.settings.${to.setting} with the default every placement should start from`;
-}
-function retiredVariableMessage(name) {
-  const to = RETIRED_VARIABLES.get(name);
-  return to === void 0 ? void 0 : `variables.${name} is no longer read: ${replacement(to)}`;
-}
-function retiredReadHint(ref) {
-  const to = RETIRED_VARIABLES.get(ref);
-  return to === void 0 ? "" : ` \u2014 ".${ref}" is no longer a variable: ${replacement(to)}; a "${to.segment}" template reads it as ".settings.${to.setting}"`;
-}
-var RETIRED_INPUT_PATHS = /* @__PURE__ */ new Map([
-  [
-    "git.timeSinceCommit",
-    `the payload stores the commit's date as "git.committedAt" (epoch seconds), and the bundled template variable "git.timeSinceCommit" computes its age at the draw: drop this declaration`
-  ],
-  [
-    "block.etaMinutes",
-    'the bundled template variable "block.etaMinutes" computes it at the draw: drop this declaration'
-  ],
-  [
-    "weekly.etaMinutes",
-    'the bundled template variable "weekly.etaMinutes" computes it at the draw: drop this declaration'
-  ]
-]);
-var RETIRED_GIT_FIELDS = new Map([
-  [
-    "branch",
-    {
-      read: ".git.branch",
-      declare: { kind: "input", path: "git.branch", default: "" },
-      note: 'when HEAD is on no branch it reads "detached", where this kind read ""'
-    }
-  ],
-  [
-    "sha",
-    {
-      read: ".git.sha",
-      declare: { kind: "input", path: "git.sha", default: "" }
-    }
-  ],
-  [
-    "dirty",
-    {
-      read: '(ne .git.status "clean")',
-      declare: {
-        kind: "template",
-        template: '{{ ne .git.status "clean" }}',
-        type: "boolean"
-      }
-    }
-  ],
-  ...["ahead", "behind", "stash"].map(
-    (field) => [
-      field,
-      {
-        read: `.git.${field}`,
-        declare: {
-          kind: "input",
-          path: `git.${field}`,
-          type: "number",
-          default: 0
-        }
-      }
-    ]
-  )
-]);
-function json5Of(decl) {
-  const value = (v) => typeof v === "string" && v.includes('"') && !v.includes("'") ? `'${v}'` : JSON.stringify(v);
-  return `{ ${Object.entries(decl).map(([k, v]) => `${k}: ${value(v)}`).join(", ")} }`;
-}
-function retiredGitKindMessage(raw) {
-  const head = `kind "git" is retired: every git fact is an input over the payload's git lane, which the bundled default already declares \u2014 drop this declaration and`;
-  const field = typeof raw.field === "string" ? RETIRED_GIT_FIELDS.get(raw.field) : void 0;
-  if (field === void 0) {
-    const reads = [...RETIRED_GIT_FIELDS.values()].map(({ read: read2 }) => read2);
-    return `${head} read whichever of ${reads.slice(0, -1).join(", ")} or ${reads.at(-1)} it stood for, where it was read`;
-  }
-  const note = field.note === void 0 ? "" : ` (${field.note})`;
-  return `${head} read ${field.read} where it was read${note}, or declare ${json5Of(field.declare)} under a name of your own`;
-}
-
-// src/config/loader/variables.ts
-function validateVariables(ctx, pathPrefix, raw) {
-  if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: pathPrefix,
-      message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, pathPrefix.split("."))
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = taggedUnion(
-      ctx,
-      VARIABLE_SCHEMA,
-      `${pathPrefix}.${name}`,
-      decl
-    );
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function literalValueSpec() {
-  return {
-    required: true,
-    json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path46, _field, raw) => {
-      const value = raw.value;
-      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
-        ctx.issues.push({
-          path: `${path46}.value`,
-          message: `literal value must be string|number|boolean, got ${describeType(value)}`,
-          line: findKeyLine(ctx.source, path46.split("."))
-        });
-        return void 0;
-      }
-      return value;
-    }
-  };
-}
-function typedDefaultSpec() {
-  return {
-    required: false,
-    json: { type: ["string", "number", "boolean"] },
-    parse: (ctx, path46, _field, raw) => {
-      const t2 = raw.type;
-      const expected = t2 === "number" || t2 === "boolean" || t2 === "string" ? t2 : "string";
-      return optionalTypedDefault(ctx, path46, raw, expected);
-    }
-  };
-}
-var PARSE_SCHEMA = {
-  noun: "parse",
-  arms: {
-    text: {
-      json: { const: true },
-      parse: (ctx, path46, value) => value === true ? { text: true } : reject(
-        ctx,
-        path46,
-        `parse.text must be the literal boolean true, got ${describeValue(value)}`
-      )
-    },
-    regex: {
-      json: { type: "string" },
-      parse: (ctx, path46, value) => typeof value === "string" ? { regex: value } : reject(
-        ctx,
-        path46,
-        `parse.regex must be a pattern string, got ${describeValue(value)}`
-      )
-    },
-    json: {
-      json: { const: true },
-      parse: (ctx, path46, value) => value === true ? { json: true } : reject(
-        ctx,
-        path46,
-        `parse.json must be the literal boolean true, got ${describeValue(value)}`
-      )
-    }
-  }
-};
-function parseSpec() {
-  return {
-    required: false,
-    json: oneOfPresentJson(PARSE_SCHEMA),
-    parse: (ctx, path46, _field, raw) => {
-      if (raw.regex !== void 0) {
-        ctx.issues.push({
-          path: `${path46}.regex`,
-          message: `${path46}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
-          line: findKeyLine(ctx.source, [...path46.split("."), "regex"])
-        });
-      }
-      return raw.parse === void 0 ? void 0 : oneOfPresent(ctx, PARSE_SCHEMA, `${path46}.parse`, raw.parse) ?? void 0;
-    }
-  };
-}
-function sourceDefaultSpec() {
-  return {
-    required: false,
-    json: {
-      type: ["string", "number", "boolean", "array", "object"],
-      description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
-    },
-    parse: (ctx, path46, _field, raw) => isPlainObject2(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path46, raw.default) : optionalStringField(ctx, path46, raw, "default")
-  };
-}
-function jsonDefault(ctx, path46, value) {
-  if (value === void 0) return void 0;
-  return isSourceDefault(value) ? value : reject(
-    ctx,
-    `${path46}.default`,
-    `${path46}.default must be a JSON value (a json-parsed source's document), got ${describeValue(value)}`
-  ) ?? void 0;
-}
-function isSourceDefault(value) {
-  return value !== null && isJsonValue(value);
-}
-var LITERAL_FIELDS = {
-  value: literalValueSpec(),
-  default: optionalStringSpec()
-};
-function inputPathSpec() {
-  const text4 = requireStringSpec();
-  return {
-    ...text4,
-    parse: (ctx, path46, field, raw) => {
-      const value = text4.parse(ctx, path46, field, raw);
-      const instead = value === void 0 ? void 0 : RETIRED_INPUT_PATHS.get(value);
-      return instead === void 0 ? value : reject(
-        ctx,
-        `${path46}.${field}`,
-        `${path46}.${field} "${value}" is no longer in the payload: ${instead}`
-      ) ?? void 0;
-    }
-  };
-}
-var INPUT_FIELDS = {
-  path: inputPathSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
-  default: typedDefaultSpec()
-};
-var ENV_FIELDS = {
-  name: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var FILE_FIELDS = {
-  path: requireStringSpec(),
-  readMode: optionalEnumSpec(["whole", "first-line"]),
-  parse: parseSpec(),
-  cache: requireCacheSpec("file"),
-  default: sourceDefaultSpec()
-};
-var SHELL_FIELDS = {
-  command: requireStringSpec(),
-  env: optionalEnvNamesSpec(),
-  parse: parseSpec(),
-  cache: requireCacheSpec("shell"),
-  default: sourceDefaultSpec()
-};
-function noCachePolicy(why2) {
-  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
-}
-var TEMPLATE_FIELDS = {
-  template: requireStringSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"]),
-  default: typedDefaultSpec()
-};
-var TEMPLATE_VAR_REMOVED = noCachePolicy(
-  "a template variable recomputes whenever a variable it reads changes"
-);
-var TIME_FIELDS = {
-  layout: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var TIME_VAR_REMOVED = noCachePolicy(
-  "a time variable reads the instant its render is drawn at"
-);
-var STATE_FIELDS = {
-  key: requireStringSpec(),
-  default: optionalStringSpec()
-};
-var VARIABLE_TAG = "kind";
-function arm(kind, fieldMap, removed = {}) {
-  return {
-    ...armFacets(VARIABLE_TAG, kind, fieldMap),
-    parse: (ctx, path46, raw) => {
-      refuseRemoved(ctx, removed, path46, raw);
-      const body = fields(ctx, fieldMap, path46, raw);
-      return body === null ? null : { kind, ...body };
-    }
-  };
-}
-var VARIABLE_SCHEMA = {
-  tag: VARIABLE_TAG,
-  noun: "source kind",
-  // `Unknown shell variable key "readMode". Expected one of: kind, command,
-  // parse, cache, default` — a field from the wrong arm, or a typo'd one, is the
-  // loud error a segment's has always been (brandon-config-9li). The author of a
-  // config they cannot see rendered has no other signal [LAW:no-silent-failure].
-  memberNoun: "variable",
-  arms: {
-    literal: arm("literal", LITERAL_FIELDS),
-    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
-    // lives in `typedDefaultSpec` (a field spec reading its sibling), so `input`
-    // is one field map like every other arm — `arm()` derives both `parse` and
-    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
-    input: arm("input", INPUT_FIELDS),
-    env: arm("env", ENV_FIELDS),
-    file: arm("file", FILE_FIELDS),
-    shell: arm("shell", SHELL_FIELDS),
-    template: arm("template", TEMPLATE_FIELDS, TEMPLATE_VAR_REMOVED),
-    time: arm("time", TIME_FIELDS, TIME_VAR_REMOVED),
-    state: arm("state", STATE_FIELDS)
-  },
-  retired: { git: retiredGitKindMessage }
-};
-function variableDeclJson() {
-  return taggedUnionJson(VARIABLE_SCHEMA);
-}
-function variablesMapJson() {
-  return { type: "object", additionalProperties: variableDeclJson() };
-}
-
-// src/config/loader/settings.ts
-init_globals();
-var SETTING_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-var SETTING_NAME_JSON = { pattern: SETTING_NAME.source };
-var SETTING_VALUE_JSON = {
-  anyOf: [{ type: "boolean" }, { type: "string" }, { type: "integer" }]
-};
-var SETTING_DECL_JSON = {
-  type: "object",
-  additionalProperties: false,
-  required: ["label", "domain", "default"],
-  properties: {
-    label: { type: "string", pattern: "^[^\\n\\r]+$" },
-    domain: {
-      anyOf: [
-        { const: "bool" },
-        {
-          type: "array",
-          items: { type: "string", pattern: "^[^/\\n\\r]+$" },
-          minItems: 1,
-          uniqueItems: true
-        },
-        {
-          type: "object",
-          additionalProperties: false,
-          required: ["min", "max"],
-          properties: {
-            min: { type: "integer" },
-            max: { type: "integer" },
-            step: { type: "integer", minimum: 1 },
-            atLeast: { type: "string", ...SETTING_NAME_JSON }
-          }
-        }
-      ]
-    },
-    default: SETTING_VALUE_JSON
-  }
-};
-var DECL_KEYS = ["label", "domain", "default"];
-var RANGE_KEYS = ["min", "max", "step", "atLeast"];
-function issue(ctx, path46, message2) {
-  ctx.issues.push({
-    path: path46,
-    message: message2,
-    line: findKeyLine(ctx.source, path46.split("."))
-  });
-  return void 0;
-}
-function parseDomain(ctx, path46, raw) {
-  if (raw === "bool") return "bool";
-  if (Array.isArray(raw)) {
-    const words2 = raw.filter((m) => typeof m === "string");
-    if (raw.length === 0 || words2.length !== raw.length) {
-      return issue(
-        ctx,
-        path46,
-        `a list domain must be a non-empty list of words, got ${JSON.stringify(raw)}`
-      );
-    }
-    if (new Set(words2).size !== words2.length) {
-      return issue(
-        ctx,
-        path46,
-        `a list domain names each word once, got ${JSON.stringify(raw)}`
-      );
-    }
-    const unwritable2 = words2.filter(
-      (w) => w === "" || w.includes("/") || /[\n\r]/.test(w)
-    );
-    if (unwritable2.length > 0) {
-      return issue(
-        ctx,
-        path46,
-        `a list domain's words must be non-empty, slash-free, and newline-free \u2014 configure mode writes each on the set-state wire \u2014 got ${JSON.stringify(unwritable2)}`
-      );
-    }
-    return words2;
-  }
-  if (isPlainObject2(raw)) {
-    const { min: min3, max: max3, step: step4 = 1, atLeast } = raw;
-    const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
-    if (extra.length === 0 && Number.isInteger(min3) && Number.isInteger(max3) && min3 <= max3 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
-      return {
-        min: min3,
-        max: max3,
-        step: step4,
-        ...atLeast !== void 0 && { atLeast }
-      };
-    }
-    return issue(
-      ctx,
-      path46,
-      `a range domain is { min, max, step?, atLeast? } with integers min \u2264 max, a whole step \u2265 1, and atLeast naming another range setting, got ${JSON.stringify(raw)}`
-    );
-  }
-  return issue(
-    ctx,
-    path46,
-    `domain must be "bool", a list of words, or { min, max }, got ${describeValue(raw)}`
-  );
-}
-function parseSettingDecl(ctx, path46, raw) {
-  if (!isPlainObject2(raw)) {
-    return issue(
-      ctx,
-      path46,
-      `${path46} must be { label, domain, default }, got ${describeType(raw)}`
-    );
-  }
-  for (const key of Object.keys(raw)) {
-    if (!DECL_KEYS.includes(key)) {
-      issue(
-        ctx,
-        `${path46}.${key}`,
-        `Unknown setting key "${key}". Expected one of: ${DECL_KEYS.join(", ")}`
-      );
-    }
-  }
-  const { label: label2 } = raw;
-  const labelOk = typeof label2 === "string" && label2.length > 0 && !/[\n\r]/.test(label2);
-  if (!labelOk) {
-    issue(
-      ctx,
-      `${path46}.label`,
-      `a setting needs a one-line, non-empty "label" \u2014 the name its control shows, spliced into a synthesized template string \u2014 got ${describeValue(label2)}`
-    );
-  }
-  const domain = parseDomain(ctx, `${path46}.domain`, raw.domain);
-  if (!labelOk || domain === void 0) return void 0;
-  const decl = { label: label2, domain, default: raw.default };
-  if (!isSettingValue(raw.default) || !inSettingDomain(decl, raw.default)) {
-    return issue(
-      ctx,
-      `${path46}.default`,
-      `default must be ${describeSettingDomain(decl)}, got ${describeValue(raw.default)}`
-    );
-  }
-  return decl;
-}
-function isSettingValue(v) {
-  return typeof v === "boolean" || typeof v === "string" || typeof v === "number";
-}
-var IMPLIED_HINTS = {
-  theme: `its default for this segment is segments.<name>.palette, and a placement sets its own with settings: { ${THEME_SETTING}: "<theme>" }`,
-  effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`
-};
-function isImplied(name) {
-  return IMPLIED_SETTINGS.includes(name);
-}
-function settingsDeclSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      propertyNames: {
-        ...SETTING_NAME_JSON,
-        not: { enum: [...IMPLIED_SETTINGS] }
-      },
-      additionalProperties: SETTING_DECL_JSON
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const at = `${path46}.${field}`;
-      if (!isPlainObject2(v)) {
-        return issue(
-          ctx,
-          at,
-          `${at} must be an object of name \u2192 { label, domain, default }, got ${describeType(v)}`
-        );
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const [name, decl] of Object.entries(v)) {
-        if (!SETTING_NAME.test(name)) {
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting name "${name}" is read as .settings.${name} in a template, so it must be an identifier (letters, digits, _; not starting with a digit)`
-          );
-          continue;
-        }
-        if (isImplied(name)) {
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting "${name}" is one every placement already has \u2014 ${IMPLIED_HINTS[name]}`
-          );
-          continue;
-        }
-        const parsed2 = parseSettingDecl(ctx, `${at}.${name}`, decl);
-        if (parsed2 !== void 0) out[name] = parsed2;
-      }
-      return out;
-    }
-  };
-}
-var RESERVED_ID_JSON = RESERVED_NAMESPACES.map(
-  (ns) => ns.replace(/\./g, "\\.")
-).join("|");
-function placementIdSpec() {
-  return {
-    required: false,
-    json: {
-      type: "string",
-      minLength: 1,
-      pattern: `^(?!${RESERVED_ID_JSON})[^:/]+$`
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v === "string" && v.length > 0 && !/[:/]/.test(v) && !isReservedName(v))
-        return v;
-      return issue(
-        ctx,
-        `${path46}.${field}`,
-        `a placement "id" must be a non-empty string without "/" or ":", outside the reserved ${RESERVED_NAMESPACES.map((ns) => `"${ns}"`).join(", ")} namespaces, got ${describeValue(v)}`
-      );
-    }
-  };
-}
-function placementSettingsSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      propertyNames: SETTING_NAME_JSON,
-      additionalProperties: SETTING_VALUE_JSON
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const at = `${path46}.${field}`;
-      if (!isPlainObject2(v)) {
-        return issue(
-          ctx,
-          at,
-          `a placement's "settings" must be an object of setting name \u2192 value, got ${describeType(v)}`
-        );
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const [name, value] of Object.entries(v)) {
-        if (isSettingValue(value)) out[name] = value;
-        else
-          issue(
-            ctx,
-            `${at}.${name}`,
-            `setting "${name}" must be a boolean, a word, or a number, got ${describeType(value)}`
-          );
-      }
-      return out;
-    }
-  };
-}
-
-// src/config/loader/segments.ts
-function inheritableSegmentNames(base) {
-  return new Set(
-    Object.keys(base.segments).filter((name) => !isReservedName(name))
-  );
-}
-function validateSegments(ctx, raw, inherited) {
-  if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "segments",
-      message: `segments must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["segments"])
-    });
-    return {};
-  }
-  const out = {};
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = record(
-      ctx,
-      inherited.has(name) ? SEGMENT_DELTA_SCHEMA : SEGMENT_SCHEMA,
-      `segments.${name}`,
-      decl
-    );
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function joinTemplateBody(ctx, path46, field, raw) {
-  const v = raw[field];
-  if (typeof v === "string") return v;
-  if (Array.isArray(v)) {
-    let ok3 = true;
-    const parts = [];
-    for (const [i2, el] of v.entries()) {
-      if (typeof el === "string") {
-        parts.push(el);
-        continue;
-      }
-      ok3 = false;
-      ctx.issues.push({
-        path: `${path46}.${field}[${i2}]`,
-        message: `${path46}.${field}[${i2}] must be a string, got ${describeType(el)}`,
-        line: findKeyLine(ctx.source, [...path46.split("."), field])
-      });
-    }
-    return ok3 ? parts.join("") : void 0;
-  }
-  ctx.issues.push({
-    path: `${path46}.${field}`,
-    message: `${path46}.${field} must be a string or an array of strings, got ${describeType(v)}`,
-    line: findKeyLine(ctx.source, [...path46.split("."), field])
-  });
-  return void 0;
-}
-var TEMPLATE_BODY_JSON = {
-  anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }]
-};
-function ownTemplateSpec() {
-  return {
-    required: true,
-    json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path46, field, raw) => raw[field] === void 0 ? reject(
-      ctx,
-      `${path46}.${field}`,
-      `${path46} declares no template \u2014 only a segment the bundled default declares may omit it (inheriting the bundled template); a segment of your own needs its own${renamedHint(path46.slice("segments.".length))}`
-    ) ?? void 0 : joinTemplateBody(ctx, path46, field, raw)
-  };
-}
-function optionalTemplateBodySpec() {
-  return {
-    required: false,
-    json: TEMPLATE_BODY_JSON,
-    parse: (ctx, path46, field, raw) => raw[field] === void 0 ? void 0 : joinTemplateBody(ctx, path46, field, raw)
-  };
-}
-function partialsSpec() {
-  return {
-    required: false,
-    json: {
-      type: "object",
-      additionalProperties: TEMPLATE_BODY_JSON
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (!isPlainObject2(v)) {
-        ctx.issues.push({
-          path: `${path46}.${field}`,
-          message: `${path46}.${field} must be an object, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, [...path46.split("."), field])
-        });
-        return void 0;
-      }
-      const out = /* @__PURE__ */ Object.create(null);
-      for (const name of Object.keys(v)) {
-        const body = joinTemplateBody(ctx, `${path46}.${field}`, name, v);
-        if (body !== void 0) out[name] = body;
-      }
-      return out;
-    }
-  };
-}
-function widthSpec() {
-  return {
-    required: false,
-    json: {
-      anyOf: [
-        { const: "auto" },
-        { const: "fill" },
-        { type: "integer", minimum: 1 }
-      ]
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (v === "auto") return "auto";
-      if (v === "fill") return "fill";
-      if (typeof v === "number" && Number.isInteger(v) && v > 0) return v;
-      ctx.issues.push({
-        path: `${path46}.${field}`,
-        message: `width must be "auto", "fill", or a positive integer, got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, [...path46.split("."), field])
-      });
-      return void 0;
-    }
-  };
-}
-function varsSpec() {
-  return {
-    required: false,
-    // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
-    // VariableDecl map the top-level `variables` block emits — one source.
-    json: variablesMapJson(),
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      return validateVariables(ctx, `${path46}.${field}`, v);
-    }
-  };
-}
-var SEGMENT_FIELDS = {
-  template: ownTemplateSpec(),
-  // [LAW:one-source-of-truth] One row is the whole change: this table is what
-  // the validator interprets AND what `segmentDefinitions()` emits into the
-  // published JSON schema, and SEGMENT_DELTA_SCHEMA reuses it, so a file may
-  // set `description` on its own segment or on a delta over a bundled name
-  // with no further edit anywhere (brandon-config-schema-qqg).
-  description: optionalStringSpec(),
-  group: optionalEnumSpec(SEGMENT_GROUPS),
-  width: widthSpec(),
-  justify: optionalEnumSpec(JUSTIFY_MODES),
-  truncate: optionalEnumSpec(TRUNCATE_MODES),
-  bg: optionalStringSpec(),
-  fg: optionalStringSpec(),
-  when: optionalStringSpec(),
-  palette: paletteSpec(),
-  vars: varsSpec(),
-  settings: settingsDeclSpec(),
-  missingData: optionalEnumSpec(MISSING_DATA),
-  partials: partialsSpec()
-};
-var SEGMENT_SCHEMA = {
-  noun: "segment key",
-  fields: SEGMENT_FIELDS
-};
-var SEGMENT_DELTA_SCHEMA = {
-  noun: "segment key",
-  fields: { ...SEGMENT_FIELDS, template: optionalTemplateBodySpec() }
-};
-var SEGMENT_DEF_NAME = "Segment";
-var SEGMENT_DELTA_DEF_NAME = "SegmentDelta";
-var SEGMENT_REF = `#/definitions/${SEGMENT_DEF_NAME}`;
-var SEGMENT_DELTA_REF = `#/definitions/${SEGMENT_DELTA_DEF_NAME}`;
-
-// src/config/loader/helpers.ts
-init_globals();
-function validateHelpers(ctx, raw) {
-  if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: "helpers",
-      message: `helpers must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["helpers"])
-    });
-    return {};
-  }
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const [name, body] of Object.entries(raw)) {
-    if (typeof body !== "string") {
-      ctx.issues.push({
-        path: `helpers.${name}`,
-        message: `helpers.${name} must be a string template body, got ${describeValue(body)}`,
-        line: findKeyLine(ctx.source, ["helpers", name])
-      });
-      continue;
-    }
-    out[name] = body;
-  }
-  return out;
-}
-
-// src/config/loader/actions.ts
-init_globals();
-var import_node_path29 = __toESM(require_path_browserify(), 1);
-function validateActions(ctx, raw, home) {
-  if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
-    issue2(
-      ctx,
-      "actions",
-      `actions must be an object, got ${describeType(raw)}`
-    );
-    return {};
-  }
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed2 = validateActionDecl(ctx, `actions.${name}`, decl, home);
-    if (parsed2 !== null) out[name] = parsed2;
-  }
-  return out;
-}
-function issue2(ctx, path46, message2) {
-  ctx.issues.push({
-    path: path46,
-    message: message2,
-    line: findKeyLine(ctx.source, path46.split("."))
-  });
-}
-function validateActionDecl(ctx, path46, raw, home) {
-  if (!isPlainObject2(raw)) {
-    issue2(
-      ctx,
-      path46,
-      `${path46} must be an action object, got ${describeType(raw)}`
-    );
-    return null;
-  }
-  if ("persistWhen" in raw) {
-    issue2(
-      ctx,
-      path46,
-      `${path46}.persistWhen was removed: declare the \`set\` alone \u2014 a session pick is a draft until a \`{ save: true }\` action writes every unsaved setting to the config file`
-    );
-    return null;
-  }
-  const present = ACTION_KEYS.filter((k) => k in raw);
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path46,
-      `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${present.length > 1 ? ` (found: ${present.join(", ")})` : ""}`
-    );
-    return null;
-  }
-  const key = present[0];
-  const { layer, ...rest2 } = raw;
-  const layers = LAYER_CHOICES[key];
-  if (layer === void 0) return actionArms(home)[key](ctx, path46, rest2);
-  if (layers === void 0) {
-    issue2(
-      ctx,
-      `${path46}.layer`,
-      `a ${key} action writes no config, so it names no layer`
-    );
-    return null;
-  }
-  if (!layers.includes(layer)) {
-    issue2(
-      ctx,
-      `${path46}.layer`,
-      `layer must be one of ${layers.join(", ")}, got ${describeValue(layer)}`
-    );
-    return null;
-  }
-  const parsed2 = actionArms(home)[key](ctx, path46, rest2);
-  return parsed2 === null ? null : { ...parsed2, layer };
-}
-function actionHomeOf(filePath2) {
-  if (filePath2 === "<default>") return { dir: null };
-  return import_node_path29.default.isAbsolute(filePath2) ? { dir: import_node_path29.default.dirname(filePath2) } : { text: filePath2 };
-}
-var actionArms = (home) => ({
-  set: (ctx, path46, raw) => valueSourceAction(ctx, path46, raw, "set", SET_ARMS),
-  persist: (ctx, path46, raw) => valueSourceAction(ctx, path46, raw, "persist", PERSIST_ARMS),
-  copy: templateArm("copy"),
-  open: templateArm("open"),
-  reset: resetArm,
-  undo: markerArm("undo"),
-  redo: markerArm("redo"),
-  back: markerArm("back"),
-  rewind: markerArm("rewind"),
-  save: markerArm("save"),
-  preset: presetArm,
-  themeDefault: themeDefaultArm,
-  doctor: doctorArm,
-  slash: slashArm,
-  run: runArm(home),
-  do: doArm
-});
-function templateArm(key) {
-  return (ctx, path46, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path46}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    const tmpl = requireString(ctx, path46, raw, key);
-    return tmpl === null ? null : { [key]: tmpl };
-  };
-}
-function resetArm(ctx, path46, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "reset")
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a reset action. Expected only: reset`
-      );
-  }
-  const key = slashFreeString(
-    ctx,
-    path46,
-    "reset",
-    raw,
-    `reset key must be non-empty (the config globals field to clear)`,
-    (v) => `reset key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return key === null ? null : { reset: key };
-}
-var MARKER_SUBJECT = {
-  undo: "it steps the session's settings history",
-  redo: "it steps the session's settings history",
-  back: "it steps the session's navigation history",
-  rewind: "it steps the session's settings history back to where edit mode opened",
-  save: "it saves the session's unsaved settings"
-};
-function markerArm(key) {
-  return (ctx, path46, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (k !== key)
-        issue2(
-          ctx,
-          `${path46}.${k}`,
-          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`
-        );
-    }
-    if (raw[key] !== true) {
-      issue2(
-        ctx,
-        `${path46}.${key}`,
-        `${key} must be the literal true (it takes no key \u2014 ${MARKER_SUBJECT[key]}), got ${describeValue(raw[key])}`
-      );
-      return null;
-    }
-    return { [key]: true };
-  };
-}
-function presetArm(ctx, path46, raw) {
-  const verb = raw.preset;
-  const allowed = verb === "save" ? ["preset"] : ["preset", "name"];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a preset action. Expected only: ${allowed.join(", ")}`
-      );
-  }
-  if (verb !== "save" && verb !== "delete") {
-    issue2(
-      ctx,
-      `${path46}.preset`,
-      `preset must be "save" or "delete", got ${describeValue(verb)}`
-    );
-    return null;
-  }
-  if (verb === "save") return { preset: "save" };
-  const name = requireString(ctx, path46, raw, "name");
-  return name === null ? null : { preset: "delete", name };
-}
-function themeDefaultArm(ctx, path46, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "themeDefault")
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a themeDefault action. Expected only: themeDefault`
-      );
-  }
-  if (raw.themeDefault !== "save") {
-    issue2(
-      ctx,
-      `${path46}.themeDefault`,
-      `themeDefault must be "save" (it saves the look the session draws as the active theme's default), got ${describeValue(raw.themeDefault)}`
-    );
-    return null;
-  }
-  return { themeDefault: "save" };
-}
-var DOCTOR_KEYS = {
-  run: ["doctor"],
-  fix: ["doctor", "check"],
-  mark: ["doctor", "check", "mark"]
-};
-function doctorArm(ctx, path46, raw) {
-  const verb = raw.doctor;
-  const known = typeof verb === "string" && Object.hasOwn(DOCTOR_KEYS, verb);
-  const allowed = known ? DOCTOR_KEYS[verb] : [...new Set(Object.values(DOCTOR_KEYS).flat())];
-  for (const k of Object.keys(raw)) {
-    if (!allowed.includes(k))
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`
-      );
-  }
-  if (!known) {
-    issue2(
-      ctx,
-      `${path46}.doctor`,
-      `doctor must be ${Object.keys(DOCTOR_KEYS).map((v) => `"${v}"`).join(", ")}, got ${describeValue(verb)}`
-    );
-    return null;
-  }
-  if (verb === "run") return { doctor: "run" };
-  const check = raw.check;
-  const nameable = verb === "mark" ? MARKED_CHECKS : CHECKS;
-  if (typeof check !== "string" || !nameable.some((c) => c.name === check)) {
-    issue2(
-      ctx,
-      `${path46}.check`,
-      `doctor ${verb} must name a check (have: ${nameable.map((c) => c.name).join(", ")}), got ${describeValue(check)}`
-    );
-    return null;
-  }
-  if (verb === "fix") return { doctor: "fix", check };
-  const mark = raw.mark;
-  if (!GLYPH_MARKS.includes(mark)) {
-    issue2(
-      ctx,
-      `${path46}.mark`,
-      `doctor mark must be ${GLYPH_MARKS.map((m) => `"${m}"`).join(" or ")}, got ${describeValue(mark)}`
-    );
-    return null;
-  }
-  return { doctor: "mark", check, mark };
-}
-function slashArm(ctx, path46, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "slash")
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a slash action. Expected only: slash`
-      );
-  }
-  const parsed2 = parseSlashLine(raw.slash);
-  if (parsed2.kind === "refused") {
-    issue2(ctx, `${path46}.slash`, parsed2.reason);
-    return null;
-  }
-  return { slash: parsed2.line };
-}
-var RUN_KEYS = ["run", "env", "refreshes"];
-function runArm(home) {
-  return (ctx, path46, raw) => {
-    for (const k of Object.keys(raw)) {
-      if (!RUN_KEYS.includes(k))
-        issue2(
-          ctx,
-          `${path46}.${k}`,
-          `Unknown key "${k}" on a run action. Expected only: ${RUN_KEYS.join(", ")}`
-        );
-    }
-    const before = ctx.issues.length;
-    const run3 = raw.run;
-    if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
-      issue2(
-        ctx,
-        `${path46}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
-      );
-    }
-    const env2 = raw.env ?? {};
-    if (!isPlainObject2(env2) || Object.entries(env2).some(
-      ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
-    )) {
-      issue2(
-        ctx,
-        `${path46}.env`,
-        `env must map variable names (letters, digits and _, not starting with a digit) to template strings, got ${describeValue(env2)}`
-      );
-    }
-    const refreshes = raw.refreshes ?? [];
-    if (!Array.isArray(refreshes) || refreshes.some((name) => typeof name !== "string" || name === "")) {
-      issue2(
-        ctx,
-        `${path46}.refreshes`,
-        `refreshes must list the names of the sources the program writes, got ${describeValue(refreshes)}`
-      );
-    }
-    if (!("dir" in home)) {
-      issue2(
-        ctx,
-        `${path46}.run`,
-        `a run action runs in the directory of the file that declares it, and ${home.text} is no file`
-      );
-    }
-    if (ctx.issues.length > before || !("dir" in home)) return null;
-    return {
-      run: run3,
-      env: env2,
-      refreshes,
-      cwd: home.dir
-    };
-  };
-}
-var RUN_ARM_JSON = {
-  type: "object",
-  properties: {
-    run: { type: "array", items: { type: "string" }, minItems: 1 },
-    env: {
-      type: "object",
-      propertyNames: { pattern: ENV_NAME.source },
-      additionalProperties: { type: "string" }
-    },
-    refreshes: { type: "array", items: { type: "string", minLength: 1 } }
-  },
-  required: ["run"],
-  additionalProperties: false
-};
-function doArm(ctx, path46, raw) {
-  for (const k of Object.keys(raw)) {
-    if (k !== "do")
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on a do action. Expected only: do`
-      );
-  }
-  const members = raw.do;
-  if (!Array.isArray(members) || members.length < 2 || members.some((m) => typeof m !== "string" || m === "")) {
-    issue2(
-      ctx,
-      `${path46}.do`,
-      `do must list at least two action names (the first is the click's face, the rest ride along in the same click), got ${describeValue(members)}`
-    );
-    return null;
-  }
-  return { do: members };
-}
-function slashFreeString(ctx, path46, field, raw, emptyMessage, slashMessage) {
-  const v = requireString(ctx, path46, raw, field);
-  if (v === null) return null;
-  const at = `${path46}.${field}`;
-  if (v === "") {
-    issue2(ctx, at, emptyMessage);
-    return null;
-  }
-  if (v.includes("/")) {
-    issue2(ctx, at, slashMessage(v));
-    return null;
-  }
-  return v;
-}
-var DISCRIMINATOR_NOUN = {
-  set: "the SessionState key to write",
-  persist: "the config globals field to write"
-};
-function validateDiscriminatorKey(ctx, path46, raw, discriminator) {
-  const noun = DISCRIMINATOR_NOUN[discriminator];
-  const value = slashFreeString(
-    ctx,
-    path46,
-    discriminator,
-    raw,
-    `${discriminator} key must be non-empty (${noun})`,
-    (v) => `${discriminator} key "${v}" contains "/" \u2014 keys must be slash-free`
-  );
-  return value === null ? null : { [discriminator]: value };
-}
-function wireName(discriminator) {
-  return discriminator === "set" ? "set-state" : "set-config";
-}
-var TO_FIELDS_SET = {
-  to: setLiteralSpec("set")
-};
-var TO_FIELDS_PERSIST = {
-  to: setLiteralSpec("persist")
-};
-var FROM_FIELDS_SET = {
-  from: fromSpec("set")
-};
-var FROM_FIELDS_PERSIST = {
-  from: fromSpec("persist")
-};
-var BOUNDED_FIELDS = {
-  min: requireIntSpec(),
-  max: requireIntSpec(),
-  by: requireIntSpec()
-};
-var INT_FIELDS = { int: intMarkerSpec() };
-var CYCLE_FIELDS_SET = {
-  cycle: cycleSpec("set")
-};
-var CYCLE_FIELDS_PERSIST = {
-  cycle: cycleSpec("persist")
-};
-var REMOVE_SEGMENT_FIELDS = {
-  removeSegment: layoutNameSpec("removeSegment")
-};
-var INSERT_SEGMENT_FIELDS = {
-  insertSegment: layoutNameSpec("insertSegment"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var INSERT_SEGMENT_FROM_FIELDS = {
-  insertSegmentFrom: fromSpec("persist"),
-  anchor: layoutNameSpec("anchor"),
-  relation: relationSpec()
-};
-var minLessThanMax = {
-  ok: (v) => v.min < v.max,
-  issue: (v) => ({
-    field: "min",
-    message: `min (${v.min}) must be less than max (${v.max})`
-  })
-};
-var byNonZero = {
-  ok: (v) => v.by !== 0,
-  issue: () => ({
-    field: "by",
-    message: `by must be a non-zero integer (the per-click increment; negative steps down)`
-  })
-};
-function valueSourceArm(discriminator, fieldMap, checks = [], detectKeys) {
-  const fullKeys = Object.keys(fieldMap);
-  const detect = detectKeys ?? fullKeys;
-  const keys2 = [discriminator];
-  const inner = (ctx, path46, raw) => fields(ctx, fieldMap, path46, raw);
-  const source = objectJson(fieldMap);
-  return {
-    detect,
-    allowed: [...keys2, ...fullKeys],
-    label: fullKeys.join("/"),
-    json: {
-      type: "object",
-      properties: {
-        ...Object.fromEntries(keys2.map((k) => [k, { type: "string" }])),
-        ...source.properties
-      },
-      required: [...keys2, ...source.required ?? []],
-      additionalProperties: false
-    },
-    parse: checks.length ? refine(inner, ...checks) : inner
-  };
-}
-var SET_ARMS = [
-  valueSourceArm("set", TO_FIELDS_SET),
-  valueSourceArm("set", FROM_FIELDS_SET),
-  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("set", INT_FIELDS),
-  valueSourceArm("set", CYCLE_FIELDS_SET)
-];
-var PERSIST_ARMS = [
-  valueSourceArm("persist", TO_FIELDS_PERSIST),
-  valueSourceArm("persist", FROM_FIELDS_PERSIST),
-  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
-  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
-  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
-  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
-  // their own discriminating field — see valueSourceArm's own comment. They
-  // share "anchor"/"relation" (same position shape, different segment-name
-  // source), so dispatching on the full field set would make EITHER arm
-  // spuriously match an action declaring the other.
-  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
-  valueSourceArm(
-    "persist",
-    INSERT_SEGMENT_FROM_FIELDS,
-    [],
-    ["insertSegmentFrom"]
-  )
-];
-function valueSourceClauses(discriminator) {
-  const clauses = [
-    `"to" (a literal value)`,
-    `"from" (an option domain \u2014 a registered domain name like "themes"/"endcaps"/"styles", or an inline array of literal values)`,
-    `"min"/"max"/"by" (a bounded step)`
-  ];
-  if (discriminator === "set")
-    clauses.push(`"int" (an unbounded integer cursor)`);
-  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
-  if (discriminator === "persist") {
-    clauses.push(
-      `"removeSegment" (remove a named segment from the layout)`,
-      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
-      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`
-    );
-  }
-  return clauses;
-}
-function VALUE_SOURCE_MESSAGE(discriminator) {
-  const clauses = valueSourceClauses(discriminator);
-  const last2 = clauses[clauses.length - 1];
-  const list2 = clauses.length === 1 ? last2 : `${clauses.slice(0, -1).join(", ")}, or ${last2}`;
-  return `a ${discriminator} action declares exactly one value source: ${list2}`;
-}
-function valueSourceAction(ctx, path46, raw, discriminator, arms) {
-  const keys2 = validateDiscriminatorKey(ctx, path46, raw, discriminator);
-  const present = arms.filter((arm3) => arm3.detect.some((k) => k in raw));
-  if (present.length !== 1) {
-    issue2(
-      ctx,
-      path46,
-      `${VALUE_SOURCE_MESSAGE(discriminator)}${present.length > 1 ? ` \u2014 found: ${present.map((a) => a.label).join(", ")}` : ""}`
-    );
-    return null;
-  }
-  const arm2 = present[0];
-  for (const k of Object.keys(raw)) {
-    if (!arm2.allowed.includes(k))
-      issue2(
-        ctx,
-        `${path46}.${k}`,
-        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm2.allowed.join(", ")}`
-      );
-  }
-  const payload = arm2.parse(ctx, path46, raw);
-  return keys2 === null || payload === null ? null : { ...keys2, ...payload };
-}
-function setLiteralSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path46, field, raw) => slashFreeString(
-      ctx,
-      path46,
-      field,
-      raw,
-      `${discriminator} value must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`,
-      (v) => `${discriminator} value "${v}" contains "/" \u2014 ${discriminator} values must be slash-free`
-    ) ?? void 0
-  };
-}
-function fromSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: {
-      anyOf: [
-        { type: "string", minLength: 1 },
-        {
-          type: "array",
-          items: { type: "string", minLength: 1 },
-          minItems: 1,
-          uniqueItems: true
-        }
-      ]
-    },
-    parse: (ctx, path46, field, raw) => {
-      const from = raw[field];
-      const at = `${path46}.${field}`;
-      if (typeof from === "string") {
-        if (from === "") {
-          issue2(ctx, at, `${field} must be a non-empty domain name`);
-          return void 0;
-        }
-        return from;
-      }
-      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
-        const members = from;
-        if (members.length === 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`
-          );
-          return void 0;
-        }
-        if (members.some((m) => m === "")) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-          );
-          return void 0;
-        }
-        const slashed = members.filter((m) => m.includes("/"));
-        if (slashed.length > 0) {
-          issue2(
-            ctx,
-            at,
-            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-          );
-          return void 0;
-        }
-        if (new Set(members).size !== members.length) {
-          issue2(
-            ctx,
-            at,
-            `${field} array members must be unique \u2014 a duplicated value would render the same picker option twice`
-          );
-          return void 0;
-        }
-        return members;
-      }
-      issue2(
-        ctx,
-        at,
-        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`
-      );
-      return void 0;
-    }
-  };
-}
-function cycleSpec(discriminator) {
-  const wire = wireName(discriminator);
-  return {
-    required: true,
-    json: {
-      type: "array",
-      items: { type: "string", minLength: 1 },
-      minItems: 2,
-      uniqueItems: true
-    },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      const at = `${path46}.${field}`;
-      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
-        issue2(
-          ctx,
-          at,
-          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`
-        );
-        return void 0;
-      }
-      const members = v;
-      if (members.length < 2) {
-        issue2(
-          ctx,
-          at,
-          `cycle needs at least two members (one member has no successor \u2014 use a literal "to")`
-        );
-        return void 0;
-      }
-      const empty2 = members.some((m) => m === "");
-      const slashed = members.filter((m) => m.includes("/"));
-      if (empty2) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be non-empty \u2014 an empty value cannot be delivered on the ${wire} wire`
-        );
-        return void 0;
-      }
-      if (slashed.length > 0) {
-        issue2(
-          ctx,
-          at,
-          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" \u2014 ${discriminator} values must be slash-free`
-        );
-        return void 0;
-      }
-      if (new Set(members).size !== members.length) {
-        issue2(
-          ctx,
-          at,
-          `cycle members must be unique \u2014 the successor of a duplicated member is ambiguous`
-        );
-        return void 0;
-      }
-      return members;
-    }
-  };
-}
-function intMarkerSpec() {
-  return {
-    required: true,
-    json: { const: true },
-    parse: (ctx, path46, field, raw) => {
-      if (raw[field] !== true) {
-        issue2(
-          ctx,
-          `${path46}.${field}`,
-          `int must be the literal true (declares the key an unbounded integer cursor \u2014 a paged picker's page key), got ${describeValue(raw[field])}`
-        );
-        return void 0;
-      }
-      return true;
-    }
-  };
-}
-function layoutNameSpec(field) {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path46, f, raw) => {
-      const v = requireString(ctx, path46, raw, f);
-      if (v === null) return void 0;
-      const at = `${path46}.${f}`;
-      if (v === "") {
-        issue2(ctx, at, `${field} must be non-empty (a segment name)`);
-        return void 0;
-      }
-      if (v.includes("/") || v.includes(":")) {
-        issue2(
-          ctx,
-          at,
-          `${field} "${v}" contains "/" or ":" \u2014 segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function relationSpec() {
-  return {
-    required: true,
-    json: { enum: ["before", "after"] },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (v !== "before" && v !== "after") {
-        issue2(
-          ctx,
-          `${path46}.${field}`,
-          `relation must be "before" or "after", got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function requireIntSpec() {
-  return {
-    required: true,
-    json: { type: "integer" },
-    parse: (ctx, path46, field, raw) => {
-      const v = raw[field];
-      if (typeof v !== "number" || !Number.isInteger(v)) {
-        issue2(
-          ctx,
-          `${path46}.${field}`,
-          `${field} must be an integer, got ${describeValue(v)}`
-        );
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-
 // src/config/loader/refs.ts
-init_globals();
 var STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`/g;
 function* templateBlocks(template) {
   let open2 = template.indexOf("{{");
@@ -70368,7 +67548,7 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
 var DEFINITION_FILE = "plugin.json5";
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
-  const name = import_node_path30.default.basename(import_node_path30.default.dirname(definition));
+  const name = import_node_path29.default.basename(import_node_path29.default.dirname(definition));
   return PLUGIN_NAME.test(name) ? { path: definition, scope, name } : { path: definition, scope, name: void 0 };
 }
 function pluginDataVar(ns) {
@@ -70397,7 +67577,7 @@ function pluginList(raw) {
   return Array.isArray(raw) && raw.every((p2) => typeof p2 === "string" && p2 !== "") ? raw : void 0;
 }
 function listedPath(ref, from, home) {
-  return resolveUserPath(import_node_path30.default.dirname(from), ref, home);
+  return resolveUserPath(import_node_path29.default.dirname(from), ref, home);
 }
 function listedPlugins(refs, from, listed) {
   const unread2 = refs.filter((ref) => !Object.hasOwn(listed, ref));
@@ -70429,7 +67609,7 @@ function applyPlugins(files, ctx, base, validate) {
           dropped: [...layer.dropped, { ...definition, reason }]
         };
       };
-      if (import_node_path30.default.basename(file) !== DEFINITION_FILE) {
+      if (import_node_path29.default.basename(file) !== DEFINITION_FILE) {
         const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
         return drop2(
           reason,
@@ -70441,7 +67621,7 @@ function applyPlugins(files, ctx, base, validate) {
       }
       if (definition.name === void 0 || ns === void 0) {
         return drop2(
-          `its folder "${import_node_path30.default.basename(import_node_path30.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
+          `its folder "${import_node_path29.default.basename(import_node_path29.default.dirname(file))}" is not a plugin name (one matching ${PLUGIN_NAME}: it prefixes every name the plugin declares)`,
           layer.config
         );
       }
@@ -70692,7 +67872,7 @@ function fragmentOf(file, dir, id2, { source, json: json2 }, { checkout, home })
     if (!DEFINITION_KEYS.has(key)) {
       issues.push({
         path: key,
-        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path30.default.basename(import_node_path30.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
+        message: key === "plugin" ? `a plugin definition does not name itself: its name is its folder's ("${import_node_path29.default.basename(import_node_path29.default.dirname(file))}") \u2014 remove "plugin"` : `a plugin definition may not declare "${key}". Expected only: ${[...DEFINITION_KEYS].join(", ")}`
       });
     }
   }
@@ -70971,7 +68151,7 @@ function sourcesOf(sources, dir, issues) {
     });
     return {};
   }
-  const storage = import_node_path30.default.join(dir, STORAGE_FOLDER);
+  const storage = import_node_path29.default.join(dir, STORAGE_FOLDER);
   const built = JSON.stringify(BUILT_SOURCE);
   const lowered = {};
   for (const [name, source] of Object.entries(sources)) {
@@ -71011,7 +68191,7 @@ function requireOneSourcePerFile(file, plugin, config2) {
   if (issues.length > 0) throw new ConfigError(file, issues);
 }
 function sourceFileOf(source) {
-  return import_node_path30.default.join(source.storage, sessionFileName("<session id>"));
+  return import_node_path29.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
   if (!isPlainObject2(built) || !isPlainObject2(authored)) {
@@ -71028,11 +68208,11 @@ function unbuilt(authored, built, at) {
 }
 function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
-    return resolveUserPath(import_node_path30.default.dirname(file), data, home);
+    return resolveUserPath(import_node_path29.default.dirname(file), data, home);
   }
   if (isPlainObject2(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
-    if (import_node_path30.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path30.default.normalize(rel).split(import_node_path30.default.sep)[0] === "..") {
+    if (import_node_path29.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path29.default.normalize(rel).split(import_node_path29.default.sep)[0] === "..") {
       issues.push({
         path: "data.checkout",
         message: `data.checkout "${rel}" must be a path inside the checkout, relative to its root (like ".lit/statusline.json"): no absolute path, "~" or ".."`
@@ -71046,7 +68226,7 @@ function dataPathOf(data, file, checkout, home, issues) {
       });
       return void 0;
     }
-    return import_node_path30.default.resolve(checkout.root, rel);
+    return import_node_path29.default.resolve(checkout.root, rel);
   }
   if (isPlainObject2(data) && "project" in data) {
     issues.push({
@@ -71068,7 +68248,7 @@ var STORAGE_FILE_MAX_AGE_MS = 30 * DAY_MS;
 var STORAGE_SWEEP_EVERY_MS = DAY_MS;
 var MAX_ENTRIES2 = 256;
 var fileName = (sessionId2) => sessionFileName(sessionId2);
-var fileOf = (f) => import_node_path31.default.join(f.folder, fileName(f.sessionId));
+var fileOf = (f) => import_node_path30.default.join(f.folder, fileName(f.sessionId));
 var keyString = (key) => JSON.stringify([key.folder, key.generation]);
 function madeOnce(folder) {
   try {
@@ -71083,14 +68263,13 @@ function madeOnce(folder) {
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
 }
-var NOTHING_NAMED = { folders: [], loads: 0 };
 var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
 var ManagedStorage = class {
   sessions;
   // [LAW:one-source-of-truth] By folder: each folder's current generation's
   // watch, the one record of what the owner knows of the folder.
   watched = /* @__PURE__ */ new Map();
-  // What the renderer's latest subscriptions named.
+  // What the renderer's latest slot ended naming.
   named = NOTHING_NAMED;
   faultCounts = {
     unusable: 0,
@@ -71133,10 +68312,10 @@ var ManagedStorage = class {
       clock: opts.clock
     });
   }
-  // [LAW:one-source-of-truth] The folders the renderer's subscriptions name,
+  // [LAW:one-source-of-truth] The folders a renderer's slot ended naming,
   // whole, replacing the last: each is kept current (`kept`) before any
   // folder no longer named closes, so a folder both name is never closed
-  // between them. Keeping a folder makes and stats it, so a turn that ran no
+  // between them. Keeping a folder makes and stats it, so a slot that ran no
   // load and moved no folder, as most do not, keeps nothing again.
   held(named3) {
     if (named3.loads === this.named.loads && named3.folders.length === this.named.folders.length && named3.folders.every((folder, i2) => folder === this.named.folders[i2]))
@@ -71267,7 +68446,7 @@ var ManagedStorage = class {
         return;
       case "changed": {
         const { paths: paths2 } = invalidation;
-        if (paths2.includes(import_node_path31.default.join(key.folder, import_node_path31.default.basename(key.folder)))) {
+        if (paths2.includes(import_node_path30.default.join(key.folder, import_node_path30.default.basename(key.folder)))) {
           this.judged(watched, () => this.sessions.changed(inFolder));
         } else {
           this.sessions.changed(
@@ -71411,7 +68590,7 @@ var ManagedStorage = class {
       for (const entry of entries) {
         if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
         scanned++;
-        const file = import_node_path31.default.join(key.folder, entry.name);
+        const file = import_node_path30.default.join(key.folder, entry.name);
         try {
           const { mtimeMs } = await fs_default.promises.stat(file);
           const held2 = this.sessions.isHeld(
@@ -71436,7 +68615,7 @@ var ManagedStorage = class {
 
 // src/daemon/cache/transcript-lanes.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
+var import_node_path31 = __toESM(require_path_browserify(), 1);
 var TRANSCRIPT_PERIOD = { okMs: 1e4, failedMs: 1e4 };
 var MAX_UNHELD = 16;
 var keyOfFollowed = ({ session, transcript: transcript2, settings }) => [session, transcript2, settings].join("\0");
@@ -71482,8 +68661,8 @@ var TranscriptLanes = class {
       `transcript-lanes:${keyOfFollowed(followed)}`,
       {
         dirs: [
-          { path: (0, import_node_path32.dirname)(transcript2), filenames: [(0, import_node_path32.basename)(transcript2)] },
-          { path: (0, import_node_path32.dirname)(settings), filenames: [(0, import_node_path32.basename)(settings)] }
+          { path: (0, import_node_path31.dirname)(transcript2), filenames: [(0, import_node_path31.basename)(transcript2)] },
+          { path: (0, import_node_path31.dirname)(settings), filenames: [(0, import_node_path31.basename)(settings)] }
         ]
       },
       changed
@@ -72098,7 +69277,7 @@ function failedStamp(prior, reason, daemon3) {
 
 // src/daemon/foundations/judge-run.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
 function judgeRun(run3) {
   const parser = parserOf(run3.identity.parse);
@@ -72123,7 +69302,7 @@ function refusalOf2({ identity: { read: read2, refresh } }) {
   return (read2.kind === "file" ? absolute("file.path", read2.path) : null) ?? (refresh.kind === "watch_file" ? absolute("cache.watch_file", refresh.path) : null) ?? (read2.kind === "shell" && refresh.kind === "ttl" && refresh.durationMs < MIN_SHELL_TTL_MS ? `a shell source's cache.ttl must be at least ${MIN_SHELL_TTL_MS}ms, got ${refresh.durationMs}ms` : null);
 }
 function absolute(where, path46) {
-  return (0, import_node_path33.isAbsolute)(path46) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path46)}`;
+  return (0, import_node_path32.isAbsolute)(path46) ? null : `${where} must be an absolute path (\`~\` and relative paths are not expanded), got ${JSON.stringify(path46)}`;
 }
 function capturing(pattern2) {
   let regex;
@@ -72275,6 +69454,236 @@ function dataNeeds(config2, preset) {
 
 // src/config/effective-globals.ts
 init_globals();
+
+// src/config/loader/edit-mode.ts
+init_globals();
+
+// src/config/loader/reserved-namespace.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+function ident(name) {
+  return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+
+// src/config/loader/reserved-namespace.ts
+function reservedNamespaceOf(name) {
+  const collapsed = ident(name);
+  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
+}
+function reservedNamespaceCollisions(ctx, out, ns, synthesizedBy) {
+  for (const section of ["variables", "actions", "segments"]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(ns)) {
+        ctx.issues.push({
+          path: `${section}.${name}`,
+          message: `"${name}" is in the reserved "${ns}" namespace (synthesized by ${synthesizedBy}) \u2014 rename it`,
+          line: findKeyLine(ctx.source, ["root"])
+        });
+      }
+    }
+  }
+}
+function pluginScopeCollisions(ctx, out, inherited) {
+  for (const section of [
+    "variables",
+    "actions",
+    "helpers",
+    "segments"
+  ]) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      const scope = scopeOf(name);
+      if (scope === void 0) continue;
+      if (section !== "variables" && name === scope) continue;
+      if (section === "segments" && inherited.has(name)) continue;
+      ctx.issues.push({
+        path: `${section}.${name}`,
+        message: `"${name}" is in "${scope}", the namespace plugins own (each declares its names there from its own definition) \u2014 rename it`,
+        line: findKeyLine(ctx.source, [section, name])
+      });
+    }
+  }
+  for (const [segment, decl] of Object.entries(out.segments ?? {})) {
+    for (const v of Object.keys(decl.vars ?? {})) {
+      const name = `${segment}.${v}`;
+      const at = () => ({
+        path: `segments.${segment}.vars.${v}`,
+        line: findKeyLine(ctx.source, ["segments", segment, "vars", v])
+      });
+      if (isPayloadInput(name)) {
+        ctx.issues.push({
+          ...at(),
+          message: `segment "${segment}"'s var "${v}" is named "${name}", ${PAYLOAD_OWNED} \u2014 rename the var or the segment`
+        });
+        continue;
+      }
+      const scope = scopeOf(name);
+      if (scope === void 0 || inherited.has(segment)) continue;
+      ctx.issues.push({
+        ...at(),
+        message: `segment "${segment}"'s var "${v}" is named "${name}", in "${scope}", the namespace plugins own \u2014 rename the var or the segment`
+      });
+    }
+  }
+}
+var PAYLOAD_OWNED = "supplied by the daemon's payload to every config";
+function payloadDeclarationNotices(filePath2, source, declared) {
+  const lineOf = keyLocator(source);
+  return declared.filter(isPayloadInput).map((name) => {
+    const line = lineOf(["variables", name]);
+    const at = line === void 0 ? filePath2 : `${filePath2}:${line}`;
+    return `${at}: "${name}" is ${PAYLOAD_OWNED}, so this declaration is ignored \u2014 remove it`;
+  });
+}
+function isPayloadInput(name) {
+  return Object.hasOwn(PAYLOAD_INPUTS, name);
+}
+
+// src/config/loader/edit-mode.ts
+var EDIT_MODE_KEY = "edit.mode";
+var EDIT_CONFIGURE_KEY = "edit.configure";
+var EDIT_TOGGLE_ACTION = "edit.toggle";
+var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
+var EDIT_MODE_ARRANGE = "arrange";
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+function configureMember(presetIdent, id2) {
+  return `${presetIdent}:${id2}`;
+}
+var EDIT_MODE_REF = {
+  variable: EDIT_MODE_KEY,
+  key: EDIT_MODE_KEY,
+  member: EDIT_MODE_ARRANGE
+};
+var EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
+function referencesEditToggle(template) {
+  try {
+    return SYNTAX_ENGINE.parse(template).referencedCalls().some((c) => c.name === "action" && c.args[0] === EDIT_TOGGLE_ACTION);
+  } catch {
+    return false;
+  }
+}
+function fileWantsEditMode(out) {
+  if (Object.values(out.actions ?? {}).some(
+    (a) => "do" in a && a.do.includes(EDIT_TOGGLE_ACTION)
+  )) {
+    return true;
+  }
+  for (const seg2 of Object.values(out.segments ?? {})) {
+    const fields2 = [
+      seg2.template,
+      seg2.bg,
+      seg2.fg,
+      ...Object.values(seg2.partials ?? {})
+    ];
+    for (const field of fields2) {
+      if (typeof field === "string" && referencesEditToggle(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+function synthesizeEditModeToggle(ctx, out) {
+  reservedNamespaceCollisions(ctx, out, EDIT_NS, "edit mode");
+  if (!fileWantsEditMode(out)) return;
+  const { variables, actions } = editModeArtifacts();
+  out.variables = { ...out.variables ?? {}, ...variables };
+  out.actions = { ...out.actions ?? {}, ...actions };
+}
+function editModeArtifacts() {
+  return {
+    variables: {
+      // Arranging lives inside the door: closing the menu leaves edit mode
+      // (brandon-menus-sjhy.9p6, Brandon: "I'd like edit mode to exit if we
+      // close the main menu").
+      [EDIT_MODE_KEY]: {
+        ...disclosureStateVar(EDIT_MODE_KEY, DISCLOSURE_CLOSED),
+        within: [SETTINGS_REF]
+      },
+      // Configuring is a level inside arranging, so leaving edit mode by any
+      // control closes it (src/config/disclosure-nest.ts).
+      [EDIT_CONFIGURE_KEY]: {
+        ...disclosureStateVar(EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED),
+        within: [EDIT_MODE_REF]
+      }
+    },
+    actions: {
+      [EDIT_TOGGLE_ACTION]: disclosureCycleAction(
+        EDIT_MODE_KEY,
+        EDIT_MODE_ARRANGE
+      ),
+      [EDIT_UNCONFIGURE_ACTION]: {
+        set: EDIT_CONFIGURE_KEY,
+        to: DISCLOSURE_CLOSED
+      }
+    }
+  };
+}
+
+// src/themes/palette-resolvers.ts
+init_globals();
+var baseCache = /* @__PURE__ */ new Map();
+function paletteForThemeName(name) {
+  const palette = basePaletteFor(name);
+  if (palette === null) {
+    throw new Error(
+      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+    );
+  }
+  return palette;
+}
+function placementPalette(theme24, bar) {
+  return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
+}
+function basePaletteFor(name) {
+  const hit = baseCache.get(name);
+  if (hit !== void 0) return hit;
+  const palette = getThemePalette(name);
+  if (palette === null) return null;
+  baseCache.set(name, palette);
+  return palette;
+}
+function transposedPalette(base, key) {
+  return TRANSPOSED(
+    base,
+    `${key.hueShift} ${key.chromaScale} ${key.lightnessScale} ${key.lightnessShift}`,
+    () => transposePalette(base, key)
+  );
+}
+var TRANSPOSED = memoPerPalette();
+function namedTheme(name) {
+  const value = basePaletteFor(name);
+  return value === null ? null : { kind: "decided", name, value };
+}
+function decideThemeName(name, where, onUnresolvable) {
+  const named3 = namedTheme(name);
+  if (named3 !== null) return named3;
+  onUnresolvable(
+    ruleFloorMessage(
+      where,
+      "palette",
+      `"${name}" names no installed theme${retiredThemeNote(name)}`
+    )
+  );
+  return themeFloor();
+}
+function resolveThemeSelection(stagedPalette, sessionTheme, globalsPalette) {
+  return resolveSelection(
+    stagedPalette,
+    sessionTheme,
+    globalsPalette,
+    themeFloor(),
+    namedTheme
+  );
+}
+function themeFloor() {
+  return {
+    kind: "decided",
+    name: THEME_FLOOR,
+    value: paletteForThemeName(THEME_FLOOR)
+  };
+}
 
 // src/config/theme-defaults.ts
 init_globals();
@@ -72924,6 +70333,45 @@ var Collector = class {
 
 // src/daemon/frame-feed.ts
 init_globals();
+
+// src/config/menu-places.ts
+init_globals();
+var TABS = [
+  { member: "session", label: "\u26A1 session" },
+  { member: "look", label: "\u{1F3A8} look" },
+  // `📐`, because `▦` is the preset control's glyph.
+  { member: "layout", label: "\u{1F4D0} layout" },
+  { member: "config", label: "\u2699 config" },
+  { member: "tools", label: "\u{1F9F0} tools" }
+];
+var TAB_LABEL = Object.fromEntries(
+  TABS.map((t2) => [t2.member, t2.label])
+);
+var SUBMENUS = {
+  gear: { beside: "theme", trigger: "\u2699" },
+  toggles: { beside: "updateNotice", trigger: "\u{1F9EA} toggles" }
+};
+var SUBMENU_NAMES = Object.keys(SUBMENUS);
+var PLACE = perSetting(
+  (name) => SETTINGS[name].place
+);
+var isSubmenu = (place) => Object.hasOwn(SUBMENUS, place);
+var within = (place, container) => place === container || isSubmenu(place) && within(PLACE[SUBMENUS[place].beside], container);
+var placePath = (place) => isSubmenu(place) ? `${placePath(PLACE[SUBMENUS[place].beside])} \u203A ${SUBMENUS[place].trigger}` : place === "door" ? "first line" : TAB_LABEL[place];
+var settingMenuPath = (name) => placePath(PLACE[name]);
+var settingsByPlace = () => ["door", ...TABS.map((t2) => t2.member)].flatMap((top) => [
+  top,
+  ...SUBMENU_NAMES.filter((s) => within(s, top))
+]).map((place) => ({
+  path: placePath(place),
+  names: SETTING_NAMES.filter((name) => PLACE[name] === place)
+})).filter(({ names }) => names.length > 0);
+var laneOffReason = (lane) => {
+  const { setting, on: on2, inTmux: inTmux2 } = LANES[lane].switch;
+  return `${LANES[lane].label} is off \u2014 turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on2)}${inTmux2 ? "; it runs only for a session inside a tmux pane" : ""}`;
+};
+
+// src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
 var FrameFeeds = class {
   constructor(deps) {
@@ -74188,11 +71636,11 @@ init_globals();
 
 // src/daemon/lane-setup.ts
 init_globals();
-var import_node_path35 = __toESM(require_path_browserify(), 1);
+var import_node_path34 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/claude-relaunch.ts
 init_globals();
-var import_node_path34 = __toESM(require_path_browserify(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 var keep = (arity) => ({ arity, keep: true });
 var drop = (arity) => ({ arity, keep: false });
 var FLAGS = {
@@ -74294,7 +71742,7 @@ function startPlace(startDir, cwd2) {
     args: ["--worktree", tree.name]
   };
 }
-var within2 = (dir, top) => dir === top || dir.startsWith(top + import_node_path34.default.sep);
+var within2 = (dir, top) => dir === top || dir.startsWith(top + import_node_path33.default.sep);
 function relaunchArgs(argv2) {
   const kept = [];
   const tokens = argv2.slice(1);
@@ -74326,14 +71774,14 @@ function relaunchArgs(argv2) {
   return { kind: "args", args: kept };
 }
 function worktreeOf(dir) {
-  const parts = dir.split(import_node_path34.default.sep);
+  const parts = dir.split(import_node_path33.default.sep);
   const at = parts.findLastIndex(
     (p2, i2) => p2 === "worktrees" && parts[i2 - 1] === ".claude" && i2 + 1 < parts.length
   );
   return at === -1 ? null : {
     name: parts[at + 1].replaceAll("+", "/"),
-    top: parts.slice(0, at + 2).join(import_node_path34.default.sep),
-    repo: parts.slice(0, at - 1).join(import_node_path34.default.sep) || import_node_path34.default.sep
+    top: parts.slice(0, at + 2).join(import_node_path33.default.sep),
+    repo: parts.slice(0, at - 1).join(import_node_path33.default.sep) || import_node_path33.default.sep
   };
 }
 function takeWhile(xs, ok3) {
@@ -74343,7 +71791,7 @@ function takeWhile(xs, ok3) {
 
 // src/daemon/lane-setup.ts
 var BAND_PLUGIN = "candybar-band@cc-candybar";
-var BAND_CLIENT = import_node_path35.default.join("bin", "cc-candybar-native");
+var BAND_CLIENT = import_node_path34.default.join("bin", "cc-candybar-native");
 var EXIT_PATIENCE_MS = 15e3;
 var ATTACH_PATIENCE_MS = 3e4;
 var RELOAD_PLUGINS = slashLine("/reload-plugins");
@@ -74354,7 +71802,7 @@ async function bandOn(session, pane, type3, host, edge) {
       `${LANES.band.label} runs the band mod from a cc-candybar source checkout, and this daemon runs ${host.bundle} \u2014 run the daemon from a checkout (mod/README.md)`
     );
   }
-  const client = import_node_path35.default.join(checkout, BAND_CLIENT);
+  const client = import_node_path34.default.join(checkout, BAND_CLIENT);
   if (!edge.fileExists(client)) {
     throw new BadVerbArgs(
       `the band mod starts ${client}, which is not built \u2014 run \`just install-rust\` in ${checkout}`
@@ -74923,7 +72371,7 @@ function addressText(at) {
 
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
-var import_node_path37 = __toESM(require_path_browserify(), 1);
+var import_node_path36 = __toESM(require_path_browserify(), 1);
 
 // src/config/loader/repo-gate.ts
 init_globals();
@@ -75015,11 +72463,11 @@ function presence(path46) {
 
 // src/doctor/state-file.ts
 init_globals();
-var import_node_path36 = __toESM(require_path_browserify(), 1);
+var import_node_path35 = __toESM(require_path_browserify(), 1);
 var textOf2 = (value) => `${JSON.stringify(value, null, 2)}
 `;
 function stateFile(dir, name, empty2, parse4) {
-  const file = import_node_path36.default.join(dir, name);
+  const file = import_node_path35.default.join(dir, name);
   const read2 = () => {
     let text4;
     try {
@@ -75068,10 +72516,10 @@ function written2(planned) {
 var REPO_CONFIGS_FILE = "repo-configs.json";
 var REPO_CONFIGS_DIR = "repo-configs";
 function repoConfigsDir(dir) {
-  return import_node_path37.default.join(dir, REPO_CONFIGS_DIR);
+  return import_node_path36.default.join(dir, REPO_CONFIGS_DIR);
 }
 function repoConfigsPath(dir) {
-  return import_node_path37.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+  return import_node_path36.default.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
 }
 var repoConfigs = (dir) => {
   const book = stateFile(
@@ -75126,7 +72574,7 @@ function answeredBook(stateDir2, answers) {
 }
 
 // src/daemon/effect-interpreter.ts
-var import_node_path38 = __toESM(require_path_browserify(), 1);
+var import_node_path37 = __toESM(require_path_browserify(), 1);
 var writeText = (file, text4) => text4 === null ? fs_default.rmSync(resolvedTarget(file), { force: true }) : writeAtomic(file, text4);
 var said = (read2) => read2 === "object" ? "an object" : read2.kind === "absent" ? "nothing" : read2.kind === "file" ? "the file as it was read" : read2.text;
 var refused = (reason) => ({
@@ -75229,7 +72677,7 @@ function performChanges(changes, book, writable2, layers) {
   }
 }
 function excludeRewrite(file, rewrites) {
-  const root = gitRootOf(import_node_path38.default.dirname(file));
+  const root = gitRootOf(import_node_path37.default.dirname(file));
   if (root === void 0) return ABSENT;
   const at = sharedExcludeOf(root);
   if (at.kind !== "ok") return at.kind === "absent" ? ABSENT : at;
@@ -75237,7 +72685,7 @@ function excludeRewrite(file, rewrites) {
   const prior = rewrites.get(exclude);
   const was = prior === void 0 ? readConfigText(exclude) : prior.was;
   const text4 = prior === void 0 ? was ?? "" : prior.will ?? "";
-  const entry = `/${import_node_path38.default.relative(root, file).split(import_node_path38.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
+  const entry = `/${import_node_path37.default.relative(root, file).split(import_node_path37.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text4.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT;
   const lead = text4 === "" || text4.endsWith("\n") ? "" : "\n";
   return ok({ file: exclude, was, will: `${text4}${lead}${entry}
@@ -75376,6 +72824,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let holder = null;
   let queued = 0;
   let served = /* @__PURE__ */ new Set();
+  let storage = NOTHING_NAMED;
   const inMailbox = (slot, at = "last") => {
     const asked2 = clock.monotonic();
     queued++;
@@ -75390,6 +72839,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           return await slot(queuedMs, (input) => void (held2.input = input));
         } finally {
           holder = null;
+          taking("storage", () => collector.storage(storage));
         }
       },
       at
@@ -75502,6 +72952,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const took = (subscriptions, frames, stored) => {
     wake.declare(subscriptions.wake);
+    storage = subscriptions.storage;
     let named3 = [];
     for (const [what, take] of [
       ["stored writes", () => collector.stored(stored)],
@@ -75517,16 +72968,18 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           served = new Set(subscriptions.configs.map((o) => originKey(o)));
         }
       ]
-    ]) {
-      try {
-        take();
-      } catch (thrown2) {
-        const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
-        log("error", text4);
-        world.unheard(text4);
-      }
-    }
+    ])
+      taking(what, take);
     return named3;
+  };
+  const taking = (what, take) => {
+    try {
+      take();
+    } catch (thrown2) {
+      const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
+      log("error", text4);
+      world.unheard(text4);
+    }
   };
   const configMade = (origin) => () => {
     const config2 = world.configs.snapshotOf(origin);
@@ -75663,7 +73116,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const closeStep = async (step4) => threw2(
     `close step ${step4}`,
-    await deliver2(() => ({ kind: "event", event: { kind: step4 } }), [])
+    await answer2(() => ({ kind: "event", event: { kind: step4 } }))
   );
   const moved2 = (origins) => {
     for (const origin of origins)
@@ -75713,7 +73166,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
 }
 var stampedOf = (clock) => (made) => ({
-  kind: "event",
   event: made.event,
   ...readingsAt(clock)
 });
@@ -75794,6 +73246,2163 @@ function repoQuestions(question, sessionId2, signer) {
 
 // src/dsl/render.ts
 init_globals();
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path38 = __toESM(require_path_browserify(), 1);
+
+// src/config/option-domain.ts
+init_globals();
+var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
+function registerBuiltinDomain(name, resolve, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+}
+registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
+  paletteOf: (option) => paletteForThemeName(option)
+});
+var PLACEMENT_THEMES = "placementThemes";
+registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
+  paletteOf: (option, render3) => placementPalette(option, render3.palette)
+});
+for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
+  registerBuiltinDomain(name, () => members, { library, labelOf });
+}
+function perConfigDomainsFor(config2) {
+  return /* @__PURE__ */ new Map([
+    [
+      "styles",
+      {
+        members: Object.keys(config2.styles),
+        // [LAW:one-source-of-truth] A style IS a ThemeKey, and the one
+        // construction of an adapted palette is transposedPalette — the same
+        // call drawDsl makes for the style actually in force. One
+        // transposition of the BASE, never a second over an already-styled
+        // palette (see OptionPalette).
+        // [LAW:no-defensive-null-guards] The members above ARE this map's keys,
+        // so a member always names a declared style.
+        paletteOf: (option, render3) => transposedPalette(render3.basePalette, config2.styles[option])
+      }
+    ],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", { members: presetNames(config2.presets) }]
+  ]);
+}
+function knownOptionDomainNames(perConfigDomains) {
+  return [
+    .../* @__PURE__ */ new Set([..._GLOBAL_OPTION_DOMAINS.keys(), ...perConfigDomains.keys()])
+  ];
+}
+function resolveOptionDomain(from, perConfigDomains) {
+  if (typeof from !== "string") return { members: from };
+  const local = perConfigDomains.get(from);
+  if (local) return local;
+  const entry = _GLOBAL_OPTION_DOMAINS.get(from);
+  if (entry) {
+    return {
+      members: entry.resolve(),
+      paletteOf: entry.paletteOf,
+      library: entry.library,
+      labelOf: entry.labelOf
+    };
+  }
+  throw new Error(unknownOptionDomain(from, perConfigDomains));
+}
+var RENAMED_OPTION_DOMAINS = /* @__PURE__ */ new Map([
+  ["looks", "styles"],
+  ["progressions", "variations"]
+]);
+function unknownOptionDomain(from, perConfigDomains) {
+  const renamed = RENAMED_OPTION_DOMAINS.get(from);
+  const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
+  return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
+}
+
+// src/config/setting-control.ts
+init_globals();
+
+// src/config/menu-keys.ts
+init_globals();
+var PAGE_HOLDING_CURRENT = "-1";
+function menuMember(applyName) {
+  return applyName;
+}
+function menuStateKey(placementId2, applyName, sharedKey) {
+  return sharedKey !== void 0 ? sharedMenuStateKey(sharedKey) : MENU_NS + ident(placementId2) + "." + ident(applyName);
+}
+function sharedMenuStateKey(sharedKey) {
+  return MENU_NS + ident(sharedKey);
+}
+function menuActionName(stateKey, member) {
+  return stateKey + "." + member;
+}
+function menuPageKey(stateKey) {
+  return MENU_PAGE_NS + stateKey;
+}
+var MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution"
+];
+var isMenuOptionName = (name) => MENU_OPTION_NAMES.includes(name);
+var MENU_OPTIONS_VOCABULARY = `"closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
+function parseMenuOptions(entries) {
+  for (const name of Object.keys(entries)) {
+    if (!isMenuOptionName(name)) {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" \u2014 the options dict takes ${MENU_OPTIONS_VOCABULARY}`
+      );
+    }
+  }
+  const bool = (name, def) => {
+    const v = entries[name];
+    if (v === void 0) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== void 0 && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`
+    );
+  }
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key \u2014 a shared key must be a non-empty name (or omit "key" for an independent menu)`
+    );
+  }
+  const distribution = entries["distribution"];
+  if (distribution !== void 0 && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+    distribution: placedBy(distribution)
+  };
+}
+
+// src/config/setting-control.ts
+var optionsOf = (domain) => "from" in domain ? domain.from : domain.themes;
+function controlDomainAdmits(domain, value, perConfigDomains) {
+  if (domain === "bool") return parseSessionBoolean(value) !== null;
+  if (!("min" in domain)) {
+    return resolveOptionDomain(
+      optionsOf(domain),
+      perConfigDomains
+    ).members.includes(value);
+  }
+  return parseSessionInt(value, domain) !== null;
+}
+var LISTED_MEMBERS = 8;
+var SAMPLED_MEMBERS = 3;
+function describeControlDomain(domain, perConfigDomains) {
+  if (domain === "bool") return BOOLEAN_MEMBERS.join(" or ");
+  if (!("min" in domain)) {
+    const from = optionsOf(domain);
+    const { members } = resolveOptionDomain(from, perConfigDomains);
+    const quoted = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+    const named3 = typeof from === "string" ? ` "${from}"` : "";
+    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+  }
+  return `an integer from ${domain.min} to ${domain.max}`;
+}
+function controlDeclOf(decl) {
+  return { label: decl.label, domain: controlDomainOf(decl.domain) };
+}
+function controlDomainOf(domain) {
+  if (domain === "theme") return { themes: PLACEMENT_THEMES };
+  if (domain === "bool") return domain;
+  return "min" in domain ? domain : { from: domain };
+}
+function settingControl(decl, key, readVar2, name, listKey) {
+  const label2 = escapeTemplateLiteral(decl.label);
+  const { domain } = decl;
+  if (domain === "bool") {
+    return {
+      kind: "inline",
+      template: `{{ action "${name}" "\u2611 ${label2}" "\u2610 ${label2}" }}`,
+      actions: { [name]: { set: key, cycle: [...BOOLEAN_MEMBERS] } },
+      variables: {}
+    };
+  }
+  if ("from" in domain) {
+    return optionPicker(key, name, listKey, domain.from, (n) => ({
+      template: `{{ carousel "${n.apply}" "${n.open}" "${label2}" }}`,
+      rows: [`{{ picker "${n.apply}" "${n.page}" false true true }}`]
+    }));
+  }
+  if ("themes" in domain) {
+    return optionPicker(key, name, listKey, domain.themes, (n) => ({
+      template: `{{ action "${n.open}" "${label2}" .${readVar2} }} {{ action "${n.open}" (swatch "${n.apply}") }}`,
+      rows: [
+        `{{ swatches "${n.apply}" "${n.page}" }}`,
+        `{{ themePreview "${n.apply}" }}`
+      ]
+    }));
+  }
+  const step4 = (by) => ({
+    set: key,
+    min: domain.min,
+    max: domain.max,
+    by
+  });
+  return {
+    kind: "inline",
+    template: `{{ action "${name}.down" "\u25C0" }} {{ "${label2}" }} {{ .${readVar2} }} {{ action "${name}.up" "\u25B6" }}`,
+    actions: {
+      [`${name}.down`]: step4(-domain.step),
+      [`${name}.up`]: step4(domain.step)
+    },
+    variables: {}
+  };
+}
+function optionPicker(key, name, listKey, from, face) {
+  const ref = { variable: listKey, key: listKey, member: name };
+  const toggle = menuActionName(listKey, name);
+  const open2 = `${name}.open`;
+  const page2 = menuPageKey(listKey);
+  const currentPage = `${page2}.current`;
+  const { template, rows } = face({ apply: name, open: open2, page: page2 });
+  return {
+    kind: "picker",
+    template,
+    actions: {
+      [name]: { set: key, from },
+      [toggle]: disclosureCycleAction(listKey, name),
+      [page2]: { set: page2, int: true },
+      [currentPage]: { set: page2, to: PAGE_HOLDING_CURRENT },
+      [open2]: { do: [toggle, currentPage] }
+    },
+    variables: {
+      [listKey]: disclosureStateVar(listKey, DISCLOSURE_CLOSED),
+      [page2]: { kind: "state", key: page2, default: "0" }
+    },
+    list: { ref, rows }
+  };
+}
+
+// src/config/loader/persist-target.ts
+init_globals();
+
+// src/config/loader/globals.ts
+init_globals();
+var GLOBALS_FIELDS = Object.fromEntries(
+  Object.entries(GLOBAL_FIELDS).map(([field, row2]) => [field, row2.spec])
+);
+function settingControlDomain(field) {
+  return rangedDomain(GLOBAL_FIELDS[field]);
+}
+function rangedDomain(row2) {
+  return "optionDomain" in row2 && row2.optionDomain !== void 0 ? { from: row2.optionDomain.name } : row2.domain;
+}
+function fragmentRejection(description, message2) {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: { not: {}, description: `not allowed here \u2014 ${description}` },
+    parse: (ctx, path46, field, raw) => {
+      if (raw[field] !== void 0) {
+        ctx.issues.push({
+          path: `${path46}.${field}`,
+          message: message2(`${path46}.${field}`),
+          line: findKeyLine(ctx.source, [...path46.split("."), field])
+        });
+      }
+      return void 0;
+    }
+  };
+}
+function nestedPresetSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot select a preset`,
+    (at) => `${at}: ${subject} cannot select a preset. Which preset is active is resolved once, as session pick over globals.preset over "default"; a fragment naming another would be a second authority over that. Set the default arrangement in the top-level globals.preset instead.`
+  );
+}
+function nestedMenuGlyphSpec(subject) {
+  return fragmentRejection(
+    `${subject} cannot change the settings menu glyph`,
+    (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
+  );
+}
+function nameOnlySpec(spec, subject, why2) {
+  return {
+    ...spec,
+    json: { ...spec.json, not: { pattern: "\\{\\{" } },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && isExpression(v)) {
+        ctx.issues.push({
+          path: `${path46}.${field}`,
+          message: `${path46}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          line: findKeyLine(ctx.source, [...path46.split("."), field])
+        });
+        return void 0;
+      }
+      return spec.parse(ctx, path46, field, raw);
+    }
+  };
+}
+var REMOVED_GLOBALS = {
+  default_bg: "nothing reads it \u2014 a segment with no `bg:` wears the decoration tint of its place in the bar. Delete the key, and author `bg:` on the segments that need a fixed colour.",
+  default_fg: "nothing reads it \u2014 a segment with no `fg:` wears text chosen for contrast against its background. Delete the key, and author `fg:` on the segments that need a fixed colour.",
+  default_truncate_marker: 'nothing reads it \u2014 a segment clipped to its `width:` always ends in "\u2026". Delete the key.',
+  // brandon-menu-ia-q30.xuz: renamed, with no shim. `style` is absent here
+  // because it is still a key — it names what `style` did, and an endcaps
+  // value in it is refused by value (cross-ref.ts).
+  look: 'it was renamed "style" \u2014 write the same name as style: "<name>"',
+  progression: 'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
+  // The tmux status line became a renderer the bar fully supports, so its
+  // experimental toggle is a value of the renderer setting.
+  // [LAW:one-source-of-truth] Where the control is comes from the menu's map.
+  experimentalTmuxStatus: `it became the renderer setting \u2014 write renderer: "tmux" (or pick tmux in ${settingMenuPath("renderer")} \u203A renderer, from a session inside tmux)`,
+  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
+  // nerdFont check names the font that lacks them.
+  charset: "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing."
+};
+var GLOBALS_SCHEMA = {
+  noun: "globals key",
+  fields: GLOBALS_FIELDS,
+  removed: REMOVED_GLOBALS
+};
+var PRESET_FRAGMENT_REJECTIONS = {
+  preset: nestedPresetSpec("a preset"),
+  menuGlyph: nestedMenuGlyphSpec("a preset")
+};
+var PRESET_GLOBALS_SCHEMA = {
+  noun: "preset globals key",
+  fields: { ...GLOBALS_FIELDS, ...PRESET_FRAGMENT_REJECTIONS },
+  removed: REMOVED_GLOBALS
+};
+function isPresetGlobalsField(key) {
+  return isGlobalsField(key) && !(key in PRESET_FRAGMENT_REJECTIONS);
+}
+var EDIT_GLOBALS_WHY = "is decided later than any rule could be settled";
+var EDIT_GLOBALS_SCHEMA = {
+  noun: "editGlobals key",
+  removed: REMOVED_GLOBALS,
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+    menuGlyph: nestedMenuGlyphSpec("the editGlobals fragment"),
+    palette: nameOnlySpec(
+      GLOBALS_FIELDS.palette,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    ),
+    effect: nameOnlySpec(
+      GLOBALS_FIELDS.effect,
+      "the editGlobals fragment",
+      EDIT_GLOBALS_WHY
+    )
+  }
+};
+var THEME_DEFAULT_SCHEMA = {
+  noun: "theme default key",
+  fields: {
+    ...Object.fromEntries(
+      THEME_DEFAULT_FIELDS.map((f) => [f, GLOBALS_FIELDS[f]])
+    ),
+    style: nameOnlySpec(
+      GLOBALS_FIELDS.style,
+      "a theme's default",
+      "is the look that theme wears by name"
+    )
+  }
+};
+function validateThemeDefaults(ctx, raw) {
+  if (!isPlainObject2(raw)) {
+    ctx.issues.push({
+      path: "themeDefaults",
+      message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["themeDefaults"])
+    });
+    return {};
+  }
+  const out = {};
+  for (const [theme24, value] of Object.entries(raw)) {
+    const path46 = `themeDefaults.${theme24}`;
+    if (!ctx.allowedPalettes.has(theme24)) {
+      ctx.issues.push({
+        path: path46,
+        message: `${path46}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        line: findKeyLine(ctx.source, ["themeDefaults", theme24])
+      });
+      continue;
+    }
+    const parsed2 = record(ctx, THEME_DEFAULT_SCHEMA, path46, value);
+    if (parsed2 !== null) out[theme24] = parsed2;
+  }
+  return out;
+}
+function validateGlobals(ctx, path46, raw) {
+  if (raw === void 0) return {};
+  return record(ctx, GLOBALS_SCHEMA, path46, raw) ?? {};
+}
+function validatePresetGlobals(ctx, path46, raw) {
+  return record(ctx, PRESET_GLOBALS_SCHEMA, path46, raw) ?? {};
+}
+function presetGlobalsJson() {
+  return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+function validateEditGlobals(ctx, path46, raw) {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path46, raw) ?? {};
+}
+var GLOBALS_FIELD_NAMES = new Set(
+  Object.keys(GLOBALS_FIELDS)
+);
+function isGlobalsField(key) {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+function removedGlobalPointer(key) {
+  return Object.hasOwn(REMOVED_GLOBALS, key) ? REMOVED_GLOBALS[key] : void 0;
+}
+function listGlobalsFieldNames() {
+  return [...GLOBALS_FIELD_NAMES];
+}
+var NUMERIC_GLOBALS_FLOORS = new Map(
+  Object.entries(GLOBAL_FIELDS).flatMap(
+    ([field, row2]) => "floor" in row2 && typeof row2.floor === "number" ? [[field, row2.floor]] : []
+  )
+);
+function numericGlobalsSeeds(globals) {
+  const seeds = /* @__PURE__ */ new Map();
+  for (const [field, floor3] of NUMERIC_GLOBALS_FLOORS) {
+    const declared = globals[field];
+    seeds.set(field, typeof declared === "number" ? declared : floor3);
+  }
+  return seeds;
+}
+
+// src/config/loader/persist-target.ts
+var SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+var PRESET_ROOT_KEY = /^presets\.(.+)\.root$/;
+var PRESET_GLOBALS_KEY = /^presets\.(.+)\.globals\.([^.]+)$/;
+var THEME_DEFAULT_KEY = /^themeDefaults\.(.+)\.([^.]+)$/;
+function presetRootKey(name) {
+  return `presets.${name}.root`;
+}
+function themeDefaultKey(theme24, field) {
+  return `themeDefaults.${theme24}.${field}`;
+}
+var isThemeDefaultField = (key) => THEME_DEFAULT_FIELDS.includes(key);
+function presetGlobalsKey(name, field) {
+  return `presets.${name}.globals.${field}`;
+}
+function parsePersistTarget(key) {
+  if (isGlobalsField(key)) return { scope: "globals", field: key };
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1] };
+  const globalsMatch = PRESET_GLOBALS_KEY.exec(key);
+  if (globalsMatch && isPresetGlobalsField(globalsMatch[2])) {
+    return {
+      scope: "preset-globals",
+      preset: globalsMatch[1],
+      field: globalsMatch[2]
+    };
+  }
+  const themeMatch = THEME_DEFAULT_KEY.exec(key);
+  if (themeMatch && isThemeDefaultField(themeMatch[2])) {
+    return {
+      scope: "theme-default",
+      theme: themeMatch[1],
+      field: themeMatch[2]
+    };
+  }
+  const presetMatch = PRESET_ROOT_KEY.exec(key);
+  return presetMatch ? { scope: "preset-root", preset: presetMatch[1] } : null;
+}
+function persistPath(target) {
+  switch (target.scope) {
+    case "globals":
+      return ["globals", target.field];
+    case "preset-globals":
+      return ["presets", target.preset, "globals", target.field];
+    case "segment-palette":
+      return ["segments", target.segment, "palette"];
+    case "theme-default":
+      return ["themeDefaults", target.theme, target.field];
+  }
+}
+
+// src/config/help.ts
+init_globals();
+var HELP_GLYPH_CLOSED = "(?)";
+function declareHelp(name, lines2, within4, out) {
+  const self2 = {
+    variable: name,
+    key: name,
+    member: DISCLOSURE_OPEN
+  };
+  out.variables[name] = {
+    ...disclosureStateVar(name, DISCLOSURE_CLOSED),
+    ...within4.length > 0 && { within: within4 }
+  };
+  out.actions[name] = disclosureCycleAction(name, DISCLOSURE_OPEN);
+  out.segments[name] = {
+    template: disclosureTrigger(
+      name,
+      HELP_GLYPH_CLOSED,
+      DISCLOSURE_GLYPH_CLOSE
+    ),
+    // The trigger is visible wherever its host surface is. An unnested `(?)`
+    // (`within` empty) is always visible, and declares no `when` at all.
+    ...gateOf(within4)
+  };
+  const children2 = lines2.map((line, i2) => {
+    const lineName = `${name}.${i2}`;
+    out.segments[lineName] = { template: line };
+    return { kind: "segment", name: lineName };
+  });
+  return disclosureNode(
+    name,
+    self2,
+    { kind: "container", direction: "horizontal", children: children2 },
+    "drop"
+  );
+}
+function gateOf(within4) {
+  const [first2, ...rest2] = within4;
+  return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
+}
+
+// src/template-engine/colors.ts
+init_globals();
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
+}
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
+  }
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
+}
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
+}
+
+// src/help-text.ts
+init_globals();
+
+// src/config/edit-glyphs.ts
+init_globals();
+var REMOVE_GLYPH = "\u2716";
+var ADD_GLYPH = "\u271A";
+var CONFIGURE_GLYPH = "\u{1F527}";
+
+// src/cli-flags.ts
+init_globals();
+var NODE_FLAGS = {
+  help: ["-h", "--help"],
+  version: ["-V", "--version"]
+};
+
+// src/help-text.ts
+var LANE_PLACES = [
+  ...new Set(
+    Object.values(LANES).map((l) => settingMenuPath(l.switch.setting))
+  )
+].join(" or ");
+var FIELD_COLUMN = Math.max(...Object.values(SETTINGS).map((s) => s.configKey.length)) + 2;
+var EDIT_MODE_HELP = [
+  `${ADD_GLYPH} inserts`,
+  `${REMOVE_GLYPH} removes`,
+  `${CONFIGURE_GLYPH} configures`,
+  "\u21BA resets layout"
+];
+var LANE_HELP = {
+  band: [
+    "animates the bar in the band above the prompt, through a Claude Code mod",
+    "on: installs the candybar-band mod from this checkout and types /reload-plugins"
+  ],
+  statusline: [
+    "animates the statusline itself, through the attach launcher shipped with cc-candybar",
+    "on: exits this Claude Code and starts it again under that launcher, on this session",
+    "or start one yourself: cc-candybar --help prints the line to type"
+  ],
+  pane: [
+    "animates the bar in a tmux pane under this session's",
+    "on: opens that pane \xB7 off: closes it"
+  ],
+  tmuxStatus: [
+    "draws the bar in the tmux status line, while this session's pane is the one it shows",
+    "tmux: the daemon draws it there \xB7 claude: puts the status line back as it was"
+  ]
+};
+var HELP_TEXT = `
+cc-candybar - Beautiful powerline statusline for Claude Code
+
+Usage: cc-candybar [options]
+
+Standalone Commands:
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
+
+Debugging:
+  CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
+
+Configuration:
+  Layout and segment options are defined in .cc-candybar.json5 (place in your
+  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
+  to point at a specific file. To see the effective merged config:
+    cc-candybar config
+
+  Every bar carries a settings menu, whatever your config says \u2014 no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  it on the bar (${DOOR_GLYPH} by default; globals.menuGlyph changes it). Beside
+  the settings listed below, its first line holds \u25C1 back, \u270E arrange (edit mode)
+  and \u{1F4BE} save, which appears while you have unsaved changes and writes them to
+  your config file. Under it are its
+  tabs, ${TABS.map((t2) => t2.label).join(", ")};
+  ${TAB_LABEL.session} holds quick actions and commands, ${TAB_LABEL.layout} a new preset.
+  A change applies to this session at once.
+  Where each setting is in the menu: the globals field that sets it in a
+  config file, then the control's label.
+${settingsByPlace().flatMap(({ path: path46, names }) => [
+  `    ${path46}`,
+  ...names.map(
+    (name) => `      ${SETTINGS[name].configKey.padEnd(FIELD_COLUMN)}${SETTINGS[name].label}`
+  )
+]).join("\n")}
+  The \u{1F9F0} tools tab holds \u{1FA7A} doctor: click it to check your setup, and click a
+  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
+
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
+
+Animation lanes (each switched in the settings menu's ${LANE_PLACES}):
+${LANE_NAMES.map((lane) => `  ${LANES[lane].label}
+${LANE_HELP[lane].map((line) => `    ${line}`).join("\n")}`).join("\n")}
+
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
+  url-handle URL           Internal \u2014 the tmux status line's click binding
+                           runs it. Sends a cc-candybar:// link to the daemon
+                           as a click. A link clicked in a terminal goes
+                           through the URL handler app instead.
+  plugin install SOURCE    Install a repository's plugins into
+                           $XDG_DATA_HOME/cc-candybar/plugins: SOURCE is a
+                           local path, a GitHub slug (owner/repo) or a git URL,
+                           and its plugins are the folders under
+                           .cc-candybar/plugins/. A definition the bar would
+                           drop installs nothing. Re-run to update.
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
+  frames --lane LANE [--config PATH]
+                           One session's bar as the daemon pushes it \u2014 up to
+                           30 frames a second while it moves, at once on a
+                           click \u2014 one JSON message per stdout line. Reads
+                           Claude Code's statusline JSON from stdin (one object
+                           a line) and sends it as the session's data
+                           (--config rides with it). LANE is one of
+                           ${LANE_NAMES.join(", ")}:
+                           the experimental lane this stream serves,
+                           which streams only while its toggle in the settings
+                           menu's ${LANE_PLACES} is on.
+  bar-pane PANE            Draw the bar of the Claude Code session in tmux
+                           pane PANE (e.g. %3) in this pane, as the daemon
+                           pushes it, while this pane is shown. The bar is
+                           drawn at PANE's width, so split PANE with -v for a
+                           pane under it that fits. Experimental:
+                           runs while ${LANES.pane.label} is on in the settings
+                           menu's ${settingMenuPath(LANES.pane.switch.setting)}.
+
+Config tooling:
+  doctor [file]            Check your setup the way the bar's \u{1FA7A} doctor does \u2014
+                           one line per check. Exit 0 all ok, 1 any failed,
+                           2 usage error / unreadable settings. Run it from a
+                           Claude Code shell (or inside the same tmux pane) so
+                           it sees Claude Code's own environment. [file] is
+                           the config to check, when the statusline command
+                           names one with --config.
+  check [--render] [file]  Validate a config on the full render pipeline (parse
+                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
+                           every preset) with no daemon. With no path, checks
+                           the same file the daemon would load from here. Exit
+                           0 clean (warnings on stderr), 1 invalid, 2
+                           unreadable. --render also prints the bar a fresh
+                           session opens on, so you can read a config without
+                           installing it. "lint" is an alias.
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
+`;
+
+// src/config/settings-menu.ts
+init_globals();
+
+// src/config/quiet-text.ts
+init_globals();
+var QUIET_PCT = 60;
+var QUIET_MIN_CONTRAST = 3;
+var QUIET_TEXT = `readableOn (mix (color "foreground") (bgOf) ${QUIET_PCT}) (bgOf) ${QUIET_MIN_CONTRAST}`;
+
+// src/doctor/report.ts
+init_globals();
+var DOCTOR_NS = `${SETTINGS_NS}doctor.`;
+var VERDICT_OK = "ok";
+var VERDICT_FAILED = "failed";
+var VERDICT_UNRUN = "";
+function doctorReportKeys(checkName) {
+  const base = `${DOCTOR_NS}${checkName}.`;
+  return {
+    verdict: `${base}verdict`,
+    reason: `${base}reason`,
+    fixable: `${base}fixable`,
+    sighting: `${base}sighting`
+  };
+}
+function configFields({ target }) {
+  return [["configTarget", target.source]];
+}
+function linkFields(terminal, clicked) {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
+  const from = clicked.kind === "failed" ? "unread" : sighting === null ? "-" : clicked.value.includes(sighting) ? "yes" : "no";
+  return [
+    [
+      "tmuxLinks",
+      client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"
+    ],
+    ["clicked", from]
+  ];
+}
+function terminalFeatureFields(terminal, width) {
+  const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
+  return [
+    ...width.kind === "failed" ? [
+      ["cols", "failed"],
+      ["widthOf", "-"]
+    ] : [
+      ["cols", String(width.value.columns ?? "-")],
+      ["widthOf", width.value.of.kind]
+    ],
+    ["clientUtf8", client === null ? "-" : client.utf8 ? "yes" : "no"]
+  ];
+}
+function installFields(install2) {
+  if (install2.kind === "not-held") return [["clients", "unheld"]];
+  if (install2.value.kind === "failed") return [["clients", "failed"]];
+  const { daemon: daemon3, clients } = install2.value.value;
+  const described = clients.map((c) => {
+    if (c.kind === "unreported") return "unreported/-/-";
+    const { bundle, source } = clientStanding(daemon3, c);
+    return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
+  });
+  return [["clients", described.join(",") || "-"]];
+}
+var signedMb = (bytes) => `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
+function daemonFields({
+  serving,
+  processes,
+  postMortems,
+  read: read2
+}) {
+  const others = serving.kind === "not-held" ? "unheld" : processes.kind === "failed" ? "-" : otherDaemons(serving.value, processes.value).map((p2) => p2.pid).join(",") || "-";
+  const running = [
+    [
+      "daemons",
+      processes.kind === "failed" ? "unread" : String(processes.value.length)
+    ],
+    ["others", others]
+  ];
+  const told = [
+    "postMortems",
+    postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(postMortems, read2).length}/${postMortems.value.length}`
+  ];
+  if (serving.kind === "not-held")
+    return [...running, ["memory", "unheld"], told];
+  const { memory, limit } = serving.value;
+  const held2 = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
+  const shares2 = memory.kind === "unmeasured" ? "-" : memory.processes.map(
+    (p2) => `${p2.role}:${p2.pid}:${p2.sizes === null ? "-" : mb(p2.sizes.rss)}`
+  ).join(",");
+  return [
+    ...running,
+    ["memory", `${held2}/${mb(limit)}`],
+    ["processes", shares2],
+    told
+  ];
+}
+function dataFields(data) {
+  const pr = () => {
+    if (data.pullRequests.kind === "unneeded") return "-";
+    const fact = data.pullRequests.fact;
+    if (fact.kind === "failed") return "failed";
+    if (fact.value === null) return "no-forge";
+    const { status } = fact.value;
+    return typeof status === "string" ? status : "logged-out";
+  };
+  const rateLimits = () => {
+    if (data.rateLimits.kind === "unneeded") return "-";
+    const fact = data.rateLimits.fact;
+    if (fact.kind === "not-held") return "unheld";
+    const count = (seen2) => fact.value.filter((v) => v === seen2).length;
+    return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
+  };
+  return [["data", `pr:${pr()},rateLimits:${rateLimits()}`]];
+}
+function frameFields({
+  origin,
+  elsewhere
+}) {
+  const chains = [origin, ...elsewhere];
+  const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
+  const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
+  const count = (seen2) => drawn.filter((f) => f.frame === seen2).length;
+  return [
+    ["frames", FRAMES_SEEN.map(count).join("/")],
+    ["chains", lines2]
+  ];
+}
+function statusLineValue(sources) {
+  const line = statusLineOf(sources);
+  switch (line.kind) {
+    case "unread":
+      return "failed";
+    case "absent":
+    case "not-an-object":
+      return line.kind;
+    case "present":
+      return `${line.from.scope}:${line.refreshInterval === void 0 ? "-" : JSON.stringify(line.refreshInterval)}`;
+  }
+}
+function truecolorEnvFields(sources) {
+  const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
+  return [
+    [
+      "truecolorEnv",
+      told.kind === "failed" ? "failed" : told.value.kind === "unset" ? "unset" : `${told.value.from.scope}:${JSON.stringify(told.value.value)}`
+    ]
+  ];
+}
+function transcriptFields(transcripts) {
+  if (transcripts.kind === "not-held") return [["transcripts", "unheld"]];
+  const count = (kind) => transcripts.value.filter((t2) => t2.read.kind === kind).length;
+  const unparsed = transcripts.value.reduce(
+    (n, t2) => n + (t2.read.kind === "ok" ? t2.read.value.unparsed : 0),
+    0
+  );
+  return [
+    ["transcripts", `${count("ok")}/${count("absent")}/${count("failed")}`],
+    ["unparsed", String(unparsed)]
+  ];
+}
+function nerdFontFields(facts, marks) {
+  if (facts.kind === "none")
+    return [
+      ["glyphs", "-"],
+      ["terminal", "-"],
+      ["font", "-"],
+      ["mark", "-"]
+    ];
+  const { glyphs, terminal } = facts;
+  const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
+  const found2 = (() => {
+    switch (terminal.kind) {
+      case "unreported":
+      case "unasked":
+        return terminal.kind;
+      case "unknown":
+        return `unknown:${terminal.called}`;
+      case "unnamed":
+        return `unnamed:${terminal.term}`;
+      case "bundling":
+      case "unread":
+      case "configured":
+        return `${terminal.name}@${terminal.version ?? "-"}`;
+    }
+  })();
+  const font = (() => {
+    if (terminal.kind !== "configured") return "-";
+    if (terminal.font.kind === "failed") return "failed";
+    const { font: name, lacks } = terminal.font.value;
+    return `${name}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
+  })();
+  const sighting = glyphSighting(facts);
+  const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
+  return [
+    ["glyphs", codes.join(",")],
+    ["terminal", found2],
+    ["font", font],
+    ["mark", mark]
+  ];
+}
+var doctorFields = (facts) => [
+  ...configFields(facts.config),
+  ...nerdFontFields(facts.nerdFont, facts.marks),
+  ...linkFields(facts.terminal, facts.clicked),
+  ...terminalFeatureFields(facts.terminal, facts.width),
+  ...installFields(facts.install),
+  ...daemonFields(facts.daemon),
+  ...dataFields(facts.data),
+  ...transcriptFields(facts.transcripts),
+  ...frameFields(facts.claudeSettings),
+  ...truecolorEnvFields(facts.claudeSettings.origin.sources)
+];
+var notedReports = (reports) => reports.map(({ check, verdict }) => ({
+  name: check.name,
+  label: check.label,
+  verdict: verdict.ok ? {
+    ok: true,
+    ...verdict.note === void 0 ? {} : { note: verdict.note }
+  } : {
+    ok: false,
+    reason: verdict.reason,
+    more: verdict.more ?? [],
+    fixable: verdict.fix !== void 0,
+    ...verdict.sighting === void 0 ? {} : { look: verdict.sighting.glyphs }
+  }
+}));
+function rowReason(reason, more = []) {
+  return more.length === 0 ? reason : `${reason} (+${more.length} more \u2014 run \`cc-candybar doctor\`)`;
+}
+function doctorReportPairs(reports) {
+  return reports.flatMap(({ check, verdict }) => {
+    const keys2 = doctorReportKeys(check.name);
+    return verdict.ok ? [
+      { key: keys2.verdict, value: VERDICT_OK },
+      { key: keys2.reason, value: verdict.note ?? "" },
+      { key: keys2.fixable, value: BOOLEAN_FALSE },
+      { key: keys2.sighting, value: "" }
+    ] : [
+      { key: keys2.verdict, value: VERDICT_FAILED },
+      { key: keys2.reason, value: rowReason(verdict.reason, verdict.more) },
+      {
+        key: keys2.fixable,
+        value: verdict.fix === void 0 ? BOOLEAN_FALSE : BOOLEAN_TRUE
+      },
+      { key: keys2.sighting, value: verdict.sighting?.glyphs ?? "" }
+    ];
+  });
+}
+
+// src/config/quick-actions.ts
+init_globals();
+var QUICK_ACTIONS = {
+  copySession: { copy: "{{ .session.id }}" },
+  copyResume: { copy: "{{ .resume_command }}" },
+  openProject: { open: "{{ .project_dir }}" },
+  openTranscript: { open: "{{ .transcript_path }}" },
+  openConfig: { open: "{{ .config_path }}" }
+};
+function quickActions(prefix) {
+  const name = (action2) => `${prefix}${action2}`;
+  return {
+    // [LAW:dataflow-not-control-flow] `↗ repo` and `↗ config` are gated on
+    // their values: a local-only repo has no page and a bar on the bundled
+    // default no file, and the glyph is absent. Every payload carries a
+    // resume command, so `⎘ resume` is not gated.
+    template: `{{ action "${name("copySession")}" "\u2398 id" }} {{ action "${name("copyResume")}" "\u2398 resume" }} {{ action "${name("openProject")}" "\u2197 proj" }} {{ action "${name("openTranscript")}" "\u2197 log" }}{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "\u2197 repo" }}{{ end }}{{ if ne .config_path "" }} {{ action "${name("openConfig")}" "\u2197 config" }}{{ end }}`,
+    actions: Object.fromEntries(
+      Object.entries(QUICK_ACTIONS).map(([action2, decl]) => [
+        `${prefix}${action2}`,
+        decl
+      ])
+    )
+  };
+}
+
+// src/config/command-tray.ts
+init_globals();
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf3 = (held2) => gates.length === 0 ? key : `${key}.${held2}`;
+  const actions = {};
+  for (let held2 = 0; held2 < 2 ** gates.length; held2++)
+    actions[nameOf3(held2)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held2 & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i2, held2) => i2 === gates.length ? `"${nameOf3(held2)}"` : `(ternary ${link(i2 + 1, held2 | 1 << i2)} ${link(i2 + 1, held2)} (${gates[i2]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/command-tray.ts
+var COMMANDS = ["/compact", "/model"];
+var CLEAR = "/clear";
+function commandTray(prefix) {
+  const commandAction = (line) => `${prefix}${line.slice(1)}`;
+  const typeClear = `${prefix}clear.slash`;
+  const clear = confirmStep(
+    `${prefix}clear`,
+    { arm: CLEAR, confirm: `${CLEAR} \u2713 confirm` },
+    [{ action: typeClear, when: "true" }]
+  );
+  return {
+    template: COMMANDS.map(
+      (line) => `{{ action "${commandAction(line)}" "${line}" }} `
+    ).join("") + clear.template,
+    when: `{{ ${IN_TMUX} }}`,
+    actions: {
+      ...Object.fromEntries(
+        COMMANDS.map((line) => [
+          commandAction(line),
+          { slash: slashLine(line) }
+        ])
+      ),
+      ...clear.actions,
+      [typeClear]: { slash: slashLine(CLEAR) }
+    },
+    variables: clear.variables,
+    disarm: clear.disarm
+  };
+}
+
+// src/config/autocompact-control.ts
+init_globals();
+function autocompactControl(prefix, formatCount) {
+  return {
+    template: `{{ if ne .autocompact.error "" }}\u21F2 \u26A0 {{ .autocompact.error }}{{ else }}\u21F2 {{ if eq .autocompact.window 0 }}auto{{ else }}${formatCount(".autocompact.applied")}{{ end }}{{ if ${IN_TMUX} }}{{ if gt .autocompact.lower 0 }} {{ action (printf "${prefix}%d" .autocompact.lower) "\u2212" }}{{ end }}{{ if gt .autocompact.higher 0 }} {{ action (printf "${prefix}%d" .autocompact.higher) "+" }}{{ end }}{{ if gt .autocompact.window 0 }} {{ action "${prefix}auto" "\u21BA" }}{{ end }}{{ end }}{{ end }}`,
+    // [LAW:no-silent-failure] An unreadable settings file paints `error`.
+    bg: '{{ if ne .autocompact.error "" }}{{ color "error" }}{{ else }}{{ tint }}{{ end }}',
+    when: '{{ or (ge .autocompact.window 0) (ne .autocompact.error "") }}',
+    // [LAW:one-source-of-truth] One action per window Claude Code accepts, so
+    // the lines a click can type are exactly AUTOCOMPACT_WINDOWS; the template
+    // picks one by name.
+    actions: {
+      [`${prefix}auto`]: { slash: slashLine("/autocompact auto") },
+      ...Object.fromEntries(
+        AUTOCOMPACT_WINDOWS.map((w) => [
+          `${prefix}${w}`,
+          { slash: slashLine(`/autocompact ${w}`) }
+        ])
+      )
+    }
+  };
+}
+
+// src/config/format-token-count.ts
+init_globals();
+var formatTokenCount = (n) => `{{ if ge ${n} 1000000 }}{{ printf "%.1f" (divf ${n} 1000000) }}M{{ else if ge ${n} 1000 }}{{ printf "%.1f" (divf ${n} 1000) }}K{{ else }}{{ ${n} }}{{ end }}`;
+
+// src/config/settings-menu.ts
+var EDIT_SEG = `${SETTINGS_NS}edit`;
+var TOOLBAR_SEG = `${SETTINGS_NS}toolbar`;
+var TOOLBAR = quickActions(SETTINGS_NS);
+var COMMANDS_SEG = `${SETTINGS_NS}commands`;
+var COMMANDS2 = commandTray(`${COMMANDS_SEG}.`);
+var AUTOCOMPACT_SEG = `${SETTINGS_NS}autocompact`;
+var AUTOCOMPACT = autocompactControl(`${AUTOCOMPACT_SEG}.`, formatTokenCount);
+var seg = (name) => ({ kind: "segment", name });
+var TAB_KEY = `${SETTINGS_NS}tab`;
+var tabSeg = (tab) => `${TAB_KEY}.${tab}`;
+var tabToggle = (tab) => `${tabSeg(tab)}.toggle`;
+var tabRef = (tab) => ({
+  variable: TAB_KEY,
+  key: TAB_KEY,
+  member: tab
+});
+var SAVE_SEG = `${SETTINGS_NS}save`;
+var PRESET_SAVE = `${SETTINGS_NS}preset.save`;
+var PRESET_DELETE = `${SETTINGS_NS}preset.delete`;
+var PRESET_DELETE_GLYPH = "\u{1F6AE}";
+var controlSeg = (name) => `${SETTINGS_NS}${name}`;
+var controlApply = (name) => `${SETTINGS_NS}apply.${name}`;
+var controlReset = (name) => `${SETTINGS_NS}reset.${name}`;
+var THEME_DEFAULT_SEG = `${SETTINGS_NS}themeDefault.save`;
+var THEME_DEFAULT_DIFFERS = `${SETTINGS_NS}themeDefault.differs`;
+var THEME_DEFAULT_THEME = `${SETTINGS_NS}themeDefault.theme`;
+var THEME_DEFAULT_CELL = {
+  when: `{{ .${THEME_DEFAULT_DIFFERS} }}`,
+  template: `{{ action "${THEME_DEFAULT_SEG}" (printf "\u2913 default for %s" .${THEME_DEFAULT_THEME}) }} {{ swatch "${controlApply("theme")}" .${THEME_DEFAULT_THEME} }}`
+};
+var RESET_ALL_SEG = `${SETTINGS_NS}resetAll`;
+var DOOR_TOGGLE = `${SETTINGS_ANCHOR}.toggle`;
+var UNDO_ACTION = `${SETTINGS_NS}undo`;
+var BACK_ACTION = `${SETTINGS_NS}back`;
+var BACK_STEP = `${BACK_ACTION}.step`;
+var BACK_COUNT = `${SETTINGS_NS}navigation.back`;
+var BACK_SEG = BACK_ACTION;
+var BACK_GLYPH = "\u25C1";
+var BACK_CELL = {
+  template: `{{ if gt .${BACK_COUNT} 0 }}{{ action "${BACK_ACTION}" "${BACK_GLYPH}" }}{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`
+};
+var REDO_ACTION = `${SETTINGS_NS}redo`;
+var DOCTOR_SEG = `${SETTINGS_NS}doctor`;
+var DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
+var doctorFixAction = (check) => `${DOCTOR_SEG}.fix.${check}`;
+var doctorMarkAction = (check, mark) => `${DOCTOR_SEG}.mark.${check}.${mark}`;
+var doctorRowSeg = (check) => `${DOCTOR_SEG}.${check}`;
+var MARK_GLYPH = {
+  drawn: "[\u2713 shapes]",
+  boxes: "[\u2717 boxes]"
+};
+var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
+var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
+var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
+var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
+var submenuRef = (name) => {
+  const key = accordionOf(PLACE[SUBMENUS[name].beside]);
+  return { variable: key, key, member: name };
+};
+var PREVIEWS = {
+  // `{{ layoutPreview }}` draws every row of the arrangement, one block per
+  // segment, named, each block in the tint the bar's variation and shade deal
+  // it — so it shows what a preset, a variation or a shade changes.
+  layout: { template: "{{ layoutPreview }}" },
+  // A style chooses how the bar's palette is adapted, and `{{ themePreview }}`
+  // samples exactly the palette the bar is drawn in. (The theme picker carries
+  // its own demo of the theme it has selected.)
+  palette: { template: "{{ themePreview }}" },
+  // While the preset ring is on a preset the user made
+  // (brandon-save-undo-bwi.o6u), the click that deletes it; `+ preset` in the
+  // 📐 layout tab makes one.
+  presetDelete: {
+    when: "{{ not .preset.bundled }}",
+    template: `{{ action "${PRESET_DELETE}" (printf "${PRESET_DELETE_GLYPH} delete %s" .${SETTINGS.preset.effectiveVar}) }}`
+  }
+};
+var controlRow = (name, row2) => `${SETTINGS_NS}list.${name}.${row2}`;
+var controlResettable = (name) => `${SETTINGS_NS}resettable.${name}`;
+var DRIFT_MARK = " \u2022";
+var anyResettable = (controls) => controls.length === 0 ? "false" : `(or ${controls.map((c) => `(and (${c.shown}) .${controlResettable(c.name)})`).join(" ")})`;
+var laneSettings = LANE_NAMES.map(
+  (lane) => [LANES[lane].switch.setting, lane]
+);
+var HELP_ARTIFACTS = {
+  variables: {},
+  actions: {},
+  segments: {}
+};
+var HELP = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => {
+    const name = `${SETTINGS_NS}help.${setting}`;
+    return [setting, declareHelp(name, LANE_HELP[lane], [], HELP_ARTIFACTS)];
+  })
+);
+var SPINNER = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+var laneReadout = (lane) => {
+  const feed2 = (field) => `.${laneFeedVar(lane, field)}`;
+  const spinner = SPINNER.map((glyph) => `${1 / MOVING_FPS} "${glyph}"`).join(
+    " "
+  );
+  return (
+    // [LAW:dataflow-not-control-flow] One test for every switch, a flag's or
+    // the renderer's: the setting's value against the one that turns the lane
+    // on, each spelled as a template literal of its own type.
+    `{{ if eq .${SETTINGS[LANES[lane].switch.setting].effectiveVar} ${JSON.stringify(LANES[lane].switch.on)} }} {{ if ${feed2("subscribers")} }}{{ realtimeFrames ${spinner} }} {{ ${feed2("fps")} }} fps{{ if not ${feed2("shown")} }} \xB7 off screen{{ end }}{{ else }}no subscriber{{ end }}{{ end }}`
+  );
+};
+var DIAGNOSTICS_INDICATOR = `{{ if .diagnostics.label }} {{ bg .diagnostics.bg (fg .diagnostics.fg (action "${DIAGNOSTICS_VIEWING}" .diagnostics.label .diagnostics.open)) }}{{ end }}`;
+var FPS_SEG = `${SETTINGS_NS}fps`;
+var POLLED = "polled";
+var AT_MOST = "\u2264";
+var FPS_UNIT = " fps";
+var RATE_WIDTH = Math.max(
+  POLLED.length,
+  AT_MOST.length + String(MOVING_FPS).length + FPS_UNIT.length
+);
+var FRAME_RATE = `{{ if eq .${drawingVar("by")} "${"feed"}" }}{{ printf "%${RATE_WIDTH - FPS_UNIT.length}s" (printf "${AT_MOST}%d" (int .${drawingVar("fps")})) }}${FPS_UNIT}{{ else }}${POLLED.padStart(RATE_WIDTH)}{{ end }}`;
+var TRAIL = Object.fromEntries(
+  laneSettings.map(([setting, lane]) => [setting, laneReadout(lane)])
+);
+var submenusBeside = (name) => SUBMENU_NAMES.filter((s) => SUBMENUS[s].beside === name);
+var menuControl = (name) => {
+  const row2 = SETTINGS[name];
+  const place = PLACE[name];
+  return {
+    ...row2,
+    name,
+    place,
+    control: settingControl(
+      {
+        label: row2.label,
+        domain: settingControlDomain(row2.configKey)
+      },
+      row2.sessionKey,
+      row2.effectiveVar,
+      controlApply(name),
+      accordionOf(place)
+    ),
+    beneath: row2.previews.map((preview) => PREVIEWS[preview]),
+    help: [HELP[name]].filter((h) => h !== void 0),
+    submenus: submenusBeside(name)
+  };
+};
+var CONTROLS = Object.keys(SETTINGS).map(menuControl);
+var controlsIn = (place) => CONTROLS.filter((c) => c.place === place);
+var controlsUnder = (place) => CONTROLS.filter((c) => within(c.place, place));
+var markedDisplay = (place) => (text4) => `(print ${templateLiteral(text4)} (ternary ${templateLiteral(DRIFT_MARK)} "" ${anyResettable(
+  controlsUnder(place)
+)}))`;
+var controlsAt = (place) => controlsIn(place).flatMap(
+  (c) => [
+    controlNode(c),
+    ...c.help,
+    ...c.submenus.map(
+      (s) => disclosureNode(submenuSeg(s), submenuRef(s), placeBody(s), "drop")
+    )
+  ].map((node) => ({ ...node, when: `{{ ${c.shown} }}` }))
+);
+var SETTINGS_WRITTEN_KEYS = new Set(
+  CONTROLS.flatMap((c) => [c.sessionKey, c.configKey])
+);
+var RESET_ALL = confirmStep(
+  RESET_ALL_SEG,
+  { arm: "\u27F2", confirm: "\u27F2 reset all?" },
+  CONTROLS.map((c) => ({ action: controlReset(c.name), when: c.shown }))
+);
+var SAVE_COUNTS = ["unsaved", "history.undo", "history.redo"];
+var saveCountVar = (count) => `${SETTINGS_NS}${count}`;
+var UNSAVED_VAR = saveCountVar("unsaved");
+var counted = (count, body) => ({
+  body,
+  shown: `(gt .${saveCountVar(count)} 0)`
+});
+var layerVar = (role) => `${SETTINGS_NS}layers.${role}`;
+var SAVE_LABEL = `(printf "\u{1F4BE} save %d" .${UNSAVED_VAR})`;
+var SAVE_TO = LAYER_ROLES.map(
+  (role) => `{{ if .${layerVar(role)} }} {{ action "${SAVE_SEG}" "${role}" "${role}" }}{{ end }}`
+).join("");
+var SAVE_BODY = `{{ if or .${layerVar("project")} .${layerVar("local")} }}{{ ${SAVE_LABEL} }}:${SAVE_TO}{{ else }}{{ action "${SAVE_SEG}" ${SAVE_LABEL} "user" }}{{ end }}`;
+var SAVE_PARTS = [
+  counted("unsaved", SAVE_BODY),
+  counted("history.undo", `{{ action "${UNDO_ACTION}" "\u21B6" }}`),
+  counted("history.redo", `{{ action "${REDO_ACTION}" "\u21B7" }}`),
+  {
+    body: RESET_ALL.template,
+    shown: `(or ${anyResettable(CONTROLS)} ${RESET_ALL.armed})`
+  }
+];
+var SAVE_CELL = {
+  when: `{{ or ${SAVE_PARTS.map((p2) => p2.shown).join(" ")} }}`,
+  template: `{{ $sep := "" }}` + SAVE_PARTS.map(
+    (p2) => `{{ if ${p2.shown} }}{{ $sep }}${p2.body}{{ $sep = " " }}{{ end }}`
+  ).join("")
+};
+var CONFIRMS = [
+  { step: RESET_ALL, place: "door" },
+  { step: COMMANDS2, place: "session" }
+];
+var disarms = (out) => out.map((c) => c.step.disarm);
+var DOOR_DISARMS = disarms(CONFIRMS);
+var TAB_DISARMS = disarms(CONFIRMS.filter((c) => c.place !== "door"));
+function controlNode(c) {
+  const self2 = controlSeg(c.name);
+  if (c.control.kind === "inline") return seg(self2);
+  return disclosureNode(
+    self2,
+    c.control.list.ref,
+    {
+      kind: "container",
+      direction: "vertical",
+      children: [...c.control.list.rows, ...c.beneath].map(
+        (_, row2) => seg(controlRow(c.name, row2))
+      )
+    },
+    "drop"
+  );
+}
+function isSettingsAnchor(segmentName) {
+  return segmentName === SETTINGS_ANCHOR;
+}
+function prependAnchor(node) {
+  const anchorRef = seg(SETTINGS_ANCHOR);
+  if (node.kind === "container" && node.direction === "vertical") {
+    const [first2, ...rest2] = node.children;
+    return node.when === void 0 && first2 !== void 0 ? { ...node, children: [prependAnchor(first2), ...rest2] } : {
+      kind: "container",
+      direction: "vertical",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [anchorRef, node]
+    };
+  }
+  if (node.when === void 0) {
+    return { ...node, children: [anchorRef, ...node.children] };
+  }
+  const { when: when2, children: children2, ...row2 } = node;
+  return {
+    ...row2,
+    children: [
+      anchorRef,
+      { kind: "container", direction: row2.direction, when: when2, children: children2 }
+    ]
+  };
+}
+function withAnchor(node) {
+  const placed2 = countAnchors(node) > 0 ? node : prependAnchor(node);
+  return placed2;
+}
+function countAnchors(node) {
+  let n = 0;
+  for (const each of walkNodes(node)) {
+    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
+  }
+  return n;
+}
+function anchorUnderGate(node, gated2 = false) {
+  const here = gated2 || node.when !== void 0;
+  if (node.kind === "segment") {
+    return here && isSettingsAnchor(node.name) || node.opens !== void 0 && anchorUnderGate(node.opens.body, true);
+  }
+  return node.children.some((child) => anchorUnderGate(child, here));
+}
+var PLACE_BODY = {
+  // `◁ back`, the controls one click from the door — theme, preset — then
+  // arranging the bar, then the save cell whenever it has something to do.
+  door: {
+    direction: "horizontal",
+    content: [seg(BACK_SEG)],
+    after: [seg(EDIT_SEG), seg(SAVE_SEG)]
+  },
+  // The quick actions, then the commands typed into Claude Code beside the
+  // auto-compact window they would summarize at.
+  session: {
+    direction: "vertical",
+    content: [
+      seg(TOOLBAR_SEG),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [seg(COMMANDS_SEG), seg(AUTOCOMPACT_SEG)]
+      }
+    ],
+    after: []
+  },
+  look: { direction: "horizontal", content: [], after: [] },
+  layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
+  config: { direction: "horizontal", content: [], after: [] },
+  tools: {
+    direction: "vertical",
+    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
+    after: []
+  },
+  // The settings that adapt the theme, then — while the look they make
+  // differs from the theme's own default — the cell that saves it as that
+  // default.
+  gear: {
+    direction: "horizontal",
+    content: [],
+    after: [seg(THEME_DEFAULT_SEG)]
+  },
+  toggles: { direction: "horizontal", content: [], after: [] }
+};
+function placeBody(place) {
+  const { direction, content, after } = PLACE_BODY[place];
+  return {
+    kind: "container",
+    direction,
+    children: [...content, ...controlsAt(place), ...after]
+  };
+}
+function expandAnchor(node) {
+  if (node.kind === "segment") {
+    return isSettingsAnchor(node.name) ? {
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        disclosureNode(node.name, SETTINGS_REF, DOOR_BODY, "above"),
+        seg(FPS_SEG)
+      ]
+    } : node;
+  }
+  return expandContainer(node);
+}
+function doorBody() {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      placeBody("door"),
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: TABS.map(
+          ({ member }) => disclosureNode(
+            tabSeg(member),
+            tabRef(member),
+            placeBody(member),
+            "drop"
+          )
+        )
+      }
+    ]
+  };
+}
+var DOOR_BODY = doorBody();
+function expandContainer(node) {
+  return {
+    ...node,
+    children: node.children.map((child) => expandAnchor(child))
+  };
+}
+function settingsArtifacts(doorGlyph) {
+  const artifacts = {
+    variables: {
+      [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
+      [DIAGNOSTICS_VIEWING]: {
+        kind: "state",
+        key: DIAGNOSTICS_VIEWING,
+        default: "0"
+      }
+    },
+    actions: {
+      [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
+      [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
+      [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
+      [DOCTOR_RUN_ACTION]: { doctor: "run" },
+      ...TOOLBAR.actions,
+      ...COMMANDS2.actions,
+      ...AUTOCOMPACT.actions,
+      [SAVE_SEG]: { save: true, layer: "ask" },
+      [UNDO_ACTION]: { undo: true },
+      // [LAW:composability] Going back can reopen a view a confirm sits in, so
+      // it disarms every confirm as the door does: a confirm is only ever
+      // clicked in the view its own arming click was made in.
+      [BACK_STEP]: { back: true },
+      [BACK_ACTION]: { do: [BACK_STEP, ...DOOR_DISARMS] },
+      [REDO_ACTION]: { redo: true },
+      [PRESET_SAVE]: { preset: "save" },
+      [THEME_DEFAULT_SEG]: { themeDefault: "save" },
+      [PRESET_DELETE]: {
+        preset: "delete",
+        name: `{{ .${SETTINGS.preset.effectiveVar} }}`
+      }
+    },
+    segments: {
+      // [LAW:one-source-of-truth] ONE symbol per state, unlike the labelled toggles
+      // below, which are a word plus the ▸/▾ that gates it. The door has no
+      // label to gate: it is a glyph, so a second glyph beside it would be the
+      // only thing on the bar that spells its state twice. The door's glyph
+      // names what it opens, `✖` names what the click does.
+      //
+      // Two displays through the same `[closed, member]` cycle every other
+      // disclosure binds: the shape did not change, only the values. Open,
+      // the ✖ wears a red the theme names for `DOOR_CLOSE_ROLE`, as the theme
+      // gives it (`roleTextOn`): the theme's text-red where that reads on the
+      // pressed state, otherwise the role's own red or the nearest rung of its
+      // ladder out toward the pole the pressed state stands farther from that
+      // does, and where none does, the named red standing farthest off. It
+      // never slides lightness: a slid red stops reading as red, and the ✖
+      // must be red on every theme. `keptOn` only stops the terminal's
+      // rounding from costing it the contrast it has. Closed, the author's
+      // glyph keeps the cell's own text.
+      [SETTINGS_ANCHOR]: {
+        template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (keptOn (roleTextOn "${DOOR_CLOSE_ROLE}" (bgOf)) (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
+      },
+      [FPS_SEG]: { template: FRAME_RATE },
+      [TOOLBAR_SEG]: { template: TOOLBAR.template },
+      [COMMANDS_SEG]: { template: COMMANDS2.template, when: COMMANDS2.when },
+      [AUTOCOMPACT_SEG]: {
+        template: AUTOCOMPACT.template,
+        bg: AUTOCOMPACT.bg,
+        when: AUTOCOMPACT.when
+      },
+      [BACK_SEG]: BACK_CELL,
+      [SAVE_SEG]: SAVE_CELL,
+      [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
+      [PRESET_SAVE]: {
+        template: `{{ action "${PRESET_SAVE}" "+ preset" }}`
+      },
+      [DOCTOR_SEG]: {
+        template: `{{ action "${DOCTOR_RUN_ACTION}" "\u{1FA7A} doctor" }}`
+      },
+      [EDIT_SEG]: {
+        // Entering or leaving edit mode is a click like every other in the
+        // menu: the menu stays as it was, so `◁ back` and the tabs stay in
+        // reach while the bar is arranged.
+        template: `{{ action "${EDIT_TOGGLE_ACTION}" "\u270E arrange" "\u270E done" }}`
+      }
+    }
+  };
+  artifacts.variables[THEME_DEFAULT_DIFFERS] = {
+    kind: "input",
+    path: "themeDefault.differs",
+    type: "boolean",
+    default: false
+  };
+  artifacts.variables[THEME_DEFAULT_THEME] = {
+    kind: "input",
+    path: "themeDefault.theme",
+    type: "string",
+    default: ""
+  };
+  artifacts.variables[BACK_COUNT] = {
+    kind: "input",
+    path: "navigation.back",
+    type: "number",
+    default: 0
+  };
+  for (const role of LAYER_ROLES) {
+    artifacts.variables[layerVar(role)] = {
+      kind: "input",
+      path: `layers.${role}`,
+      type: "boolean",
+      default: false
+    };
+  }
+  for (const count of SAVE_COUNTS) {
+    artifacts.variables[saveCountVar(count)] = {
+      kind: "input",
+      path: count,
+      type: "number",
+      default: 0
+    };
+  }
+  artifacts.variables[TAB_KEY] = disclosureStateVar(TAB_KEY, DISCLOSURE_CLOSED);
+  for (const { member, label: label2 } of TABS) {
+    artifacts.actions[tabToggle(member)] = disclosureCycleAction(
+      TAB_KEY,
+      member
+    );
+    artifacts.actions[tabSeg(member)] = {
+      do: [tabToggle(member), ...TAB_DISARMS]
+    };
+    const display = markedDisplay(member);
+    artifacts.segments[tabSeg(member)] = {
+      template: `{{ ${disclosureTriggerCall(
+        tabSeg(member),
+        display(label2),
+        display(`${DISCLOSURE_GLYPH_OPEN} ${label2}`)
+      )} }}`
+    };
+  }
+  Object.assign(artifacts.variables, COMMANDS2.variables, RESET_ALL.variables);
+  declareSettingControls(artifacts);
+  declareDoctorRows(artifacts);
+  return artifacts;
+}
+function declareDoctorRows(artifacts) {
+  for (const c of CHECKS) {
+    const keys2 = doctorReportKeys(c.name);
+    const fix = doctorFixAction(c.name);
+    for (const key of Object.values(keys2)) {
+      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
+    }
+    artifacts.actions[fix] = { doctor: "fix", check: c.name };
+    const marks = c.takesMark ? GLYPH_MARKS : [];
+    for (const mark of marks) {
+      artifacts.actions[doctorMarkAction(c.name, mark)] = {
+        doctor: "mark",
+        check: c.name,
+        mark
+      };
+    }
+    const markCells = marks.map(
+      (mark) => ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`
+    ).join("");
+    artifacts.segments[doctorRowSeg(c.name)] = {
+      when: `{{ ne .${keys2.verdict} "${VERDICT_UNRUN}" }}`,
+      template: `{{ if eq .${keys2.verdict} "${VERDICT_OK}" }}\u2713 ${c.label}{{ if ne .${keys2.reason} "" }} \u2014 {{ .${keys2.reason} }}{{ end }}{{ else }}\u2717 ${c.label} \u2014 {{ .${keys2.reason} }}{{ if eq .${keys2.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` + (markCells === "" ? "" : `{{ if ne .${keys2.sighting} "" }} {{ .${keys2.sighting} }}${markCells}{{ end }}`) + `{{ end }}`
+    };
+  }
+}
+function declareSettingControls(artifacts) {
+  for (const c of CONTROLS) {
+    Object.assign(artifacts.actions, c.control.actions);
+    const reset = controlReset(c.name);
+    artifacts.actions[reset] = { reset: c.configKey };
+    artifacts.variables[controlResettable(c.name)] = {
+      kind: "input",
+      path: `resettable.${c.name}`,
+      type: "boolean",
+      default: false
+    };
+    const resetCell = `{{ if .${controlResettable(c.name)} }} {{ action "${reset}" "\u21BA" }}{{ end }}`;
+    Object.assign(artifacts.variables, c.control.variables);
+    artifacts.segments[controlSeg(c.name)] = {
+      template: `${c.control.template}${TRAIL[c.name] ?? ""}${resetCell}`
+    };
+    if (c.control.kind === "picker") {
+      [
+        ...c.control.list.rows.map((template) => ({ template })),
+        ...c.beneath
+      ].forEach((row2, i2) => {
+        artifacts.segments[controlRow(c.name, i2)] = row2;
+      });
+    }
+  }
+  Object.assign(artifacts.actions, RESET_ALL.actions);
+  Object.assign(artifacts.variables, HELP_ARTIFACTS.variables);
+  Object.assign(artifacts.actions, HELP_ARTIFACTS.actions);
+  Object.assign(artifacts.segments, HELP_ARTIFACTS.segments);
+  for (const name of SUBMENU_NAMES) {
+    const ref = submenuRef(name);
+    artifacts.actions[submenuToggle(name)] = disclosureCycleAction(
+      ref.key,
+      ref.member
+    );
+    artifacts.segments[submenuSeg(name)] = {
+      template: `{{ action "${submenuToggle(name)}" ${markedDisplay(name)(SUBMENUS[name].trigger)} }}`
+    };
+  }
+}
+function ensureEditToggle(artifacts) {
+  const { variables, actions } = editModeArtifacts();
+  Object.assign(artifacts.variables, variables);
+  Object.assign(artifacts.actions, actions);
+}
+function synthesizeSettingsMenu(config2) {
+  const artifacts = settingsArtifacts(config2.globals.menuGlyph ?? DOOR_GLYPH);
+  ensureEditToggle(artifacts);
+  const presets = { ...config2.presets };
+  for (const name of presetNames(config2.presets)) {
+    const { node } = presetRoot(config2, name);
+    const root = expandAnchor(withAnchor(node));
+    presets[name] = { ...presetByName(config2.presets, name), root };
+  }
+  return {
+    ...config2,
+    variables: { ...config2.variables, ...artifacts.variables },
+    actions: { ...config2.actions, ...artifacts.actions },
+    segments: { ...config2.segments, ...artifacts.segments },
+    presets
+  };
+}
+
+// src/config/edit-chrome.ts
+var EDIT_LIVE_KEY = `${EDIT_NS}live`;
+var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
+var EDIT_DONE_SEG = `${EDIT_NS}done`;
+var EDIT_SAVE_ACTION = `${EDIT_NS}save`;
+var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
+var EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
+var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
+var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
+var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
+var EDIT_LIVE_REF = {
+  variable: EDIT_LIVE_KEY,
+  key: EDIT_LIVE_KEY,
+  member: DISCLOSURE_OPEN
+};
+function configuringVar(presetIdent) {
+  return `${EDIT_NS}configuring.p${presetIdent}`;
+}
+function namesView(presetIdent) {
+  return `and ${disclosureTerm(EDIT_MODE_REF)} (not ${disclosureTerm(EDIT_LIVE_REF)}) (ne .${configuringVar(presetIdent)} "true")`;
+}
+function configuringDecl(members) {
+  const terms = members.map(
+    (m) => `(eq .${EDIT_CONFIGURE_KEY} "${escapeTemplateLiteral(m)}")`
+  );
+  return { kind: "template", template: `{{ or ${terms.join(" ")} false }}` };
+}
+function inNamesView(presetIdent, verdict, when2) {
+  return `{{ if ${namesView(presetIdent)} }}${verdict}{{ else }}${when2}{{ end }}`;
+}
+var PRESET_CUSTOMIZED_VAR = "preset.customized";
+var CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
+var isChromeExempt = isReservedName;
+function configOptionDomains(config2) {
+  return new Map([
+    ...perConfigDomainsFor(config2),
+    ...addableSegmentDomains(config2)
+  ]);
+}
+var ADDABLE_DOMAIN = `${EDIT_NS}addable`;
+function addableSegmentDomains(config2) {
+  return /* @__PURE__ */ new Map([
+    [
+      ADDABLE_DOMAIN,
+      {
+        members: Object.keys(config2.segments).filter((n) => !isChromeExempt(n)),
+        library: {
+          groups: LIBRARY_GROUPS.map((id2) => ({
+            id: id2,
+            label: GROUP_LABELS[id2]
+          })),
+          entry: (option) => {
+            const decl = config2.segments[option];
+            return {
+              group: decl.group ?? OTHER_GROUP,
+              ...decl.description !== void 0 && {
+                description: decl.description
+              }
+            };
+          }
+        }
+      }
+    ]
+  ]);
+}
+function chromeCell(name, template, artifacts) {
+  artifacts.segments[name] = { template, when: EDIT_MODE_GATE, bg: NO_FILL };
+  return { kind: "segment", name };
+}
+function removeTerm(ctx, posIdent, id2) {
+  const actionName = `${EDIT_NS}${ctx.presetIdent}.remove.${posIdent}`;
+  ctx.artifacts.actions[actionName] = {
+    persist: ctx.rootKey,
+    removeSegment: id2
+  };
+  const remove = `readableOn (color "error") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return `{{ fg (${remove}) (action "${actionName}" "${REMOVE_GLYPH}") }}`;
+}
+function inArrangeMode(term) {
+  return `{{ if ${disclosureTerm(EDIT_MODE_REF)} }}${term}{{ end }}`;
+}
+function shownWhile(refs, when2) {
+  return refs.reduce(
+    (inner, ref) => `{{ if and ${disclosureTerm(EDIT_MODE_REF)} ${disclosureTerm(ref)} }}true{{ else }}${inner}{{ end }}`,
+    when2
+  );
+}
+function configureRefsIn(nodes) {
+  return nodes.flatMap(
+    (node) => [...walkNodes(node)].flatMap(
+      (n) => n.kind === "segment" && n.opens?.ref.key === EDIT_CONFIGURE_KEY ? [n.opens.ref] : []
+    )
+  );
+}
+function placementDraftKey(presetIdent, id2, setting) {
+  return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
+}
+function configureParts(ctx, posIdent, node, decls) {
+  const id2 = placementId(node);
+  const prefix = `${EDIT_NS}${ctx.presetIdent}`;
+  const member = configureMember(ctx.presetIdent, id2);
+  ctx.configured.push(member);
+  const enter = `${prefix}.configure.${posIdent}`;
+  const listKey = sharedMenuStateKey(enter);
+  const fold = `${enter}.fold`;
+  ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
+  ctx.artifacts.actions[enter] = {
+    do: [`${enter}.open`, fold]
+  };
+  ctx.artifacts.actions[`${enter}.open`] = {
+    set: EDIT_CONFIGURE_KEY,
+    to: member
+  };
+  const drafts = {};
+  const controls = Object.entries(decls).map(([name, decl]) => {
+    const key = placementDraftKey(ctx.presetIdent, id2, name);
+    const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${posIdent}.${name}`;
+    ctx.artifacts.variables[variable] = {
+      kind: "state",
+      key,
+      default: settingSpelling(node.settings?.[name] ?? decl.default)
+    };
+    drafts[name] = { id: id2, key, variable };
+    const segName = `${prefix}.setting.${posIdent}.${name}`;
+    const control2 = settingControl(
+      controlDeclOf(decl),
+      key,
+      variable,
+      segName,
+      listKey
+    );
+    Object.assign(ctx.artifacts.actions, control2.actions);
+    Object.assign(ctx.artifacts.variables, control2.variables);
+    if (control2.kind === "inline") {
+      ctx.artifacts.segments[segName] = { template: control2.template };
+      return { kind: "segment", name: segName };
+    }
+    ctx.artifacts.segments[segName] = { template: control2.template };
+    const rows = control2.list.rows.map((template, row2) => {
+      const listSeg = `${segName}.list.${row2}`;
+      ctx.artifacts.segments[listSeg] = { template };
+      return { kind: "segment", name: listSeg };
+    });
+    return disclosureNode(
+      segName,
+      control2.list.ref,
+      { kind: "container", direction: "vertical", children: rows },
+      "drop"
+    );
+  });
+  return {
+    term: `{{ action "${enter}" "${CONFIGURE_GLYPH}" }}`,
+    ref: { variable: EDIT_CONFIGURE_KEY, key: EDIT_CONFIGURE_KEY, member },
+    // One control per row, its list dropping below it when opened.
+    body: { kind: "container", direction: "vertical", children: controls },
+    drafts
+  };
+}
+var LABEL_NS = `${EDIT_NS}label:`;
+function arrangedSegment(name) {
+  if (name.startsWith(LABEL_NS)) {
+    const label2 = name.slice(LABEL_NS.length);
+    return label2.slice(label2.indexOf(":") + 1);
+  }
+  return name.startsWith(EDIT_NS) ? void 0 : name;
+}
+function labelChrome(child, decl, ctx, configure) {
+  const id2 = placementId(child);
+  const name = labelSegment(ctx, id2, child, decl, id2);
+  const settings = Object.fromEntries(
+    IMPLIED_SETTINGS.flatMap((setting) => {
+      const value = child.settings?.[setting];
+      return value === void 0 ? [] : [[setting, value]];
+    })
+  );
+  return {
+    ...disclosureNode(
+      name,
+      configure.ref,
+      configure.body,
+      "drop",
+      shownWhile([configure.ref], `{{ ${namesView(ctx.presetIdent)} }}`)
+    ),
+    ...Object.keys(settings).length > 0 && { settings },
+    drafts: Object.fromEntries(
+      IMPLIED_SETTINGS.map((setting) => [setting, configure.drafts[setting]])
+    )
+  };
+}
+function labelSegment(ctx, key, child, decl, text4) {
+  const name = `${LABEL_NS}${key}:${child.name}`;
+  ctx.artifacts.segments[name] = {
+    template: `{{ "${escapeTemplateLiteral(text4)}" }}`,
+    ...decl.palette !== void 0 && { palette: decl.palette }
+  };
+  return name;
+}
+function editableUnit(child, spliced, first2, ctx) {
+  const id2 = placementId(child);
+  const leading = first2 ? [insertTerm(ctx, String(ctx.posCounter.n++), id2, "before")] : [];
+  const afterPos = String(ctx.posCounter.n++);
+  const after = insertTerm(ctx, afterPos, id2, "after");
+  const remove = removeTerm(ctx, afterPos, id2);
+  const decl = ctx.segments[child.name];
+  const configure = configureParts(ctx, afterPos, child, settingsOf(decl));
+  const lead = inArrangeMode(remove);
+  const trail = inArrangeMode(configure.term);
+  return [
+    ...leading.map(
+      (lead2) => chromeCell(lead2.host, lead2.template, ctx.artifacts)
+    ),
+    // Labelled by the placement's id: two placements of one segment are
+    // told apart by it, and a bare placement's id is its segment's name.
+    { ...labelChrome(child, decl, ctx, configure), lead, trail },
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true"),
+      lead,
+      trail,
+      drafts: configure.drafts
+    },
+    chromeCell(after.host, after.template, ctx.artifacts)
+  ];
+}
+function fileLabel(file) {
+  return import_node_path38.default.join(import_node_path38.default.basename(import_node_path38.default.dirname(file)), import_node_path38.default.basename(file));
+}
+function insertedUnit(child, insertedBy, spliced, ctx) {
+  const decl = ctx.segments[child.name];
+  const id2 = placementId(child);
+  const label2 = {
+    kind: "segment",
+    // Keyed by the preset too: another preset may hold the same id as an
+    // editable placement, whose label reads only the id. An id holds no
+    // `/` and a preset ident no `:`, so the two names never meet.
+    name: labelSegment(
+      ctx,
+      `${id2}/${ctx.presetIdent}`,
+      child,
+      decl,
+      `${id2} \xB7 ${fileLabel(insertedBy.file)} ${insertedBy.entry}`
+    ),
+    when: `{{ ${namesView(ctx.presetIdent)} }}`
+  };
+  return [
+    label2,
+    {
+      ...spliced,
+      when: inNamesView(ctx.presetIdent, "false", child.when ?? "true")
+    }
+  ];
+}
+function insertTerm(ctx, posIdent, anchor, relation) {
+  const { presetIdent, artifacts } = ctx;
+  const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
+  artifacts.actions[applyName] = {
+    persist: ctx.rootKey,
+    insertSegmentFrom: ADDABLE_DOMAIN,
+    anchor,
+    relation
+  };
+  const member = menuMember(applyName);
+  const stateKey = menuStateKey(chromeSegName, applyName, void 0);
+  const pageKey = menuPageKey(stateKey);
+  const identity2 = menuActionName(stateKey, member);
+  artifacts.variables[stateKey] = {
+    ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
+    within: [EDIT_MODE_REF]
+  };
+  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
+  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
+  const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
+  return {
+    host: chromeSegName,
+    template: `{{ $m := menu "${applyName}" "${ADD_GLYPH}" "${DISCLOSURE_GLYPH_CLOSE}" }}{{ if ${open2} }}{{ $m }}{{ else }}{{ fg (${add2}) $m }}{{ end }}`
+  };
+}
+function spliceContainer(node, ctx) {
+  const children2 = [];
+  const firstContent = node.children.findIndex(
+    (child) => child.kind === "segment" && !isChromeExempt(child.name) && child.insertedBy === void 0
+  );
+  const splice2 = (body) => spliceContainer(body, ctx);
+  for (const [i2, child] of node.children.entries()) {
+    if (child.kind === "container") {
+      children2.push(splice2(child));
+      continue;
+    }
+    const spliced = mapOpens(child, splice2);
+    if (isChromeExempt(child.name)) {
+      children2.push(spliced);
+      continue;
+    }
+    const cells = child.insertedBy === void 0 ? editableUnit(child, spliced, i2 === firstContent, ctx) : insertedUnit(child, child.insertedBy, spliced, ctx);
+    const unit = {
+      kind: "container",
+      direction: "horizontal",
+      children: cells,
+      unit: true
+    };
+    children2.push(
+      node.direction === "vertical" ? { kind: "container", direction: "horizontal", children: [unit] } : unit
+    );
+  }
+  return {
+    ...node,
+    children: children2,
+    ...node.when !== void 0 && {
+      when: shownWhile(
+        configureRefsIn(children2),
+        inNamesView(ctx.presetIdent, "true", node.when)
+      )
+    }
+  };
+}
+function wrapWithPresetRows(splicedRoot, presetIdent, rootKey, artifacts, lead, live, tail) {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  artifacts.actions[actionName] = { reset: rootKey };
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "\u21BA reset layout" }}`,
+    when: CUSTOMIZED_BANNER_GATE
+  };
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      // The ways out lead the top row, top left, where they are found without
+      // reopening the menu edit mode was entered from: keep or discard what
+      // was changed, restore the bundled layout, and the view toggle.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [...lead, { kind: "segment", name: chromeSegName }, live]
+      },
+      // The `(?)`'s body drops BELOW the row the trigger rides while the
+      // disclosure is open, like every other disclosure body in this codebase.
+      withTrailingCell(splicedRoot, tail)
+    ]
+  };
+}
+function withTrailingCell(node, cell3) {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell3]
+    };
+  }
+  const last2 = node.children.at(-1);
+  if (node.direction === "vertical" && last2 !== void 0 && (last2.kind === "segment" || last2.when === void 0)) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last2, cell3)]
+    };
+  }
+  return { ...node, children: [...node.children, cell3] };
+}
+function spliceEditChromeForPreset(config2, presetName, artifacts, lead, live, tail) {
+  const { node } = presetRoot(config2, presetName);
+  const ctx = {
+    presetIdent: ident(presetName),
+    rootKey: presetRootKey(presetName),
+    segments: config2.segments,
+    artifacts,
+    posCounter: { n: 0 },
+    configured: []
+  };
+  const spliced = spliceContainer(node, ctx);
+  artifacts.variables[configuringVar(ctx.presetIdent)] = configuringDecl(
+    ctx.configured
+  );
+  return wrapWithPresetRows(
+    spliced,
+    ctx.presetIdent,
+    ctx.rootKey,
+    artifacts,
+    lead,
+    live,
+    tail
+  );
+}
+function synthesizeEditChrome(config2) {
+  const artifacts = {
+    variables: {},
+    actions: {},
+    segments: {}
+  };
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts
+  );
+  artifacts.variables[EDIT_LIVE_KEY] = disclosureStateVar(
+    EDIT_LIVE_KEY,
+    DISCLOSURE_CLOSED
+  );
+  artifacts.actions[EDIT_LIVE_KEY] = disclosureCycleAction(
+    EDIT_LIVE_KEY,
+    EDIT_LIVE_REF.member
+  );
+  artifacts.segments[EDIT_LIVE_KEY] = {
+    template: disclosureTrigger(EDIT_LIVE_KEY, ...EDIT_LIVE_DISPLAY),
+    when: EDIT_MODE_GATE
+  };
+  const live = { kind: "segment", name: EDIT_LIVE_KEY };
+  const tail = help;
+  artifacts.variables[EDIT_CHANGES_VAR] = {
+    kind: "input",
+    path: "history.sinceEdit",
+    type: "number",
+    default: 0
+  };
+  artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
+  artifacts.actions[EDIT_DONE_SEG] = {
+    do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION]
+  };
+  artifacts.segments[EDIT_DONE_SEG] = {
+    template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
+    when: EDIT_MODE_GATE
+  };
+  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
+  artifacts.actions[EDIT_CANCEL_SEG] = {
+    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION]
+  };
+  artifacts.segments[EDIT_CANCEL_SEG] = {
+    template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+  };
+  const lead = [
+    { kind: "segment", name: EDIT_DONE_SEG },
+    { kind: "segment", name: EDIT_CANCEL_SEG }
+  ];
+  const presets = { ...config2.presets };
+  for (const name of presetNames(config2.presets)) {
+    const root = spliceEditChromeForPreset(
+      config2,
+      name,
+      artifacts,
+      lead,
+      live,
+      tail
+    );
+    presets[name] = { ...presetByName(config2.presets, name), root };
+  }
+  return {
+    ...config2,
+    variables: { ...config2.variables, ...artifacts.variables },
+    actions: { ...config2.actions, ...artifacts.actions },
+    segments: { ...config2.segments, ...artifacts.segments },
+    presets
+  };
+}
 
 // src/config/shell-env.ts
 init_globals();
@@ -77680,6 +77289,36 @@ function withStyle(frag, style) {
 
 // src/render/action.ts
 init_globals();
+
+// src/config/layout-ops.ts
+init_globals();
+function encodeLayoutOp(op) {
+  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
+}
+function decodeLayoutOp(token) {
+  const parts = token.split(":");
+  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
+    return { op: "remove", target: parts[1] };
+  }
+  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
+    return {
+      op: "insert",
+      segment: parts[1],
+      anchor: parts[2],
+      relation: parts[3]
+    };
+  }
+  return null;
+}
+function mintPlacement(segment, anchor, trees) {
+  const taken = new Set(
+    trees.map(placementIds).filter((held2) => held2.includes(anchor)).flat()
+  );
+  const id2 = freePlacementId(segment, taken);
+  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
+}
+
+// src/render/action.ts
 function renderBinding(runtime, reader) {
   if (runtime.bound === void 0) {
     throw new Error(
@@ -86437,26 +86076,6 @@ var MenuIdle = class {
 
 // src/renderer/feeds.ts
 init_globals();
-
-// src/renderer-interface/interface.ts
-init_globals();
-function timed(renderer, monotonic) {
-  return {
-    answer: async (input) => {
-      const from = monotonic();
-      const output = await renderer.answer(input);
-      return { ...output, turnMs: Math.round(monotonic() - from) };
-    }
-  };
-}
-function followingOf(viewers) {
-  const following = /* @__PURE__ */ new Set();
-  for (const [lane, seen2] of Object.entries(viewers?.lanes ?? {}))
-    if (seen2.drawing) following.add(lane);
-  return following;
-}
-
-// src/renderer/feeds.ts
 var FEED_PERIODS = {
   moving: 1e3 / MOVING_FPS,
   still: 1e3
@@ -89388,6 +89007,393 @@ var HeldDocuments = class {
   }
 };
 
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
+  }
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min3, max3, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min3 = Math.min(...ranges.map((r) => r.min));
+    const max3 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min3 || n > max3;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min3, max: max3 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
+  }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config2) {
+      const held2 = gates.get(config2);
+      if (held2?.epoch === epoch) return held2.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config2), noun);
+      gates.set(config2, { epoch, gate: gate2 });
+      return gate2;
+    }
+  };
+}
+
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
+}
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config2) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config2.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config2) {
+  const perConfigDomains = configOptionDomains(config2);
+  return [
+    ...clearableContributions(config2),
+    ...Object.values(config2.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config2) {
+  return mergeContributions(actionContributions(config2), "config");
+}
+
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config2) {
+  const perConfigDomains = configOptionDomains(config2);
+  return dropBaselineAllowLists(
+    Object.values(config2.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config2) {
+  return mergeContributions(actionContributions2(config2));
+}
+
+// src/daemon/foundations/gates.ts
+function createGates(held2) {
+  const state = makeStateKeyspace();
+  const config2 = makeConfigKeyspace();
+  for (const { key, allowed } of held2.state) state.register(key, allowed);
+  for (const { key, allowed } of held2.config) config2.register(key, allowed);
+  return { state, config: config2 };
+}
+
 // src/renderer/turn-log.ts
 init_globals();
 var TurnLog = class {
@@ -91504,7 +91510,7 @@ function mainRenderer(parts, own2, drained, said2) {
     sources: {},
     lanes: {},
     configs: [],
-    storage: { folders: [], loads: 0 },
+    storage: NOTHING_NAMED,
     wake: null
   };
   let parked = [];
@@ -94573,7 +94579,6 @@ function createDaemon(inputs) {
       {
         subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
-          managedStorage.held(subscriptions.storage);
           frameFeeds.switched(subscriptions.lanes);
           declaredStatusLines.declare(
             Object.entries(subscriptions.lanes).flatMap(
@@ -94581,6 +94586,7 @@ function createDaemon(inputs) {
             )
           );
         },
+        storage: (named3) => managedStorage.held(named3),
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
