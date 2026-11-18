@@ -74603,6 +74603,9 @@ function segmentsOf2(value) {
   }
 }
 
+// src/daemon/acts.ts
+init_globals();
+
 // src/claude-input/typing.ts
 init_globals();
 
@@ -74664,9 +74667,6 @@ var typeInPane = (edge) => async (tmux3, line) => {
   const typed = await edge.type(tmux3, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux3.pane } : typed;
 };
-
-// src/daemon/acts.ts
-init_globals();
 
 // src/daemon/lane-setup.ts
 init_globals();
@@ -74844,7 +74844,7 @@ async function bandOn(session, pane, type3, host, edge) {
   }
   return installBand(session, pane, type3, checkout, edge);
 }
-async function restartClaude(session, tmux3, host, edge) {
+async function restartClaude(session, tmux3, read2, host, edge) {
   const launcher = attachLauncherOf(host.preload);
   const missing = [host.preload, launcher].find(
     (file) => !edge.fileExists(file)
@@ -74857,6 +74857,7 @@ async function restartClaude(session, tmux3, host, edge) {
   return restartUnderAttach(
     session,
     tmux3,
+    read2,
     { node: host.node[0], launcher, preload: host.preload },
     edge
   );
@@ -74903,7 +74904,7 @@ function environmentOf(env2) {
     })
   );
 }
-async function restartUnderAttach(session, tmux3, attach, edge) {
+async function restartUnderAttach(session, tmux3, read2, attach, edge) {
   const claude = await edge.paneClaude(tmux3);
   if (claude.attached) {
     return `left Claude Code in ${tmux3.pane} running: it already runs under the attach launcher`;
@@ -74929,7 +74930,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
       `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
     );
   }
-  const loses = endingLoses(await edge.claudeInput.read(tmux3));
+  const loses = endingLoses(await read2(tmux3));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${loses} \u2014 then turn ${LANES.statusline.label} off and on again`
@@ -75124,6 +75125,7 @@ var Acts = class {
         () => restartClaude(
           { ...act2.at, sessionId: act2.session },
           act2.pane,
+          deps.claudeInput.read,
           lanes.host,
           lanes.edge
         )
@@ -75177,7 +75179,10 @@ var Acts = class {
   performers;
   // A slash line typed into `pane` in its turn.
   typed(pane, line) {
-    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
+    return this.inPane.run(
+      paneKey(pane),
+      () => typeInPane(this.deps.claudeInput)(pane, line)
+    );
   }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
@@ -94673,7 +94678,7 @@ function createDaemon(inputs) {
   });
   const acts = new Acts({
     launch: clickLaunchVia(launcher),
-    type: typeInPane(inputs.claudeInput(launcher)),
+    claudeInput: inputs.claudeInput(launcher),
     run: (run3) => runs.start(run3),
     applyUpdate: () => updateWatch.act(),
     lanes: {
@@ -95604,6 +95609,11 @@ async function readStartTime(pid2, launch) {
   return { kind: "unavailable", detail };
 }
 function systemProbe(launcher) {
+  let source;
+  const chosen = () => {
+    const bootId = readBootId();
+    return bootId === null ? (pid2) => readStartTime(pid2, launcher.launch) : (pid2) => readProcStartTime(pid2, bootId);
+  };
   return {
     alive: (pid2) => {
       try {
@@ -95613,8 +95623,32 @@ function systemProbe(launcher) {
         return e.code === "EPERM";
       }
     },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+    startTime: async (pid2) => (source ??= chosen())(pid2)
   };
+}
+function readBootId() {
+  try {
+    return fs_default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return null;
+    throw e;
+  }
+}
+async function readProcStartTime(pid2, bootId) {
+  let stat3;
+  try {
+    stat3 = await fs_default.promises.readFile(`/proc/${pid2}/stat`, "utf8");
+  } catch (e) {
+    return { kind: "unavailable", detail: e.message };
+  }
+  const ticks = procStatStartTime(stat3);
+  return ticks === null ? { kind: "unavailable", detail: `unparseable /proc/${pid2}/stat` } : { kind: "start", token: `${bootId}:${ticks}` };
+}
+function procStatStartTime(stat3) {
+  const fields2 = stat3.slice(stat3.lastIndexOf(")") + 1).trim().split(" ");
+  const ticks = fields2[22 - 3];
+  return ticks !== void 0 && /^\d+$/.test(ticks) ? ticks : null;
 }
 
 // src/daemon/file-storage.ts
@@ -95917,7 +95951,6 @@ var FOLLOW_POLL_MS = 200;
 function productionLaneEdge(launcher, following, closing, clock, probe2, environmentOf2) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) => barPanesOf(
       await tmux2(launcher, hint, [
         "list-panes",

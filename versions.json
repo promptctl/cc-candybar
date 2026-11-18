@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-832",
+      "ref": "refs/pull/832/merge",
+      "sha": "04c75c5b4082cf658c6725dc93489302be05f045",
+      "timestamp": "2026-11-18T22:26:40.037Z",
+      "commits": [
+        {
+          "sha": "04c75c5b4082cf658c6725dc93489302be05f045",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:25:40Z",
+          "message": "Merge db333529acd298e7f3dcc775a47193cd25b91f23 into 5a71a43f5da66bd536475cb0df17c28d9a6469e0\n"
+        },
+        {
+          "sha": "db333529acd298e7f3dcc775a47193cd25b91f23",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:25:00-07:00",
+          "message": "fix(daemon): a process identity carries its start-time wherever the kernel keeps one, and a failed lease write refuses the boot (m5bq)\n\nA lease outliving its owner is judged by its owner's identity, so the\nidentity has to hold up: on Linux the start-time is read from /proc (the\nstat's start-time beside the boot id) with no subprocess, and ps stays for\nhosts without /proc. Liveness is asked first, so a dead pid is stale with\nno start-time read at all, which is the common case after a daemon's exit.\n\nThe ownership self-check and the arbitration compare identities through one\nfunction, pid and start-time alike. A lease write that fails refuses the\nboot with its reason, rather than serving until the self-check calls the\ndaemon displaced. The exit test is folded into the one that proves no\nremoval runs, and the reason the lease stays is kept once, at the write.\n"
+        },
+        {
+          "sha": "1a052a0374bec117cef9a2ba86c3b26c830bffb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:14:05-07:00",
+          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-810",
       "ref": "refs/pull/810/merge",
       "sha": "219e675b4e5445d6c43750ccaee03d8de97e4e9b",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:18:11-07:00",
           "message": "fix(state): each per-session file keeps its sessions' recency as list position, so an integer-like id is never moved to the oldest end (3xhn)\n\nThe session book, the session picks and the settings history each bound\ntheir sessions by recency, and each carried that order through a record\nkeyed by session id: the file, and the stored state handed to a renderer.\nA record enumerates integer-like keys first, so after a restart a session\nlike \"7\" written last sat at the oldest end and the bound evicted it.\n\nSessions now cross every hop as [id, value] entries, oldest first, and\nboth files are written as a JSON array of those pairs. A load takes each\npair through the session id checkpoint, refusing a repeated id by name.\nA file in the keyed form is refused whole with a warning, since its order\nis gone by the time it parses.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-832",
-      "ref": "refs/pull/832/merge",
-      "sha": "a30a62d800644e19b2b70f9478c75bcdee128c8d",
-      "timestamp": "2026-11-18T22:16:12.488Z",
-      "commits": [
-        {
-          "sha": "a30a62d800644e19b2b70f9478c75bcdee128c8d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:15:04-07:00",
-          "message": "Merge 1a052a0374bec117cef9a2ba86c3b26c830bffb4 into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
-        },
-        {
-          "sha": "1a052a0374bec117cef9a2ba86c3b26c830bffb4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:14:05-07:00",
-          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
         }
       ]
     },
