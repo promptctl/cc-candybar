@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-813",
+      "ref": "refs/pull/813/merge",
+      "sha": "01b4b5b9a89fc3e3a9b3dd6cc79ca5f52551f521",
+      "timestamp": "2026-11-18T17:27:37.380Z",
+      "commits": [
+        {
+          "sha": "01b4b5b9a89fc3e3a9b3dd6cc79ca5f52551f521",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T17:26:34Z",
+          "message": "Merge bf7feaed62a50d3b921c8a2f48776715b6daa785 into b20d54e03314e183b84f143fe4194b85c8b54431\n"
+        },
+        {
+          "sha": "bf7feaed62a50d3b921c8a2f48776715b6daa785",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:26:20-07:00",
+          "message": "fix(git): an ask that fails other than by an exit is the read's result as it stands (a623)\n"
+        },
+        {
+          "sha": "24fc2d93f4180accac98449f9c4a9f80e219f4ca",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:21:32-07:00",
+          "message": "fix(git): a failed ask is a read that never started; the ask runs in the read's directory; forge reads unset GH_REPO (a623)\n"
+        },
+        {
+          "sha": "5948360b1a83bbca3d9997dab3cba7b32c3af819",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:07:44-07:00",
+          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-807",
       "ref": "refs/pull/807/merge",
       "sha": "89e63355f62641b4f219052088a28b4e88b07f08",
@@ -20,35 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:32:32-07:00",
           "message": "fix(doctor): the config row names the repository the bar asks about, and where it stands (qo8j)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-813",
-      "ref": "refs/pull/813/merge",
-      "sha": "01d4080cc7a1537bd629f94357f1b3e9fb323e4f",
-      "timestamp": "2026-11-18T17:22:51.317Z",
-      "commits": [
-        {
-          "sha": "01d4080cc7a1537bd629f94357f1b3e9fb323e4f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T17:21:55Z",
-          "message": "Merge 24fc2d93f4180accac98449f9c4a9f80e219f4ca into b20d54e03314e183b84f143fe4194b85c8b54431\n"
-        },
-        {
-          "sha": "24fc2d93f4180accac98449f9c4a9f80e219f4ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:21:32-07:00",
-          "message": "fix(git): a failed ask is a read that never started; the ask runs in the read's directory; forge reads unset GH_REPO (a623)\n"
-        },
-        {
-          "sha": "5948360b1a83bbca3d9997dab3cba7b32c3af819",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:07:44-07:00",
-          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
         }
       ]
     },

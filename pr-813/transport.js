@@ -67176,8 +67176,7 @@ var localEnvUnset = (stdout2) => Object.fromEntries(
 function askedOf(answer2) {
   if (answer2.ok)
     return { kind: "unset", overlay: localEnvUnset(answer2.stdout) };
-  if (answer2.reason === "spawn-error")
-    return { kind: "failed", result: answer2 };
+  if (answer2.reason !== "non-zero") return { kind: "failed", result: answer2 };
   return {
     kind: "failed",
     result: {
