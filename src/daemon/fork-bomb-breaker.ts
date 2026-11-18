@@ -82,10 +82,12 @@ export function daemonCeiling(env: Readonly<NodeJS.ProcessEnv>): number {
 //                                        epic requires never happens)
 //   isolated=true,  count <  ceiling  → allow (below the backstop)
 //   isolated=true,  count >= ceiling  → deny (the fork-bomb condition)
-// [LAW:no-silent-failure] The count is exact or there is none: a registry or
-// entry that cannot be read throws, and the boot refuses on the throw, naming
-// it. A backstop that admits what it could not count is no backstop, and the
-// count is short exactly when the machine is (a fork storm's spent descriptors).
+// [LAW:no-silent-failure] The count is never short of what the registry
+// holds: a registry that cannot be listed throws, and the boot refuses on the
+// throw, naming it; an entry whose start time cannot be read is judged by its
+// pid alone (readRegistryEntry), which can only count it high. A backstop that
+// admits what it could not count is no backstop, and a short count comes
+// exactly when the machine is short (a fork storm's spent descriptors).
 export function decideBoot(
   isolated: boolean,
   liveSiblingCount: number,
@@ -111,18 +113,15 @@ export function decideBoot(
 }
 
 // A registry entry read, alongside its source path so a stale one can be
-// swept. `null` is every unreadable/corrupt/absent-pid outcome — collapsed
-// early here (unlike readLease's richer enumeration) because the only
-// downstream use is "count it or don't"; there is no distinct action for
-// "unreadable" vs "absent" the way socket-lease arbitration has one.
+// swept.
 export interface RegistryEntry {
   path: string;
   identity: ProcessIdentity;
 }
 
 // [LAW:no-silent-failure] Throws when the directory cannot be listed: the
-// admission makes it just before it lists it, so no answer of the disk means
-// an empty registry.
+// admission makes it just before it lists it, so a listing that fails never
+// means an empty registry.
 export function listRegistryFiles(dir: string): string[] {
   return fs
     .readdirSync(dir)
@@ -130,28 +129,38 @@ export function listRegistryFiles(dir: string): string[] {
     .map((f) => path.join(dir, f));
 }
 
-// Mirrors readSlot (test/helpers/daemon-pool.ts) / readLease's pid validation
-// (socket-lease.ts). [LAW:no-silent-failure] Null is an entry that is not
-// there: removed since the listing (its daemon released it), or content that
-// names no process. Any other read failure throws, since the daemon it would
-// name may be live (see decideBoot).
+// [LAW:one-source-of-truth] An entry's pid is its name, the only name
+// admission writes; its content adds the start time that tells the pid's
+// process from a later one given the same pid.
+const ENTRY_NAME = /^pid-([1-9]\d*)\.json$/;
+const entryPath = (dir: string, pid: number): string =>
+  path.join(dir, `pid-${pid}.json`);
+
+// [LAW:no-silent-failure] Null is no entry: a name admission never writes, or
+// a file removed since the listing (its daemon released it). A start time
+// that cannot be read, from content unreadable or not an identity, leaves the
+// entry judged by its pid alone. That liveness can count a recycled pid as
+// live and never a live one as dead, so the count can come out high, which
+// refuses, and never short. It needs no descriptor either, so a fork storm's
+// spent descriptors still count every sibling.
 export function readRegistryEntry(filePath: string): ProcessIdentity | null {
+  const named = ENTRY_NAME.exec(path.basename(filePath));
+  if (named === null) return null;
+  const pid = Number(named[1]);
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw e;
+    return { pid, startTime: null };
   }
+  return { pid, startTime: startTimeOf(raw) };
+}
+
+function startTimeOf(raw: string): string | null {
   try {
-    const parsed = JSON.parse(raw) as Partial<ProcessIdentity> | null;
-    const pid = parsed?.pid;
-    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
-      return null;
-    }
-    const startTime =
-      typeof parsed?.startTime === "string" ? parsed.startTime : null;
-    return { pid, startTime };
+    const parsed = JSON.parse(raw) as { startTime?: unknown } | null;
+    return typeof parsed?.startTime === "string" ? parsed.startTime : null;
   } catch {
     return null;
   }
@@ -251,14 +260,16 @@ export async function admitDaemon(deps: BreakerDeps): Promise<BreakerResult> {
   if (!decision.allow) {
     return { decision, registryPath: null };
   }
-  const registryPath = path.join(deps.registryDir, `pid-${deps.pid}.json`);
+  const registryPath = entryPath(deps.registryDir, deps.pid);
   deps.writeEntry(registryPath, { pid: deps.pid, startTime: deps.startTime });
   return { decision, registryPath };
 }
 
-// Best-effort self-cleanup on shutdown — mirrors removeLeaseIfOwned
-// (socket-lease.ts): only remove the entry if it still names us, so a
-// displaced/superseded record from a different process is never deleted.
+// Self-cleanup on shutdown — mirrors removeLeaseIfOwned (socket-lease.ts):
+// only remove the entry if it still names us, so a displaced/superseded record
+// from a different process is never deleted. [LAW:no-silent-failure] A removal
+// that fails throws to the shutdown step, which logs it; the next boot's sweep
+// reclaims the entry.
 export function releaseRegistration(
   registryPath: string,
   myPid: number,
@@ -266,14 +277,7 @@ export function releaseRegistration(
   removeFile: (filePath: string) => void,
 ): void {
   const entry = readEntry(registryPath);
-  if (entry !== null && entry.pid === myPid) {
-    try {
-      removeFile(registryPath);
-    } catch {
-      // Best-effort; a leftover entry naming a dead pid is harmless — the
-      // next boot's sweep reclaims it.
-    }
-  }
+  if (entry !== null && entry.pid === myPid) removeFile(registryPath);
 }
 
 // `myStartTime` is threaded in rather than recomputed here so callers (only
