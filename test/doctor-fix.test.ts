@@ -56,6 +56,7 @@ const loadsConfig =
     layers: [],
     error: null,
     warnings: [],
+    repo: null,
     unused: [],
     config,
   });

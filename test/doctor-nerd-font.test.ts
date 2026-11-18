@@ -665,6 +665,7 @@ describe("gatherFacts: where the Nerd Font facts come from", () => {
         layers: [],
         error: null,
         warnings: [],
+        repo: null,
         unused: [],
         config,
       }),

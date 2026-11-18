@@ -15,6 +15,7 @@ import {
   type TmuxFacts,
 } from "../../src/doctor/checks";
 import { detectTmuxHint } from "../../src/tmux-hint";
+import type { RepoQuestion } from "../../src/config/config-snapshot";
 import { frameFields, truecolorEnvFields } from "../helpers/doctor-fields";
 import type { JsonObject, SettingsSource } from "../../src/claude-settings";
 import type { JsonValue } from "../../src/var-system/types";
@@ -40,6 +41,7 @@ const LOADED: ConfigFacts = {
   layers: ["/p/.cc-candybar.json5"],
   target: { source: "search" },
   warnings: [],
+  repo: null,
   unused: [],
 };
 
@@ -321,6 +323,76 @@ describe("config probe", () => {
     });
   });
 
+  describe("the repository the bar asks about", () => {
+    const AWAITING = `awaiting approval: /p — its cc-candybar config runs once it is approved in the bar`;
+    const DECLINED = `declined: /p — its cc-candybar config does not run`;
+    const repo = (
+      standing: RepoQuestion["standing"],
+      unproven: string | null = null,
+    ) => ({ dir: "/p", standing, unproven });
+
+    test.each([
+      ["awaiting approval", "awaiting", AWAITING],
+      ["declined", "declined", DECLINED],
+    ] as const)(
+      "%s is named with what was judged, and fails nothing: a repository question is nothing wrong",
+      (_name, standing, line) => {
+        expect(
+          config({ ...LOADED, layers: [], repo: repo(standing) }),
+        ).toEqual({
+          ok: true,
+          note: `bundled default (no config file loaded); ${line}`,
+        });
+      },
+    );
+
+    test("a failed load names the repository with what it judged, never as a problem", () => {
+      expect(
+        config({
+          kind: "failed",
+          layers: ["/p/.cc-candybar.json5"],
+          target: { source: "search" },
+          warnings: [],
+          repo: repo("declined"),
+          error: "boom",
+        }),
+      ).toEqual({
+        ok: false,
+        reason: `${JUDGED}: boom; ${DECLINED}`,
+        more: [],
+      });
+    });
+
+    test("a worktree link not proven is said beside the standing, and fails nothing", () => {
+      const UNPROVEN = `not proven a worktree: /p — it answers for itself, because its .git file names no worktree`;
+      expect(
+        config({
+          ...LOADED,
+          repo: repo("approved", "its .git file names no worktree"),
+        }),
+      ).toEqual({ ok: true, note: `${JUDGED}; ${UNPROVEN}` });
+      expect(
+        config({
+          ...LOADED,
+          layers: [],
+          repo: repo("awaiting", "its .git file names no worktree"),
+        }),
+      ).toEqual({
+        ok: true,
+        note: `bundled default (no config file loaded); ${AWAITING}; ${UNPROVEN}`,
+      });
+    });
+
+    test("an approved or unread repository adds nothing: an unread book is the load's own warning", () => {
+      expect(config({ ...LOADED, repo: repo("approved") })).toEqual(
+        config(LOADED),
+      );
+      expect(config({ ...LOADED, repo: repo("unread") })).toEqual(
+        config(LOADED),
+      );
+    });
+  });
+
   test("a search that found nothing reads as check reads it", () => {
     expect(config({ ...LOADED, layers: [] })).toEqual({
       ok: true,
@@ -395,6 +467,7 @@ describe("config probe", () => {
         layers: ["/p/.cc-candybar.json5"],
         target: { source: "search" },
         warnings: ["an advisory"],
+        repo: null,
         error:
           "Invalid config in /p/.cc-candybar.json5 (1 issue):\n  [line 2 • root] root references unknown segment",
       }),
@@ -421,6 +494,7 @@ describe("config probe", () => {
           layers: ["/p/.cc-candybar.json5"],
           target,
           warnings: [],
+          repo: null,
           error: " \n ",
         }),
       ).toEqual({

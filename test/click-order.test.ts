@@ -52,6 +52,7 @@ const LOAD: ConfigLoad = {
   layers: [],
   error: null,
   warnings: [],
+  repo: null,
   unused: [],
   config: EMPTY_DEFAULT,
 };

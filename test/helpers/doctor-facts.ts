@@ -222,6 +222,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
     layers: [],
     target: { source: "search" },
     warnings: [],
+    repo: null,
     unused: [],
   },
   ...onOrigin(STILL),

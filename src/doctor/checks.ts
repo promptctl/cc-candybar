@@ -33,6 +33,8 @@ import {
   type TranscriptSaid,
 } from "../daemon/foundations/sightings.js";
 import type { DeclKind, UnusedDecl } from "../config/unused.js";
+import type { RepoQuestion } from "../config/config-snapshot.js";
+import { repoQuestionLines } from "../config/loader/repo-gate.js";
 import type { ClickArrival, Delivery } from "./sightings.js";
 import {
   approachingLimit,
@@ -102,6 +104,8 @@ export type ConfigFacts = {
   readonly layers: readonly string[];
   readonly target: ConfigTarget;
   readonly warnings: readonly string[];
+  // The repository the bar asks about, as discovery ruled it.
+  readonly repo: RepoQuestion | null;
 } & (
   | { readonly kind: "failed"; readonly error: string }
   | {
@@ -836,16 +840,25 @@ function configProblems(config: ConfigFacts): readonly string[] {
 // search could not check, a variable that failed to declare), and everything
 // the files declare is used. A threshold whose knobs do not ascend is a load error, so it is the first of
 // those. Either verdict names the file or chain it judged and what named it.
+// [LAW:nothing-unseen] Either also says, last, where the repository the bar
+// asks about stands, since the chain leaves its config out until it is
+// approved. A repository question is nothing wrong (the bar lists it in
+// blue), so no standing fails the row, and on a failed load it follows the
+// failure, never reads as its cause.
 const config: Check = {
   name: "config",
   label: "config",
   takesMark: false,
   probe: ({ config }) => {
     const judged = judgedConfig(config);
+    const repo = repoQuestionLines(config.repo);
     const verdict = problemsVerdict(configProblems(config));
     return verdict.ok
-      ? { ok: true, note: judged }
-      : { ...verdict, reason: `${judged}: ${verdict.reason}` };
+      ? { ok: true, note: [judged, ...repo].join("; ") }
+      : {
+          ...verdict,
+          reason: [`${judged}: ${verdict.reason}`, ...repo].join("; "),
+        };
   },
 };
 

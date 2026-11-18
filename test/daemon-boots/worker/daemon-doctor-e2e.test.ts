@@ -157,6 +157,38 @@ test("the doctor's config row reports the session's own config load", async () =
   }
 });
 
+test("the doctor's config row names a project whose config awaits approval", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    "cc-candybar-doctor-e2e",
+  );
+  const projectDir = realpathSync(
+    mkdtempSync(path.join(os.tmpdir(), "cc-candybar-doctor-e2e-project-")),
+  );
+  writeFileSync(path.join(projectDir, ".cc-candybar.json5"), "{}");
+
+  const daemon = startDaemon(env);
+  try {
+    const SID = "doctor-e2e-awaiting";
+    const closed = await render(daemon, SID, projectDir);
+    await click(daemon, urlWriting(closed, SETTINGS_ANCHOR, SETTINGS_OPEN));
+    const opened = await render(daemon, SID, projectDir);
+    await click(daemon, urlWriting(opened, `${SETTINGS_NS}tab`, "tools"));
+    const tools = await render(daemon, SID, projectDir);
+    const run = linkUrls(tools).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_DOCTOR_RUN),
+    );
+    expect(run).toBeDefined();
+    await click(daemon, run!);
+    await reported(
+      () => render(daemon, SID, projectDir),
+      `✓ config — bundled default (no config file loaded); awaiting approval: ${projectDir}`,
+    );
+  } finally {
+    await daemon.stop();
+    removeTmpDirs();
+  }
+});
+
 // What named the file reaches the click from the request that named it, so
 // the row and `cc-candybar doctor` agree on it, and it is the spelling a person
 // would have to change: `--config` wins even where the variable names one file.
