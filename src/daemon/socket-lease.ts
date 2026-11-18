@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import process from "node:process";
 
 import type { ProcessIdentity } from "./process-fingerprint";
+import { publishByRename } from "../utils/atomic-write";
 
 // ─── Socket ownership lease ──────────────────────────────────────────────────
 //
@@ -159,38 +159,23 @@ export function readLease(leasePath: string): LeaseRead {
 // Write our lease after we win the bind. Overwrite-on-write: whoever holds the
 // socket right now replaces whatever stale lease a dead owner left.
 //
-// [LAW:no-ambient-temporal-coupling] Atomic publish: write a uniquely-named temp
-// sibling then rename onto the lease path. POSIX rename within a directory is
-// atomic, so a concurrent reader (a second daemon's EADDRINUSE arbitration) sees
-// either the old lease or the complete new one — never a truncated/empty file
-// mid-write, which would read as `unreadable` and force a false reclaim of this
-// daemon's live socket. The unique temp name means it is always freshly created,
-// so its 0600 mode always applies (0600 has no group/world bits for any umask to
-// need re-tightening) and rename carries that mode across. Returns null on
-// success, a reason on failure.
+// [LAW:no-ambient-temporal-coupling] Published by rename, so a concurrent
+// reader (a second daemon's EADDRINUSE arbitration) sees either the old lease
+// or the complete new one — never a truncated/empty file mid-write, which
+// would read as `unreadable` and force a false reclaim of this daemon's live
+// socket. Owner-only: 0600 has no group/world bits for any umask to strip.
+// Returns null on success, a reason on failure.
 export function writeLease(
   leasePath: string,
   record: LeaseRecord,
 ): string | null {
-  const tmp = `${leasePath}.${process.pid}.tmp`;
   try {
-    fs.writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
-    fs.renameSync(tmp, leasePath);
+    publishByRename(leasePath, JSON.stringify(record), 0o600);
     return null;
   } catch (e) {
-    const reason = (e as Error).message;
-    // [LAW:no-silent-failure] Best-effort temp cleanup, but don't swallow a real
-    // failure: ENOENT means the temp was never created (write failed first) —
-    // benign; any other unlink error means the temp WAS created and now leaks,
-    // so append it to the reason rather than hiding it behind the primary error.
-    try {
-      fs.unlinkSync(tmp);
-    } catch (cleanupErr) {
-      if ((cleanupErr as NodeJS.ErrnoException).code !== "ENOENT") {
-        return `${reason}; also failed to remove temp ${tmp}: ${(cleanupErr as Error).message}`;
-      }
-    }
-    return reason;
+    // [LAW:no-silent-failure] The reason is the caller's: a lease that did
+    // not land, and any staged file it left, reach whoever wrote it.
+    return (e as Error).message;
   }
 }
 

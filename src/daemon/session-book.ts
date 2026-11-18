@@ -126,9 +126,9 @@ export class SessionBook {
     return this.environments.get(session) ?? NOT_HEARD;
   }
 
-  close(): void {
-    this.storage.flush();
+  close(): Promise<void> {
     this.phase = "closed";
+    return this.storage.flush();
   }
 
   private bound(): void {

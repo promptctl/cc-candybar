@@ -58,20 +58,22 @@ describe("a daemon aimed by its paths value", () => {
   test("every path of the value is under the directories its environment names", () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     expect(
-      Object.values(aimed).filter((p) => !p.startsWith(path.join(root, "aimed"))),
+      Object.values(aimed).filter(
+        (p) => !p.startsWith(path.join(root, "aimed")),
+      ),
     ).toEqual([]);
   });
 
   // [LAW:one-source-of-truth] A renderer's profile is a function of its name:
   // the main one keeps the state directory's own files, and any other writes
   // under its own directory and nowhere else.
-  test("a profile under a second name writes only under its own directory", () => {
+  test("a profile under a second name writes only under its own directory", async () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
     const second = adapters.profile(rendererNameOf("second"), () => {});
     second.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
-    second.session.flush();
+    await second.session.flush();
     second.history.save({});
     second.doctor.clicked.update((seen) => [...seen, "kitty"]);
 
@@ -105,7 +107,7 @@ describe("a daemon aimed by its paths value", () => {
 
       const storage = adapters.profile(MAIN_RENDERER, () => {});
       storage.session.save({ [sessionIdOf("s1")]: { theme: "x" } });
-      storage.session.flush();
+      await storage.session.flush();
       storage.history.save({});
       storage.doctor.clicked.update((seen) => [...seen, "kitty"]);
       adapters.linkKey();
@@ -115,7 +117,10 @@ describe("a daemon aimed by its paths value", () => {
         launcher: unscriptedLauncher,
         log: () => {},
       });
-      limits.writeMemoryReport(path.join(limits.snapshotDir, "report.txt"), "r");
+      limits.writeMemoryReport(
+        path.join(limits.snapshotDir, "report.txt"),
+        "r",
+      );
       limits.writeLogNow();
 
       expect(logLines(aimed.log).join("\n")).toContain("a line");

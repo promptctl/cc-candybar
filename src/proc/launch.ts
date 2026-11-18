@@ -38,18 +38,13 @@
 // timeout, its caller's `signal`, its own exit, or the lifeline (below) when
 // the process that launched it ends.
 
-import {
-  existsSync,
-  linkSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { types } from "node:util";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
+import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
 import type { SpawnedChild, Spawner } from "./spawner";
@@ -1218,23 +1213,17 @@ function endJob(
   status: string,
   end: JobEnd,
 ): JobEnding {
-  const staged = `${status}.${process.pid}`;
+  // [LAW:one-source-of-truth] Published by link, so the first verdict stands.
+  // The verdict is staged beside the status, so ENOENT from either step is the
+  // directory gone.
+  let stands: boolean;
   try {
-    writeFileSync(staged, `${formatJobEnd(end)}\n`);
+    stands = publishByLink(status, `${formatJobEnd(end)}\n`) === "published";
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       return { stands: false, signalled: false };
     }
     throw err;
-  }
-  let stands = true;
-  try {
-    linkSync(staged, status);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-    stands = false;
-  } finally {
-    rmSync(staged, { force: true });
   }
   const signalled = spawner.signalJob(pid, "SIGTERM");
   if (signalled) {

@@ -72,10 +72,16 @@ describe("a doctor state file", () => {
   });
 
   test("a write that fails throws: a fault, never the refusal a file that does not read is", () => {
-    // A directory where the write's tmp goes fails it for every user, root
-    // included, while the file itself is absent and so reads.
-    fs.mkdirSync(`${file}.tmp`, { recursive: true });
-    expect(() => stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toThrow(/EISDIR/);
-    expect(fs.existsSync(file)).toBe(false);
+    // The disk refuses the publish, while the file itself is absent and so
+    // reads.
+    const spy = jest.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    });
+    try {
+      expect(() => stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toThrow(/EIO/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readdirSync(path.dirname(file))).toEqual([]);
   });
 });
