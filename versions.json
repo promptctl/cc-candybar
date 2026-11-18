@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-803",
+      "ref": "refs/pull/803/merge",
+      "sha": "ba098f5ad89ed86ae83631ccd9a2d7d4e18c5ba5",
+      "timestamp": "2026-11-18T14:35:14.850Z",
+      "commits": [
+        {
+          "sha": "ba098f5ad89ed86ae83631ccd9a2d7d4e18c5ba5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:34:04-07:00",
+          "message": "Merge 4c1fbb880824cd1bf3c8372ba0a9a66d8ab7f2d9 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "4c1fbb880824cd1bf3c8372ba0a9a66d8ab7f2d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:33:53-07:00",
+          "message": "fix(colour): the door's ✖ ranks its reds in one comparison, and says where the terminal's red stands in (87n6)\n"
+        },
+        {
+          "sha": "092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:15:42-07:00",
+          "message": "fix(colour): the door's ✖ takes the first red to clear the text floor, else the farthest (87n6)\n"
+        },
+        {
+          "sha": "b5f7c2ee26510af8c242973daeb83ae79299b5b0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:02:01-07:00",
+          "message": "fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-804",
       "ref": "refs/pull/804/merge",
       "sha": "1111a2616218986ead315047b8f33f534fddd564",
@@ -27,35 +63,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T07:23:48-07:00",
           "message": "fix(test): a file that leaves a source held fails at its own end, and two files end their prepared config whole (y1ff)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-803",
-      "ref": "refs/pull/803/merge",
-      "sha": "ed7f5f7e601e4eeb6676436f3733016a6a74a518",
-      "timestamp": "2026-11-18T14:17:05.776Z",
-      "commits": [
-        {
-          "sha": "ed7f5f7e601e4eeb6676436f3733016a6a74a518",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:15:56Z",
-          "message": "Merge 092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:15:42-07:00",
-          "message": "fix(colour): the door's ✖ takes the first red to clear the text floor, else the farthest (87n6)\n"
-        },
-        {
-          "sha": "b5f7c2ee26510af8c242973daeb83ae79299b5b0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:02:01-07:00",
-          "message": "fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n"
         }
       ]
     },

@@ -38213,6 +38213,9 @@ function hexColor(input, lead, digits, lengths) {
   const byte = (at) => parseInt(digits.slice(at, at + 2), 16);
   return new ColorRgba(byte(0), byte(2), byte(4), digits.length === 8 ? byte(6) / 255 : 1);
 }
+function parseRgbHex(hex3) {
+  return hexColor(hex3, "", hex3, [6]);
+}
 function parseHexColor(literal) {
   return hexColor(literal, "#", literal.startsWith("#") ? literal.slice(1) : "", [6, 8]);
 }
@@ -62130,9 +62133,10 @@ function settingsArtifacts(doorGlyph) {
       //
       // Two displays through the same `[closed, member]` cycle every other
       // disclosure binds: the shape did not change, only the values. Open,
-      // the ✖ wears the theme's own error red as this depth draws it on the
-      // pressed state (`errorRedOn`). It never slides lightness: a slid red
-      // stops reading as red, and the ✖ must be red on every theme. Closed,
+      // the ✖ is red as this depth draws it on the pressed state, the
+      // theme's own error red wherever one reads (`errorRedOn`). It never
+      // slides lightness: a slid red stops reading as red, and the ✖ must be
+      // red on every theme. Closed,
       // the author's glyph keeps the cell's own text.
       [SETTINGS_ANCHOR]: {
         template: `{{ $door := ${disclosureTriggerCall(SETTINGS_ANCHOR, templateLiteral(doorGlyph), templateLiteral(DOOR_CLOSE_GLYPH))} }}{{ if ${disclosureTerm(SETTINGS_REF)} }}{{ fg (errorRedOn (bgOf)) $door }}{{ else }}{{ $door }}{{ end }}` + DIAGNOSTICS_INDICATOR
@@ -79434,13 +79438,17 @@ function segmentColorFuncs(ref) {
   };
   return { ...palette, bgOf, tint, errorRedOn, gauge };
 }
-var RUNGS_OUT = {
-  black: ["darken-1", "darken-2", "darken-3"],
-  white: ["lighten-1", "lighten-2", "lighten-3"]
-};
-var TERMINAL_REDS = [1, 9].map(
-  (index) => STANDARD_TABLE.get(index)
-);
+var POLES = [
+  { pole: parseRgbHex("000000"), rungs: ["darken-1", "darken-2", "darken-3"] },
+  {
+    pole: parseRgbHex("ffffff"),
+    rungs: ["lighten-1", "lighten-2", "lighten-3"]
+  }
+];
+var TERMINAL_REDS = [
+  ANSI_COLOR_NAMES.red,
+  ANSI_COLOR_NAMES.bright_red
+].map((index) => STANDARD_TABLE.get(index));
 var RED_HUE = { from: -20, to: 38, chroma: 0.06 };
 function readsRed(colour) {
   const { h, c } = Oklch.fromRgba(colour);
@@ -79449,18 +79457,19 @@ function readsRed(colour) {
 }
 function errorRed(palette, ground, depth) {
   const shown = drawnColour(ground, depth);
-  const far = contrastFor(shown).hex === "#000000" ? "black" : "white";
-  const back2 = far === "black" ? "white" : "black";
+  const [farther, nearer] = [...POLES].sort(
+    (x, y) => contrastRatio(y.pole, shown) - contrastRatio(x.pole, shown)
+  );
   const themed = [
     "text-error",
     "error",
-    ...[...RUNGS_OUT[far], ...RUNGS_OUT[back2]].map((rung) => `error-${rung}`)
+    ...[...farther.rungs, ...nearer.rungs].map((rung) => `error-${rung}`)
   ].map((name) => resolveColorRef(palette, name));
-  const kept = [...themed, ...TERMINAL_REDS].filter((colour) => readsRed(drawnColour(colour, depth))).map((colour) => ({
-    colour,
-    ratio: contrastRatio(drawnColour(colour, depth), shown)
-  }));
-  return (kept.find(({ ratio }) => ratio >= TEXT_MIN_CONTRAST) ?? kept.reduce((best, c) => c.ratio > best.ratio ? c : best)).colour;
+  const counted2 = (ratio) => Math.min(ratio, TEXT_MIN_CONTRAST);
+  return [...themed, ...TERMINAL_REDS].map((colour) => {
+    const drawn = drawnColour(colour, depth);
+    return { colour, drawn, ratio: counted2(contrastRatio(drawn, shown)) };
+  }).filter(({ drawn }) => readsRed(drawn)).reduce((best, c) => c.ratio > best.ratio ? c : best).colour;
 }
 function flattenStops(stops) {
   return stops.flatMap((stop2) => {
