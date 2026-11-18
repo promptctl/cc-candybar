@@ -499,7 +499,8 @@ describe("WatcherRegistry", () => {
   // opens, and every handle fs.watch opens is recorded with the directory, the
   // listener the registry gave it, and whether it was closed. No real
   // directory can be made to report or fail on demand.
-  function standIn() {
+  // `refuse`: the directories whose open the OS refuses, read at each open.
+  function standIn(refuse: ReadonlySet<string> = new Set()) {
     type Opened = {
       dir: string;
       closed: boolean;
@@ -512,6 +513,7 @@ describe("WatcherRegistry", () => {
       _opts: unknown,
       listener: Opened["listener"],
     ) => {
+      if (refuse.has(dir)) throw new Error(`ENOSPC: watch '${dir}'`);
       const record = { dir, closed: false, listener } as Opened;
       record.handle = Object.assign(new EventEmitter(), {
         close: () => void (record.closed = true),
@@ -792,6 +794,41 @@ describe("WatcherRegistry", () => {
         dirWatchesOpened: 3,
         dirWatchesClosed: 1,
       });
+      reg.closeAll();
+    } finally {
+      fake.restore();
+    }
+  });
+
+  test("an errored handle whose reopen is refused tells its slot the refusal, and the same refusal again tells nothing", async () => {
+    const refuse = new Set<string>();
+    const fake = standIn(refuse);
+    try {
+      const reg = new WatcherRegistry({
+        clock: systemTimekeeper,
+        logger: () => {},
+      });
+      const seen: Invalidation[] = [];
+      const handle = reg.acquire(
+        "k",
+        { dirs: [{ path: "/w" }], polled: [] },
+        (inv) => seen.push(inv),
+      );
+      fake.opensOf("/w")[0]!.handle.emit("error", new Error("EIO: i/o error"));
+      await until(() => seen.length === 1, "the error's window");
+      refuse.add("/w");
+      reg.judge();
+      await until(() => seen.length === 2, "the refusal's window");
+      expect(seen[1]).toEqual({
+        kind: "failed",
+        reason: "/w: ENOSPC: watch '/w'",
+      });
+      expect(handle.deaf).toEqual([
+        { kind: "refused", path: "/w", reason: "ENOSPC: watch '/w'" },
+      ]);
+      reg.judge();
+      await new Promise((resolve) => setTimeout(resolve, 3 * DEBOUNCE_MS));
+      expect(seen).toHaveLength(2);
       reg.closeAll();
     } finally {
       fake.restore();

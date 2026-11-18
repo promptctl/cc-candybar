@@ -132,15 +132,18 @@ export function watchFault(
       // Every reason names the path it stopped at, the kernel's and the loop's.
       (u) => `cannot follow a link chain — ${u.reason}`,
     ),
-    ...watch.held.handle.deaf.map((d) =>
-      d.kind === "refused"
-        ? `cannot watch ${d.path} — ${d.reason}`
-        : `watching ${d.path} failed — ${d.reason}`,
-    ),
+    ...watch.held.handle.deaf.map(deafnessLine),
     ...(beyond === null ? [] : [beyond]),
   ];
   return reasons.length === 0 ? null : `${label}: ${reasons.join("; ")}`;
 }
+
+// [LAW:one-source-of-truth] The one phrasing of a deafness, for every fault
+// that shows one.
+export const deafnessLine = (d: Deafness): string =>
+  d.kind === "refused"
+    ? `cannot watch ${d.path} — ${d.reason}`
+    : `watching ${d.path} failed — ${d.reason}`;
 
 // A target the OS is not listening to, and why: it refused the open, or the
 // handle reported an error after it opened.
