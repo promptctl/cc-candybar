@@ -14,13 +14,18 @@ import {
 } from "./daemon/source-runs.js";
 import { awaitedReading } from "./facts/awaited.js";
 import { judgeRun } from "./daemon/foundations/judge-run.js";
-import { restamp } from "./facts/fact.js";
+import { restamp, type Fact } from "./facts/fact.js";
 import { UNREAD_RUN, type RunFact } from "./facts/world-state.js";
 import { Holds } from "./utils/holds.js";
 import type { Current } from "./utils/reading.js";
 import type { JsonValue } from "./var-system/types.js";
 import type { Instant } from "./utils/instant.js";
 import type { SourceRegistry } from "./var-system/sources.js";
+import {
+  variableOf,
+  type Environment,
+} from "./daemon/foundations/session-env.js";
+import type { HostReadings } from "./dsl/view-source.js";
 
 export class CheckRuns {
   private readonly holds = new Holds();
@@ -50,6 +55,9 @@ export class CheckRuns {
     private readonly registry: SourceRegistry,
     // The instant every pass is drawn at, which each answered reading carries.
     private readonly at: Instant,
+    // [LAW:one-source-of-truth] `check` runs in the session's own shell, so
+    // its process environment is the session's.
+    private readonly environment: Environment,
   ) {
     this.stop = reaction(
       () => registry.subscriptions(),
@@ -61,6 +69,7 @@ export class CheckRuns {
             // The registry's set moved, so this is where it arrives: each
             // run is judged here, once per move.
             new Map(runs.map((run) => [run.digest, judgeRun(run)])),
+            { kind: "ok", value: environment },
             (_, declare) => declare(),
           ),
         );
@@ -73,6 +82,18 @@ export class CheckRuns {
         onError: (error) => runInAction(() => this.thrown.set({ error })),
       },
     );
+  }
+
+  // What a view's source reads of this holder: its runs and its environment.
+  readonly readings: HostReadings = {
+    run: (digest) => this.run(digest),
+    env: (name) => this.env(name),
+  };
+
+  // What the view's source answers for an `env` source's variable: the
+  // process's own, set or not, answered at the instant the pass is drawn at.
+  env(name: string): Fact<string> {
+    return { ...variableOf(this.environment, name), at: this.at };
   }
 
   // What the view's source answers for a run: the lane's reading as it

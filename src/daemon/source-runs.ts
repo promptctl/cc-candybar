@@ -42,7 +42,12 @@ import {
 import type { Holds } from "../utils/holds.js";
 import { KeyedSource, NO_WATCH } from "../utils/keyed-source.js";
 import { quietLogger, type DaemonLogger } from "../utils/logger.js";
-import { failed, ok, type Outcome } from "../utils/outcome.js";
+import { failed, ok, type Asked, type Outcome } from "../utils/outcome.js";
+import { digestOf } from "../utils/plain.js";
+import type {
+  Environment,
+  SessionEnvironment,
+} from "./foundations/session-env.js";
 import { settledLane, type Current } from "../utils/reading.js";
 import { RefreshLedger, REFRESH_TRIGGERS } from "../utils/refresh-ledger.js";
 import { valueOf } from "../utils/logfmt.js";
@@ -83,17 +88,21 @@ const whereOf = (read: SourceRead): string =>
 
 function shellReader(
   launcher: Launcher,
-  command: string,
-  cwd: string,
+  read: Extract<SourceRead, { kind: "shell" }>,
+  env: Environment,
   signal: AbortSignal,
 ): SourceReader {
+  const { command, cwd } = read;
   return {
-    where: whereOf({ kind: "shell", command, cwd }),
+    where: whereOf(read),
     read: async () => {
       const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd,
+        // [LAW:one-source-of-truth] Exactly the variables the run's identity
+        // carries, so nothing its digest does not hold can move its output.
+        environment: env,
         category: "user-shell",
         timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal,
@@ -140,12 +149,13 @@ function fileReader(
 
 function readerOf(
   launcher: Launcher,
-  read: SourceRead,
+  { run: { identity }, env }: SessionRun,
   signal: AbortSignal,
 ): SourceReader {
+  const { read } = identity;
   switch (read.kind) {
     case "shell":
-      return shellReader(launcher, read.command, read.cwd, signal);
+      return shellReader(launcher, read, env, signal);
     case "file":
       return fileReader(read.path, read.readMode, signal);
   }
@@ -359,10 +369,11 @@ export interface SourceRunsDeps {
 
 export class SourceRuns {
   private readonly byKind: Readonly<
-    Record<SourceRead["kind"], KeyedSource<AcceptedRun, JsonValue>>
+    Record<SourceRead["kind"], KeyedSource<SessionRun, JsonValue>>
   >;
   private readonly watchMgr: PathWatches;
-  // Each watching entry's fault, by digest, for the lanes that read it.
+  // Each watching entry's fault, by its run's digest, for the lanes that read
+  // it.
   private readonly faults = observable.map<string, string>(undefined, {
     deep: false,
   });
@@ -379,24 +390,28 @@ export class SourceRuns {
     // share it. A record per digest would grow with every key value a bar
     // ever had.
     const source = (kind: SourceRead["kind"]) =>
-      new KeyedSource<AcceptedRun, JsonValue>({
+      new KeyedSource<SessionRun, JsonValue>({
         name: `source.${kind}`,
         scope: "daemon",
         keyOf: (run) => run.digest,
-        fields: ({ digest, identity }, holders) =>
+        fields: ({ digest, run: { identity } }, holders) =>
           `digest=${shortDigest(digest)} where=${valueOf(whereOf(identity.read))} sharedBy=${holders}`,
         // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
         // readers through this one function; text/regex/json are three
         // parsers through it.
-        read: async ({ identity, parser }, signal) => {
-          const reader = readerOf(deps.launcher, identity.read, signal);
-          return parsed(await reader.read(), parser, reader.where);
+        read: async (run, signal) => {
+          const reader = readerOf(deps.launcher, run, signal);
+          return parsed(await reader.read(), run.run.parser, reader.where);
         },
-        every: ({ identity: { refresh } }) =>
+        every: ({
+          run: {
+            identity: { refresh },
+          },
+        }) =>
           refresh.kind === "ttl"
             ? { okMs: refresh.durationMs, failedMs: refresh.durationMs }
             : null,
-        watch: ({ digest, identity }, changed) => {
+        watch: ({ digest, run: { identity } }, changed) => {
           if (identity.refresh.kind !== "watch_file") return NO_WATCH();
           const unsubscribe = this.watchMgr.subscribe(
             identity.refresh.path,
@@ -425,23 +440,29 @@ export class SourceRuns {
   }
 
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // an accepted run's digest, created and read once on its first hold, and
-  // the lane reads it as it stands. A refused run reaches no reader: its lane
-  // answers its refusal for good, and the refusal is its standing fault, so
-  // the bar draws the source's fallback beside a ⚠ that says why.
-  declare(holds: Holds, judged: Judged): SourceLane {
+  // the session's run of an accepted declaration, created and read once on
+  // its first hold, and the lane reads it as it stands. A refused run reaches
+  // no reader: its lane answers its refusal for good, and the refusal is its
+  // standing fault, so the bar draws the source's fallback beside a ⚠ that
+  // says why. A shell run for a session whose environment the host does not
+  // hold is refused the same way: the host's own is never a session's.
+  declare(
+    holds: Holds,
+    judged: Judged,
+    environment: SessionEnvironment,
+  ): SourceLane {
     const { digest } = judged;
-    if (judged.kind === "refused") {
-      const refusal = `refused: ${judged.reason}`;
-      const lane = settledLane<JsonValue>(failed(refusal, "read"));
-      return { digest, current: () => lane.current(), fault: () => refusal };
+    const run = sessionRunOf(judged, environment);
+    if (run.kind === "failed") {
+      const lane = settledLane<JsonValue>(failed(run.reason, "read"));
+      return { digest, current: () => lane.current(), fault: () => run.reason };
     }
-    const { run } = judged;
-    const lane = this.byKind[run.identity.read.kind].declare(holds, run);
+    const held = run.value;
+    const lane = this.byKind[held.run.identity.read.kind].declare(holds, held);
     return {
       digest,
       current: () => lane.current(),
-      fault: () => this.faults.get(digest) ?? null,
+      fault: () => this.faults.get(held.digest) ?? null,
     };
   }
 
@@ -473,12 +494,52 @@ export function declareRuns(
   sourceRuns: Pick<SourceRuns, "declare">,
   holds: Holds,
   runs: ReadonlyMap<string, Judged>,
+  environment: SessionEnvironment,
   take: (digest: string, declare: () => SourceLane) => SourceLane,
 ): ReadonlyMap<string, SourceLane> {
   return new Map(
     [...runs].map(([digest, judged]) => [
       digest,
-      take(digest, () => sourceRuns.declare(holds, judged)),
+      take(digest, () => sourceRuns.declare(holds, judged, environment)),
     ]),
   );
+}
+
+// [LAW:types-are-the-program] A run as the host keys and spawns it: an
+// accepted declaration with the variables it names, at their values in the
+// session's environment (spec ADR-8). Its digest is over both, so sessions
+// whose named values agree share one run and one whose value differs gets
+// its own. A named variable the session does not set is absent from `env`,
+// as it is from the process.
+export interface SessionRun {
+  readonly digest: string;
+  readonly run: AcceptedRun;
+  readonly env: Environment;
+}
+
+// [LAW:single-enforcer] The one step from a judged declaration and a
+// session's environment to the run the host holds. A file run names no
+// variable, so it reads no environment and is shared by every session.
+function sessionRunOf(
+  judged: Judged,
+  environment: SessionEnvironment,
+): Asked<SessionRun> {
+  if (judged.kind === "refused")
+    return { kind: "failed", reason: `refused: ${judged.reason}` };
+  const { run } = judged;
+  const { read } = run.identity;
+  if (read.kind === "file")
+    return { kind: "ok", value: { digest: run.digest, run, env: {} } };
+  if (environment.kind === "failed")
+    return { kind: "failed", reason: `not run: ${environment.reason}` };
+  const session = environment.value;
+  const env: Environment = Object.fromEntries(
+    read.env.flatMap((name) =>
+      Object.hasOwn(session, name) ? [[name, session[name]!]] : [],
+    ),
+  );
+  return {
+    kind: "ok",
+    value: { digest: digestOf({ identity: run.identity, env }), run, env },
+  };
 }

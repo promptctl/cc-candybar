@@ -16,10 +16,19 @@ import { digestOf } from "../utils/plain.js";
 
 export type ReadMode = "whole" | "first-line";
 
-// What text a run reads: a command's stdout in a directory, or a file's
-// content, whole or its first line.
+// What text a run reads: a command's stdout in a directory, run in the
+// variables it names, or a file's content, whole or its first line.
+// [LAW:one-source-of-truth] The names are a sorted set, the base set and the
+// declared names merged where the declaration is made, so two spellings of
+// one read are one digest. They are names only: the values are the session's,
+// which the host lays in and no renderer holds.
 export type SourceRead =
-  | { readonly kind: "shell"; readonly command: string; readonly cwd: string }
+  | {
+      readonly kind: "shell";
+      readonly command: string;
+      readonly cwd: string;
+      readonly env: readonly string[];
+    }
   | {
       readonly kind: "file";
       readonly path: string;

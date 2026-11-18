@@ -79,7 +79,7 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
-import { UNREAD_RUN } from "../src/facts/world-state";
+import { NOTHING_READ } from "../src/dsl/view-source";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
 import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
@@ -94,6 +94,7 @@ import type {
 import type { RequestFacts } from "../src/daemon/foundations/request-event";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const S1 = sessionIdOf("s1");
 
@@ -246,7 +247,6 @@ function rig(): Rig {
     {
       clock: systemTimekeeper,
       locations: locations(host),
-      env: host.env,
       sessionState,
       storage: {
         hold: (id, folders) => {
@@ -413,7 +413,6 @@ describe("a source's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -510,7 +509,6 @@ describe("a source's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -544,7 +542,6 @@ describe("a source's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -670,7 +667,6 @@ describe("a source's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -799,7 +795,7 @@ describe("a source's document", () => {
     registry.bindInputs({
       session: () => TEST_SESSION,
       read: (p) => resolvePath(payload(), p),
-      run: () => UNREAD_RUN,
+      ...NOTHING_READ,
       drawnAt: () => {
         throw new Error("no depth is read");
       },
@@ -911,6 +907,7 @@ function statusline(r: Rig, configFile: string) {
       new AbortController().signal,
       () => {},
       checked.req,
+      TEST_ENVIRONMENT,
       ++id as RequestId,
       systemTimekeeper.monotonic() + 5000,
       facts,

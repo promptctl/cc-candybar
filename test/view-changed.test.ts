@@ -83,7 +83,6 @@ function setUp() {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

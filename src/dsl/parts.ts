@@ -310,6 +310,7 @@ export class ViewParts {
       session: () => this.view.get().session,
       read: (path) => this.inputAt(path),
       run: (digest) => this.view.get().run(digest),
+      env: (name) => this.view.get().env(name),
       drawnAt: () => drawnDepth(this.colorCompatibility()),
     });
   }

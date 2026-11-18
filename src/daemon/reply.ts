@@ -374,7 +374,7 @@ export async function replyTo(
       // [LAW:one-source-of-truth] The book keeps what the newest request says,
       // never one that arrived behind it.
       if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-        parts.sessionBook.heard(checked.req);
+        parts.sessionBook.heard(checked.req, checked.environment);
       // A declared session's row follows the pane its newest request reports.
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
@@ -419,6 +419,7 @@ export async function replyTo(
       parts.closing,
       parts.log,
       checked.req,
+      checked.environment,
       order,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to

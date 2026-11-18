@@ -287,6 +287,7 @@ describe("the all-pending document", () => {
       autoCompact: pendingOf("unread"),
       sources: new Map(),
       runs: new Map(),
+      env: new Map(),
       doctor: ABSENT,
     },
     today: waiting,

@@ -141,7 +141,6 @@ import type {
   DeclaredSources,
   SessionContext,
 } from "../../renderer-interface/request-context";
-import { sessionEnv } from "../../daemon/foundations/session-env";
 import { runDeclaration, type SlashAction } from "../../config/action";
 import {
   GLYPH_MARKS,
@@ -1457,16 +1456,9 @@ function runOf(
     action,
     program,
     args,
-    // [LAW:single-enforcer] The session's process environment, the action's
-    // own variables over it.
-    env: {
-      ...sessionEnv({
-        sessionId: sid,
-        projectDir: origin.projectDir,
-        claudeConfigDir: contextFor(ctx.context, sid)?.durable.claudeConfigDir,
-      }),
-      ...drawn.env,
-    },
+    // The action's own variables: the host lays them over the session's
+    // environment, which no renderer holds.
+    env: drawn.env,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose

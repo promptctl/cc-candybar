@@ -48,7 +48,7 @@ const FIXTURE_SOURCE = readFileSync(
 
 // HOME is controlled so the directory template's home-collapse branch is
 // never taken — makes path rendering deterministic across machines. (An `env`
-// source reads the registry's environment at registerDslConfig call time.)
+// source reads the session's environment, which the rig states.)
 const ENV = { HOME: "" };
 
 describe("DSL render spine (bzh.7 steel thread)", () => {

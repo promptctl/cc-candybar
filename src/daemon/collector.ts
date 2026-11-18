@@ -58,6 +58,7 @@ import {
 } from "../renderer-interface/request-context.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { judgeRun } from "./foundations/judge-run.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 import { writableSettingsFiles } from "../doctor/gather.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
@@ -96,7 +97,7 @@ export interface CollectorDeps {
 // and the lanes that declaration took, written whole by each declaration so a
 // read never joins one request's keys to another's lanes.
 interface Declared {
-  readonly locator: ViewFacts;
+  readonly locator: Locator;
   readonly lanes: DeclaredLanes;
 }
 
@@ -104,7 +105,7 @@ interface Declared {
 // subscriptions.
 interface DeclaredFor {
   readonly session: SessionId;
-  readonly locator: ViewFacts;
+  readonly locator: Locator;
   readonly subscriptions: Subscribed;
 }
 
@@ -169,11 +170,18 @@ interface StampInputs {
   readonly daemon: DaemonFacts;
 }
 
-// What a session's declaration keys on, of the request that named it.
-const locatorOf = (req: ViewFacts): ViewFacts => ({
+// What a session's declaration keys on, of the request that named it: its
+// keys, and the environment its runs run in, which stays in the host.
+type Locator = ViewFacts & { readonly environment: SessionEnvironment };
+
+const locatorOf = (
+  req: ViewFacts,
+  environment: SessionEnvironment,
+): Locator => ({
   hookData: req.hookData,
   cwd: req.cwd,
   hints: req.hints,
+  environment,
 });
 
 // [LAW:single-enforcer] A set is judged where it arrives, and only for the
@@ -200,6 +208,11 @@ const sourcesOf = (
         : [],
     ),
   ),
+  env: [
+    ...new Set(
+      subscriptions.flatMap((s) => (s.kind === "env" ? [s.name] : [])),
+    ),
+  ].sort(),
   // A renderer runs one doctor run per session at a time.
   doctor:
     subscriptions.flatMap((s) => (s.kind === "doctor" ? [s.ask] : []))[0] ??
@@ -213,6 +226,8 @@ const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) &&
   a.runs.size === b.runs.size &&
   [...a.runs.keys()].every((digest) => b.runs.has(digest)) &&
+  a.env.length === b.env.length &&
+  a.env.every((name, i) => b.env[i] === name) &&
   compareStructural(a.doctor, b.doctor);
 
 // A live session's reads stop and its holds close.
@@ -244,8 +259,8 @@ export class Collector {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req: ViewFacts): WorldState {
-    const locator = locatorOf(req);
+  requested(req: ViewFacts, environment: SessionEnvironment): WorldState {
+    const locator = locatorOf(req, environment);
     const sessionId = req.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId);
@@ -418,10 +433,11 @@ export class Collector {
     runInAction(() => this.records.clear());
   }
 
-  private open(session: SessionId, locator: ViewFacts): SessionRecord {
+  private open(session: SessionId, locator: Locator): SessionRecord {
     const subscriptions: Subscribed = {
       plugins: new Map(),
       runs: new Map(),
+      env: [],
       doctor: null,
     };
     const reader = this.reader({ session, locator, subscriptions });
@@ -468,7 +484,7 @@ export class Collector {
 
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
-  private live(record: SessionRecord, locator: ViewFacts): Live {
+  private live(record: SessionRecord, locator: Locator): Live {
     return this.watch(
       record.session,
       record.stamped,
@@ -541,7 +557,13 @@ export class Collector {
         acquired,
         released,
       } = holds.declare(() =>
-        declareLanes(this.deps.owners, holds, locator, subscriptions),
+        declareLanes(
+          this.deps.owners,
+          holds,
+          locator,
+          locator.environment,
+          subscriptions,
+        ),
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -569,7 +591,7 @@ export class Collector {
     }
   }
 
-  private inputsOf(locator: ViewFacts) {
+  private inputsOf(locator: Locator) {
     return { ...locator, deps: this.deps.owners };
   }
 

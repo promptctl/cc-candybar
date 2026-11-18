@@ -7,15 +7,16 @@
 // - a session's own values — its `input`s (the request's facts), its `state`
 //   reads — are the view's;
 // - a source whose reading arrives in the session's world state — a plugin's
-//   `source`, a `shell` or `file` run — is the view's: a directory has no
+//   `source`, a `shell` or `file` run, an `env` variable of the session's
+//   environment — is the view's: a directory has no
 //   session to read a world state from. Sessions of one directory still share
 //   a run, because they name one digest and the host keys runs by digest
 //   (docs/design/per-directory-sources.md);
 // - a derivation (`template`, `time`) is the view's: it reads the session's
 //   values, the depth its view draws at, and — a projection — the instant of
 //   a draw, and only a view is drawn;
-// - a value the directory alone decides (`literal`, `env`, a dropped
-//   plugin's document) is the directory's.
+// - a value the directory alone decides (`literal`, a dropped plugin's
+//   document) is the directory's.
 
 import { declaredVariables } from "../config/loader/refs.js";
 import type { ValidatedConfig, VariableDecl } from "../config/dsl-types.js";
@@ -30,8 +31,8 @@ const KIND_SCOPE: Readonly<Record<VariableDecl["kind"], VarScope>> = {
   source: "view",
   shell: "view",
   file: "view",
+  env: "view",
   literal: "directory",
-  env: "directory",
   dropped: "directory",
 };
 

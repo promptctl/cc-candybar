@@ -32,6 +32,7 @@ import {
 } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import type { SourceOf } from "./render-cache.js";
+import { pendingOf } from "../utils/outcome.js";
 import {
   composePayload,
   type ComposeInputs,
@@ -134,6 +135,9 @@ export function sessionSource(
       // [LAW:types-are-the-program] A digest the document does not carry is a
       // run the host has not read for this session yet.
       run: (digest) => document().runs[digest] ?? UNREAD_RUN,
+      // A variable the document does not carry is one the host has not
+      // handed in for this session yet.
+      env: (name) => document().env[name] ?? pendingOf("unread"),
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw.read().effective,

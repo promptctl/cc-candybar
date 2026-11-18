@@ -38,7 +38,12 @@ import { ConfigError } from "../src/config/loader/diagnostics";
 import { instantOf } from "../src/utils/instant";
 import { Runs, type RunAct } from "../src/daemon/runs";
 import type { EffectId } from "../src/renderer-interface/interface";
-import { sessionEnv } from "../src/daemon/foundations/session-env";
+import {
+  NOT_HEARD,
+  sessionEnvironment,
+  type SessionFacts,
+} from "../src/daemon/foundations/session-env";
+import { TEST_ENV, TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { linkSigner, linkSignerOver } from "../src/click/link-signer";
 import { linkKeyFromFile } from "../src/daemon/link-key";
@@ -232,7 +237,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       sessionState,
       watchers,
       storage: providers.managedStorage,
@@ -253,6 +257,15 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
   const runs = new Runs({
     clock: systemTimekeeper,
     supersede: (key, sid) => providers.managedStorage.supersede(key, sid),
+    // The session's environment as the checkpoint makes it of what its client
+    // reported: a shell's search path, under the session's own facts.
+    environmentOf: () => ({
+      kind: "ok",
+      value: sessionEnvironment(
+        { PATH: TEST_ENV.PATH! },
+        { sessionId: SID, projectDir: dir, claudeConfigDir: "/u/.claude-x" },
+      ),
+    }),
     launch,
   });
   cleanups.push(() => {
@@ -415,7 +428,6 @@ describe("a run's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -444,7 +456,6 @@ describe("a run's declaration", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      env: HOST.env,
       sessionState: r.sessionState,
       signer: TEST_SIGNER,
       gates: bareGates(),
@@ -840,25 +851,34 @@ describe("the run owner", () => {
       },
       launch,
       timeoutMs,
+      environmentOf: (session) =>
+        session === SESSION ? TEST_ENVIRONMENT : NOT_HEARD,
     });
     cleanups.push(() => runs.close());
-    const run = (script: string): RunAct => ({
+    const run = (script: string, session: SessionId = SESSION): RunAct => ({
       kind: "run",
       id: 1 as EffectId,
-      session: SESSION,
+      session,
       action: "act",
       program: "/bin/sh",
       args: ["-c", script],
-      env: sessionEnv({
-        sessionId: SID,
-        projectDir: dir,
-        claudeConfigDir: undefined,
-      }),
+      env: {},
       cwd: dir,
       refreshes: [{ name: STATUS, folder: FOLDER }],
     });
     return { runs, held, run };
   }
+
+  test("a session whose environment the host does not hold runs nothing, and says why", async () => {
+    const o = owner();
+    const ended = await o.runs.start(o.run("true", sessionIdOf("unheard")));
+    expect(ended.outcome).toEqual({
+      kind: "failed",
+      reason: expect.stringMatching(/^not run: no request from this session/),
+    });
+    expect(o.held).toEqual([]);
+    expect(o.runs.stats()).toMatchObject({ running: 0, failed: 1 });
+  });
 
   test("a non-zero exit fails with the trimmed stderr, and counts as failed", async () => {
     const o = owner();
@@ -978,26 +998,29 @@ describe("the run owner", () => {
 });
 
 describe("the session's process environment", () => {
-  test("the daemon's session variables never reach it; the session's own are set from its facts", async () => {
+  test("a child starts from the environment the session reported, never the daemon's, with the session's facts over it", async () => {
     const daemon = {
-      PATH: "/usr/bin",
-      CLAUDE_CODE_SESSION_ID: "daemon-sid",
-      CLAUDE_PROJECT_DIR: "/daemon/project",
-      CLAUDE_CONFIG_DIR: "/daemon/.claude",
+      PATH: "/daemon/bin",
+      DAEMON_ONLY: "1",
       TMUX: "/tmp/tmux-501/default,1,0",
       TMUX_PANE: "%3",
     };
-    // What a child gets is the launcher's inherited environment under the
-    // overlay: asked of a real child, `env` prints it.
+    const reported = {
+      PATH: "/usr/bin",
+      API_HOST: "prod",
+      CLAUDE_CODE_SESSION_ID: "stale-sid",
+      CLAUDE_CONFIG_DIR: "/reported/.claude",
+    };
+    // What a child gets, asked of a real one: `env` prints it.
     const childSees = async (
-      facts: Parameters<typeof sessionEnv>[0],
+      facts: SessionFacts,
     ): Promise<Record<string, string>> => {
       const ran = await systemLauncher(
         { inherited: daemon },
         systemTimekeeper,
       ).launch({
         bin: "/usr/bin/env",
-        envOverlay: sessionEnv(facts),
+        environment: sessionEnvironment(reported, facts),
         category: "click.run",
       });
       if (!ran.ok) throw new Error(`env failed: ${JSON.stringify(ran)}`);
@@ -1011,31 +1034,28 @@ describe("the session's process environment", () => {
           ]),
       );
     };
-    expect(
-      await childSees({
-        sessionId: S9,
-        projectDir: "/p",
-        claudeConfigDir: "/u/.claude-z",
-      }),
-    ).toMatchObject({
+    const seen = await childSees({
+      sessionId: S9,
+      projectDir: "/p",
+      claudeConfigDir: "/u/.claude-z",
+    });
+    expect(seen).toMatchObject({
       PATH: "/usr/bin",
+      API_HOST: "prod",
       CLAUDE_CODE_SESSION_ID: "s9",
       CLAUDE_PROJECT_DIR: "/p",
       CLAUDE_CONFIG_DIR: "/u/.claude-z",
     });
-    // The default directory: the variable unset, as Claude Code reads it.
+    for (const gone of ["DAEMON_ONLY", "TMUX", "TMUX_PANE"])
+      expect(seen).not.toHaveProperty(gone);
+    // The default directory: the variable unset, as Claude Code reads it,
+    // whatever the client's own environment said.
     const defaulted = await childSees({
       sessionId: S9,
       projectDir: "/p",
       claudeConfigDir: undefined,
     });
-    expect(defaulted).toMatchObject({
-      PATH: "/usr/bin",
-      CLAUDE_CODE_SESSION_ID: "s9",
-      CLAUDE_PROJECT_DIR: "/p",
-    });
-    for (const gone of ["CLAUDE_CONFIG_DIR", "TMUX", "TMUX_PANE"])
-      expect(defaulted).not.toHaveProperty(gone);
+    expect(defaulted).not.toHaveProperty("CLAUDE_CONFIG_DIR");
   });
 });
 

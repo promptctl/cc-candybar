@@ -71,7 +71,6 @@ function rig(
     {
       clock: opts.clock ?? systemTimekeeper,
       locations: locations(host),
-      env: host.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

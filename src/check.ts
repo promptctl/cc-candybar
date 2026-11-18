@@ -95,6 +95,7 @@ import {
   type EffectiveGlobals,
 } from "./config/effective-globals.js";
 import { LAYER_ROLES, layerFlags } from "./config/layer-role.js";
+import { plainEnvironment } from "./daemon/foundations/session-env.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -175,7 +176,7 @@ function bindPass(
     opts,
     effective,
     CHECK_SESSION,
-    (digest) => runs.run(digest),
+    runs.readings,
   );
   return { drawn, opts };
 }
@@ -323,9 +324,10 @@ function checkReadings(
       // control renders all of its cells.
       autoCompact: ok<AutoCompactWindow>(400_000),
       sources: new Map(sources.map((name) => [name, ABSENT])),
-      // The runs reach the view through its holder (check-runs.ts), not the
-      // payload.
+      // The runs and the environment reach the view through its holder
+      // (check-runs.ts), not the payload.
       runs: new Map(),
+      env: new Map(),
       // `check` runs no doctor.
       doctor: ABSENT,
     },
@@ -627,9 +629,13 @@ export async function prepareSnapshot(
     config.globals.default_empty_value ?? "",
     new SessionState(),
     null,
-    world.host.env,
   );
-  const runs = new CheckRuns(sourceRuns, registry, at);
+  const runs = new CheckRuns(
+    sourceRuns,
+    registry,
+    at,
+    plainEnvironment(world.host.env),
+  );
   const dispose = (): void => {
     registry.dispose();
     runs.close();

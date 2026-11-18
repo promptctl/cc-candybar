@@ -29,6 +29,7 @@ import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { TEST_ENV } from "./helpers/session-environment";
 
 const AT = instantOf(new Date(2026, 9, 25, 12, 0, 0));
 const RUN_WITHIN_MS = 5_000;
@@ -60,7 +61,7 @@ function viewOver(
     launcher: processLauncher,
     clock: systemTimekeeper,
   });
-  const held = new CheckRuns(sourceRuns, registry, AT);
+  const held = new CheckRuns(sourceRuns, registry, AT, TEST_ENV);
   const selections = resolveEffectiveGlobals(
     config,
     () => null,
@@ -69,7 +70,7 @@ function viewOver(
   bindView(compiled, store, registry, {
     session: TEST_SESSION,
     payload: () => answer.get(),
-    run: (digest) => held.run(digest),
+    ...held.readings,
     selections: () => selections,
   });
   return {
@@ -302,6 +303,7 @@ test("a run whose declaration throws fails the check's wait with it", async () =
   const registry = new SourceRegistry(store);
   registry.declareShell("probe", "echo hi", {
     cwd: os.tmpdir(),
+    env: [],
     parse: { kind: "text", default: undefined },
     cache: { kind: "never" },
   });
@@ -312,7 +314,7 @@ test("a run whose declaration throws fails the check's wait with it", async () =
       },
     },
     registry,
-    AT,
+    AT, TEST_ENV
   );
   try {
     await expect(held.settled(AbortSignal.timeout(1000))).rejects.toThrow(

@@ -58,6 +58,10 @@ import type {
   ViewFacts,
   Subscribed,
 } from "../renderer-interface/request-context";
+import {
+  variableOf,
+  type SessionEnvironment,
+} from "./foundations/session-env.js";
 
 // ─── Provider dependencies ────────────────────────────────────────────────────
 
@@ -153,6 +157,8 @@ export interface Lanes {
   // Each run the session's renderer subscribes to, by digest: its reading
   // and its watch's fault.
   readonly runs: ReadonlyMap<string, RunReading>;
+  // Each variable the session's `env` sources name, from its environment.
+  readonly env: ReadonlyMap<string, Current<string>>;
   readonly doctor: Current<DoctorReading>;
 }
 
@@ -204,6 +210,8 @@ export interface DeclaredLanes {
   readonly sources: ReadonlyMap<string, Lane<JsonValue>>;
   // One lane per run the renderer subscribes to, by digest.
   readonly runs: ReadonlyMap<string, SourceLane>;
+  // One lane per variable the renderer's `env` sources name.
+  readonly env: ReadonlyMap<string, Lane<string>>;
   // The doctor run the renderer subscribes to; absent when it asks none.
   readonly doctor: Lane<DoctorReading>;
 }
@@ -218,7 +226,7 @@ export interface Declaration {
 // when its declaration threw whole, or a caller's that declares nothing.
 export function settledLanes(
   outcome: Outcome<never>,
-  { plugins, runs, doctor }: Subscribed,
+  { plugins, runs, env, doctor }: Subscribed,
 ): DeclaredLanes {
   const lane = settledLane(outcome);
   return {
@@ -235,6 +243,7 @@ export function settledLanes(
         { digest, current: () => lane.current(), fault: () => null },
       ]),
     ),
+    env: new Map(env.map((name) => [name, lane])),
     doctor: doctorLane(doctor, () => lane),
   };
 }
@@ -275,6 +284,8 @@ export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
   facts: ViewFacts,
+  // The session's environment its shell runs run in, which stays in the host.
+  environment: SessionEnvironment,
   sources: Subscribed,
 ): Declaration {
   const pane = facts.hints.tmux ?? null;
@@ -329,11 +340,24 @@ export function declareLanes(
       owners.sourceRuns,
       holds,
       sources.runs,
+      environment,
       (digest, take) => ({
         digest,
         fault: () => null,
         ...declare(`run ${shortDigest(digest)}`, take),
       }),
+    ),
+    // [LAW:one-source-of-truth] Each named variable as the session's
+    // environment holds it: set, unset, or why the host holds none.
+    env: new Map(
+      sources.env.map((name) => [
+        name,
+        settledLane<string>(
+          environment.kind === "failed"
+            ? failed(environment.reason, "read")
+            : variableOf(environment.value, name),
+        ),
+      ]),
     ),
     doctor: doctorLane(sources.doctor, (ask) =>
       declare("doctor", () =>
@@ -431,6 +455,7 @@ export function readingsOf(
         { reading: lane.current(), fault: lane.fault() },
       ]),
     ),
+    env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()])),
     doctor: lanes.doctor.current(),
   };
   return {

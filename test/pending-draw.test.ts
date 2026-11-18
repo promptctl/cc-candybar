@@ -36,6 +36,7 @@ import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import { exits, hangs, runsFor, shell } from "../src/proc/spawner-fake";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { TEST_ENV } from "./helpers/session-environment";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S = sessionIdOf("s");
 
@@ -77,7 +78,7 @@ function renderer(cfg: ValidatedConfig) {
   declareDslVariables(cfg, registry, "/tmp", EVERY_SCOPE);
   // The runs its sources name, held as the host holds a session's.
   const sourceRuns = new SourceRuns({ launcher, clock });
-  const runs = new CheckRuns(sourceRuns, registry, AT);
+  const runs = new CheckRuns(sourceRuns, registry, AT, TEST_ENV);
   const drawn = lastBinding(compiled.menuRuntime.action);
   return {
     store,
@@ -111,7 +112,7 @@ function renderer(cfg: ValidatedConfig) {
         },
         { onSegmentError: (id, message) => errors.push(`${id}: ${message}`) },
         selectionFor(cfg),
-        (digest) => runs.run(digest),
+        runs.readings,
       );
       return {
         frame,

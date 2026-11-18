@@ -43,6 +43,7 @@ import {
 } from "./daemon-log";
 import { until } from "./until";
 import { fieldOf, fieldsOf } from "../../src/utils/logfmt";
+import { TEST_ENV } from "./session-environment";
 
 // The argv a client sends: binary path first, as parseRenderArgs expects.
 export const configFlag = (p: string): string[] => [
@@ -138,6 +139,8 @@ async function renderAnswer(
         v: PROTOCOL_VERSION,
         kind: "render",
         deadline: now() + replyBudgetMs,
+        // Like a real client, it reports the environment it was started in.
+        env: TEST_ENV,
         ...request,
       },
       replyBudgetMs,
@@ -238,6 +241,7 @@ export function renderBody(
     // points CLAUDE_CONFIG_DIR at an empty dir, so no test daemon reads the
     // host's Claude Code settings. A case's own hints win.
     claudeConfigDir: detectClaudeConfigDir(process.env, cwd),
+    env: TEST_ENV,
     ...hints,
   };
 }

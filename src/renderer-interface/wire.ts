@@ -52,17 +52,6 @@ export interface RendererBoot {
   readonly linkKey: Asked<string>;
 }
 
-// The host's environment as a boot carries it: its set variables.
-export function bootEnv(
-  env: Readonly<NodeJS.ProcessEnv>,
-): Readonly<Record<string, string>> {
-  return Object.fromEntries(
-    Object.entries(env).flatMap(([name, value]) =>
-      value === undefined ? [] : [[name, value]],
-    ),
-  );
-}
-
 // A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
 export type ReachPath = string;
 

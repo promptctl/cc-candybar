@@ -110,6 +110,9 @@ export interface WorldState {
   readonly builtins: BuiltinFacts;
   readonly sources: Readonly<Record<SourceId, Fact<SourceValue>>>;
   readonly runs: Readonly<Record<string, RunFact>>;
+  // Each variable the session's `env` sources name, from its environment:
+  // those alone, since an environment holds keys and tokens.
+  readonly env: Readonly<Record<string, Fact<string>>>;
   // The doctor run the session's renderer subscribes to, as the host read it
   // (src/daemon/cache/doctor.ts); absent while it subscribes to none.
   readonly doctor: Fact<DoctorReading>;

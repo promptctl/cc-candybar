@@ -3,7 +3,9 @@
 // request, kept in the host's state directory, so a click after a restart,
 // before the session's next request, still has the config it acts on. What
 // its client reports now (pane, terminal) is the newest request's, held in
-// memory by the frame feeds, and never kept here.
+// memory by the frame feeds, and never kept here. The session's environment
+// is held here in memory alone, never written: it carries keys and tokens,
+// and a click finds it here after the collector has retired the session.
 
 import { isAbsolute } from "node:path";
 import {
@@ -14,6 +16,10 @@ import {
   type SessionContext,
 } from "../renderer-interface/request-context.js";
 import type { SessionId } from "./foundations/session-id.js";
+import {
+  NOT_HEARD,
+  type SessionEnvironment,
+} from "./foundations/session-env.js";
 import { originOfRecord, originRecord } from "./foundations/render-origin.js";
 import type {
   SessionFileKind,
@@ -65,6 +71,8 @@ export class SessionBook {
   // [LAW:types-are-the-program] Insertion order is the order each session
   // was last heard in, which the bound drops the oldest of.
   private book = new Map<SessionId, DurableContext>();
+  // The environment of each session heard since the daemon started.
+  private readonly environments = new Map<SessionId, SessionEnvironment>();
   // [LAW:no-ambient-temporal-coupling] The file is written only while open:
   // before the load, a save would land over the book the daemon before it
   // flushed, unread; after the close, over the file a next daemon has taken
@@ -88,8 +96,9 @@ export class SessionBook {
 
   // The session's newest request: what it says the session is, saved when
   // it moved.
-  heard(req: CheckedRenderRequest): void {
+  heard(req: CheckedRenderRequest, environment: SessionEnvironment): void {
     const session = req.hookData.session_id;
+    this.environments.set(session, environment);
     const durable = durableOf(req);
     const held = this.book.get(session);
     this.book.delete(session);
@@ -111,6 +120,12 @@ export class SessionBook {
     return durable === undefined ? null : { session, durable, live: null };
   }
 
+  // [LAW:one-source-of-truth] The environment a program the host runs for
+  // the session starts from: its newest request's, or why the host has none.
+  environmentOf(session: SessionId): SessionEnvironment {
+    return this.environments.get(session) ?? NOT_HEARD;
+  }
+
   close(): void {
     this.storage.flush();
     this.phase = "closed";
@@ -120,6 +135,7 @@ export class SessionBook {
     for (const oldest of this.book.keys()) {
       if (this.book.size <= MAX_SESSIONS) break;
       this.book.delete(oldest);
+      this.environments.delete(oldest);
     }
   }
 }

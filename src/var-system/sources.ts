@@ -59,6 +59,7 @@ import {
   type SourceRead,
 } from "../facts/source-identity.js";
 import { UNREAD_RUN, type RunFact } from "../facts/world-state.js";
+import type { Fact } from "../facts/fact.js";
 
 export type { ReadMode } from "../facts/source-identity.js";
 
@@ -115,6 +116,9 @@ export interface ShellOptions {
   // cwd. Required, because the daemon is detached — its
   // own cwd is whichever shell spawned it, never the session's.
   readonly cwd: string;
+  // The variables the command runs in, as a sorted set of names: the host
+  // reads their values from the session's environment.
+  readonly env: readonly string[];
   readonly cache: CachePolicy;
   readonly parse: SourceParse;
 }
@@ -194,6 +198,8 @@ export interface InputSource {
   session(): SessionId;
   read(path: string): Resolved;
   run(digest: string): RunFact;
+  // A variable of the session's environment, as the host handed it in.
+  env(name: string): Fact<string>;
   drawnAt(): ColorDepth;
 }
 
@@ -210,6 +216,7 @@ const UNBOUND: InputSource = {
   },
   read: () => pendingOf("unread"),
   run: () => UNREAD_RUN,
+  env: () => pendingOf("unread"),
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -406,6 +413,18 @@ export class SourceRegistry {
   // The names of this registry's own async sources (shell, file), whose
   // stored values `published` reads.
   private readonly sourceNames = observable.array<string>([], { deep: false });
+  // The variables this registry's `env` sources read.
+  private readonly envNames = observable.array<string>([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry needs of the session's
+  // environment: each variable once, sorted, so an output is the same
+  // whatever order a config declares in.
+  private readonly envNow = computed(
+    (): readonly string[] => [...new Set(this.envNames)].sort(),
+    { equals: compareStructural },
+  );
+  envSubscriptions(): readonly string[] {
+    return this.envNow.get();
+  }
   // [LAW:one-source-of-truth] What this registry's sources have published, as
   // one value that changes exactly when one of their stored values or
   // standing faults does: the store writes a value only when its own compare
@@ -441,10 +460,6 @@ export class SourceRegistry {
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
-    // [LAW:one-source-of-truth] The environment an `env` source reads: the
-    // daemon's host, handed in by whatever builds the registry. A registry built
-    // without one reads every variable as unset, and says so on the source.
-    private readonly env: Readonly<Record<string, string | undefined>> = {},
   ) {
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {}));
@@ -464,7 +479,6 @@ export class SourceRegistry {
       this.defaultEmptyValue,
       this.sessionState,
       this,
-      this.env,
     );
   }
 
@@ -567,23 +581,30 @@ export class SourceRegistry {
     }
   }
 
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
+  // env: a variable of the session's environment, which the host holds and
+  // hands in as this one variable's value (`InputSource.env`). Pending until
+  // it is handed in; an unset variable is the fallback, with the reason on
+  // the variable. Always a string: env vars are text by nature.
   declareEnv(name: string, envVar: string, varDefault?: string): void {
-    const raw = this.env[envVar];
-    if (raw !== undefined) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    // Env var absent: apply fallback chain, record last_error.
-    const fallback =
-      varDefault !== undefined
-        ? varDefault
-        : typeof this.defaultEmptyValue === "string"
-          ? this.defaultEmptyValue
-          : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    runInAction(() => this.envNames.push(envVar));
+    this.cleanups.push(
+      reaction(
+        () => this.inputs.get().env(envVar),
+        (fact) => {
+          if (fact.kind === "pending") return;
+          const { at: _at, ...outcome } = fact;
+          const read: Outcome<string> =
+            outcome.kind === "absent"
+              ? failed(`env var "${envVar}" is not set`, "read")
+              : outcome;
+          this.noteOutcome(name, read);
+          this.store.setBox(name, orElse(read, fallback));
+        },
+        { fireImmediately: true },
+      ),
+    );
   }
 
   // ─── Async source kinds ───────────────────────────────────────────────────
@@ -592,7 +613,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      { kind: "shell", command, cwd: opts.cwd },
+      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
       opts.cache,
       opts.parse,
     );

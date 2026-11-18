@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { productionLaneEdge } from "../src/daemon/lane-edge";
+import { NOT_HEARD } from "../src/daemon/foundations/session-env";
 import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { systemTimekeeper } from "../src/time";
@@ -84,7 +85,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       closing.signal,
       systemTimekeeper,
-      processProbe,
+      processProbe, () => NOT_HEARD
     );
 
     const opened = await edge.openBarPane(hint, barPane(), {});
@@ -95,7 +96,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe,
+      processProbe, () => NOT_HEARD
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
@@ -118,7 +119,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe,
+      processProbe, () => NOT_HEARD
     );
 
     await edge.openBarPane(hint, barPane(), {});
@@ -134,7 +135,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe,
+      processProbe, () => NOT_HEARD
     );
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(

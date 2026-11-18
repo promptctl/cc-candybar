@@ -377,8 +377,8 @@ export type Act = { readonly id: EffectId } & (
       readonly action: string;
       readonly program: string;
       readonly args: readonly string[];
-      // Set over the launcher's inherited environment; null unsets.
-      readonly env: Readonly<Record<string, string | null>>;
+      // Laid over the session's environment, which the host holds.
+      readonly env: Readonly<Record<string, string>>;
       readonly cwd: string;
       readonly refreshes: readonly RunRefresh[];
     }
@@ -451,6 +451,9 @@ export type Subscription =
       readonly folder: string;
     }
   | { readonly kind: "run"; readonly run: Run }
+  // A variable an `env` source reads, from the session's environment, which
+  // the host holds and hands in as that one variable's value.
+  | { readonly kind: "env"; readonly name: string }
   | { readonly kind: "doctor"; readonly ask: DoctorAsk };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the

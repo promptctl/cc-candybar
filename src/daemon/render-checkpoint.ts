@@ -18,6 +18,11 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { rateLimitsSeen } from "./render-sightings";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import { parseClientDeadline } from "./foundations/request-deadline.js";
+import {
+  sessionEnvironment,
+  type Environment,
+  type SessionEnvironment,
+} from "./foundations/session-env.js";
 
 // [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
@@ -105,7 +110,15 @@ export function checkRenderRequest(
   stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
   log: DaemonLogger,
   home: string,
-): { ok: true; req: CheckedRenderRequest } | { ok: false; problems: string[] } {
+):
+  | {
+      ok: true;
+      req: CheckedRenderRequest;
+      // Beside the request, never in it: the request is the renderer's
+      // context, and no renderer input carries an environment.
+      environment: SessionEnvironment;
+    }
+  | { ok: false; problems: string[] } {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
   // top-level keys. Required-field problems are *protocol* failures
@@ -164,6 +177,8 @@ export function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
+  const env = parseReportedEnv((req as { env?: unknown }).env);
+  if (env.kind === "refused") wireProblems.push(env.problem);
   const encoding = parseRenderEncoding(req.encoding);
   if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
@@ -171,7 +186,12 @@ export function checkRenderRequest(
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId.ok || !encoding.ok)
+  if (
+    wireProblems.length > 0 ||
+    !sessionId.ok ||
+    !encoding.ok ||
+    env.kind === "refused"
+  )
     return { ok: false, problems: wireProblems };
   // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
   // request carries the field, and a line each rotated the log in minutes.
@@ -190,10 +210,22 @@ export function checkRenderRequest(
   // process.cwd(), so config resolution depends only on request data — the
   // daemon's own working directory must not influence output.
   const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
+  const { env: _env, ...rest } = req;
   return {
     ok: true,
+    environment:
+      env.kind === "absent"
+        ? { kind: "failed", reason: UNREPORTED }
+        : {
+            kind: "ok",
+            value: sessionEnvironment(env.env, {
+              sessionId: sessionId.id,
+              projectDir: req.hookData.workspace.project_dir,
+              claudeConfigDir: hints.claudeConfigDir,
+            }),
+          },
     req: {
-      ...req,
+      ...rest,
       hookData: { ...req.hookData, session_id: sessionId.id },
       deadline,
       encoding: encoding.encoding,
@@ -207,4 +239,31 @@ export function checkRenderRequest(
       refusedArgs,
     } as CheckedRenderRequest,
   };
+}
+
+// A client older than the host sends no environment, and the host runs no
+// program for its session in one of its own.
+const UNREPORTED =
+  "this session's client sent no environment, so it is older than the daemon; update cc-candybar so its programs can run";
+
+// [LAW:parse-dont-validate] The environment a client sent: absent from a
+// client too old to send one, else every variable a string.
+function parseReportedEnv(
+  raw: unknown,
+):
+  | { readonly kind: "absent" }
+  | { readonly kind: "reported"; readonly env: Environment }
+  | { readonly kind: "refused"; readonly problem: string } {
+  if (raw === undefined) return { kind: "absent" };
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    Array.isArray(raw) ||
+    !Object.values(raw).every((value) => typeof value === "string")
+  )
+    return {
+      kind: "refused",
+      problem: "request 'env' is not an object of strings",
+    };
+  return { kind: "reported", env: raw as Environment };
 }

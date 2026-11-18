@@ -85,7 +85,6 @@ function makeCache(budgetBytes: number, maxEntries?: number) {
     {
       clock: systemTimekeeper,
       locations: locs(),
-      env: HOST.env,
       storage: NO_PLUGIN_STORAGE,
       signer: TEST_SIGNER,
       gates: bareGates(),

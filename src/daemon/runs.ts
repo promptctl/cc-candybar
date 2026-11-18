@@ -11,6 +11,7 @@ import {
   type Launcher,
 } from "../proc/launcher.js";
 import type { SessionId } from "./foundations/session-id.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { Resume } from "../utils/keyed-source.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { valueOf } from "../utils/logfmt.js";
@@ -44,6 +45,9 @@ export interface RunsDeps {
   // [LAW:one-source-of-truth] The storage owner's one supersede.
   readonly supersede: (folder: string, sessionId: SessionId) => Resume;
   readonly launch: Launcher["launch"];
+  // [LAW:one-source-of-truth] The environment a session's program starts
+  // from: the session book's.
+  readonly environmentOf: (session: SessionId) => SessionEnvironment;
   // [LAW:effects-at-boundaries] The daemon's clock, which times each run.
   readonly clock: Pick<Timekeeper, "monotonic">;
   readonly timeoutMs?: number;
@@ -98,6 +102,17 @@ export class Runs {
   // fresh.
   start(run: RunAct): Promise<RunEnd> {
     if (this.closed) throw new Error("run owner used after close");
+    // [LAW:no-silent-failure] A session whose environment the host does not
+    // hold runs nothing: the host's own environment is never a session's.
+    const environment = this.deps.environmentOf(run.session);
+    if (environment.kind === "failed") {
+      this.failed++;
+      const reason = `not run: ${environment.reason}`;
+      return Promise.resolve({
+        outcome: { kind: "failed", reason },
+        said: `program=${valueOf(run.program)} ended=refused — ${reason}`,
+      });
+    }
     // [LAW:no-ambient-temporal-coupling] Superseded before the program
     // starts, so no draw after the click shows the value from before it.
     const resumes = run.refreshes.map((r) =>
@@ -115,6 +130,8 @@ export class Runs {
         // looked up on PATH.
         bin: program.includes("/") ? path.resolve(run.cwd, program) : program,
         args: [...args],
+        // The program's own variables over its session's environment.
+        environment: environment.value,
         envOverlay: run.env,
         cwd: run.cwd,
         timeoutMs: this.timeoutMs,

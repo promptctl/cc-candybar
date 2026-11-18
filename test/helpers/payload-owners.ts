@@ -82,6 +82,7 @@ import {
 } from "../../src/daemon/cache/transcript-lanes";
 import { RefreshLedger } from "../../src/utils/refresh-ledger";
 import type { DaemonLogger } from "../../src/utils/logger";
+import { TEST_ENVIRONMENT } from "./session-environment";
 
 type Answer<T> = Outcome<T> | Promise<Outcome<T>>;
 
@@ -445,7 +446,12 @@ function openHome(
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
   const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
-  const { lanes, faults } = declareLanes(keyed, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null });
+  const { lanes, faults } = declareLanes(keyed, holds, facts, TEST_ENVIRONMENT, {
+    plugins: new Map(),
+    runs: new Map(),
+    env: [],
+    doctor: null,
+  });
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   // The home ends what it built: its holds, and the trigger whose period a

@@ -47,6 +47,7 @@ import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import { CheckRuns } from "../src/check-runs";
+import { TEST_ENV } from "./helpers/session-environment";
 import {
   DiscoveringCache,
   loadDiscovered,
@@ -597,7 +598,6 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),
-    env: host.env,
     signer: TEST_SIGNER,
     gates: bareGates(),
     sessionState: new SessionState(),
@@ -657,7 +657,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -705,7 +704,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -763,7 +761,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -782,7 +779,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -940,7 +936,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        env: host.env,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -999,7 +994,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1044,7 +1038,7 @@ describe("an installed plugin", () => {
           const runs = new CheckRuns(
             sourceRuns,
             held.view.registry,
-            instantOf(new Date()),
+            instantOf(new Date()), TEST_ENV
           );
           try {
             expect(await runs.settled(AbortSignal.timeout(5000))).toEqual([]);
@@ -1065,7 +1059,7 @@ describe("an installed plugin", () => {
                 },
                 undefined,
                 undefined,
-                (digest) => runs.run(digest),
+                runs.readings,
               ).frame,
             );
           } finally {
@@ -1104,7 +1098,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        env: host.env,
         signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
@@ -1648,7 +1641,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -1687,7 +1679,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        env: host.env,
         storage: NO_PLUGIN_STORAGE,
         signer: TEST_SIGNER,
         gates: bareGates(),
@@ -1803,7 +1794,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -1884,7 +1874,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
@@ -2046,7 +2035,6 @@ describe("a repo's plugin beside an installed one of its name", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      env: host.env,
       signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),

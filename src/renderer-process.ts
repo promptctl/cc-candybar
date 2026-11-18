@@ -129,7 +129,6 @@ function booted(
       stored: boot.stored,
       linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
       locations: locations(host),
-      env: host.env,
       home: host.home,
       gates: daemonGates(),
       memoryLimitBytes: boot.memoryLimitBytes,

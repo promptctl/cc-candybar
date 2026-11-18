@@ -62,6 +62,7 @@ import {
 import { awaitsReading } from "../src/facts/awaited";
 import { TRANSCRIPT_PERIOD } from "../src/daemon/cache/transcript-lanes";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
+import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 
 const SID = sessionIdOf("s1");
 
@@ -200,7 +201,7 @@ describe("a request", () => {
     const { owners, held, land } = handLanded();
     land("host.name", ok("box"));
     const { collector, handedIn } = collectorOver(owners);
-    const document = collector.requested(requestAt("/a"));
+    const document = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect([...held].sort()).toEqual(
       ["git:/a", "host.name", "host.user", "today"].sort(),
     );
@@ -215,9 +216,9 @@ describe("a request", () => {
   test("naming another key takes it and releases the one it left; the same keys again change nothing", () => {
     const { owners, held } = handLanded();
     const { collector, handedIn } = collectorOver(owners);
-    const first = collector.requested(requestAt("/a"));
-    expect(collector.requested(requestAt("/a"))).toBe(first);
-    collector.requested(requestAt("/b"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+    expect(collector.requested(requestAt("/a"), TEST_ENVIRONMENT)).toBe(first);
+    collector.requested(requestAt("/b"), TEST_ENVIRONMENT);
     expect(held.has("git:/b")).toBe(true);
     expect(held.has("git:/a")).toBe(false);
     expect(handedIn).toEqual([]);
@@ -257,7 +258,7 @@ describe("a session's transcript", () => {
   test("a first request waits for the lanes' first read, which hands in the world state that answers it", async () => {
     const { owners } = followed();
     const { collector, clock, handedIn } = collectorOver(owners);
-    const first = collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(first.builtins.metrics).toMatchObject(pendingOf("unread"));
     expect(awaitsReading(first, [])).toBe(true);
     await clock.settle(0);
@@ -269,7 +270,7 @@ describe("a session's transcript", () => {
   test("an append lands in the world state on the collector's trigger, with no request", async () => {
     const { owners, append } = followed();
     const { collector, clock, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     await clock.settle(0);
     append();
     await clock.settle(TRANSCRIPT_PERIOD.okMs);
@@ -279,10 +280,10 @@ describe("a session's transcript", () => {
   test("a request on a warm session waits on nothing, and reads nothing", async () => {
     const { owners, append } = followed();
     const { collector, clock } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     await clock.settle(0);
     append();
-    const warm = collector.requested(requestAt("/a"));
+    const warm = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(awaitsReading(warm, [])).toBe(false);
     // What the transcript said when the trigger last read it, not the append
     // this request arrived after: the trigger reads it, not the request.
@@ -303,7 +304,7 @@ describe("a request's wait", () => {
     const { owners, land } = handLanded();
     const { collector } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     let ended = false;
     const waiting = collector
       .settled(SID, new AbortController().signal)
@@ -319,7 +320,7 @@ describe("a request's wait", () => {
     const { owners, land } = handLanded();
     const { collector } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     const signal = new AbortController();
     const waiting = collector.settled(SID, signal.signal);
     signal.abort();
@@ -331,7 +332,7 @@ describe("an owner landing", () => {
   test("that moves the world state hands it in once, and one that moves nothing hands in nothing", () => {
     const { owners, land } = handLanded();
     const { collector, handedIn } = collectorOver(owners);
-    const first = collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     land("host.name", ok("box"));
     expect(handedIn).toEqual([
       {
@@ -351,8 +352,8 @@ describe("an owner landing", () => {
   test("after a request moved the keys, is read at the new keys only", () => {
     const { owners, land } = handLanded();
     const { collector, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
-    collector.requested(requestAt("/b"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
+    collector.requested(requestAt("/b"), TEST_ENVIRONMENT);
     land("git:/a", ok({}));
     expect(handedIn).toEqual([]);
   });
@@ -375,7 +376,7 @@ describe("a stamp that throws", () => {
       hostService: { declareName: failing, declareUser: failing },
     } as unknown as RenderPayloadDeps;
     const { collector, handedIn, logged } = collectorOver(owners);
-    const first = collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     runInAction(() => broken.set(true));
     expect(handedIn).toHaveLength(1);
     const failedDoc = (handedIn[0] as { worldState: WorldState }).worldState;
@@ -413,7 +414,7 @@ describe("owners that keep failing to read", () => {
     const { collector, handedIn } = collectorOver(owners, {
       update: () => newer.get(),
     });
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     runInAction(() => broken.set(true));
     expect(handedIn).toHaveLength(1);
     runInAction(() => newer.set(pendingOf("superseded")));
@@ -428,7 +429,7 @@ describe("the renderer's subscriptions", () => {
   test("a plugin source added is declared and read into the world state; one dropped is released after that output", () => {
     const { owners, held, land } = handLanded();
     const { collector, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     collector.subscribed(subscribing(SID, "/plugin"));
     expect(held.has("source:/plugin")).toBe(true);
     land("source:/plugin", ok({ home: "/h" }));
@@ -463,7 +464,7 @@ describe("the renderer's subscriptions", () => {
         [SID]: [{ kind: "doctor", ask: { run: 1 } as unknown as DoctorAsk }],
       },
     };
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     collector.subscribed(asking);
     land("doctor", reading("/p"));
     collector.subscribed({ sources: {} });
@@ -485,7 +486,7 @@ describe("the renderer's subscriptions", () => {
   test("a doctor lane that fails answers a failed reading of the run it was declared for", () => {
     const { owners, land } = handLanded();
     const { collector, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     collector.subscribed({
       sources: {
         [SID]: [{ kind: "doctor", ask: { run: 7 } as unknown as DoctorAsk }],
@@ -521,11 +522,11 @@ describe("the renderer's subscriptions", () => {
     const subscription: Pick<Subscriptions, "sources"> = {
       sources: { [SID]: [{ kind: "run" as const, run }] },
     };
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     collector.subscribed(subscription);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     collector.subscribed(subscription);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(logged.filter((line) => line.includes("run refused"))).toEqual([
       expect.stringMatching(
         /^warn run refused .* reason="file\.path must be an absolute path/,
@@ -550,7 +551,7 @@ describe("the renderer's subscriptions", () => {
   test("a session named like an object's inherited member subscribes to nothing it was not handed", () => {
     const { owners } = handLanded();
     const { collector, logged } = collectorOver(owners);
-    collector.requested(requestAt("/a", sessionIdOf("constructor")));
+    collector.requested(requestAt("/a", sessionIdOf("constructor")), TEST_ENVIRONMENT);
     expect(() => collector.subscribed({ sources: {} })).not.toThrow();
     expect(logged.filter((line) => !line.startsWith("info"))).toEqual([]);
   });
@@ -571,7 +572,7 @@ describe("the sweep", () => {
     const { collector, clock, handedIn } = collectorOver(owners, {
       retired: async () => ({ kind: "threw" }),
     });
-    const first = collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);
     expect(held.size).toBeGreaterThan(0);
@@ -583,14 +584,14 @@ describe("the sweep", () => {
     // The last session gone, the sweep stops.
     expect(clock.pending()).toBe(0);
     // The renderer let go of the session's document, so seq 1 is taken.
-    expect(collector.requested(requestAt("/a")).seq).toBe(first.seq);
+    expect(collector.requested(requestAt("/a"), TEST_ENVIRONMENT).seq).toBe(first.seq);
   });
 
   test("a wait on a session the sweep retires ends with it", async () => {
     const { owners, land } = handLanded();
     const { collector, clock } = collectorOver(owners);
     land("host.name", UNREAD);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     let ended = false;
     const waiting = collector
       .settled(SID, new AbortController().signal)
@@ -606,7 +607,7 @@ describe("the sweep", () => {
     const { collector, clock, handedIn } = collectorOver(owners, {
       watched: new Set([SID]),
     });
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(3 * SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 0 });
@@ -615,7 +616,7 @@ describe("the sweep", () => {
   test("keeps a clicked session through the next sweep, as a request does", () => {
     const { owners } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(SESSION_SWEEP_MS);
     collector.clicked(SID);
     clock.advance(SESSION_SWEEP_MS);
@@ -627,7 +628,7 @@ describe("the sweep", () => {
   test("keeps a session a turn holds for as long as it holds it, and the first sweep after it settles with no request since retires it", () => {
     const { owners } = handLanded();
     const { collector, clock, handedIn } = collectorOver(owners);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     const release = collector.holding(SID);
     clock.advance(5 * SESSION_SWEEP_MS);
     expect(handedIn).toEqual([]);
@@ -651,7 +652,7 @@ describe("the sweep", () => {
     const { owners, held } = handLanded();
     const { retired, answer } = heldRetires();
     const { collector, clock, logged } = collectorOver(owners, { retired });
-    const first = collector.requested(requestAt("/a"));
+    const first = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(2 * SESSION_SWEEP_MS);
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
 
@@ -659,7 +660,7 @@ describe("the sweep", () => {
     expect(held.size).toBe(0);
     expect(logged.filter((line) => line.startsWith("error"))).toEqual([]);
 
-    const revived = collector.requested(requestAt("/a"));
+    const revived = collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     expect(revived.seq).toBe(first.seq + 1);
     expect(revived.sources).toHaveProperty("/plugin");
     expect(held.has("source:/plugin")).toBe(true);
@@ -672,9 +673,9 @@ describe("the sweep", () => {
     const { owners } = handLanded();
     const { retired, answer } = heldRetires();
     const { collector, clock } = collectorOver(owners, { retired });
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(2 * SESSION_SWEEP_MS);
-    collector.requested(requestAt("/a"));
+    collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     clock.advance(2 * SESSION_SWEEP_MS);
     expect(collector.stats()).toEqual({ sessions: 1, retiring: 1 });
 
@@ -769,7 +770,7 @@ describe("over the real repository owner", () => {
       log: () => {},
     } as unknown as RenderPayloadDeps;
     const { collector, handedIn } = collectorOver(owners);
-    collector.requested(requestAt(dir));
+    collector.requested(requestAt(dir), TEST_ENVIRONMENT);
     expect(git.getStats().held).toBe(1);
     await jest.advanceTimersByTimeAsync(0);
     expect(inner.prLookups).toBe(1);
@@ -782,7 +783,7 @@ describe("over the real repository owner", () => {
         },
       },
     });
-    collector.requested(requestAt(dir));
+    collector.requested(requestAt(dir), TEST_ENVIRONMENT);
     expect(git.getStats()).toMatchObject({ held: 1, hits: 1, misses: 1 });
     expect(inner.prLookups).toBe(1);
   });
@@ -823,7 +824,12 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, { plugins: new Map(), runs: new Map(), doctor: null }),
+    declareLanes(owners, holds, facts, TEST_ENVIRONMENT, {
+      plugins: new Map(),
+      runs: new Map(),
+      env: [],
+      doctor: null,
+    }),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
@@ -849,7 +855,7 @@ test("a run whose declaration throws answers its failure, and every other run an
   const holds = new Holds();
   const runAt = (command: string) =>
     runOf({
-      read: { kind: "shell", command, cwd: "/w" },
+      read: { kind: "shell", command, cwd: "/w", env: [] },
       parse: { kind: "text" },
       refresh: { kind: "never" },
     });
@@ -870,12 +876,13 @@ test("a run whose declaration throws answers its failure, and every other run an
     },
   } as unknown as KeyedOwners;
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, requestAt("/w"), {
+    declareLanes(owners, holds, requestAt("/w"), TEST_ENVIRONMENT, {
       plugins: new Map(),
       runs: new Map([
         [broken.digest, judgeRun(broken)],
         [fine.digest, judgeRun(fine)],
       ]),
+      env: [],
       doctor: null,
     }),
   );

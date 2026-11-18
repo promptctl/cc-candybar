@@ -639,6 +639,9 @@ export interface FileVarDecl {
 export interface ShellVarDecl {
   readonly kind: "shell";
   readonly command: string;
+  // The environment variables the command reads beyond the base set
+  // (src/config/shell-env.ts), from the session's environment.
+  readonly env?: readonly string[];
   readonly parse?: ParseDecl;
   readonly cache: CacheDecl;
   readonly default?: SourceDefault;

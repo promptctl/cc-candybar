@@ -35,7 +35,7 @@ export type CheckedHookData = Omit<ClaudeHookData, "session_id"> & {
 declare const CHECKED: unique symbol;
 export type CheckedRenderRequest = Omit<
   ReaderRenderRequest,
-  "deadline" | "encoding" | "hookData"
+  "deadline" | "encoding" | "hookData" | "env"
 > & {
   readonly hookData: CheckedHookData;
   readonly deadline: ClientDeadline;
@@ -106,5 +106,7 @@ export type DeclaredSources = ReadonlyMap<string, string>;
 export interface Subscribed {
   readonly plugins: DeclaredSources;
   readonly runs: ReadonlyMap<string, Judged>;
+  // The variables its `env` sources name, sorted.
+  readonly env: readonly string[];
   readonly doctor: DoctorAsk | null;
 }

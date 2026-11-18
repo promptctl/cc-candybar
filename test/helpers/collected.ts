@@ -14,6 +14,7 @@ import type { ViewFacts } from "../../src/renderer-interface/request-context";
 import { WorldStates } from "../../src/renderer/world-states";
 import { systemTimekeeper } from "../../src/time";
 import { daemonFactsOf } from "./daemon-facts";
+import { TEST_ENVIRONMENT } from "./session-environment";
 
 // What the renderer's turns read of the cache: what a retire closes, and what
 // every output says the open views need read.
@@ -85,7 +86,7 @@ export function collected(
       routed = host;
     },
     config: (facts, hold) => {
-      worldStates.take(collector.requested(facts));
+      worldStates.take(collector.requested(facts, TEST_ENVIRONMENT));
       const held = hold();
       collector.subscribed(cache().subscriptions());
       return held;

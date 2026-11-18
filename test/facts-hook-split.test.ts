@@ -153,7 +153,12 @@ test("two hooks that differ only in their instantaneous fields read one document
       SID,
       readingsOf(
         inputs,
-        settledLanes(ABSENT, { plugins: new Map(), runs: new Map(), doctor: null }),
+        settledLanes(ABSENT, {
+          plugins: new Map(),
+          runs: new Map(),
+          env: [],
+          doctor: null,
+        }),
       ),
       daemonFactsOf(),
       AT,

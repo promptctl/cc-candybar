@@ -7,7 +7,9 @@ import {
   sessionIdOf,
   type SessionId,
 } from "../../src/daemon/foundations/session-id";
+import { NOT_HEARD } from "../../src/daemon/foundations/session-env";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import { TEST_ENVIRONMENT } from "../helpers/session-environment";
 import { SESSION_BOOK_FILE, SessionBook } from "../../src/daemon/session-book";
 import type { SessionFileStorage } from "../../src/daemon/session-state-file";
 import type {
@@ -144,7 +146,7 @@ describe("the book's file", () => {
       claudeConfigDir: "/u/.claude-x",
     });
     const { saves, storage: kept } = storage();
-    loaded(kept).heard(req);
+    loaded(kept).heard(req, TEST_ENVIRONMENT);
     expect(
       JSON.parse(JSON.stringify(SESSION_BOOK_FILE.record(saves.at(-1)![S1]!))),
     ).toEqual({
@@ -164,7 +166,7 @@ describe("the book", () => {
     );
     book.load();
     const req = request("s1");
-    book.heard(req);
+    book.heard(req, TEST_ENVIRONMENT);
     expect(book.contextOf(S1, req)).toEqual({
       session: S1,
       durable: durable("/p"),
@@ -178,6 +180,20 @@ describe("the book", () => {
     expect(book.contextOf(sessionIdOf("never"), null)).toBeNull();
   });
 
+  test("a session's environment is the one it last reported, held in memory and never saved", () => {
+    const { storage: kept, saves } = storage(new Map([[S2, durable("/q")]]));
+    const book = loaded(kept);
+    book.heard(request("s1"), { kind: "ok", value: { TOKEN: "old" } });
+    book.heard(request("s1"), { kind: "ok", value: { TOKEN: "secret" } });
+    expect(book.environmentOf(S1)).toEqual({
+      kind: "ok",
+      value: { TOKEN: "secret" },
+    });
+    expect(JSON.stringify(saves)).not.toContain("secret");
+    // Read back from the file alone, a session has no environment to run in.
+    expect(book.environmentOf(S2)).toEqual(NOT_HEARD);
+  });
+
   test("a session heard before the load keeps what it said over what the file holds", () => {
     const book = new SessionBook(
       storage(
@@ -187,7 +203,7 @@ describe("the book", () => {
         ]),
       ).storage,
     );
-    book.heard(request("s1", "/new"));
+    book.heard(request("s1", "/new"), TEST_ENVIRONMENT);
     book.load();
     expect(book.contextOf(S1, null)?.durable).toEqual(durable("/new"));
     expect(book.contextOf(S2, null)?.durable).toEqual(durable("/q"));
@@ -196,17 +212,17 @@ describe("the book", () => {
   test("a request that says what the book holds is not saved again", () => {
     const { storage: kept, saves } = storage();
     const book = loaded(kept);
-    book.heard(request("s1", "/p", { termCols: 80 }));
-    book.heard(request("s1", "/p", { termCols: 120 }));
+    book.heard(request("s1", "/p", { termCols: 80 }), TEST_ENVIRONMENT);
+    book.heard(request("s1", "/p", { termCols: 120 }), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(2);
-    book.heard(request("s1", "/q"));
+    book.heard(request("s1", "/q"), TEST_ENVIRONMENT);
     expect(saves.at(-1)).toEqual({ [S1]: durable("/q") });
   });
 
   test("the load saves the merged book, so a save made before it never lands alone", () => {
     const { storage: kept, saves } = storage(new Map([[S2, durable("/q")]]));
     const book = new SessionBook(kept);
-    book.heard(request("s1", "/p"));
+    book.heard(request("s1", "/p"), TEST_ENVIRONMENT);
     book.load();
     expect(saves.at(-1)).toEqual({ [S2]: durable("/q"), [S1]: durable("/p") });
   });
@@ -214,8 +230,8 @@ describe("the book", () => {
   test("a request that moves only the Claude Code directory is saved again", () => {
     const { storage: kept, saves } = storage();
     const book = loaded(kept);
-    book.heard(request("s1", "/p"));
-    book.heard(request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }));
+    book.heard(request("s1", "/p"), TEST_ENVIRONMENT);
+    book.heard(request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(3);
     expect(saves.at(-1)).toEqual({
       [S1]: { ...durable("/p"), claudeConfigDir: "/u/.claude-x" },
@@ -253,7 +269,7 @@ describe("the book", () => {
   test("the book holds its newest sessions and drops the oldest", () => {
     const { storage: kept, saves } = storage();
     const book = loaded(kept);
-    for (let i = 0; i <= 256; i += 1) book.heard(request(`s${i}`, `/p${i}`));
+    for (let i = 0; i <= 256; i += 1) book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
     expect(Object.keys(saves.at(-1)!)).toHaveLength(256);
     expect(book.contextOf(sessionIdOf("s0"), null)).toBeNull();
     expect(book.contextOf(sessionIdOf("s256"), null)?.durable).toEqual(
@@ -264,26 +280,26 @@ describe("the book", () => {
   test("a close flushes the file, and nothing heard after it is saved", () => {
     const { storage: kept, saves, flushes } = storage();
     const book = loaded(kept);
-    book.heard(request("s1"));
+    book.heard(request("s1"), TEST_ENVIRONMENT);
     book.close();
     expect(flushes()).toBe(1);
-    book.heard(request("s2"));
+    book.heard(request("s2"), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(2);
   });
 
   test("nothing heard before the load is saved until the load has read the file", () => {
     const { storage: kept, saves } = storage();
     const book = new SessionBook(kept);
-    book.heard(request("s1"));
+    book.heard(request("s1"), TEST_ENVIRONMENT);
     expect(saves).toHaveLength(0);
   });
 
   test("a session heard again moves to the newest end, so the bound drops the one heard longest ago", () => {
     const { storage: kept } = storage();
     const book = loaded(kept);
-    for (let i = 0; i < 256; i += 1) book.heard(request(`s${i}`, `/p${i}`));
-    book.heard(request("s0", "/p0"));
-    book.heard(request("s256", "/p256"));
+    for (let i = 0; i < 256; i += 1) book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
+    book.heard(request("s0", "/p0"), TEST_ENVIRONMENT);
+    book.heard(request("s256", "/p256"), TEST_ENVIRONMENT);
     expect(book.contextOf(sessionIdOf("s0"), null)?.durable).toEqual(
       durable("/p0"),
     );
