@@ -1,3 +1,9 @@
+## [1.231.0](https://github.com/promptctl/cc-candybar/compare/v1.230.1...v1.231.0) (2026-11-18)
+
+### Features
+
+* **daemon:** a session's programs run in the environment its client sends (bco) ([#792](https://github.com/promptctl/cc-candybar/issues/792)) ([0967970](https://github.com/promptctl/cc-candybar/commit/0967970a05c571dcb920cf33268b2dcc19d6200b))
+
 ## [1.230.1](https://github.com/promptctl/cc-candybar/compare/v1.230.0...v1.230.1) (2026-11-18)
 
 ### Bug Fixes
