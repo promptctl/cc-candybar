@@ -52,7 +52,8 @@ export interface RendererBoot {
   readonly linkKey: Asked<string>;
 }
 
-// A reach's path in `AdapterToHost`, dotted for a reach in a group.
+// A reach's name in `AdapterToHost`, as a line carries it: a renderer of
+// another build can name one this host has not.
 export type ReachPath = string;
 
 export type HostLine =
@@ -108,44 +109,24 @@ export const RENDERER_LINES_CROSS: Crosses<
 // [LAW:types-are-the-program] Every reach `AdapterToHost` spells, each a
 // notice (`REACHES_CROSS`): a reach added there fails the build here until it
 // is listed.
-type ReachKinds<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: never[]) => unknown
-    ? "notice"
-    : ReachKinds<T[K]>;
-};
-
-export const REACH_KINDS: ReachKinds<AdapterToHost> = {
+export const REACH_KINDS: { readonly [K in keyof AdapterToHost]: "notice" } = {
   log: "notice",
   eventAnswered: "notice",
 };
 
 type Reach = (...args: readonly unknown[]) => unknown;
 
-// [LAW:single-enforcer] The one walk of the table: each reach's path and
-// kind, in the table's order.
-function reachesOf(table: object, prefix = ""): readonly ReachPath[] {
-  return Object.entries(table).flatMap(([key, value]) =>
-    typeof value === "string"
-      ? [`${prefix}${key}`]
-      : reachesOf(value as object, `${prefix}${key}.`),
-  );
-}
+const REACHES = Object.keys(REACH_KINDS) as readonly ReachPath[];
 
-const REACHES = reachesOf(REACH_KINDS);
-
-// The host's side of a reach: the function at its path in the host's parts.
+// The host's side of a reach: the function of its name in the host's parts.
 function reachAt(host: AdapterToHost, path: ReachPath): Reach {
-  const found = path
-    .split(".")
-    .reduce<unknown>(
-      (at, key) => (at as Record<string, unknown> | undefined)?.[key],
-      host,
-    );
-  // [LAW:no-silent-failure] A path the table does not hold is a renderer of
+  // [LAW:no-silent-failure] A name the table does not hold is a renderer of
   // another build's; it is said, never dropped.
-  if (typeof found !== "function")
+  // [LAW:one-source-of-truth] The table, not the host object, says which
+  // names are reaches, so an inherited key reaches nothing.
+  if (!Object.hasOwn(REACH_KINDS, path))
     throw new Error(`the renderer reached ${path}, which the host has not`);
-  return found as Reach;
+  return host[path as keyof AdapterToHost] as Reach;
 }
 
 // [LAW:single-enforcer] One splitter for a stream of lines: each chunk is
@@ -357,16 +338,9 @@ export function hostOverLines(
   send: (line: RendererLine) => void,
 ): AdapterToHost {
   const host: Record<string, unknown> = {};
-  for (const path of REACHES) {
-    const keys = path.split(".");
-    const leaf = keys.pop() as string;
-    const group = keys.reduce<Record<string, unknown>>(
-      (at, key) => (at[key] ??= {}) as Record<string, unknown>,
-      host,
-    );
-    group[leaf] = (...args: readonly unknown[]) =>
+  for (const path of REACHES)
+    host[path] = (...args: readonly unknown[]) =>
       send({ kind: "notice", reach: path, args });
-  }
   // [LAW:types-are-the-program] exception: built from `REACH_KINDS`, whose
   // type is `AdapterToHost`'s own shape, so every reach is here.
   return host as unknown as AdapterToHost;

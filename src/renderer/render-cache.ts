@@ -127,15 +127,16 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 
 // The count ceiling beside the byte budget: every entry holds a
 // SourceRegistry (fs watchers, TTL timers), a resource the byte budget does
-// not see. At the default memory limit
-// the bytes bind just short of it (~230 entries with no view); it is what
-// bounds watchers above it, when CC_CANDYBAR_RSS_LIMIT_MB is raised.
+// not see. At the default memory limit the bytes bind just short of it (~230
+// entries with no view); it is what bounds watchers above it, when
+// CC_CANDYBAR_RSS_LIMIT_MB is raised.
 export const MAX_ENTRIES = 256;
 
 // [LAW:single-enforcer] These are the cache-and-registry deps — session state
-// (for declareState atoms) among them. Daemon-owned data providers like the SessionUsageStore/git provider/etc. live in
-// the session source (src/renderer/session-source.ts) a view's payload is
-// derived through; they are not part of cache identity or lifecycle.
+// (for declareState atoms) among them. Daemon-owned data providers like the
+// SessionUsageStore/git provider/etc. live in the session source
+// (src/renderer/session-source.ts) a view's payload is derived through; they
+// are not part of cache identity or lifecycle.
 export interface RenderDeps<S extends ViewSource = ViewSource> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;

@@ -346,12 +346,25 @@ describe("ManagedStorage watches", () => {
     expect(r.storage.stats().folders).toBe(1);
   });
 
-  test("a folder nothing declares any more keeps its watch until the owner closes", () => {
+  test("a folder nothing declares any more keeps its watch through periods and catch-ups until the owner closes", () => {
     const r = rig();
     r.open().close();
+    r.fileEvents.notify({ kind: "period" });
+    r.fileEvents.notify({ kind: "caught-up", since: 0 });
     expect(r.counters.watchersClosed).toBe(0);
+    expect(r.storage.stats().folders).toBe(1);
     r.storage.close();
     expect(r.counters.watchersClosed).toBe(1);
+    expect(r.storage.stats().folders).toBe(0);
+  });
+
+  // A render that was mid-wait as the daemon closed: no close comes after it.
+  test("a declaration after the owner closes opens no watch", async () => {
+    const r = rig();
+    r.storage.close();
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toMatchObject({ kind: "failed" });
+    expect(r.counters.watchersOpened).toBe(0);
     expect(r.storage.stats().folders).toBe(0);
   });
 
@@ -400,6 +413,19 @@ describe("ManagedStorage watches", () => {
     );
     expect(r.counters.watchersOpened).toBe(2);
     expect(r.counters.watchersClosed).toBe(1);
+  });
+
+  // An update replaces a plugin's folder by rename, which the watch, gone
+  // with the old folder, never hears.
+  test("a folder replaced unheard is made again at the period that finds it lost, while a file in it is held", () => {
+    fakeWatches();
+    const r = rig();
+    r.open();
+    fs.rmSync(r.folder, { recursive: true });
+    r.fileEvents.notify({ kind: "period" });
+    expect(r.storage.stats().lost).toBe(1);
+    expect(r.generation()).toBe(1);
+    expect(fs.statSync(r.folder).isDirectory()).toBe(true);
   });
 
   test("a removed plugin's folder, with no file in it held, is not made again: its watch closes at the period", async () => {

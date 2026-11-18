@@ -261,10 +261,10 @@ type Phase =
 // steps, and any other is closed.
 type Begun = Extract<Phase, { kind: "closing" | "closed" }>;
 
-// A renderer's own id, as the host minted its own for it.
-interface Minted<T> {
+// A renderer's own effect id, under the one the host minted for it.
+interface MintedEffect {
   readonly by: Link;
-  readonly id: T;
+  readonly id: EffectId;
 }
 
 export function processRenderer(own: ProcessOwner): RendererLink {
@@ -275,12 +275,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   let young = 0;
   // Inputs refused while none was live, said once the next one is.
   let refused = 0;
-  // [LAW:one-source-of-truth] The host's ids for what renderers mint: an id
+  // [LAW:one-source-of-truth] The host's ids for renderers' effects: an id
   // the host sees is its own, never repeated across renderers, and names the
   // link and the renderer's own id.
   let minted = 0;
-  const mint = <T extends number>(): T => ++minted as T;
-  const effects = new Map<EffectId, Minted<EffectId>>();
+  const effects = new Map<EffectId, MintedEffect>();
 
   const current = (): Link | null =>
     phase.kind === "starting" ||
@@ -583,7 +582,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       return {
         ...output,
         effects: output.effects.map((effect) => {
-          const host = mint<EffectId>();
+          const host = ++minted as EffectId;
           effects.set(host, { by: link, id: effect.id });
           return { ...effect, id: host };
         }),
