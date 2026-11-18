@@ -17,6 +17,7 @@ import {
 import {
   actsDir,
   claimAct,
+  INERT_DEADLINE,
   isRecordedJob,
   judgeAct,
   makeActReader,
@@ -31,7 +32,10 @@ import {
 import { makeUpdateWatch } from "../src/daemon/update-notice";
 import { newUpdateFact, type UpdateFact } from "../src/daemon/update-fact";
 import { updateNotice } from "../src/daemon/foundations/update-offer";
-import type { UpdateWatch } from "../src/daemon/update-notice";
+import type {
+  UpdateWatch,
+  UpdateWatchOptions,
+} from "../src/daemon/update-notice";
 
 // The notice a session that dismissed nothing is shown, folded as its draw
 // folds it from its world state: the update the fact holds, and the act the
@@ -77,7 +81,6 @@ const RECORD: ActRecord = {
   pid: 1,
   startTime: "t",
   started: 0,
-
 };
 const facts = (over: Partial<ActFacts>): ActFacts => ({
   act: 3,
@@ -664,6 +667,41 @@ describe("claimAct: one act per bundle", () => {
     expect(watch.acts().actsError).toBeNull();
   });
 
+  // [LAW:parse-dont-validate] A record of the wrong shape is refused where it
+  // is read, naming its file, never judged as an act.
+  test("a record missing a field is refused, naming its file", async () => {
+    const dir = dirOf();
+    fs.mkdirSync(path.join(dir, "1"), { recursive: true });
+    const { started: _started, ...missing } = RECORD;
+    fs.writeFileSync(path.join(dir, "1", "record.json"), JSON.stringify(missing));
+    await expect(
+      makeActReader(dir, sameLeader, processLauncher, systemTimekeeper).read(),
+    ).rejects.toThrow(
+      `${path.join(dir, "1", "record.json")}: not an act record`,
+    );
+  });
+
+  // A daemon of an older release on the bundle ends an act at its recorded
+  // deadline, so an act this release starts carries one no clock passes.
+  test("a claimed act's record carries a deadline no clock passes", async () => {
+    const dir = dirOf();
+    const claim = await claimAct(
+      processLauncher,
+      dir,
+      null,
+      "id-1",
+      SLEEP,
+      Date.now(),
+      sameLeader,
+    );
+    expect(claim.ok).toBe(true);
+    const stored = JSON.parse(
+      fs.readFileSync(path.join(dir, "1", "record.json"), "utf8"),
+    );
+    ended.push(stored.pid);
+    expect(stored.deadline).toBe(INERT_DEADLINE);
+  });
+
   // [LAW:one-source-of-truth] The update is one fact for the daemon, stamped by
   // the watch that owns it: pending until sampled, pending while the registry
   // has not answered, the release once it has, and nothing once closed.
@@ -749,7 +787,9 @@ describe("the update watch: one turn at a time on the act files", () => {
     category: "update.apply" as const,
   });
 
-  function harness() {
+  function harness(
+    over: Partial<Pick<UpdateWatchOptions, "clock" | "probe">> = {},
+  ) {
     const dir = actsDir(scratch, "/some/bundle/index.mjs");
     const ps: Array<(answer: LaunchResult) => void> = [];
     const logged: string[] = [];
@@ -786,6 +826,7 @@ describe("the update watch: one turn at a time on the act files", () => {
       fetchImpl: async () => Response.json({ latest: "999.0.0" }),
       onApplied: () => applied++,
       log: (_level, msg) => logged.push(msg),
+      ...over,
     });
     closers.push(() => watch.close());
     const notice = () => noticeOf(fact, watch);
@@ -834,27 +875,13 @@ describe("the update watch: one turn at a time on the act files", () => {
   // nothing on wake, and a wedged act on an awake machine is ended once ten
   // watched minutes have gone by.
   test("a sleep past the budget ends nothing; ten watched minutes end a wedged act", async () => {
-    const dir = actsDir(scratch, "/some/bundle/index.mjs");
-    const pid = await running(dir, marker("stop"));
     const clock = heldClock(new Date());
-    const logged: string[] = [];
-    const watch = makeUpdateWatch({
-      fact: newUpdateFact(),
+    // The leader reads as the one `running` recorded.
+    const { dir, watch, logged } = harness({
       clock,
-      launcher: processLauncher,
-      // The leader reads as the one `running` recorded.
       probe: { startTime: sameLeader },
-      digest: null,
-      entryUrl: "file:///some/bundle/index.mjs",
-      actsDir: dir,
-      intervalMs: 60 * 60_000,
-      releaseIntervalMs: 60 * 60_000,
-      registryUrl: "http://127.0.0.1:1",
-      fetchImpl: async () => Response.json({ latest: "999.0.0" }),
-      onApplied: () => {},
-      log: (_level, msg) => logged.push(msg),
     });
-    closers.push(() => watch.close());
+    const pid = await running(dir, marker("stop"));
     const ended = () => logged.filter((l) => l.includes("timed out"));
     watch.arm();
     await until(() => watch.acts().act.kind === "running", "the first look");
@@ -870,7 +897,15 @@ describe("the update watch: one turn at a time on the act files", () => {
     await clock.settle(10 * 60_000 - 4_000);
     expect(ended()).toEqual([]);
     await clock.settle(4_000);
-    expect(ended()).toEqual([expect.stringContaining("act 1 timed out")]);
+    // The first look past the budget ends it, a poll past ten minutes.
+    expect(ended()).toEqual([
+      expect.stringContaining(
+        "act 1 timed out after 602000ms watched (3600000ms unwatched)",
+      ),
+    ]);
+    expect(logged).toContainEqual(
+      expect.stringContaining("act 1 unwatched for 3600000ms"),
+    );
     await until(
       () => !processLauncher.jobGroupAlive(pid),
       "the timed-out act to end",

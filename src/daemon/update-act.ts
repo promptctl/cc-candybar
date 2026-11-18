@@ -6,7 +6,8 @@
 //
 // [LAW:one-source-of-truth] The acts directory is the one answer to "is an
 // act running on this bundle, and how did the last one end". No daemon holds
-// that answer in memory; each judges the directory when it asks.
+// that answer in memory; each judges the directory when it asks. How long an
+// act has been watched running is the watching daemon's own (`watchedAt`).
 //
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
@@ -29,7 +30,7 @@ import {
 } from "../proc/launcher";
 import { readTailSync } from "../utils/transcript-fs";
 import type { StartTimeRead } from "./process-fingerprint";
-import type { Timekeeper } from "../time.js";
+import { spanMs, type Monotonic, type Timekeeper } from "../time.js";
 import { IDLE, type ActState } from "../facts/world-state";
 
 export function actsDir(stateDir: string, entryPath: string): string {
@@ -48,40 +49,41 @@ export interface ActRecord {
   readonly started: number;
 }
 
-// How long one daemon has watched an act run. The budget that bounds a wedged
-// act is spent in this, not in wall time: wall time runs while the machine
-// sleeps, and an act ended on wake for a lid closed mid-build tears the
-// bundle it was writing. No Node clock counts awake time alone (on macOS
+// How long one daemon has watched one act's job run. The budget that bounds a
+// wedged act is spent in this, not in wall time: wall time runs while the
+// machine sleeps, and an act ended on wake for a lid closed mid-build tears
+// the bundle it was writing. No Node clock counts awake time alone (on macOS
 // `process.hrtime` and `os.uptime` both count sleep), so it is observed: each
-// look spends the time since the look before it.
+// look spends the span since the look before it, and the spans it does not
+// spend are kept beside, so a timeout says how it came to be.
 export interface Watched {
-  readonly act: number;
+  readonly job: ActRecord;
   readonly spentMs: number;
-  readonly lookedAt: number;
+  readonly unwatchedMs: number;
+  readonly lookedAt: Monotonic;
 }
 
-// [LAW:no-ambient-temporal-coupling] One look at a running act, at `now`. A
-// gap longer than `longestLookMs` is time nobody watched, a sleep or a stalled
-// daemon, and spends nothing, as a clock set back does: so a weekend of dark
-// wakes, each a look after a long gap, spends nothing. A new act starts
-// unspent, so a daemon that takes over from one that died grants at most one
-// more budget.
+// [LAW:no-ambient-temporal-coupling] One look at a running act's job, at
+// `now`. A span longer than `longestLookMs` is time nobody watched (a sleep, a
+// stalled daemon) and is not spent; a dark wake spends the polls it stays
+// awake for after its first look. A job this daemon has not watched before
+// starts unspent: the spend lives in the watching daemon, so a daemon that
+// starts while an act runs gives it a whole budget again, and says so when it
+// first sees it run.
 export function watchedAt(
   prev: Watched | null,
-  act: number,
-  now: number,
+  job: ActRecord,
+  now: Monotonic,
   longestLookMs: number,
 ): Watched {
-  const from = prev?.act === act ? prev : UNWATCHED;
-  const since = now - from.lookedAt;
-  return {
-    act,
-    spentMs: from.spentMs + (since >= 0 && since <= longestLookMs ? since : 0),
-    lookedAt: now,
-  };
+  if (prev === null || !sameJob(prev.job, job)) {
+    return { job, spentMs: 0, unwatchedMs: 0, lookedAt: now };
+  }
+  const since = spanMs(prev.lookedAt, now);
+  return since <= longestLookMs
+    ? { ...prev, spentMs: prev.spentMs + since, lookedAt: now }
+    : { ...prev, unwatchedMs: prev.unwatchedMs + since, lookedAt: now };
 }
-
-const UNWATCHED = { spentMs: 0, lookedAt: -Infinity } as const;
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
 // verdict before its group ends, so "gone, then no verdict" is a job that
@@ -207,12 +209,43 @@ export async function isRecordedJob(
 
 // The record of an act, or null when the act is gone.
 function readRecord(actDir: string): ActRecord | null {
+  const file = recordOf(actDir);
+  let text: string;
   try {
-    return JSON.parse(fs.readFileSync(recordOf(actDir), "utf8")) as ActRecord;
+    text = fs.readFileSync(file, "utf8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+  return parsedRecord(file, text);
+}
+
+// [LAW:parse-dont-validate] A record crosses into an ActRecord here or not
+// at all: a field missing or of the wrong kind would judge a stale act
+// running, or a running one stale. [LAW:no-silent-failure] The throw reaches
+// the act files' one edge, which shows it.
+function parsedRecord(file: string, text: string): ActRecord {
+  const r: unknown = JSON.parse(text);
+  if (
+    typeof r === "object" &&
+    r !== null &&
+    "identity" in r &&
+    typeof r.identity === "string" &&
+    "pid" in r &&
+    Number.isSafeInteger(r.pid) &&
+    "startTime" in r &&
+    (r.startTime === null || typeof r.startTime === "string") &&
+    "started" in r &&
+    Number.isFinite(r.started)
+  ) {
+    return {
+      identity: r.identity,
+      pid: r.pid as number,
+      startTime: r.startTime,
+      started: r.started as number,
+    };
+  }
+  throw new Error(`${file}: not an act record: ${text.slice(0, 200)}`);
 }
 
 export interface ActReader {
@@ -233,7 +266,7 @@ interface Known {
   final: ActFacts | null;
 }
 
-const sameJob = (a: ActRecord, b: ActRecord): boolean =>
+export const sameJob = (a: ActRecord, b: ActRecord): boolean =>
   a.pid === b.pid && a.startTime === b.startTime;
 
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
@@ -301,9 +334,11 @@ export function makeActReader(
 // [LAW:one-source-of-truth] exception: a daemon of an older release, still
 // running beside this one on the bundle, ends an act whose recorded
 // `deadline` its wall clock has passed, and reads a missing one as passed.
-// Written past any clock, it never passes, so the time this release watched
-// the act is the one bound. Nothing of this release reads it.
-const INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
+// Written past any clock, it never passes, so for an act this release starts
+// the watched budget is the one bound. Nothing of this release reads it; it
+// stays while a release that does can still run on a bundle this one wrote.
+export const INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
+type StoredRecord = ActRecord & { readonly deadline: typeof INERT_DEADLINE };
 
 // [LAW:no-ambient-temporal-coupling] Synchronous, so no exit lands between the
 // staging directory and its removal: nothing sweeps a stranded one. False when
@@ -314,7 +349,10 @@ function stakeClaim(dir: string, actDir: string, record: ActRecord): boolean {
   try {
     fs.writeFileSync(
       recordOf(staging),
-      JSON.stringify({ ...record, deadline: INERT_DEADLINE }),
+      JSON.stringify({
+        ...record,
+        deadline: INERT_DEADLINE,
+      } satisfies StoredRecord),
     );
     fs.renameSync(staging, actDir);
     return true;
