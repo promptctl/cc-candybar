@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   gitInfoFailures,
@@ -214,22 +215,22 @@ function holdKey(root: string): string {
 //
 // `commonDir` is the git directory the refs live in (`resolveCommonGitDir`):
 // the gitDir itself for a main checkout, the main repo's for a linked
-// worktree, whose own metadata dir holds no refs at all. The branch refs are
-// watched as a tree, because a branch name's slashes are directories
-// (`refs/heads/fix/thing`) and a watch one level deep never hears a ref move
-// below them. A ref-only move — `reset --soft`, `update-ref`, an amend with
-// nothing staged — rewrites nothing but its ref.
+// worktree, whose own metadata dir holds no refs at all. A branch name's
+// slashes are directories (`refs/heads/fix/thing`), and a watch one level
+// deep never hears a ref move below them, so `refs/heads` and every
+// directory below it are each a directory target (`refsDirs`). A ref-only
+// move — `reset --soft`, `update-ref`, an amend with nothing staged —
+// rewrites nothing but its ref. A new prefix directory is an event on its
+// parent, so the pass it starts derives a key naming it, and the rebind
+// opens it.
 //
-// The tree is `refs/heads`, not `refs`: on Linux a recursive watch is Node's
-// own walk, one inotify watch and one stat per entry and a re-read of a
-// directory on every event in it, so its cost is the tree's size. Local
-// branches are tens to hundreds; remote refs and tags are the remote's to
-// grow, and a fetch rewriting thousands of them would re-walk the directory
-// per ref. Those still reach the bar on the period.
-// [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
-// each directory names it for the key and decides nothing, and the stat
-// cannot throw. A tree that cannot be opened is a refusal the registry logs
-// and counts, and the period is what refreshes a repo whose watch is refused.
+// The tree is `refs/heads`, not `refs`: local branches are tens to hundreds
+// of refs in a few directories; remote refs and tags are the remote's to
+// grow, and still reach the bar on the period.
+// [LAW:single-enforcer] The registry is the one judge of what cannot be
+// watched: a directory it cannot open is a refusal it logs, counts and
+// retries every period, and the period is what refreshes a repo whose watch
+// is refused. So the walk decides nothing about failure.
 //
 // HEAD and the index are polled, so a git directory deleted and recreated at
 // its path (`worktree remove` then `worktree add` of the same name, `rm -rf`
@@ -242,9 +243,39 @@ function holdKey(root: string): string {
 // [LAW:one-source-of-truth] The key and `unbound` are the shared derivation's.
 function watchSpec(gitDir: string, commonDir: string): WatchSpec {
   return specOf({
-    dirs: [{ path: path.join(commonDir, "refs", "heads"), recursive: true }],
+    dirs: refsDirs(path.join(commonDir, "refs", "heads")).map((dir) => ({
+      path: dir,
+    })),
     polled: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
   });
+}
+
+// `root` and every directory below it, sorted so equal trees spell equal
+// keys. Each one reached is a target whatever it is: one that cannot be
+// listed (a reftable repo's `refs/heads` is a file, a folder at mode 000) is
+// the registry's to refuse, and the pass after it can be listed reaches what
+// is below it. A link is a target git reads refs through, never descended
+// into, so a link loop is one target.
+// [LAW:effects-at-boundaries] exception: a synchronous read on the thread
+// that renders, as the spec's stats are, one per refs directory a pass.
+function refsDirs(root: string): string[] {
+  const dirs: string[] = [];
+  const walk = (dir: string): void => {
+    dirs.push(dir);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const child = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.isSymbolicLink()) dirs.push(child);
+    }
+  };
+  walk(root);
+  return dirs.sort();
 }
 
 // [LAW:one-source-of-truth] The branch one pass read — never the stored one,

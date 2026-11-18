@@ -329,32 +329,6 @@ describe("WatcherRegistry", () => {
     }
   });
 
-  test("a tree target hears a write below its first level, named by its path", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-tree-"));
-    const reg = new WatcherRegistry({ clock: systemTimekeeper });
-    const seen: Invalidation[] = [];
-    reg.acquire(dir, { dirs: [{ path: dir, recursive: true }], polled: [] }, (inv) =>
-      seen.push(inv),
-    );
-    const paths = () =>
-      seen.flatMap((inv) => (inv.kind === "changed" ? [...inv.paths] : []));
-    const leaf = path.join(dir, "a", "b", "c");
-    // The directories appear under the live watch, as a branch's `fix/`
-    // directory appears under a repo's watch, and the leaf's write is
-    // re-applied until the watch proves itself live on it.
-    fs.mkdirSync(path.dirname(leaf), { recursive: true });
-    try {
-      await untilHeard(
-        () => fs.writeFileSync(leaf, "1"),
-        () => paths().includes(leaf),
-        () => `the leaf's path among ${JSON.stringify(paths())}`,
-      );
-    } finally {
-      reg.closeAll();
-      rmrf(dir);
-    }
-  });
-
   test("a refused target comes back on the handle and in the stats, never as opened", () => {
     const counters = {
       watchersOpened: 0,
@@ -394,12 +368,10 @@ describe("WatcherRegistry", () => {
     expect(counters.watchersClosed).toBe(1);
   });
 
-  // fs.watch refuses a folder it cannot read, except Linux's recursive watch
-  // on Node 20 and 22, which swallows the error and never fires. The registry
-  // refuses it on every platform and Node, as a tree or not. Root ignores
-  // directory permissions, so the condition cannot be built.
+  // The registry refuses a folder it cannot read on every platform and Node.
+  // Root ignores directory permissions, so the condition cannot be built.
   (process.getuid?.() === 0 ? test.skip : test)(
-    "a folder the daemon cannot open is refused, watched as a tree or not",
+    "a folder the daemon cannot open is refused",
     () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-unreadable-"));
       fs.chmodSync(dir, 0o000);
@@ -415,13 +387,6 @@ describe("WatcherRegistry", () => {
         };
         expect(
           reg.acquire("dir", { dirs: [{ path: dir }], polled: [] }, () => {}).deaf,
-        ).toEqual([refusal]);
-        expect(
-          reg.acquire(
-            "tree",
-            { dirs: [{ path: dir, recursive: true }], polled: [] },
-            () => {},
-          ).deaf,
         ).toEqual([refusal]);
         expect(reg.dirWatches()).toBe(0);
       } finally {
@@ -909,9 +874,8 @@ const sha = (ref: string, cwd: string): string =>
 //
 // The branch is cut only once the watch has proven itself live, because that
 // is the order a session meets: its repo is declared long before a branch is
-// cut, so `refs/heads/fix/` appears under a watch already open. On Linux the
-// tree watch has to pick a new directory up itself; a watch opened over an
-// existing one proves nothing about that.
+// cut, so `refs/heads/fix/` appears under a watch already open, and only a
+// watch the rebind opened on it hears the moves after the checkout.
 async function hearsRefOnlyMove(
   workingDir: string,
   branch: string,
@@ -1113,6 +1077,24 @@ describe("GitDataProvider + watchers integration", () => {
       rmrf(repo);
     }
   });
+
+  // Root ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a ref-only move on a slash-named branch is heard while a sibling refs directory cannot be listed",
+    async () => {
+      const repo = makeRepo();
+      execSync("git commit -q --allow-empty -m second", { cwd: repo });
+      execSync("git branch locked/x", { cwd: repo });
+      const locked = path.join(repo, ".git", "refs", "heads", "locked");
+      fs.chmodSync(locked, 0o000);
+      try {
+        await hearsRefOnlyMove(repo, "fix/thing");
+      } finally {
+        fs.chmodSync(locked, 0o700);
+        rmrf(repo);
+      }
+    },
+  );
 
   test("a ref-only move on a slash-named branch is heard in a linked worktree, whose own git dir holds no refs (brandon-unfiled-3248.1x2q)", async () => {
     const repo = makeRepo();

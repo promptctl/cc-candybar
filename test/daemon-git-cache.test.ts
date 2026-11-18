@@ -1317,7 +1317,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-576q-"));
     const gitDir = path.join(repo, ".git");
     // A git directory always holds `refs/heads`, and the repo's watch covers
-    // that tree; a fixture without it is refused, not opened.
+    // it; a fixture without it is refused, not opened.
     fs.mkdirSync(path.join(gitDir, "refs", "heads"), { recursive: true });
     const replace = (name: string, text: string) => {
       const lock = path.join(gitDir, `${name}.lock`);
@@ -1350,7 +1350,7 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         watchersClosed: 0,
         watchRefusals: 0,
         watchErrors: 0,
-        // The refs tree alone, never reopened: HEAD and index are polled.
+        // `refs/heads` alone, never reopened: HEAD and index are polled.
         dirWatchesOpened: 1,
         dirWatchesClosed: 0,
       });
@@ -1415,6 +1415,78 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       expect(watchMoves()[0]).toBe("kept");
     } finally {
       svc.close();
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  // A repo on disk with HEAD, the index and `refs/heads`, each directory
+  // below `refs/heads` made by `layout` from the refs folder.
+  async function refsRig(layout: (heads: string) => void) {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-refs-"));
+    const gitDir = path.join(repo, ".git");
+    const heads = path.join(gitDir, "refs", "heads");
+    fs.mkdirSync(heads, { recursive: true });
+    fs.writeFileSync(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
+    fs.writeFileSync(path.join(gitDir, "index"), "0");
+    layout(heads);
+    const rig = counted();
+    rig.inner.repoRootByDir[repo] = repo;
+    await gitOf(rig.svc, new Holds(), repo);
+    return { ...rig, repo, heads };
+  }
+
+  test("every directory below `refs/heads`, and a link there, is its own directory watch", async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "git-cache-team-"));
+    const { counters, watchers, repo } = await refsRig((heads) => {
+      fs.mkdirSync(path.join(heads, "fix", "deep"), { recursive: true });
+      fs.symlinkSync(outside, path.join(heads, "team"));
+    });
+    try {
+      // `refs/heads`, `fix`, `fix/deep` and the link.
+      expect(watchers.dirWatches()).toBe(4);
+      expect(counters).toMatchObject({ watchersOpened: 1, watchRefusals: 0 });
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  // Root ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "a refs directory that cannot be listed is the registry's refusal, and its siblings are watched",
+    async () => {
+      let locked = "";
+      const { counters, watchers, logs, repo } = await refsRig((heads) => {
+        fs.mkdirSync(path.join(heads, "fix"));
+        locked = path.join(heads, "locked");
+        fs.mkdirSync(locked);
+        fs.chmodSync(locked, 0o000);
+      });
+      try {
+        expect(counters).toMatchObject({ watchersOpened: 0, watchRefusals: 1 });
+        expect(watchers.dirWatches()).toBe(2);
+        expect(logs).toContainEqual(
+          expect.stringMatching(new RegExp(`^watch failed ${locked}: EACCES`)),
+        );
+      } finally {
+        fs.chmodSync(locked, 0o700);
+        fs.rmSync(repo, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test("a `refs/heads` that is a file, as in a reftable repo, is refused with ENOTDIR", async () => {
+    const { counters, watchers, logs, repo, heads } = await refsRig((h) => {
+      fs.rmdirSync(h);
+      fs.writeFileSync(h, "");
+    });
+    try {
+      expect(counters).toMatchObject({ watchersOpened: 0, watchRefusals: 1 });
+      expect(watchers.dirWatches()).toBe(0);
+      expect(logs).toContainEqual(
+        expect.stringMatching(new RegExp(`^watch failed ${heads}: ENOTDIR`)),
+      );
+    } finally {
       fs.rmSync(repo, { recursive: true, force: true });
     }
   });
@@ -1520,7 +1592,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
       // The refs tree under it is refused, on every platform.
       expect(
         logs.some((l) =>
-          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(l),
+          /^git watch bound root=.* dirs=[^,]*refs\/heads polled=\S* deaf=1$/.test(
+            l,
+          ),
         ),
       ).toBe(true);
       expect(counters).toEqual({
