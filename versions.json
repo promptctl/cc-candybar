@@ -2,88 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-793",
-      "ref": "refs/pull/793/merge",
-      "sha": "c58904f078872f547ed544eb57957c03be3fbf67",
-      "timestamp": "2026-11-18T05:19:07.111Z",
-      "commits": [
-        {
-          "sha": "c58904f078872f547ed544eb57957c03be3fbf67",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:18:11Z",
-          "message": "Merge 6ec260284638812225f51b33379cbe367bab9d82 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
-        },
-        {
-          "sha": "6ec260284638812225f51b33379cbe367bab9d82",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T22:18:00-07:00",
-          "message": "fix(doctor): a load's warnings stay a list, a segment's warning names its placement, and the doctor CLI says what its stores and close logged (9a7)\n"
-        },
-        {
-          "sha": "631841e5c74f419b3c105917a1623491b4d71029",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:55:50-07:00",
-          "message": "fix(doctor): errors a reporting run logged fail the command, and one rule says what a click proves of the URL handler (9a7)\n"
-        },
-        {
-          "sha": "71b4fb1f0cb1a457f68c88ecf416d766379a7ee0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:44:07-07:00",
-          "message": "fix(doctor): a failed run notes its reason, every turn's record reaches the CLI's wait, and the doctor's fields are pairs the record's writer quotes (9a7)\n\nFrom the step-10 review:\n- A run whose reading failed notes `failed` with its reason on its turn's\n  record, so `cc-candybar doctor` says why at once instead of timing out.\n- The doctor's field groups are key/value pairs written by the one logfmt\n  writer, so a terminal release with a space in it no longer fails the run.\n- A link click judged on a run asked another way proves the URL handler.\n- rendererHost hands every turn's record to a `recorded` sink, so a note on a\n  turn the host took itself (a due, a config turn, a start) reaches a wait.\n- The faults note is made as its record is kept, so a draw that throws notes\n  nothing a later `kept` is read against, and each frame spells it once.\n- The doctor CLI's bar closes as the first teardown step, and a step that\n  fails to close is the command's failure on stderr.\n- postMortemsOf has its doc comment back; the zones test's root fixtures\n  name a file still a root.\n"
-        },
-        {
-          "sha": "1f99d3a5375f969dddf27023745d7a23b19e6228",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:19:17-07:00",
-          "message": "docs(memory): check and the doctor command draw through answer, and the doctor CLI never asks a daemon (9a7)\n\nThe memory lines that said check composes its own payload, that the CLI\nreads the doctor's stores through the daemon, and how the deleted URL probe\nchose its socket now say what holds: both commands are hosts of their own\nover the daemon's collector and host, the doctor CLI reads the profile's\nstores itself and names the facts only a running daemon holds as not judged\nhere, and each check pass is a session of its own so its first record\ncarries every fault.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "44b0c8a340920e1a413375a0fa3bfcc75fe78740",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:17:52-07:00",
-          "message": "feat(doctor): the doctor command is a host of its own bar and asks no daemon (9a7)\n\n`cc-candybar doctor` stands up a local bar of the daemon's parts over the\nsession's own discovery, stored state and payload owners, draws its bar,\nthen sends the renderer a `doctor-run` click that arrives by command. The\nrenderer judges the run through the daemon's DoctorSource and notes every\ncheck's verdict on that turn's record; the command prints the note. A run\nwhose note never comes is a loud exit 2.\n\nDoctorSource takes what its host saw of a session as a provider: the daemon\nhands it its render sightings and itself, the command its one drawn bar,\nits own width, and not-held for what only a running daemon knows. A check\nover a fact not held is ok with a note naming the bar's doctor as its judge;\nthe daemon check still judges the process table and unread post-mortems, and\nthe URL handler check reads the scheme's registration from Launch Services.\n\nThe daemon-stats doctor answer, the handler probe and its click verb, the\ndoctor's stats fields and the `doctor:` log line go. The doctor's record\nfields are each one logfmt value, so a font or terminal name is read whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "a5e3c33c3242abdcb53a772965e9683170205c32",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T20:37:29-07:00",
-          "message": "feat(check): check draws every preset's bar through the daemon's own host and renderer (9a7)\n\n`check` stands up a local bar of the daemon's parts: a collector over the\nfixture session's owners, the main renderer in process, the renderer host\nand the statusline answer. Each preset is one stored session whose pick is\nthat preset, drawn by one render request through the request checkpoint, and\nthe verdict reads the request turn's record: its faults, the preset it drew\nand the sources still unread when its wait ended. A turn that threw, or an\nanswer with no frame, is a `render:` failure.\n\nThe faked session owns where its directory sits, so the host's location read\nis a port: the daemon's is the disk, check's is the fixture's checkout.\n\nThe parallel check pipeline goes: no payload composed in check, no separate\nsource waiter, no faked menu counts. Tests that drew a composed payload\nwithout a renderer take it from test-side helpers.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "efa9ff9787ddc508eba179ead5f2015b190869a7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T20:14:00-07:00",
-          "message": "refactor(daemon): a payload's owners are typed by what it calls, and the runs a test holds go through a real collector (9a7)\n\nEach owner a payload reads is a Pick of the methods it calls, so a fixture\nworld types without casts and the daemon's providers still satisfy it. The\ntests that held runs through check's holder now hold them through a\ncollector over the case's source runs, so nothing but check reads that\nholder.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        },
-        {
-          "sha": "7df8fa37325002c3c09448a71b30e577836e9438",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T19:54:11-07:00",
-          "message": "feat(renderer): a segment's error reaches the ⚠ list and the turn record, and each record notes the faults it met (9a7)\n\nA placement that cannot draw still draws its ⚠ cell, and its whole message\nis now a `segment` warning among the warnings the draw returns. The renderer\nkeeps those for the bar's ⚠ list, so the next frame counts it and its viewer\nshows it in full. The observer that only `check` passed is gone: check reads\nsegment warnings from the draw like every other kind.\n\nEach draw's turn record gains two fields:\n- `faults`: every error and warning the frame met, each with its level, its\n  kind, what it is about where it carries one, and its whole message, as a\n  JSON array. It holds `kept` while the list equals the one last noted for\n  the session and renderer, so an unchanged bar adds no message per tick.\n  The kinds come from the producers' own unions; the draw's errors name\n  theirs once. The shared note module spells and parses the note, so host\n  code can read what the renderer noted.\n- `preset`: the preset the draw used.\n\n`warn=`, `err=`, `diag=` and `warnRecord=` are unchanged; `warn=` tags a\nsegment warning `segment:<placement>`.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "c50a9a7b33e8a8b4d16895b50b157d62d5c55323",
-      "timestamp": "2026-11-18T02:24:25.974Z",
+      "sha": "e33675a193dfc48790988daa17ac05641e602a19",
+      "timestamp": "2026-11-18T05:27:37.397Z",
       "commits": [
         {
-          "sha": "c50a9a7b33e8a8b4d16895b50b157d62d5c55323",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T02:23:22Z",
-          "message": "chore(release): set `package.json` to 1.231.0\n\n## [1.231.0](https://github.com/promptctl/cc-candybar/compare/v1.230.1...v1.231.0) (2026-11-18)\n\n### Features\n\n* **daemon:** a session's programs run in the environment its client sends (bco) ([#792](https://github.com/promptctl/cc-candybar/issues/792)) ([0967970](https://github.com/promptctl/cc-candybar/commit/0967970a05c571dcb920cf33268b2dcc19d6200b))\n"
+          "sha": "e33675a193dfc48790988daa17ac05641e602a19",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T22:26:41-07:00",
+          "message": "feat: check and the doctor CLI draw through Renderer.answer, with no daemon running (9a7) (#793)\n\n* feat(renderer): a segment's error reaches the ⚠ list and the turn record, and each record notes the faults it met (9a7)\n\nA placement that cannot draw still draws its ⚠ cell, and its whole message\nis now a `segment` warning among the warnings the draw returns. The renderer\nkeeps those for the bar's ⚠ list, so the next frame counts it and its viewer\nshows it in full. The observer that only `check` passed is gone: check reads\nsegment warnings from the draw like every other kind.\n\nEach draw's turn record gains two fields:\n- `faults`: every error and warning the frame met, each with its level, its\n  kind, what it is about where it carries one, and its whole message, as a\n  JSON array. It holds `kept` while the list equals the one last noted for\n  the session and renderer, so an unchanged bar adds no message per tick.\n  The kinds come from the producers' own unions; the draw's errors name\n  theirs once. The shared note module spells and parses the note, so host\n  code can read what the renderer noted.\n- `preset`: the preset the draw used.\n\n`warn=`, `err=`, `diag=` and `warnRecord=` are unchanged; `warn=` tags a\nsegment warning `segment:<placement>`.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* refactor(daemon): a payload's owners are typed by what it calls, and the runs a test holds go through a real collector (9a7)\n\nEach owner a payload reads is a Pick of the methods it calls, so a fixture\nworld types without casts and the daemon's providers still satisfy it. The\ntests that held runs through check's holder now hold them through a\ncollector over the case's source runs, so nothing but check reads that\nholder.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(check): check draws every preset's bar through the daemon's own host and renderer (9a7)\n\n`check` stands up a local bar of the daemon's parts: a collector over the\nfixture session's owners, the main renderer in process, the renderer host\nand the statusline answer. Each preset is one stored session whose pick is\nthat preset, drawn by one render request through the request checkpoint, and\nthe verdict reads the request turn's record: its faults, the preset it drew\nand the sources still unread when its wait ended. A turn that threw, or an\nanswer with no frame, is a `render:` failure.\n\nThe faked session owns where its directory sits, so the host's location read\nis a port: the daemon's is the disk, check's is the fixture's checkout.\n\nThe parallel check pipeline goes: no payload composed in check, no separate\nsource waiter, no faked menu counts. Tests that drew a composed payload\nwithout a renderer take it from test-side helpers.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* feat(doctor): the doctor command is a host of its own bar and asks no daemon (9a7)\n\n`cc-candybar doctor` stands up a local bar of the daemon's parts over the\nsession's own discovery, stored state and payload owners, draws its bar,\nthen sends the renderer a `doctor-run` click that arrives by command. The\nrenderer judges the run through the daemon's DoctorSource and notes every\ncheck's verdict on that turn's record; the command prints the note. A run\nwhose note never comes is a loud exit 2.\n\nDoctorSource takes what its host saw of a session as a provider: the daemon\nhands it its render sightings and itself, the command its one drawn bar,\nits own width, and not-held for what only a running daemon knows. A check\nover a fact not held is ok with a note naming the bar's doctor as its judge;\nthe daemon check still judges the process table and unread post-mortems, and\nthe URL handler check reads the scheme's registration from Launch Services.\n\nThe daemon-stats doctor answer, the handler probe and its click verb, the\ndoctor's stats fields and the `doctor:` log line go. The doctor's record\nfields are each one logfmt value, so a font or terminal name is read whole.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* docs(memory): check and the doctor command draw through answer, and the doctor CLI never asks a daemon (9a7)\n\nThe memory lines that said check composes its own payload, that the CLI\nreads the doctor's stores through the daemon, and how the deleted URL probe\nchose its socket now say what holds: both commands are hosts of their own\nover the daemon's collector and host, the doctor CLI reads the profile's\nstores itself and names the facts only a running daemon holds as not judged\nhere, and each check pass is a session of its own so its first record\ncarries every fault.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\n* fix(doctor): a failed run notes its reason, every turn's record reaches the CLI's wait, and the doctor's fields are pairs the record's writer quotes (9a7)\n\nFrom the step-10 review:\n- A run whose reading failed notes `failed` with its reason on its turn's\n  record, so `cc-candybar doctor` says why at once instead of timing out.\n- The doctor's field groups are key/value pairs written by the one logfmt\n  writer, so a terminal release with a space in it no longer fails the run.\n- A link click judged on a run asked another way proves the URL handler.\n- rendererHost hands every turn's record to a `recorded` sink, so a note on a\n  turn the host took itself (a due, a config turn, a start) reaches a wait.\n- The faults note is made as its record is kept, so a draw that throws notes\n  nothing a later `kept` is read against, and each frame spells it once.\n- The doctor CLI's bar closes as the first teardown step, and a step that\n  fails to close is the command's failure on stderr.\n- postMortemsOf has its doc comment back; the zones test's root fixtures\n  name a file still a root.\n\n* fix(doctor): errors a reporting run logged fail the command, and one rule says what a click proves of the URL handler (9a7)\n\n* fix(doctor): a load's warnings stay a list, a segment's warning names its placement, and the doctor CLI says what its stores and close logged (9a7)\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>"
         }
       ]
     }
