@@ -727,6 +727,6 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
       log: (_level, message) => logged.push(message),
     });
     expect(rt.sessionState.get(SID, inB)).toBeNull();
-    expect(logged.join("\n")).toContain(`released=${JSON.stringify([inB])}`);
+    expect(logged.join("\n")).toContain(`keys=${JSON.stringify([inB])}`);
   });
 });

@@ -66,6 +66,8 @@ export function recordingView(
       ),
     clear: (sessionId, key) =>
       recorded(sessionId, [key], () => store.clear(sessionId, key)),
+    sessions: () => store.sessions(),
+    keys: (sessionId) => store.keys(sessionId),
   };
 }
 
@@ -87,7 +89,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // of writes: the store cannot hold more than maxSessions, so the bound is
   // structural, not dependent on an external prune caller. A read moves
   // nothing, so the host's copy, which hears only writes, keeps the same order.
-  private readonly sessions: Map<SessionId, Session>;
+  private readonly bySession: Map<SessionId, Session>;
   // [LAW:one-source-of-truth] The sessions whose state moved since the host
   // was last told, in the order they last moved: what the turn's stored
   // writes carry (`drain`).
@@ -105,7 +107,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     loaded: StoredState["sessions"] = {},
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
-    this.sessions = new Map(
+    this.bySession = new Map(
       (
         Object.entries(loaded) as Array<
           [SessionId, Readonly<Record<string, string>>]
@@ -124,12 +126,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
     // outside a tracking context (the common direct-read case) it is a no-op.
     this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.values.get(key) ?? null;
+    return this.bySession.get(sessionId)?.values.get(key) ?? null;
   }
 
   revision(sessionId: SessionId): number {
     this.atom.reportObserved();
-    return this.sessions.get(sessionId)?.revision ?? 0;
+    return this.bySession.get(sessionId)?.revision ?? 0;
   }
 
   // How many derivations are subscribed to this store right now — every
@@ -151,9 +153,19 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return this.head;
   }
 
+  sessions(): readonly SessionId[] {
+    this.atom.reportObserved();
+    return [...this.bySession.keys()];
+  }
+
+  keys(sessionId: SessionId): readonly string[] {
+    this.atom.reportObserved();
+    return [...(this.bySession.get(sessionId)?.values.keys() ?? [])];
+  }
+
   // How many sessions the store holds.
   size(): number {
-    return this.sessions.size;
+    return this.bySession.size;
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of
@@ -170,7 +182,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     sessionId: SessionId,
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void {
-    const held = this.sessions.get(sessionId);
+    const held = this.bySession.get(sessionId);
     if (!pairs.some(({ key, value }) => held?.values.get(key) !== value))
       return;
     runInAction(() => {
@@ -186,7 +198,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   clear(sessionId: SessionId, key: string): void {
-    const session = this.sessions.get(sessionId);
+    const session = this.bySession.get(sessionId);
     if (session === undefined || !session.values.has(key)) return;
     runInAction(() => {
       session.values.delete(key);
@@ -214,7 +226,7 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private valuesOf(sessionId: SessionId): Record<string, string> | null {
-    const session = this.sessions.get(sessionId);
+    const session = this.bySession.get(sessionId);
     return session === undefined ? null : Object.fromEntries(session.values);
   }
 
@@ -222,14 +234,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // written, here and in what the host is told.
   private changed(sessionId: SessionId, session: Session): void {
     session.revision = ++this.head;
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, session);
+    this.bySession.delete(sessionId);
+    this.bySession.set(sessionId, session);
     this.told(sessionId);
   }
 
   private dropped(sessionId: SessionId): void {
     this.head++;
-    this.sessions.delete(sessionId);
+    this.bySession.delete(sessionId);
     this.told(sessionId);
   }
 
@@ -239,12 +251,12 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private evictOldest(): void {
-    let overflow = this.sessions.size - this.maxSessions;
+    let overflow = this.bySession.size - this.maxSessions;
     if (overflow <= 0) return;
     // Delete the oldest keys in insertion order. Cost is proportional to the
     // number of evictions, not the total loaded set — deleting an already-
     // yielded key mid-iteration is well-defined for a Map.
-    for (const id of this.sessions.keys()) {
+    for (const id of this.bySession.keys()) {
       this.dropped(id);
       if (--overflow === 0) break;
     }

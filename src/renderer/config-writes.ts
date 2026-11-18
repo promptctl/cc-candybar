@@ -152,6 +152,11 @@ export class ConfigWrites {
     });
   }
 
+  // Whether the open click wrote a layer of its chain.
+  wroteLayer(): boolean {
+    return this.open.size > 0;
+  }
+
   // A change of the open click to a settings file of Claude Code's, which the
   // host lands only while what it read there stands (src/doctor/gather.ts,
   // `settingChange`).

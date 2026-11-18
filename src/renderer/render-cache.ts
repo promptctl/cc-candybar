@@ -16,7 +16,11 @@ import type {
 import type { LinkSigner } from "../click/link-signer.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
-import { writable, type ConfigSnapshot } from "../config/config-snapshot.js";
+import {
+  mergedLayers,
+  writable,
+  type ConfigSnapshot,
+} from "../config/config-snapshot.js";
 import type { Drawing } from "../config/lanes.js";
 import type { FrameRecord } from "../render/frame-memory.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
@@ -49,6 +53,8 @@ import {
 import { mb, NEAR_LIMIT } from "../daemon/foundations/memory-limit.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { presetNames, presetRoot } from "../config/presets.js";
+import { placementsOf } from "../config/edit-chrome.js";
+import { configOf, releaseAtLoad } from "./placement-release.js";
 import { resolveEffectiveGlobals } from "../config/effective-globals.js";
 import {
   fixedSource,
@@ -250,6 +256,11 @@ export interface DslRenderState {
   // [LAW:no-silent-failure] The placements of undeclared segments the load
   // dropped to draw the rest of the bar, one error per file that wrote one.
   readonly dropped: readonly DroppedFileError[];
+  // [LAW:one-source-of-truth] The placements the config holds, as a session
+  // key names one (placementsOf), measured on the trees the files place
+  // before the load drops a placement whose segment it cannot see: a typo
+  // mid-edit, or a plugin absent from this origin, has not ended one.
+  readonly placements: ReadonlySet<string>;
   // [LAW:one-source-of-truth] The identity of `compiled` (compileKey of what
   // it was compiled from): states carrying one key carry one compile.
   readonly compileKey: string;
@@ -312,11 +323,8 @@ export interface ConfigChain {
 function chainOf(snapshot: ConfigSnapshot, locs: Locations): ConfigChain {
   const { chain } = snapshot;
   return {
-    // [LAW:one-source-of-truth] The files reported are the files merged: a
-    // layer not written or not read is no layer of the load.
-    layers: chain
-      .filter((l) => l.content.kind === "text")
-      .map((l) => ({ path: l.path, role: l.role })),
+    // [LAW:one-source-of-truth] The files reported are the files merged.
+    layers: mergedLayers(snapshot).map((l) => ({ path: l.path, role: l.role })),
     // Every chain holds the user layer: it is the one no answer gates.
     home: chain.find((l) => l.role === "user")!.path,
     writable: chain.filter((l) => writable(l.content)).map((l) => l.role),
@@ -790,6 +798,7 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
     state: {
       config,
       dropped,
+      placements: placementsOf(loaded.placed),
       compileKey: registration.compileKey,
       loadKey: load.key,
       buildWarnings: warnings,
@@ -1623,7 +1632,19 @@ export class RenderCache<
     served: DslRenderState | null,
   ): LoadOutcome {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(cwd, snapshot, this.deps, served);
+    const loaded = loadOrigin(cwd, snapshot, this.deps, served);
+    // [LAW:single-enforcer] Every load the cache makes passes here, its first
+    // after a restart included, so a placement that ended while no session
+    // watched ends their state now. A load that failed says nothing about
+    // which placements its config holds, and releases nothing.
+    if (loaded.state !== null)
+      releaseAtLoad(
+        this.deps.sessionState,
+        loaded.state.placements,
+        configOf(snapshot),
+        this.log,
+      );
+    return loaded;
   }
 
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the

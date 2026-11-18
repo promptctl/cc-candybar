@@ -54,5 +54,7 @@ export function closingView(
       write(sessionId, [{ key, value: nestOf(sessionId).defaultOf(key) }], () =>
         store.clear(sessionId, key),
       ),
+    sessions: () => store.sessions(),
+    keys: (sessionId) => store.keys(sessionId),
   };
 }

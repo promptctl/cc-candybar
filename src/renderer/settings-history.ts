@@ -760,6 +760,14 @@ function heldWrites(
       for (const { key, value } of pairs) put(sessionId, key, value);
     },
     clear: (sessionId, key) => put(sessionId, key, null),
+    sessions: () => [...new Set([...store.sessions(), ...held.keys()])],
+    // The store's keys as the click leaves them: its own writes over them.
+    keys: (sessionId) => {
+      const writes = held.get(sessionId) ?? new Map<string, string | null>();
+      return [...new Set([...store.keys(sessionId), ...writes.keys()])].filter(
+        (key) => writes.get(key) !== null,
+      );
+    },
     // One transaction, so no observer sees half a click.
     flush: () =>
       runInAction(() => {

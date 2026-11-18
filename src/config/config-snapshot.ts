@@ -51,6 +51,14 @@ export function writable(
   return content.kind !== "unreadable";
 }
 
+// [LAW:one-source-of-truth] The files a load merges: a layer it read. A layer
+// not written yet or not read is in the chain, and no layer of the merge.
+export function mergedLayers(
+  snapshot: Pick<ConfigSnapshot, "chain">,
+): readonly Layer[] {
+  return snapshot.chain.filter((l) => l.content.kind === "text");
+}
+
 // The one repository an origin's directories belong to. Project and local
 // share its answer, kept under `dir`: a linked worktree's main checkout.
 export interface RepoQuestion {

@@ -1,4 +1,4 @@
-import { escapedIdent, ident } from "../../src/config/ident";
+import { escapedIdent, ident, unescapedIdent } from "../../src/config/ident";
 
 // The escape is what keeps edit chrome's names apart, so it is held here as
 // the properties every name built from it relies on.
@@ -35,5 +35,10 @@ describe("escapedIdent", () => {
   test("a name of plain letters and digits other than the marker reads as written", () => {
     expect(escapedIdent("directory2")).toBe("directory2");
     expect(escapedIdent("git-2")).toBe("gitZ00002d2");
+  });
+
+  test("a spelling reads back as the name that made it", () => {
+    for (const name of NAMES)
+      expect(unescapedIdent(escapedIdent(name))).toBe(name);
   });
 });

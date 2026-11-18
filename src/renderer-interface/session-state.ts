@@ -29,6 +29,10 @@ export interface SessionStateRW extends SessionStateReader {
     pairs: ReadonlyArray<{ key: string; value: string }>,
   ): void;
   clear(sessionId: SessionId, key: string): void;
+  // Every session the store holds state for, and the keys one holds: what a
+  // release walks, since what it ends is named by the keys themselves.
+  sessions(): readonly SessionId[];
+  keys(sessionId: SessionId): readonly string[];
 }
 
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the

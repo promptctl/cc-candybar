@@ -645,6 +645,28 @@ function chainOver(into: Seen, text: string | null): LoadedChain {
   );
 }
 
+// [LAW:one-source-of-truth] `snapshot` with each layer of its chain as `read`
+// gives it: a click's view of its origin, its own writes in.
+export function snapshotRead(
+  snapshot: ConfigSnapshot,
+  read: (file: string) => string | null,
+): ConfigSnapshot {
+  return {
+    ...snapshot,
+    chain: snapshot.chain.flatMap((l) => {
+      const text = read(l.path);
+      return text === null ? [] : [heldLayer(l, text)];
+    }),
+  };
+}
+
+// The trees `snapshot`'s files place, loaded as every click's chain is, before
+// the load drops a placement whose segment it cannot see.
+export function placedBy(snapshot: ConfigSnapshot, home: string): DslConfig {
+  return loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, { warned: () => {} })
+    .placed;
+}
+
 // The chain merged up to the written layer: each loaded layer is merged over
 // the ones under it, and those are the same on both sides of a write, so a
 // difference between two of these is the written layer's alone.
@@ -1079,7 +1101,7 @@ export function applyLayoutOp(
   layer: WriteLayer,
   key: string,
   op: LayoutOp,
-): { readonly placed: NewPlacement | null; readonly config: DslConfig } {
+): { readonly placed: NewPlacement | null } {
   const into = seenBy(layer, (file) => store.read(file));
   const target = requireTarget(key);
   if (target.scope !== "preset-root") {
@@ -1106,7 +1128,8 @@ export function applyLayoutOp(
       `${placement.path.join(".")} in ${into.path} has no placement "${subject}" — the bar you clicked is stale (it reloads on the next render), or the action names a placement the layout never held`,
     );
   }
-  return { placed, config: commit(store, into, before, after, refuseHidden) };
+  commit(store, into, before, after, refuseHidden);
+  return { placed };
 }
 
 // [LAW:dataflow-not-control-flow] One splice per op arm, total over LayoutOp:

@@ -48,7 +48,9 @@ import {
   deletePreset as deletePresetFromFile,
   deleteValues,
   proveLoads,
+  placedBy,
   readValue,
+  snapshotRead,
   writePreset,
   writeDrafts,
   writeThemeDefault,
@@ -63,20 +65,19 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import type { NavigationHistory } from "../navigation-history";
+import { placementsOf } from "../../config/edit-chrome";
 import {
-  placementId,
+  configOf,
+  releaseSession,
+  SESSION_CONFIG_KEY,
+} from "../placement-release";
+import {
   settingSpelling,
-  walkNodes,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
+import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
 import {
   durableLanding,
   placementDrafts,
@@ -92,7 +93,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   decodeSegments,
   batchAdjacentWrites,
@@ -1074,47 +1074,6 @@ const resetConfig: VerbHandler = (value, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
-  before: DslConfig,
-  after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(preset, placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
-): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
-}
-
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -1148,26 +1107,13 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const { placed, config } = applyLayoutOpToFile(
-    editStore(ctx, sid),
-    into,
-    key,
-    op,
-  );
-  // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the config the write's own load proved, and released in the
-  // same click, so its undo brings the placement and its drafts back.
-  // The session state the edit discards — the fact its log line carries.
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
-  for (const key of released) ctx.sessionState.clear(sid, key);
+  // A removed placement's session state ends with the click (endClick).
+  const { placed } = applyLayoutOpToFile(editStore(ctx, sid), into, key, op);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} (session=${sid})`,
   );
 };
 
@@ -1688,6 +1634,15 @@ function journaled<C extends DaemonContext>(
   } catch (e) {
     failures.push(e);
   }
+  // Whatever the handler did before a throw is real, so the click ends over
+  // it either way.
+  if (sid !== null && origin !== null) {
+    try {
+      endClick(ctx, sid, origin, journal.sessionState);
+    } catch (e) {
+      failures.push(e);
+    }
+  }
   // Each commit runs whatever the other did: both record what landed.
   const consequence = (landedIn: Effect[]): void => {
     const failed: unknown[] = [];
@@ -1723,6 +1678,40 @@ function journaled<C extends DaemonContext>(
     failures.push(e);
   }
   throwAll(failures);
+}
+
+// [LAW:single-enforcer] Every click of a session passes here, before its
+// changes leave: the session's state now belongs to the config the click
+// leaves it rendering (SESSION_CONFIG_KEY), and a click that wrote that config
+// ends its own session's state for every placement the config no longer
+// holds, through the click's journal, as one more write of the click — so its
+// undo brings the placement back with its drafts. Every other session's ends
+// at the load the landing makes (src/renderer/placement-release.ts).
+// [LAW:dataflow-not-control-flow] One release whatever the click did — a
+// removal, a reset, a preset deleted, an undo — measured over what its files
+// say once its writes are in. A click that wrote no layer left its config as
+// the last load measured it.
+function endClick(
+  ctx: DaemonContext,
+  sid: SessionId,
+  origin: RenderOrigin,
+  journaled: SessionStateRW,
+): void {
+  const left = snapshotRead(ctx.snapshotFor(origin), (file) =>
+    ctx.configWrites.read(file),
+  );
+  const config = configOf(left);
+  // Where the session clicks is a fact of the click, not one of its writes,
+  // so it is no step and lands whether or not the click's changes do.
+  ctx.sessionState.set(sid, SESSION_CONFIG_KEY, config);
+  if (!ctx.configWrites.wroteLayer()) return;
+  releaseSession(
+    journaled,
+    sid,
+    placementsOf(placedBy(left, ctx.locations.home)),
+    config,
+    ctx.log,
+  );
 }
 
 // [LAW:single-enforcer] A click: a journal around the fold of its effects,

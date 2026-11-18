@@ -31,3 +31,12 @@ export function escapedIdent(name: string): string {
         `${ESCAPE}${c.codePointAt(0)!.toString(16).padStart(6, "0")}`,
   ).join("");
 }
+
+// The name `escapedIdent` spelled, read back: every escape becomes its code
+// point again, so a key built from escaped names can say which names built it.
+export function unescapedIdent(spelled: string): string {
+  return spelled.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)),
+  );
+}
