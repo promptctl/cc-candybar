@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "fa1bc9efda588b256f008400ac9868b8de85ef38",
+      "timestamp": "2026-11-18T22:30:22.232Z",
+      "commits": [
+        {
+          "sha": "fa1bc9efda588b256f008400ac9868b8de85ef38",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-18T22:29:14Z",
+          "message": "chore(release): set `package.json` to 1.232.8\n\n## [1.232.8](https://github.com/promptctl/cc-candybar/compare/v1.232.7...v1.232.8) (2026-11-18)\n\n### Bug Fixes\n\n* **acts:** a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno) ([#827](https://github.com/promptctl/cc-candybar/issues/827)) ([5a71a43](https://github.com/promptctl/cc-candybar/commit/5a71a43f5da66bd536475cb0df17c28d9a6469e0))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-832",
       "ref": "refs/pull/832/merge",
       "sha": "04c75c5b4082cf658c6725dc93489302be05f045",
@@ -63,43 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:14:02-07:00",
           "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "5a71a43f5da66bd536475cb0df17c28d9a6469e0",
-      "timestamp": "2026-11-18T22:22:25.556Z",
-      "commits": [
-        {
-          "sha": "5a71a43f5da66bd536475cb0df17c28d9a6469e0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:21:10-07:00",
-          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno) (#827)\n\n* fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n\n* docs(acts): the input edge's comments say who reads and who types through it (clno)\n\n* refactor(acts): a slash line is typed only in its pane's turn (clno)"
-        }
-      ]
-    },
-    {
-      "version": "pr-833",
-      "ref": "refs/pull/833/merge",
-      "sha": "1118b19fed98218d325da6682cfd85653b2f088c",
-      "timestamp": "2026-11-18T22:20:01.781Z",
-      "commits": [
-        {
-          "sha": "1118b19fed98218d325da6682cfd85653b2f088c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:19:04-07:00",
-          "message": "Merge 7cc6a5d4ce78f1d9c2a265be2c9bf8bcd00cbb4b into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
-        },
-        {
-          "sha": "7cc6a5d4ce78f1d9c2a265be2c9bf8bcd00cbb4b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:18:11-07:00",
-          "message": "fix(state): each per-session file keeps its sessions' recency as list position, so an integer-like id is never moved to the oldest end (3xhn)\n\nThe session book, the session picks and the settings history each bound\ntheir sessions by recency, and each carried that order through a record\nkeyed by session id: the file, and the stored state handed to a renderer.\nA record enumerates integer-like keys first, so after a restart a session\nlike \"7\" written last sat at the oldest end and the bound evicted it.\n\nSessions now cross every hop as [id, value] entries, oldest first, and\nboth files are written as a JSON array of those pairs. A load takes each\npair through the session id checkpoint, refusing a repeated id by name.\nA file in the keyed form is refused whole with a warning, since its order\nis gone by the time it parses.\n"
         }
       ]
     },
