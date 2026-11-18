@@ -2,60 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-830",
-      "ref": "refs/pull/830/merge",
-      "sha": "637340e3b8ead97d7e9c03a83094fd8d432d4f4c",
-      "timestamp": "2026-11-18T21:41:22.406Z",
-      "commits": [
-        {
-          "sha": "637340e3b8ead97d7e9c03a83094fd8d432d4f4c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:40:32Z",
-          "message": "Merge 8c1ef8b5c031d8d3a25bd49243751c7ac0c9c90f into c8a92c406ada8c34ff102fb22f8e050196acde2a\n"
-        },
-        {
-          "sha": "8c1ef8b5c031d8d3a25bd49243751c7ac0c9c90f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:14:39-07:00",
-          "message": "fix(config): the installed layer's comments claim only what the load and the install do (70xn)\n"
-        },
-        {
-          "sha": "387e8fa50187a3ef27e56d9864bb4a6e5a736b87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:10:02-07:00",
-          "message": "fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n"
-        },
-        {
-          "sha": "a946ccb371687da7ccf77e3a13f5c8781242ee67",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:00:04-07:00",
-          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
-        },
-        {
-          "sha": "aa2cf20db6e108bc42ce750f0a0088fd222d890c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:07:47-07:00",
-          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "c8a92c406ada8c34ff102fb22f8e050196acde2a",
-      "timestamp": "2026-11-18T21:39:05.945Z",
+      "sha": "6d3c06faf1789732872268f46aba7d8531c992ce",
+      "timestamp": "2026-11-18T21:54:37.163Z",
       "commits": [
         {
-          "sha": "c8a92c406ada8c34ff102fb22f8e050196acde2a",
+          "sha": "6d3c06faf1789732872268f46aba7d8531c992ce",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:38:13-07:00",
-          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv) (#824)\n\n* fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n\n* fix(watchers): an event looks again only at the path it names, a tree that cannot be listed keeps its watches, and a directory refused as it joins reaches its holders (cimv)\n\n* fix(watchers): an event re-reads the listing of its own directory, so nothing it names can throw, and a held directory that cannot be listed is refused (cimv)\n\n* fix(watchers): a tree directory gone from its path leaves without a refusal (cimv)"
+          "timestamp": "2026-11-18T14:53:29-07:00",
+          "message": "fix(config): each load builds its installed-plugin layer, and nothing keeps one past it (70xn) (#830)\n\n* fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n\n* fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n\n* fix(config): a load builds its installed layer from its own snapshot again, so no caller can pair a snapshot with another's layer (70xn)\n\n* fix(config): the installed layer's comments claim only what the load and the install do (70xn)"
         }
       ]
     },

@@ -83606,11 +83606,12 @@ function noFile(dflt) {
 }
 function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
   const parsed2 = parseDslFile(path45, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
+    const layer = layPlugins(
       listedPlugins(refs, path45, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path45, allowedPalettes)
+      path45,
+      allowedPalettes
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -83640,29 +83641,22 @@ function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
     config: standing2.config
   };
 }
-var installedMemo = /* @__PURE__ */ new WeakMap();
+function layPlugins(files, ctx, base, label2, allowedPalettes) {
+  return applyPlugins(
+    files,
+    ctx,
+    base,
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, label2, allowedPalettes)
+  );
+}
 function installedLayer(files, ctx, dflt, allowedPalettes) {
-  const key = digestOf({
-    palettes: [...allowedPalettes ?? []].sort(),
-    files: files.map((f) => ({
-      path: f.path,
-      scope: f.scope,
-      definition: f.definition
-    }))
-  });
-  const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
-  installedMemo.set(dflt, byProject);
-  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
+  return layPlugins(
     files,
     ctx,
     { config: dflt, rendering: /* @__PURE__ */ new Map() },
-    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
+    "<installed plugins>",
+    allowedPalettes
   );
-  byProject.set(slot, { key, layer });
-  return layer;
 }
 function strayDrop({ path: file, scope }) {
   const root = import_node_path38.default.dirname(file);
@@ -94242,6 +94236,9 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
     notices,
     // [LAW:single-enforcer] The one place a session's working directory
     // becomes the checkout its plugins' data paths resolve against.
+    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
+    // above it, since an ancestor watch per session is the cost; the next
+    // rediscovery reads the new checkout.
     checkout: checkoutOf(cwd2)
   };
 }
