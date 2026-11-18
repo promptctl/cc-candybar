@@ -35040,8 +35040,8 @@ var failedOf = (d) => ({
   reason: `${d.path}: ${d.reason}`
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var UNSEEN = "unseen";
 function entryAt(at) {
   try {
     const s = fs_default.lstatSync(at, { bigint: true });
@@ -35089,8 +35089,8 @@ var WatcherRegistry = class {
     }
     const shared = this.slots.get(key);
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
-    if (shared !== void 0) this.sighted(shared.polled);
     const slot = shared ?? this.opened(key, targets);
+    this.sighted(slot.polled);
     const holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -35345,13 +35345,10 @@ var WatcherRegistry = class {
     if (this.counters) this.counters.watchersClosed++;
   }
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, sighted.
+  // the acquire is a change; or the one already held, which the acquire sights.
   polledAt(at) {
     const held2 = this.polled.get(at);
-    if (held2 !== void 0) {
-      this.sighted([held2]);
-      return held2;
-    }
+    if (held2 !== void 0) return held2;
     const record2 = {
       path: at,
       entry: entryAt(at),
