@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-830",
+      "ref": "refs/pull/830/merge",
+      "sha": "2420321114bcabfa9dedaaadb6bd101b19e6a623",
+      "timestamp": "2026-11-18T20:09:06.349Z",
+      "commits": [
+        {
+          "sha": "2420321114bcabfa9dedaaadb6bd101b19e6a623",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:07:58-07:00",
+          "message": "Merge 1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c into f72209a57f1948648b44508adcfa2a143579eaf8\n"
+        },
+        {
+          "sha": "1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:07:47-07:00",
+          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-829",
       "ref": "refs/pull/829/merge",
       "sha": "c0dd3d4834b60b84bcce0ba11e314eea67bd89a0",
