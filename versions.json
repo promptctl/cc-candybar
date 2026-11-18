@@ -4,15 +4,22 @@
     {
       "version": "pr-793",
       "ref": "refs/pull/793/merge",
-      "sha": "3990d7d93acbde2215989574e159b6a0f0f63726",
-      "timestamp": "2026-11-18T04:21:11.168Z",
+      "sha": "b65562525b610b89556891562dfb437a7dfffa72",
+      "timestamp": "2026-11-18T04:45:19.378Z",
       "commits": [
         {
-          "sha": "3990d7d93acbde2215989574e159b6a0f0f63726",
+          "sha": "b65562525b610b89556891562dfb437a7dfffa72",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T21:19:57-07:00",
-          "message": "Merge 1f99d3a5375f969dddf27023745d7a23b19e6228 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+          "timestamp": "2026-11-18T04:44:18Z",
+          "message": "Merge 71b4fb1f0cb1a457f68c88ecf416d766379a7ee0 into c50a9a7b33e8a8b4d16895b50b157d62d5c55323\n"
+        },
+        {
+          "sha": "71b4fb1f0cb1a457f68c88ecf416d766379a7ee0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T21:44:07-07:00",
+          "message": "fix(doctor): a failed run notes its reason, every turn's record reaches the CLI's wait, and the doctor's fields are pairs the record's writer quotes (9a7)\n\nFrom the step-10 review:\n- A run whose reading failed notes `failed` with its reason on its turn's\n  record, so `cc-candybar doctor` says why at once instead of timing out.\n- The doctor's field groups are key/value pairs written by the one logfmt\n  writer, so a terminal release with a space in it no longer fails the run.\n- A link click judged on a run asked another way proves the URL handler.\n- rendererHost hands every turn's record to a `recorded` sink, so a note on a\n  turn the host took itself (a due, a config turn, a start) reaches a wait.\n- The faults note is made as its record is kept, so a draw that throws notes\n  nothing a later `kept` is read against, and each frame spells it once.\n- The doctor CLI's bar closes as the first teardown step, and a step that\n  fails to close is the command's failure on stderr.\n- postMortemsOf has its doc comment back; the zones test's root fixtures\n  name a file still a root.\n"
         },
         {
           "sha": "1f99d3a5375f969dddf27023745d7a23b19e6228",

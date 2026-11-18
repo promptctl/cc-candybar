@@ -30240,16 +30240,6 @@ init_globals();
 var BARE = /^[^\s"=\\]+$/;
 var valueOf = (value) => BARE.test(value) ? value : JSON.stringify(value);
 var eventLine = (kind, fields2) => `${kind}${fields2.map(([key, value]) => ` ${key}=${valueOf(value)}`).join("")}`;
-var TOKEN = /([^\s"=\\]+)=("(?:[^"\\]|\\.)*"|[^\s"=\\]+)|"(?:[^"\\]|\\.)*"|\S+/g;
-function fieldsOf(line) {
-  const fields2 = /* @__PURE__ */ new Map();
-  for (const m of line.matchAll(TOKEN)) {
-    if (m[1] === void 0) continue;
-    const raw = m[2];
-    fields2.set(m[1], raw.startsWith('"') ? JSON.parse(raw) : raw);
-  }
-  return fields2;
-}
 
 // src/daemon/runs.ts
 var RUN_TIMEOUT_MS = 1e4;
@@ -61295,29 +61285,43 @@ function doctorReportKeys(checkName) {
   };
 }
 function configFields({ target }) {
-  return `configTarget=${target.source}`;
+  return [["configTarget", target.source]];
 }
 function linkFields(terminal, clicked) {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
   const sighting = terminal.kind === "seen" ? sightingOf(terminal.identified) : null;
   const from = clicked.kind === "failed" ? "unread" : sighting === null ? "-" : clicked.value.includes(sighting) ? "yes" : "no";
-  return `tmuxLinks=${client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"} clicked=${from}`;
+  return [
+    [
+      "tmuxLinks",
+      client === null ? "-" : client.features.includes("hyperlinks") ? "yes" : "no"
+    ],
+    ["clicked", from]
+  ];
 }
 function terminalFeatureFields(terminal, width) {
   const client = terminal.kind === "seen" ? terminal.tmuxClient : null;
-  const cols = width.kind === "failed" ? "failed widthOf=-" : `${width.value.columns ?? "-"} widthOf=${width.value.of.kind}`;
-  return `cols=${cols} clientUtf8=${client === null ? "-" : client.utf8 ? "yes" : "no"}`;
+  return [
+    ...width.kind === "failed" ? [
+      ["cols", "failed"],
+      ["widthOf", "-"]
+    ] : [
+      ["cols", String(width.value.columns ?? "-")],
+      ["widthOf", width.value.of.kind]
+    ],
+    ["clientUtf8", client === null ? "-" : client.utf8 ? "yes" : "no"]
+  ];
 }
 function installFields(install2) {
-  if (install2.kind === "not-held") return "clients=unheld";
-  if (install2.value.kind === "failed") return "clients=failed";
+  if (install2.kind === "not-held") return [["clients", "unheld"]];
+  if (install2.value.kind === "failed") return [["clients", "failed"]];
   const { daemon: daemon3, clients } = install2.value.value;
   const described = clients.map((c) => {
     if (c.kind === "unreported") return "unreported/-/-";
     const { bundle, source } = clientStanding(daemon3, c);
     return `${c.client}/${bundle.kind}/${source.kind === "uncompared" ? "-" : source.kind}`;
   });
-  return `clients=${described.join(",") || "-"}`;
+  return [["clients", described.join(",") || "-"]];
 }
 var signedMb = (bytes) => `${bytes >= 0 ? "+" : ""}${mb(bytes)}`;
 function daemonFields({
@@ -61327,17 +61331,30 @@ function daemonFields({
   read: read2
 }) {
   const others = serving.kind === "not-held" ? "unheld" : processes.kind === "failed" ? "-" : otherDaemons(serving.value, processes.value).map((p2) => p2.pid).join(",") || "-";
-  const running = `daemons=${processes.kind === "failed" ? "unread" : processes.value.length} others=${others}`;
-  const told = postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(postMortems, read2).length}/${postMortems.value.length}`;
-  if (serving.kind === "not-held") {
-    return `${running} memory=unheld postMortems=${told}`;
-  }
+  const running = [
+    [
+      "daemons",
+      processes.kind === "failed" ? "unread" : String(processes.value.length)
+    ],
+    ["others", others]
+  ];
+  const told = [
+    "postMortems",
+    postMortems.kind === "failed" || read2.kind === "failed" ? "unread" : `${unreadPostMortems(postMortems, read2).length}/${postMortems.value.length}`
+  ];
+  if (serving.kind === "not-held")
+    return [...running, ["memory", "unheld"], told];
   const { memory, limit } = serving.value;
   const held2 = memory.kind === "unmeasured" ? "unmeasured" : `${measureOf(memory.charge)}${memory.charge.kind === "stand-in" ? `(${signedMb(-memory.charge.gap)})` : ""}:${mb(memory.charge.bytes)}`;
   const shares2 = memory.kind === "unmeasured" ? "-" : memory.processes.map(
     (p2) => `${p2.role}:${p2.pid}:${p2.sizes === null ? "-" : mb(p2.sizes.rss)}`
   ).join(",");
-  return `${running} memory=${held2}/${mb(limit)} processes=${shares2} postMortems=${told}`;
+  return [
+    ...running,
+    ["memory", `${held2}/${mb(limit)}`],
+    ["processes", shares2],
+    told
+  ];
 }
 function dataFields(data) {
   const pr = () => {
@@ -61355,7 +61372,7 @@ function dataFields(data) {
     const count = (seen2) => fact.value.filter((v) => v === seen2).length;
     return `${count("carried")}/${count("missing")}/${count("unanswered")}`;
   };
-  return `data=pr:${pr()},rateLimits:${rateLimits()}`;
+  return [["data", `pr:${pr()},rateLimits:${rateLimits()}`]];
 }
 function frameFields({
   origin,
@@ -61365,7 +61382,10 @@ function frameFields({
   const lines2 = chains.map(({ sources }) => statusLineValue(sources)).join(",");
   const drawn = refreshedFrames(chains.flatMap((c) => c.bars));
   const count = (seen2) => drawn.filter((f) => f.frame === seen2).length;
-  return `frames=${FRAMES_SEEN.map(count).join("/")} chains=${valueOf(lines2)}`;
+  return [
+    ["frames", FRAMES_SEEN.map(count).join("/")],
+    ["chains", lines2]
+  ];
 }
 function statusLineValue(sources) {
   const line = statusLineOf(sources);
@@ -61381,20 +61401,33 @@ function statusLineValue(sources) {
 }
 function truecolorEnvFields(sources) {
   const told = envVarOf(sources, TMUX_TRUECOLOR_VAR);
-  if (told.kind === "failed") return "truecolorEnv=failed";
-  return told.value.kind === "unset" ? "truecolorEnv=unset" : `truecolorEnv=${valueOf(`${told.value.from.scope}:${JSON.stringify(told.value.value)}`)}`;
+  return [
+    [
+      "truecolorEnv",
+      told.kind === "failed" ? "failed" : told.value.kind === "unset" ? "unset" : `${told.value.from.scope}:${JSON.stringify(told.value.value)}`
+    ]
+  ];
 }
 function transcriptFields(transcripts) {
-  if (transcripts.kind === "not-held") return "transcripts=unheld";
+  if (transcripts.kind === "not-held") return [["transcripts", "unheld"]];
   const count = (kind) => transcripts.value.filter((t2) => t2.read.kind === kind).length;
   const unparsed = transcripts.value.reduce(
     (n, t2) => n + (t2.read.kind === "ok" ? t2.read.value.unparsed : 0),
     0
   );
-  return `transcripts=${count("ok")}/${count("absent")}/${count("failed")} unparsed=${unparsed}`;
+  return [
+    ["transcripts", `${count("ok")}/${count("absent")}/${count("failed")}`],
+    ["unparsed", String(unparsed)]
+  ];
 }
 function nerdFontFields(facts, marks) {
-  if (facts.kind === "none") return "glyphs=- terminal=- font=- mark=-";
+  if (facts.kind === "none")
+    return [
+      ["glyphs", "-"],
+      ["terminal", "-"],
+      ["font", "-"],
+      ["mark", "-"]
+    ];
   const { glyphs, terminal } = facts;
   const codes = [...glyphs].map((g) => g.codePointAt(0).toString(16));
   const found2 = (() => {
@@ -61403,9 +61436,9 @@ function nerdFontFields(facts, marks) {
       case "unasked":
         return terminal.kind;
       case "unknown":
-        return valueOf(`unknown:${terminal.called}`);
+        return `unknown:${terminal.called}`;
       case "unnamed":
-        return valueOf(`unnamed:${terminal.term}`);
+        return `unnamed:${terminal.term}`;
       case "bundling":
       case "unread":
       case "configured":
@@ -61416,32 +61449,29 @@ function nerdFontFields(facts, marks) {
     if (terminal.kind !== "configured") return "-";
     if (terminal.font.kind === "failed") return "failed";
     const { font: name, lacks } = terminal.font.value;
-    return valueOf(
-      `${name}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`
-    );
+    return `${name}:${lacks === null ? "not-installed" : `lacks${lacks.length}`}`;
   })();
   const sighting = glyphSighting(facts);
   const mark = marks.kind === "failed" ? "unread" : sighting === void 0 ? "-" : marks.value[NERD_FONT_CHECK]?.[sighting.id] ?? "-";
-  return `glyphs=${codes.join(",")} terminal=${found2} font=${font} mark=${mark}`;
+  return [
+    ["glyphs", codes.join(",")],
+    ["terminal", found2],
+    ["font", font],
+    ["mark", mark]
+  ];
 }
-function doctorFields(facts) {
-  const line = [
-    configFields(facts.config),
-    nerdFontFields(facts.nerdFont, facts.marks),
-    linkFields(facts.terminal, facts.clicked),
-    terminalFeatureFields(facts.terminal, facts.width),
-    installFields(facts.install),
-    daemonFields(facts.daemon),
-    dataFields(facts.data),
-    transcriptFields(facts.transcripts),
-    frameFields(facts.claudeSettings),
-    truecolorEnvFields(facts.claudeSettings.origin.sources)
-  ].join(" ");
-  const fields2 = [...fieldsOf(line)];
-  if (eventLine("doctor", fields2) !== `doctor ${line}`)
-    throw new Error(`the doctor's fields do not read back whole: ${line}`);
-  return fields2;
-}
+var doctorFields = (facts) => [
+  ...configFields(facts.config),
+  ...nerdFontFields(facts.nerdFont, facts.marks),
+  ...linkFields(facts.terminal, facts.clicked),
+  ...terminalFeatureFields(facts.terminal, facts.width),
+  ...installFields(facts.install),
+  ...daemonFields(facts.daemon),
+  ...dataFields(facts.data),
+  ...transcriptFields(facts.transcripts),
+  ...frameFields(facts.claudeSettings),
+  ...truecolorEnvFields(facts.claudeSettings.origin.sources)
+];
 var notedReports = (reports) => reports.map(({ check, verdict }) => ({
   name: check.name,
   label: check.label,
@@ -72366,9 +72396,10 @@ function configFacts(load, target) {
     unused: load.unused
   };
 }
-function doctorFacts({ machine, install: install2 }, load, target, stores) {
+function doctorFacts({ machine, install: install2 }, load, target, stores, arrival) {
   return {
     ...machine,
+    urlHandler: arrival.via === "link" ? { kind: "arrived", delivery: arrival.delivery } : machine.urlHandler,
     config: configFacts(load, target),
     marks: stores.marks,
     clicked: stores.clicked,
@@ -75371,6 +75402,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         turnMs,
         hopMs: elapsedMs(clock, sentAt) - turnMs
       };
+      collector.recorded(turn.record);
       const changes = output.effects.filter(
         (effect) => effect.kind === "change"
       );
@@ -85593,14 +85625,6 @@ function projectGitInfo(info, pullRequest, pending2) {
   };
 }
 
-// src/renderer-interface/noted-faults.ts
-init_globals();
-var KEPT_FAULTS = "kept";
-function faultsNote(faults, last2) {
-  const noted = JSON.stringify(faults);
-  return last2 !== void 0 && JSON.stringify(last2) === noted ? KEPT_FAULTS : noted;
-}
-
 // src/daemon/foundations/click-error.ts
 init_globals();
 var KEY = "click.error";
@@ -86101,7 +86125,6 @@ function drawRender(parts, setup, drawing2, feeds) {
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
     warnRecord: recorded2 ? "new" : "kept",
-    faults: faultsNote(faults, renderWarnings.noted(sessionId2, drawing2.by)),
     // The message the viewer showed in the body's place, `-` while closed.
     viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
   });
@@ -86140,13 +86163,15 @@ function keepDraw(parts, setup, kept) {
   view.frames.set(by, record2);
   view.lastRenderCellsBySegment = segments;
   parts.effectSessions.keep(session, motion);
-  parts.renderWarnings.keep(
-    session,
-    by,
-    warnings.scope,
-    warnings.list,
-    warnings.faults
-  );
+  noteFacts(setup.facts, {
+    faults: parts.renderWarnings.keep(
+      session,
+      by,
+      warnings.scope,
+      warnings.list,
+      warnings.faults
+    )
+  });
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
 }
 var UPDATE_FAILED = "update-failed";
@@ -89462,6 +89487,14 @@ var NavigationHistory = class {
 
 // src/renderer/render-warnings.ts
 init_globals();
+
+// src/renderer-interface/noted-faults.ts
+init_globals();
+var KEPT_FAULTS = "kept";
+var spelledFaults = (faults) => JSON.stringify(faults);
+var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
+
+// src/renderer/render-warnings.ts
 var MAX_RECORDS = 512;
 var RENDERERS2 = ["request", "feed"];
 var generations = /* @__PURE__ */ new WeakMap();
@@ -89501,30 +89534,31 @@ var RenderWarningRecords = class {
     }
     return listed;
   }
-  // The faults `by` last noted for `sessionId`; nothing before its first
-  // record, or once its record was evicted, so the next note is whole.
-  noted(sessionId2, by) {
-    return this.records.get(keyOf(sessionId2, by))?.faults;
-  }
   // Whether a frame that warned `warnings` changes what the renderer's next
   // frame shows.
   moves(sessionId2, by, warnings) {
     return JSON.stringify(this.of(sessionId2, by)) !== JSON.stringify(warnings);
   }
   // [LAW:single-enforcer] The one writer: the turn that drew a frame records
-  // what it warned and the faults its record noted.
+  // what it warned and the faults it met, and answers the note its record
+  // carries of them. The note is made only with the record it is compared
+  // with, so a frame that kept nothing noted nothing a later `kept` could be
+  // read against. A record evicted, or none yet, makes the note whole.
   keep(sessionId2, by, scope, warnings, faults) {
     const key = keyOf(sessionId2, by);
+    const spelled2 = spelledFaults(faults);
+    const last2 = this.records.get(key)?.faults;
     this.records.delete(key);
     this.records.set(key, {
       generation: generationOf(scope.config),
       warnings,
-      faults
+      faults: spelled2
     });
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
+    return faultsNote(spelled2, last2);
   }
 };
 var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
@@ -89812,7 +89846,7 @@ var fileClickedTerminals = (dir) => stateFile(
 // src/renderer-interface/noted-doctor.ts
 init_globals();
 var DOCTOR_NOTE = "doctor";
-var doctorNote = (reports) => JSON.stringify(reports);
+var doctorNote = (run3) => JSON.stringify(run3);
 
 // src/renderer/doctor.ts
 var FRESH_FOR = 120;
@@ -89869,7 +89903,8 @@ var DoctorRuns = class {
     if (run3 === void 0 || run3.reading !== null || doctor.kind !== "ok" || doctor.value.run !== run3.ask.run)
       return;
     const reading = doctor.value;
-    if (reading.kind === "failed") return this.fail(session, reading.reason);
+    if (reading.kind === "failed")
+      return this.fail(session, reading.reason, record2);
     try {
       this.report(
         this.deps.sessionState,
@@ -89879,7 +89914,7 @@ var DoctorRuns = class {
       );
       run3.reading = { read: reading, at: doctor.at };
     } catch (e) {
-      this.fail(session, e instanceof Error ? e.message : String(e));
+      this.fail(session, e instanceof Error ? e.message : String(e), record2);
     }
   }
   // [LAW:single-enforcer] The session's run's facts as they stand for a click
@@ -89900,23 +89935,35 @@ var DoctorRuns = class {
   // `cc-candybar doctor`) has the report the rows were written from.
   report(store, session, facts, record2) {
     const reports = runDoctor(facts);
+    const fields2 = doctorFields(facts);
     store.setBatch(session, doctorReportPairs(reports));
-    noteFacts(record2, { [DOCTOR_NOTE]: doctorNote(notedReports(reports)) });
-    record2.push(...doctorFields(facts));
+    noteFacts(record2, {
+      [DOCTOR_NOTE]: doctorNote({
+        kind: "reported",
+        reports: notedReports(reports)
+      })
+    });
+    record2.push(...fields2);
   }
   retire(session) {
     this.runs.delete(session);
   }
-  fail(session, reason) {
+  // [LAW:no-silent-failure] A failed run shows why on its session's bar, and
+  // its turn's record says so, for a reader waiting on the run's note.
+  fail(session, reason, record2) {
     this.runs.delete(session);
     this.deps.failed(session, `doctor: ${reason}`);
+    noteFacts(record2, {
+      [DOCTOR_NOTE]: doctorNote({ kind: "failed", reason })
+    });
   }
   judged(run3, read2, arrival) {
     const facts = doctorFacts(
       read2,
       run3.load,
       run3.target,
-      readStores(this.deps.stores)
+      readStores(this.deps.stores),
+      arrival
     );
     return { ...facts, clicked: this.filed(arrival, facts) };
   }
@@ -94521,7 +94568,10 @@ function createDaemon(inputs) {
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
-        writableSettings: (session) => collector.writableSettings(session)
+        writableSettings: (session) => collector.writableSettings(session),
+        // The daemon waits on no turn's note.
+        recorded: () => {
+        }
       },
       {
         perform: (act2) => acts.perform(act2),
