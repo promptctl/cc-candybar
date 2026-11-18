@@ -186,6 +186,9 @@ export function sessionPlugins(
     notices,
     // [LAW:single-enforcer] The one place a session's working directory
     // becomes the checkout its plugins' data paths resolve against.
+    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
+    // above it, since an ancestor watch per session is the cost; the next
+    // rediscovery reads the new checkout.
     checkout: checkoutOf(cwd),
   };
 }

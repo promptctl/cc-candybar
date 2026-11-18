@@ -30,7 +30,6 @@
 import nodePath from "node:path";
 import JSON5 from "json5";
 import type { ConfigSnapshot, PluginFile, Stray } from "./config-snapshot.js";
-import { digestOf } from "../utils/plain.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -109,6 +108,7 @@ import {
   dropsOwning,
   type DroppedPlugin,
   type PluginDefinition,
+  type PluginBase,
   type PluginLayer,
   DEFINITION_FILE,
   pluginList,
@@ -230,12 +230,12 @@ export function loadConfigSource(
   // delta are the segments of that very layer.
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
+    const layer = layPlugins(
       listedPlugins(refs, path, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) =>
-        checkPlugin(c, plugin, replaces, path, allowedPalettes),
+      path,
+      allowedPalettes,
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -266,71 +266,55 @@ export function loadConfigSource(
   };
 }
 
-// [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes and folders, the checkout, the home, the base and the
-// palettes, so it is memoised on exactly those: a load with nothing installed
-// changed pays one digest of the definitions, not one reference check per
-// plugin. Per-plugin validation stays — it is what lets one plugin drop alone.
-const installedMemo = new WeakMap<
-  DslConfig,
-  Map<string, { readonly key: string; readonly layer: PluginLayer }>
->();
+// [LAW:single-enforcer] The one way plugins are laid over a base: each is
+// validated over the layer it joins, so one that would not load drops alone.
+function layPlugins(
+  files: readonly PluginFile[],
+  ctx: PluginContext,
+  base: PluginBase,
+  label: string,
+  allowedPalettes: ReadonlySet<string> | undefined,
+): PluginLayer {
+  return applyPlugins(files, ctx, base, (c, plugin, replaces) =>
+    checkPlugin(c, plugin, replaces, label, allowedPalettes),
+  );
+}
 
+// Built by every load that merges over it. A store of these beside the render
+// cache's entries outlives the checkouts they serve: an entry's checkout
+// changes on a reload without the entry leaving.
 function installedLayer(
   files: readonly PluginFile[],
   ctx: PluginContext,
   dflt: DslConfig,
   allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
-  const key = digestOf({
-    palettes: [...(allowedPalettes ?? [])].sort(),
-    files: files.map((f) => ({
-      path: f.path,
-      scope: f.scope,
-      definition: f.definition,
-    })),
-  });
-  const byProject = installedMemo.get(dflt) ?? new Map();
-  installedMemo.set(dflt, byProject);
-  // Keyed on the checkout, not the working directory: every directory of one
-  // checkout reads the same data, and the next load after a `.git` appears
-  // above a directory reads the new checkout's. Nothing watches for that
-  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
+  return layPlugins(
     files,
     ctx,
     { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
+    "<installed plugins>",
+    allowedPalettes,
   );
-  byProject.set(slot, { key, layer });
-  return layer;
 }
 
 /**
- * Why each of `definitions` would not load, laid over `dflt` exactly as the
- * installed layer lays them: what `cc-candybar plugin install` refuses before
- * it writes anything. `checkout` stands in for a session's, so a
- * `data: { checkout }` path resolves; the data file need not exist.
+ * Why each of `definitions` would not load as an installed layer over `dflt`:
+ * what `cc-candybar plugin install` refuses before it writes anything.
+ * `checkout` stands in for a session's, so a `data: { checkout }` path
+ * resolves; the data file need not exist.
  */
-// [LAW:single-enforcer] The install's verdict is the loader's own, so a
-// definition the bar would drop is never installed.
+// [LAW:single-enforcer] The install's verdict is laid exactly as the installed
+// layer lays its plugins, so a definition that alone would drop is never
+// installed.
 export function definitionProblems(
   definitions: readonly PluginFile[],
   dflt: DslConfig,
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
-  return applyPlugins(
-    definitions,
-    { checkout, home },
-    { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
-  ).dropped;
+  return installedLayer(definitions, { checkout, home }, dflt, undefined)
+    .dropped;
 }
 
 // The drop a loose file in a plugin root is: a plugin is a folder.
