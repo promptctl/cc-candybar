@@ -1,3 +1,9 @@
+## [1.232.2](https://github.com/promptctl/cc-candybar/compare/v1.232.1...v1.232.2) (2026-11-18)
+
+### Bug Fixes
+
+* **edit:** edit chrome is named by the placement it serves, not by walk position (5bfl) ([#799](https://github.com/promptctl/cc-candybar/issues/799)) ([9ffa985](https://github.com/promptctl/cc-candybar/commit/9ffa98534dfa6e86e99e386945d6eae856f1ecaa))
+
 ## [1.232.1](https://github.com/promptctl/cc-candybar/compare/v1.232.0...v1.232.1) (2026-11-18)
 
 ### Bug Fixes
