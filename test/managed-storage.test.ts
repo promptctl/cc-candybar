@@ -486,7 +486,7 @@ describe("ManagedStorage watches", () => {
     expect(faultLines(r)).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^warn plugin storage fault folder=${r.folder} cause=unusable reason=`,
+          `^warn plugin storage fault folder=${r.folder} source=folder cause=unusable reason=`,
         ),
       ),
     ]);
@@ -495,7 +495,7 @@ describe("ManagedStorage watches", () => {
     period(r);
     expect(r.counters.watchersOpened).toBe(1);
     expect(clearedLines(r)).toEqual([
-      `info plugin storage fault cleared folder=${r.folder} cause=unusable`,
+      `info plugin storage fault cleared folder=${r.folder} source=folder cause=unusable`,
     ]);
     r.write(A, '"a"');
     // The lane carries into the generation, re-read once it opens.
@@ -587,7 +587,7 @@ describe("ManagedStorage watches", () => {
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(lane.current()).toEqual(ok("a"));
     expect(clearedLines(r)).toEqual([
-      `info plugin storage fault cleared folder=${r.folder} generation=0 cause=refused`,
+      `info plugin storage fault cleared folder=${r.folder} generation=0 source=watch cause=refused`,
     ]);
     expect(r.generation()).toBe(0);
   });
@@ -614,7 +614,7 @@ describe("ManagedStorage watches", () => {
     });
     expect(faultLines(r)).toEqual([
       expect.stringMatching(
-        /^warn plugin storage fault folder=\S+ generation=0 cause=error reason=/,
+        /^warn plugin storage fault folder=\S+ generation=0 source=watch cause=error reason=/,
       ),
     ]);
     period(r);
@@ -666,7 +666,7 @@ describe("ManagedStorage watches", () => {
     period(r);
     await until(() => lane.current().kind !== "failed", "the re-read");
     expect(clearedLines(r)).toEqual([
-      `info plugin storage fault cleared folder=${r.folder} generation=0 cause=refused`,
+      `info plugin storage fault cleared folder=${r.folder} generation=0 source=watch cause=refused`,
     ]);
   });
 
@@ -698,9 +698,41 @@ describe("ManagedStorage watches", () => {
     period(r);
     await until(() => lane.current().kind === "ok", "the re-read");
     expect(clearedLines(r)).toEqual([
-      `info plugin storage fault cleared folder=${r.folder} generation=0 cause=error`,
+      `info plugin storage fault cleared folder=${r.folder} generation=0 source=folder cause=error`,
     ]);
     expect(r.generation()).toBe(0);
+  });
+
+  test("a folder whose identity cannot be read at its first hold opens no generation; the first read that answers opens one, and nothing is lost", async () => {
+    let fail = true;
+    const identityOf: IdentityRead = (folder) => {
+      if (fail) throw new Error("EIO: i/o error");
+      return statIdentity(folder);
+    };
+    fakeWatches();
+    const r = rig({ identityOf });
+    r.hold();
+    r.write(A, '"a"');
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toEqual({
+      kind: "failed",
+      failedAt: "read",
+      reason: `cannot refresh: ${r.folder} could not be read: EIO: i/o error`,
+    });
+    expect(r.counters.watchersOpened).toBe(0);
+    fail = false;
+    period(r);
+    await until(() => lane.current().kind === "ok", "the re-read");
+    expect(lane.current()).toEqual(ok("a"));
+    expect(r.counters.watchersOpened).toBe(1);
+    expect(r.storage.stats().lost).toBe(0);
+    expect(clearedLines(r)).toEqual([
+      `info plugin storage fault cleared folder=${r.folder} source=folder cause=error`,
+    ]);
+    period(r);
+    await settled();
+    expect(r.counters.watchersOpened).toBe(1);
+    expect(r.storage.stats().lost).toBe(0);
   });
 
   test("each fault source starts and clears on its own: a stat failure beneath a refusal is counted once, and each logs its own clear", async () => {
@@ -727,8 +759,8 @@ describe("ManagedStorage watches", () => {
       error: 1,
     });
     expect(clearedLines(r)).toEqual([
-      `info plugin storage fault cleared folder=${r.folder} generation=0 cause=refused`,
-      `info plugin storage fault cleared folder=${r.folder} generation=0 cause=error`,
+      `info plugin storage fault cleared folder=${r.folder} generation=0 source=watch cause=refused`,
+      `info plugin storage fault cleared folder=${r.folder} generation=0 source=folder cause=error`,
     ]);
   });
 
@@ -740,7 +772,7 @@ describe("ManagedStorage watches", () => {
     r.hold();
     expect(r.generation()).toBe(1);
     expect(endedLines(r)).toEqual([
-      `info plugin storage fault ended folder=${r.folder} generation=0 cause=refused`,
+      `info plugin storage fault ended folder=${r.folder} generation=0 source=watch cause=refused`,
     ]);
   });
 });

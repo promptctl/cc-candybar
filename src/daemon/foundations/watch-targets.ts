@@ -138,8 +138,8 @@ export function watchFault(
   return reasons.length === 0 ? null : `${label}: ${reasons.join("; ")}`;
 }
 
-// [LAW:one-source-of-truth] The one phrasing of a deafness, for every fault
-// that shows one.
+// [LAW:one-source-of-truth] How a fault a consumer shows phrases one
+// deafness.
 export const deafnessLine = (d: Deafness): string =>
   d.kind === "refused"
     ? `cannot watch ${d.path} — ${d.reason}`

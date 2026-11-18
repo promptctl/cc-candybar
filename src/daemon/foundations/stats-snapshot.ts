@@ -271,7 +271,7 @@ export interface GitCacheStats {
 }
 
 export interface ManagedStorageStats extends KeyedSourceStats {
-  // Folders watched now.
+  // Folders some hold names now: watched, or no generation could open on.
   readonly folders: number;
   readonly faults: Readonly<Record<FaultCause, number>>;
   // Folders found gone or replaced under their watch.
