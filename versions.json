@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-795",
+      "ref": "refs/pull/795/merge",
+      "sha": "4c10ea1856a10c75d52e8c8e06b6c44464384151",
+      "timestamp": "2026-11-18T07:36:58.197Z",
+      "commits": [
+        {
+          "sha": "4c10ea1856a10c75d52e8c8e06b6c44464384151",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T00:35:55-07:00",
+          "message": "Merge b0416878eb6e156ecfa15ada4c4d8f6bd47ce0d3 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "b0416878eb6e156ecfa15ada4c4d8f6bd47ce0d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T00:35:32-07:00",
+          "message": "refactor(daemon): the storage owner alone decides how long a folder's watch lives (2jt, 1/7)\n\nA storage folder is made and watched at the first declaration of a file in\nit, and its watch lives until the folder is lost or the owner closes. The\nrenderer no longer reaches the host to hold or release folders: the\n`storage` member leaves AdapterToHost and REACH_KINDS, so a renderer restart,\nreload or crash mid-start cannot close a watch, and the handover bookkeeping\nin the renderer process link goes.\n\nAn ended generation, lost or faulted, moves on at the next file-event period\nor catch-up by one rule: its next opens while a file in it is held, and it\ncloses when none is, so a removed plugin's folder is not made again. A\ndeclaration never retries a faulted folder, because every request declares\nagain and each retry would fail, log and count once more.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-794",
       "ref": "refs/pull/794/merge",
       "sha": "435be904af462f2dadd15bf484a63fa5d3be3755",
