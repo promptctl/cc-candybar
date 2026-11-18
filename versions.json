@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-810",
+      "ref": "refs/pull/810/merge",
+      "sha": "b55a403baec1f8e6604468f6485a918949947933",
+      "timestamp": "2026-11-18T16:23:58.173Z",
+      "commits": [
+        {
+          "sha": "b55a403baec1f8e6604468f6485a918949947933",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:22:51Z",
+          "message": "Merge 94c93874896c371ba065557200feb8fff329a803 into 727ff7b57655585b73a86cdb20adabe0fa145197\n"
+        },
+        {
+          "sha": "94c93874896c371ba065557200feb8fff329a803",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:14:02-07:00",
+          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "80324c6174fd974dee5eff58b05bbb0cedfbf719",
@@ -20,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:05:22-07:00",
           "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-810",
-      "ref": "refs/pull/810/merge",
-      "sha": "cf552f8ee0d6b37b9420610dca4e50e807766613",
-      "timestamp": "2026-11-18T16:16:22.914Z",
-      "commits": [
-        {
-          "sha": "cf552f8ee0d6b37b9420610dca4e50e807766613",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:13-07:00",
-          "message": "Merge ea4134cee922e563f9712079d70be71556687536 into 727ff7b57655585b73a86cdb20adabe0fa145197\n"
-        },
-        {
-          "sha": "ea4134cee922e563f9712079d70be71556687536",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:02-07:00",
-          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
         }
       ]
     },
