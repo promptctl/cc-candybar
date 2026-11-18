@@ -50988,7 +50988,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.3";
+var PACKAGE_VERSION = "1.232.4";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -74926,7 +74926,6 @@ var Acts = class {
   constructor(deps) {
     this.deps = deps;
     const { lanes } = deps;
-    this.type = typeInPane(deps.claudeInput);
     this.performers = {
       copy: (act2) => clickLaunch(
         deps.launch,
@@ -75023,11 +75022,12 @@ var Acts = class {
   // each: their Claude Code is about to exit.
   restarting = /* @__PURE__ */ new Map();
   performers;
-  // A slash line typed into a pane, once the prompt there reads ready.
-  type;
   // A slash line typed into `pane` in its turn.
   typed(pane, line) {
-    return this.inPane.run(paneKey(pane), () => this.type(pane, line));
+    return this.inPane.run(
+      paneKey(pane),
+      () => typeInPane(this.deps.claudeInput)(pane, line)
+    );
   }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
