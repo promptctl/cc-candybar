@@ -1482,8 +1482,9 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
         () => watchMoves().includes("rebound"),
         "the pass after the re-add",
       );
+      // The rebind reads the polled HEAD made again, so a spare pass may
+      // follow it; none rebinds again.
       expect(watchMoves().filter((m) => m === "rebound")).toHaveLength(1);
-      expect(watchMoves().at(-1)).toBe("rebound");
       expect(counters).toEqual({
         watchersOpened: 2,
         watchersClosed: 1,

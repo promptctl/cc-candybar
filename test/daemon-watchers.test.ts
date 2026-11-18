@@ -12,6 +12,7 @@ import {
 } from "../src/daemon/cache/watchers";
 import { heldClock, type HeldClock } from "./helpers/held-clock";
 import {
+  specOf,
   watchFault,
   watchTargetsOf,
   type Deafness,
@@ -153,6 +154,39 @@ describe("WatcherRegistry", () => {
       fs.writeFileSync(later, "x");
       swept();
       expect(seen).toEqual([{ kind: "changed", paths: [later] }]);
+    });
+
+    // The holder reads, then follows: a file made after the last sweep and
+    // read by the holder is the baseline its removal is told against, so
+    // the removal before the next sweep is heard.
+    test("a follow that keeps the watch reads its polled paths now, so a file made and removed inside one sweep is heard", () => {
+      const f = path.join(dir, "f");
+      const spec = specOf({ dirs: [], polled: [f] });
+      const seen: Invalidation[] = [];
+      const hear = (inv: Invalidation) => seen.push(inv);
+      const { watch } = reg.follow(null, spec, hear);
+      fs.writeFileSync(f, "made");
+      expect(reg.follow(watch, spec, hear).move).toBe("kept");
+      clock.advance(DEBOUNCE_MS);
+      expect(seen).toEqual([{ kind: "changed", paths: [f] }]);
+      fs.rmSync(f);
+      swept();
+      expect(seen).toEqual([
+        { kind: "changed", paths: [f] },
+        { kind: "changed", paths: [f] },
+      ]);
+    });
+
+    test("an acquire reads its polled paths now, telling every holder of a change since the last sweep", () => {
+      const f = path.join(dir, "f");
+      const first = polling(f);
+      fs.writeFileSync(f, "made");
+      const second = polling(f);
+      clock.advance(DEBOUNCE_MS);
+      expect(first).toEqual([{ kind: "changed", paths: [f] }]);
+      expect(second).toEqual(first);
+      swept();
+      expect(first).toHaveLength(1);
     });
 
     test("is read once per sweep for every slot naming it, and its last release leaves no sweep armed", () => {
