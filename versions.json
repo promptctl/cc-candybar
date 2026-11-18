@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "556287991e7955f7a9fbfc4a12b9ded691a25344",
+      "timestamp": "2026-11-18T16:37:16.205Z",
+      "commits": [
+        {
+          "sha": "556287991e7955f7a9fbfc4a12b9ded691a25344",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:36:10-07:00",
+          "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk) (#805)"
+        }
+      ]
+    },
+    {
       "version": "pr-809",
       "ref": "refs/pull/809/merge",
       "sha": "4c97b4211afd3d9ab3506a2db3b4056663777428",
@@ -20,28 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:11:12-07:00",
           "message": "fix(edit): a click releases every state key its change of the config ends, so a re-added placement's library opens closed (t2yz)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-805",
-      "ref": "refs/pull/805/merge",
-      "sha": "40ad224783535efb8da1a5ee49343a03a5e0ee8e",
-      "timestamp": "2026-11-18T16:26:11.654Z",
-      "commits": [
-        {
-          "sha": "40ad224783535efb8da1a5ee49343a03a5e0ee8e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:25:19Z",
-          "message": "Merge b4abfb5850ecaaf18711662f9df1d0eada055be0 into 727ff7b57655585b73a86cdb20adabe0fa145197\n"
-        },
-        {
-          "sha": "b4abfb5850ecaaf18711662f9df1d0eada055be0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:38:17-07:00",
-          "message": "fix(watchers): a path watched by name is polled at its path, and only folders ride the OS event stream (iywk)\n"
         }
       ]
     },
@@ -86,21 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:05:22-07:00",
           "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "727ff7b57655585b73a86cdb20adabe0fa145197",
-      "timestamp": "2026-11-18T16:14:56.822Z",
-      "commits": [
-        {
-          "sha": "727ff7b57655585b73a86cdb20adabe0fa145197",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T16:13:49Z",
-          "message": "chore(release): set `package.json` to 1.232.2\n\n## [1.232.2](https://github.com/promptctl/cc-candybar/compare/v1.232.1...v1.232.2) (2026-11-18)\n\n### Bug Fixes\n\n* **edit:** edit chrome is named by the placement it serves, not by walk position (5bfl) ([#799](https://github.com/promptctl/cc-candybar/issues/799)) ([9ffa985](https://github.com/promptctl/cc-candybar/commit/9ffa98534dfa6e86e99e386945d6eae856f1ecaa))\n"
         }
       ]
     },
