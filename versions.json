@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "9ffa98534dfa6e86e99e386945d6eae856f1ecaa",
+      "timestamp": "2026-11-18T16:00:59.549Z",
+      "commits": [
+        {
+          "sha": "9ffa98534dfa6e86e99e386945d6eae856f1ecaa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:00:01-07:00",
+          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl) (#799)\n\n* fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n\n* fix(edit): edit chrome spells preset and placement with one injective, readable identifier (5bfl)\n\nA placement or preset name is letters and digits as they are and every\nother code point as Z and six hex digits, so names that differ only in\npunctuation keep their own chrome and menu keys. The preset collision\nguard protected only the lossy preset spelling and is deleted.\n\n* fix(edit): chrome name builders take names as written and escape inside (5bfl)"
+        }
+      ]
+    },
+    {
       "version": "pr-806",
       "ref": "refs/pull/806/merge",
       "sha": "f2146118da338ffd0db402ef1937b0ea96a42111",
@@ -64,21 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T08:32:32-07:00",
           "message": "fix(doctor): the config row names the repository the bar asks about, and where it stands (qo8j)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "3ce2357e96988528f010578e31cb069ce8d02ecc",
-      "timestamp": "2026-11-18T15:43:36.297Z",
-      "commits": [
-        {
-          "sha": "3ce2357e96988528f010578e31cb069ce8d02ecc",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T15:42:23Z",
-          "message": "chore(release): set `package.json` to 1.232.1\n\n## [1.232.1](https://github.com/promptctl/cc-candybar/compare/v1.232.0...v1.232.1) (2026-11-18)\n\n### Bug Fixes\n\n* every staged file is published through one operation, under a name unique to its call (ooi7) ([#798](https://github.com/promptctl/cc-candybar/issues/798)) ([36b0c26](https://github.com/promptctl/cc-candybar/commit/36b0c268535b139534bb9b29bd59ac0a0621b719))\n"
         }
       ]
     }
