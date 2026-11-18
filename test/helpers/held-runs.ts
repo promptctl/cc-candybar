@@ -100,6 +100,22 @@ export function collectedRuns(
     [...registry.namedRuns()]
       .filter(([, run]) => awaitedReading(readings.run(run.digest).reading))
       .map(([name]) => name);
+  // Ends the hold whichever comes first, the case's close or the registry's
+  // own teardown: a case that replaces a view closes the old hold while its
+  // registry lives on, and one that ends the registry has ended the hold.
+  let open = true;
+  const close = (): void => {
+    if (!open) return;
+    open = false;
+    stop();
+    collector.close();
+    owners.transcriptLanes.close();
+  };
+  // [LAW:single-enforcer] The registry's teardown ends what is held over it.
+  // A disposed registry still reports its subscriptions, so a collector left
+  // open keeps holding the session's lanes, and each lane's refresh period
+  // re-arms for the life of the worker.
+  registry.own(close);
   return {
     readings,
     // Asked again at its own continuation: a landing that answers a key
@@ -107,15 +123,14 @@ export function collectedRuns(
     // after the collector's wait, so one wait can end between the answer and
     // the run it names.
     settled: async (signal) => {
+      // [LAW:no-silent-failure] A closed hold stamps no world state again,
+      // so a wait on one could only spin.
+      if (!open) throw new Error("a wait on runs whose hold has ended");
       while (!signal.aborted && stragglers().length > 0)
         await collector.settled(sid, signal);
       return stragglers();
     },
-    close: () => {
-      stop();
-      collector.close();
-      owners.transcriptLanes.close();
-    },
+    close,
   };
 }
 
