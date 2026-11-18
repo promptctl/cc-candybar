@@ -4,15 +4,22 @@
     {
       "version": "pr-792",
       "ref": "refs/pull/792/merge",
-      "sha": "89f42f6e6993d752d7bd685898b4d380914e4fa7",
-      "timestamp": "2026-11-18T01:31:54.426Z",
+      "sha": "dfb7bed422bc7b8c7585f5b544652a7acc201b6b",
+      "timestamp": "2026-11-18T01:45:09.456Z",
       "commits": [
         {
-          "sha": "89f42f6e6993d752d7bd685898b4d380914e4fa7",
+          "sha": "dfb7bed422bc7b8c7585f5b544652a7acc201b6b",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T01:31:04Z",
-          "message": "Merge ae03de6ee560f9b414495323bbe0d9395126fb84 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+          "timestamp": "2026-11-18T01:44:04Z",
+          "message": "Merge 6e3e144172e82aa194f545b65e6a40d146cb5cf5 into 56372f0bd83dcf930c0554eda0b7556027be5d9e\n"
+        },
+        {
+          "sha": "6e3e144172e82aa194f545b65e6a40d146cb5cf5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T18:43:51-07:00",
+          "message": "fix(daemon): env reads take own keys, the base set leaves TERM out, and a run refused for no environment is counted apart (bco)\n\n- An `env` variable is read by own key on both sides, so a name like\n  `constructor` reads not handed in; one UNREAD_ENV replaces three literals.\n- TERM leaves the base set: it differs between a tmux session and a bare\n  terminal, so it split every shell run it was meant to share.\n- The Rust client leaves a non-UTF-8 variable unset rather than sending its\n  value with the bytes replaced.\n- A run refused for want of an environment counts as `refused`, not `failed`,\n  so `failed` stays a part of `started`.\n- One Locator type; the single-enforcer marker restored where the host lays a\n  run's variables; the lane edge's `claude` launch is tested in the session's\n  environment and refused without one.\n- The click doc says TMUX and TMUX_PANE are unset; the architecture memory\n  says the git and PR reads are a directory's and run in the daemon's env.\n"
         },
         {
           "sha": "ae03de6ee560f9b414495323bbe0d9395126fb84",

@@ -30264,6 +30264,7 @@ var Runs = class {
   inFlight = /* @__PURE__ */ new Set();
   started = 0;
   failed = 0;
+  refused = 0;
   timedOut = 0;
   closed = false;
   constructor(deps) {
@@ -30277,7 +30278,7 @@ var Runs = class {
     if (this.closed) throw new Error("run owner used after close");
     const environment = this.deps.environmentOf(run3.session);
     if (environment.kind === "failed") {
-      this.failed++;
+      this.refused++;
       const reason = `not run: ${environment.reason}`;
       return Promise.resolve({
         outcome: { kind: "failed", reason },
@@ -30298,7 +30299,8 @@ var Runs = class {
       // looked up on PATH.
       bin: program.includes("/") ? import_node_path3.default.resolve(run3.cwd, program) : program,
       args: [...args],
-      // The program's own variables over its session's environment.
+      // [LAW:single-enforcer] The program's own variables over its
+      // session's environment, laid here for every click's run.
       environment: environment.value,
       envOverlay: run3.env,
       cwd: run3.cwd,
@@ -30317,6 +30319,7 @@ var Runs = class {
       started: this.started,
       failed: this.failed,
       timedOut: this.timedOut,
+      refused: this.refused,
       running: this.inFlight.size
     };
   }
@@ -34726,6 +34729,7 @@ function settledLane(outcome) {
 
 // src/facts/world-state.ts
 init_globals();
+var UNREAD_ENV = pendingOf("unread");
 var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
@@ -35877,6 +35881,9 @@ function attempt(read2) {
 
 // src/utils/plain.ts
 init_globals();
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
 function digestOf(value) {
   return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 }
@@ -71823,7 +71830,7 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -72059,7 +72066,7 @@ function assembleFacts(prior, session, readings, daemon3, at) {
   const env2 = Object.fromEntries(
     [...lanes.env].map(([name, reading]) => [
       name,
-      stamp2(prior?.env[name], reading)
+      stamp2(prior && ownValue(prior.env, name), reading)
     ])
   );
   const doctor = stamp2(prior?.doctor, lanes.doctor);
@@ -75788,7 +75795,6 @@ var SHELL_BASE_ENV = [
   "LOGNAME",
   "PATH",
   "SHELL",
-  "TERM",
   "TMPDIR",
   "USER",
   "XDG_CACHE_HOME",
@@ -76686,7 +76692,7 @@ var UNBOUND = {
   },
   read: () => pendingOf("unread"),
   run: () => UNREAD_RUN,
-  env: () => pendingOf("unread"),
+  env: () => UNREAD_ENV,
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -89086,8 +89092,8 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     action: action2,
     program,
     args,
-    // The action's own variables: the host lays them over the session's
-    // environment, which no renderer holds.
+    // [LAW:single-enforcer] The action's own variables only: the host lays
+    // them over the session's environment, which no renderer holds.
     env: drawn.env,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
@@ -90006,7 +90012,7 @@ function sessionSource(deps) {
       run: (digest2) => document().runs[digest2] ?? UNREAD_RUN,
       // A variable the document does not carry is one the host has not
       // handed in for this session yet.
-      env: (name) => document().env[name] ?? pendingOf("unread"),
+      env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw2.read().effective
