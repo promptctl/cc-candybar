@@ -35101,8 +35101,8 @@ var WatcherRegistry = class {
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
-    if (followed.move === "kept")
-      this.reread(this.slots.get(followed.watch.key)?.polled ?? []);
+    const slot = this.slots.get(followed.watch.key);
+    if (slot !== void 0) this.reread(slot.polled);
     return followed;
   }
   opened(key, targets) {
@@ -35333,9 +35333,8 @@ var WatcherRegistry = class {
     if (this.counters) this.counters.watchersClosed++;
   }
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // the acquire is a change; or the one already held, which the acquire reads
+  // again (`reread`).
   polledAt(at) {
     const held2 = this.polled.get(at);
     if (held2 !== void 0) return held2;
@@ -35372,11 +35371,14 @@ var WatcherRegistry = class {
     this.reread(this.polled.values());
   }
   // [LAW:no-ambient-temporal-coupling] Every acquire and every follow reads
-  // its polled paths now, as the sweep does. A holder follows right after it
-  // reads, and a baseline older than that read hides any change that undoes
-  // what it read before the next sweep: a file made and removed within one
-  // period reads the same at both sweeps. A path that moved since the last
-  // sweep fires, a spare re-read and never a missed one.
+  // its polled paths now, as the sweep does, because a baseline older than a
+  // holder's read hides a change that undoes what it read before the next
+  // sweep: a file made and removed within one period reads the same at both
+  // sweeps. A holder that follows before it reads hears whatever moves after
+  // the follow at the next sweep; one that reads first leaves the span
+  // between its read and its follow unwatched. A path that moved since the
+  // last sweep fires every slot on it, a spare re-read for any that already
+  // read it.
   reread(records) {
     for (const record2 of records) {
       const now2 = entryAt(record2.path);

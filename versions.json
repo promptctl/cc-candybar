@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-818",
+      "ref": "refs/pull/818/merge",
+      "sha": "7105107b7a3e935382c12e9fc50347ee07d1b969",
+      "timestamp": "2026-11-18T18:18:08.268Z",
+      "commits": [
+        {
+          "sha": "7105107b7a3e935382c12e9fc50347ee07d1b969",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T18:16:56Z",
+          "message": "Merge 965c6949e718a856760eaa8c656af6707e3194a5 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "965c6949e718a856760eaa8c656af6707e3194a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:16:43-07:00",
+          "message": "fix(watchers): every follow reads the slot it holds, and the baseline's comments say what order hears a change (hqoo)\n"
+        },
+        {
+          "sha": "5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:56:43-07:00",
+          "message": "fix(watchers): every acquire and follow reads its polled paths now, so a file made and removed inside one sweep is heard (hqoo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-820",
       "ref": "refs/pull/820/merge",
       "sha": "4f936b837718ff16ea2a1331648e51aa2c5c8ce8",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:59:23-07:00",
           "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-818",
-      "ref": "refs/pull/818/merge",
-      "sha": "c03f18c195478c80a5f2eefa865e832387e749c8",
-      "timestamp": "2026-11-18T17:58:15.450Z",
-      "commits": [
-        {
-          "sha": "c03f18c195478c80a5f2eefa865e832387e749c8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:57:02-07:00",
-          "message": "Merge 5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:56:43-07:00",
-          "message": "fix(watchers): every acquire and follow reads its polled paths now, so a file made and removed inside one sweep is heard (hqoo)\n"
         }
       ]
     },
