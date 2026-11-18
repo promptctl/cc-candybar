@@ -28934,71 +28934,59 @@ function timeoutSignal(clock, ms) {
 // src/utils/atomic-write.ts
 init_globals();
 var import_node_path2 = __toESM(require_path_browserify(), 1);
-function publish(file, bytes, { by, mode, admit: admit2 = admitted }) {
+function publishByRename(file, bytes, mode) {
   const staged = stagedName(file);
-  let published;
   try {
-    const fd = fs_default.openSync(staged, "wx", mode);
-    try {
-      fs_default.writeFileSync(fd, bytes);
-      fs_default.fsyncSync(fd);
-    } finally {
-      fs_default.closeSync(fd);
-    }
-    published = admit2(staged) && lands(by, () => PUBLISH[by](staged, file));
+    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    fs_default.renameSync(staged, file);
   } catch (e) {
-    throw withCleanup(e, staged);
+    throw leftBehind(e, staged);
   }
-  fs_default.rmSync(staged, { force: true });
-  return published;
 }
-async function publishAsync(file, bytes, { by, mode, admit: admit2 = admitted }) {
+async function publishByRenameAsync(file, bytes, mode) {
   const staged = stagedName(file);
-  let published;
   try {
-    const handle = await fs_default.promises.open(staged, "wx", mode);
-    try {
-      await handle.writeFile(bytes);
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    published = admit2(staged) && await PUBLISH_ASYNC[by](staged, file).then(
-      () => true,
-      (e) => lostTheLink(by, e)
+    await fs_default.promises.writeFile(staged, bytes, {
+      flag: "wx",
+      mode,
+      flush: true
+    });
+    await fs_default.promises.rename(staged, file);
+  } catch (e) {
+    throw leftBehind(e, staged);
+  }
+}
+function publishByLink(file, bytes, mode) {
+  const staged = stagedName(file);
+  let linked;
+  try {
+    fs_default.writeFileSync(staged, bytes, { flag: "wx", mode, flush: true });
+    linked = taken(() => fs_default.linkSync(staged, file));
+  } catch (e) {
+    throw leftBehind(e, staged);
+  }
+  try {
+    fs_default.rmSync(staged);
+  } catch (e) {
+    throw new Error(
+      `${file}: ${linked}, but the staged file ${staged} was left behind: ${e.message}`
     );
-  } catch (e) {
-    throw withCleanup(e, staged);
   }
-  await fs_default.promises.rm(staged, { force: true });
-  return published;
+  return linked;
 }
-var admitted = () => true;
-var PUBLISH = {
-  rename: (staged, file) => fs_default.renameSync(staged, file),
-  link: (staged, file) => fs_default.linkSync(staged, file)
-};
-var PUBLISH_ASYNC = {
-  rename: (staged, file) => fs_default.promises.rename(staged, file),
-  link: (staged, file) => fs_default.promises.link(staged, file)
-};
-function lands(by, run3) {
+function taken(link) {
   try {
-    run3();
-    return true;
+    link();
+    return "published";
   } catch (e) {
-    return lostTheLink(by, e);
+    if (e.code === "EEXIST") return "taken";
+    throw e;
   }
-}
-function lostTheLink(by, e) {
-  if (by === "link" && e.code === "EEXIST")
-    return false;
-  throw e;
 }
 function stagedName(file) {
   return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
 }
-function withCleanup(e, staged) {
+function leftBehind(e, staged) {
   try {
     fs_default.rmSync(staged, { force: true });
   } catch (c) {
@@ -29009,10 +28997,11 @@ function withCleanup(e, staged) {
 function writeAtomic(at, text4, mode) {
   const file = resolvedTarget(at);
   fs_default.mkdirSync(import_node_path2.default.dirname(file), { recursive: true });
-  publish(file, text4, {
-    by: "rename",
-    mode: mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode
-  });
+  publishByRename(
+    file,
+    text4,
+    mode ?? fs_default.statSync(file, { throwIfNoEntry: false })?.mode
+  );
 }
 function readConfigText(file) {
   try {
@@ -29782,8 +29771,8 @@ function readJobEnd(status) {
 function endJob(spawner, clock, pid2, status, end) {
   let stands;
   try {
-    stands = publish(status, `${formatJobEnd(end)}
-`, { by: "link" });
+    stands = publishByLink(status, `${formatJobEnd(end)}
+`) === "published";
   } catch (err) {
     if (err.code === "ENOENT") {
       return { stands: false, signalled: false };
@@ -30292,8 +30281,8 @@ var SessionBook = class {
     return this.environments.get(session) ?? NOT_HEARD;
   }
   close() {
-    this.storage.flush();
     this.phase = "closed";
+    return this.storage.flush();
   }
   bound() {
     for (const oldest of this.book.keys()) {
@@ -46141,10 +46130,10 @@ var RichText = class _RichText {
    * is admitted as given.
    */
   _addSpan(start, end, style) {
-    const admitted2 = admitStyle(style);
-    if (isEmptyStyle(admitted2))
+    const admitted = admitStyle(style);
+    if (isEmptyStyle(admitted))
       return;
-    this._spans.push(new Span(start, end, admitted2));
+    this._spans.push(new Span(start, end, admitted));
   }
   stylize(style, start, end) {
     const len3 = this._text.get().length;
@@ -51285,10 +51274,10 @@ var inWalkOrder = (window2) => {
 var windowSize = (count, colours) => Math.max(2, Math.min(count, colours - 1));
 var WINDOWS = memoPerPalette();
 var drawnIn = (palette, hue, drawnAt) => (tone) => drawnColour(palette.get(shadeRole(hue, tone)), drawnAt).hex;
-function widen(palette, hue, from, taken, drawnAt) {
+function widen(palette, hue, from, taken2, drawnAt) {
   const drawn = drawnIn(palette, hue, drawnAt);
   return ladderFrom(from, palette.dark).find(
-    (rung) => !taken.includes(drawn(rung))
+    (rung) => !taken2.includes(drawn(rung))
   );
 }
 function ladderFrom(from, dark) {
@@ -51441,11 +51430,11 @@ function turnsHeld(palette, decor, dealt, drawnAt) {
   const pressed = drawnPress(palette, { decor, depth: 0 }, drawnAt);
   const apart = (at, off) => {
     const { hue } = line[at];
-    const taken = [drawn(at - 1), drawn(at + 1), ...off].filter(
+    const taken2 = [drawn(at - 1), drawn(at + 1), ...off].filter(
       (colour) => colour !== void 0
     );
     const window2 = windowAt(palette, hue, decor.shade, drawnAt);
-    const tone = window2.find((t2) => !taken.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken, drawnAt);
+    const tone = window2.find((t2) => !taken2.includes(drawnIn(palette, hue, drawnAt)(t2))) ?? widen(palette, hue, window2, taken2, drawnAt);
     return tone === void 0 ? void 0 : { hue, shade: tone };
   };
   const moves = (at) => [[pressed], []].flatMap(
@@ -51514,10 +51503,10 @@ function pressedAt(palette, disclosure, drawnAt) {
       drawnPress(palette, up, drawnAt)
     ];
     const besideTrigger = depth === 0 ? [...variation.hues, ...keystone].flatMap(dealt) : besideBand({ decor, depth: depth - 1 });
-    const taken = [...dealt(hue), ...besideTrigger];
-    if (!taken.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
+    const taken2 = [...dealt(hue), ...besideTrigger];
+    if (!taken2.includes(drawnIn(palette, hue, drawnAt)(shade.activated)))
       return shade.activated;
-    return widen(palette, hue, [shade.activated], taken, drawnAt) ?? shade.activated;
+    return widen(palette, hue, [shade.activated], taken2, drawnAt) ?? shade.activated;
   });
 }
 var PRESSED = memoPerPalette();
@@ -52516,10 +52505,10 @@ function placementIds(tree) {
     (n) => n.kind === "segment" ? [placementId(n)] : []
   );
 }
-function freePlacementId(segment, taken) {
-  if (!taken.has(segment)) return segment;
+function freePlacementId(segment, taken2) {
+  if (!taken2.has(segment)) return segment;
   let n = 2;
-  while (taken.has(`${segment}-${n}`)) n++;
+  while (taken2.has(`${segment}-${n}`)) n++;
   return `${segment}-${n}`;
 }
 function mapOpens(node, f) {
@@ -62806,10 +62795,10 @@ function decodeLayoutOp(token) {
   return null;
 }
 function mintPlacement(segment, anchor, trees) {
-  const taken = new Set(
+  const taken2 = new Set(
     trees.map(placementIds).filter((held2) => held2.includes(anchor)).flat()
   );
-  const id2 = freePlacementId(segment, taken);
+  const id2 = freePlacementId(segment, taken2);
   return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
 }
 
@@ -63420,7 +63409,7 @@ function makeUpdateWatch(opts) {
     const held2 = fact.get();
     return held2.kind === "ok" ? held2.value : null;
   };
-  function publish2() {
+  function publish() {
     const reading = closed ? ABSENT : updateReading(build2, release4);
     const next = restamp(fact.get(), reading, instantAt(clock));
     runInAction(() => fact.set(next));
@@ -63429,7 +63418,7 @@ function makeUpdateWatch(opts) {
     const sampled = assessBuild(entryUrl, () => bundleStamp(digest2));
     build2 = ok(sampled);
     logBuild(describeBuild(sampled));
-    publish2();
+    publish();
     return sampled;
   }
   async function pollRelease() {
@@ -63442,7 +63431,7 @@ function makeUpdateWatch(opts) {
     const assessed = assessCurrency(PACKAGE_VERSION, latest);
     release4 = ok(assessed);
     logRelease(describeRelease(assessed));
-    publish2();
+    publish();
   }
   const logUnreadable = changeLogger(log);
   async function touchActs(touch) {
@@ -63512,7 +63501,7 @@ function makeUpdateWatch(opts) {
     },
     close() {
       closed = true;
-      publish2();
+      publish();
       armed.forEach((release5) => release5());
     },
     acts: () => actsRead.get(),
@@ -70462,7 +70451,7 @@ function listedPlugins(refs, from, listed) {
   return refs.map((ref) => listed[ref]);
 }
 function applyPlugins(files, ctx, base, validate) {
-  const taken = /* @__PURE__ */ new Map();
+  const taken2 = /* @__PURE__ */ new Map();
   return files.reduce(
     (layer, found2) => {
       const definition = pluginDefinition(found2.path, found2.scope);
@@ -70494,14 +70483,14 @@ function applyPlugins(files, ctx, base, validate) {
           layer.config
         );
       }
-      const first2 = taken.get(ns);
+      const first2 = taken2.get(ns);
       if (first2 !== void 0) {
         return drop2(
           `plugin "${definition.name}" is already listed, from ${first2}`,
           layer.config
         );
       }
-      taken.set(ns, file);
+      taken2.set(ns, file);
       const under3 = withoutPlugin(layer.config, ns);
       const read2 = found2.definition;
       const merged = read2.kind === "unreadable" ? { ok: false, reason: read2.error } : attempt3(() => {
@@ -73579,7 +73568,7 @@ var INSTALL_QUERIES = (session) => [
   show(session, PRIOR_OPTION),
   show(session, WROTE_OPTION)
 ];
-function leftBehind(prior, wrote, owner) {
+function leftBehind2(prior, wrote, owner) {
   let parsed2;
   let status;
   try {
@@ -73601,7 +73590,7 @@ function installPlan(session, answers, owner) {
   const own2 = ownOf(rest2.slice(0, 2 + MAX_STATUS_ROWS));
   const globals = rest2.slice(2 + MAX_STATUS_ROWS, 2 + 2 * MAX_STATUS_ROWS);
   const [prior = "", wrote = ""] = rest2.slice(2 + 2 * MAX_STATUS_ROWS);
-  if (prior !== "") return leftBehind(prior, wrote, owner);
+  if (prior !== "") return leftBehind2(prior, wrote, owner);
   const base = statusRows(statusWordNow);
   const above = {};
   for (let i2 = 0; i2 < base; i2++) {
@@ -73968,7 +73957,7 @@ var TmuxStatusLines = class {
         const [session, prior, wrote = ""] = line.split("	");
         if (session === void 0 || prior === void 0 || prior === "")
           continue;
-        const found2 = leftBehind(prior, wrote, this.deps.owner);
+        const found2 = leftBehind2(prior, wrote, this.deps.owner);
         if (found2.kind === "ours")
           server.layouts.set(session, {
             prior: found2.prior,
@@ -74364,15 +74353,15 @@ function relaunchArgs(argv2) {
         reason: `Claude Code was started with ${name}, which cc-candybar does not know how to carry to a restart`
       };
     }
-    const taken = eq2 !== -1 ? [] : rule.arity === "one" ? tokens.slice(i2, i2 + 1) : rule.arity === "optional" ? tokens.slice(i2, i2 + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens.slice(i2), (t2) => !isFlag(t2)) : [];
-    if (rule.arity === "one" && eq2 === -1 && taken.length === 0) {
+    const taken2 = eq2 !== -1 ? [] : rule.arity === "one" ? tokens.slice(i2, i2 + 1) : rule.arity === "optional" ? tokens.slice(i2, i2 + 1).filter((t2) => !isFlag(t2)) : rule.arity === "variadic" ? takeWhile(tokens.slice(i2), (t2) => !isFlag(t2)) : [];
+    if (rule.arity === "one" && eq2 === -1 && taken2.length === 0) {
       return {
         kind: "refused",
         reason: `Claude Code was started with ${name} and no value after it`
       };
     }
-    i2 += taken.length;
-    if (rule.keep) kept.push(token, ...taken);
+    i2 += taken2.length;
+    if (rule.keep) kept.push(token, ...taken2);
   }
   return { kind: "args", args: kept };
 }
@@ -75663,16 +75652,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       slotted: await inSlot(stamped(made), queuedMs)
     };
   }, at);
-  const taken = async (make, at = "last") => {
+  const taken2 = async (make, at = "last") => {
     const { event, slotted } = await throughSlot(make, at);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled }
     };
   };
-  const answer2 = async (make) => (await taken(make)).turn;
+  const answer2 = async (make) => (await taken2(make)).turn;
   const recorded2 = (at) => async (make, about) => {
-    const { event, turn } = await taken(make, at);
+    const { event, turn } = await taken2(make, at);
     record2(event, about, turn);
     return turn;
   };
@@ -77106,7 +77095,7 @@ var SourceRegistry = class _SourceRegistry {
   // simply not overwritten yet, so a key change draws no pending flash (spec
   // section 19).
   declareSource(name, read2, cache2, parse4) {
-    const publish2 = this.publisherFor(name, parse4);
+    const publish = this.publisherFor(name, parse4);
     const refreshOf = this.registerCachePolicy(name, cache2);
     const run3 = computed(
       () => {
@@ -77142,7 +77131,7 @@ var SourceRegistry = class _SourceRegistry {
         (reading) => {
           if (reading === void 0 || reading.kind === "pending") return;
           const { at: _at, ...outcome } = reading;
-          publish2(outcome);
+          publish(outcome);
         },
         { fireImmediately: true }
       )
@@ -83555,7 +83544,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     const own2 = new Set(
       bare.dropped.flatMap((d) => d.issues.map((i2) => i2.message))
     );
-    const { taken, refused: refused2 } = written3.cells.reduce(
+    const { taken: taken2, refused: refused2 } = written3.cells.reduce(
       (acc, cell3) => {
         try {
           judge([...acc.taken, cell3], []);
@@ -83577,7 +83566,7 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
       },
       { taken: [], refused: [] }
     );
-    return judge(taken, refused2);
+    return judge(taken2, refused2);
   }
 }
 function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
@@ -87638,7 +87627,7 @@ function presetKeys(doc) {
   return declared?.kind === "object" ? declared.entries.map((e) => e.key) : [];
 }
 function freePresetName(doc, under3, into) {
-  const taken = new Set(
+  const taken2 = new Set(
     [
       ...Object.keys(under3.presets),
       ...presetKeys(doc),
@@ -87652,9 +87641,9 @@ function freePresetName(doc, under3, into) {
     ].map(ident)
   );
   return Array.from(
-    { length: taken.size + 1 },
+    { length: taken2.size + 1 },
     (_, i2) => `${SAVED_PRESET_PREFIX}${i2 + 1}`
-  ).find((candidate) => !taken.has(ident(candidate)));
+  ).find((candidate) => !taken2.has(ident(candidate)));
 }
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
@@ -92063,8 +92052,8 @@ var HeldStores = class {
   // settling) stays in memory, so it never lands over the files a next
   // daemon has taken up.
   close() {
-    this.storage.session.flush();
     this.closed = true;
+    return this.storage.session.flush();
   }
 };
 function moved(store, key, value) {
@@ -95035,7 +95024,7 @@ var ephemeralSessionFile = () => ({
   load: () => /* @__PURE__ */ new Map(),
   save: () => {
   },
-  flush: () => {
+  flush: async () => {
   }
 });
 var SESSION_STATE_FILE = {
@@ -95059,17 +95048,13 @@ var SessionFile = class {
   logger;
   // What clears the debounce timer while one is armed.
   clearTimer = null;
+  // [LAW:one-source-of-truth] State not yet durably written: cleared only once
+  // its write lands, so a disk that refuses leaves it for the next write.
   pending = null;
-  // Whether a debounced write is on its way to the disk.
-  writing = false;
-  // Counts synchronous flushes that landed: a debounced write begun before
-  // the latest one is older than what it wrote. A flush the disk refused
-  // counts for nothing, so the write it raced still publishes.
-  generation = 0;
-  // What a flush runs to supersede the debounced write whose bytes are staged
-  // and on their way to publish: it removes them.
-  discardStaged = () => {
-  };
+  // [LAW:no-ambient-temporal-coupling] Every write joins the end of this
+  // chain, so writes land in the order they began and none overtakes
+  // another: older state still on its way never lands over newer.
+  written = Promise.resolve();
   // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
   // *defined* recovery, not a hidden fallback to different data: an empty
   // store re-rolls random picks exactly as a first-ever boot would.
@@ -95126,10 +95111,10 @@ var SessionFile = class {
     this.pending = snapshot;
     this.schedule();
   }
-  // One debounced write at a time, so snapshots land in the order they were
-  // taken; a save that arrives while one is being written waits for it.
+  // One debounce window at a time: the saves inside it coalesce into the
+  // write it ends with.
   schedule() {
-    if (this.clearTimer !== null || this.writing) return;
+    if (this.clearTimer !== null) return;
     this.clearTimer = this.clock.after(
       this.debounceMs,
       () => {
@@ -95138,6 +95123,12 @@ var SessionFile = class {
       },
       { unref: true }
     );
+  }
+  // Joins a write of what is pending to the chain, settling once it lands or
+  // fails.
+  write() {
+    this.written = this.written.then(() => this.land());
+    return this.written;
   }
   body(snapshot) {
     return JSON.stringify(
@@ -95155,42 +95146,15 @@ var SessionFile = class {
   // journaled metadata op, and on a busy disk it waits on the journal like
   // any write: run synchronously here it held every bar and click for 180 ms
   // on a CI runner, past every client's reply budget.
-  async write() {
+  async land() {
     const snapshot = this.pending;
     if (snapshot === null) return;
-    const generation = this.generation;
     const started2 = this.clock.monotonic();
     const body = this.body(snapshot);
-    this.writing = true;
     const heldMs = elapsedMs(this.clock, started2);
     try {
       await fs_default.promises.mkdir(import_node_path49.default.dirname(this.filePath), { recursive: true });
-      let landed = false;
-      try {
-        landed = await publishAsync(this.filePath, body, {
-          by: "rename",
-          // [LAW:single-enforcer] Daemon runtime files are owner-only, like
-          // pid/spawn.lock: a session file carries conversation identifiers.
-          mode: 384,
-          admit: (staged) => {
-            this.discardStaged = () => fs_default.rmSync(staged, { force: true });
-            return generation === this.generation;
-          }
-        });
-      } catch (e) {
-        if (e.code !== "ENOENT" || generation === this.generation)
-          throw e;
-      } finally {
-        this.discardStaged = () => {
-        };
-      }
-      if (generation !== this.generation) {
-        this.logger(
-          "info",
-          `${this.kind.name} write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
-        );
-        return;
-      }
+      await publishByRenameAsync(this.filePath, body, 384);
       this.saved(body, snapshot, started2, heldMs);
       if (this.pending === snapshot) this.pending = null;
     } catch (e) {
@@ -95198,47 +95162,14 @@ var SessionFile = class {
         "warn",
         `${this.kind.name} save failed: ${e.message}`
       );
-    } finally {
-      this.writing = false;
-      if (this.pending !== null && this.pending !== snapshot) this.schedule();
     }
   }
-  // The synchronous write, for shutdown and for callers that read the file
-  // back at once.
+  // For shutdown and for callers that read the file back: what is pending
+  // lands now, behind any write already on its way.
   flush() {
     this.clearTimer?.();
     this.clearTimer = null;
-    if (this.pending === null) return;
-    const snapshot = this.pending;
-    const started2 = this.clock.monotonic();
-    try {
-      fs_default.mkdirSync(import_node_path49.default.dirname(this.filePath), { recursive: true });
-      const body = this.body(snapshot);
-      publish(this.filePath, body, {
-        by: "rename",
-        mode: 384,
-        // [LAW:no-ambient-temporal-coupling] The debounced write's staged
-        // bytes go just before this write lands, whatever its rename is doing
-        // on the thread pool: a rename and an unlink of one directory entry
-        // cannot interleave, so either the older state landed already and is
-        // overwritten here, or its rename finds nothing. Newer state is never
-        // put back under older. A flush the disk refuses before this point
-        // discards nothing; one it refuses at the rename leaves both writes
-        // saying they failed, and the newer state pending for the next save.
-        admit: () => {
-          this.discardStaged();
-          return true;
-        }
-      });
-      this.generation++;
-      this.saved(body, snapshot, started2, elapsedMs(this.clock, started2));
-      this.pending = null;
-    } catch (e) {
-      this.logger(
-        "warn",
-        `${this.kind.name} save failed: ${e.message}`
-      );
-    }
+    return this.write();
   }
   // [LAW:nothing-unseen] Every write says what it wrote, how long it took, and
   // how much of that it held the daemon's one thread.
@@ -95833,7 +95764,7 @@ function readOrCreate(file) {
 }
 function create(file) {
   fs_default.mkdirSync(import_node_path53.default.dirname(file), { recursive: true });
-  publish(file, randomBytes(LINK_KEY_BYTES), { by: "link", mode: 384 });
+  publishByLink(file, randomBytes(LINK_KEY_BYTES), 384);
 }
 
 // src/daemon/renderer-process.ts

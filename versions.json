@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-798",
+      "ref": "refs/pull/798/merge",
+      "sha": "cf933be2f773452a29f2fefbee53e6000f4c986c",
+      "timestamp": "2026-11-18T12:27:02.629Z",
+      "commits": [
+        {
+          "sha": "cf933be2f773452a29f2fefbee53e6000f4c986c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:25:50-07:00",
+          "message": "Merge 749f31c1c8e6f620e702d5f27bad1e04d4cc6266 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "749f31c1c8e6f620e702d5f27bad1e04d4cc6266",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:25:40-07:00",
+          "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-797",
       "ref": "refs/pull/797/merge",
       "sha": "d463595bb16d73516d6faa5bb08f7b320fe9c509",
@@ -20,28 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:12:48-07:00",
           "message": "fix: an update act's budget is spent in time a daemon watched it run, not wall time (9eu3)\n\nWall time runs while the machine sleeps, so a lid closed mid-build past\nten minutes ended the build on wake, possibly mid-write, tearing the\nbundle. Each watching daemon now spends the budget by its looks: a gap\nlonger than five polls is a sleep or a stall and spends nothing, as a\nclock set back does. The record's deadline is written past any clock, so\nan older daemon on the bundle never ends an act by it.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-796",
-      "ref": "refs/pull/796/merge",
-      "sha": "6c242e5d1d61b50b90e5ad7aee4363f77f2b3087",
-      "timestamp": "2026-11-18T12:08:03.833Z",
-      "commits": [
-        {
-          "sha": "6c242e5d1d61b50b90e5ad7aee4363f77f2b3087",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:06:54-07:00",
-          "message": "Merge 7e3fa98d44f50ef605e50d9a7cad640737e5a7c2 into e33675a193dfc48790988daa17ac05641e602a19\n"
-        },
-        {
-          "sha": "7e3fa98d44f50ef605e50d9a7cad640737e5a7c2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:05:24-07:00",
-          "message": "fix: every staged file is published through one operation, under a name unique to its call (wkh1, 8a7z)\n\nTwo processes writing one state file staged at one fixed name, so one\nrename published or removed the other's bytes and the other failed ENOENT.\npublish/publishAsync now own staging, fsync, rename or link, and cleanup\nfor every writer: writeAtomic, the session state file, the socket lease,\nthe fork-bomb registry, the link key and a job's verdict. A failed publish\nthrows its own error, with a failed cleanup added to its message.\n"
         }
       ]
     },
