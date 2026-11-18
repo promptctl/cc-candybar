@@ -4,15 +4,22 @@
     {
       "version": "pr-819",
       "ref": "refs/pull/819/merge",
-      "sha": "bb37c35c95ee56cf11eb218a05fab7ba19e5a1cd",
-      "timestamp": "2026-11-18T18:00:55.925Z",
+      "sha": "b64e5a09a42bcca87fcffb65a7cbdc66f7986e0a",
+      "timestamp": "2026-11-18T18:07:32.257Z",
       "commits": [
         {
-          "sha": "bb37c35c95ee56cf11eb218a05fab7ba19e5a1cd",
+          "sha": "b64e5a09a42bcca87fcffb65a7cbdc66f7986e0a",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:59:52-07:00",
-          "message": "Merge 016e26a637774a98f9d6e6d670763604bfd25034 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+          "timestamp": "2026-11-18T18:06:42Z",
+          "message": "Merge b06e96600980c324aa99aa36eb4b9cca5c8bba0e into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "b06e96600980c324aa99aa36eb4b9cca5c8bba0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:06:30-07:00",
+          "message": "fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n"
         },
         {
           "sha": "016e26a637774a98f9d6e6d670763604bfd25034",
@@ -42,35 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:56:43-07:00",
           "message": "fix(watchers): every acquire and follow reads its polled paths now, so a file made and removed inside one sweep is heard (hqoo)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-815",
-      "ref": "refs/pull/815/merge",
-      "sha": "15fd30750a101cdcad91cf7b735845f857d05bb3",
-      "timestamp": "2026-11-18T17:49:19.056Z",
-      "commits": [
-        {
-          "sha": "15fd30750a101cdcad91cf7b735845f857d05bb3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T17:48:25Z",
-          "message": "Merge fb5a30bee7efad0cce1472850365b20e452a7306 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "fb5a30bee7efad0cce1472850365b20e452a7306",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:48:13-07:00",
-          "message": "fix(storage): a folder whose identity cannot be read opens no generation, and each fault line names its source (oiyf)\n"
-        },
-        {
-          "sha": "bc5c9bc699fa9f2f5b8153a423b49cc1df80aaf4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:33:34-07:00",
-          "message": "fix(storage): a plugin storage folder's fault clears when the OS or the disk answers again (oiyf)\n\nA refused or erroring watch, a failed stat, or a folder that cannot be\nmade each stands only while that answer does: the registry's period\nreopens the watch, every judgment stats again, and every hold, period\nand catch-up makes the folder again. A folder that cannot be made holds\nno watch. Each fault source is logged and counted on its own moves, and\na generation that closes logs the faults it ended with.\n"
         }
       ]
     },
