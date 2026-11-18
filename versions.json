@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-824",
+      "ref": "refs/pull/824/merge",
+      "sha": "a4682ae4edde933199a42ddbcb63977508dda5aa",
+      "timestamp": "2026-11-18T18:50:57.199Z",
+      "commits": [
+        {
+          "sha": "a4682ae4edde933199a42ddbcb63977508dda5aa",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:50:01-07:00",
+          "message": "Merge 627a9501141d72e6e9a5d9d4a67bc435f71deac6 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "627a9501141d72e6e9a5d9d4a67bc435f71deac6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:49:43-07:00",
+          "message": "fix(watchers): where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-820",
       "ref": "refs/pull/820/merge",
       "sha": "926163875b2ed38f9c2b71e983f9b5f982f60b70",
@@ -63,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T11:37:23-07:00",
           "message": "fix(watchers): an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-822",
-      "ref": "refs/pull/822/merge",
-      "sha": "091788933b02dd6c6b0dbf49bf844bcaa2d6f45e",
-      "timestamp": "2026-11-18T18:35:02.519Z",
-      "commits": [
-        {
-          "sha": "091788933b02dd6c6b0dbf49bf844bcaa2d6f45e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:34:01-07:00",
-          "message": "Merge e5c0b5a36d17828d764f390d58d538f3767dec45 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "e5c0b5a36d17828d764f390d58d538f3767dec45",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:33:46-07:00",
-          "message": "fix(watchers): where a recursive watch is Node's walk, a directory below its root that will not open refuses the watch, naming it (eipv)\n"
         }
       ]
     },
