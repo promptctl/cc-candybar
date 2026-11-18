@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-829",
+      "ref": "refs/pull/829/merge",
+      "sha": "c0dd3d4834b60b84bcce0ba11e314eea67bd89a0",
+      "timestamp": "2026-11-18T20:06:26.281Z",
+      "commits": [
+        {
+          "sha": "c0dd3d4834b60b84bcce0ba11e314eea67bd89a0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:05:09-07:00",
+          "message": "Merge f2624392d06b0f6931d2adb644af4ab53ff018db into f72209a57f1948648b44508adcfa2a143579eaf8\n"
+        },
+        {
+          "sha": "f2624392d06b0f6931d2adb644af4ab53ff018db",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:04:46-07:00",
+          "message": "fix(edit): a session releases an ended placement's state when its view meets the config\n\nA placement's edit chrome, configure level and unsaved values are released wherever a session's view opens over a config that no longer holds the placement: viewing, idle, evicted, restarted, or moved to another config, and after a hand edit as well as a click. The clicking session's release joins its click's step, so undo restores it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-819",
       "ref": "refs/pull/819/merge",
       "sha": "e3bba598fb3795d02bbd6d90ef2badc4ad2c5f15",
@@ -56,28 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T13:01:42-07:00",
           "message": "fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k) (#820)\n\n* fix(plugins): a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k)\n\n* docs(stats): name the unreadable fault cause (9z3k)\n\n* fix(plugins): a standing storage fault re-reads nothing, and a folder no hold names leaves without a clear (9z3k)\n\n* fix(plugins): a folder there whose stat fails reads as unreadable, and a hold counts the loss it finds (9z3k)"
-        }
-      ]
-    },
-    {
-      "version": "pr-828",
-      "ref": "refs/pull/828/merge",
-      "sha": "7c1b3ec6d3fdfc650a04878a6473805cb2b49419",
-      "timestamp": "2026-11-18T19:56:23.577Z",
-      "commits": [
-        {
-          "sha": "7c1b3ec6d3fdfc650a04878a6473805cb2b49419",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:55:06-07:00",
-          "message": "Merge 6e56c634ca082a560d48088a8953b2e6de842fc2 into 1c2d955fd5bc787336ce3430ee52aeab1e787b59\n"
-        },
-        {
-          "sha": "6e56c634ca082a560d48088a8953b2e6de842fc2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:54:55-07:00",
-          "message": "fix(render-cache): the installed-plugin layers are the render cache's, held only for the checkouts its entries serve (izc.967)\n"
         }
       ]
     },

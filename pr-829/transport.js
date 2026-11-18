@@ -8879,11 +8879,11 @@ var require_glob = __commonJS({
           for (const index of pattern2.indexes) {
             if (cache2.seen(entryPath, pattern2, index) || cache2.seen(entryPath, pattern2, index + 1))
               return;
-            const current2 = pattern2.at(index);
+            const current = pattern2.at(index);
             const nextIndex = index + 1;
             const next = pattern2.at(nextIndex);
             const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
-            if (current2 === GLOBSTAR) {
+            if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
               const nextMatches = pattern2.test(nextIndex, name);
               let nextNonGlobIndex = nextIndex;
@@ -8926,10 +8926,10 @@ var require_glob = __commonJS({
                 }
               }
             }
-            if (typeof current2 === "string") {
+            if (typeof current === "string") {
               if (pattern2.test(index, name) && index !== last2)
                 subPatterns.add(nextIndex);
-              else if (current2 === "." && pattern2.test(nextIndex, name)) {
+              else if (current === "." && pattern2.test(nextIndex, name)) {
                 if (nextIndex === last2) {
                   if (this.accept(entryPath))
                     yield this.result(entryPath);
@@ -8937,7 +8937,7 @@ var require_glob = __commonJS({
                   subPatterns.add(nextIndex + 1);
               }
             }
-            if (typeof current2 === "object" && pattern2.test(index, name)) {
+            if (typeof current === "object" && pattern2.test(index, name)) {
               if (index === last2) {
                 if (this.accept(entryPath))
                   yield this.result(entryPath);
@@ -22249,10 +22249,10 @@ var require_dist = __commonJS({
             parseState = "beforePropertyName";
           }
         } else {
-          var current2 = stack[stack.length - 1];
-          if (current2 == null) {
+          var current = stack[stack.length - 1];
+          if (current == null) {
             parseState = "end";
-          } else if (Array.isArray(current2)) {
+          } else if (Array.isArray(current)) {
             parseState = "afterArrayValue";
           } else {
             parseState = "afterPropertyValue";
@@ -22261,10 +22261,10 @@ var require_dist = __commonJS({
       }
       function pop() {
         stack.pop();
-        var current2 = stack[stack.length - 1];
-        if (current2 == null) {
+        var current = stack[stack.length - 1];
+        if (current == null) {
           parseState = "end";
-        } else if (Array.isArray(current2)) {
+        } else if (Array.isArray(current)) {
           parseState = "afterArrayValue";
         } else {
           parseState = "afterPropertyValue";
@@ -36551,7 +36551,7 @@ function doctorLane(ask2, take) {
   const lane = take(ask2);
   return { current: () => ofRun(ask2, lane.current()) };
 }
-var ofRun = ({ run: run3 }, current2) => current2.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current2.reason }) : current2;
+var ofRun = ({ run: run3 }, current) => current.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current.reason }) : current;
 function readingsOf(inputs, lanes) {
   const { deps } = inputs;
   const sessionId2 = inputs.hookData.session_id;
@@ -44382,12 +44382,12 @@ function editDistance(a, b) {
   let before = [];
   let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i2 = 1; i2 <= a.length; i2++) {
-    const current2 = [i2];
+    const current = [i2];
     for (let j = 1; j <= b.length; j++) {
       const swap = i2 > 1 && j > 1 && a[i2 - 1] === b[j - 2] && a[i2 - 2] === b[j - 1];
-      current2[j] = Math.min(previous[j] + 1, current2[j - 1] + 1, previous[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
     }
-    [before, previous] = [previous, current2];
+    [before, previous] = [previous, current];
   }
   return previous[b.length];
 }
@@ -48124,8 +48124,8 @@ function shimmer(curve, width, glow, z) {
       for (const { strength, centre } of passes)
         lit = Math.max(lit, strength * bump((cell3.col - left - centre) / width));
       const row2 = cell3.row + z;
-      const current2 = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
-      const caustic = (ripple(cell3.col * 0.21 + current2, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current2, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
+      const current = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
+      const caustic = (ripple(cell3.col * 0.21 + current, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
       return curve.swing * curve.ease(lit * (0.1 + 0.6 * caustic));
     };
   };
@@ -52145,8 +52145,8 @@ var SessionEffects = class {
     const effectOf = (rowKey, part) => {
       const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
       made.set(rowKey, row3);
-      const current2 = row3.get(part.scope);
-      if (current2 !== void 0) return current2.effect;
+      const current = row3.get(part.scope);
+      if (current !== void 0) return current.effect;
       const last3 = known.get(rowKey)?.get(part.scope);
       const reuse = last3?.name === part.name;
       const z = noiseOffset(
@@ -54640,6 +54640,18 @@ function escapedIdent(name) {
       `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
     )
   ).join("");
+}
+function unescapedIdent(spelled2) {
+  const name = spelled2.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    // A number past the last code point is no escape: it stays as written,
+    // and the round trip below refuses it.
+    (escape, hex3) => {
+      const point = parseInt(hex3, 16);
+      return point <= 1114111 ? String.fromCodePoint(point) : escape;
+    }
+  );
+  return escapedIdent(name) === spelled2 ? name : null;
 }
 
 // src/config/menu-keys.ts
@@ -62665,14 +62677,20 @@ function configureRefsIn(nodes) {
 function placementDraftKey(presetIdent, id2, setting) {
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id2}.${setting}`;
 }
+function configureEnter(preset, id2) {
+  return `${EDIT_NS}${escapedIdent(preset)}.configure.${escapedIdent(id2)}`;
+}
+function configureListKey(preset, id2) {
+  return sharedMenuStateKey(configureEnter(preset, id2));
+}
 function configureParts(ctx, node, decls) {
   const id2 = placementId(node);
   const placement = escapedIdent(id2);
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.preset, id2);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${placement}`;
-  const listKey = sharedMenuStateKey(enter);
+  const enter = configureEnter(ctx.preset, id2);
+  const listKey = configureListKey(ctx.preset, id2);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
   ctx.artifacts.actions[enter] = {
@@ -62855,6 +62873,50 @@ function insertGap(preset, anchor, relation) {
   const apply = `${EDIT_NS}${escapedIdent(preset)}.insert.${gap}`;
   const host = `${EDIT_NS}${escapedIdent(preset)}.insertSeg.${gap}`;
   return { apply, host, stateKey: menuStateKey(host, apply, void 0) };
+}
+function placementOfKey(key, value) {
+  return configuredBy(key, value) ?? draftOwner(key) ?? menuOwner(key);
+}
+function configuredBy(key, value) {
+  if (key !== EDIT_CONFIGURE_KEY) return null;
+  const at = value.indexOf(":");
+  const preset = unescapedIdent(value.slice(0, at));
+  return at > 0 && preset !== null && configureMember(preset, value.slice(at + 1)) === value ? value : null;
+}
+function draftOwner(key) {
+  if (!key.startsWith(PLACEMENT_DRAFT_NS)) return null;
+  const path45 = key.slice(PLACEMENT_DRAFT_NS.length);
+  const first2 = path45.indexOf(".");
+  const last2 = path45.lastIndexOf(".");
+  const presetIdent = path45.slice(0, first2);
+  const preset = unescapedIdent(presetIdent);
+  const id2 = path45.slice(first2 + 1, last2);
+  return first2 > 0 && last2 > first2 + 1 && preset !== null && placementDraftKey(presetIdent, id2, path45.slice(last2 + 1)) === key ? configureMember(preset, id2) : null;
+}
+function menuOwner(key) {
+  const state = key.startsWith(MENU_PAGE_NS) ? key.slice(MENU_PAGE_NS.length) : key;
+  if (!state.startsWith(MENU_NS)) return null;
+  const minted = (stateKey) => stateKey === state && (key === state || menuPageKey(stateKey) === key);
+  const names = state.slice(MENU_NS.length).split(/[._]/);
+  const preset = unescapedIdent(names[1] ?? "");
+  if (preset === null) return null;
+  const relation = names[3];
+  const anchor = unescapedIdent(names[4] ?? "");
+  if ((relation === "before" || relation === "after") && anchor !== null && minted(insertGap(preset, anchor, relation).stateKey))
+    return configureMember(preset, anchor);
+  const id2 = unescapedIdent(names[3] ?? "");
+  return id2 !== null && minted(configureListKey(preset, id2)) ? configureMember(preset, id2) : null;
+}
+var EVERY_PLACEMENT = { holds: () => true };
+function placementsOf(placed2) {
+  const members = new Set(
+    presetNames(placed2.presets).flatMap(
+      (preset) => [...walkNodes(presetRoot(placed2, preset).node)].flatMap(
+        (n) => n.kind === "segment" ? [configureMember(preset, placementId(n))] : []
+      )
+    )
+  );
+  return { holds: (member) => members.has(member) };
 }
 function spliceContainer(node, ctx) {
   const children2 = [];
@@ -63666,7 +63728,7 @@ function makeUpdateWatch(opts) {
   const every = (run3, ms) => {
     armed.push(clock.every(ms, run3, { unref: true }));
   };
-  const current2 = () => {
+  const current = () => {
     const held2 = fact.get();
     return held2.kind === "ok" ? held2.value : null;
   };
@@ -63811,7 +63873,7 @@ function makeUpdateWatch(opts) {
       const read2 = await touchActs(() => acts.read());
       if (closed) throw new DaemonClosing("apply-update");
       if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const update = current2();
+      const update = current();
       if (update === null) {
         throw new BadVerbArgs(
           "apply-update: nothing newer is known to apply"
@@ -71400,22 +71462,76 @@ function madeOnce(folder) {
     let st;
     try {
       st = fs_default.statSync(folder);
-    } catch {
-      throw e;
+    } catch (statError) {
+      const code2 = statError.code;
+      if (code2 === "ENOENT" || code2 === "ENOTDIR") throw e;
+      return;
     }
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
 }
-var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
+var NO_FAULTS = { make: null, read: null, watch: null };
+var SOURCES = ["make", "read", "watch"];
+var faultsOf = (folder) => {
+  switch (folder?.kind) {
+    case void 0:
+    case "lost":
+      return NO_FAULTS;
+    case "unmade":
+      return {
+        ...NO_FAULTS,
+        make: { cause: "unusable", reason: folder.reason }
+      };
+    case "unreadable":
+      return {
+        ...NO_FAULTS,
+        read: { cause: "unreadable", reason: folder.reason }
+      };
+    case "watching": {
+      const [deaf] = folder.handle.deaf;
+      return {
+        make: null,
+        read: folder.unread === null ? null : { cause: "unreadable", reason: folder.unread },
+        watch: deaf === void 0 ? null : {
+          cause: deaf.kind === "refused" ? "refused" : "error",
+          reason: deaf.reason
+        }
+      };
+    }
+  }
+};
+var sameFolder = (a, b) => {
+  if (a === b) return true;
+  if (a === void 0 || b === void 0 || a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "watching":
+      return false;
+    case "lost":
+      return true;
+    case "unmade":
+    case "unreadable":
+      return a.reason === b.reason;
+  }
+};
+var sameFault = (a, b) => a === b || a?.cause === b?.cause && a?.reason === b?.reason;
+var watchKey = (key) => `plugin-storage:${keyString(key)}`;
+var targetsOf = (folder) => ({
+  dirs: [{ path: folder }],
+  polled: []
+});
 var ManagedStorage = class {
   sessions;
-  // [LAW:one-source-of-truth] By folder: each folder's current generation's
-  // watch, the one record of what the owner knows of the folder.
-  watched = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
+  // a hold names.
+  folders = /* @__PURE__ */ new Map();
+  // By folder: the faults last logged and counted, so each is told once as it
+  // starts, changes and clears.
+  told = /* @__PURE__ */ new Map();
   // The folders each render state's latest load named.
   holds = /* @__PURE__ */ new Map();
   faultCounts = {
     unusable: 0,
+    unreadable: 0,
     refused: 0,
     error: 0
   };
@@ -71456,32 +71572,36 @@ var ManagedStorage = class {
     });
   }
   // A render state's load names its folders: held under its id until the next
-  // load replaces the list or its `release`. Each named folder is kept
-  // current (`kept`), so a folder two states name is never closed between
-  // them.
+  // load replaces the list or its `release`. Each named folder is asked again
+  // before any unheld one closes, so a folder two states name is never closed
+  // between them.
   hold(id2, folders) {
     this.holds.set(id2, folders);
-    for (const folder of new Set(folders)) this.kept(folder);
+    for (const folder of new Set(folders)) this.asked(folder, "hold");
     this.closeUnheld();
   }
-  // [LAW:single-enforcer] The one way a held folder's generation moves on:
-  // one not yet watched, or whose generation ended, or whose path holds
-  // another folder now, opens its new generation's watch before any old one
-  // closes, and its held files are re-read, since what they read before came
-  // from the path unwatched.
-  kept(folder) {
-    const was = this.watched.get(folder);
-    const found2 = this.found(folder);
-    if (was !== void 0 && current(was, found2)) return;
-    const generation = this.generations++;
-    if (was !== void 0)
-      this.logger(
-        "info",
-        `plugin storage generation folder=${valueOf(folder)} generation=${generation}`
-      );
-    this.opened({ folder, generation }, found2);
-    if (was !== void 0) this.closed(was);
-    this.sessions.changed((f) => f.folder === folder);
+  // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
+  // A generation's folder is read, never made: a stat that fails keeps the
+  // generation, and the registry judges its watch again, as it does for an
+  // acquire joining the slot, so a deaf watch reopens on the owner's own
+  // triggers. A folder found gone or replaced is lost, except at a hold, which
+  // makes it again at once. Any other state is made and read again, and a
+  // folder made opens its next generation's watch before any old one closes.
+  asked(folder, trigger) {
+    const was = this.folders.get(folder);
+    if (was?.kind === "watching") {
+      const read2 = this.readAt(folder);
+      if (read2.kind === "unreadable" || this.present(was, read2)) {
+        was.unread = read2.kind === "unreadable" ? read2.reason : null;
+        this.watchers.acquire(watchKey(was.key), targetsOf(folder), () => {
+        }).release();
+        this.settle(folder);
+        return;
+      }
+      this.lostAt(was, read2);
+      if (trigger !== "hold") return;
+    }
+    this.moved(folder, this.made(folder));
   }
   // A render state reclaimed: the folders only it named close.
   release(id2) {
@@ -71502,7 +71622,7 @@ var ManagedStorage = class {
   stats() {
     return {
       ...this.sessions.stats(),
-      folders: this.watched.size,
+      folders: this.folders.size,
       faults: { ...this.faultCounts },
       lost: this.lost
     };
@@ -71513,67 +71633,126 @@ var ManagedStorage = class {
     this.holds.clear();
     this.closeUnheld();
   }
-  // What a hold finds at a folder's path. Creates the storage folder, so its
-  // program has somewhere to write before any session reads it.
-  // [LAW:no-silent-failure] A folder that cannot be created or read is its
-  // generation's standing fault, read by every source in it, never a throw:
-  // one plugin's folder fails only that plugin's sources, not the build.
-  found(folder) {
+  // What a folder's path holds once made: the storage folder is made first,
+  // so its program has somewhere to write before any session reads it.
+  // [LAW:no-silent-failure] A folder that cannot be made or read is a standing
+  // fault of every source in it, never a throw: one plugin's folder fails only
+  // that plugin's sources, not the build.
+  made(folder) {
     try {
       madeOnce(folder);
-      return { kind: "found", identity: this.identityOf(folder) };
     } catch (e) {
       return {
-        kind: "unusable",
-        reason: `could not be created or read: ${e.message}`
+        kind: "unmade",
+        reason: `could not be created: ${e.message}`
       };
     }
+    const read2 = this.readAt(folder);
+    switch (read2.kind) {
+      case "unreadable":
+        return read2;
+      // Removed as it was made.
+      case "gone":
+        return { kind: "lost" };
+      case "found":
+        return this.opened(folder, read2.identity);
+    }
+  }
+  readAt(folder) {
+    try {
+      const identity2 = this.identityOf(folder);
+      return identity2 === "gone" ? { kind: "gone" } : { kind: "found", identity: identity2 };
+    } catch (e) {
+      return {
+        kind: "unreadable",
+        reason: `could not be read: ${e.message}`
+      };
+    }
+  }
+  // Whether a read found the folder a generation's watch opened on.
+  present(was, read2) {
+    return read2.kind === "found" && sameIdentity(read2.identity, was.identity);
   }
   // Closes every folder no hold names.
   closeUnheld() {
     const named3 = new Set([...this.holds.values()].flat());
-    for (const [folder, watched] of [...this.watched])
-      if (!named3.has(folder)) this.closed(watched);
+    for (const folder of [...this.folders.keys()])
+      if (!named3.has(folder)) this.moved(folder, void 0);
   }
-  // Opens a folder's next generation, on what its hold found, as the folder's
-  // current watch.
-  opened(key, found2) {
-    const identity2 = found2.kind === "found" ? found2.identity : "gone";
-    const watched = {
+  // Opens a folder's next generation on the folder a read found.
+  opened(folder, identity2) {
+    const key = { folder, generation: this.generations++ };
+    const watching = {
+      kind: "watching",
       key,
       identity: identity2,
-      // [LAW:single-enforcer] The only acquirer of this registry key, so the
-      // slot's one callback is this generation's own.
+      // [LAW:single-enforcer] The only holder of this registry key past an
+      // acquire, so the slot's one lasting callback is this generation's own.
       handle: this.watchers.acquire(
-        `plugin-storage:${keyString(key)}`,
-        { dirs: [{ path: key.folder }], polled: [] },
-        (invalidation) => this.invalidated(watched, invalidation)
+        watchKey(key),
+        targetsOf(folder),
+        (invalidation) => this.invalidated(watching, invalidation)
       ),
       stopSweep: this.clock.every(
         STORAGE_SWEEP_EVERY_MS,
         () => void this.sweep(key),
         { unref: true }
       ),
-      health: { kind: "watching" }
+      unread: null
     };
-    this.watched.set(key.folder, watched);
-    if (found2.kind === "unusable")
-      this.faulted(watched, "unusable", found2.reason);
-    for (const refusal of watched.handle.deaf) {
-      this.faulted(watched, "refused", refusal.reason);
-    }
     void this.sweep(key);
-    return watched;
+    return watching;
   }
-  // Closes a generation's watch. The folder's entry goes only if it is still
-  // this one: a hold that moved the generation has already put its successor
-  // there.
-  closed(watched) {
-    if (this.watched.get(watched.key.folder) === watched)
-      this.watched.delete(watched.key.folder);
-    watched.health = { kind: "closed" };
-    watched.stopSweep();
-    watched.handle.release();
+  // A folder's state moves: a generation it ends closes, after any next one
+  // opened, and its held files are re-read, since what they read before came
+  // from another folder or from the path unwatched. `undefined`: no hold
+  // names it now.
+  moved(folder, now2) {
+    const was = this.folders.get(folder);
+    if (now2 === void 0) this.folders.delete(folder);
+    else this.folders.set(folder, now2);
+    if (now2?.kind === "watching" && now2 !== was && was !== void 0)
+      this.logger(
+        "info",
+        `plugin storage generation folder=${valueOf(folder)} generation=${now2.key.generation}`
+      );
+    if (was?.kind === "watching" && was !== now2) {
+      was.stopSweep();
+      was.handle.release();
+    }
+    if (now2 === void 0) this.told.delete(folder);
+    this.settle(folder, !sameFolder(was, now2));
+  }
+  // [LAW:no-silent-failure] Each fault a folder stands on is logged and
+  // counted as it starts and as its reason changes, and logged as it clears,
+  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
+  // on a move of its state or its faults, which they read first.
+  settle(folder, stateMoved = false) {
+    const was = this.told.get(folder) ?? NO_FAULTS;
+    const now2 = faultsOf(this.folders.get(folder));
+    let moved2 = false;
+    for (const source of SOURCES) {
+      const before = was[source];
+      const after = now2[source];
+      if (sameFault(before, after)) continue;
+      moved2 = true;
+      if (after === null) {
+        this.logger(
+          "info",
+          `plugin storage fault cleared folder=${valueOf(folder)} cause=${before.cause}`
+        );
+        continue;
+      }
+      this.faultCounts[after.cause]++;
+      this.logger(
+        "warn",
+        `plugin storage fault folder=${valueOf(folder)} cause=${after.cause} reason=${JSON.stringify(after.reason)}`
+      );
+    }
+    if (SOURCES.every((source) => now2[source] === null))
+      this.told.delete(folder);
+    else this.told.set(folder, now2);
+    if (moved2 || stateMoved) this.sessions.changed((f) => f.folder === folder);
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -71582,18 +71761,20 @@ var ManagedStorage = class {
   // folder's own name is, re-reading every held file in the folder still
   // there. The OS reports a change to the watched folder itself under the
   // folder's own name, as though it were a child, so that path is the folder
-  // joined with its own name.
-  invalidated(watched, invalidation) {
-    const { key } = watched;
-    const inFolder = (f) => f.folder === key.folder;
+  // joined with its own name. A generation no longer the folder's state has
+  // nothing left to hear.
+  invalidated(watching, invalidation) {
+    const { folder } = watching.key;
+    if (this.folders.get(folder) !== watching) return;
+    const inFolder = (f) => f.folder === folder;
     switch (invalidation.kind) {
       case "unknown":
-        this.judged(watched, () => this.sessions.changed(inFolder));
+        if (this.judged(watching)) this.sessions.changed(inFolder);
         return;
       case "changed": {
         const { paths: paths2 } = invalidation;
-        if (paths2.includes(import_node_path30.default.join(key.folder, import_node_path30.default.basename(key.folder)))) {
-          this.judged(watched, () => this.sessions.changed(inFolder));
+        if (paths2.includes(import_node_path30.default.join(folder, import_node_path30.default.basename(folder)))) {
+          if (this.judged(watching)) this.sessions.changed(inFolder);
         } else {
           this.sessions.changed(
             (f) => inFolder(f) && paths2.includes(fileOf(f))
@@ -71601,110 +71782,72 @@ var ManagedStorage = class {
         }
         return;
       }
+      // The watch's fault is the handle's to say (`faultsOf`).
       case "failed":
-        this.judged(
-          watched,
-          () => this.faulted(watched, "error", invalidation.reason)
-        );
+        this.judged(watching);
         return;
     }
   }
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder's held files are re-read from the
-  // path, so no draw shows a value from a folder no longer there while the
-  // next period opens the next generation. A generation already ended has
-  // nothing left to judge.
-  judged(watched, present) {
-    const { health } = watched;
-    if (health.kind !== "watching") return;
-    const { key } = watched;
-    let now2;
-    try {
-      now2 = this.identityOf(key.folder);
-    } catch (e) {
-      this.faulted(watched, "error", `stat failed: ${e.message}`);
-      return;
+  // a stat that fails keeps the generation. True while it still watches.
+  judged(watching) {
+    const read2 = this.readAt(watching.key.folder);
+    if (read2.kind === "unreadable" || this.present(watching, read2)) {
+      watching.unread = read2.kind === "unreadable" ? read2.reason : null;
+      this.settle(watching.key.folder);
+      return true;
     }
-    const opened = watched.identity;
-    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened)) {
-      present();
-      return;
-    }
-    watched.health = { kind: "lost" };
+    this.lostAt(watching, read2);
+    return false;
+  }
+  // A generation's folder found gone or replaced: the generation ends, and
+  // its held files are re-read from the path, so no draw shows a value from a
+  // folder no longer there while the next trigger makes it again.
+  lostAt(watching, read2) {
+    const { key } = watching;
     this.lost++;
     this.logger(
       "info",
-      `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
+      `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${read2.kind === "gone" ? "gone" : "replaced"}`
     );
-    this.sessions.changed((f) => f.folder === key.folder);
-  }
-  // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
-  // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the generation ends; its owner opens the next
-  // when file events catch up (`noticed`). No retry here: the OS
-  // refusing a watch (limits, permissions) refuses an immediate retry the
-  // same way.
-  faulted(watched, cause, reason) {
-    const { key } = watched;
-    if (watched.health.kind !== "watching") return;
-    watched.health = { kind: "faulted", reason };
-    this.faultCounts[cause]++;
-    this.logger(
-      "warn",
-      `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`
-    );
-    this.sessions.changed((f) => f.folder === key.folder);
+    this.moved(key.folder, { kind: "lost" });
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
-  // folder. Each period opens the next generation of every folder lost before
-  // it, and judges every watched one against the disk: the event naming a
-  // removed folder can drop without a stall. Every change of delivery and
-  // every catch-up re-reads every held file, so no lane keeps a stall after
-  // delivery moves on, and a file written during a span lands; a catch-up
-  // also opens the next generation of every held folder whose generation
-  // ended, as the span may have held what ended it.
+  // folder. Each period and each catch-up asks again of every held folder:
+  // the event naming a removed folder can drop without a stall, and a fault
+  // stands only while its answer does. Every change of delivery and every
+  // catch-up re-reads every held file, so no lane keeps a stall after
+  // delivery moves on, and a file written during a span lands.
   noticed(notice) {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind === "lost") this.kept(watched.key.folder);
-          else this.judged(watched, () => {
-          });
-        return;
       case "caught-up":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind !== "watching") this.kept(watched.key.folder);
-        this.sessions.changed(() => true);
+        for (const folder of [...this.folders.keys()])
+          this.asked(folder, notice.kind);
+        if (notice.kind === "caught-up") this.sessions.changed(() => true);
         return;
       case "moved":
         this.sessions.changed(() => true);
         return;
     }
   }
-  // The folder's current generation's standing failure, which every source
-  // in it reads first. A folder no hold names has none: its files read the
-  // path.
+  // The folder's standing failure, which every source in it reads first:
+  // every fault standing, else the stall. A folder no hold names has none:
+  // its files read the path.
   standing(folder) {
-    const watched = this.watched.get(folder);
-    if (watched === void 0) return null;
-    const { health } = watched;
-    switch (health.kind) {
-      case "faulted":
-        return `cannot refresh: ${folder} ${health.reason}; retried when the config next loads or file events catch up`;
-      // While file events are stalled a folder's sources read the stall,
-      // never a file read once from the path and then left unrefreshed.
-      // While delivery is unmeasured its files read as usual: the bar's row
-      // already says it cannot be checked.
-      case "watching":
-      case "lost": {
-        const stall = stallReason(this.fileEvents.delivery());
-        return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
-      }
-      case "closed":
-        return null;
-    }
+    const state = this.folders.get(folder);
+    if (state === void 0) return null;
+    const faults = faultsOf(state);
+    const reasons = SOURCES.flatMap((source) => {
+      const fault = faults[source];
+      return fault === null ? [] : [fault.reason];
+    });
+    if (reasons.length > 0)
+      return `cannot refresh: ${folder} ${reasons.join("; ")}; retried at the next config load or file-event check`;
+    const stall = stallReason(this.fileEvents.delivery());
+    return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
   async read(f) {
     const fault = this.standing(f.folder);
@@ -72151,7 +72294,7 @@ var RuntimeStats = class _RuntimeStats {
         },
         pluginStorage: {
           folders: 0,
-          faults: { unusable: 0, refused: 0, error: 0 },
+          faults: { unusable: 0, unreadable: 0, refused: 0, error: 0 },
           lost: 0
         }
       },
@@ -72764,7 +72907,7 @@ var writableSettingsFiles = ({
 var readSources = (settings) => chainsOf(settings).flatMap(
   ({ sources }) => sources.kind === "ok" ? sources.value : []
 );
-var readThrough = (through) => (current2) => current2.through === null || laterIdentity(through, current2.through) ? { through } : current2;
+var readThrough = (through) => (current) => current.through === null || laterIdentity(through, current.through) ? { through } : current;
 function settingChange(fix, sources) {
   const file = sources.find((s) => s.path === fix.file.path);
   return file === void 0 ? {
@@ -73521,9 +73664,9 @@ function controlledSessions(listClients) {
 function shownPanes(listPanes, controlled) {
   const shown = /* @__PURE__ */ new Set();
   for (const line of listPanes.split("\n")) {
-    const [pane, session, attached, current2, zoomed, active2] = line.trim().split(" ");
+    const [pane, session, attached, current, zoomed, active2] = line.trim().split(" ");
     if (pane === void 0 || pane === "" || session === void 0) continue;
-    if (Number(attached) > 0 && (current2 === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
+    if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
       shown.add(pane);
   }
   return shown;
@@ -75197,24 +75340,24 @@ function diffMembers(at, beforeText, was, afterText, will) {
   return [...gone, ...changed];
 }
 function applyChanges(text4, changes, dialect = JSON5_DIALECT) {
-  let current2 = text4;
+  let current = text4;
   for (const change of changes) {
-    const parsed2 = parse2(current2);
+    const parsed2 = parse2(current);
     const ancestor = movedAncestor(parsed2, change.at);
     if (ancestor !== null)
       return {
         kind: "moved",
         at: ancestor,
         read: "object",
-        found: readAt(current2, parsed2, ancestor)
+        found: readAt(current, parsed2, ancestor)
       };
     const read2 = change.op === "insert" ? ABSENT3 : change.read;
-    const found2 = readAt(current2, parsed2, change.at);
+    const found2 = readAt(current, parsed2, change.at);
     if (!sameRead(found2, read2))
       return { kind: "moved", at: change.at, read: read2, found: found2 };
-    current2 = applied(current2, change, dialect);
+    current = applied(current, change, dialect);
   }
-  return { kind: "applied", text: current2 };
+  return { kind: "applied", text: current };
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
@@ -75292,14 +75435,14 @@ function stateFile(dir, name, empty2, parse4) {
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
   const plan = (next) => {
-    const current2 = read2();
-    if (current2.kind === "failed") return current2;
-    const value = next(current2.value);
+    const current = read2();
+    if (current.kind === "failed") return current;
+    const value = next(current.value);
     return {
       kind: "ok",
       value: {
         file,
-        text: value === current2.value ? null : textOf2(value),
+        text: value === current.value ? null : textOf2(value),
         value
       }
     };
@@ -75362,14 +75505,14 @@ function answering(book, dir, answer2) {
 function answeredBook(stateDir2, answers) {
   const said2 = [];
   const planned = repoConfigs(stateDir2).plan(
-    (current2) => answers.reduce((book, { session, dir, answer: answer2 }) => {
+    (current) => answers.reduce((book, { session, dir, answer: answer2 }) => {
       const answered = answering(book, dir, answer2);
       const { superseded, absent, unchecked } = answered.recorded;
       said2.push(
         `repo-config: ${dir} ${answer2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`
       );
       return answered.book;
-    }, current2)
+    }, current)
   );
   return planned.kind === "failed" ? planned : ok({ ...planned.value, said: said2 });
 }
@@ -78227,8 +78370,8 @@ function linkFragment(text4, url, active2, base) {
   rt.end = "";
   return rt;
 }
-function linkOver(cell3, url, current2 = false) {
-  const link = new Style({ link: url, bold: current2 ? true : void 0 });
+function linkOver(cell3, url, current = false) {
+  const link = new Style({ link: url, bold: current ? true : void 0 });
   const linked = new RichText(cell3.plain, {
     style: Style.combine([resolvedStyle(cell3.style), link])
   });
@@ -78249,26 +78392,26 @@ function cycleIndex(c, store) {
 function realize(c, display, boundValue, store, sessionId2, signer) {
   switch (c.kind) {
     case "set-literal": {
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current2 === c.value
+        active: current === c.value
       };
     }
     case "set-option": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current2 === value
+        active: current === value
       };
     }
     case "set-int": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current2 === value
+        active: current === value
       };
     }
     case "set-cycle": {
@@ -78315,22 +78458,22 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
     // the write durable, not the click itself.
     case "persist-literal": {
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [
           { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, c.value] }
         ],
-        active: current2 === c.value
+        active: current === c.value
       };
     }
     case "persist-option": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [
           { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, value] }
         ],
-        active: current2 === value
+        active: current === value
       };
     }
     case "persist-cycle": {
@@ -78679,21 +78822,21 @@ var cell2 = (text4, style) => {
   drawn.end = "";
   return drawn;
 };
-var currentMark = (current2) => new Style({ bold: current2 });
+var currentMark = (current) => new Style({ bold: current });
 function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
   if (paletteOf === void 0) {
-    return (position, _option, label2, current2) => cell2(
+    return (position, _option, label2, current) => cell2(
       label2,
       Style.combine([
         bandItemStyle(active2, { ...position, distribution }, drawnAt),
-        currentMark(current2)
+        currentMark(current)
       ])
     );
   }
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, label2, current2) => named2(
+  return (_position, option, label2, current) => named2(
     label2,
-    Style.combine([text4, currentMark(current2)]),
+    Style.combine([text4, currentMark(current)]),
     paletteOf(option, render3)
   );
 }
@@ -78709,11 +78852,11 @@ function labelPaint(render3, paletteOf, option, label2) {
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, _label, current2) => cell2(
+  return (_position, option, _label, current) => cell2(
     RichText.fromFragments([
-      cell2(current2 ? "[" : " ", text4),
+      cell2(current ? "[" : " ", text4),
       swatch(paletteOf(option, render3)),
-      cell2(current2 ? "]" : " ", text4)
+      cell2(current ? "]" : " ", text4)
     ])
   );
 }
@@ -78894,14 +79037,14 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = clickSession(runtime, "picker");
-  const current2 = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
   const optionFace = (i2, label2) => {
     const option = apply.options[i2];
     return itemPaint(
       { index: i2, count: apply.options.length },
       option,
       label2,
-      option === current2
+      option === current
     );
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
@@ -78925,7 +79068,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current2 === void 0 ? -1 : apply.options.indexOf(current2)
+    current === void 0 ? -1 : apply.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -79079,9 +79222,9 @@ function pickerFuncs(runtime, activeSegment) {
 init_globals();
 var CAROUSEL_PREV = "\u25C0";
 var CAROUSEL_NEXT = "\u25B6";
-function ringAround(options, current2) {
+function ringAround(options, current) {
   const count = options.length;
-  const centre = Math.max(options.indexOf(current2), 0);
+  const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
 function renderCarousel(applyName, apply, openName, label2, runtime) {
@@ -79710,20 +79853,20 @@ init_globals();
 init_globals();
 function splitCellsIntoLines(cells) {
   const lines2 = [];
-  let current2 = [];
+  let current = [];
   for (const cell3 of cells) {
     if (!cell3.contains("\n")) {
-      current2.push(cell3);
+      current.push(cell3);
       continue;
     }
     const pieces = cell3.split("\n");
-    current2.push(pieces[0]);
+    current.push(pieces[0]);
     for (let i2 = 1; i2 < pieces.length; i2++) {
-      lines2.push(current2);
-      current2 = [pieces[i2]];
+      lines2.push(current);
+      current = [pieces[i2]];
     }
   }
-  lines2.push(current2);
+  lines2.push(current);
   return lines2;
 }
 
@@ -83478,45 +83621,30 @@ function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
     config: standing2.config
   };
 }
-var installedSlot = (checkout, home) => JSON.stringify([checkout, home]);
-var InstalledLayers = class {
-  held = /* @__PURE__ */ new Map();
-  layer(files, ctx, dflt, allowedPalettes) {
-    const key = digestOf({
-      palettes: [...allowedPalettes ?? []].sort(),
-      files: files.map((f) => ({
-        path: f.path,
-        scope: f.scope,
-        definition: f.definition
-      }))
-    });
-    const slot = installedSlot(ctx.checkout?.root ?? null, ctx.home);
-    const hit = this.held.get(slot);
-    if (hit?.key === key && hit.dflt === dflt) return hit.layer;
-    const layer = applyPlugins(
-      files,
-      ctx,
-      { config: dflt, rendering: /* @__PURE__ */ new Map() },
-      (c, plugin, replaces) => checkPlugin(
-        c,
-        plugin,
-        replaces,
-        "<installed plugins>",
-        allowedPalettes
-      )
-    );
-    this.held.set(slot, { dflt, key, layer });
-    return layer;
-  }
-  // Every slot `serving` does not name goes.
-  keep(serving) {
-    for (const slot of [...this.held.keys()])
-      if (!serving.has(slot)) this.held.delete(slot);
-  }
-  slots() {
-    return new Set(this.held.keys());
-  }
-};
+var installedMemo = /* @__PURE__ */ new WeakMap();
+function installedLayer(files, ctx, dflt, allowedPalettes) {
+  const key = digestOf({
+    palettes: [...allowedPalettes ?? []].sort(),
+    files: files.map((f) => ({
+      path: f.path,
+      scope: f.scope,
+      definition: f.definition
+    }))
+  });
+  const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
+  installedMemo.set(dflt, byProject);
+  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
+  const hit = byProject.get(slot);
+  if (hit?.key === key) return hit.layer;
+  const layer = applyPlugins(
+    files,
+    ctx,
+    { config: dflt, rendering: /* @__PURE__ */ new Map() },
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
+  );
+  byProject.set(slot, { key, layer });
+  return layer;
+}
 function strayDrop({ path: file, scope }) {
   const root = import_node_path38.default.dirname(file);
   return {
@@ -83526,31 +83654,26 @@ function strayDrop({ path: file, scope }) {
     reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path38.default.join(root, "<name>", DEFINITION_FILE)}`
   };
 }
-function loadSnapshot(snapshot, home, dflt, trace, installed, allowedPalettes) {
+function loadSnapshot(snapshot, home, dflt, trace, allowedPalettes) {
   const { ctx, plugins: plugins2, base, layers } = mergeChain(
     snapshot,
     home,
     dflt,
     trace,
-    installed,
     allowedPalettes
   );
   return validateChain(ctx, plugins2, base, layers, trace, allowedPalettes);
 }
-function inheritedConfig(snapshot, home, dflt, installed) {
-  const { base, layers } = mergeChain(
-    snapshot,
-    home,
-    dflt,
-    { warned: () => {
-    } },
-    installed
-  );
+function inheritedConfig(snapshot, home, dflt) {
+  const { base, layers } = mergeChain(snapshot, home, dflt, {
+    warned: () => {
+    }
+  });
   return layers.at(-1)?.config ?? base;
 }
-function mergeChain(snapshot, home, dflt, trace, installed, allowedPalettes) {
+function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
   const ctx = { checkout: snapshot.checkout, home };
-  const merged = installed.layer(snapshot.plugins, ctx, dflt, allowedPalettes);
+  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
   const plugins2 = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)]
@@ -87557,7 +87680,7 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function writeLayerOf(snapshot, role, configFile, home, installed) {
+function writeLayerOf(snapshot, role, configFile, home) {
   const layer = snapshot.chain.find((l) => l.role === role);
   if (layer === void 0)
     throw new BadVerbArgs(
@@ -87567,7 +87690,7 @@ function writeLayerOf(snapshot, role, configFile, home, installed) {
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${layer.path} could not be read (${layer.content.error}), and a click does not write over a file it could not read`
     );
-  return { ...layer, snapshot, home, installed };
+  return { ...layer, snapshot, home };
 }
 var rank = (role) => LAYER_ROLES.indexOf(role);
 function seenBy(layer, read2) {
@@ -87644,8 +87767,7 @@ function inheritedOf(into) {
     return inheritedConfig(
       heldSnapshot(into, into.below),
       into.home,
-      DEFAULT_DSL_CONFIG,
-      into.installed
+      DEFAULT_DSL_CONFIG
     );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
@@ -87665,8 +87787,7 @@ function chainOver(into, text4) {
     into.home,
     DEFAULT_DSL_CONFIG,
     { warned: () => {
-    } },
-    into.installed
+    } }
   );
 }
 function writtenConfig(into, chain2) {
@@ -88008,6 +88129,12 @@ var SessionState = class {
     this.atom.reportObserved();
     return this.sessions.get(sessionId2)?.values.get(key) ?? null;
   }
+  // Every key the session holds, with its value: what a session meeting a
+  // config is measured by (src/renderer/placement-release.ts).
+  entries(sessionId2) {
+    this.atom.reportObserved();
+    return [...this.sessions.get(sessionId2)?.values ?? []];
+  }
   revision(sessionId2) {
     this.atom.reportObserved();
     return this.sessions.get(sessionId2)?.revision ?? 0;
@@ -88124,7 +88251,8 @@ var MAX_STEPS = 50;
 var MAX_SESSIONS5 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
 var EMPTY3 = { past: [], future: [] };
-var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
+var sessionTarget = (key) => `session:${key}`;
+var identity = (c) => c.kind === "session" ? sessionTarget(c.key) : `layer:${c.role}:${c.digest}`;
 var SettingsHistory = class {
   // `loaded` is what the profile holds, oldest first, as the host handed it
   // in: held to the same bounds as every step that lands.
@@ -88231,11 +88359,11 @@ var SettingsHistory = class {
         const changes = [...committing.get(sessionId2)?.values() ?? []].filter(
           (c) => c.before !== c.after
         );
-        const current2 = click3.historyOf(sessionId2);
-        const appended = changes.length === 0 ? current2 : afterAppend(current2, changes);
+        const current = click3.historyOf(sessionId2);
+        const appended = changes.length === 0 ? current : afterAppend(current, changes);
         const toggle = toggled.get(sessionId2);
         const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-        if (next !== current2) click3.move(sessionId2, next);
+        if (next !== current) click3.move(sessionId2, next);
       }
     };
     return {
@@ -88274,6 +88402,26 @@ var SettingsHistory = class {
         held2.flush();
       }
     };
+  }
+  // [LAW:single-enforcer] The session's `keys` released, because the config
+  // its view opens over holds no placement they belong to
+  // (src/renderer/placement-release.ts). `landing` is the view of the
+  // session's own click whose changes are landing: the keys clear through it,
+  // so they are part of that click's step, and its undo brings them back with
+  // the placement. With none, they clear in the store and every change to
+  // them leaves both stacks and the savepoint (`forgotten`), so undo, redo and
+  // cancel never throw over a key that is gone, nor bring it back.
+  release(sessionId2, keys2, landing) {
+    if (landing !== null) {
+      for (const key of keys2) landing.clear(sessionId2, key);
+      return;
+    }
+    runInAction(() => {
+      for (const key of keys2) this.sessionState.clear(sessionId2, key);
+    });
+    const history = this.history(sessionId2);
+    const next = forgotten(history, new Set(keys2.map(sessionTarget)));
+    if (next !== history) this.put(sessionId2, next);
   }
   undo(click3, sessionId2) {
     const history = click3.historyOf(sessionId2);
@@ -88558,7 +88706,15 @@ function stepOf(click3, sessionId2, change, to) {
     what: `${addressText(applied3.at)} in the ${change.role} layer`
   };
 }
-function forgotten({ past, future, savepoint }, gone) {
+function forgotten(history, gone) {
+  const { past, future, savepoint } = history;
+  const steps2 = [
+    ...past,
+    ...future,
+    ...savepoint === void 0 ? [] : [savepoint.net, ...savepoint.below]
+  ];
+  if (!steps2.some((step4) => step4.some((c) => gone.has(identity(c)))))
+    return history;
   return {
     past: without2(past, gone),
     future: without2(future, gone),
@@ -88727,10 +88883,10 @@ var setState = (rawValue, ctx) => {
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
-function stepWithin(current2, by, min3, max3) {
-  const n = current2 + by;
-  if (n > max3) return current2 === max3 ? min3 : max3;
-  if (n < min3) return current2 === min3 ? max3 : min3;
+function stepWithin(current, by, min3, max3) {
+  const n = current + by;
+  if (n > max3) return current === max3 ? min3 : max3;
+  if (n < min3) return current === min3 ? max3 : min3;
   return n;
 }
 var stepState = (rawValue, ctx) => {
@@ -88863,8 +89019,7 @@ function heldLayer2(ctx, origin, role) {
     ctx.snapshotFor(origin),
     role,
     origin.target.path ?? null,
-    ctx.locations.home,
-    ctx.installed
+    ctx.locations.home
   );
 }
 function configWire(verb, raw) {
@@ -88947,19 +89102,19 @@ var stepConfig = (rawValue, ctx) => {
   );
   const store = editStore(ctx, sid);
   const stored = readValue(store.read(into.path), landing.key);
-  const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
+  const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
     params,
     configKeySeed(landing.globals, key)
   );
-  const next = stepWithin(current2, by, params.min, params.max);
+  const next = stepWithin(current, by, params.min, params.max);
   const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
+    `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
 var save = (value, ctx) => {
@@ -89111,28 +89266,6 @@ var resetConfig = (value, ctx) => {
     `reset-config: ${[...fileKeys, ...sessionKeys.map((k) => `session:${k}`)].join(" ")} \u2190 ${into.path} (session=${sid})`
   );
 };
-function endedPlacements(before, after) {
-  const placed2 = (config2, preset) => [...walkNodes(presetRoot(config2, preset).node)].filter(
-    (n) => n.kind === "segment"
-  );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap(
-      (preset) => placed2(after, preset).map((n) => configureMember(preset, placementId(n)))
-    )
-  );
-  return presetNames(before.presets).flatMap(
-    (preset) => placed2(before, preset).map((node) => ({
-      member: configureMember(preset, placementId(node)),
-      node
-    })).filter(({ member }) => !survivors.has(member))
-  );
-}
-function endedSessionKeys(ended, configuring) {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
-  ]);
-}
 var applyLayoutOp2 = (rawValue, ctx) => {
   const {
     sid,
@@ -89140,8 +89273,7 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     args: [key = "", opToken = ""]
   } = configWire("apply-layout-op", rawValue);
   const origin = sessionOrigin(ctx, sid);
-  const before = ctx.configFor(origin);
-  const gate2 = ctx.gates.config.gateFor(before);
+  const gate2 = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate2.listKeys().join(", ")})`
@@ -89156,20 +89288,10 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     );
   }
   const into = heldLayer2(ctx, origin, role);
-  const { placed: placed2, config: config2 } = applyLayoutOp(
-    editStore(ctx, sid),
-    into,
-    key,
-    op
-  );
-  const released = endedSessionKeys(
-    endedPlacements(before, config2),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY)
-  ).filter((key2) => ctx.sessionState.get(sid, key2) !== null);
-  for (const key2 of released) ctx.sessionState.clear(sid, key2);
+  const { placed: placed2 } = applyLayoutOp(editStore(ctx, sid), into, key, op);
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
+    `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} (session=${sid})`
   );
 };
 var undo = (value, ctx) => {
@@ -89525,7 +89647,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     throwAll(failed3);
   };
   try {
-    ctx.configWrites.seal(effects, sid, consequence);
+    ctx.configWrites.seal(effects, sid, consequence, journal.sessionState);
   } catch (e) {
     failures.push(e);
   }
@@ -89623,6 +89745,20 @@ var HeldDocuments = class {
   }
 };
 
+// src/renderer/placement-release.ts
+init_globals();
+function placementRelease(deps) {
+  return (sessionId2, placements) => {
+    const ended = deps.sessionState.entries(sessionId2).flatMap(([key, value]) => {
+      const member = placementOfKey(key, value);
+      return member === null || placements.holds(member) ? [] : [key];
+    });
+    deps.history.release(sessionId2, ended, deps.landingOf(sessionId2));
+    deps.navigation.forget(sessionId2, ended);
+    return ended;
+  };
+}
+
 // src/renderer/navigation-history.ts
 init_globals();
 var MAX_STEPS2 = 20;
@@ -89716,6 +89852,20 @@ var NavigationHistory = class {
     });
     this.put(sessionId2, steps2.slice(0, -1));
     return { step: step4, discarded };
+  }
+  // The session's `keys` are gone with the placement they belonged to
+  // (src/renderer/placement-release.ts): every change to them leaves its
+  // steps, so going back never reopens a removed placement's library or
+  // configure over a later placement that takes its id. A step left empty
+  // leaves too.
+  forget(sessionId2, keys2) {
+    const gone = new Set(keys2);
+    const steps2 = this.past.get(sessionId2) ?? [];
+    if (!steps2.some((step4) => step4.some((c) => gone.has(c.key)))) return;
+    this.put(
+      sessionId2,
+      steps2.map((step4) => step4.filter((c) => !gone.has(c.key))).filter((step4) => step4.length > 0)
+    );
   }
   push(sessionId2, step4) {
     const steps2 = this.past.get(sessionId2) ?? [];
@@ -90556,15 +90706,14 @@ function declaredSources(config2) {
     if (decl.kind === "source") sources.set(name, decl.storage);
   return sources;
 }
-function resolveLoad(cwd2, chain2, installed) {
+function resolveLoad(cwd2, chain2) {
   const warnings = [];
   try {
     const loaded = loadSnapshot(
       chain2.snapshot,
       chain2.locs.home,
       DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) },
-      installed
+      { warned: (w) => warnings.push(...w) }
     );
     const inputs = {
       cwd: cwd2,
@@ -90651,6 +90800,7 @@ function buildRenderState(load, deps) {
         reached: installed.reached,
         rendering: installed.rendering
       },
+      placements: placementsOf(loaded.placed),
       sources: load.sources
     }
   };
@@ -90688,7 +90838,7 @@ function settle2(chain2, resolveWarnings, attempt4) {
   }
 }
 function loadChain(cwd2, chain2, deps, served = null) {
-  const resolved = resolveLoad(cwd2, chain2, deps.installed);
+  const resolved = resolveLoad(cwd2, chain2);
   if (resolved.kind === "failed") {
     return settle2(chain2, [], resolved);
   }
@@ -90699,25 +90849,21 @@ function loadOrigin(cwd2, snapshot, deps, served = null) {
   return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
 }
 function fallbackState(cwd2, snapshot, deps) {
-  const resolved = resolveLoad(
-    cwd2,
-    {
-      layers: [],
-      home: "",
-      // A failed load's writes are refused until its chain loads (the writer
-      // proves the whole chain), so its bar offers the one layer every chain has.
-      writable: ["user"],
-      snapshot: { ...snapshot, chain: [] },
-      locs: deps.locations
-    },
-    deps.installed
-  );
+  const resolved = resolveLoad(cwd2, {
+    layers: [],
+    home: "",
+    // A failed load's writes are refused until its chain loads (the writer
+    // proves the whole chain), so its bar offers the one layer every chain has.
+    writable: ["user"],
+    snapshot: { ...snapshot, chain: [] },
+    locs: deps.locations
+  });
   const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause
     });
-  return built.state;
+  return { ...built.state, placements: EVERY_PLACEMENT };
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
@@ -90835,10 +90981,6 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   compiles = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] The installed layers every load of this cache
-  // and every click's proof over it merge over, held for the checkouts its
-  // entries serve (drop).
-  installed = new InstalledLayers();
   deps;
   log;
   // Read when an eviction is decided: the budget is a boot-time fact.
@@ -90848,8 +90990,7 @@ var RenderCache = class {
   constructor(deps, opts) {
     this.deps = {
       ...deps,
-      compile: (key, input) => this.compileOf(key, input),
-      installed: this.installed
+      compile: (key, input) => this.compileOf(key, input)
     };
     this.log = deps.log ?? quietLogger;
     this.budgetBytes = opts.budgetBytes;
@@ -91037,19 +91178,19 @@ var RenderCache = class {
   // The session's view of `state`: the one it has, or a new one replacing it.
   viewOf(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
-    const current2 = this.views.get(sessionId2);
-    if (current2?.state === state) {
+    const current = this.views.get(sessionId2);
+    if (current?.state === state) {
       this.views.delete(sessionId2);
-      this.views.set(sessionId2, current2);
-      current2.requested(facts);
-      return current2;
+      this.views.set(sessionId2, current);
+      current.requested(facts);
+      return current;
     }
     this.views.delete(sessionId2);
     let view;
     try {
       view = this.opened(entry, state, facts, by);
     } finally {
-      if (current2 !== void 0) this.retireView(current2, "moved");
+      if (current !== void 0) this.retireView(current, "moved");
     }
     this.fit(entry);
     return view;
@@ -91060,7 +91201,9 @@ var RenderCache = class {
   opened(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
     let view;
+    let released;
     try {
+      released = this.deps.meets(sessionId2, state.placements);
       view = openView(state, entry.cwd, facts, {
         source: this.deps.source,
         changed: (sid) => this.observers.onViewChanged?.(sid),
@@ -91075,7 +91218,7 @@ var RenderCache = class {
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size} ended=${released.length}`
     );
     return view;
   }
@@ -91178,16 +91321,6 @@ var RenderCache = class {
   drop(key, entry, reason) {
     this.entries.delete(key);
     this.retire(entry.state, reason, null);
-    this.installed.keep(
-      new Set(
-        [...this.entries.values()].map(
-          (e) => installedSlot(
-            e.snapshot.checkout?.root ?? null,
-            this.deps.locations.home
-          )
-        )
-      )
-    );
   }
   get stats() {
     let held2 = 0;
@@ -91646,7 +91779,7 @@ var ConfigWrites = class {
   // The open click is over. Its changes and its answers join its turn's
   // effects, and its consequence waits for them; a click that changed no file
   // and answered nothing has its consequence now.
-  seal(effects, session, consequence) {
+  seal(effects, session, consequence, sessionState) {
     const answers = this.answers;
     const settings = this.settings;
     this.answers = [];
@@ -91709,7 +91842,7 @@ var ConfigWrites = class {
       }))
     ];
     this.inFlight = {
-      of: { session, origin, files, consequence },
+      of: { session, origin, files, consequence, sessionState },
       owed: new Set(landing.map((c) => c.id)),
       missed: null
     };
@@ -91729,6 +91862,12 @@ var ConfigWrites = class {
   // The origin of the click whose changes are on their way, if one's are.
   landing() {
     return this.inFlight?.of.origin ?? null;
+  }
+  // The view of `session`'s own click whose changes are on their way, if
+  // they are: what is written through it joins that click's step.
+  landingOf(session) {
+    const landing = this.inFlight?.of;
+    return landing?.session === session ? landing.sessionState : null;
   }
   // No click begins after this: the daemon is closing.
   close() {
@@ -91996,6 +92135,14 @@ function mainRendererOf(inputs, host) {
       storage: host.storage,
       signer: linkSigner2,
       gates,
+      // [LAW:single-enforcer] A session meeting a config releases what it
+      // holds of a placement that config ended.
+      meets: placementRelease({
+        sessionState,
+        history: settingsHistory,
+        navigation: navigationHistory,
+        landingOf: (sessionId2) => configWrites.landingOf(sessionId2)
+      }),
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
       // histories' depths.
@@ -92067,7 +92214,6 @@ function mainRendererOf(inputs, host) {
     gates,
     sessionState,
     snapshotFor: (origin) => renderCache.snapshotFor(origin),
-    installed: renderCache.installed,
     locations: inputs.locations,
     configWrites,
     clickLanded: (sessionId2) => menuIdle.clicked(sessionId2, time.tick),
