@@ -114,12 +114,13 @@ export interface LocalBar {
 const NO_ACT = "a command performs no act";
 
 // The daemon's own facts as a command holds them: no update offered, no
-// file-events, launcher, renderer or act fault.
+// file-events, launcher, repository-variable, renderer or act fault.
 export function commandDaemonFacts(at: Instant): DaemonFacts {
   return {
     update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
     fileEvents: [],
     launcher: [],
+    repoVariables: [],
     rendererEnded: null,
     actFailed: null,
   };

@@ -43,6 +43,7 @@ import { processPort } from "./renderer-process.js";
 import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
+import { settleRepoVariables } from "../proc/repo-variables";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -216,6 +217,8 @@ async function boot(): Promise<void> {
     }),
     bundle: runningBundle(),
     host,
+    // [LAW:one-source-of-truth] Settled once, here, before any read.
+    repoVariables: settleRepoVariables(world.launcher),
     paths,
     memoryLimitBytes: memoryLimit,
     registryUrl: host.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,

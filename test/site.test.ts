@@ -101,6 +101,8 @@ test("the built site renders, clicks, and plays its scenario with no server", ()
   expect(r.copied).toMatch(/^the browser did not copy .*; the text: \S+$/);
   expect(r.doctorRefused).toBeNull();
   expect(r.doctor).toContain("✓ daemon");
+  // The page's daemon asked the simulated git for the repository variables at its start.
+  expect(r.doctor).toContain("✓ git environment");
 });
 
 // [LAW:verifiable-goals] `pnpm site:dev` promises the page as it is on disk, served to this machine

@@ -19,6 +19,10 @@ import { locations } from "./daemon/paths.js";
 import type { World } from "./host.js";
 import { type OneShotLauncher } from "./proc/launch.js";
 import { failureText } from "./proc/launcher.js";
+import {
+  repoVariablesText,
+  settleRepoVariables,
+} from "./proc/repo-variables.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -89,8 +93,8 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // checks out nothing, and repoDefinitions says so. `--` keeps a source
 // spelled like an option from being read as one. With terminal prompts off,
 // a repo that is not there (GitHub asks for credentials) fails rather than
-// waiting on a prompt; a credential helper still answers. The variables git
-// names as locating a repository (a hook's GIT_DIR, say) are dropped, so
+// waiting on a prompt; a credential helper still answers. The variables that
+// point git at another repository (a hook's GIT_DIR, say) are dropped, so
 // every call acts on the clone. `shown` stands for `url` in messages.
 function cloneRepo(
   launcher: OneShotLauncher,
@@ -114,11 +118,20 @@ function cloneRepo(
       );
     return run.stdout;
   };
-  // Overlay: terminal prompts off, and the variables that locate a repository
-  // (named by the tool itself) unset.
-  const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = null;
+  // Overlay: terminal prompts off, and the variables that point git at another
+  // repository unset. [LAW:one-source-of-truth] This process settles them as a
+  // daemon does, through the same ask, once for its one install.
+  const vars = settleRepoVariables(launcher);
+  // [LAW:no-silent-failure] A git that could not name them leaves the fixed
+  // list, said before the clone goes on.
+  if (vars.kind === "fixed")
+    console.error(
+      `plugin install: warning: ${repoVariablesText(vars, "the clone's git calls")}`,
+    );
+  const env: Record<string, string | null> = {
+    GIT_TERMINAL_PROMPT: "0",
+    ...Object.fromEntries(vars.names.map((name) => [name, null])),
+  };
   git(
     env,
     "clone",

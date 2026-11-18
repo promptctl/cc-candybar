@@ -24,9 +24,16 @@ import type { ServingDaemon } from "../../src/daemon/foundations/memory-limit";
 import { memoryStateFile } from "./state-file";
 import type { ClientHint } from "../../src/client-hint";
 import type { Sighted } from "../../src/doctor/read";
+import type { RepoVariables } from "../../src/proc/repo-variables";
 
 // One published install: the daemon's bundle and the native client beside it.
 export const HEALTHY_BUNDLE = "/opt/cc/dist/index.mjs";
+
+// The repository variables a daemon whose git answered drops.
+export const HEALTHY_REPO_VARIABLES: RepoVariables = {
+  kind: "asked",
+  names: ["GIT_DIR", "GIT_WORK_TREE", "GH_REPO"],
+};
 
 // The `client` hint a healthy native client records: the bundle it execs is
 // the daemon's (testVerbContext's `bundle`).
@@ -197,6 +204,7 @@ export const healthySighted = (
   bars: readonly FrameSighting[] = STILL,
 ): Sighted => ({
   serving: held(HEALTHY_SERVING),
+  repoVariables: held(HEALTHY_REPO_VARIABLES),
   rateLimits: CARRIED,
   transcripts: NAMED,
   clients: held({ bundle: HEALTHY_BUNDLE, clients: [healthyClient()] }),
@@ -254,6 +262,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
   }),
   daemon: {
     serving: held(HEALTHY_SERVING),
+    repoVariables: held(HEALTHY_REPO_VARIABLES),
     processes: { kind: "ok", value: [HEALTHY_PROCESS] },
     postMortems: { kind: "ok", value: [] },
     read: { kind: "ok", value: { through: null } },

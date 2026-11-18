@@ -19,6 +19,7 @@ export const daemonFactsOf = (
   update: { newer, act: IDLE, actsError: null },
   fileEvents: [],
   launcher: [],
+  repoVariables: [],
   rendererEnded: null,
   actFailed: null,
 });

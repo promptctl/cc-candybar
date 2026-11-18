@@ -28,6 +28,7 @@ import {
   HEALTHY_BUNDLE,
   HEALTHY_INSTALL_EDGE,
   HEALTHY_SERVING,
+  HEALTHY_REPO_VARIABLES,
   healthyClient,
   healthyDaemonEdge,
   healthyDataEdge,
@@ -137,6 +138,7 @@ test("a command's provider: its own bar and width are judged, the facts only a d
     await read(
       () => ({
         serving: NOT_HELD,
+        repoVariables: NOT_HELD,
         rateLimits: NOT_HELD,
         transcripts: NOT_HELD,
         clients: NOT_HELD,
@@ -177,7 +179,13 @@ test("the daemon's provider: its sightings and itself are held, and a link's arr
   const got = reading(
     await read(
       (session) =>
-        daemonSighted(session, [said], HEALTHY_SERVING, HEALTHY_BUNDLE),
+        daemonSighted(
+          session,
+          [said],
+          HEALTHY_SERVING,
+          HEALTHY_BUNDLE,
+          HEALTHY_REPO_VARIABLES,
+        ),
       edge,
       input({ via: "link", delivery: { kind: "forwarder", urlV: 1 } }),
     ),

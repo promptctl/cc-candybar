@@ -251,6 +251,44 @@ describe("runPlugin", () => {
     );
   });
 
+  test("a git that cannot name the repository variables still clones without them, and says so", () => {
+    const repo = repoWith({ app: DEFINITION });
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+    git("init", "-q");
+    git("add", ".");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
+    // A git on the PATH that refuses the ask and runs every other command.
+    const realGit = execFileSync("sh", ["-c", "command -v git"], {
+      encoding: "utf8",
+    }).trim();
+    const bin = path.join(dir, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(
+      path.join(bin, "git"),
+      `#!/bin/sh\nif [ "$2" = --local-env-vars ]; then exit 128; fi\nexec '${realGit}' "$@"\n`,
+      { mode: 0o755 },
+    );
+    const other = path.join(dir, "other");
+    execFileSync("git", ["init", "-q", other]);
+    const hooked = worldOf(
+      hostOf({
+        ...world.host.env,
+        PATH: `${bin}:${world.host.env.PATH}`,
+        GIT_DIR: path.join(other, ".git"),
+      }),
+    );
+    expect(runPlugin(["install", `file://${repo}`], hooked)).toBe(0);
+    expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(
+      false,
+    );
+    expect(err).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^plugin install: warning: git could not name the variables .*exited with code 128.*GIT_DIR/,
+      ),
+    );
+  });
+
   test("a git repo without the plugins folder fails, naming the source", () => {
     const repo = repoWith({});
     fs.writeFileSync(path.join(repo, "README"), "x");

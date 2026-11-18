@@ -11,6 +11,7 @@ import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
+import { settleRepoVariables } from "../src/proc/repo-variables";
 import { memoryLimitBytes } from "../src/daemon/limits";
 import { daemonGates } from "../src/daemon/foundations/update-keys";
 import { DaemonLog } from "../src/daemon/log";
@@ -79,6 +80,8 @@ const pageDaemon = createDaemon({
   gates: daemonGates(),
   paths,
   host: HOST,
+  // Asked of the simulated git, as a process asks its own.
+  repoVariables: settleRepoVariables(WORLD.launcher),
   bundle: {
     entryUrl: "file:///app/dist/index.mjs",
     digest: null,

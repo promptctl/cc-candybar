@@ -6,6 +6,12 @@ import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
+import {
+  repoVariablesText,
+  repoVariablesWarnings,
+  withoutRepoVariables,
+  type RepoVariables,
+} from "../proc/repo-variables";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
@@ -169,6 +175,11 @@ export interface DaemonInputs extends DaemonAdapters {
   // environment, home and temporary directory. The daemon reads them from here
   // alone, and its launcher's children inherit the same environment.
   readonly host: Host;
+  // [LAW:one-source-of-truth] The variables that point git and the forge CLIs
+  // at another repository, settled by the process before it builds the daemon
+  // (src/proc/repo-variables.ts). The daemon's environment is its spawning
+  // shell's, so it runs without them.
+  readonly repoVariables: RepoVariables;
   // The paths the daemon itself reads or writes. The files an adapter owns are
   // aimed by the same value at the adapter (production-adapters.ts), so a daemon
   // aimed at a temporary directory writes nowhere else.
@@ -248,8 +259,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     exit,
     paths,
     gates,
-    host,
+    repoVariables,
   } = inputs;
+  // [LAW:single-enforcer] The daemon's environment, once, without the
+  // variables that point git and the forge CLIs at the spawning shell's
+  // repository: everything below reads this host and the launcher's children
+  // inherit its env, so no read path chooses whether the drop applies. A
+  // session's own program starts from the session's environment instead,
+  // which keeps what the session set.
+  const host: Host = {
+    ...inputs.host,
+    env: withoutRepoVariables(inputs.host.env, repoVariables),
+  };
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
@@ -265,6 +286,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] What this daemon's work logs through.
   const log: DaemonLogger = (level, msg) =>
     inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
+  // [LAW:no-silent-failure] Which names the daemon's reads run without, once:
+  // a git that named none leaves the fixed list, said as a warning.
+  log(
+    repoVariables.kind === "asked" ? "info" : "warn",
+    repoVariablesText(repoVariables),
+  );
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
@@ -429,6 +456,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         renderSightings.ofSession(sessionId, now),
         limits.serving(),
         bundle.path,
+        repoVariables,
       ),
     clock,
     logger: log,
@@ -642,6 +670,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     owners: payloadProviders,
     daemon: () => ({
       update: { newer: updateFact.get(), ...updateWatch.acts() },
+      repoVariables: repoVariablesWarnings(repoVariables),
       ...daemonFaults.get(),
     }),
     clock,

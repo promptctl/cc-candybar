@@ -310,6 +310,7 @@ const ZONE_ROWS = {
   "src/time.ts": "shared",
   "src/claude-settings.ts": "shared",
   "src/proc/launcher.ts": "shared",
+  "src/proc/repo-variables.ts": "shared",
   "src/doctor/report.ts": "shared",
   "src/doctor/sightings.ts": "shared",
   "src/doctor/terminal.ts": "shared",

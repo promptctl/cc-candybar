@@ -3,6 +3,7 @@
 import { inTmux } from "../tmux-hint.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
+import type { RepoVariablesWarning } from "../proc/repo-variables";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
@@ -650,6 +651,7 @@ export function drawRender(
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
+    ...daemon.repoVariables,
     ...launched,
     ...held,
     ...(configWatch === null
@@ -843,6 +845,7 @@ export function drawRender(
       case "launch-pipes":
       case "renderer-ended":
       case "act-failed":
+      case "repo-variables":
       case "when":
         return w.kind;
     }
@@ -1090,6 +1093,7 @@ function daemonEventAt(
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
+  | RepoVariablesWarning
   | LauncherWarning
   | DaemonEventWarning
   | ConfigWatchWarning

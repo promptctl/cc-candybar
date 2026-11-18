@@ -58,16 +58,19 @@ import { fieldsOf } from "../../../src/utils/logfmt";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 import { until } from "../../helpers/until";
+import { HEALTHY_REPO_VARIABLES } from "../../helpers/doctor-facts";
 
 jest.setTimeout(30_000);
 
-// What the daemon tells a doctor read of session `sid`, out of its stats.
+// What the daemon tells a doctor read of session `sid`, out of its stats. The
+// stats carry no repository variables, and no case here reads them.
 const sightedOf = (stats: StatsSnapshot, sid: string) =>
   daemonSighted(
     sessionIdOf(sid),
     stats.clients.filter((c) => c.sessionId === sid),
     stats.daemon,
     stats.bundle,
+    HEALTHY_REPO_VARIABLES,
   );
 
 // A report row wraps at the client's width, through a path or a word, and a

@@ -84,6 +84,9 @@ export const LAUNCH_CATEGORIES = [
   // (src/plugin-install.ts): three git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
+  // `git rev-parse --local-env-vars` (src/proc/repo-variables.ts): once where a
+  // process that reads repositories starts, never per read.
+  "repo-variables",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
   // one query per server a second, paced by its own clock, so no rate limit.
   "frames.visibility",

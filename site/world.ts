@@ -7,6 +7,7 @@
 import { vol } from "./shims/fs";
 import { HOME } from "./shims/os";
 import { programs, RESIDENT, type ProgramRun } from "./shims/child_process";
+import { FIXED_REPO_VARIABLES } from "../src/proc/repo-variables";
 
 export { HOME };
 export const REPO = `${HOME}/code/tidepool`;
@@ -75,10 +76,13 @@ programs.set("awk", () => RESIDENT);
 // page's daemon is no process, and none other runs on the demo machine.
 programs.set("ps", () => ok(""));
 
-// The four commands the git segment runs (src/segments/git.ts); anything else
-// fails as git does, and says so in the console, so a new one is noticed.
+// The four commands the git segment runs (src/segments/git.ts), and the ask the
+// page's daemon makes once at its start (src/proc/repo-variables.ts), answered
+// as git 2.50.1 answers it, which is the list the fixed answer spells; anything
+// else fails as git does, and says so in the console, so a new one is noticed.
 programs.set("git", (args) => {
   const line = args.join(" ");
+  if (line === "rev-parse --local-env-vars") return ok(FIXED_REPO_VARIABLES.map((name) => `${name}\n`).join(""));
   if (line.startsWith("status --porcelain=v2 --branch")) {
     const rows = [
       `# branch.oid ${repo.head}`,

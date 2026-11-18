@@ -244,6 +244,7 @@ async function doctorRun(
       throw new Error("the doctor's read came before its bar was drawn");
     return {
       serving: NOT_HELD,
+      repoVariables: NOT_HELD,
       rateLimits: NOT_HELD,
       transcripts: NOT_HELD,
       clients: NOT_HELD,

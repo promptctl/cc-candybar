@@ -5,6 +5,9 @@
 import {
   CHECKS,
   checkByName,
+  held,
+  notJudged,
+  NOT_HELD,
   describeFix,
   envVarOf,
   runDoctor,
@@ -516,6 +519,7 @@ describe("config probe", () => {
       ["config", true],
       ["install", true],
       ["daemon", true],
+      ["gitEnvironment", true],
       ["urlHandler", true],
       ["links", true],
       ["tmuxTruecolor", true],
@@ -964,6 +968,48 @@ describe("effectRefresh probe", () => {
         ],
         fix: FIX,
       });
+    });
+  });
+});
+
+// The daemon's git and forge reads run without the variables that would point
+// them at the repository of the shell that spawned it: the row names them, and
+// fails while they are the fixed list git could not answer for.
+describe("gitEnvironment probe", () => {
+  const probe = (repoVariables: DoctorFacts["daemon"]["repoVariables"]) =>
+    checkByName("gitEnvironment")!.probe({
+      ...HEALTHY_FACTS,
+      daemon: { ...HEALTHY_FACTS.daemon, repoVariables },
+    });
+
+  test("git's own answer passes, naming every variable dropped", () => {
+    const verdict = probe(
+      held({ kind: "asked", names: ["GIT_DIR", "GIT_WORK_TREE", "GH_REPO"] }),
+    );
+    expect(verdict.ok).toBe(true);
+    const note = verdict.ok ? verdict.note : "";
+    for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GH_REPO"])
+      expect(note).toContain(name);
+  });
+
+  test("the fixed list fails, with why git gave none and the list", () => {
+    const verdict = probe(
+      held({
+        kind: "fixed",
+        why: "git rev-parse --local-env-vars exited with code 128",
+        names: ["GIT_DIR", "GH_REPO"],
+      }),
+    );
+    expect(verdict.ok).toBe(false);
+    const reason = verdict.ok ? "" : verdict.reason;
+    expect(reason).toContain("exited with code 128");
+    expect(reason).toContain("GIT_DIR, GH_REPO");
+  });
+
+  test("a run with no daemon behind it says the variables are not judged", () => {
+    expect(probe(NOT_HELD)).toEqual({
+      ok: true,
+      note: notJudged("which variables the daemon's git reads run without"),
     });
   });
 });

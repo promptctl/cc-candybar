@@ -9,6 +9,7 @@ import type { Fact } from "./fact";
 import { pendingOf } from "../utils/outcome";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import type { LauncherFact } from "../proc/launcher";
+import type { RepoVariablesWarning } from "../proc/repo-variables";
 import type { HeldEvent } from "../utils/event-hold";
 import type { DoctorReading } from "../doctor/gather";
 
@@ -78,6 +79,9 @@ export interface DaemonFacts {
   readonly update: UpdateState;
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
+  // Whether its git and forge reads run on the fixed list of repository
+  // variables, git having named none at its start.
+  readonly repoVariables: readonly RepoVariablesWarning[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;
 }

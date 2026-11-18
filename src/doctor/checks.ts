@@ -37,6 +37,10 @@ import type { RepoQuestion } from "../config/config-snapshot.js";
 import { repoQuestionLines } from "../config/loader/repo-gate.js";
 import type { ClickArrival, Delivery } from "./sightings.js";
 import {
+  repoVariablesText,
+  type RepoVariables,
+} from "../proc/repo-variables.js";
+import {
   approachingLimit,
   chargeWords,
   laterIdentity,
@@ -432,6 +436,8 @@ export interface PostMortemsRead {
 // as read (src/doctor/post-mortems-read.ts).
 export interface DaemonFacts {
   readonly serving: Held<ServingDaemon>;
+  // The variables its git and forge reads run without.
+  readonly repoVariables: Held<RepoVariables>;
   readonly processes: Asked<readonly DaemonProcess[]>;
   readonly postMortems: Asked<readonly PostMortem[]>;
   readonly read: Asked<PostMortemsRead>;
@@ -1216,6 +1222,27 @@ const daemon: Check = {
   },
 };
 
+// "The bar's git reads follow the session": the daemon's environment is the
+// shell that spawned it, so its git and forge reads run without the variables
+// that would point them at that shell's repository. The row names them, and
+// fails while they are the fixed list because git could not name its own.
+const gitEnvironment: Check = {
+  name: "gitEnvironment",
+  label: "git environment",
+  takesMark: false,
+  probe: ({ daemon: { repoVariables } }) => {
+    if (repoVariables.kind === "not-held")
+      return {
+        ok: true,
+        note: notJudged("which variables the daemon's git reads run without"),
+      };
+    const text = repoVariablesText(repoVariables.value);
+    return repoVariables.value.kind === "asked"
+      ? { ok: true, note: text }
+      : { ok: false, reason: text };
+  },
+};
+
 type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
 
 const CLICK_TO_SEE =
@@ -1789,6 +1816,7 @@ export const CHECKS: readonly Check[] = [
   config,
   install,
   daemon,
+  gitEnvironment,
   urlHandler,
   links,
   tmuxTruecolor,

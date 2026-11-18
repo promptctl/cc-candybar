@@ -25,6 +25,7 @@ import type { ClientHints } from "../foundations/protocol";
 import type { SessionId } from "../foundations/session-id";
 import type { RenderSighting } from "../foundations/sightings";
 import type { ServingDaemon } from "../foundations/memory-limit";
+import type { RepoVariables } from "../../proc/repo-variables";
 import type {
   DoctorAsk,
   DoctorOrigin,
@@ -129,15 +130,18 @@ export async function readDoctorRun(
 }
 
 // What the daemon tells a session's read: its own render sightings of the
-// session, and itself as it reports itself, with the bundle it runs.
+// session, and itself as it reports itself, with the bundle it runs and the
+// repository variables its reads run without.
 export function daemonSighted(
   session: SessionId,
   said: readonly RenderSighting[],
   serving: ServingDaemon,
   bundle: string,
+  repoVariables: RepoVariables,
 ): Sighted {
   return {
     serving: held(serving),
+    repoVariables: held(repoVariables),
     rateLimits: held(said.map((s) => s.rateLimits)),
     transcripts: held(said.map((s) => s.transcript)),
     clients: held({ bundle, clients: said.map((s) => s.client) }),

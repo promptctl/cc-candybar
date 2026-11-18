@@ -12,6 +12,7 @@ import type { SettingsChainAt } from "../claude-settings.js";
 import { readSettingsChain } from "../claude-settings-read.js";
 import type { ClientHints } from "../daemon/foundations/protocol.js";
 import type { DataNeeds } from "./data-needs.js";
+import type { RepoVariables } from "../proc/repo-variables.js";
 import type {
   RateLimitsSeen,
   TranscriptSaid,
@@ -258,6 +259,7 @@ async function segmentDataFacts(
 // else.
 export interface Sighted {
   readonly serving: Held<ServingDaemon>;
+  readonly repoVariables: Held<RepoVariables>;
   readonly rateLimits: Held<readonly RateLimitsSeen[]>;
   readonly transcripts: Held<readonly TranscriptSaid[]>;
   // The clients that drew the session's bars, and the bundle the daemon
@@ -327,6 +329,7 @@ export async function readDoctor(
     urlHandler,
     daemon: {
       serving: sighted.serving,
+      repoVariables: sighted.repoVariables,
       processes,
       postMortems: edge.postMortems(),
     },

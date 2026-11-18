@@ -4,7 +4,8 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
-import { HOST } from "./host";
+import { HOST, worldOf } from "./host";
+import { settleRepoVariables } from "../../src/proc/repo-variables";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -87,11 +88,14 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog =
     overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
+  const host = overrides.host ?? HOST;
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
       bundle: bundleAt(path.join(paths.state, "checkout")),
-      host: HOST,
+      host,
+      // Asked as a process asks, by its own launcher over the daemon's env.
+      repoVariables: settleRepoVariables(worldOf(host).launcher),
       memoryLimitBytes: memoryLimitBytes(process.env),
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
