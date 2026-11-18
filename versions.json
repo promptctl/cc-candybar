@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-799",
+      "ref": "refs/pull/799/merge",
+      "sha": "eb8982689f6e03d760574283d961acec8f6a1545",
+      "timestamp": "2026-11-18T14:55:31.163Z",
+      "commits": [
+        {
+          "sha": "eb8982689f6e03d760574283d961acec8f6a1545",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:54:11Z",
+          "message": "Merge 3eb063020b8663b909696a15289288afeb6a0d51 into da23aa8eef006c7d3ab59ca80d78ed17d712ef01\n"
+        },
+        {
+          "sha": "3eb063020b8663b909696a15289288afeb6a0d51",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:24:36-07:00",
+          "message": "fix(edit): chrome name builders take names as written and escape inside (5bfl)\n"
+        },
+        {
+          "sha": "16b3fad8978b35ff755feb67fbc3633b29e20b0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T06:09:13-07:00",
+          "message": "fix(edit): edit chrome spells preset and placement with one injective, readable identifier (5bfl)\n\nA placement or preset name is letters and digits as they are and every\nother code point as Z and six hex digits, so names that differ only in\npunctuation keep their own chrome and menu keys. The preset collision\nguard protected only the lossy preset spelling and is deleted.\n"
+        },
+        {
+          "sha": "cf0ab984ed020c2d614b0bc3db772112dc6d508b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:48:16-07:00",
+          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-804",
       "ref": "refs/pull/804/merge",
       "sha": "fcffc5a6548107845d4c8dbcc9ede719c236f9a1",
@@ -85,42 +121,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:25:40-07:00",
           "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-799",
-      "ref": "refs/pull/799/merge",
-      "sha": "228551d4633aa57a374417b68040a714270adc19",
-      "timestamp": "2026-11-18T13:25:43.023Z",
-      "commits": [
-        {
-          "sha": "228551d4633aa57a374417b68040a714270adc19",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:24:47Z",
-          "message": "Merge 709d2fab431a44a53bc409996a13b4b9d5b65773 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "709d2fab431a44a53bc409996a13b4b9d5b65773",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:24:36-07:00",
-          "message": "fix(edit): chrome name builders take names as written and escape inside (5bfl)\n"
-        },
-        {
-          "sha": "1f09e1276786ff736ac8e4ab886b11d9ac3d9dc7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:09:13-07:00",
-          "message": "fix(edit): edit chrome spells preset and placement with one injective, readable identifier (5bfl)\n\nA placement or preset name is letters and digits as they are and every\nother code point as Z and six hex digits, so names that differ only in\npunctuation keep their own chrome and menu keys. The preset collision\nguard protected only the lossy preset spelling and is deleted.\n"
-        },
-        {
-          "sha": "2da58b391ed0013455c92fe34ae64ef6afd42c6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T05:48:16-07:00",
-          "message": "fix(edit): edit chrome is named by the placement it serves, not by walk position (5bfl)\n\nOne walk counter spelled every insert slot, removal, configure control and\ndraft variable, so an add, removal or move renamed every control after it,\nand an open menu, page or list landed on a neighbour. Every name is now\nspelled from the placement's id through an injective spelling that is a\nfixed point of ident, and the counter is gone.\n"
         }
       ]
     }
