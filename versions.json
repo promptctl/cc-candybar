@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-811",
+      "ref": "refs/pull/811/merge",
+      "sha": "e7809693ea350624e1a6c3e5d7d07dbcd8117469",
+      "timestamp": "2026-11-18T16:54:31.918Z",
+      "commits": [
+        {
+          "sha": "e7809693ea350624e1a6c3e5d7d07dbcd8117469",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:53:22-07:00",
+          "message": "Merge a8dfc4f01a00cc70d915fd263d10df42ab1595b8 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
+        },
+        {
+          "sha": "a8dfc4f01a00cc70d915fd263d10df42ab1595b8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:52:57-07:00",
+          "message": "fix(daemon): the daemon drops the variables that locate a repository, so each session's git read answers for its own directory (i3ek)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-806",
       "ref": "refs/pull/806/merge",
       "sha": "c7e2ebb6701a943a324ae4109ead8d19a489ae7c",
