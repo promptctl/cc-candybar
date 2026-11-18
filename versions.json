@@ -4,15 +4,22 @@
     {
       "version": "pr-797",
       "ref": "refs/pull/797/merge",
-      "sha": "5abc0c219e42ac4501ec50648a11511321b51bf9",
-      "timestamp": "2026-11-18T12:31:48.074Z",
+      "sha": "e6326912bcab8aeae7261efe2b300ddfb69dcf90",
+      "timestamp": "2026-11-18T12:36:51.569Z",
       "commits": [
         {
-          "sha": "5abc0c219e42ac4501ec50648a11511321b51bf9",
+          "sha": "e6326912bcab8aeae7261efe2b300ddfb69dcf90",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:30:49Z",
-          "message": "Merge c01cd14eece70f044ae2e77548a47ac83f93be06 into e33675a193dfc48790988daa17ac05641e602a19\n"
+          "timestamp": "2026-11-18T12:35:58Z",
+          "message": "Merge 198882e9d271c129b0820007ae9f37901660d3d0 into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "198882e9d271c129b0820007ae9f37901660d3d0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T05:35:47-07:00",
+          "message": "fix(update): one job's watch is one value, and a look's wait excludes its read (9eu3)\n\nA look is tagged first, spent or unwatched, and the watch logs from that.\nThe job's ended mark lives in the same value and is set only once the end\nhas run. The wait runs from one look's end to the next look's start, so a\nslow read under load is never taken for a sleep. The act record's parse\nnarrows with type guards. A claim's fault and a throwing look go back to\ntheir own paths, which already show them.\n"
         },
         {
           "sha": "c01cd14eece70f044ae2e77548a47ac83f93be06",

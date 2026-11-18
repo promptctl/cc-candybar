@@ -47138,9 +47138,9 @@ var Recolored = class {
     if (options.colorSystem === null)
       return { segments, hold: UNMOVED };
     const depth = options.colorSystem ?? ColorDepth.TRUECOLOR;
-    const looked = looks(segments, depth, this.theme);
-    const walked = walk(looked);
-    const animation = this.effect(measured(looked, () => walked, depth, this.theme));
+    const looked2 = looks(segments, depth, this.theme);
+    const walked = walk(looked2);
+    const animation = this.effect(measured(looked2, () => walked, depth, this.theme));
     const shown = shownAt(animation, this.t, options);
     return { segments: this._recolored(walked, shown.value, depth), hold: holdOf(shown, this.t) };
   }
@@ -47351,9 +47351,9 @@ function walkGlyphs(segments) {
 function inked(text4) {
   return text4.trim() !== "";
 }
-function walk(looked) {
-  const placed2 = walkGlyphs(looked.map(({ segment }) => segment));
-  return looked.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
+function walk(looked2) {
+  const placed2 = walkGlyphs(looked2.map(({ segment }) => segment));
+  return looked2.map((item, i2) => ({ ...item, glyphs: placed2[i2] }));
 }
 function edgesBeside(walked, drawings) {
   let rows;
@@ -47391,7 +47391,7 @@ function edgesBeside(walked, drawings) {
 function drawsLines(style) {
   return [style.underline, style.underline2, style.strike, style.overline, style.frame, style.encircle].some((on2) => on2 === true);
 }
-function measured(looked, walked, depth, theme24) {
+function measured(looked2, walked, depth, theme24) {
   const ground = theme24.backgroundColor.hex;
   let everything;
   const list2 = () => walked().flatMap(({ look, glyphs }) => {
@@ -47403,7 +47403,7 @@ function measured(looked, walked, depth, theme24) {
   const listed = () => everything ??= list2();
   let all2;
   let shown;
-  const words2 = looked.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
+  const words2 = looked2.flatMap(({ segment, look }) => look !== void 0 && inked(segment.text) && !look.seam ? [look.pair] : []);
   const pairs2 = [...new Map(words2.map((pair) => [`${pair.fg.hex}/${pair.bg.hex}/${pair.terminal.fg}/${pair.terminal.bg}/${pair.reverse}`, pair])).values()];
   const own2 = (slot) => pairs2.flatMap((pair) => pair.terminal[slot] ? [] : [pair[slot].hex]);
   return {
@@ -50553,12 +50553,33 @@ function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path15.default.join(stateDir2, "update-act", key);
 }
-function watchedAt(prev, job, now2, longestLookMs) {
+function looked(prev, job, began, done, longestLookMs) {
   if (prev === null || !sameJob(prev.job, job)) {
-    return { job, spentMs: 0, unwatchedMs: 0, lookedAt: now2 };
+    return {
+      kind: "first",
+      watched: {
+        job,
+        spentMs: 0,
+        unwatchedMs: 0,
+        lookedAt: done,
+        ended: false
+      }
+    };
   }
-  const since = spanMs(prev.lookedAt, now2);
-  return since <= longestLookMs ? { ...prev, spentMs: prev.spentMs + since, lookedAt: now2 } : { ...prev, unwatchedMs: prev.unwatchedMs + since, lookedAt: now2 };
+  const waitedMs = spanMs(prev.lookedAt, began);
+  return waitedMs <= longestLookMs ? {
+    kind: "spent",
+    watched: { ...prev, spentMs: prev.spentMs + waitedMs, lookedAt: done },
+    waitedMs
+  } : {
+    kind: "unwatched",
+    watched: {
+      ...prev,
+      unwatchedMs: prev.unwatchedMs + waitedMs,
+      lookedAt: done
+    },
+    waitedMs
+  };
 }
 function judgeAct(facts) {
   if (facts === null) return IDLE;
@@ -50633,7 +50654,7 @@ function readRecord(actDir) {
 }
 function parsedRecord(file, text4) {
   const r = JSON.parse(text4);
-  if (typeof r === "object" && r !== null && "identity" in r && typeof r.identity === "string" && "pid" in r && Number.isSafeInteger(r.pid) && "startTime" in r && (r.startTime === null || typeof r.startTime === "string") && "started" in r && Number.isFinite(r.started)) {
+  if (typeof r === "object" && r !== null && "identity" in r && typeof r.identity === "string" && "pid" in r && typeof r.pid === "number" && Number.isSafeInteger(r.pid) && "startTime" in r && (r.startTime === null || typeof r.startTime === "string") && "started" in r && typeof r.started === "number" && Number.isFinite(r.started)) {
     return {
       identity: r.identity,
       pid: r.pid,
@@ -63437,29 +63458,31 @@ function makeUpdateWatch(opts) {
     }
   }
   let watched = null;
-  let ended = null;
-  function endIfOverdue(facts) {
-    if (!facts?.alive) {
-      watched = null;
-      return;
-    }
-    const was = watched;
-    watched = watchedAt(
+  function endIfOverdue(facts, began) {
+    if (!facts?.alive) return;
+    const look = looked(
       watched,
       facts.record,
+      began,
       clock.monotonic(),
       LONGEST_LOOK_MS
     );
-    if (was !== null && watched.unwatchedMs > was.unwatchedMs) {
+    watched = look.watched;
+    if (look.kind === "first") {
       log(
         "info",
-        `apply-update: act ${facts.act} unwatched for ${watched.unwatchedMs - was.unwatchedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`
+        `apply-update: act ${facts.act}: this daemon's budget for its job starts unspent`
       );
     }
-    if (watched.spentMs <= ACT_TIMEOUT_MS) return;
-    if (ended !== null && sameJob(ended, facts.record)) return;
-    ended = facts.record;
+    if (look.kind === "unwatched") {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${look.waitedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`
+      );
+    }
+    if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir2, facts, launcher);
+    watched = { ...watched, ended: true };
     const why2 = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
@@ -63469,8 +63492,9 @@ function makeUpdateWatch(opts) {
   }
   async function watchAct() {
     const read2 = await touchActs(async () => {
+      const began = clock.monotonic();
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) endIfOverdue(facts, began);
       return facts;
     });
     if (closed || !read2.ok) return;
@@ -63478,15 +63502,12 @@ function makeUpdateWatch(opts) {
     const was = seen2;
     seen2 = next;
     if (was === null && next.kind === "running") {
-      log(
-        "info",
-        `apply-update: act ${next.act} is running; watching it, with this daemon's budget unspent`
-      );
+      log("info", `apply-update: act ${next.act} is running; watching it`);
     }
-    const ended2 = was?.kind === "running" && next.kind !== "running";
-    const succeeded = ended2 && next.kind === "succeeded";
+    const ended = was?.kind === "running" && next.kind !== "running";
+    const succeeded = ended && next.kind === "succeeded";
     if (succeeded) log("info", `apply-update: act ${next.act} succeeded`);
-    if (ended2 && next.kind === "failed") {
+    if (ended && next.kind === "failed") {
       log("error", `apply-update: act ${next.act} failed: ${next.reason}`);
     }
     runInAction(() => {
@@ -63497,14 +63518,7 @@ function makeUpdateWatch(opts) {
   }
   let clearTick;
   async function tick() {
-    try {
-      await actTurn(watchAct);
-    } catch (err) {
-      log(
-        "error",
-        `apply-update: a look at the acts failed: ${err.message}`
-      );
-    }
+    await actTurn(watchAct);
     if (closed) return;
     clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
   }
@@ -63546,21 +63560,15 @@ function makeUpdateWatch(opts) {
       if (judgeAct(newest).kind === "running") {
         throw new BadVerbArgs(`apply-update: already ${words2.busy}`);
       }
-      const claimed = await touchActs(
-        () => claimAct(
-          launcher,
-          actsDir2,
-          newest === null ? null : newest.act,
-          updateIdentity(update),
-          { ...command, category: "update.apply" },
-          clock.now(),
-          readStart
-        )
+      const claim = await claimAct(
+        launcher,
+        actsDir2,
+        newest === null ? null : newest.act,
+        updateIdentity(update),
+        { ...command, category: "update.apply" },
+        clock.now(),
+        readStart
       );
-      if (closed) throw new DaemonClosing("apply-update");
-      if (!claimed.ok)
-        throw new BadVerbArgs(`apply-update: ${claimed.error}`);
-      const claim = claimed.value;
       if (!claim.ok) {
         throw new BadVerbArgs(`apply-update: ${claim.reason}`);
       }
