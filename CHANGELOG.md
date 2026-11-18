@@ -1,3 +1,9 @@
+## [1.232.8](https://github.com/promptctl/cc-candybar/compare/v1.232.7...v1.232.8) (2026-11-18)
+
+### Bug Fixes
+
+* **acts:** a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno) ([#827](https://github.com/promptctl/cc-candybar/issues/827)) ([5a71a43](https://github.com/promptctl/cc-candybar/commit/5a71a43f5da66bd536475cb0df17c28d9a6469e0))
+
 ## [1.232.7](https://github.com/promptctl/cc-candybar/compare/v1.232.6...v1.232.7) (2026-11-18)
 
 ### Bug Fixes
