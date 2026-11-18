@@ -59189,25 +59189,6 @@ var RefreshFaults = class {
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
 
-// src/renderer-interface/interface.ts
-init_globals();
-function timed(renderer, monotonic) {
-  return {
-    answer: async (input) => {
-      const from = monotonic();
-      const output = await renderer.answer(input);
-      return { ...output, turnMs: Math.round(monotonic() - from) };
-    }
-  };
-}
-function followingOf(viewers) {
-  const following = /* @__PURE__ */ new Set();
-  for (const [lane, seen2] of Object.entries(viewers?.lanes ?? {}))
-    if (seen2.drawing) following.add(lane);
-  return following;
-}
-var NOTHING_NAMED = { folders: [], loads: 0 };
-
 // src/var-system/parse.ts
 init_globals();
 var LINE_BREAK = /\r\n|\r|\n/g;
@@ -68264,6 +68245,7 @@ function madeOnce(folder) {
   }
 }
 var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
+var NOTHING_NAMED = { folders: [], loads: 0 };
 var ManagedStorage = class {
   sessions;
   // [LAW:one-source-of-truth] By folder: each folder's current generation's
@@ -68386,8 +68368,9 @@ var ManagedStorage = class {
   }
   // Closes every folder the subscriptions do not name.
   closeUnheld() {
+    const named3 = new Set(this.named.folders);
     for (const [folder, watched] of [...this.watched])
-      if (!this.named.folders.includes(folder)) this.closed(watched);
+      if (!named3.has(folder)) this.closed(watched);
   }
   // Opens a folder's next generation, on what its hold found, as the folder's
   // current watch.
@@ -72824,7 +72807,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let holder = null;
   let queued = 0;
   let served = /* @__PURE__ */ new Set();
-  let storage = NOTHING_NAMED;
+  let storage = [];
+  let loads = 0;
   const inMailbox = (slot, at = "last") => {
     const asked2 = clock.monotonic();
     queued++;
@@ -72839,7 +72823,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           return await slot(queuedMs, (input) => void (held2.input = input));
         } finally {
           holder = null;
-          taking("storage", () => collector.storage(storage));
+          taking(
+            "storage",
+            () => collector.storage({ folders: storage, loads })
+          );
         }
       },
       at
@@ -72863,6 +72850,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     let release4 = () => {
     };
     if (input.event.kind === "start") served = /* @__PURE__ */ new Set();
+    if (input.event.kind === "config") loads++;
     try {
       release4 = session === null ? release4 : collector.holding(session);
       const sentAt = clock.monotonic();
@@ -72998,13 +72986,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const input = stamped(made);
     const { turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why2]], turn);
-    const threw3 = turn.kind === "threw" ? [
+    const threw2 = turn.kind === "threw" ? [
       {
         kind: THREW_AS[turn.failure.kind],
         reason: turn.failure.message
       }
     ] : [];
-    return { settled: settled3.then((outcomes) => [...threw3, ...outcomes]) };
+    return { settled: settled3.then((outcomes) => [...threw2, ...outcomes]) };
   };
   const doneOf = (effect, outcome) => ({
     kind: "event",
@@ -73092,13 +73080,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     log("error", text4);
     world.unheard(text4);
   });
-  const threw2 = (what, turn) => {
+  const failIfThrew = (what, turn) => {
     if (turn.kind !== "threw") return;
-    const took2 = turn.turnMs === null ? "" : ` took=${turn.turnMs}ms`;
+    const ran2 = turn.turnMs === null ? "" : ` took=${turn.turnMs}ms`;
     throw new CrossedFailure({
       ...turn.failure,
       message: `renderer ${name} ${what} threw: ${turn.failure.message}`,
-      detail: `renderer ${name} ${what} threw${took2}: ${turn.failure.detail}`
+      detail: `renderer ${name} ${what} threw${ran2}: ${turn.failure.detail}`
     });
   };
   const inspect2 = async (ask2) => {
@@ -73106,7 +73094,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       kind: "event",
       event: { kind: "inspect", ask: ask2 }
     }));
-    threw2(`inspect ${ask2.kind}`, turn);
+    failIfThrew(`inspect ${ask2.kind}`, turn);
     const report2 = turn.effects.find((effect) => effect.kind === "report");
     if (report2?.reading.kind !== ask2.kind)
       throw new Error(
@@ -73114,7 +73102,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       );
     return report2.reading;
   };
-  const closeStep = async (step4) => threw2(
+  const closeStep = async (step4) => failIfThrew(
     `close step ${step4}`,
     await answer2(() => ({ kind: "event", event: { kind: step4 } }))
   );
@@ -86076,6 +86064,26 @@ var MenuIdle = class {
 
 // src/renderer/feeds.ts
 init_globals();
+
+// src/renderer-interface/interface.ts
+init_globals();
+function timed(renderer, monotonic) {
+  return {
+    answer: async (input) => {
+      const from = monotonic();
+      const output = await renderer.answer(input);
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    }
+  };
+}
+function followingOf(viewers) {
+  const following = /* @__PURE__ */ new Set();
+  for (const [lane, seen2] of Object.entries(viewers?.lanes ?? {}))
+    if (seen2.drawing) following.add(lane);
+  return following;
+}
+
+// src/renderer/feeds.ts
 var FEED_PERIODS = {
   moving: 1e3 / MOVING_FPS,
   still: 1e3
@@ -90588,8 +90596,6 @@ var RenderCache = class {
   }
   // Every state the map serves or served, until reclaimed.
   holds = /* @__PURE__ */ new Map();
-  // The config loads run, of every origin (`storage`).
-  loads = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
@@ -90930,7 +90936,6 @@ var RenderCache = class {
   // built after would hold timers and watchers nothing tears down.
   load(cwd2, snapshot, served) {
     if (this.closed) throw new Error("render cache used after close");
-    this.loads++;
     return loadOrigin(cwd2, snapshot, this.deps, served);
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
@@ -91032,7 +91037,7 @@ var RenderCache = class {
     const folders = /* @__PURE__ */ new Set();
     for (const state of this.holds.keys())
       for (const folder of state.sources.values()) folders.add(folder);
-    return { folders: [...folders].sort(), loads: this.loads };
+    return [...folders].sort();
   }
   holdOf(state) {
     const hold2 = this.holds.get(state);
@@ -91510,7 +91515,7 @@ function mainRenderer(parts, own2, drained, said2) {
     sources: {},
     lanes: {},
     configs: [],
-    storage: NOTHING_NAMED,
+    storage: [],
     wake: null
   };
   let parked = [];

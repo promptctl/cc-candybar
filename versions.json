@@ -4,15 +4,22 @@
     {
       "version": "pr-794",
       "ref": "refs/pull/794/merge",
-      "sha": "2a7a95c01935d44a4cd5578da608309dd49258aa",
-      "timestamp": "2026-11-18T06:40:07.588Z",
+      "sha": "435be904af462f2dadd15bf484a63fa5d3be3755",
+      "timestamp": "2026-11-18T06:53:55.830Z",
       "commits": [
         {
-          "sha": "2a7a95c01935d44a4cd5578da608309dd49258aa",
+          "sha": "435be904af462f2dadd15bf484a63fa5d3be3755",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T06:38:58Z",
-          "message": "Merge dcb474676fe4583da0e3cfcdf0c36380596f22fe into e33675a193dfc48790988daa17ac05641e602a19\n"
+          "timestamp": "2026-11-18T06:52:48Z",
+          "message": "Merge 2e6e795cc4efe98d05445bc3d87c8febdf57ad9c into e33675a193dfc48790988daa17ac05641e602a19\n"
+        },
+        {
+          "sha": "2e6e795cc4efe98d05445bc3d87c8febdf57ad9c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-17T23:52:36-07:00",
+          "message": "fix(renderer): the host counts storage loads, so a restart cannot repeat one (2jt)\n\nA renderer counted its own config loads and the storage owner kept its\nfolders again when the count moved. A restarted renderer counted from zero,\nso after the same loads as the one before it the owner skipped the keep and\na refused watch went untried. The host counts the config turns it hands in,\nacross every renderer, and the interface carries the folders alone.\n\nAlso: the host's assert-on-failure helper is failIfThrew, and the storage\nowner's close pass reads the named folders through a set.\n"
         },
         {
           "sha": "dcb474676fe4583da0e3cfcdf0c36380596f22fe",
