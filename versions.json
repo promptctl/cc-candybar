@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-832",
+      "ref": "refs/pull/832/merge",
+      "sha": "a30a62d800644e19b2b70f9478c75bcdee128c8d",
+      "timestamp": "2026-11-18T22:16:12.488Z",
+      "commits": [
+        {
+          "sha": "a30a62d800644e19b2b70f9478c75bcdee128c8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:15:04-07:00",
+          "message": "Merge 1a052a0374bec117cef9a2ba86c3b26c830bffb4 into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
+        },
+        {
+          "sha": "1a052a0374bec117cef9a2ba86c3b26c830bffb4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:14:05-07:00",
+          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-827",
       "ref": "refs/pull/827/merge",
       "sha": "27741fdffa9530e0fd49804dbc4e86f1fd773a04",
