@@ -14,6 +14,7 @@ import { type Launcher } from "../src/proc/launcher";
 import type { TmuxHint } from "../src/tmux-hint";
 import { systemTimekeeper } from "../src/time";
 import { HAS_TMUX } from "./helpers/private-tmux";
+import { UNREACHED_CLAUDE_INPUT } from "./helpers/claude-input";
 
 
 (HAS_TMUX ? describe : describe.skip)("a bar pane on a real tmux", () => {
@@ -85,7 +86,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       closing.signal,
       systemTimekeeper,
-      processProbe, () => NOT_HEARD
+      processProbe, () => NOT_HEARD, UNREACHED_CLAUDE_INPUT
     );
 
     const opened = await edge.openBarPane(hint, barPane(), {});
@@ -96,7 +97,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe, () => NOT_HEARD
+      processProbe, () => NOT_HEARD, UNREACHED_CLAUDE_INPUT
     );
     expect(await tagged.barPanes(hint)).toEqual([opened]);
     expect(active()).toBe(hint.pane);
@@ -119,7 +120,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe, () => NOT_HEARD
+      processProbe, () => NOT_HEARD, UNREACHED_CLAUDE_INPUT
     );
 
     await edge.openBarPane(hint, barPane(), {});
@@ -135,7 +136,7 @@ import { HAS_TMUX } from "./helpers/private-tmux";
       () => new Set(),
       new AbortController().signal,
       systemTimekeeper,
-      processProbe, () => NOT_HEARD
+      processProbe, () => NOT_HEARD, UNREACHED_CLAUDE_INPUT
     );
 
     await expect(edge.openBarPane(hint, barPane(), {})).rejects.toThrow(

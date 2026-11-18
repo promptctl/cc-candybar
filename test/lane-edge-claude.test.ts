@@ -12,6 +12,7 @@ import { processProbe } from "./helpers/host";
 import { fakeLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { UNREACHED_CLAUDE_INPUT } from "./helpers/claude-input";
 
 const S = sessionIdOf("s");
 
@@ -27,6 +28,7 @@ function edgeIn(environment: SessionEnvironment) {
     systemTimekeeper,
     processProbe,
     (session) => (session === S ? environment : NOT_HEARD),
+    UNREACHED_CLAUDE_INPUT,
   );
   return { edge, fake };
 }

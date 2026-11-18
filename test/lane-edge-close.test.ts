@@ -8,12 +8,13 @@ import { processProbe } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { UNREACHED_CLAUDE_INPUT } from "./helpers/claude-input";
 
 const S = sessionIdOf("s");
 
 describe("the lane edge after its daemon closes", () => {
   const edgeOver = (closing: AbortController) =>
-    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, () => NOT_HEARD);
+    productionLaneEdge(unscriptedLauncher, () => new Set(), closing.signal, systemTimekeeper, processProbe, () => NOT_HEARD, UNREACHED_CLAUDE_INPUT);
 
   test("a wait for a subscriber ends at once, before its deadline", async () => {
     const closing = new AbortController();

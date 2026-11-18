@@ -41,8 +41,16 @@ import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
-import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
-import type { DaemonLog } from "../../../src/daemon/log";
+import {
+  buildDaemon,
+  bundleAt,
+  statsOf,
+  type DaemonOverrides,
+} from "../../helpers/in-worker-daemon";
+import { DaemonLog } from "../../../src/daemon/log";
+import { productionAdapters } from "../../../src/daemon/production-adapters";
+import type { ClaudeInputEdge } from "../../../src/claude-input/typing";
+import { UNREACHED_CLAUDE_INPUT } from "../../helpers/claude-input";
 import { until } from "../../helpers/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
@@ -111,10 +119,12 @@ describe("the daemon is a value", () => {
       checkout?: string;
       digest?: string;
       profile?: () => never;
+      adapters?: Pick<DaemonOverrides, "claudeInput" | "laneEdge">;
     } = {},
   ): Daemon => {
     const { profile } = inputs;
     const { daemon, daemonLog } = buildDaemon({
+      ...inputs.adapters,
       host: hostNow(),
       paths: daemonPaths(hostNow()),
       bundle: bundleAt(
@@ -274,6 +284,36 @@ describe("the daemon is a value", () => {
     await answer(second, renderRequest("value-second"));
     await close(first);
     await close(second);
+  });
+
+  test("the claude-input edge it is given is built once, and is the one its lanes read", async () => {
+    writeConfig(PADDED);
+    const given = UNREACHED_CLAUDE_INPUT;
+    let built = 0;
+    const handed: ClaudeInputEdge[] = [];
+    const spareLog = new DaemonLog(path.join(root, "spare.log"), systemTimekeeper);
+    openLogs.push(spareLog);
+    const production = productionAdapters(
+      daemonPaths(hostNow()),
+      spareLog,
+      systemTimekeeper,
+    );
+    const daemon = construct({
+      adapters: {
+        claudeInput: () => {
+          built++;
+          return given;
+        },
+        laneEdge: (...args) => {
+          handed.push(args[5]);
+          return production.laneEdge(...args);
+        },
+      },
+    });
+    expect(built).toBe(1);
+    expect(handed).toEqual([given]);
+    expect(handed[0]).toBe(given);
+    await close(daemon);
   });
 
   test("a build that throws stands in the way of no next build", async () => {

@@ -133,12 +133,15 @@ export interface DaemonAdapters {
   readonly probe: (launcher: Launcher) => ProcessProbe;
   // What turning an animation lane on or off does to the machine: it is told
   // which lanes a session's feed follows, and ends its waits with the daemon.
+  // [LAW:single-enforcer] `claudeInput` is the daemon's one edge to Claude
+  // Code's input, which a slash click types through too.
   readonly laneEdge: (
     launcher: Launcher,
     following: (sessionId: SessionId) => ReadonlySet<Lane>,
     closing: AbortSignal,
     probe: ProcessProbe,
     environmentOf: (session: SessionId) => SessionEnvironment,
+    claudeInput: ClaudeInputEdge,
   ) => LaneEdge;
   // [LAW:one-source-of-truth] The link key, asked for at each use: every
   // click is opened with it and every renderer draws with it.
@@ -455,11 +458,14 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     environmentOf: (session) => sessionBook.environmentOf(session),
     clock,
   });
+  // [LAW:single-enforcer] The one edge to Claude Code's input: a slash
+  // click types through it and a lane reads it.
+  const claudeInput = inputs.claudeInput(launcher);
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's
   // turns return (src/daemon/acts.ts).
   const acts = new Acts({
     launch: clickLaunchVia(launcher),
-    type: typeInPane(inputs.claudeInput(launcher)),
+    type: typeInPane(claudeInput),
     run: (run) => runs.start(run),
     applyUpdate: () => updateWatch.act(),
     lanes: {
@@ -471,6 +477,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         closing.signal,
         probe,
         (session) => sessionBook.environmentOf(session),
+        claudeInput,
       ),
       // A bar pane runs this bundle under the node running it now, with the
       // flags it runs with (tsx's loader, under the test harness).

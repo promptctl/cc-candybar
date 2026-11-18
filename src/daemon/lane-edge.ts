@@ -17,10 +17,8 @@ import {
 import { runTmuxAsync } from "../proc/tmux.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { Lane } from "../config/lanes.js";
-import {
-  pasteLineArgs,
-  productionClaudeInputEdge,
-} from "../claude-input/edge.js";
+import { pasteLineArgs } from "../claude-input/edge.js";
+import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { lineage, processTable } from "../proc/process-table.js";
 import type { ProcessProbe } from "./process-fingerprint.js";
 import { presence } from "../utils/presence.js";
@@ -269,10 +267,12 @@ export function productionLaneEdge(
   probe: Pick<ProcessProbe, "alive">,
   // [LAW:one-source-of-truth] The session book's.
   environmentOf: (session: SessionId) => SessionEnvironment,
+  // [LAW:single-enforcer] The daemon's.
+  claudeInput: ClaudeInputEdge,
 ): LaneEdge {
   const wait = (ms: number): Promise<void> => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
+    claudeInput,
     barPanes: async (hint) =>
       barPanesOf(
         await tmux(launcher, hint, [
