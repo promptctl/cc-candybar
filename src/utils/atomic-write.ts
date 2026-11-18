@@ -1,10 +1,150 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 
-// [LAW:single-enforcer] The one tmp+rename for every file a user may be
-// reading while we write it — the config file, the settings history, and Claude
-// Code's settings.json (the doctor fix and `install`): a reader never sees a
-// torn file, and a rename that fails leaves no orphaned tmp behind. Without a
+// How staged bytes take the published name. A rename replaces whatever is
+// there, so the last complete write wins; a link lands only where nothing is,
+// so the first one does, and a link that finds the name taken publishes
+// nothing.
+export type PublishBy = "rename" | "link";
+
+export interface Publishing {
+  readonly by: PublishBy;
+  // The staged file's mode, through the umask. Without it the process's
+  // default applies.
+  readonly mode?: number;
+  // Asked once the bytes are on disk, with the name they are staged under:
+  // false discards them and publishes nothing. The session state file's
+  // debounced write is superseded here by a flush that landed meanwhile.
+  readonly admit?: (staged: string) => boolean;
+}
+
+// [LAW:single-enforcer] The one stage-and-publish for every file another
+// process may read or write while this one writes it. Staging, syncing,
+// publishing and cleanup live here and nowhere else, so a defect in any of
+// them is fixed once for every writer.
+//
+// [LAW:no-ambient-temporal-coupling] Each call stages under a name of its
+// own, so writers of one file, in one process or many, never publish or
+// remove each other's staged bytes. The bytes are synced before the publish:
+// a publish can reach the disk ahead of the bytes it names, which a crash
+// turns into an empty file under the published name. On macOS libuv's fsync
+// is F_FULLFSYNC, which also flushes the drive's cache, where a plain fsync
+// stops short of it.
+//
+// True when the bytes were published; false when `admit` declined them or a
+// link found the name taken. The staged file never outlives the call.
+export function publish(
+  file: string,
+  bytes: string | Uint8Array,
+  { by, mode, admit = admitted }: Publishing,
+): boolean {
+  const staged = stagedName(file);
+  let published: boolean;
+  try {
+    const fd = fs.openSync(staged, "wx", mode);
+    try {
+      fs.writeFileSync(fd, bytes);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    published = admit(staged) && lands(by, () => PUBLISH[by](staged, file));
+  } catch (e) {
+    throw withCleanup(e, staged);
+  }
+  fs.rmSync(staged, { force: true });
+  return published;
+}
+
+// [LAW:one-type-per-behavior] `publish` off the daemon's one thread: every
+// step runs on the thread pool, so a disk that is slow to write, sync or
+// rename holds no bar and no click.
+export async function publishAsync(
+  file: string,
+  bytes: string | Uint8Array,
+  { by, mode, admit = admitted }: Publishing,
+): Promise<boolean> {
+  const staged = stagedName(file);
+  let published: boolean;
+  try {
+    const handle = await fs.promises.open(staged, "wx", mode);
+    try {
+      await handle.writeFile(bytes);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    published =
+      admit(staged) &&
+      (await PUBLISH_ASYNC[by](staged, file).then(
+        () => true,
+        (e: unknown) => lostTheLink(by, e),
+      ));
+  } catch (e) {
+    throw withCleanup(e, staged);
+  }
+  await fs.promises.rm(staged, { force: true });
+  return published;
+}
+
+const admitted = (): boolean => true;
+
+const PUBLISH: Record<PublishBy, (staged: string, file: string) => void> = {
+  rename: (staged, file) => fs.renameSync(staged, file),
+  link: (staged, file) => fs.linkSync(staged, file),
+};
+
+const PUBLISH_ASYNC: Record<
+  PublishBy,
+  (staged: string, file: string) => Promise<void>
+> = {
+  rename: (staged, file) => fs.promises.rename(staged, file),
+  link: (staged, file) => fs.promises.link(staged, file),
+};
+
+function lands(by: PublishBy, run: () => void): boolean {
+  try {
+    run();
+    return true;
+  } catch (e) {
+    return lostTheLink(by, e);
+  }
+}
+
+// [LAW:one-source-of-truth] A link that finds the name taken lost to a write
+// that already landed: that is the outcome a link publishes by, not a
+// failure. Anything else is.
+function lostTheLink(by: PublishBy, e: unknown): false {
+  if (by === "link" && (e as NodeJS.ErrnoException).code === "EEXIST")
+    return false;
+  throw e;
+}
+
+// Beside the file, so the publish stays on one filesystem; unique to the
+// call, since a pid alone is shared by two writes in one process and can
+// repeat across pid namespaces.
+function stagedName(file: string): string {
+  return `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+}
+
+// [LAW:no-silent-failure] The write's own error is the error: callers branch
+// on its `code`. A cleanup that also fails leaves the staged file behind, so
+// its path and reason are added to the write's message, never put in its
+// place.
+function withCleanup(e: unknown, staged: string): unknown {
+  try {
+    fs.rmSync(staged, { force: true });
+  } catch (c) {
+    (e as Error).message +=
+      `; the staged file ${staged} was left behind: ${(c as Error).message}`;
+  }
+  return e;
+}
+
+// The tmp+rename for every file a user may be reading while we write it —
+// the config file, the settings history, and Claude Code's settings.json (the
+// doctor fix and `install`): a reader never sees a torn file. Without a
 // `mode` the existing file's mode survives (a hand-authored file keeps
 // whatever the user gave it) and a first-ever file takes the process umask.
 // A symlinked file is written where it points — a dotfiles-managed
@@ -14,19 +154,10 @@ import path from "node:path";
 export function writeAtomic(at: string, text: string, mode?: number): void {
   const file = resolvedTarget(at);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.tmp`;
-  const fileMode = mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode;
-  try {
-    fs.writeFileSync(
-      tmp,
-      text,
-      fileMode === undefined ? {} : { mode: fileMode },
-    );
-    fs.renameSync(tmp, file);
-  } catch (e) {
-    fs.rmSync(tmp, { force: true });
-    throw e;
-  }
+  publish(file, text, {
+    by: "rename",
+    mode: mode ?? fs.statSync(file, { throwIfNoEntry: false })?.mode,
+  });
 }
 
 // [LAW:one-source-of-truth] A config file's text, or null when it does not

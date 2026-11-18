@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import process from "node:process";
 
 import type { ProcessIdentity } from "./process-fingerprint";
+import { publish } from "../utils/atomic-write";
 
 // ─── Socket ownership lease ──────────────────────────────────────────────────
 //
@@ -172,25 +172,11 @@ export function writeLease(
   leasePath: string,
   record: LeaseRecord,
 ): string | null {
-  const tmp = `${leasePath}.${process.pid}.tmp`;
   try {
-    fs.writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
-    fs.renameSync(tmp, leasePath);
+    publish(leasePath, JSON.stringify(record), { by: "rename", mode: 0o600 });
     return null;
   } catch (e) {
-    const reason = (e as Error).message;
-    // [LAW:no-silent-failure] Best-effort temp cleanup, but don't swallow a real
-    // failure: ENOENT means the temp was never created (write failed first) —
-    // benign; any other unlink error means the temp WAS created and now leaks,
-    // so append it to the reason rather than hiding it behind the primary error.
-    try {
-      fs.unlinkSync(tmp);
-    } catch (cleanupErr) {
-      if ((cleanupErr as NodeJS.ErrnoException).code !== "ENOENT") {
-        return `${reason}; also failed to remove temp ${tmp}: ${(cleanupErr as Error).message}`;
-      }
-    }
-    return reason;
+    return (e as Error).message;
   }
 }
 

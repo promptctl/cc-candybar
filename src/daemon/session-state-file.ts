@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { quietLogger, type DaemonLogger } from "../utils/logger";
+import { publish, publishAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 
@@ -61,8 +62,9 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   // the latest one is older than what it wrote. A flush the disk refused
   // counts for nothing, so the write it raced still publishes.
   private generation = 0;
-  // The debounced write's temp file: what a flush removes to supersede it.
-  private readonly writingPath: string;
+  // What a flush runs to supersede the debounced write whose bytes are staged
+  // and on their way to publish: it removes them.
+  private discardStaged: () => void = () => {};
 
   constructor(
     private readonly kind: SessionFileKind<V>,
@@ -74,9 +76,7 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     // [LAW:locality-or-seam] Logging is injected, not hard-wired to
     // daemon.log: the daemon passes its log, every other caller stays quiet.
     private readonly logger: DaemonLogger = quietLogger,
-  ) {
-    this.writingPath = `${filePath}.writing`;
-  }
+  ) {}
 
   // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
   // *defined* recovery, not a hidden fallback to different data: an empty
@@ -179,44 +179,42 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     const generation = this.generation;
     const started = this.clock.monotonic();
     const body = this.body(snapshot);
-    const tmp = this.writingPath;
     this.writing = true;
     // The thread is held until the first await.
     const heldMs = elapsedMs(this.clock, started);
     try {
       await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-      const file = await fs.promises.open(tmp, "w", 0o600);
-      try {
-        await file.writeFile(body);
-        await file.chmod(0o600);
-        await file.datasync();
-      } finally {
-        await file.close();
-      }
       // [LAW:no-ambient-temporal-coupling] A synchronous flush since this
       // write began wrote state at least as new: renaming this over it would
-      // put older state back. A flush that lands while the rename is on its
-      // way removes the temp file first (flush, below), so the rename finds
-      // nothing: the one outcome in which this older state cannot land over
-      // the newer.
+      // put older state back, so it is not admitted. A flush that lands while
+      // the rename is on its way removes the staged bytes first (flush,
+      // below), so the rename finds nothing: the one outcome in which this
+      // older state cannot land over the newer.
       let landed = false;
-      if (generation === this.generation) {
-        try {
-          await fs.promises.rename(tmp, this.filePath);
-          landed = true;
-        } catch (e) {
-          if (
-            (e as NodeJS.ErrnoException).code !== "ENOENT" ||
-            generation === this.generation
-          )
-            throw e;
-        }
+      try {
+        landed = await publishAsync(this.filePath, body, {
+          by: "rename",
+          // [LAW:single-enforcer] Daemon runtime files are owner-only, like
+          // pid/spawn.lock: a session file carries conversation identifiers.
+          mode: 0o600,
+          admit: (staged) => {
+            this.discardStaged = () => fs.rmSync(staged, { force: true });
+            return generation === this.generation;
+          },
+        });
+      } catch (e) {
+        if (
+          (e as NodeJS.ErrnoException).code !== "ENOENT" ||
+          generation === this.generation
+        )
+          throw e;
+      } finally {
+        this.discardStaged = () => {};
       }
       // [LAW:nothing-unseen] A write a flush superseded, before or after its
       // rename, says so: its bytes were written and synced, and the last
       // `saved` line stays the flush's.
       if (generation !== this.generation) {
-        if (!landed) await fs.promises.rm(tmp, { force: true });
         this.logger(
           "info",
           `${this.kind.name} write superseded by a flush landed=${landed} took=${elapsedMs(this.clock, started)}ms held=${heldMs}ms`,
@@ -249,24 +247,23 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     const started = this.clock.monotonic();
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      const tmp = `${this.filePath}.tmp`;
       const body = this.body(snapshot);
-      // [LAW:single-enforcer] Daemon runtime files are owner-only (0o600), like
-      // pid/spawn.lock. A session file carries conversation identifiers, so it
-      // gets the same perms — chmod defeats umask and re-perms a reused tmp.
-      fs.writeFileSync(tmp, body, { mode: 0o600 });
-      fs.chmodSync(tmp, 0o600);
-      // [LAW:no-ambient-temporal-coupling] The debounced write's temp file goes
-      // just before this write lands, whatever its rename is doing on the
-      // thread pool: a rename and an unlink of one directory entry cannot
-      // interleave, so either the older state landed already and is
-      // overwritten below, or its rename finds nothing. Newer state is never
-      // put back under older. A flush the disk refuses before this point
-      // discards nothing; one it refuses at the rename below leaves both
-      // writes saying they failed, and the newer state pending for the next
-      // save.
-      fs.rmSync(this.writingPath, { force: true });
-      fs.renameSync(tmp, this.filePath);
+      publish(this.filePath, body, {
+        by: "rename",
+        mode: 0o600,
+        // [LAW:no-ambient-temporal-coupling] The debounced write's staged
+        // bytes go just before this write lands, whatever its rename is doing
+        // on the thread pool: a rename and an unlink of one directory entry
+        // cannot interleave, so either the older state landed already and is
+        // overwritten here, or its rename finds nothing. Newer state is never
+        // put back under older. A flush the disk refuses before this point
+        // discards nothing; one it refuses at the rename leaves both writes
+        // saying they failed, and the newer state pending for the next save.
+        admit: () => {
+          this.discardStaged();
+          return true;
+        },
+      });
       this.generation++;
       this.saved(body, snapshot, started, elapsedMs(this.clock, started));
       // [LAW:one-source-of-truth] `pending` is "state not yet durably written".

@@ -145,7 +145,7 @@ describe("the session state's file", () => {
       s1: { theme: "nord" },
     });
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
   });
 
   // The rename that publishes a debounced write runs on the thread pool, so a
@@ -180,7 +180,7 @@ describe("the session state's file", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([
       expect.stringContaining("superseded by a flush landed=false"),
@@ -265,7 +265,7 @@ describe("the session state's file", () => {
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({
       s1: { theme: "new" },
     });
-    expect(existsSync(`${file}.writing`)).toBe(false);
+    expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
     expect(logged.filter((l) => l.includes("save failed"))).toEqual([]);
     expect(logged.filter((l) => l.includes("superseded"))).toEqual([
       expect.stringContaining("superseded by a flush landed=false"),
@@ -382,7 +382,7 @@ describe("the session state's file", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
       await settled(() => existsSync(file));
-      expect(existsSync(`${file}.writing`)).toBe(false);
+      expect(fs.readdirSync(dir)).toEqual(["session-state.json"]);
 
       const reborn = restarted();
       expect(reborn.get(S1, "theme")).toBe("nord");

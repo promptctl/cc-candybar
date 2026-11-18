@@ -8,6 +8,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { LINK_KEY_BYTES } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
+import { publish } from "../utils/atomic-write.js";
 
 export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
@@ -53,24 +54,11 @@ function readOrCreate(file: string): Buffer {
   return key;
 }
 
-// [LAW:no-ambient-temporal-coupling] The key is written whole to a file of the
-// maker's own, then linked into place: a link lands whole or fails because a
-// key already did, so a racer never reads a key half written, and a crash
-// mid-write leaves only its own temporary file. Every racer ends on the key
-// that landed. Readable by this user alone: whoever holds it can forge a link
-// that runs a program.
+// [LAW:no-ambient-temporal-coupling] The key is published by link: it lands
+// whole or not at all because a key already did, so a racer never reads a key
+// half written, and every racer ends on the key that landed. Readable by this
+// user alone: whoever holds it can forge a link that runs a program.
 function create(file: string): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const written = `${file}.${process.pid}.${randomBytes(6).toString("hex")}`;
-  fs.writeFileSync(written, randomBytes(LINK_KEY_BYTES), {
-    mode: 0o600,
-    flag: "wx",
-  });
-  try {
-    fs.linkSync(written, file);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-  } finally {
-    fs.unlinkSync(written);
-  }
+  publish(file, randomBytes(LINK_KEY_BYTES), { by: "link", mode: 0o600 });
 }
