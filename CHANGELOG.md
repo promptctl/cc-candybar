@@ -1,3 +1,10 @@
+## [1.232.7](https://github.com/promptctl/cc-candybar/compare/v1.232.6...v1.232.7) (2026-11-18)
+
+### Bug Fixes
+
+* **config:** each load builds its installed-plugin layer, and nothing keeps one past it (70xn) ([#830](https://github.com/promptctl/cc-candybar/issues/830)) ([6d3c06f](https://github.com/promptctl/cc-candybar/commit/6d3c06faf1789732872268f46aba7d8531c992ce))
+* **watchers:** where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv) ([#824](https://github.com/promptctl/cc-candybar/issues/824)) ([c8a92c4](https://github.com/promptctl/cc-candybar/commit/c8a92c406ada8c34ff102fb22f8e050196acde2a))
+
 ## [1.232.6](https://github.com/promptctl/cc-candybar/compare/v1.232.5...v1.232.6) (2026-11-18)
 
 ### Bug Fixes
