@@ -2,60 +2,24 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-803",
-      "ref": "refs/pull/803/merge",
-      "sha": "818cc7724205d8d138296c89b482e7f3474a11d6",
-      "timestamp": "2026-11-18T14:36:18.803Z",
-      "commits": [
-        {
-          "sha": "818cc7724205d8d138296c89b482e7f3474a11d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:34:33Z",
-          "message": "Merge 507693686050f18428cc4305b0963985aaf610a8 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
-        },
-        {
-          "sha": "507693686050f18428cc4305b0963985aaf610a8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:34:21-07:00",
-          "message": "docs(colour): errorRedOn states its general contract (87n6)\n"
-        },
-        {
-          "sha": "4c1fbb880824cd1bf3c8372ba0a9a66d8ab7f2d9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:33:53-07:00",
-          "message": "fix(colour): the door's ✖ ranks its reds in one comparison, and says where the terminal's red stands in (87n6)\n"
-        },
-        {
-          "sha": "092c7ed4cc5e0ab83a485efd13f0cdacbd97a39b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:15:42-07:00",
-          "message": "fix(colour): the door's ✖ takes the first red to clear the text floor, else the farthest (87n6)\n"
-        },
-        {
-          "sha": "b5f7c2ee26510af8c242973daeb83ae79299b5b0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:02:01-07:00",
-          "message": "fix(colour): the door's ✖ is the theme's own red as each depth draws it (87n6)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-804",
       "ref": "refs/pull/804/merge",
-      "sha": "1111a2616218986ead315047b8f33f534fddd564",
-      "timestamp": "2026-11-18T14:30:13.568Z",
+      "sha": "fd131216264496188f25160011893ca7f4f2b743",
+      "timestamp": "2026-11-18T14:53:05.172Z",
       "commits": [
         {
-          "sha": "1111a2616218986ead315047b8f33f534fddd564",
+          "sha": "fd131216264496188f25160011893ca7f4f2b743",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:29:10-07:00",
-          "message": "Merge 6ca978190e8fd2479a6f1795fc19c242f2936f95 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+          "timestamp": "2026-11-18T07:52:11-07:00",
+          "message": "Merge 54db7d98177510f274b58d0d4287eed35bc409b5 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "54db7d98177510f274b58d0d4287eed35bc409b5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:51:57-07:00",
+          "message": "fix(test): a registry's teardown ends the runs held over it (y1ff)\n"
         },
         {
           "sha": "6ca978190e8fd2479a6f1795fc19c242f2936f95",
