@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5a71a43f5da66bd536475cb0df17c28d9a6469e0",
+      "timestamp": "2026-11-18T22:22:25.556Z",
+      "commits": [
+        {
+          "sha": "5a71a43f5da66bd536475cb0df17c28d9a6469e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:21:10-07:00",
+          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno) (#827)\n\n* fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n\n* docs(acts): the input edge's comments say who reads and who types through it (clno)\n\n* refactor(acts): a slash line is typed only in its pane's turn (clno)"
+        }
+      ]
+    },
+    {
       "version": "pr-810",
       "ref": "refs/pull/810/merge",
       "sha": "4831e4023339b1fe82debd65bbbdaa3286b815bf",
@@ -78,21 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:14:05-07:00",
           "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "a60f0ec526fedc5ba857fde3060c85687dc4e6ff",
-      "timestamp": "2026-11-18T22:03:20.322Z",
-      "commits": [
-        {
-          "sha": "a60f0ec526fedc5ba857fde3060c85687dc4e6ff",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T22:02:20Z",
-          "message": "chore(release): set `package.json` to 1.232.7\n\n## [1.232.7](https://github.com/promptctl/cc-candybar/compare/v1.232.6...v1.232.7) (2026-11-18)\n\n### Bug Fixes\n\n* **config:** each load builds its installed-plugin layer, and nothing keeps one past it (70xn) ([#830](https://github.com/promptctl/cc-candybar/issues/830)) ([6d3c06f](https://github.com/promptctl/cc-candybar/commit/6d3c06faf1789732872268f46aba7d8531c992ce))\n* **watchers:** where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv) ([#824](https://github.com/promptctl/cc-candybar/issues/824)) ([c8a92c4](https://github.com/promptctl/cc-candybar/commit/c8a92c406ada8c34ff102fb22f8e050196acde2a))\n"
         }
       ]
     },
