@@ -30,7 +30,6 @@
 import nodePath from "node:path";
 import JSON5 from "json5";
 import type { ConfigSnapshot, PluginFile, Stray } from "./config-snapshot.js";
-import { digestOf } from "../utils/plain.js";
 import {
   type DslConfig,
   type InsertCell,
@@ -266,48 +265,24 @@ export function loadConfigSource(
   };
 }
 
-// [LAW:one-source-of-truth] The installed layer is a function of the
-// definitions' bytes and folders, the checkout, the home, the base and the
-// palettes, so it is memoised on exactly those: a load with nothing installed
-// changed pays one digest of the definitions, not one reference check per
-// plugin. Per-plugin validation stays — it is what lets one plugin drop alone.
-const installedMemo = new WeakMap<
-  DslConfig,
-  Map<string, { readonly key: string; readonly layer: PluginLayer }>
->();
-
+// [LAW:one-source-of-truth] The installed layer is built by every load and
+// held only by the state that loaded it: a store of layers beside the render
+// cache's entries outlives the checkouts they serve, since an entry's checkout
+// changes on a reload without the entry leaving. Per-plugin validation is
+// what lets one plugin drop alone.
 function installedLayer(
   files: readonly PluginFile[],
   ctx: PluginContext,
   dflt: DslConfig,
   allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
-  const key = digestOf({
-    palettes: [...(allowedPalettes ?? [])].sort(),
-    files: files.map((f) => ({
-      path: f.path,
-      scope: f.scope,
-      definition: f.definition,
-    })),
-  });
-  const byProject = installedMemo.get(dflt) ?? new Map();
-  installedMemo.set(dflt, byProject);
-  // Keyed on the checkout, not the working directory: every directory of one
-  // checkout reads the same data, and the next load after a `.git` appears
-  // above a directory reads the new checkout's. Nothing watches for that
-  // `.git`: an ancestor watch per session is the cost, a reload the remedy.
-  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
+  return applyPlugins(
     files,
     ctx,
     { config: dflt, rendering: new Map() },
     (c, plugin, replaces) =>
       checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
   );
-  byProject.set(slot, { key, layer });
-  return layer;
 }
 
 /**

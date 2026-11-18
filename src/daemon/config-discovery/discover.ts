@@ -185,7 +185,9 @@ export function sessionPlugins(
     strays,
     notices,
     // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
+    // becomes the checkout its plugins' data paths resolve against. Nothing
+    // watches for a `.git` appearing above it: an ancestor watch per session
+    // is the cost, a reload the remedy.
     checkout: checkoutOf(cwd),
   };
 }
