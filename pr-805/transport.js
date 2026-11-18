@@ -35332,9 +35332,12 @@ var WatcherRegistry = class {
   }
   // [LAW:no-ambient-temporal-coupling] The sweep runs every period while a
   // path is polled and the registry is open. The reads are synchronous, so no
-  // two sweeps overlap and no older read lands over a newer one. The daemon already lstats these
-  // paths on this thread when it derives a spec, so a hung mount under a
-  // polled path blocks it there whatever the sweep does.
+  // two sweeps overlap and no older read lands over a newer one.
+  // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
+  // renders, once a period per path, so a mount under a polled path that stops
+  // answering stops every bar until it answers. The paths are a session's own
+  // files (its transcript, its settings, its config, its git directory), which
+  // the daemon reads on this thread to render anyway.
   armSweep() {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
@@ -50950,7 +50953,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.0";
+var PACKAGE_VERSION = "1.232.1";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -64951,7 +64954,7 @@ var GitDataProvider = class {
     if (followed.move === "rebound") {
       this.logger(
         "info",
-        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} deaf=${followed.watch.handle.deaf.length}`
+        `git watch bound root=${root} dirs=${spec.targets.dirs.map((d) => d.path).join(",")} polled=${spec.targets.polled.join(",")} deaf=${followed.watch.handle.deaf.length}`
       );
     }
     return followed;
@@ -71640,14 +71643,18 @@ var TranscriptLanes = class {
   close() {
     this.source.close();
   }
-  // The transcript and the settings file, each polled at its path, under one
-  // key per entry: their folders are busy trees (every session's transcripts,
-  // Claude Code's own state), which an OS watch would route here whole.
+  // The transcript and the settings file, each polled at every hop of its
+  // link chain, under one key per entry: their folders are busy trees (every
+  // session's transcripts, Claude Code's own state), which an OS watch would
+  // route here whole, and a settings file is often a link into a dotfiles
+  // checkout, whose edits land at the link's target. [LAW:single-enforcer]
+  // The hops are the one rule's (`watchTargetsOf`). A chain that loops is not
+  // a fault here: the lane's own read of the path fails, loudly.
   watch(followed, changed) {
     const { transcript: transcript2, settings } = followed;
     const handle = this.deps.watchers.acquire(
       `transcript-lanes:${keyOfFollowed(followed)}`,
-      { dirs: [], polled: [transcript2, settings] },
+      watchTargetsOf({ named: [transcript2, settings], whole: [] }).targets,
       changed
     );
     return () => handle.release();
