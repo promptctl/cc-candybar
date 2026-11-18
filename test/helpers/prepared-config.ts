@@ -18,6 +18,7 @@ import {
   snapshotOf,
 } from "../../src/daemon/config-discovery/discover";
 import {
+  installedBase,
   loadSnapshot,
   refuseDrops,
   type ConfigLayer,
@@ -94,9 +95,11 @@ export async function prepareConfig(
   const layers = snapshot.chain
     .filter((l) => l.content.kind === "text")
     .map((l) => l.path);
-  const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
-    warned: (w) => warnings.push(...w),
-  });
+  const loaded = loadSnapshot(
+    snapshot,
+    installedBase(snapshot, world.host.home, DEFAULT_DSL_CONFIG),
+    { warned: (w) => warnings.push(...w) },
+  );
   refuseDrops(loaded.dropped);
   const { config } = loaded;
   const store = new VariableStore(world.clock);

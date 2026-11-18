@@ -31,6 +31,8 @@ import {
   inheritedConfig,
   loadSnapshot,
   type LoadedChain,
+  installedBase,
+  type InstalledBase,
 } from "../config/dsl-loader.js";
 import {
   writable,
@@ -478,6 +480,9 @@ export function writeLayerOf(
 interface Seen extends WriteLayer {
   readonly below: readonly HeldLayer[];
   readonly above: readonly HeldLayer[];
+  // What every load of the click's chain merges over: the chain changes
+  // between them, the snapshot's plugins never do.
+  readonly installed: InstalledBase;
 }
 type HeldLayer = Layer & { readonly text: string };
 
@@ -497,6 +502,7 @@ function seenBy(
     ...layer,
     below: held(chain.filter((l) => rank(l.role) < rank(layer.role))),
     above: held(chain.filter((l) => rank(l.role) > rank(layer.role))),
+    installed: installedBase(layer.snapshot, layer.home, DEFAULT_DSL_CONFIG),
   };
 }
 
@@ -613,11 +619,7 @@ function loadedOrNull(into: Seen, text: string | null): LoadedChain | null {
 // click, naming why, as the written file's own failure to load does.
 function inheritedOf(into: Seen): DslConfig {
   try {
-    return inheritedConfig(
-      heldSnapshot(into, into.below),
-      into.home,
-      DEFAULT_DSL_CONFIG,
-    );
+    return inheritedConfig(heldSnapshot(into, into.below), into.installed);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -637,12 +639,9 @@ function chainOver(into: Seen, text: string | null): LoadedChain {
     ...(text !== null ? [heldLayer(into, text)] : []),
     ...into.above,
   ];
-  return loadSnapshot(
-    heldSnapshot(into, layers),
-    into.home,
-    DEFAULT_DSL_CONFIG,
-    { warned: () => {} },
-  );
+  return loadSnapshot(heldSnapshot(into, layers), into.installed, {
+    warned: () => {},
+  });
 }
 
 // The chain merged up to the written layer: each loaded layer is merged over

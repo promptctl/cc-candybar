@@ -20,7 +20,11 @@ import {
   type PreparedConfig,
 } from "../../../test/helpers/prepared-config.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
-import { homeLayer, loadSnapshot } from "../../../src/config/dsl-loader.js";
+import {
+  homeLayer,
+  installedBase,
+  loadSnapshot,
+} from "../../../src/config/dsl-loader.js";
 import {
   installedRoots,
   sessionPlugins,
@@ -164,13 +168,13 @@ export const STAGES: readonly Benchmark[] = [
       try {
         const ms = await repeat(plan.samples, () => {
           const locs = locations(processWorld().host);
+          const snapshot = snapshotOf(
+            sessionPlugins(locs, installedRoots(locs), null, cwd),
+            [],
+          );
           loadSnapshot(
-            snapshotOf(
-              sessionPlugins(locs, installedRoots(locs), null, cwd),
-              [],
-            ),
-            locs.home,
-            DEFAULT_DSL_CONFIG,
+            snapshot,
+            installedBase(snapshot, locs.home, DEFAULT_DSL_CONFIG),
             { warned: () => {} },
           );
         });

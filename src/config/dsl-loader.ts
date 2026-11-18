@@ -108,6 +108,7 @@ import {
   dropsOwning,
   type DroppedPlugin,
   type PluginDefinition,
+  type PluginBase,
   type PluginLayer,
   DEFINITION_FILE,
   pluginList,
@@ -229,12 +230,12 @@ export function loadConfigSource(
   // delta are the segments of that very layer.
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
   const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
+    const layer = layPlugins(
       listedPlugins(refs, path, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) =>
-        checkPlugin(c, plugin, replaces, path, allowedPalettes),
+      path,
+      allowedPalettes,
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -265,47 +266,66 @@ export function loadConfigSource(
   };
 }
 
-// [LAW:one-source-of-truth] The installed layer is built by every load and
-// held only by the state that loaded it: a store of layers beside the render
-// cache's entries outlives the checkouts they serve, since an entry's checkout
-// changes on a reload without the entry leaving. Per-plugin validation is
-// what lets one plugin drop alone.
-function installedLayer(
+// [LAW:single-enforcer] The one way plugins are laid over a base: each is
+// validated over the layer it joins, so one that would not load drops alone.
+// `label` names the layer in a refusal's error; a drop's reason is its issues.
+function layPlugins(
   files: readonly PluginFile[],
   ctx: PluginContext,
-  dflt: DslConfig,
+  base: PluginBase,
+  label: string,
   allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
-  return applyPlugins(
-    files,
-    ctx,
-    { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes),
+  return applyPlugins(files, ctx, base, (c, plugin, replaces) =>
+    checkPlugin(c, plugin, replaces, label, allowedPalettes),
   );
 }
 
+// [LAW:no-shared-mutable-globals] The installed plugins laid over the bundled
+// default for one checkout: what every load of a snapshot with these plugins
+// merges its chain over. Whoever holds the snapshot builds it and lends it to
+// that snapshot's loads, so a click's loads share one. A store of these
+// beside the render cache's entries outlives the checkouts they serve, since
+// an entry's checkout changes on a reload without the entry leaving.
+export interface InstalledBase {
+  readonly ctx: PluginContext;
+  readonly layer: PluginLayer;
+}
+
+export function installedBase(
+  snapshot: Pick<ConfigSnapshot, "plugins" | "checkout">,
+  home: string,
+  dflt: DslConfig,
+): InstalledBase {
+  const ctx: PluginContext = { checkout: snapshot.checkout, home };
+  return {
+    ctx,
+    layer: layPlugins(
+      snapshot.plugins,
+      ctx,
+      { config: dflt, rendering: new Map() },
+      "<installed plugins>",
+      undefined,
+    ),
+  };
+}
+
 /**
- * Why each of `definitions` would not load, laid over `dflt` exactly as the
- * installed layer lays them: what `cc-candybar plugin install` refuses before
- * it writes anything. `checkout` stands in for a session's, so a
- * `data: { checkout }` path resolves; the data file need not exist.
+ * Why each of `definitions` would not load as an installed layer over `dflt`:
+ * what `cc-candybar plugin install` refuses before it writes anything.
+ * `checkout` stands in for a session's, so a `data: { checkout }` path
+ * resolves; the data file need not exist.
  */
-// [LAW:single-enforcer] The install's verdict is the loader's own, so a
-// definition the bar would drop is never installed.
+// [LAW:single-enforcer] The install's verdict is the installed layer's own
+// drops, so a definition the bar would drop is never installed.
 export function definitionProblems(
   definitions: readonly PluginFile[],
   dflt: DslConfig,
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
-  return applyPlugins(
-    definitions,
-    { checkout, home },
-    { config: dflt, rendering: new Map() },
-    (c, plugin, replaces) =>
-      checkPlugin(c, plugin, replaces, "<plugin install>", undefined),
-  ).dropped;
+  return installedBase({ plugins: definitions, checkout }, home, dflt).layer
+    .dropped;
 }
 
 // The drop a loose file in a plugin root is: a plugin is a folder.
@@ -343,19 +363,11 @@ function strayDrop({ path: file, scope }: Stray): DroppedPlugin {
  */
 export function loadSnapshot(
   snapshot: ConfigSnapshot,
-  home: string,
-  dflt: DslConfig,
+  installed: InstalledBase,
   trace: ChainTrace,
-  allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
-  const { ctx, plugins, base, layers } = mergeChain(
-    snapshot,
-    home,
-    dflt,
-    trace,
-    allowedPalettes,
-  );
-  return validateChain(ctx, plugins, base, layers, trace, allowedPalettes);
+  const { ctx, plugins, base, layers } = mergeChain(snapshot, installed, trace);
+  return validateChain(ctx, plugins, base, layers, trace, undefined);
 }
 
 /**
@@ -368,10 +380,9 @@ export function loadSnapshot(
  */
 export function inheritedConfig(
   snapshot: ConfigSnapshot,
-  home: string,
-  dflt: DslConfig,
+  installed: InstalledBase,
 ): DslConfig {
-  const { base, layers } = mergeChain(snapshot, home, dflt, {
+  const { base, layers } = mergeChain(snapshot, installed, {
     warned: () => {},
   });
   return layers.at(-1)?.config ?? base;
@@ -381,17 +392,15 @@ type MergedLayers = Array<LoadedFile & { path: string; config: DslConfig }>;
 
 function mergeChain(
   snapshot: ConfigSnapshot,
-  home: string,
-  dflt: DslConfig,
+  installed: InstalledBase,
   trace: ChainTrace,
-  allowedPalettes?: ReadonlySet<string>,
 ) {
-  const ctx: PluginContext = { checkout: snapshot.checkout, home };
+  const { ctx } = installed;
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
+  const merged = installed.layer;
   const plugins = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)],
@@ -428,7 +437,7 @@ function mergeChain(
           rendering: below?.rendering ?? plugins.rendering,
         },
       },
-      allowedPalettes,
+      undefined,
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });

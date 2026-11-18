@@ -5,6 +5,7 @@
 import { locs as testLocs } from "./host";
 import {
   loadConfigSource,
+  installedBase,
   loadSnapshot,
   mergeWithDefault,
   type ChainTrace,
@@ -72,5 +73,9 @@ export function loadChain(
     sessionPlugins(locs, installedRoots(locs), null, cwd ?? locs.home),
     chain.map((l) => layerOf(l.role, l.path, content(l.path), locs.home)),
   );
-  return loadSnapshot(snapshot, locs.home, dflt, trace);
+  return loadSnapshot(
+    snapshot,
+    installedBase(snapshot, locs.home, dflt),
+    trace,
+  );
 }
