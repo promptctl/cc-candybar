@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-825",
+      "ref": "refs/pull/825/merge",
+      "sha": "f124d90a08dabd0a7ebe4f217a46df6a1900722d",
+      "timestamp": "2026-11-18T19:01:07.660Z",
+      "commits": [
+        {
+          "sha": "f124d90a08dabd0a7ebe4f217a46df6a1900722d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:00:03-07:00",
+          "message": "Merge f3ea210f7eb8d9722b7af6a203c4bd76c6299654 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "f3ea210f7eb8d9722b7af6a203c4bd76c6299654",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:59:46-07:00",
+          "message": "fix(edit): a config turn that ends a placement releases its library, configure key and drafts in every session drawn from it (ce4m)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-823",
       "ref": "refs/pull/823/merge",
       "sha": "fbfcbd2485fb27c596c481bb9d90cf72092de292",
