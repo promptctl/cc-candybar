@@ -35089,8 +35089,10 @@ var WatcherRegistry = class {
     }
     const shared = this.slots.get(key);
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    this.sighted(
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+    );
     const slot = shared ?? this.opened(key, targets);
-    this.sighted(slot.polled);
     const holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -35113,9 +35115,13 @@ var WatcherRegistry = class {
   // heard. Only the sweep fires, so the work a path drives stays once a
   // period; a change undone before the holder acquired or followed is one no
   // poll sees.
+  // [LAW:escape-local-minima] exception: seeing a change undone before the
+  // holder looks needs the entry the holder read, which polled consumers do
+  // not yet hand over.
   sighted(records) {
     for (const record2 of records)
-      if (entryAt(record2.path) !== record2.entry) record2.entry = UNSEEN;
+      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+        record2.entry = UNSEEN;
   }
   opened(key, targets) {
     const slot = {

@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-823",
+      "ref": "refs/pull/823/merge",
+      "sha": "fc6789f55cf4d54a76d6c2c508b80c6e655bb883",
+      "timestamp": "2026-11-18T19:08:25.009Z",
+      "commits": [
+        {
+          "sha": "fc6789f55cf4d54a76d6c2c508b80c6e655bb883",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T19:07:19Z",
+          "message": "Merge a21566da2575d4db40c8750f5ce610101cab453d into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "a21566da2575d4db40c8750f5ce610101cab453d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:06:51-07:00",
+          "message": "fix(watchers): an acquire reads each polled path once, a marked path is not read again, and an unchanged follow is pinned silent (ggyk)\n"
+        },
+        {
+          "sha": "a3f81589f4dfad67ce29bcda571ab5d70f090c15",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:52:05-07:00",
+          "message": "fix(watchers): the unseen mark is its own symbol, one acquire marks its records, and the record says what a poll cannot see (ggyk)\n"
+        },
+        {
+          "sha": "f0047f591a4d45071817a0aaf16163f4e5e10cfb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:37:23-07:00",
+          "message": "fix(watchers): an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-824",
       "ref": "refs/pull/824/merge",
       "sha": "c10d1f1f28660afb915c2f588019a3fa580f9149",
@@ -49,35 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T11:59:46-07:00",
           "message": "fix(edit): a config turn that ends a placement releases its library, configure key and drafts in every session drawn from it (ce4m)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-823",
-      "ref": "refs/pull/823/merge",
-      "sha": "fbfcbd2485fb27c596c481bb9d90cf72092de292",
-      "timestamp": "2026-11-18T18:53:27.293Z",
-      "commits": [
-        {
-          "sha": "fbfcbd2485fb27c596c481bb9d90cf72092de292",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T18:52:18Z",
-          "message": "Merge a3f81589f4dfad67ce29bcda571ab5d70f090c15 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "a3f81589f4dfad67ce29bcda571ab5d70f090c15",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:52:05-07:00",
-          "message": "fix(watchers): the unseen mark is its own symbol, one acquire marks its records, and the record says what a poll cannot see (ggyk)\n"
-        },
-        {
-          "sha": "f0047f591a4d45071817a0aaf16163f4e5e10cfb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:37:23-07:00",
-          "message": "fix(watchers): an acquire or follow that finds a polled path off its swept entry marks it unseen, so the next sweep fires it (ggyk)\n"
         }
       ]
     },
