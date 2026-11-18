@@ -7,7 +7,12 @@
 import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
 import type { LaunchResult } from "../proc/launcher.js";
 import type { TmuxHint } from "../tmux-hint.js";
-import type { SlashTyper, TypeResult } from "../claude-input/typing.js";
+import {
+  typeInPane,
+  type ClaudeInputEdge,
+  type SlashTyper,
+  type TypeResult,
+} from "../claude-input/typing.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
@@ -32,8 +37,10 @@ type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
-  // A slash line typed into a pane, once the prompt there reads ready.
-  readonly type: SlashTyper;
+  // [LAW:one-source-of-truth] The daemon's one reader and typer of Claude
+  // Code's input: every line typed into a pane and every read of its prompt
+  // go through it. A lane only reads, so it is handed the read.
+  readonly claudeInput: ClaudeInputEdge;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.
   readonly applyUpdate: () => Promise<void>;
@@ -107,8 +114,12 @@ export class Acts {
     readonly [K in HostAct["kind"]]: (act: Of<K>) => Promise<Done>;
   };
 
+  // A slash line typed into a pane, once the prompt there reads ready.
+  private readonly type: SlashTyper;
+
   constructor(private readonly deps: ActDeps) {
     const { lanes } = deps;
+    this.type = typeInPane(deps.claudeInput);
     this.performers = {
       copy: (act) =>
         clickLaunch(
@@ -156,6 +167,7 @@ export class Acts {
           restartClaude(
             { ...act.at, sessionId: act.session },
             act.pane,
+            deps.claudeInput.read,
             lanes.host,
             lanes.edge,
           ),
@@ -193,7 +205,7 @@ export class Acts {
 
   // A slash line typed into `pane` in its turn.
   private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
-    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
+    return this.inPane.run(paneKey(pane), () => this.type(pane, line));
   }
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A

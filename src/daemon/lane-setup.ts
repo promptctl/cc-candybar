@@ -98,7 +98,6 @@ export interface PaneClaude {
 }
 
 export interface LaneEdge {
-  readonly claudeInput: ClaudeInputEdge;
   // The bar panes the daemon opened for `tmux.pane`.
   readonly barPanes: (tmux: TmuxHint) => Promise<readonly string[]>;
   // Split a pane under `tmux.pane` running `argv` with `env`, tagged as its
@@ -207,6 +206,7 @@ export async function bandOn(
 export async function restartClaude(
   session: LaneAt,
   tmux: TmuxHint,
+  read: ClaudeInputEdge["read"],
   host: LaneHost,
   edge: LaneEdge,
 ): Promise<string> {
@@ -223,6 +223,7 @@ export async function restartClaude(
   return restartUnderAttach(
     session,
     tmux,
+    read,
     { node: host.node[0]!, launcher, preload: host.preload },
     edge,
   );
@@ -316,6 +317,7 @@ function environmentOf(env: readonly string[]): ReadonlyMap<string, string> {
 async function restartUnderAttach(
   session: LaneAt,
   tmux: TmuxHint,
+  read: ClaudeInputEdge["read"],
   attach: Attach,
   edge: LaneEdge,
 ): Promise<string> {
@@ -351,7 +353,7 @@ async function restartUnderAttach(
       `Claude Code in ${tmux.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`,
     );
   }
-  const loses = endingLoses(await edge.claudeInput.read(tmux));
+  const loses = endingLoses(await read(tmux));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux.pane} was left running: ${loses} — then turn ${LANES.statusline.label} off and on again`,

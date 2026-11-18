@@ -5,7 +5,6 @@
 // `tmux` on PATH that records its argv and serves a captured screen — so the
 // assertions are the exact commands tmux would run. The screens are the ones
 // Claude Code 2.1.284 drew in the measurements prompt-screen.ts records.
-import { typeInPane } from "../src/claude-input/typing";
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
@@ -45,10 +44,8 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 // The host's typing, over the real tmux edge on the test's fake tmux: one
 // edge per rig, since an edge remembers what it typed moments ago.
 const typing = () => ({
-  type: typeInPane(
-    productionClaudeInputEdge(
-      systemLauncher({ inherited: process.env }, systemTimekeeper),
-    ),
+  claudeInput: productionClaudeInputEdge(
+    systemLauncher({ inherited: process.env }, systemTimekeeper),
   ),
 });
 const S1 = sessionIdOf("s1");
