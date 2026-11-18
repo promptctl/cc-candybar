@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-810",
+      "ref": "refs/pull/810/merge",
+      "sha": "e6fd974c68baecadf517e005da424469fb3fef7e",
+      "timestamp": "2026-11-18T22:58:51.897Z",
+      "commits": [
+        {
+          "sha": "e6fd974c68baecadf517e005da424469fb3fef7e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:57:58Z",
+          "message": "Merge 7b5d8505083036ca4b9e6dbc76d38b2ea9a0a951 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
+        },
+        {
+          "sha": "7b5d8505083036ca4b9e6dbc76d38b2ea9a0a951",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:49:12-07:00",
+          "message": "fix(test): a rig's default session is the one a payload naming none draws, and the sweep draws with the session's resolved options and checks its frame (s33)\n"
+        },
+        {
+          "sha": "1eb11e2a5fb82b2323a1c7f3e9b9e0fcd9f34007",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:49:12-07:00",
+          "message": "fix(config): a durable landing lands in the preset the render resolves (s33)\n"
+        },
+        {
+          "sha": "ec709f8ae13ec7c72881df9a12b95eba21099d7d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:49:12-07:00",
+          "message": "fix(config): one rule names the session key a setting's pick is under, for the resolution and the settings alike (s33)\n"
+        },
+        {
+          "sha": "97d90d82f13d15ac333213ff70a2d9da1831fc75",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:38-07:00",
+          "message": "fix(test): the quiet-text sweep draws through a one-session rig, and each row asserts the theme it drew under (s33)\n"
+        },
+        {
+          "sha": "d982095befaa1a7f355345c5606d6018a2e958f5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:20:37-07:00",
+          "message": "fix(config): the globals resolution reads each selector's pick under its globals row's sessionKey, the key the settings menu writes (s33)\n"
+        },
+        {
+          "sha": "49f17f62554648aaaceac8230c150dd4f55f6d7c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T09:14:02-07:00",
+          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-832",
       "ref": "refs/pull/832/merge",
       "sha": "746bd7ffa2f003b2b7dcebbad9ec7e71f60a5bde",
@@ -84,63 +141,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:34:45-07:00",
           "message": "fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80)\n\nThe session book, session state and settings history keep recency in a Map\nand persist it through a record keyed by session id. A record lists\ncanonical array-index keys (\"7\") first, so an integer-like id jumped to the\noldest end on a round trip and the bound could evict it while newest.\n\nThe session-id parse now refuses exactly the canonical array indices (an\ninteger from 0 to 2^32 - 2 in its canonical spelling), naming the id, at every\ndoor: render, subscribe, click, and each file's load, which drops the entry by\nname. The files keep their keyed form.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-810",
-      "ref": "refs/pull/810/merge",
-      "sha": "cd6deec6004c3fce20e5c7b89a2be7113295b042",
-      "timestamp": "2026-11-18T22:50:38.592Z",
-      "commits": [
-        {
-          "sha": "cd6deec6004c3fce20e5c7b89a2be7113295b042",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:49:35Z",
-          "message": "Merge ee78dd18b76a1a8ffaf9fcf84e31c29306b4d5f9 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "ee78dd18b76a1a8ffaf9fcf84e31c29306b4d5f9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(test): a rig's default session is the one a payload naming none draws, and the sweep draws with the session's resolved options and checks its frame (s33)\n"
-        },
-        {
-          "sha": "eb4c149483d120957cdb712f73a47d276b3d0e92",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(config): a durable landing lands in the preset the render resolves (s33)\n"
-        },
-        {
-          "sha": "3a53067a39f1a9a6e3d0359a431bdf9e691713df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(config): one rule names the session key a setting's pick is under, for the resolution and the settings alike (s33)\n"
-        },
-        {
-          "sha": "529033c636d7371d0596fe41b17a4d1f0eb0a980",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:38-07:00",
-          "message": "fix(test): the quiet-text sweep draws through a one-session rig, and each row asserts the theme it drew under (s33)\n"
-        },
-        {
-          "sha": "6f01db3354e1d16f72bd6703ae0a8d643a1061df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:37-07:00",
-          "message": "fix(config): the globals resolution reads each selector's pick under its globals row's sessionKey, the key the settings menu writes (s33)\n"
-        },
-        {
-          "sha": "064333c629eddfaf984e3306ec2650695189f401",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:02-07:00",
-          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
         }
       ]
     },
