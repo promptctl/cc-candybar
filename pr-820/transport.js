@@ -71379,8 +71379,10 @@ function madeOnce(folder) {
     let st;
     try {
       st = fs_default.statSync(folder);
-    } catch {
-      throw e;
+    } catch (statError) {
+      const code2 = statError.code;
+      if (code2 === "ENOENT" || code2 === "ENOTDIR") throw e;
+      return;
     }
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
@@ -71513,10 +71515,8 @@ var ManagedStorage = class {
         this.settle(folder);
         return;
       }
-      if (trigger !== "hold") {
-        this.lostAt(was, read2);
-        return;
-      }
+      this.lostAt(was, read2);
+      if (trigger !== "hold") return;
     }
     this.moved(folder, this.made(folder));
   }
@@ -71721,7 +71721,7 @@ var ManagedStorage = class {
   }
   // A generation's folder found gone or replaced: the generation ends, and
   // its held files are re-read from the path, so no draw shows a value from a
-  // folder no longer there while the next period makes it again.
+  // folder no longer there while the next trigger makes it again.
   lostAt(watching, read2) {
     const { key } = watching;
     this.lost++;
