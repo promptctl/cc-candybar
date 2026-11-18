@@ -8879,11 +8879,11 @@ var require_glob = __commonJS({
           for (const index of pattern2.indexes) {
             if (cache2.seen(entryPath, pattern2, index) || cache2.seen(entryPath, pattern2, index + 1))
               return;
-            const current2 = pattern2.at(index);
+            const current = pattern2.at(index);
             const nextIndex = index + 1;
             const next = pattern2.at(nextIndex);
             const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
-            if (current2 === GLOBSTAR) {
+            if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
               const nextMatches = pattern2.test(nextIndex, name);
               let nextNonGlobIndex = nextIndex;
@@ -8926,10 +8926,10 @@ var require_glob = __commonJS({
                 }
               }
             }
-            if (typeof current2 === "string") {
+            if (typeof current === "string") {
               if (pattern2.test(index, name) && index !== last2)
                 subPatterns.add(nextIndex);
-              else if (current2 === "." && pattern2.test(nextIndex, name)) {
+              else if (current === "." && pattern2.test(nextIndex, name)) {
                 if (nextIndex === last2) {
                   if (this.accept(entryPath))
                     yield this.result(entryPath);
@@ -8937,7 +8937,7 @@ var require_glob = __commonJS({
                   subPatterns.add(nextIndex + 1);
               }
             }
-            if (typeof current2 === "object" && pattern2.test(index, name)) {
+            if (typeof current === "object" && pattern2.test(index, name)) {
               if (index === last2) {
                 if (this.accept(entryPath))
                   yield this.result(entryPath);
@@ -22249,10 +22249,10 @@ var require_dist = __commonJS({
             parseState = "beforePropertyName";
           }
         } else {
-          var current2 = stack[stack.length - 1];
-          if (current2 == null) {
+          var current = stack[stack.length - 1];
+          if (current == null) {
             parseState = "end";
-          } else if (Array.isArray(current2)) {
+          } else if (Array.isArray(current)) {
             parseState = "afterArrayValue";
           } else {
             parseState = "afterPropertyValue";
@@ -22261,10 +22261,10 @@ var require_dist = __commonJS({
       }
       function pop() {
         stack.pop();
-        var current2 = stack[stack.length - 1];
-        if (current2 == null) {
+        var current = stack[stack.length - 1];
+        if (current == null) {
           parseState = "end";
-        } else if (Array.isArray(current2)) {
+        } else if (Array.isArray(current)) {
           parseState = "afterArrayValue";
         } else {
           parseState = "afterPropertyValue";
@@ -35040,7 +35040,25 @@ var failedOf = (d) => ({
   reason: `${d.path}: ${d.reason}`
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var UNSEEN = /* @__PURE__ */ Symbol("unseen");
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var isBelow = (at, root) => at.startsWith(root + import_node_path6.default.sep);
+function dirsBelow(at, held2, trusted, unlisted) {
+  const heldIn = (dir) => [...held2].filter((p2) => p2 === dir || isBelow(p2, dir));
+  let entries;
+  try {
+    entries = fs_default.readdirSync(at, { withFileTypes: true });
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
+    unlisted.push(at);
+    return [...held2].filter((p2) => isBelow(p2, at));
+  }
+  return entries.filter((e) => e.isDirectory()).flatMap((e) => {
+    const below = import_node_path6.default.join(at, e.name);
+    return trusted && held2.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held2, false, unlisted)];
+  });
+}
 function entryAt(at) {
   try {
     const s = fs_default.lstatSync(at, { bigint: true });
@@ -35060,10 +35078,12 @@ var WatcherRegistry = class {
   logger;
   clock;
   closed = false;
+  nodeWalksTrees;
   constructor(opts) {
     this.clock = opts.clock;
     this.counters = opts.counters;
     this.logger = opts.logger ?? defaultLogger;
+    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
@@ -35087,7 +35107,14 @@ var WatcherRegistry = class {
       };
     }
     const shared = this.slots.get(key);
-    for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    if (shared !== void 0) {
+      for (const { dir } of shared.listeners.values())
+        this.judged(dir, "acquire");
+      this.reconciled(shared, "acquire", null);
+    }
+    this.sighted(
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+    );
     const slot = shared ?? this.opened(key, targets);
     const holder = { onInvalidate };
     slot.holders.add(holder);
@@ -35095,26 +35122,40 @@ var WatcherRegistry = class {
   }
   // The held watch following `spec` (`followWatch`).
   follow(held2, spec, onInvalidate) {
-    return followWatch(
+    const followed = followWatch(
       held2,
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
+    if (followed.move === "kept")
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    return followed;
+  }
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  // [LAW:escape-local-minima] exception: seeing a change undone before the
+  // holder looks needs the entry the holder read, which polled consumers do
+  // not yet hand over.
+  sighted(records) {
+    for (const record2 of records)
+      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+        record2.entry = UNSEEN;
   }
   opened(key, targets) {
     const slot = {
       key,
-      listeners: [],
+      targets: targets.dirs,
+      listeners: /* @__PURE__ */ new Map(),
       polled: [],
       holders: /* @__PURE__ */ new Set(),
       debounce: null
     };
-    for (const target of targets.dirs) {
-      const dir = this.dirFor(target);
-      const listener = { slot, dir };
-      dir.listeners.add(listener);
-      slot.listeners.push(listener);
-    }
+    this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
       const record2 = this.polledAt(at);
       record2.slots.add(slot);
@@ -35123,19 +35164,83 @@ var WatcherRegistry = class {
     this.armSweep();
     this.slots.set(key, slot);
     if (this.counters) {
-      if (slot.listeners.every((l) => l.dir.state.kind === "listening"))
+      if ([...slot.listeners.values()].every(
+        (l) => l.dir.state.kind === "listening"
+      ))
         this.counters.watchersOpened++;
       else this.counters.watchRefusals++;
     }
     return slot;
   }
-  // The directory watch a new slot's target joins: the one already open
-  // there, judged, or a new one.
-  dirFor(target) {
+  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
+  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
+  // Node's own walk (Linux) stops at the first entry it cannot watch and says
+  // nothing, and where it fails cannot be predicted, so a tree there is a
+  // plain watch on the root and on each directory below it, each refused or
+  // heard by the OS on its own. `heardIn` is the directory an event was heard
+  // in, or null for the whole of every target: an event moves only what its
+  // own directory lists, so only that listing is read again.
+  dirsOf(targets, heardIn, held2, unlisted) {
+    return targets.flatMap((target) => {
+      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
+      const at = heardIn ?? target.path;
+      if (at !== target.path && !isBelow(at, target.path)) return [];
+      const below = dirsBelow(at, held2, heardIn !== null, unlisted);
+      return [...heardIn === null ? [at] : [], ...below].map((dir) => ({
+        path: dir
+      }));
+    });
+  }
+  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
+  // directories its targets name now, below the directory listed again: one
+  // it lacks joins, one no longer named leaves. Run whole at its acquire and
+  // on every period, and for the directory each event its watches hear is
+  // heard in, so a tree's new directory is heard from the event that made it.
+  reconciled(slot, cause, heardIn) {
+    const held2 = new Set([...slot.listeners.values()].map((l) => l.dir.path));
+    const unlisted = [];
+    const named3 = new Map(
+      this.dirsOf(slot.targets, heardIn, held2, unlisted).map((t2) => [
+        dirId(t2),
+        t2
+      ])
+    );
+    for (const [id2, listener] of slot.listeners)
+      if (!named3.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
+        slot.listeners.delete(id2);
+        this.left(listener, cause);
+      }
+    for (const [id2, target] of named3)
+      if (!slot.listeners.has(id2)) {
+        const dir = this.dirFor(target, cause);
+        const listener = { slot, dir };
+        dir.listeners.add(listener);
+        slot.listeners.set(id2, listener);
+        if (slot.holders.size > 0 && dir.state.kind === "deaf")
+          this.fire(slot, failedOf(dir.state.deafness));
+      }
+    for (const at of unlisted) {
+      const dir = this.dirs.get(dirId({ path: at }));
+      if (dir?.state.kind === "listening")
+        this.reopen(dir, "it cannot be listed");
+    }
+  }
+  // A directory watch closes with the last slot on it.
+  left(listener, cause) {
+    const { dir } = listener;
+    dir.listeners.delete(listener);
+    if (dir.listeners.size > 0) return;
+    if (dir.state.kind === "listening")
+      this.closeHandle(dir.path, dir.state.handle, cause);
+    this.dirs.delete(dir.id);
+  }
+  // The directory watch a slot's target joins: the one already open there,
+  // judged, or a new one.
+  dirFor(target, cause) {
     const id2 = dirId(target);
     const existing = this.dirs.get(id2);
     if (existing !== void 0) {
-      this.judged(existing, "acquire");
+      this.judged(existing, cause);
       return existing;
     }
     const where = { path: target.path, recursive: target.recursive === true };
@@ -35143,7 +35248,7 @@ var WatcherRegistry = class {
       id: id2,
       ...where,
       listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, "acquire", null)
+      state: this.open(where, () => dir, cause, null)
     };
     this.dirs.set(id2, dir);
     return dir;
@@ -35174,8 +35279,11 @@ var WatcherRegistry = class {
   // path: inotify reports a directory's own removal or self-move, never its
   // parent's), and the retry of a directory the OS refused or whose handle
   // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing.
+  // costs one stat, or one refused open, and tells nothing; a tree heard
+  // directory by directory costs a listing of each directory too.
   judge() {
+    for (const slot of this.slots.values())
+      this.reconciled(slot, "period", null);
     for (const dir of this.dirs.values()) this.judged(dir, "period");
   }
   // [LAW:no-silent-failure] Every slot on the directory hears it change
@@ -35245,6 +35353,8 @@ var WatcherRegistry = class {
     this.tell(dir, namedOf(dir.path, changed));
     if (changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
       this.judged(dir, "moved");
+    for (const slot of [...dir.listeners].map((l) => l.slot))
+      this.reconciled(slot, "heard", dir.path);
   }
   tell(dir, invalidation) {
     for (const { slot } of dir.listeners) this.fire(slot, invalidation);
@@ -35255,7 +35365,7 @@ var WatcherRegistry = class {
       return;
     }
     const debounce = {
-      window: invalidation,
+      window: invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation,
       cancel: this.clock.after(
         DEBOUNCE_MS,
         () => {
@@ -35280,12 +35390,12 @@ var WatcherRegistry = class {
   makeHandle(slot, holder) {
     return {
       get deaf() {
-        return slot.listeners.flatMap(
+        return [...slot.listeners.values()].flatMap(
           ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
         );
       },
       // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
-      ridesStream: slot.listeners.length > 0,
+      ridesStream: slot.listeners.size > 0,
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -35313,14 +35423,7 @@ var WatcherRegistry = class {
       slot.debounce.cancel();
       slot.debounce = null;
     }
-    for (const listener of slot.listeners) {
-      const { dir } = listener;
-      dir.listeners.delete(listener);
-      if (dir.listeners.size > 0) continue;
-      if (dir.state.kind === "listening")
-        this.closeHandle(dir.path, dir.state.handle, cause);
-      this.dirs.delete(dir.id);
-    }
+    for (const listener of slot.listeners.values()) this.left(listener, cause);
     for (const record2 of slot.polled) {
       record2.slots.delete(slot);
       if (record2.slots.size === 0) this.polled.delete(record2.path);
@@ -35329,9 +35432,7 @@ var WatcherRegistry = class {
     if (this.counters) this.counters.watchersClosed++;
   }
   // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, whose entry is the last
-  // sweep's, so a slot joining it also hears a change since that sweep, a
-  // spare re-read and never a missed one.
+  // the acquire is a change; or the one already held, which the acquire sights.
   polledAt(at) {
     const held2 = this.polled.get(at);
     if (held2 !== void 0) return held2;
@@ -35347,10 +35448,11 @@ var WatcherRegistry = class {
   // path is polled and the registry is open. The reads are synchronous, so no
   // two sweeps overlap and no older read lands over a newer one.
   // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path, so a mount under a polled path that stops
-  // answering stops every bar until it answers. The paths are a session's own
-  // files (its transcript, its settings, its config, its git directory), which
-  // the daemon reads on this thread to render anyway.
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
   armSweep() {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
@@ -36530,7 +36632,7 @@ function doctorLane(ask2, take) {
   const lane = take(ask2);
   return { current: () => ofRun(ask2, lane.current()) };
 }
-var ofRun = ({ run: run3 }, current2) => current2.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current2.reason }) : current2;
+var ofRun = ({ run: run3 }, current) => current.kind === "failed" ? ok({ run: run3, kind: "failed", reason: current.reason }) : current;
 function readingsOf(inputs, lanes) {
   const { deps } = inputs;
   const sessionId2 = inputs.hookData.session_id;
@@ -44361,12 +44463,12 @@ function editDistance(a, b) {
   let before = [];
   let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i2 = 1; i2 <= a.length; i2++) {
-    const current2 = [i2];
+    const current = [i2];
     for (let j = 1; j <= b.length; j++) {
       const swap = i2 > 1 && j > 1 && a[i2 - 1] === b[j - 2] && a[i2 - 2] === b[j - 1];
-      current2[j] = Math.min(previous[j] + 1, current2[j - 1] + 1, previous[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
     }
-    [before, previous] = [previous, current2];
+    [before, previous] = [previous, current];
   }
   return previous[b.length];
 }
@@ -48103,8 +48205,8 @@ function shimmer(curve, width, glow, z) {
       for (const { strength, centre } of passes)
         lit = Math.max(lit, strength * bump((cell3.col - left - centre) / width));
       const row2 = cell3.row + z;
-      const current2 = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
-      const caustic = (ripple(cell3.col * 0.21 + current2, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current2, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
+      const current = 0.8 * noise(cell3.col * 0.05, row2 * 0.3 + 1.3, t2 * 0.02);
+      const caustic = (ripple(cell3.col * 0.21 + current, row2 * 0.9, t2 * 0.022) * ripple(cell3.col * 0.33 + 9.1 - current, row2 * 0.7, t2 * 0.018 + 4.2)) ** 2;
       return curve.swing * curve.ease(lit * (0.1 + 0.6 * caustic));
     };
   };
@@ -50967,7 +51069,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.3";
+var PACKAGE_VERSION = "1.232.8";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -52124,8 +52226,8 @@ var SessionEffects = class {
     const effectOf = (rowKey, part) => {
       const row3 = made.get(rowKey) ?? /* @__PURE__ */ new Map();
       made.set(rowKey, row3);
-      const current2 = row3.get(part.scope);
-      if (current2 !== void 0) return current2.effect;
+      const current = row3.get(part.scope);
+      if (current !== void 0) return current.effect;
       const last3 = known.get(rowKey)?.get(part.scope);
       const reuse = last3?.name === part.name;
       const z = noiseOffset(
@@ -63645,7 +63747,7 @@ function makeUpdateWatch(opts) {
   const every = (run3, ms) => {
     armed.push(clock.every(ms, run3, { unref: true }));
   };
-  const current2 = () => {
+  const current = () => {
     const held2 = fact.get();
     return held2.kind === "ok" ? held2.value : null;
   };
@@ -63790,7 +63892,7 @@ function makeUpdateWatch(opts) {
       const read2 = await touchActs(() => acts.read());
       if (closed) throw new DaemonClosing("apply-update");
       if (!read2.ok) throw new BadVerbArgs(`apply-update: ${read2.error}`);
-      const update = current2();
+      const update = current();
       if (update === null) {
         throw new BadVerbArgs(
           "apply-update: nothing newer is known to apply"
@@ -71379,22 +71481,76 @@ function madeOnce(folder) {
     let st;
     try {
       st = fs_default.statSync(folder);
-    } catch {
-      throw e;
+    } catch (statError) {
+      const code2 = statError.code;
+      if (code2 === "ENOENT" || code2 === "ENOTDIR") throw e;
+      return;
     }
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
 }
-var current = (was, found2) => was.health.kind === "watching" && found2.kind === "found" && found2.identity !== "gone" && was.identity !== "gone" && sameIdentity(found2.identity, was.identity);
+var NO_FAULTS = { make: null, read: null, watch: null };
+var SOURCES = ["make", "read", "watch"];
+var faultsOf = (folder) => {
+  switch (folder?.kind) {
+    case void 0:
+    case "lost":
+      return NO_FAULTS;
+    case "unmade":
+      return {
+        ...NO_FAULTS,
+        make: { cause: "unusable", reason: folder.reason }
+      };
+    case "unreadable":
+      return {
+        ...NO_FAULTS,
+        read: { cause: "unreadable", reason: folder.reason }
+      };
+    case "watching": {
+      const [deaf] = folder.handle.deaf;
+      return {
+        make: null,
+        read: folder.unread === null ? null : { cause: "unreadable", reason: folder.unread },
+        watch: deaf === void 0 ? null : {
+          cause: deaf.kind === "refused" ? "refused" : "error",
+          reason: deaf.reason
+        }
+      };
+    }
+  }
+};
+var sameFolder = (a, b) => {
+  if (a === b) return true;
+  if (a === void 0 || b === void 0 || a.kind !== b.kind) return false;
+  switch (a.kind) {
+    case "watching":
+      return false;
+    case "lost":
+      return true;
+    case "unmade":
+    case "unreadable":
+      return a.reason === b.reason;
+  }
+};
+var sameFault = (a, b) => a === b || a?.cause === b?.cause && a?.reason === b?.reason;
+var watchKey = (key) => `plugin-storage:${keyString(key)}`;
+var targetsOf = (folder) => ({
+  dirs: [{ path: folder }],
+  polled: []
+});
 var ManagedStorage = class {
   sessions;
-  // [LAW:one-source-of-truth] By folder: each folder's current generation's
-  // watch, the one record of what the owner knows of the folder.
-  watched = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
+  // a hold names.
+  folders = /* @__PURE__ */ new Map();
+  // By folder: the faults last logged and counted, so each is told once as it
+  // starts, changes and clears.
+  told = /* @__PURE__ */ new Map();
   // The folders each render state's latest load named.
   holds = /* @__PURE__ */ new Map();
   faultCounts = {
     unusable: 0,
+    unreadable: 0,
     refused: 0,
     error: 0
   };
@@ -71435,32 +71591,36 @@ var ManagedStorage = class {
     });
   }
   // A render state's load names its folders: held under its id until the next
-  // load replaces the list or its `release`. Each named folder is kept
-  // current (`kept`), so a folder two states name is never closed between
-  // them.
+  // load replaces the list or its `release`. Each named folder is asked again
+  // before any unheld one closes, so a folder two states name is never closed
+  // between them.
   hold(id2, folders) {
     this.holds.set(id2, folders);
-    for (const folder of new Set(folders)) this.kept(folder);
+    for (const folder of new Set(folders)) this.asked(folder, "hold");
     this.closeUnheld();
   }
-  // [LAW:single-enforcer] The one way a held folder's generation moves on:
-  // one not yet watched, or whose generation ended, or whose path holds
-  // another folder now, opens its new generation's watch before any old one
-  // closes, and its held files are re-read, since what they read before came
-  // from the path unwatched.
-  kept(folder) {
-    const was = this.watched.get(folder);
-    const found2 = this.found(folder);
-    if (was !== void 0 && current(was, found2)) return;
-    const generation = this.generations++;
-    if (was !== void 0)
-      this.logger(
-        "info",
-        `plugin storage generation folder=${valueOf(folder)} generation=${generation}`
-      );
-    this.opened({ folder, generation }, found2);
-    if (was !== void 0) this.closed(was);
-    this.sessions.changed((f) => f.folder === folder);
+  // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
+  // A generation's folder is read, never made: a stat that fails keeps the
+  // generation, and the registry judges its watch again, as it does for an
+  // acquire joining the slot, so a deaf watch reopens on the owner's own
+  // triggers. A folder found gone or replaced is lost, except at a hold, which
+  // makes it again at once. Any other state is made and read again, and a
+  // folder made opens its next generation's watch before any old one closes.
+  asked(folder, trigger) {
+    const was = this.folders.get(folder);
+    if (was?.kind === "watching") {
+      const read2 = this.readAt(folder);
+      if (read2.kind === "unreadable" || this.present(was, read2)) {
+        was.unread = read2.kind === "unreadable" ? read2.reason : null;
+        this.watchers.acquire(watchKey(was.key), targetsOf(folder), () => {
+        }).release();
+        this.settle(folder);
+        return;
+      }
+      this.lostAt(was, read2);
+      if (trigger !== "hold") return;
+    }
+    this.moved(folder, this.made(folder));
   }
   // A render state reclaimed: the folders only it named close.
   release(id2) {
@@ -71481,7 +71641,7 @@ var ManagedStorage = class {
   stats() {
     return {
       ...this.sessions.stats(),
-      folders: this.watched.size,
+      folders: this.folders.size,
       faults: { ...this.faultCounts },
       lost: this.lost
     };
@@ -71492,67 +71652,126 @@ var ManagedStorage = class {
     this.holds.clear();
     this.closeUnheld();
   }
-  // What a hold finds at a folder's path. Creates the storage folder, so its
-  // program has somewhere to write before any session reads it.
-  // [LAW:no-silent-failure] A folder that cannot be created or read is its
-  // generation's standing fault, read by every source in it, never a throw:
-  // one plugin's folder fails only that plugin's sources, not the build.
-  found(folder) {
+  // What a folder's path holds once made: the storage folder is made first,
+  // so its program has somewhere to write before any session reads it.
+  // [LAW:no-silent-failure] A folder that cannot be made or read is a standing
+  // fault of every source in it, never a throw: one plugin's folder fails only
+  // that plugin's sources, not the build.
+  made(folder) {
     try {
       madeOnce(folder);
-      return { kind: "found", identity: this.identityOf(folder) };
     } catch (e) {
       return {
-        kind: "unusable",
-        reason: `could not be created or read: ${e.message}`
+        kind: "unmade",
+        reason: `could not be created: ${e.message}`
       };
     }
+    const read2 = this.readAt(folder);
+    switch (read2.kind) {
+      case "unreadable":
+        return read2;
+      // Removed as it was made.
+      case "gone":
+        return { kind: "lost" };
+      case "found":
+        return this.opened(folder, read2.identity);
+    }
+  }
+  readAt(folder) {
+    try {
+      const identity2 = this.identityOf(folder);
+      return identity2 === "gone" ? { kind: "gone" } : { kind: "found", identity: identity2 };
+    } catch (e) {
+      return {
+        kind: "unreadable",
+        reason: `could not be read: ${e.message}`
+      };
+    }
+  }
+  // Whether a read found the folder a generation's watch opened on.
+  present(was, read2) {
+    return read2.kind === "found" && sameIdentity(read2.identity, was.identity);
   }
   // Closes every folder no hold names.
   closeUnheld() {
     const named3 = new Set([...this.holds.values()].flat());
-    for (const [folder, watched] of [...this.watched])
-      if (!named3.has(folder)) this.closed(watched);
+    for (const folder of [...this.folders.keys()])
+      if (!named3.has(folder)) this.moved(folder, void 0);
   }
-  // Opens a folder's next generation, on what its hold found, as the folder's
-  // current watch.
-  opened(key, found2) {
-    const identity2 = found2.kind === "found" ? found2.identity : "gone";
-    const watched = {
+  // Opens a folder's next generation on the folder a read found.
+  opened(folder, identity2) {
+    const key = { folder, generation: this.generations++ };
+    const watching = {
+      kind: "watching",
       key,
       identity: identity2,
-      // [LAW:single-enforcer] The only acquirer of this registry key, so the
-      // slot's one callback is this generation's own.
+      // [LAW:single-enforcer] The only holder of this registry key past an
+      // acquire, so the slot's one lasting callback is this generation's own.
       handle: this.watchers.acquire(
-        `plugin-storage:${keyString(key)}`,
-        { dirs: [{ path: key.folder }], polled: [] },
-        (invalidation) => this.invalidated(watched, invalidation)
+        watchKey(key),
+        targetsOf(folder),
+        (invalidation) => this.invalidated(watching, invalidation)
       ),
       stopSweep: this.clock.every(
         STORAGE_SWEEP_EVERY_MS,
         () => void this.sweep(key),
         { unref: true }
       ),
-      health: { kind: "watching" }
+      unread: null
     };
-    this.watched.set(key.folder, watched);
-    if (found2.kind === "unusable")
-      this.faulted(watched, "unusable", found2.reason);
-    for (const refusal of watched.handle.deaf) {
-      this.faulted(watched, "refused", refusal.reason);
-    }
     void this.sweep(key);
-    return watched;
+    return watching;
   }
-  // Closes a generation's watch. The folder's entry goes only if it is still
-  // this one: a hold that moved the generation has already put its successor
-  // there.
-  closed(watched) {
-    if (this.watched.get(watched.key.folder) === watched)
-      this.watched.delete(watched.key.folder);
-    watched.health = { kind: "closed" };
-    watched.stopSweep();
-    watched.handle.release();
+  // A folder's state moves: a generation it ends closes, after any next one
+  // opened, and its held files are re-read, since what they read before came
+  // from another folder or from the path unwatched. `undefined`: no hold
+  // names it now.
+  moved(folder, now2) {
+    const was = this.folders.get(folder);
+    if (now2 === void 0) this.folders.delete(folder);
+    else this.folders.set(folder, now2);
+    if (now2?.kind === "watching" && now2 !== was && was !== void 0)
+      this.logger(
+        "info",
+        `plugin storage generation folder=${valueOf(folder)} generation=${now2.key.generation}`
+      );
+    if (was?.kind === "watching" && was !== now2) {
+      was.stopSweep();
+      was.handle.release();
+    }
+    if (now2 === void 0) this.told.delete(folder);
+    this.settle(folder, !sameFolder(was, now2));
+  }
+  // [LAW:no-silent-failure] Each fault a folder stands on is logged and
+  // counted as it starts and as its reason changes, and logged as it clears,
+  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
+  // on a move of its state or its faults, which they read first.
+  settle(folder, stateMoved = false) {
+    const was = this.told.get(folder) ?? NO_FAULTS;
+    const now2 = faultsOf(this.folders.get(folder));
+    let moved2 = false;
+    for (const source of SOURCES) {
+      const before = was[source];
+      const after = now2[source];
+      if (sameFault(before, after)) continue;
+      moved2 = true;
+      if (after === null) {
+        this.logger(
+          "info",
+          `plugin storage fault cleared folder=${valueOf(folder)} cause=${before.cause}`
+        );
+        continue;
+      }
+      this.faultCounts[after.cause]++;
+      this.logger(
+        "warn",
+        `plugin storage fault folder=${valueOf(folder)} cause=${after.cause} reason=${JSON.stringify(after.reason)}`
+      );
+    }
+    if (SOURCES.every((source) => now2[source] === null))
+      this.told.delete(folder);
+    else this.told.set(folder, now2);
+    if (moved2 || stateMoved) this.sessions.changed((f) => f.folder === folder);
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -71561,18 +71780,20 @@ var ManagedStorage = class {
   // folder's own name is, re-reading every held file in the folder still
   // there. The OS reports a change to the watched folder itself under the
   // folder's own name, as though it were a child, so that path is the folder
-  // joined with its own name.
-  invalidated(watched, invalidation) {
-    const { key } = watched;
-    const inFolder = (f) => f.folder === key.folder;
+  // joined with its own name. A generation no longer the folder's state has
+  // nothing left to hear.
+  invalidated(watching, invalidation) {
+    const { folder } = watching.key;
+    if (this.folders.get(folder) !== watching) return;
+    const inFolder = (f) => f.folder === folder;
     switch (invalidation.kind) {
       case "unknown":
-        this.judged(watched, () => this.sessions.changed(inFolder));
+        if (this.judged(watching)) this.sessions.changed(inFolder);
         return;
       case "changed": {
         const { paths: paths2 } = invalidation;
-        if (paths2.includes(import_node_path30.default.join(key.folder, import_node_path30.default.basename(key.folder)))) {
-          this.judged(watched, () => this.sessions.changed(inFolder));
+        if (paths2.includes(import_node_path30.default.join(folder, import_node_path30.default.basename(folder)))) {
+          if (this.judged(watching)) this.sessions.changed(inFolder);
         } else {
           this.sessions.changed(
             (f) => inFolder(f) && paths2.includes(fileOf(f))
@@ -71580,110 +71801,72 @@ var ManagedStorage = class {
         }
         return;
       }
+      // The watch's fault is the handle's to say (`faultsOf`).
       case "failed":
-        this.judged(
-          watched,
-          () => this.faulted(watched, "error", invalidation.reason)
-        );
+        this.judged(watching);
         return;
     }
   }
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // otherwise `present` runs. A lost folder's held files are re-read from the
-  // path, so no draw shows a value from a folder no longer there while the
-  // next period opens the next generation. A generation already ended has
-  // nothing left to judge.
-  judged(watched, present) {
-    const { health } = watched;
-    if (health.kind !== "watching") return;
-    const { key } = watched;
-    let now2;
-    try {
-      now2 = this.identityOf(key.folder);
-    } catch (e) {
-      this.faulted(watched, "error", `stat failed: ${e.message}`);
-      return;
+  // a stat that fails keeps the generation. True while it still watches.
+  judged(watching) {
+    const read2 = this.readAt(watching.key.folder);
+    if (read2.kind === "unreadable" || this.present(watching, read2)) {
+      watching.unread = read2.kind === "unreadable" ? read2.reason : null;
+      this.settle(watching.key.folder);
+      return true;
     }
-    const opened = watched.identity;
-    if (now2 !== "gone" && opened !== "gone" && sameIdentity(now2, opened)) {
-      present();
-      return;
-    }
-    watched.health = { kind: "lost" };
+    this.lostAt(watching, read2);
+    return false;
+  }
+  // A generation's folder found gone or replaced: the generation ends, and
+  // its held files are re-read from the path, so no draw shows a value from a
+  // folder no longer there while the next trigger makes it again.
+  lostAt(watching, read2) {
+    const { key } = watching;
     this.lost++;
     this.logger(
       "info",
-      `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${now2 === "gone" ? "gone" : "replaced"}`
+      `plugin storage lost folder=${valueOf(key.folder)} generation=${key.generation} now=${read2.kind === "gone" ? "gone" : "replaced"}`
     );
-    this.sessions.changed((f) => f.folder === key.folder);
-  }
-  // [LAW:no-silent-failure] A watch the OS refused, or one that errored on a
-  // folder still there, is a standing fault: every source read from the
-  // generation reads it, and the generation ends; its owner opens the next
-  // when file events catch up (`noticed`). No retry here: the OS
-  // refusing a watch (limits, permissions) refuses an immediate retry the
-  // same way.
-  faulted(watched, cause, reason) {
-    const { key } = watched;
-    if (watched.health.kind !== "watching") return;
-    watched.health = { kind: "faulted", reason };
-    this.faultCounts[cause]++;
-    this.logger(
-      "warn",
-      `plugin storage fault folder=${valueOf(key.folder)} generation=${key.generation} cause=${cause} reason=${JSON.stringify(reason)}`
-    );
-    this.sessions.changed((f) => f.folder === key.folder);
+    this.moved(key.folder, { kind: "lost" });
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
-  // folder. Each period opens the next generation of every folder lost before
-  // it, and judges every watched one against the disk: the event naming a
-  // removed folder can drop without a stall. Every change of delivery and
-  // every catch-up re-reads every held file, so no lane keeps a stall after
-  // delivery moves on, and a file written during a span lands; a catch-up
-  // also opens the next generation of every held folder whose generation
-  // ended, as the span may have held what ended it.
+  // folder. Each period and each catch-up asks again of every held folder:
+  // the event naming a removed folder can drop without a stall, and a fault
+  // stands only while its answer does. Every change of delivery and every
+  // catch-up re-reads every held file, so no lane keeps a stall after
+  // delivery moves on, and a file written during a span lands.
   noticed(notice) {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind === "lost") this.kept(watched.key.folder);
-          else this.judged(watched, () => {
-          });
-        return;
       case "caught-up":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind !== "watching") this.kept(watched.key.folder);
-        this.sessions.changed(() => true);
+        for (const folder of [...this.folders.keys()])
+          this.asked(folder, notice.kind);
+        if (notice.kind === "caught-up") this.sessions.changed(() => true);
         return;
       case "moved":
         this.sessions.changed(() => true);
         return;
     }
   }
-  // The folder's current generation's standing failure, which every source
-  // in it reads first. A folder no hold names has none: its files read the
-  // path.
+  // The folder's standing failure, which every source in it reads first:
+  // every fault standing, else the stall. A folder no hold names has none:
+  // its files read the path.
   standing(folder) {
-    const watched = this.watched.get(folder);
-    if (watched === void 0) return null;
-    const { health } = watched;
-    switch (health.kind) {
-      case "faulted":
-        return `cannot refresh: ${folder} ${health.reason}; retried when the config next loads or file events catch up`;
-      // While file events are stalled a folder's sources read the stall,
-      // never a file read once from the path and then left unrefreshed.
-      // While delivery is unmeasured its files read as usual: the bar's row
-      // already says it cannot be checked.
-      case "watching":
-      case "lost": {
-        const stall = stallReason(this.fileEvents.delivery());
-        return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
-      }
-      case "closed":
-        return null;
-    }
+    const state = this.folders.get(folder);
+    if (state === void 0) return null;
+    const faults = faultsOf(state);
+    const reasons = SOURCES.flatMap((source) => {
+      const fault = faults[source];
+      return fault === null ? [] : [fault.reason];
+    });
+    if (reasons.length > 0)
+      return `cannot refresh: ${folder} ${reasons.join("; ")}; retried at the next config load or file-event check`;
+    const stall = stallReason(this.fileEvents.delivery());
+    return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
   async read(f) {
     const fault = this.standing(f.folder);
@@ -72130,7 +72313,7 @@ var RuntimeStats = class _RuntimeStats {
         },
         pluginStorage: {
           folders: 0,
-          faults: { unusable: 0, refused: 0, error: 0 },
+          faults: { unusable: 0, unreadable: 0, refused: 0, error: 0 },
           lost: 0
         }
       },
@@ -72743,7 +72926,7 @@ var writableSettingsFiles = ({
 var readSources = (settings) => chainsOf(settings).flatMap(
   ({ sources }) => sources.kind === "ok" ? sources.value : []
 );
-var readThrough = (through) => (current2) => current2.through === null || laterIdentity(through, current2.through) ? { through } : current2;
+var readThrough = (through) => (current) => current.through === null || laterIdentity(through, current.through) ? { through } : current;
 function settingChange(fix, sources) {
   const file = sources.find((s) => s.path === fix.file.path);
   return file === void 0 ? {
@@ -73500,9 +73683,9 @@ function controlledSessions(listClients) {
 function shownPanes(listPanes, controlled) {
   const shown = /* @__PURE__ */ new Set();
   for (const line of listPanes.split("\n")) {
-    const [pane, session, attached, current2, zoomed, active2] = line.trim().split(" ");
+    const [pane, session, attached, current, zoomed, active2] = line.trim().split(" ");
     if (pane === void 0 || pane === "" || session === void 0) continue;
-    if (Number(attached) > 0 && (current2 === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
+    if (Number(attached) > 0 && (current === "1" || controlled.has(session)) && (zoomed !== "1" || active2 === "1"))
       shown.add(pane);
   }
   return shown;
@@ -74427,6 +74610,9 @@ function segmentsOf2(value) {
   }
 }
 
+// src/daemon/acts.ts
+init_globals();
+
 // src/claude-input/typing.ts
 init_globals();
 
@@ -74488,9 +74674,6 @@ var typeInPane = (edge) => async (tmux3, line) => {
   const typed = await edge.type(tmux3, line);
   return typed.kind === "typed" ? { kind: "typed", pane: tmux3.pane } : typed;
 };
-
-// src/daemon/acts.ts
-init_globals();
 
 // src/daemon/lane-setup.ts
 init_globals();
@@ -74668,7 +74851,7 @@ async function bandOn(session, pane, type3, host, edge) {
   }
   return installBand(session, pane, type3, checkout, edge);
 }
-async function restartClaude(session, tmux3, host, edge) {
+async function restartClaude(session, tmux3, read2, host, edge) {
   const launcher = attachLauncherOf(host.preload);
   const missing = [host.preload, launcher].find(
     (file) => !edge.fileExists(file)
@@ -74681,6 +74864,7 @@ async function restartClaude(session, tmux3, host, edge) {
   return restartUnderAttach(
     session,
     tmux3,
+    read2,
     { node: host.node[0], launcher, preload: host.preload },
     edge
   );
@@ -74727,7 +74911,7 @@ function environmentOf(env2) {
     })
   );
 }
-async function restartUnderAttach(session, tmux3, attach, edge) {
+async function restartUnderAttach(session, tmux3, read2, attach, edge) {
   const claude = await edge.paneClaude(tmux3);
   if (claude.attached) {
     return `left Claude Code in ${tmux3.pane} running: it already runs under the attach launcher`;
@@ -74753,7 +74937,7 @@ async function restartUnderAttach(session, tmux3, attach, edge) {
       `Claude Code in ${tmux3.pane} is no longer the process the restart read (pid ${claude.pid}), so it was not restarted under the attach launcher`
     );
   }
-  const loses = endingLoses(await edge.claudeInput.read(tmux3));
+  const loses = endingLoses(await read2(tmux3));
   if (loses !== null) {
     throw new Error(
       `Claude Code in ${tmux3.pane} was left running: ${loses} \u2014 then turn ${LANES.statusline.label} off and on again`
@@ -74948,6 +75132,7 @@ var Acts = class {
         () => restartClaude(
           { ...act2.at, sessionId: act2.session },
           act2.pane,
+          deps.claudeInput.read,
           lanes.host,
           lanes.edge
         )
@@ -75001,7 +75186,10 @@ var Acts = class {
   performers;
   // A slash line typed into `pane` in its turn.
   typed(pane, line) {
-    return this.inPane.run(paneKey(pane), () => this.deps.type(pane, line));
+    return this.inPane.run(
+      paneKey(pane),
+      () => typeInPane(this.deps.claudeInput)(pane, line)
+    );
   }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
   // throw is classified once, here: a refusal the user can act on, the
@@ -75176,24 +75364,24 @@ function diffMembers(at, beforeText, was, afterText, will) {
   return [...gone, ...changed];
 }
 function applyChanges(text4, changes, dialect = JSON5_DIALECT) {
-  let current2 = text4;
+  let current = text4;
   for (const change of changes) {
-    const parsed2 = parse2(current2);
+    const parsed2 = parse2(current);
     const ancestor = movedAncestor(parsed2, change.at);
     if (ancestor !== null)
       return {
         kind: "moved",
         at: ancestor,
         read: "object",
-        found: readAt(current2, parsed2, ancestor)
+        found: readAt(current, parsed2, ancestor)
       };
     const read2 = change.op === "insert" ? ABSENT3 : change.read;
-    const found2 = readAt(current2, parsed2, change.at);
+    const found2 = readAt(current, parsed2, change.at);
     if (!sameRead(found2, read2))
       return { kind: "moved", at: change.at, read: read2, found: found2 };
-    current2 = applied(current2, change, dialect);
+    current = applied(current, change, dialect);
   }
-  return { kind: "applied", text: current2 };
+  return { kind: "applied", text: current };
 }
 function movedAncestor(parsed2, at) {
   if (at.length === 0) return null;
@@ -75271,14 +75459,14 @@ function stateFile(dir, name, empty2, parse4) {
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
   const plan = (next) => {
-    const current2 = read2();
-    if (current2.kind === "failed") return current2;
-    const value = next(current2.value);
+    const current = read2();
+    if (current.kind === "failed") return current;
+    const value = next(current.value);
     return {
       kind: "ok",
       value: {
         file,
-        text: value === current2.value ? null : textOf2(value),
+        text: value === current.value ? null : textOf2(value),
         value
       }
     };
@@ -75341,14 +75529,14 @@ function answering(book, dir, answer2) {
 function answeredBook(stateDir2, answers) {
   const said2 = [];
   const planned = repoConfigs(stateDir2).plan(
-    (current2) => answers.reduce((book, { session, dir, answer: answer2 }) => {
+    (current) => answers.reduce((book, { session, dir, answer: answer2 }) => {
       const answered = answering(book, dir, answer2);
       const { superseded, absent, unchecked } = answered.recorded;
       said2.push(
         `repo-config: ${dir} ${answer2} superseded=${superseded.join(",") || "-"} absent=${absent.join(",") || "-"} unchecked=${unchecked.length === 0 ? "-" : JSON.stringify(unchecked)} (session=${session})`
       );
       return answered.book;
-    }, current2)
+    }, current)
   );
   return planned.kind === "failed" ? planned : ok({ ...planned.value, said: said2 });
 }
@@ -78206,8 +78394,8 @@ function linkFragment(text4, url, active2, base) {
   rt.end = "";
   return rt;
 }
-function linkOver(cell3, url, current2 = false) {
-  const link = new Style({ link: url, bold: current2 ? true : void 0 });
+function linkOver(cell3, url, current = false) {
+  const link = new Style({ link: url, bold: current ? true : void 0 });
   const linked = new RichText(cell3.plain, {
     style: Style.combine([resolvedStyle(cell3.style), link])
   });
@@ -78228,26 +78416,26 @@ function cycleIndex(c, store) {
 function realize(c, display, boundValue, store, sessionId2, signer) {
   switch (c.kind) {
     case "set-literal": {
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current2 === c.value
+        active: current === c.value
       };
     }
     case "set-option": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current2 === value
+        active: current === value
       };
     }
     case "set-int": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current2 === value
+        active: current === value
       };
     }
     case "set-cycle": {
@@ -78294,22 +78482,22 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
     // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
     // the write durable, not the click itself.
     case "persist-literal": {
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [
           { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, c.value] }
         ],
-        active: current2 === c.value
+        active: current === c.value
       };
     }
     case "persist-option": {
       const value = boundValue ?? display;
-      const current2 = readVar(store, c.stateVar);
+      const current = readVar(store, c.stateVar);
       return {
         effects: [
           { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, value] }
         ],
-        active: current2 === value
+        active: current === value
       };
     }
     case "persist-cycle": {
@@ -78658,21 +78846,21 @@ var cell2 = (text4, style) => {
   drawn.end = "";
   return drawn;
 };
-var currentMark = (current2) => new Style({ bold: current2 });
+var currentMark = (current) => new Style({ bold: current });
 function optionPaint(active2, distribution, render3, paletteOf, drawnAt, ground) {
   if (paletteOf === void 0) {
-    return (position, _option, label2, current2) => cell2(
+    return (position, _option, label2, current) => cell2(
       label2,
       Style.combine([
         bandItemStyle(active2, { ...position, distribution }, drawnAt),
-        currentMark(current2)
+        currentMark(current)
       ])
     );
   }
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, label2, current2) => named2(
+  return (_position, option, label2, current) => named2(
     label2,
-    Style.combine([text4, currentMark(current2)]),
+    Style.combine([text4, currentMark(current)]),
     paletteOf(option, render3)
   );
 }
@@ -78688,11 +78876,11 @@ function labelPaint(render3, paletteOf, option, label2) {
 }
 function swatchPaint(active2, render3, paletteOf, drawnAt, ground) {
   const text4 = stateCell(active2.palette, ground, drawnAt);
-  return (_position, option, _label, current2) => cell2(
+  return (_position, option, _label, current) => cell2(
     RichText.fromFragments([
-      cell2(current2 ? "[" : " ", text4),
+      cell2(current ? "[" : " ", text4),
       swatch(paletteOf(option, render3)),
-      cell2(current2 ? "]" : " ", text4)
+      cell2(current ? "]" : " ", text4)
     ])
   );
 }
@@ -78873,14 +79061,14 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   const declared = runtime.compiled.get(applyName);
   const store = renderBinding(runtime, "picker").store;
   const sessionId2 = clickSession(runtime, "picker");
-  const current2 = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
+  const current = "stateVar" in apply ? readVar(store, apply.stateVar) : void 0;
   const optionFace = (i2, label2) => {
     const option = apply.options[i2];
     return itemPaint(
       { index: i2, count: apply.options.length },
       option,
       label2,
-      option === current2
+      option === current
     );
   };
   const available = !paged ? Infinity : close.kind === "led" ? ledRowBudget(runtime) : rowBudget(runtime);
@@ -78904,7 +79092,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   const holding2 = pageHolding(
-    current2 === void 0 ? -1 : apply.options.indexOf(current2)
+    current === void 0 ? -1 : apply.options.indexOf(current)
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
@@ -79058,9 +79246,9 @@ function pickerFuncs(runtime, activeSegment) {
 init_globals();
 var CAROUSEL_PREV = "\u25C0";
 var CAROUSEL_NEXT = "\u25B6";
-function ringAround(options, current2) {
+function ringAround(options, current) {
   const count = options.length;
-  const centre = Math.max(options.indexOf(current2), 0);
+  const centre = Math.max(options.indexOf(current), 0);
   return (offset) => ((centre + offset) % count + count) % count;
 }
 function renderCarousel(applyName, apply, openName, label2, runtime) {
@@ -79689,20 +79877,20 @@ init_globals();
 init_globals();
 function splitCellsIntoLines(cells) {
   const lines2 = [];
-  let current2 = [];
+  let current = [];
   for (const cell3 of cells) {
     if (!cell3.contains("\n")) {
-      current2.push(cell3);
+      current.push(cell3);
       continue;
     }
     const pieces = cell3.split("\n");
-    current2.push(pieces[0]);
+    current.push(pieces[0]);
     for (let i2 = 1; i2 < pieces.length; i2++) {
-      lines2.push(current2);
-      current2 = [pieces[i2]];
+      lines2.push(current);
+      current = [pieces[i2]];
     }
   }
-  lines2.push(current2);
+  lines2.push(current);
   return lines2;
 }
 
@@ -83423,11 +83611,12 @@ function noFile(dflt) {
 }
 function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
   const parsed2 = parseDslFile(path45, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
+    const layer = layPlugins(
       listedPlugins(refs, path45, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path45, allowedPalettes)
+      path45,
+      allowedPalettes
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -83457,29 +83646,22 @@ function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
     config: standing2.config
   };
 }
-var installedMemo = /* @__PURE__ */ new WeakMap();
+function layPlugins(files, ctx, base, label2, allowedPalettes) {
+  return applyPlugins(
+    files,
+    ctx,
+    base,
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, label2, allowedPalettes)
+  );
+}
 function installedLayer(files, ctx, dflt, allowedPalettes) {
-  const key = digestOf({
-    palettes: [...allowedPalettes ?? []].sort(),
-    files: files.map((f) => ({
-      path: f.path,
-      scope: f.scope,
-      definition: f.definition
-    }))
-  });
-  const byProject = installedMemo.get(dflt) ?? /* @__PURE__ */ new Map();
-  installedMemo.set(dflt, byProject);
-  const slot = JSON.stringify([ctx.checkout?.root ?? null, ctx.home]);
-  const hit = byProject.get(slot);
-  if (hit?.key === key) return hit.layer;
-  const layer = applyPlugins(
+  return layPlugins(
     files,
     ctx,
     { config: dflt, rendering: /* @__PURE__ */ new Map() },
-    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
+    "<installed plugins>",
+    allowedPalettes
   );
-  byProject.set(slot, { key, layer });
-  return layer;
 }
 function strayDrop({ path: file, scope }) {
   const root = import_node_path38.default.dirname(file);
@@ -88188,11 +88370,11 @@ var SettingsHistory = class {
         const changes = [...committing.get(sessionId2)?.values() ?? []].filter(
           (c) => c.before !== c.after
         );
-        const current2 = click3.historyOf(sessionId2);
-        const appended = changes.length === 0 ? current2 : afterAppend(current2, changes);
+        const current = click3.historyOf(sessionId2);
+        const appended = changes.length === 0 ? current : afterAppend(current, changes);
         const toggle = toggled.get(sessionId2);
         const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-        if (next !== current2) click3.move(sessionId2, next);
+        if (next !== current) click3.move(sessionId2, next);
       }
     };
     return {
@@ -88684,10 +88866,10 @@ var setState = (rawValue, ctx) => {
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 var STEP_INT_RE = /^-?\d+$/;
-function stepWithin(current2, by, min3, max3) {
-  const n = current2 + by;
-  if (n > max3) return current2 === max3 ? min3 : max3;
-  if (n < min3) return current2 === min3 ? max3 : min3;
+function stepWithin(current, by, min3, max3) {
+  const n = current + by;
+  if (n > max3) return current === max3 ? min3 : max3;
+  if (n < min3) return current === min3 ? max3 : min3;
   return n;
 }
 var stepState = (rawValue, ctx) => {
@@ -88903,19 +89085,19 @@ var stepConfig = (rawValue, ctx) => {
   );
   const store = editStore(ctx, sid);
   const stored = readValue(store.read(into.path), landing.key);
-  const current2 = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
+  const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
     params,
     configKeySeed(landing.globals, key)
   );
-  const next = stepWithin(current2, by, params.min, params.max);
+  const next = stepWithin(current, by, params.min, params.max);
   const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
     "info",
-    `step-config: ${landing.key} ${current2}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
+    `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
 var save = (value, ctx) => {
@@ -90983,19 +91165,19 @@ var RenderCache = class {
   // The session's view of `state`: the one it has, or a new one replacing it.
   viewOf(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
-    const current2 = this.views.get(sessionId2);
-    if (current2?.state === state) {
+    const current = this.views.get(sessionId2);
+    if (current?.state === state) {
       this.views.delete(sessionId2);
-      this.views.set(sessionId2, current2);
-      current2.requested(facts);
-      return current2;
+      this.views.set(sessionId2, current);
+      current.requested(facts);
+      return current;
     }
     this.views.delete(sessionId2);
     let view;
     try {
       view = this.opened(entry, state, facts, by);
     } finally {
-      if (current2 !== void 0) this.retireView(current2, "moved");
+      if (current !== void 0) this.retireView(current, "moved");
     }
     this.fit(entry);
     return view;
@@ -94059,6 +94241,9 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
     notices,
     // [LAW:single-enforcer] The one place a session's working directory
     // becomes the checkout its plugins' data paths resolve against.
+    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
+    // above it, since an ancestor watch per session is the cost; the next
+    // rediscovery reads the new checkout.
     checkout: checkoutOf(cwd2)
   };
 }
@@ -94500,7 +94685,7 @@ function createDaemon(inputs) {
   });
   const acts = new Acts({
     launch: clickLaunchVia(launcher),
-    type: typeInPane(inputs.claudeInput(launcher)),
+    claudeInput: inputs.claudeInput(launcher),
     run: (run3) => runs.start(run3),
     applyUpdate: () => updateWatch.act(),
     lanes: {
@@ -95744,7 +95929,6 @@ var FOLLOW_POLL_MS = 200;
 function productionLaneEdge(launcher, following, closing, clock, probe2, environmentOf2) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
-    claudeInput: productionClaudeInputEdge(launcher),
     barPanes: async (hint) => barPanesOf(
       await tmux2(launcher, hint, [
         "list-panes",
