@@ -91959,7 +91959,7 @@ function mainRendererOf(inputs, host) {
         layers: entry.configLayers,
         error: entry.lastError,
         warnings: entry.lastWarnings,
-        repo: renderCache.snapshotFor(origin).repo,
+        repo: entry.snapshot.repo,
         unused: entry.state.unused,
         config: entry.state.config
       };
