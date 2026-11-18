@@ -10,7 +10,6 @@ import type { TmuxHint } from "../tmux-hint.js";
 import {
   typeInPane,
   type ClaudeInputEdge,
-  type SlashTyper,
   type TypeResult,
 } from "../claude-input/typing.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
@@ -39,8 +38,8 @@ export interface ActDeps {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
   // [LAW:one-source-of-truth] The daemon's one edge onto Claude Code's
   // prompt: every read of it and every slash line typed into it go through
-  // this edge. A lane step is handed the part it uses (a restart the read, a
-  // band install the typer).
+  // this edge. A lane step is handed the part it uses: a restart its read, a
+  // band install the queued typing every slash click goes through.
   readonly claudeInput: ClaudeInputEdge;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   // The update notice's act: what it applies is the update watch's.
@@ -115,12 +114,8 @@ export class Acts {
     readonly [K in HostAct["kind"]]: (act: Of<K>) => Promise<Done>;
   };
 
-  // A slash line typed into a pane, once the prompt there reads ready.
-  private readonly type: SlashTyper;
-
   constructor(private readonly deps: ActDeps) {
     const { lanes } = deps;
-    this.type = typeInPane(deps.claudeInput);
     this.performers = {
       copy: (act) =>
         clickLaunch(
@@ -206,7 +201,11 @@ export class Acts {
 
   // A slash line typed into `pane` in its turn.
   private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
-    return this.inPane.run(paneKey(pane), () => this.type(pane, line));
+    // [LAW:single-enforcer] The one way a line is typed: in the pane's turn,
+    // once the prompt there reads ready.
+    return this.inPane.run(paneKey(pane), () =>
+      typeInPane(this.deps.claudeInput)(pane, line),
+    );
   }
 
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A

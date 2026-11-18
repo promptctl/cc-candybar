@@ -22,7 +22,7 @@ import {
   type PaneClaude,
 } from "../src/daemon/lane-setup";
 import { LaneActs } from "../src/renderer/lane-acts";
-import { Acts, type ActDeps, type HostAct } from "../src/daemon/acts";
+import { Acts, type HostAct } from "../src/daemon/acts";
 import type {
   Act,
   ActRequest,
