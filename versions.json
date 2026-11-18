@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "26c913b5ff08b9203ff635608f0e7130723b0159",
+      "timestamp": "2026-11-18T23:06:26.206Z",
+      "commits": [
+        {
+          "sha": "26c913b5ff08b9203ff635608f0e7130723b0159",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:05:14-07:00",
+          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33) (#810)\n\n* fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n\n* fix(config): the globals resolution reads each selector's pick under its globals row's sessionKey, the key the settings menu writes (s33)\n\n* fix(test): the quiet-text sweep draws through a one-session rig, and each row asserts the theme it drew under (s33)\n\n* fix(config): one rule names the session key a setting's pick is under, for the resolution and the settings alike (s33)\n\n* fix(config): a durable landing lands in the preset the render resolves (s33)\n\n* fix(test): a rig's default session is the one a payload naming none draws, and the sweep draws with the session's resolved options and checks its frame (s33)"
+        }
+      ]
+    },
+    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
       "sha": "455cc368e8e9d41add350caf5bf66202cd15a11f",
@@ -34,63 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:05:22-07:00",
           "message": "fix(daemon): a connection is one state, reads one frame, and answers an unencodable reply (df7i)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-810",
-      "ref": "refs/pull/810/merge",
-      "sha": "e6fd974c68baecadf517e005da424469fb3fef7e",
-      "timestamp": "2026-11-18T22:58:51.897Z",
-      "commits": [
-        {
-          "sha": "e6fd974c68baecadf517e005da424469fb3fef7e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T22:57:58Z",
-          "message": "Merge 7b5d8505083036ca4b9e6dbc76d38b2ea9a0a951 into fa1bc9efda588b256f008400ac9868b8de85ef38\n"
-        },
-        {
-          "sha": "7b5d8505083036ca4b9e6dbc76d38b2ea9a0a951",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(test): a rig's default session is the one a payload naming none draws, and the sweep draws with the session's resolved options and checks its frame (s33)\n"
-        },
-        {
-          "sha": "1eb11e2a5fb82b2323a1c7f3e9b9e0fcd9f34007",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(config): a durable landing lands in the preset the render resolves (s33)\n"
-        },
-        {
-          "sha": "ec709f8ae13ec7c72881df9a12b95eba21099d7d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:49:12-07:00",
-          "message": "fix(config): one rule names the session key a setting's pick is under, for the resolution and the settings alike (s33)\n"
-        },
-        {
-          "sha": "97d90d82f13d15ac333213ff70a2d9da1831fc75",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:38-07:00",
-          "message": "fix(test): the quiet-text sweep draws through a one-session rig, and each row asserts the theme it drew under (s33)\n"
-        },
-        {
-          "sha": "d982095befaa1a7f355345c5606d6018a2e958f5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:20:37-07:00",
-          "message": "fix(config): the globals resolution reads each selector's pick under its globals row's sessionKey, the key the settings menu writes (s33)\n"
-        },
-        {
-          "sha": "49f17f62554648aaaceac8230c150dd4f55f6d7c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:14:02-07:00",
-          "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
         }
       ]
     },
@@ -199,21 +157,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:35:58-07:00",
           "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "fa1bc9efda588b256f008400ac9868b8de85ef38",
-      "timestamp": "2026-11-18T22:30:22.232Z",
-      "commits": [
-        {
-          "sha": "fa1bc9efda588b256f008400ac9868b8de85ef38",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T22:29:14Z",
-          "message": "chore(release): set `package.json` to 1.232.8\n\n## [1.232.8](https://github.com/promptctl/cc-candybar/compare/v1.232.7...v1.232.8) (2026-11-18)\n\n### Bug Fixes\n\n* **acts:** a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno) ([#827](https://github.com/promptctl/cc-candybar/issues/827)) ([5a71a43](https://github.com/promptctl/cc-candybar/commit/5a71a43f5da66bd536475cb0df17c28d9a6469e0))\n"
         }
       ]
     }
