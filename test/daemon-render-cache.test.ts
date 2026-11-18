@@ -1130,9 +1130,9 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const causes: LoadCause["kind"][] = [];
     const { cache, originAt, cleanups, reloads, watchers } = makeCache({
-      onReload: (entry, sessions, cause, settled) => {
+      onReload: (entry, sessions, cause, settled, was) => {
         causes.push(cause.kind);
-        reloads.observers.onReload!(entry, sessions, cause, settled);
+        reloads.observers.onReload!(entry, sessions, cause, settled, was);
       },
     });
     try {

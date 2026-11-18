@@ -96,6 +96,7 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
+import { endedSessionKeys } from "./ended-placements.js";
 import { reaction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
@@ -533,12 +534,28 @@ export function mainRendererOf(
         // daemon.log with its cause — the operator's only record of why a load
         // ran, and whether a save was picked up cleanly, kept rendering
         // last-known-good behind an error, or resolved to a different file.
-        onReload: (entry, sessions, cause, settled) => {
+        onReload: (entry, sessions, cause, settled, was) => {
           log("info", configLoadedLine(entry, cause, settled));
           // A reload changes the bar of every session drawn from the entry,
           // even one that failed and kept the old config: its indicator says so.
-          for (const sessionId of sessions)
+          // [LAW:single-enforcer] Every change to a config arrives here, a
+          // click's or a hand edit's, so a placement it ended takes its session
+          // state with it in every session that drew it. A click's own session
+          // released it already, in the click's step, which undo restores.
+          for (const sessionId of sessions) {
+            const released = endedSessionKeys(
+              was.config,
+              entry.state.config,
+              (key) => sessionState.get(sessionId, key),
+            );
+            for (const key of released) sessionState.clear(sessionId, key);
+            if (released.length > 0)
+              log(
+                "info",
+                `placements ended session=${sessionId} released=${JSON.stringify(released)}`,
+              );
             feeds.wake(sessionId, "reload", time.tick);
+          }
         },
         // [LAW:single-enforcer] What a session's view draws from moved: its
         // feed's next frame is brought forward, whatever moved it: a request's

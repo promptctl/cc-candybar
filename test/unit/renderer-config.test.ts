@@ -29,6 +29,8 @@ import type {
 } from "../../src/renderer-interface/interface";
 import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import { mainRendererOf } from "../../src/renderer/main";
+import { insertGap } from "../../src/config/edit-chrome";
+import { PRESET_FLOOR } from "../../src/config/presets";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Tick } from "../../src/utils/instant";
@@ -268,4 +270,49 @@ test("a click on a session with no live context waits for the config of the orig
       target: { kind: "layer", origin, role: "user" },
     }),
   ]);
+});
+
+test("a config turn that ends a placement releases its state in every session drawn from it, and only its own", async () => {
+  const library = (id: string) =>
+    insertGap(PRESET_FLOOR, id, "after").stateKey;
+  const held = { [library("said")]: "open", [library("kept")]: "open" };
+  const sessions = ["s1", "s2"].map(sessionIdOf);
+  const t = renderer(new Map(sessions.map((s) => [s, held])));
+  const both = `{
+    segments: { said: { template: "${SAID}" }, kept: { template: "k" } },
+    root: { h: ["said", "kept"] },
+  }`;
+  answered(await handIn(t.r, { kind: "start", viewers: {}, sessions: [] }));
+  const origin = contextOf("s1").requested;
+  for (const s of ["s1", "s2"]) {
+    const context = contextOf(s);
+    answered(
+      await handIn(t.r, {
+        kind: "context",
+        context,
+        worldState: worldStateOf(context.hookData.session_id),
+      }),
+    );
+  }
+  const config = (text: string) =>
+    handIn(t.r, { kind: "config", origin, config: snapshotOf(text) });
+  answered(await config(both));
+  for (const s of ["s1", "s2"])
+    answered(
+      await handIn(t.r, {
+        kind: "request",
+        id: 1 as RequestId,
+        context: contextOf(s),
+      }),
+    );
+  // A hand edit: no click ended it.
+  answered(await config(both.replace(`"said", `, "")));
+  expect(
+    t.logged.filter((line) => line.startsWith("info placements ended")),
+  ).toEqual(
+    sessions.map(
+      (s) =>
+        `info placements ended session=${s} released=${JSON.stringify([library("said")])}`,
+    ),
+  );
 });

@@ -208,6 +208,9 @@ export interface RenderCacheObservers {
     cause: LoadCause,
     // What the load did: built a state, kept the one served, or failed.
     settled: Settled,
+    // What the entry served before the load: the config every one of
+    // `sessions` drew from.
+    was: Readonly<Pick<DslRenderState, "config">>,
   ) => void;
   // Fires with a session's id when its view opens and whenever what the view
   // draws from moves (openView's `changed`): what a feed showing the session
@@ -1343,7 +1346,13 @@ export class RenderCache<
       `render-cache entry projectDir=${projectDir} cwd=${cwd} compile=${entry.state.compileKey.slice(0, 12)} entries=${this.entries.size} compiles=${this.compiles.size} accounted=${mb(this.accountedBytes())}/${mb(this.budgetBytes())}MB`,
     );
     // An entry just created was drawn by no session.
-    this.observers.onReload?.(entry, [], { kind: "open" }, loaded.kind);
+    this.observers.onReload?.(
+      entry,
+      [],
+      { kind: "open" },
+      loaded.kind,
+      entry.state,
+    );
 
     return entry;
   }
@@ -1863,7 +1872,7 @@ export class RenderCache<
     // A reload can move the entry onto a compile no other entry carries, and
     // charges the views it reopened, once their predecessors are retired.
     this.fit(entry);
-    this.observers.onReload?.(entry, sessions, cause, loaded.kind);
+    this.observers.onReload?.(entry, sessions, cause, loaded.kind, served);
   }
 
   get size(): number {
