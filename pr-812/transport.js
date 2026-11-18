@@ -50966,7 +50966,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.2";
+var PACKAGE_VERSION = "1.232.3";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -71286,18 +71286,19 @@ function madeOnce(folder) {
     if (!st.isDirectory()) throw new Error(`${folder} is not a folder`);
   }
 }
+var CAUSE_OF = {
+  refused: "refused",
+  failed: "error"
+};
 function faultOf(watched) {
   const { health, deafness, statFailure, key } = watched;
   if (health.kind === "unusable")
     return {
       cause: "unusable",
-      text: `${key.folder} ${health.reason}; retried when the config next loads or file events catch up`
+      text: `${key.folder} ${health.reason}`
     };
   if (deafness !== null)
-    return {
-      cause: deafness.kind === "refused" ? "refused" : "error",
-      text: deafnessLine(deafness)
-    };
+    return { cause: CAUSE_OF[deafness.kind], text: deafnessLine(deafness) };
   if (statFailure !== null)
     return { cause: "error", text: `${key.folder} ${statFailure}` };
   return null;
@@ -71365,9 +71366,8 @@ var ManagedStorage = class {
   // another folder now, opens its new generation's watch before any old one
   // closes, and its held files are re-read, since what they read before came
   // from the path unwatched.
-  kept(folder) {
+  kept(folder, found2 = this.found(folder)) {
     const was = this.watched.get(folder);
-    const found2 = this.found(folder);
     if (was !== void 0 && current(was, found2)) return;
     const generation = this.generations++;
     if (was !== void 0)
@@ -71554,26 +71554,27 @@ var ManagedStorage = class {
     const was = faultOf(watched);
     update();
     const now2 = faultOf(watched);
-    if (was?.cause === now2?.cause && was?.text === now2?.text) return;
+    if (compareStructural(was, now2)) return;
     const { key } = watched;
     const at = `folder=${valueOf(key.folder)} generation=${key.generation}`;
-    if (now2 === null)
-      this.logger(
-        "info",
-        `plugin storage fault cleared ${at} cause=${was.cause}`
-      );
-    else {
+    if (now2 !== null) {
       this.faultCounts[now2.cause]++;
       this.logger(
         "warn",
         `plugin storage fault ${at} cause=${now2.cause} reason=${JSON.stringify(now2.text)}`
       );
-    }
+    } else if (was !== null)
+      this.logger(
+        "info",
+        `plugin storage fault cleared ${at} cause=${was.cause}`
+      );
     this.sessions.changed((f) => f.folder === key.folder);
   }
   // [LAW:one-source-of-truth] What the delivery owner says reaches every
   // folder. Each period opens the next generation of every folder lost before
-  // it, and judges every watched one against the disk: the event naming a
+  // it, makes again every folder that could not be made and opens its next
+  // generation once it is there, and judges every watched one against the
+  // disk: the event naming a
   // removed folder can drop without a stall. Every change of delivery and
   // every catch-up re-reads every held file, so no lane keeps a stall after
   // delivery moves on, and a file written during a span lands; a catch-up
@@ -71582,10 +71583,15 @@ var ManagedStorage = class {
   noticed(notice) {
     switch (notice.kind) {
       case "period":
-        for (const watched of [...this.watched.values()])
-          if (watched.health.kind === "lost") this.kept(watched.key.folder);
-          else this.judged(watched, () => {
+        for (const watched of [...this.watched.values()]) {
+          const { folder } = watched.key;
+          if (watched.health.kind === "lost") this.kept(folder);
+          else if (watched.health.kind === "unusable") {
+            const found2 = this.found(folder);
+            if (found2.kind === "found") this.kept(folder, found2);
+          } else this.judged(watched, () => {
           });
+        }
         return;
       case "caught-up":
         for (const watched of [...this.watched.values()])
@@ -71607,7 +71613,7 @@ var ManagedStorage = class {
   // be checked.
   standing(folder) {
     const watched = this.watched.get(folder);
-    if (watched === void 0 || watched.health.kind === "closed") return null;
+    if (watched === void 0) return null;
     const fault = faultOf(watched);
     if (fault !== null) return `cannot refresh: ${fault.text}`;
     const stall = stallReason(this.fileEvents.delivery());
