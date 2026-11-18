@@ -2410,6 +2410,414 @@ var init_globals = __esm({
   }
 });
 
+// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
+var require_path_browserify = __commonJS({
+  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports2, module2) {
+    "use strict";
+    init_globals();
+    function assertPath(path46) {
+      if (typeof path46 !== "string") {
+        throw new TypeError("Path must be a string. Received " + JSON.stringify(path46));
+      }
+    }
+    function normalizeStringPosix(path46, allowAboveRoot) {
+      var res = "";
+      var lastSegmentLength = 0;
+      var lastSlash = -1;
+      var dots = 0;
+      var code2;
+      for (var i2 = 0; i2 <= path46.length; ++i2) {
+        if (i2 < path46.length)
+          code2 = path46.charCodeAt(i2);
+        else if (code2 === 47)
+          break;
+        else
+          code2 = 47;
+        if (code2 === 47) {
+          if (lastSlash === i2 - 1 || dots === 1) {
+          } else if (lastSlash !== i2 - 1 && dots === 2) {
+            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
+              if (res.length > 2) {
+                var lastSlashIndex = res.lastIndexOf("/");
+                if (lastSlashIndex !== res.length - 1) {
+                  if (lastSlashIndex === -1) {
+                    res = "";
+                    lastSegmentLength = 0;
+                  } else {
+                    res = res.slice(0, lastSlashIndex);
+                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
+                  }
+                  lastSlash = i2;
+                  dots = 0;
+                  continue;
+                }
+              } else if (res.length === 2 || res.length === 1) {
+                res = "";
+                lastSegmentLength = 0;
+                lastSlash = i2;
+                dots = 0;
+                continue;
+              }
+            }
+            if (allowAboveRoot) {
+              if (res.length > 0)
+                res += "/..";
+              else
+                res = "..";
+              lastSegmentLength = 2;
+            }
+          } else {
+            if (res.length > 0)
+              res += "/" + path46.slice(lastSlash + 1, i2);
+            else
+              res = path46.slice(lastSlash + 1, i2);
+            lastSegmentLength = i2 - lastSlash - 1;
+          }
+          lastSlash = i2;
+          dots = 0;
+        } else if (code2 === 46 && dots !== -1) {
+          ++dots;
+        } else {
+          dots = -1;
+        }
+      }
+      return res;
+    }
+    function _format(sep2, pathObject) {
+      var dir = pathObject.dir || pathObject.root;
+      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
+      if (!dir) {
+        return base;
+      }
+      if (dir === pathObject.root) {
+        return dir + base;
+      }
+      return dir + sep2 + base;
+    }
+    var posix = {
+      // path.resolve([from ...], to)
+      resolve: function resolve() {
+        var resolvedPath = "";
+        var resolvedAbsolute = false;
+        var cwd2;
+        for (var i2 = arguments.length - 1; i2 >= -1 && !resolvedAbsolute; i2--) {
+          var path46;
+          if (i2 >= 0)
+            path46 = arguments[i2];
+          else {
+            if (cwd2 === void 0)
+              cwd2 = process.cwd();
+            path46 = cwd2;
+          }
+          assertPath(path46);
+          if (path46.length === 0) {
+            continue;
+          }
+          resolvedPath = path46 + "/" + resolvedPath;
+          resolvedAbsolute = path46.charCodeAt(0) === 47;
+        }
+        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
+        if (resolvedAbsolute) {
+          if (resolvedPath.length > 0)
+            return "/" + resolvedPath;
+          else
+            return "/";
+        } else if (resolvedPath.length > 0) {
+          return resolvedPath;
+        } else {
+          return ".";
+        }
+      },
+      normalize: function normalize(path46) {
+        assertPath(path46);
+        if (path46.length === 0) return ".";
+        var isAbsolute4 = path46.charCodeAt(0) === 47;
+        var trailingSeparator = path46.charCodeAt(path46.length - 1) === 47;
+        path46 = normalizeStringPosix(path46, !isAbsolute4);
+        if (path46.length === 0 && !isAbsolute4) path46 = ".";
+        if (path46.length > 0 && trailingSeparator) path46 += "/";
+        if (isAbsolute4) return "/" + path46;
+        return path46;
+      },
+      isAbsolute: function isAbsolute4(path46) {
+        assertPath(path46);
+        return path46.length > 0 && path46.charCodeAt(0) === 47;
+      },
+      join: function join4() {
+        if (arguments.length === 0)
+          return ".";
+        var joined;
+        for (var i2 = 0; i2 < arguments.length; ++i2) {
+          var arg = arguments[i2];
+          assertPath(arg);
+          if (arg.length > 0) {
+            if (joined === void 0)
+              joined = arg;
+            else
+              joined += "/" + arg;
+          }
+        }
+        if (joined === void 0)
+          return ".";
+        return posix.normalize(joined);
+      },
+      relative: function relative(from, to) {
+        assertPath(from);
+        assertPath(to);
+        if (from === to) return "";
+        from = posix.resolve(from);
+        to = posix.resolve(to);
+        if (from === to) return "";
+        var fromStart = 1;
+        for (; fromStart < from.length; ++fromStart) {
+          if (from.charCodeAt(fromStart) !== 47)
+            break;
+        }
+        var fromEnd = from.length;
+        var fromLen = fromEnd - fromStart;
+        var toStart = 1;
+        for (; toStart < to.length; ++toStart) {
+          if (to.charCodeAt(toStart) !== 47)
+            break;
+        }
+        var toEnd = to.length;
+        var toLen = toEnd - toStart;
+        var length = fromLen < toLen ? fromLen : toLen;
+        var lastCommonSep = -1;
+        var i2 = 0;
+        for (; i2 <= length; ++i2) {
+          if (i2 === length) {
+            if (toLen > length) {
+              if (to.charCodeAt(toStart + i2) === 47) {
+                return to.slice(toStart + i2 + 1);
+              } else if (i2 === 0) {
+                return to.slice(toStart + i2);
+              }
+            } else if (fromLen > length) {
+              if (from.charCodeAt(fromStart + i2) === 47) {
+                lastCommonSep = i2;
+              } else if (i2 === 0) {
+                lastCommonSep = 0;
+              }
+            }
+            break;
+          }
+          var fromCode = from.charCodeAt(fromStart + i2);
+          var toCode = to.charCodeAt(toStart + i2);
+          if (fromCode !== toCode)
+            break;
+          else if (fromCode === 47)
+            lastCommonSep = i2;
+        }
+        var out = "";
+        for (i2 = fromStart + lastCommonSep + 1; i2 <= fromEnd; ++i2) {
+          if (i2 === fromEnd || from.charCodeAt(i2) === 47) {
+            if (out.length === 0)
+              out += "..";
+            else
+              out += "/..";
+          }
+        }
+        if (out.length > 0)
+          return out + to.slice(toStart + lastCommonSep);
+        else {
+          toStart += lastCommonSep;
+          if (to.charCodeAt(toStart) === 47)
+            ++toStart;
+          return to.slice(toStart);
+        }
+      },
+      _makeLong: function _makeLong(path46) {
+        return path46;
+      },
+      dirname: function dirname3(path46) {
+        assertPath(path46);
+        if (path46.length === 0) return ".";
+        var code2 = path46.charCodeAt(0);
+        var hasRoot = code2 === 47;
+        var end = -1;
+        var matchedSlash = true;
+        for (var i2 = path46.length - 1; i2 >= 1; --i2) {
+          code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              end = i2;
+              break;
+            }
+          } else {
+            matchedSlash = false;
+          }
+        }
+        if (end === -1) return hasRoot ? "/" : ".";
+        if (hasRoot && end === 1) return "//";
+        return path46.slice(0, end);
+      },
+      basename: function basename2(path46, ext) {
+        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
+        assertPath(path46);
+        var start = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i2;
+        if (ext !== void 0 && ext.length > 0 && ext.length <= path46.length) {
+          if (ext.length === path46.length && ext === path46) return "";
+          var extIdx = ext.length - 1;
+          var firstNonSlashEnd = -1;
+          for (i2 = path46.length - 1; i2 >= 0; --i2) {
+            var code2 = path46.charCodeAt(i2);
+            if (code2 === 47) {
+              if (!matchedSlash) {
+                start = i2 + 1;
+                break;
+              }
+            } else {
+              if (firstNonSlashEnd === -1) {
+                matchedSlash = false;
+                firstNonSlashEnd = i2 + 1;
+              }
+              if (extIdx >= 0) {
+                if (code2 === ext.charCodeAt(extIdx)) {
+                  if (--extIdx === -1) {
+                    end = i2;
+                  }
+                } else {
+                  extIdx = -1;
+                  end = firstNonSlashEnd;
+                }
+              }
+            }
+          }
+          if (start === end) end = firstNonSlashEnd;
+          else if (end === -1) end = path46.length;
+          return path46.slice(start, end);
+        } else {
+          for (i2 = path46.length - 1; i2 >= 0; --i2) {
+            if (path46.charCodeAt(i2) === 47) {
+              if (!matchedSlash) {
+                start = i2 + 1;
+                break;
+              }
+            } else if (end === -1) {
+              matchedSlash = false;
+              end = i2 + 1;
+            }
+          }
+          if (end === -1) return "";
+          return path46.slice(start, end);
+        }
+      },
+      extname: function extname(path46) {
+        assertPath(path46);
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var preDotState = 0;
+        for (var i2 = path46.length - 1; i2 >= 0; --i2) {
+          var code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              startPart = i2 + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i2 + 1;
+          }
+          if (code2 === 46) {
+            if (startDot === -1)
+              startDot = i2;
+            else if (preDotState !== 1)
+              preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          return "";
+        }
+        return path46.slice(startDot, end);
+      },
+      format: function format(pathObject) {
+        if (pathObject === null || typeof pathObject !== "object") {
+          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
+        }
+        return _format("/", pathObject);
+      },
+      parse: function parse4(path46) {
+        assertPath(path46);
+        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
+        if (path46.length === 0) return ret;
+        var code2 = path46.charCodeAt(0);
+        var isAbsolute4 = code2 === 47;
+        var start;
+        if (isAbsolute4) {
+          ret.root = "/";
+          start = 1;
+        } else {
+          start = 0;
+        }
+        var startDot = -1;
+        var startPart = 0;
+        var end = -1;
+        var matchedSlash = true;
+        var i2 = path46.length - 1;
+        var preDotState = 0;
+        for (; i2 >= start; --i2) {
+          code2 = path46.charCodeAt(i2);
+          if (code2 === 47) {
+            if (!matchedSlash) {
+              startPart = i2 + 1;
+              break;
+            }
+            continue;
+          }
+          if (end === -1) {
+            matchedSlash = false;
+            end = i2 + 1;
+          }
+          if (code2 === 46) {
+            if (startDot === -1) startDot = i2;
+            else if (preDotState !== 1) preDotState = 1;
+          } else if (startDot !== -1) {
+            preDotState = -1;
+          }
+        }
+        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
+        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
+        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
+          if (end !== -1) {
+            if (startPart === 0 && isAbsolute4) ret.base = ret.name = path46.slice(1, end);
+            else ret.base = ret.name = path46.slice(startPart, end);
+          }
+        } else {
+          if (startPart === 0 && isAbsolute4) {
+            ret.name = path46.slice(1, startDot);
+            ret.base = path46.slice(1, end);
+          } else {
+            ret.name = path46.slice(startPart, startDot);
+            ret.base = path46.slice(startPart, end);
+          }
+          ret.ext = path46.slice(startDot, end);
+        }
+        if (startPart > 0) ret.dir = path46.slice(0, startPart - 1);
+        else if (isAbsolute4) ret.dir = "/";
+        return ret;
+      },
+      sep: "/",
+      delimiter: ":",
+      win32: null,
+      posix: null
+    };
+    posix.posix = posix;
+    module2.exports = posix;
+  }
+});
+
 // site/shims/url.ts
 var url_exports = {};
 __export(url_exports, {
@@ -3805,414 +4213,6 @@ var init_tslib_es6 = __esm({
       __disposeResources,
       __rewriteRelativeImportExtension
     };
-  }
-});
-
-// node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js
-var require_path_browserify = __commonJS({
-  "node_modules/.pnpm/path-browserify@1.0.1/node_modules/path-browserify/index.js"(exports2, module2) {
-    "use strict";
-    init_globals();
-    function assertPath(path46) {
-      if (typeof path46 !== "string") {
-        throw new TypeError("Path must be a string. Received " + JSON.stringify(path46));
-      }
-    }
-    function normalizeStringPosix(path46, allowAboveRoot) {
-      var res = "";
-      var lastSegmentLength = 0;
-      var lastSlash = -1;
-      var dots = 0;
-      var code2;
-      for (var i2 = 0; i2 <= path46.length; ++i2) {
-        if (i2 < path46.length)
-          code2 = path46.charCodeAt(i2);
-        else if (code2 === 47)
-          break;
-        else
-          code2 = 47;
-        if (code2 === 47) {
-          if (lastSlash === i2 - 1 || dots === 1) {
-          } else if (lastSlash !== i2 - 1 && dots === 2) {
-            if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== 46 || res.charCodeAt(res.length - 2) !== 46) {
-              if (res.length > 2) {
-                var lastSlashIndex = res.lastIndexOf("/");
-                if (lastSlashIndex !== res.length - 1) {
-                  if (lastSlashIndex === -1) {
-                    res = "";
-                    lastSegmentLength = 0;
-                  } else {
-                    res = res.slice(0, lastSlashIndex);
-                    lastSegmentLength = res.length - 1 - res.lastIndexOf("/");
-                  }
-                  lastSlash = i2;
-                  dots = 0;
-                  continue;
-                }
-              } else if (res.length === 2 || res.length === 1) {
-                res = "";
-                lastSegmentLength = 0;
-                lastSlash = i2;
-                dots = 0;
-                continue;
-              }
-            }
-            if (allowAboveRoot) {
-              if (res.length > 0)
-                res += "/..";
-              else
-                res = "..";
-              lastSegmentLength = 2;
-            }
-          } else {
-            if (res.length > 0)
-              res += "/" + path46.slice(lastSlash + 1, i2);
-            else
-              res = path46.slice(lastSlash + 1, i2);
-            lastSegmentLength = i2 - lastSlash - 1;
-          }
-          lastSlash = i2;
-          dots = 0;
-        } else if (code2 === 46 && dots !== -1) {
-          ++dots;
-        } else {
-          dots = -1;
-        }
-      }
-      return res;
-    }
-    function _format(sep2, pathObject) {
-      var dir = pathObject.dir || pathObject.root;
-      var base = pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
-      if (!dir) {
-        return base;
-      }
-      if (dir === pathObject.root) {
-        return dir + base;
-      }
-      return dir + sep2 + base;
-    }
-    var posix = {
-      // path.resolve([from ...], to)
-      resolve: function resolve() {
-        var resolvedPath = "";
-        var resolvedAbsolute = false;
-        var cwd2;
-        for (var i2 = arguments.length - 1; i2 >= -1 && !resolvedAbsolute; i2--) {
-          var path46;
-          if (i2 >= 0)
-            path46 = arguments[i2];
-          else {
-            if (cwd2 === void 0)
-              cwd2 = process.cwd();
-            path46 = cwd2;
-          }
-          assertPath(path46);
-          if (path46.length === 0) {
-            continue;
-          }
-          resolvedPath = path46 + "/" + resolvedPath;
-          resolvedAbsolute = path46.charCodeAt(0) === 47;
-        }
-        resolvedPath = normalizeStringPosix(resolvedPath, !resolvedAbsolute);
-        if (resolvedAbsolute) {
-          if (resolvedPath.length > 0)
-            return "/" + resolvedPath;
-          else
-            return "/";
-        } else if (resolvedPath.length > 0) {
-          return resolvedPath;
-        } else {
-          return ".";
-        }
-      },
-      normalize: function normalize(path46) {
-        assertPath(path46);
-        if (path46.length === 0) return ".";
-        var isAbsolute4 = path46.charCodeAt(0) === 47;
-        var trailingSeparator = path46.charCodeAt(path46.length - 1) === 47;
-        path46 = normalizeStringPosix(path46, !isAbsolute4);
-        if (path46.length === 0 && !isAbsolute4) path46 = ".";
-        if (path46.length > 0 && trailingSeparator) path46 += "/";
-        if (isAbsolute4) return "/" + path46;
-        return path46;
-      },
-      isAbsolute: function isAbsolute4(path46) {
-        assertPath(path46);
-        return path46.length > 0 && path46.charCodeAt(0) === 47;
-      },
-      join: function join4() {
-        if (arguments.length === 0)
-          return ".";
-        var joined;
-        for (var i2 = 0; i2 < arguments.length; ++i2) {
-          var arg = arguments[i2];
-          assertPath(arg);
-          if (arg.length > 0) {
-            if (joined === void 0)
-              joined = arg;
-            else
-              joined += "/" + arg;
-          }
-        }
-        if (joined === void 0)
-          return ".";
-        return posix.normalize(joined);
-      },
-      relative: function relative(from, to) {
-        assertPath(from);
-        assertPath(to);
-        if (from === to) return "";
-        from = posix.resolve(from);
-        to = posix.resolve(to);
-        if (from === to) return "";
-        var fromStart = 1;
-        for (; fromStart < from.length; ++fromStart) {
-          if (from.charCodeAt(fromStart) !== 47)
-            break;
-        }
-        var fromEnd = from.length;
-        var fromLen = fromEnd - fromStart;
-        var toStart = 1;
-        for (; toStart < to.length; ++toStart) {
-          if (to.charCodeAt(toStart) !== 47)
-            break;
-        }
-        var toEnd = to.length;
-        var toLen = toEnd - toStart;
-        var length = fromLen < toLen ? fromLen : toLen;
-        var lastCommonSep = -1;
-        var i2 = 0;
-        for (; i2 <= length; ++i2) {
-          if (i2 === length) {
-            if (toLen > length) {
-              if (to.charCodeAt(toStart + i2) === 47) {
-                return to.slice(toStart + i2 + 1);
-              } else if (i2 === 0) {
-                return to.slice(toStart + i2);
-              }
-            } else if (fromLen > length) {
-              if (from.charCodeAt(fromStart + i2) === 47) {
-                lastCommonSep = i2;
-              } else if (i2 === 0) {
-                lastCommonSep = 0;
-              }
-            }
-            break;
-          }
-          var fromCode = from.charCodeAt(fromStart + i2);
-          var toCode = to.charCodeAt(toStart + i2);
-          if (fromCode !== toCode)
-            break;
-          else if (fromCode === 47)
-            lastCommonSep = i2;
-        }
-        var out = "";
-        for (i2 = fromStart + lastCommonSep + 1; i2 <= fromEnd; ++i2) {
-          if (i2 === fromEnd || from.charCodeAt(i2) === 47) {
-            if (out.length === 0)
-              out += "..";
-            else
-              out += "/..";
-          }
-        }
-        if (out.length > 0)
-          return out + to.slice(toStart + lastCommonSep);
-        else {
-          toStart += lastCommonSep;
-          if (to.charCodeAt(toStart) === 47)
-            ++toStart;
-          return to.slice(toStart);
-        }
-      },
-      _makeLong: function _makeLong(path46) {
-        return path46;
-      },
-      dirname: function dirname3(path46) {
-        assertPath(path46);
-        if (path46.length === 0) return ".";
-        var code2 = path46.charCodeAt(0);
-        var hasRoot = code2 === 47;
-        var end = -1;
-        var matchedSlash = true;
-        for (var i2 = path46.length - 1; i2 >= 1; --i2) {
-          code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              end = i2;
-              break;
-            }
-          } else {
-            matchedSlash = false;
-          }
-        }
-        if (end === -1) return hasRoot ? "/" : ".";
-        if (hasRoot && end === 1) return "//";
-        return path46.slice(0, end);
-      },
-      basename: function basename2(path46, ext) {
-        if (ext !== void 0 && typeof ext !== "string") throw new TypeError('"ext" argument must be a string');
-        assertPath(path46);
-        var start = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i2;
-        if (ext !== void 0 && ext.length > 0 && ext.length <= path46.length) {
-          if (ext.length === path46.length && ext === path46) return "";
-          var extIdx = ext.length - 1;
-          var firstNonSlashEnd = -1;
-          for (i2 = path46.length - 1; i2 >= 0; --i2) {
-            var code2 = path46.charCodeAt(i2);
-            if (code2 === 47) {
-              if (!matchedSlash) {
-                start = i2 + 1;
-                break;
-              }
-            } else {
-              if (firstNonSlashEnd === -1) {
-                matchedSlash = false;
-                firstNonSlashEnd = i2 + 1;
-              }
-              if (extIdx >= 0) {
-                if (code2 === ext.charCodeAt(extIdx)) {
-                  if (--extIdx === -1) {
-                    end = i2;
-                  }
-                } else {
-                  extIdx = -1;
-                  end = firstNonSlashEnd;
-                }
-              }
-            }
-          }
-          if (start === end) end = firstNonSlashEnd;
-          else if (end === -1) end = path46.length;
-          return path46.slice(start, end);
-        } else {
-          for (i2 = path46.length - 1; i2 >= 0; --i2) {
-            if (path46.charCodeAt(i2) === 47) {
-              if (!matchedSlash) {
-                start = i2 + 1;
-                break;
-              }
-            } else if (end === -1) {
-              matchedSlash = false;
-              end = i2 + 1;
-            }
-          }
-          if (end === -1) return "";
-          return path46.slice(start, end);
-        }
-      },
-      extname: function extname(path46) {
-        assertPath(path46);
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var preDotState = 0;
-        for (var i2 = path46.length - 1; i2 >= 0; --i2) {
-          var code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              startPart = i2 + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i2 + 1;
-          }
-          if (code2 === 46) {
-            if (startDot === -1)
-              startDot = i2;
-            else if (preDotState !== 1)
-              preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          return "";
-        }
-        return path46.slice(startDot, end);
-      },
-      format: function format(pathObject) {
-        if (pathObject === null || typeof pathObject !== "object") {
-          throw new TypeError('The "pathObject" argument must be of type Object. Received type ' + typeof pathObject);
-        }
-        return _format("/", pathObject);
-      },
-      parse: function parse4(path46) {
-        assertPath(path46);
-        var ret = { root: "", dir: "", base: "", ext: "", name: "" };
-        if (path46.length === 0) return ret;
-        var code2 = path46.charCodeAt(0);
-        var isAbsolute4 = code2 === 47;
-        var start;
-        if (isAbsolute4) {
-          ret.root = "/";
-          start = 1;
-        } else {
-          start = 0;
-        }
-        var startDot = -1;
-        var startPart = 0;
-        var end = -1;
-        var matchedSlash = true;
-        var i2 = path46.length - 1;
-        var preDotState = 0;
-        for (; i2 >= start; --i2) {
-          code2 = path46.charCodeAt(i2);
-          if (code2 === 47) {
-            if (!matchedSlash) {
-              startPart = i2 + 1;
-              break;
-            }
-            continue;
-          }
-          if (end === -1) {
-            matchedSlash = false;
-            end = i2 + 1;
-          }
-          if (code2 === 46) {
-            if (startDot === -1) startDot = i2;
-            else if (preDotState !== 1) preDotState = 1;
-          } else if (startDot !== -1) {
-            preDotState = -1;
-          }
-        }
-        if (startDot === -1 || end === -1 || // We saw a non-dot character immediately before the dot
-        preDotState === 0 || // The (right-most) trimmed path component is exactly '..'
-        preDotState === 1 && startDot === end - 1 && startDot === startPart + 1) {
-          if (end !== -1) {
-            if (startPart === 0 && isAbsolute4) ret.base = ret.name = path46.slice(1, end);
-            else ret.base = ret.name = path46.slice(startPart, end);
-          }
-        } else {
-          if (startPart === 0 && isAbsolute4) {
-            ret.name = path46.slice(1, startDot);
-            ret.base = path46.slice(1, end);
-          } else {
-            ret.name = path46.slice(startPart, startDot);
-            ret.base = path46.slice(startPart, end);
-          }
-          ret.ext = path46.slice(startDot, end);
-        }
-        if (startPart > 0) ret.dir = path46.slice(0, startPart - 1);
-        else if (isAbsolute4) ret.dir = "/";
-        return ret;
-      },
-      sep: "/",
-      delimiter: ":",
-      win32: null,
-      posix: null
-    };
-    posix.posix = posix;
-    module2.exports = posix;
   }
 });
 
@@ -28252,6 +28252,146 @@ var require_hdrhistogram_umd = __commonJS({
 // site/transport.ts
 init_globals();
 
+// src/daemon/foundations/session-env.ts
+init_globals();
+
+// src/utils/outcome.ts
+init_globals();
+function ok(value) {
+  return { kind: "ok", value };
+}
+var ABSENT = { kind: "absent" };
+function failed(reason, failedAt) {
+  return { kind: "failed", reason, failedAt };
+}
+function orElse(outcome, fallback) {
+  return outcome?.kind === "ok" ? outcome.value : fallback;
+}
+var PENDINGS = {
+  unread: Object.freeze({ kind: "pending", why: "unread" }),
+  superseded: Object.freeze({ kind: "pending", why: "superseded" })
+};
+function pendingOf(why2) {
+  return PENDINGS[why2];
+}
+function isPending(value) {
+  return typeof value === "object" && value !== null && value.kind === "pending";
+}
+
+// src/claude-settings.ts
+init_globals();
+var import_node_path = __toESM(require_path_browserify(), 1);
+var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function claudeConfigDir(detected, home) {
+  return detected ?? import_node_path.default.join(home, ".claude");
+}
+function claudeSettingsPath(configDir) {
+  return import_node_path.default.join(configDir, "settings.json");
+}
+function claudeManagedSettingsDir(platform3) {
+  switch (platform3) {
+    case "darwin":
+      return "/Library/Application Support/ClaudeCode";
+    case "win32":
+      return "C:\\Program Files\\ClaudeCode";
+    default:
+      return "/etc/claude-code";
+  }
+}
+var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process.platform);
+var projectLocalSettingsFile = (projectDir) => import_node_path.default.join(projectDir, ".claude", "settings.local.json");
+var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+
+// src/utils/plain.ts
+init_globals();
+
+// site/shims/crypto.ts
+init_globals();
+var import_buffer2 = __toESM(require_buffer(), 1);
+function fnv(text4) {
+  let h = 2166136261;
+  for (let i2 = 0; i2 < text4.length; i2++) h = Math.imul(h ^ text4.charCodeAt(i2), 16777619) >>> 0;
+  return h.toString(16).padStart(8, "0").repeat(8);
+}
+function createHash(_alg) {
+  let acc = "";
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest(_enc2) {
+      return fnv(acc);
+    }
+  };
+  return h;
+}
+function createHmac(_alg, key) {
+  let acc = import_buffer2.Buffer.from(key).toString("hex");
+  const h = {
+    update(d) {
+      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
+      return h;
+    },
+    digest() {
+      return import_buffer2.Buffer.from(fnv(acc), "hex");
+    }
+  };
+  return h;
+}
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
+  return a.every((byte, i2) => byte === b[i2]);
+}
+var randomUUID = () => globalThis.crypto.randomUUID();
+var randomBytes = (n) => import_buffer2.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
+var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
+
+// src/utils/plain.ts
+function ownValue(record2, key) {
+  return Object.hasOwn(record2, key) ? record2[key] : void 0;
+}
+function digestOf(value) {
+  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+}
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
+    );
+  }
+  return value;
+}
+
+// src/daemon/foundations/session-env.ts
+function plainEnvironment(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).flatMap(
+      ([name, value]) => value === void 0 ? [] : [[name, value]]
+    )
+  );
+}
+function variableOf(env2, name) {
+  const value = ownValue(env2, name);
+  return value === void 0 ? ABSENT : ok(value);
+}
+var NOT_HEARD = {
+  kind: "failed",
+  reason: "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps"
+};
+function sessionEnvironment(reported, facts) {
+  const { [CLAUDE_CONFIG_DIR_ENV]: _reportedDir, ...rest2 } = reported;
+  return {
+    ...rest2,
+    CLAUDE_CODE_SESSION_ID: facts.sessionId,
+    CLAUDE_PROJECT_DIR: facts.projectDir,
+    ...facts.claudeConfigDir !== void 0 && {
+      [CLAUDE_CONFIG_DIR_ENV]: facts.claudeConfigDir
+    }
+  };
+}
+
 // src/click/wire.ts
 init_globals();
 init_url();
@@ -28861,7 +29001,7 @@ function checkRateLimit(lastStartAt, category, now2) {
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 function childEnv(scope, opts) {
-  const env2 = { ...scope.inherited };
+  const env2 = { ...opts.environment ?? scope.inherited };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -29616,7 +29756,7 @@ init_globals();
 
 // site/shims/child_process.ts
 init_globals();
-var import_buffer2 = __toESM(require_buffer(), 1);
+var import_buffer3 = __toESM(require_buffer(), 1);
 var import_events2 = __toESM(require_events(), 1);
 var RESIDENT = "resident";
 var programs = /* @__PURE__ */ new Map();
@@ -29628,7 +29768,7 @@ var Stream = class extends import_events2.EventEmitter {
     return this;
   }
   chunk(text4) {
-    this.emit("data", this.encoding === null ? import_buffer2.Buffer.from(text4) : text4);
+    this.emit("data", this.encoding === null ? import_buffer3.Buffer.from(text4) : text4);
   }
   pipe() {
     return this;
@@ -29756,50 +29896,6 @@ init_globals();
 
 // src/click/link-signer.ts
 init_globals();
-
-// site/shims/crypto.ts
-init_globals();
-var import_buffer3 = __toESM(require_buffer(), 1);
-function fnv(text4) {
-  let h = 2166136261;
-  for (let i2 = 0; i2 < text4.length; i2++) h = Math.imul(h ^ text4.charCodeAt(i2), 16777619) >>> 0;
-  return h.toString(16).padStart(8, "0").repeat(8);
-}
-function createHash(_alg) {
-  let acc = "";
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest(_enc2) {
-      return fnv(acc);
-    }
-  };
-  return h;
-}
-function createHmac(_alg, key) {
-  let acc = import_buffer3.Buffer.from(key).toString("hex");
-  const h = {
-    update(d) {
-      acc += typeof d === "string" ? d : new TextDecoder().decode(d);
-      return h;
-    },
-    digest() {
-      return import_buffer3.Buffer.from(fnv(acc), "hex");
-    }
-  };
-  return h;
-}
-function timingSafeEqual(a, b) {
-  if (a.length !== b.length) throw new RangeError("Input buffers must have the same byte length");
-  return a.every((byte, i2) => byte === b[i2]);
-}
-var randomUUID = () => globalThis.crypto.randomUUID();
-var randomBytes = (n) => import_buffer3.Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(n)));
-var crypto_default = { createHash, createHmac, timingSafeEqual, randomUUID, randomBytes };
-
-// src/click/link-signer.ts
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
@@ -29957,7 +30053,7 @@ init_globals();
 
 // src/daemon/session-book.ts
 init_globals();
-var import_node_path = __toESM(require_path_browserify(), 1);
+var import_node_path2 = __toESM(require_path_browserify(), 1);
 
 // src/renderer-interface/request-context.ts
 init_globals();
@@ -30013,7 +30109,7 @@ var SESSION_BOOK_FILE = {
     const origin = originOfRecord(value);
     if (origin === null) return null;
     const { claudeConfigDir: claudeConfigDir2 } = value;
-    if (!(0, import_node_path.isAbsolute)(origin.projectDir) || !(0, import_node_path.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path.isAbsolute)(claudeConfigDir2)))
+    if (!(0, import_node_path2.isAbsolute)(origin.projectDir) || !(0, import_node_path2.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path2.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path2.isAbsolute)(claudeConfigDir2)))
       return null;
     return {
       origin,
@@ -30030,6 +30126,8 @@ var SessionBook = class {
   // [LAW:types-are-the-program] Insertion order is the order each session
   // was last heard in, which the bound drops the oldest of.
   book = /* @__PURE__ */ new Map();
+  // The environment of each session heard since the daemon started.
+  environments = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The file is written only while open:
   // before the load, a save would land over the book the daemon before it
   // flushed, unread; after the close, over the file a next daemon has taken
@@ -30049,8 +30147,9 @@ var SessionBook = class {
   }
   // The session's newest request: what it says the session is, saved when
   // it moved.
-  heard(req) {
+  heard(req, environment) {
     const session = req.hookData.session_id;
+    this.environments.set(session, environment);
     const durable = durableOf(req);
     const held = this.book.get(session);
     this.book.delete(session);
@@ -30067,6 +30166,11 @@ var SessionBook = class {
     const durable = this.book.get(session);
     return durable === void 0 ? null : { session, durable, live: null };
   }
+  // [LAW:one-source-of-truth] The environment a program the host runs for
+  // the session starts from: its newest request's, or why the host has none.
+  environmentOf(session) {
+    return this.environments.get(session) ?? NOT_HEARD;
+  }
   close() {
     this.storage.flush();
     this.phase = "closed";
@@ -30075,13 +30179,14 @@ var SessionBook = class {
     for (const oldest of this.book.keys()) {
       if (this.book.size <= MAX_SESSIONS) break;
       this.book.delete(oldest);
+      this.environments.delete(oldest);
     }
   }
 };
 
 // src/daemon/runs.ts
 init_globals();
-var import_node_path2 = __toESM(require_path_browserify(), 1);
+var import_node_path3 = __toESM(require_path_browserify(), 1);
 
 // src/proc/launcher.ts
 init_globals();
@@ -30170,6 +30275,7 @@ var Runs = class {
   inFlight = /* @__PURE__ */ new Set();
   started = 0;
   failed = 0;
+  refused = 0;
   timedOut = 0;
   closed = false;
   constructor(deps) {
@@ -30181,6 +30287,15 @@ var Runs = class {
   // fresh.
   start(run3) {
     if (this.closed) throw new Error("run owner used after close");
+    const environment = this.deps.environmentOf(run3.session);
+    if (environment.kind === "failed") {
+      this.refused++;
+      const reason = `not run: ${environment.reason}`;
+      return Promise.resolve({
+        outcome: { kind: "failed", reason },
+        said: `program=${valueOf(run3.program)} ended=refused \u2014 ${reason}`
+      });
+    }
     const resumes = run3.refreshes.map(
       (r) => this.deps.supersede(r.folder, run3.session)
     );
@@ -30193,8 +30308,11 @@ var Runs = class {
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path2.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path3.default.resolve(run3.cwd, program) : program,
       args: [...args],
+      // [LAW:single-enforcer] The program's own variables over its
+      // session's environment, laid here for every click's run.
+      environment: environment.value,
       envOverlay: run3.env,
       cwd: run3.cwd,
       timeoutMs: this.timeoutMs,
@@ -30212,6 +30330,7 @@ var Runs = class {
       started: this.started,
       failed: this.failed,
       timedOut: this.timedOut,
+      refused: this.refused,
       running: this.inFlight.size
     };
   }
@@ -30242,7 +30361,7 @@ var Runs = class {
 // src/daemon/paths.ts
 init_globals();
 init_os();
-var import_node_path3 = __toESM(require_path_browserify(), 1);
+var import_node_path4 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/foundations/renderer-name.ts
 init_globals();
@@ -30254,19 +30373,19 @@ function xdgEnv(env2, name) {
   return v && v.length > 0 ? v : void 0;
 }
 function stateDir(host) {
-  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path3.default.join(host.home, ".local", "state");
-  return import_node_path3.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_STATE_HOME") ?? import_node_path4.default.join(host.home, ".local", "state");
+  return import_node_path4.default.join(base, "cc-candybar");
 }
 function cacheDir(host) {
-  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path3.default.join(host.home, ".cache");
-  return import_node_path3.default.join(base, "cc-candybar");
+  const base = xdgEnv(host.env, "XDG_CACHE_HOME") ?? import_node_path4.default.join(host.home, ".cache");
+  return import_node_path4.default.join(base, "cc-candybar");
 }
 function socketPath(host) {
   return host.env.CC_CANDYBAR_SOCKET || defaultSocketPath();
 }
 function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
-  return import_node_path3.default.join("/tmp", `cc-candybar-${uid}`, "socket");
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 function leasePathFor(sockPath) {
   return `${sockPath}.lease`;
@@ -30275,26 +30394,26 @@ function leasePath(host) {
   return leasePathFor(socketPath(host));
 }
 function sessionStatePath(host) {
-  return import_node_path3.default.join(stateDir(host), "session-state.json");
+  return import_node_path4.default.join(stateDir(host), "session-state.json");
 }
 function settingsHistoryPath(host) {
-  return import_node_path3.default.join(stateDir(host), "settings-history.json");
+  return import_node_path4.default.join(stateDir(host), "settings-history.json");
 }
 function daemonRegistryDir(host) {
   const override = host.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
   if (override) return override;
   const uid = os_default.userInfo().uid;
-  return import_node_path3.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
+  return import_node_path4.default.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 var SPAWN_BACKOFF_FILE = "spawn.backoff";
 function spawnBackoffPath(host) {
-  return import_node_path3.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
+  return import_node_path4.default.join(stateDir(host), SPAWN_BACKOFF_FILE);
 }
 function watchProbeDir(host) {
-  return import_node_path3.default.join(stateDir(host), "watch-probe");
+  return import_node_path4.default.join(stateDir(host), "watch-probe");
 }
 function logPath(host) {
-  return import_node_path3.default.join(stateDir(host), "daemon.log");
+  return import_node_path4.default.join(stateDir(host), "daemon.log");
 }
 function daemonPaths(host) {
   return {
@@ -30305,7 +30424,7 @@ function daemonPaths(host) {
     log: logPath(host),
     sessionState: sessionStatePath(host),
     settingsHistory: settingsHistoryPath(host),
-    sessionBook: import_node_path3.default.join(stateDir(host), "session-book.json"),
+    sessionBook: import_node_path4.default.join(stateDir(host), "session-book.json"),
     watchProbe: watchProbeDir(host),
     spawnBackoff: spawnBackoffPath(host)
   };
@@ -30317,21 +30436,21 @@ function profilePaths(paths2, name) {
       settingsHistory: paths2.settingsHistory,
       documents: paths2.state
     };
-  const state = import_node_path3.default.join(paths2.state, "renderers", name, "state");
+  const state = import_node_path4.default.join(paths2.state, "renderers", name, "state");
   return {
-    sessionState: import_node_path3.default.join(state, import_node_path3.default.basename(paths2.sessionState)),
-    settingsHistory: import_node_path3.default.join(state, import_node_path3.default.basename(paths2.settingsHistory)),
+    sessionState: import_node_path4.default.join(state, import_node_path4.default.basename(paths2.sessionState)),
+    settingsHistory: import_node_path4.default.join(state, import_node_path4.default.basename(paths2.settingsHistory)),
     documents: state
   };
 }
 function locations(host) {
   const { env: env2 } = host;
   const xdgDefault = "/usr/local/share:/usr/share";
-  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path3.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
+  const defaultDataDirs = process.platform === "darwin" ? `${import_node_path4.default.join(xdgEnv(env2, "HOMEBREW_PREFIX") ?? "/opt/homebrew", "share")}:${xdgDefault}` : xdgDefault;
   return {
     home: host.home,
-    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path3.default.join(host.home, ".config"),
-    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path3.default.join(host.home, ".local", "share"),
+    configHome: xdgEnv(env2, "XDG_CONFIG_HOME") ?? import_node_path4.default.join(host.home, ".config"),
+    dataHome: xdgEnv(env2, "XDG_DATA_HOME") ?? import_node_path4.default.join(host.home, ".local", "share"),
     dataDirs: (xdgEnv(env2, "XDG_DATA_DIRS") ?? defaultDataDirs).split(":").filter((d) => d !== "")
   };
 }
@@ -30342,29 +30461,6 @@ init_process();
 
 // src/daemon/readings.ts
 init_globals();
-
-// src/utils/outcome.ts
-init_globals();
-function ok(value) {
-  return { kind: "ok", value };
-}
-var ABSENT = { kind: "absent" };
-function failed(reason, failedAt) {
-  return { kind: "failed", reason, failedAt };
-}
-function orElse(outcome, fallback) {
-  return outcome?.kind === "ok" ? outcome.value : fallback;
-}
-var PENDINGS = {
-  unread: Object.freeze({ kind: "pending", why: "unread" }),
-  superseded: Object.freeze({ kind: "pending", why: "superseded" })
-};
-function pendingOf(why2) {
-  return PENDINGS[why2];
-}
-function isPending(value) {
-  return typeof value === "object" && value !== null && value.kind === "pending";
-}
 
 // src/utils/reading.ts
 init_globals();
@@ -34644,6 +34740,7 @@ function settledLane(outcome) {
 
 // src/facts/world-state.ts
 init_globals();
+var UNREAD_ENV = pendingOf("unread");
 var UNREAD_RUN = {
   reading: pendingOf("unread"),
   fault: null
@@ -34666,30 +34763,6 @@ var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
 function stampFailureOf(document) {
   return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
 }
-
-// src/claude-settings.ts
-init_globals();
-var import_node_path4 = __toESM(require_path_browserify(), 1);
-var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
-function claudeConfigDir(detected, home) {
-  return detected ?? import_node_path4.default.join(home, ".claude");
-}
-function claudeSettingsPath(configDir) {
-  return import_node_path4.default.join(configDir, "settings.json");
-}
-function claudeManagedSettingsDir(platform3) {
-  switch (platform3) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-var claudeManagedSettingsDirIn = (env2) => env2.CC_CANDYBAR_CLAUDE_MANAGED_DIR ?? claudeManagedSettingsDir(process.platform);
-var projectLocalSettingsFile = (projectDir) => import_node_path4.default.join(projectDir, ".claude", "settings.local.json");
-var isJsonObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 
 // src/daemon/source-runs.ts
 init_globals();
@@ -35905,14 +35978,18 @@ var Refreshes = class {
 // src/daemon/source-runs.ts
 var SHELL_READ_TIMEOUT_MS = 1e4;
 var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
-function shellReader(launcher, command, cwd2, signal) {
+function shellReader(launcher, read2, env2, signal) {
+  const { command, cwd: cwd2 } = read2;
   return {
-    where: whereOf({ kind: "shell", command, cwd: cwd2 }),
+    where: whereOf(read2),
     read: async () => {
       const r = await launcher.launch({
         bin: "/bin/sh",
         args: ["-c", command],
         cwd: cwd2,
+        // [LAW:one-source-of-truth] Exactly the variables the run's identity
+        // carries, so nothing its digest does not hold can move its output.
+        environment: env2,
         category: "user-shell",
         timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal
@@ -35944,10 +36021,11 @@ function fileReader(filePath2, readMode, signal) {
     }
   };
 }
-function readerOf(launcher, read2, signal) {
+function readerOf(launcher, { run: { identity: identity2 }, env: env2 }, signal) {
+  const { read: read2 } = identity2;
   switch (read2.kind) {
     case "shell":
-      return shellReader(launcher, read2.command, read2.cwd, signal);
+      return shellReader(launcher, read2, env2, signal);
     case "file":
       return fileReader(read2.path, read2.readMode, signal);
   }
@@ -36069,7 +36147,8 @@ var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePa
 var SourceRuns = class {
   byKind;
   watchMgr;
-  // Each watching entry's fault, by digest, for the lanes that read it.
+  // Each watching entry's fault, by its run's digest, for the lanes that read
+  // it.
   faults = observable.map(void 0, {
     deep: false
   });
@@ -36084,16 +36163,22 @@ var SourceRuns = class {
       name: `source.${kind}`,
       scope: "daemon",
       keyOf: (run3) => run3.digest,
-      fields: ({ digest: digest2, identity: identity2 }, holders) => `digest=${shortDigest(digest2)} where=${valueOf(whereOf(identity2.read))} sharedBy=${holders}`,
+      // [LAW:nothing-unseen] Its declaration's digest beside its own, so
+      // the entry is found from the session's subscriptions that name it.
+      fields: ({ digest: digest2, run: run3 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run3.digest)} where=${valueOf(whereOf(run3.identity.read))} sharedBy=${holders}`,
       // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
       // readers through this one function; text/regex/json are three
       // parsers through it.
-      read: async ({ identity: identity2, parser }, signal) => {
-        const reader = readerOf(deps.launcher, identity2.read, signal);
-        return parsed(await reader.read(), parser, reader.where);
+      read: async (run3, signal) => {
+        const reader = readerOf(deps.launcher, run3, signal);
+        return parsed(await reader.read(), run3.run.parser, reader.where);
       },
-      every: ({ identity: { refresh } }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
-      watch: ({ digest: digest2, identity: identity2 }, changed) => {
+      every: ({
+        run: {
+          identity: { refresh }
+        }
+      }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
+      watch: ({ digest: digest2, run: { identity: identity2 } }, changed) => {
         if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
         const unsubscribe = this.watchMgr.subscribe(
           identity2.refresh.path,
@@ -36120,23 +36205,25 @@ var SourceRuns = class {
     this.byKind = { shell: source("shell"), file: source("file") };
   }
   // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // an accepted run's digest, created and read once on its first hold, and
-  // the lane reads it as it stands. A refused run reaches no reader: its lane
-  // answers its refusal for good, and the refusal is its standing fault, so
-  // the bar draws the source's fallback beside a ⚠ that says why.
-  declare(holds2, judged) {
+  // the session's run of an accepted declaration, created and read once on
+  // its first hold, and the lane reads it as it stands. A refused run reaches
+  // no reader: its lane answers its refusal for good, and the refusal is its
+  // standing fault, so the bar draws the source's fallback beside a ⚠ that
+  // says why. A shell run for a session whose environment the host does not
+  // hold is refused the same way: the host's own is never a session's.
+  declare(holds2, judged, environment) {
     const { digest: digest2 } = judged;
-    if (judged.kind === "refused") {
-      const refusal = `refused: ${judged.reason}`;
-      const lane2 = settledLane(failed(refusal, "read"));
-      return { digest: digest2, current: () => lane2.current(), fault: () => refusal };
+    const run3 = sessionRunOf(judged, environment);
+    if (run3.kind === "failed") {
+      const lane2 = settledLane(failed(run3.reason, "read"));
+      return { digest: digest2, current: () => lane2.current(), fault: () => run3.reason };
     }
-    const { run: run3 } = judged;
-    const lane = this.byKind[run3.identity.read.kind].declare(holds2, run3);
+    const held = run3.value;
+    const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
     return {
       digest: digest2,
       current: () => lane.current(),
-      fault: () => this.faults.get(digest2) ?? null
+      fault: () => this.faults.get(held.digest) ?? null
     };
   }
   stats() {
@@ -36153,13 +36240,34 @@ var SourceRuns = class {
     this.watchMgr.dispose();
   }
 };
-function declareRuns(sourceRuns, holds2, runs, take) {
+function declareRuns(sourceRuns, holds2, runs, environment, take) {
   return new Map(
     [...runs].map(([digest2, judged]) => [
       digest2,
-      take(digest2, () => sourceRuns.declare(holds2, judged))
+      take(digest2, () => sourceRuns.declare(holds2, judged, environment))
     ])
   );
+}
+function sessionRunOf(judged, environment) {
+  if (judged.kind === "refused")
+    return { kind: "failed", reason: `refused: ${judged.reason}` };
+  const { run: run3 } = judged;
+  const { read: read2 } = run3.identity;
+  if (read2.kind === "file")
+    return { kind: "ok", value: { digest: run3.digest, run: run3, env: {} } };
+  if (environment.kind === "failed")
+    return { kind: "failed", reason: `not run: ${environment.reason}` };
+  const session = environment.value;
+  const env2 = Object.fromEntries(
+    read2.env.flatMap((name) => {
+      const value = ownValue(session, name);
+      return value === void 0 ? [] : [[name, value]];
+    })
+  );
+  return {
+    kind: "ok",
+    value: { digest: digestOf({ run: run3.digest, env: env2 }), run: run3, env: env2 }
+  };
 }
 
 // src/daemon/readings.ts
@@ -36173,7 +36281,7 @@ function cacheTallyFacts(deps) {
     usage: tally(deps.usageStore.getStats())
   };
 }
-function settledLanes(outcome, { plugins: plugins2, runs, doctor }) {
+function settledLanes(outcome, { plugins: plugins2, runs, env: env2, doctor }) {
   const lane = settledLane(outcome);
   return {
     git: lane,
@@ -36189,6 +36297,7 @@ function settledLanes(outcome, { plugins: plugins2, runs, doctor }) {
         { digest: digest2, current: () => lane.current(), fault: () => null }
       ])
     ),
+    env: new Map(env2.map((name) => [name, lane])),
     doctor: doctorLane(doctor, () => lane)
   };
 }
@@ -36208,6 +36317,7 @@ function gitAt({
   ];
 }
 function declareLanes(owners, holds2, facts, sources) {
+  const { environment } = facts;
   const pane = facts.hints.tmux ?? null;
   const faults = [];
   const declare = (lane, take) => {
@@ -36259,11 +36369,22 @@ function declareLanes(owners, holds2, facts, sources) {
       owners.sourceRuns,
       holds2,
       sources.runs,
+      environment,
       (digest2, take) => ({
         digest: digest2,
         fault: () => null,
         ...declare(`run ${shortDigest(digest2)}`, take)
       })
+    ),
+    // [LAW:one-source-of-truth] Each named variable as the session's
+    // environment holds it: set, unset, or why the host holds none.
+    env: new Map(
+      sources.env.map((name) => [
+        name,
+        settledLane(
+          environment.kind === "failed" ? failed(environment.reason, "read") : variableOf(environment.value, name)
+        )
+      ])
     ),
     doctor: doctorLane(
       sources.doctor,
@@ -36328,6 +36449,7 @@ function readingsOf(inputs, lanes) {
         { reading: lane.current(), fault: lane.fault() }
       ])
     ),
+    env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()])),
     doctor: lanes.doctor.current()
   };
   return {
@@ -49033,7 +49155,7 @@ var msOf = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, collector, clock, closing, log, arrived2, id2, waitEndsAt, facts) {
+async function answerStatusline(host, collector, clock, closing, log, arrived2, environment, id2, waitEndsAt, facts) {
   const req = located(arrived2);
   const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
@@ -49049,7 +49171,7 @@ async function answerStatusline(host, collector, clock, closing, log, arrived2, 
     [["effect", String(effect.id)]]
   );
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
-  const worldState = collector.requested(req);
+  const worldState = collector.requested(req, environment);
   const release4 = collector.holding(session);
   let configured;
   let delivered;
@@ -49419,6 +49541,8 @@ function checkRenderRequest(req, stats, log, home) {
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
     );
   }
+  const env2 = parseReportedEnv(req.env);
+  if (env2.kind === "refused") wireProblems.push(env2.problem);
   const encoding = parseRenderEncoding(req.encoding);
   if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
@@ -49426,7 +49550,7 @@ function checkRenderRequest(req, stats, log, home) {
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok)
+  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || env2.kind === "refused")
     return { ok: false, problems: wireProblems };
   for (const field of report2.unknownTopLevelFields) {
     if (stats.firstSightOfUnknownHookField(field)) {
@@ -49438,10 +49562,19 @@ function checkRenderRequest(req, stats, log, home) {
   }
   const hints = parseClientHints(req);
   const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
+  const { env: _env, ...rest2 } = req;
   return {
     ok: true,
+    environment: env2.kind === "absent" ? { kind: "failed", reason: UNREPORTED } : {
+      kind: "ok",
+      value: sessionEnvironment(env2.env, {
+        sessionId: sessionId2.id,
+        projectDir: req.hookData.workspace.project_dir,
+        claudeConfigDir: hints.claudeConfigDir
+      })
+    },
     req: {
-      ...req,
+      ...rest2,
       hookData: { ...req.hookData, session_id: sessionId2.id },
       deadline,
       encoding: encoding.encoding,
@@ -49455,6 +49588,16 @@ function checkRenderRequest(req, stats, log, home) {
       refusedArgs
     }
   };
+}
+var UNREPORTED = "this session's client sent no environment, so it is older than the daemon; update cc-candybar so its programs can run";
+function parseReportedEnv(raw) {
+  if (raw === void 0) return { kind: "absent" };
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw) || !Object.values(raw).every((value) => typeof value === "string"))
+    return {
+      kind: "refused",
+      problem: "request 'env' is not an object of strings"
+    };
+  return { kind: "reported", env: raw };
 }
 
 // src/daemon/click-handoff.ts
@@ -52287,7 +52430,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       sighted(checked.req, "drawing");
       frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
       if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-        parts.sessionBook.heard(checked.req);
+        parts.sessionBook.heard(checked.req, checked.environment);
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
@@ -52321,6 +52464,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.closing,
       parts.log,
       checked.req,
+      // [LAW:one-source-of-truth] The book's, the newest request's, so a
+      // request that arrived behind a newer one runs nothing in its older
+      // environment.
+      parts.sessionBook.environmentOf(checked.req.hookData.session_id),
       order2,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to
@@ -52900,7 +53047,7 @@ function sourceEntries(root, dir, keep2 = isSourceEntry) {
     return [[rel, entryBytes(p2, st)]];
   });
 }
-function digestOf(entries) {
+function digestOf2(entries) {
   const h = crypto_default.createHash("sha256");
   for (const [rel, bytes] of entries) {
     h.update(rel).update("\0").update(bytes).update("\0");
@@ -52908,11 +53055,11 @@ function digestOf(entries) {
   return h.digest("hex");
 }
 function sourceDigest(srcDir) {
-  return digestOf(sourceEntries(srcDir, srcDir));
+  return digestOf2(sourceEntries(srcDir, srcDir));
 }
 var CRATE_SOURCE = ["Cargo.toml", "Cargo.lock", "src"];
 function crateDigest(crateDir) {
-  return digestOf(
+  return digestOf2(
     sourceEntries(
       crateDir,
       crateDir,
@@ -54411,6 +54558,29 @@ function optionalStringSpec() {
     required: false,
     json: { type: "string" },
     parse: (ctx, path46, field, raw) => optionalStringField(ctx, path46, raw, field)
+  };
+}
+var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function optionalEnvNamesSpec() {
+  return {
+    required: false,
+    json: {
+      type: "array",
+      items: { type: "string", pattern: ENV_NAME.source }
+    },
+    parse: (ctx, path46, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
+        ctx.issues.push({
+          path: `${path46}.${field}`,
+          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
   };
 }
 function optionalBooleanSpec() {
@@ -68576,6 +68746,7 @@ var FILE_FIELDS = {
 };
 var SHELL_FIELDS = {
   command: requireStringSpec(),
+  env: optionalEnvNamesSpec(),
   parse: parseSpec(),
   cache: requireCacheSpec("shell"),
   default: sourceDefaultSpec()
@@ -69366,7 +69537,6 @@ function slashArm(ctx, path46, raw) {
   return { slash: parsed2.line };
 }
 var RUN_KEYS = ["run", "env", "refreshes"];
-var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 function runArm(home) {
   return (ctx, path46, raw) => {
     for (const k of Object.keys(raw)) {
@@ -71653,7 +71823,7 @@ var RuntimeStats = class _RuntimeStats {
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
-      runs: { started: 0, failed: 0, timedOut: 0, running: 0 },
+      runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
       frameFeeds: {
         feeds: 0,
@@ -71886,10 +72056,16 @@ function assembleFacts(prior, session, readings, daemon3, at) {
       ];
     })
   );
+  const env2 = Object.fromEntries(
+    [...lanes.env].map(([name, reading]) => [
+      name,
+      stamp2(prior && ownValue(prior.env, name), reading)
+    ])
+  );
   const doctor = stamp2(prior?.doctor, lanes.doctor);
   const diagnostics = readings.faults;
-  const parts = { builtins, sources, runs, doctor, daemon: daemon3, diagnostics };
-  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && doctor === prior.doctor && compareStructural(
+  const parts = { builtins, sources, runs, env: env2, doctor, daemon: daemon3, diagnostics };
+  if (prior !== void 0 && sameFacts(builtins, prior.builtins) && sameFacts(sources, prior.sources) && sameFacts(runs, prior.runs) && sameFacts(env2, prior.env) && doctor === prior.doctor && compareStructural(
     { daemon: daemon3, diagnostics },
     { daemon: prior.daemon, diagnostics: prior.diagnostics }
   )) {
@@ -72306,10 +72482,11 @@ var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
 var writableOf = ({ doctor }, kept) => doctor.kind === "ok" && doctor.value.kind === "read" ? writableSettingsFiles(doctor.value) : kept;
-var locatorOf = (req) => ({
+var locatorOf = (req, environment) => ({
   hookData: req.hookData,
   cwd: req.cwd,
-  hints: req.hints
+  hints: req.hints,
+  environment
 });
 var sourcesOf2 = (subscriptions, prior) => ({
   plugins: new Map(
@@ -72327,10 +72504,15 @@ var sourcesOf2 = (subscriptions, prior) => ({
       ] : []
     )
   ),
+  env: [
+    ...new Set(
+      subscriptions.flatMap((s) => s.kind === "env" ? [s.name] : [])
+    )
+  ].sort(),
   // A renderer runs one doctor run per session at a time.
   doctor: subscriptions.flatMap((s) => s.kind === "doctor" ? [s.ask] : [])[0] ?? null
 });
-var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && compareStructural(a.doctor, b.doctor);
+var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && a.env.length === b.env.length && a.env.every((name, i2) => b.env[i2] === name) && compareStructural(a.doctor, b.doctor);
 function release3({ stop: stop2, holds: holds2 }) {
   stop2();
   holds2.close();
@@ -72358,8 +72540,8 @@ var Collector = class {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req) {
-    const locator = locatorOf(req);
+  requested(req, environment) {
+    const locator = locatorOf(req, environment);
     const sessionId2 = req.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId2);
@@ -72511,6 +72693,7 @@ var Collector = class {
     const subscriptions = {
       plugins: /* @__PURE__ */ new Map(),
       runs: /* @__PURE__ */ new Map(),
+      env: [],
       doctor: null
     };
     const reader = this.reader({ session, locator, subscriptions });
@@ -74193,13 +74376,11 @@ async function paneOff(tmux3, edge) {
   return open2.length === 0 ? `no bar pane draws ${tmux3.pane}'s bar` : `closed bar pane ${open2.join(", ")}`;
 }
 async function installBand(session, pane, type3, checkout, edge) {
-  const facts = {
-    sessionId: session.sessionId,
-    projectDir: session.projectDir,
-    claudeConfigDir: session.claudeConfigDir ?? void 0
-  };
-  await edge.claude(["plugin", "marketplace", "add", checkout], facts);
-  await edge.claude(["plugin", "install", BAND_PLUGIN], facts);
+  await edge.claude(
+    ["plugin", "marketplace", "add", checkout],
+    session.sessionId
+  );
+  await edge.claude(["plugin", "install", BAND_PLUGIN], session.sessionId);
   const typed = await typeSlash(type3, pane, RELOAD_PLUGINS);
   if (typed.kind === "refused") {
     throw new Error(
@@ -75597,6 +75778,30 @@ function repoQuestions(question, sessionId2, signer) {
 // src/dsl/render.ts
 init_globals();
 
+// src/config/shell-env.ts
+init_globals();
+var SHELL_BASE_ENV = [
+  "HOME",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOGNAME",
+  "PATH",
+  "SHELL",
+  "TMPDIR",
+  "USER",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_DIRS",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_DIRS",
+  "XDG_DATA_HOME",
+  "XDG_RUNTIME_DIR",
+  "XDG_STATE_HOME"
+];
+function shellEnvOf(declared = []) {
+  return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
+}
+
 // src/var-system/sources.ts
 init_globals();
 
@@ -76437,24 +76642,7 @@ function unwrapDocument(name, doc) {
 
 // src/facts/source-identity.ts
 init_globals();
-
-// src/utils/plain.ts
-init_globals();
-function digestOf2(value) {
-  return createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
-}
-function canonical(value) {
-  if (Array.isArray(value)) return value.map(canonical);
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([k, v]) => [k, canonical(v)])
-    );
-  }
-  return value;
-}
-
-// src/facts/source-identity.ts
-var runOf2 = (identity2) => ({ digest: digestOf2(identity2), identity: identity2 });
+var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
 function keyHashOf(value) {
   return crypto_default.createHash("sha256").update(value).digest("hex");
 }
@@ -76497,6 +76685,7 @@ var UNBOUND = {
   },
   read: () => pendingOf("unread"),
   run: () => UNREAD_RUN,
+  env: () => UNREAD_ENV,
   drawnAt: () => {
     throw new PendingValueError(
       "colorCompatibility.effective",
@@ -76560,19 +76749,19 @@ var SourceRegistry = class _SourceRegistry {
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null, env2 = {}) {
+  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
     this.store = store;
     this.defaultEmptyValue = defaultEmptyValue;
     this.parent = parent;
-    this.env = env2;
     this.sessionState = sessionState;
     this.cleanups.push(observe(this.subscriptionsNow, () => {
+    }));
+    this.cleanups.push(observe(this.envNow, () => {
     }));
   }
   store;
   defaultEmptyValue;
   parent;
-  env;
   lastErrors = /* @__PURE__ */ new Map();
   // A cache policy that cannot fire is a STANDING fault, not a read's
   // outcome: a read that succeeds afterwards says nothing about whether the
@@ -76659,6 +76848,18 @@ var SourceRegistry = class _SourceRegistry {
   // The names of this registry's own async sources (shell, file), whose
   // stored values `published` reads.
   sourceNames = observable.array([], { deep: false });
+  // The variables this registry's `env` sources read.
+  envNames = observable.array([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry needs of the session's
+  // environment: each variable once, sorted, so an output is the same
+  // whatever order a config declares in.
+  envNow = computed(
+    () => [...new Set(this.envNames)].sort(),
+    { equals: compareStructural }
+  );
+  envSubscriptions() {
+    return this.envNow.get();
+  }
   // [LAW:one-source-of-truth] What this registry's sources have published, as
   // one value that changes exactly when one of their stored values or
   // standing faults does: the store writes a value only when its own compare
@@ -76693,8 +76894,7 @@ var SourceRegistry = class _SourceRegistry {
       new VariableStore(this.store.clock, this.store),
       this.defaultEmptyValue,
       this.sessionState,
-      this,
-      this.env
+      this
     );
   }
   // [LAW:one-source-of-truth] The registry IS the owner of its store — every
@@ -76779,24 +76979,34 @@ var SourceRegistry = class _SourceRegistry {
       );
     }
   }
-  // env: resolved once at declaration from the registry's environment; box written once, never again.
-  // type is always 'string' — env vars are text by nature.
+  // env: a variable of the session's environment, which the host holds and
+  // hands in as this one variable's value (`InputSource.env`). Pending until
+  // it is handed in; an unset variable is the fallback, with the reason on
+  // the variable. Always a string: env vars are text by nature.
   declareEnv(name, envVar, varDefault) {
-    const raw = this.env[envVar];
-    if (raw !== void 0) {
-      this.store.defineBox(name, "string", raw);
-      return;
-    }
-    const fallback = varDefault !== void 0 ? varDefault : typeof this.defaultEmptyValue === "string" ? this.defaultEmptyValue : "";
-    this.store.defineBox(name, "string", fallback);
-    this.recordError(name, `env var "${envVar}" is not set`);
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    runInAction(() => this.envNames.push(envVar));
+    this.cleanups.push(
+      reaction(
+        () => this.inputs.get().env(envVar),
+        (fact) => {
+          if (fact.kind === "pending") return;
+          const { at: _at, ...outcome } = fact;
+          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
+          this.noteOutcome(name, read2);
+          this.store.setBox(name, orElse(read2, fallback));
+        },
+        { fireImmediately: true }
+      )
+    );
   }
   // ─── Async source kinds ───────────────────────────────────────────────────
   // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
   declareShell(name, command, opts) {
     this.declareSource(
       name,
-      { kind: "shell", command, cwd: opts.cwd },
+      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
       opts.cache,
       opts.parse
     );
@@ -79228,8 +79438,8 @@ var KIND_SCOPE = {
   source: "view",
   shell: "view",
   file: "view",
+  env: "view",
   literal: "directory",
-  env: "directory",
   dropped: "directory"
 };
 var SCOPES = /* @__PURE__ */ new WeakMap();
@@ -79783,6 +79993,7 @@ var ViewParts = class {
       session: () => this.view.get().session,
       read: (path46) => this.inputAt(path46),
       run: (digest2) => this.view.get().run(digest2),
+      env: (name) => this.view.get().env(name),
       drawnAt: () => drawnDepth(this.colorCompatibility())
     });
   }
@@ -80452,6 +80663,7 @@ function declareOne(registry, name, decl, cwd2, derivation) {
     case "shell":
       registry.declareShell(name, decl.command, {
         cwd: cwd2,
+        env: shellEnvOf(decl.env),
         cache: toCachePolicy(decl.cache),
         parse: toSourceParse(decl.parse, decl.default)
       });
@@ -83040,7 +83252,7 @@ function loadConfigSource(path46, source, dflt, ctx, allowedPalettes) {
 }
 var installedMemo = /* @__PURE__ */ new WeakMap();
 function installedLayer(files, ctx, dflt, allowedPalettes) {
-  const key = digestOf2({
+  const key = digestOf({
     palettes: [...allowedPalettes ?? []].sort(),
     files: files.map((f) => ({
       path: f.path,
@@ -83685,11 +83897,11 @@ var RAW_DEFAULT_DSL_CONFIG = {
     // arrived over SSH. All three come through the augmented payload rather
     // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
-    //     DAEMON, which is detached and serves every session for this user at
-    //     once — its `SSH_*` env describes whichever shell happened to spawn
-    //     it. The fact is captured by the live client and carried as a wire
-    //     hint (the `termCols` pattern); the payload is the only honest source.
+    //   • `host.ssh` is the client's judgement over three variables (any of
+    //     `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY` set), carried as a wire
+    //     hint (the `termCols` pattern), so the payload holds one boolean that
+    //     the bar and the doctor read alike; an `env` variable reads one
+    //     string.
     //   • `host.name`/`host.user` are machine facts the daemon reads directly,
     //     so they cost two syscalls instead of a per-render subprocess.
     //
@@ -87750,7 +87962,7 @@ var SettingsHistory = class {
         note(sessionId2, {
           kind: "layer",
           role: files.roleOf(file),
-          digest: digestOf2(file),
+          digest: digestOf(file),
           before,
           after
         });
@@ -88048,7 +88260,7 @@ function stepOf(click3, sessionId2, change, to) {
       what: `session setting "${change.key}"`
     };
   const file = click3.files.pathOf(change.role);
-  if (file === null || digestOf2(file) !== change.digest)
+  if (file === null || digestOf(file) !== change.digest)
     return {
       kind: "moved",
       target: identity(change),
@@ -88112,26 +88324,6 @@ function heldWrites(store) {
       }
       held.clear();
     })
-  };
-}
-
-// src/daemon/foundations/session-env.ts
-init_globals();
-var SESSION_FACT_VARIABLES = [
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_PROJECT_DIR",
-  "CLAUDE_CONFIG_DIR",
-  "TMUX",
-  "TMUX_PANE"
-];
-function sessionEnv(facts) {
-  return {
-    ...Object.fromEntries(SESSION_FACT_VARIABLES.map((name) => [name, null])),
-    CLAUDE_CODE_SESSION_ID: facts.sessionId,
-    CLAUDE_PROJECT_DIR: facts.projectDir,
-    ...facts.claudeConfigDir !== void 0 && {
-      CLAUDE_CONFIG_DIR: facts.claudeConfigDir
-    }
   };
 }
 
@@ -88895,16 +89087,9 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     action: action2,
     program,
     args,
-    // [LAW:single-enforcer] The session's process environment, the action's
-    // own variables over it.
-    env: {
-      ...sessionEnv({
-        sessionId: sid,
-        projectDir: origin.projectDir,
-        claudeConfigDir: contextFor(ctx.context, sid)?.durable.claudeConfigDir
-      }),
-      ...drawn.env
-    },
+    // [LAW:single-enforcer] The action's own variables only: the host lays
+    // them over the session's environment, which no renderer holds.
+    env: drawn.env,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
@@ -89820,6 +90005,9 @@ function sessionSource(deps) {
       // [LAW:types-are-the-program] A digest the document does not carry is a
       // run the host has not read for this session yet.
       run: (digest2) => document().runs[digest2] ?? UNREAD_RUN,
+      // A variable the document does not carry is one the host has not
+      // handed in for this session yet.
+      env: (name) => ownValue(document().env, name) ?? UNREAD_ENV,
       hints: () => compose.read().hints,
       failure: () => stampFailureOf(document()),
       selections: () => draw2.read().effective
@@ -90006,7 +90194,7 @@ function plugins(p2) {
 }
 function loadKey(inputs) {
   const { loaded, chain: chain2 } = inputs;
-  return digestOf2({
+  return digestOf({
     cwd: inputs.cwd,
     chain: {
       layers: chain2.layers,
@@ -90092,8 +90280,7 @@ function buildRenderState(load, deps) {
     store,
     config2.globals.default_empty_value ?? "",
     deps.sessionState,
-    null,
-    deps.env
+    null
   );
   let registration;
   try {
@@ -90276,7 +90463,8 @@ var subscriptionsOf = ({
   ...[...state.sources].map(
     ([source, folder]) => ({ kind: "plugin", source, folder })
   ),
-  ...registry.subscriptions().map((run3) => ({ kind: "run", run: run3 }))
+  ...registry.subscriptions().map((run3) => ({ kind: "run", run: run3 })),
+  ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
 ];
 var RenderCache = class {
   entries = /* @__PURE__ */ new Map();
@@ -90347,7 +90535,7 @@ var RenderCache = class {
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
-    const held = { snapshot, digest: digestOf2(snapshot) };
+    const held = { snapshot, digest: digestOf(snapshot) };
     this.snapshots.set(key, held);
     const entry = this.entries.get(key);
     if (entry !== void 0 && entry.digest !== held.digest)
@@ -90596,8 +90784,9 @@ var RenderCache = class {
     if (view !== void 0) this.retireView(view, "idle");
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
-  // plugin sources its config declares, at their storage folders, and
-  // the runs its `shell` and `file` sources name. Read
+  // plugin sources its config declares, at their storage folders, the runs
+  // its `shell` and `file` sources name, and the variables of the session's
+  // environment its `env` sources read. Read
   // off the views each turn, so a view that opened, moved or closed is the
   // next output's.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's
@@ -91464,7 +91653,6 @@ function mainRendererOf(inputs, host) {
     {
       clock: time.clock,
       locations: inputs.locations,
-      env: inputs.env,
       sessionState,
       log,
       storage: host.storage,
@@ -91743,27 +91931,6 @@ function fileDocument(doctor, write) {
   const file = doctor[write.store];
   return file.update(() => write.value);
 }
-
-// src/renderer-interface/wire.ts
-init_globals();
-function bootEnv(env2) {
-  return Object.fromEntries(
-    Object.entries(env2).flatMap(
-      ([name, value]) => value === void 0 ? [] : [[name, value]]
-    )
-  );
-}
-var REACH_KINDS = {
-  log: "notice",
-  eventAnswered: "notice",
-  storage: { hold: "notice", release: "notice" }
-};
-function reachesOf(table, prefix = "") {
-  return Object.entries(table).flatMap(
-    ([key, value]) => typeof value === "string" ? [`${prefix}${key}`] : reachesOf(value, `${prefix}${key}.`)
-  );
-}
-var REACHES = reachesOf(REACH_KINDS);
 
 // src/daemon/cache/doctor.ts
 init_globals();
@@ -93824,7 +93991,7 @@ var ConfigDiscovery = class {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
     };
-    return { origin, snapshot, digest: digestOf2(snapshot), watch: watch2 };
+    return { origin, snapshot, digest: digestOf(snapshot), watch: watch2 };
   }
   // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a
   // candidate appeared, a link was re-pointed), and which directories the
@@ -93938,7 +94105,6 @@ function createDaemon(inputs) {
         stored: stores.current(),
         linkSigner: linkSigner2,
         locations: locs,
-        env: host.env,
         home: host.home,
         gates,
         memoryLimitBytes: memoryLimitBytes2
@@ -93951,7 +94117,7 @@ function createDaemon(inputs) {
       return {
         stored: stores.current(),
         digest: bundle.digest,
-        host: { ...host, env: bootEnv(host.env) },
+        host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes: memoryLimitBytes2,
         linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
       };
@@ -94012,6 +94178,7 @@ function createDaemon(inputs) {
   const runs = new Runs({
     supersede: (folder, sessionId2) => managedStorage.supersede(folder, sessionId2),
     launch: launcher.launch,
+    environmentOf: (session) => sessionBook.environmentOf(session),
     clock
   });
   const acts = new Acts({
@@ -94026,7 +94193,8 @@ function createDaemon(inputs) {
         // viewers the renderer is handed are.
         (sessionId2) => followingOf(frameFeeds.viewersOf(sessionId2)),
         closing.signal,
-        probe2
+        probe2,
+        (session) => sessionBook.environmentOf(session)
       ),
       // A bar pane runs this bundle under the node running it now, with the
       // flags it runs with (tsx's loader, under the test harness).
@@ -95280,7 +95448,7 @@ async function paneClaude(launcher, hint) {
   };
 }
 var FOLLOW_POLL_MS = 200;
-function productionLaneEdge(launcher, following, closing, clock, probe2) {
+function productionLaneEdge(launcher, following, closing, clock, probe2, environmentOf2) {
   const wait = (ms) => sleep(clock, ms, closing);
   return {
     claudeInput: productionClaudeInputEdge(launcher),
@@ -95313,19 +95481,25 @@ function productionLaneEdge(launcher, following, closing, clock, probe2) {
       ...argv2
     ])).trim(),
     closePane: async (hint, pane) => void await tmux2(launcher, hint, ["kill-pane", "-t", pane]),
-    // [LAW:single-enforcer] The session's process environment: the
-    // session's facts, never those of whichever shell spawned this detached
-    // daemon.
-    claude: async (args, session) => void ran(
-      `claude ${args.join(" ")}`,
-      await launcher.launch({
-        bin: "claude",
-        args: [...args],
-        envOverlay: sessionEnv(session),
-        timeoutMs: 3e4,
-        category: "lane.claude"
-      })
-    ),
+    // [LAW:single-enforcer] The session's environment, never that of
+    // whichever shell spawned this detached daemon.
+    claude: async (args, session) => {
+      const environment = environmentOf2(session);
+      if (environment.kind === "failed")
+        throw new Error(
+          `claude ${args.join(" ")} not run: ${environment.reason}`
+        );
+      void ran(
+        `claude ${args.join(" ")}`,
+        await launcher.launch({
+          bin: "claude",
+          args: [...args],
+          environment: environment.value,
+          timeoutMs: 3e4,
+          category: "lane.claude"
+        })
+      );
+    },
     fileExists: (file) => fs_default.existsSync(file),
     presence,
     paneClaude: (hint) => paneClaude(launcher, hint),
@@ -95474,6 +95648,20 @@ init_globals();
 // src/daemon/streamed-file.ts
 init_globals();
 
+// src/renderer-interface/wire.ts
+init_globals();
+var REACH_KINDS = {
+  log: "notice",
+  eventAnswered: "notice",
+  storage: { hold: "notice", release: "notice" }
+};
+function reachesOf(table, prefix = "") {
+  return Object.entries(table).flatMap(
+    ([key, value]) => typeof value === "string" ? [`${prefix}${key}`] : reachesOf(value, `${prefix}${key}.`)
+  );
+}
+var REACHES = reachesOf(REACH_KINDS);
+
 // src/daemon/renderer-process.ts
 var inProcessPort = ({ name, build: build2 }) => ({
   start: (own2) => inProcessRenderer(name, build2, own2.reaches, own2.clock)
@@ -95526,7 +95714,14 @@ function productionAdapters(paths2, daemonLog, machine) {
     doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
     probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe2) => productionLaneEdge(launcher, following, closing, machine, probe2),
+    laneEdge: (launcher, following, closing, probe2, environmentOf2) => productionLaneEdge(
+      launcher,
+      following,
+      closing,
+      machine,
+      probe2,
+      environmentOf2
+    ),
     limits: ({ startedAtMs, exit: exit2, launcher, log }) => realLimitsDeps(startedAtMs, exit2, {
       launcher,
       log,
@@ -95986,6 +96181,7 @@ async function frame(size) {
     v: PROTOCOL_VERSION,
     kind: "render",
     encoding: "frame",
+    env: plainEnvironment(HOST.env),
     hookData: hookData(),
     args: ["cc-candybar"],
     cwd: REPO,
