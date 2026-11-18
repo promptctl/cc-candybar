@@ -7,11 +7,13 @@ import net from "node:net";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
-  makeFrameReader,
+  ProtocolError,
+  readFrames,
   type Response,
   type SubscribeRequest,
 } from "./foundations/protocol";
 import type { Lane } from "../config/lanes";
+import { asError } from "../utils/atomic-write";
 
 // [LAW:types-are-the-program] Why a stream ended: the caller closed it, the
 // daemon closed it (a restart, a shutdown), the daemon answered the subscribe
@@ -67,11 +69,31 @@ export function openFrameStream(
   sock.once("connect", () => sock.write(encodeFrame(subscribe)));
   sock.on(
     "data",
-    makeFrameReader(
+    readFrames(
       (frame) => {
-        const resp = frame as Response;
-        if (isRefusal(resp)) finish({ kind: "refused", resp });
-        else onFrame(resp);
+        // [LAW:parse-dont-validate] A frame that is no object is no
+        // response, and fails the stream as a malformed frame does.
+        if (typeof frame !== "object" || frame === null)
+          finish({
+            kind: "failed",
+            error: new ProtocolError(
+              `a frame that is not a response: ${String(frame)}`,
+            ),
+          });
+        else if (isRefusal(frame as Response))
+          finish({ kind: "refused", resp: frame as Refusal });
+        else
+          try {
+            onFrame(frame as Response);
+          } catch (error) {
+            // [LAW:no-silent-failure] A consumer that cannot take a frame
+            // ends the stream it reads, as a failure of its own, never a
+            // malformed frame's.
+            finish({ kind: "failed", error: asError(error) });
+          }
+        // [LAW:single-enforcer] An ended stream reads no more, so nothing
+        // reaches `onFrame` after `onEnd`.
+        return end === null ? "more" : "done";
       },
       (error) => finish({ kind: "failed", error }),
     ),

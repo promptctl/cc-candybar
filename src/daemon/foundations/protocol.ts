@@ -578,8 +578,14 @@ export function encodeFrame(value: unknown): Buffer {
 
 // A frame of JSON already serialized: a pushed frame is serialized once for
 // every subscriber.
+// [LAW:single-enforcer] The frame cap is the encoder's as it is the reader's:
+// a body every reader would refuse is never framed, whoever sends it.
 export function encodeJsonFrame(json: string): Buffer {
   const body = Buffer.from(json, "utf8");
+  if (body.length > MAX_FRAME_BYTES)
+    throw new ProtocolError(
+      `a frame of ${body.length} bytes is past the ${MAX_FRAME_BYTES}-byte cap`,
+    );
   const header = Buffer.alloc(FRAME_HEADER_BYTES);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);
@@ -590,25 +596,60 @@ export function encodeJsonFrame(json: string): Buffer {
 export function makeFrameReader(
   onFrame: (frame: unknown) => void,
   onError: (err: Error) => void,
-) {
-  let buf = Buffer.alloc(0);
+): (chunk: Buffer) => void {
+  return readFrames((frame) => {
+    onFrame(frame);
+    return "more";
+  }, onError);
+}
+
+// A reader of exactly one frame: its first frame or its first error settles
+// it, and nothing after is handled or buffered. A daemon connection carries
+// one request.
+export function makeOneFrameReader(
+  onFrame: (frame: unknown) => void,
+  onError: (err: Error) => void,
+): (chunk: Buffer) => void {
+  return readFrames((frame) => {
+    onFrame(frame);
+    return "done";
+  }, onError);
+}
+
+// [LAW:single-enforcer] Where a stream of frames ends: a frame whose reader
+// asks for no more, or the first error, after which the stream is out of step
+// for good. Either way nothing more is read or buffered, so a sender writing
+// on past an over-cap header allocates nothing and is refused once. A frame's
+// handler runs outside the parse, so its own throw is its caller's, never read
+// as a malformed frame.
+export function readFrames(
+  onFrame: (frame: unknown) => "more" | "done",
+  onError: (err: Error) => void,
+): (chunk: Buffer) => void {
+  let buf: Buffer | null = Buffer.alloc(0);
+  const end = (): void => {
+    buf = null;
+  };
   return function feed(chunk: Buffer): void {
+    if (buf === null) return;
     buf = Buffer.concat([buf, chunk]);
-    while (buf.length >= FRAME_HEADER_BYTES) {
+    while (buf !== null && buf.length >= FRAME_HEADER_BYTES) {
       const len = buf.readUInt32BE(0);
       // Hard cap to defend against a runaway sender allocating gigabytes.
       // [LAW:types-are-the-program] ProtocolError carries the discriminator
       // structurally — interpretException routes on `instanceof`, not on a
       // brittle string match against the message body.
       if (len > MAX_FRAME_BYTES) {
+        end();
         onError(new ProtocolError(`frame too large: ${len}`));
         return;
       }
       if (buf.length < FRAME_HEADER_BYTES + len) return;
       const body = buf.subarray(FRAME_HEADER_BYTES, FRAME_HEADER_BYTES + len);
       buf = buf.subarray(FRAME_HEADER_BYTES + len);
+      let frame: unknown;
       try {
-        onFrame(JSON.parse(body.toString("utf8")));
+        frame = JSON.parse(body.toString("utf8"));
       } catch (e) {
         // JSON.parse throws SyntaxError; wrap as ProtocolError so the
         // recovery class is structurally typed (not message-matched).
@@ -619,8 +660,17 @@ export function makeFrameReader(
         if (e instanceof Error) {
           wrapped.cause = e;
         }
+        end();
         onError(wrapped);
         return;
+      }
+      // A handler that throws leaves the stream out of step, as an error
+      // does: its throw is its caller's, and nothing more is read.
+      let next: "more" | "done" = "done";
+      try {
+        next = onFrame(frame);
+      } finally {
+        if (next === "done") end();
       }
     }
   };
