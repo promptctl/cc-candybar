@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017",
+      "timestamp": "2026-11-18T15:17:52.319Z",
+      "commits": [
+        {
+          "sha": "f6f5efcbbb882955a0e6ce9bfbb7b7b4d8d6b017",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-18T15:16:38Z",
+          "message": "chore(release): set `package.json` to 1.232.0\n\n## [1.232.0](https://github.com/promptctl/cc-candybar/compare/v1.231.0...v1.232.0) (2026-11-18)\n\n### Features\n\n* check and the doctor CLI draw through Renderer.answer, with no daemon running (9a7) ([#793](https://github.com/promptctl/cc-candybar/issues/793)) ([e33675a](https://github.com/promptctl/cc-candybar/commit/e33675a193dfc48790988daa17ac05641e602a19))\n\n### Bug Fixes\n\n* an update act's budget is spent in time a daemon watched it run, not wall time ([#797](https://github.com/promptctl/cc-candybar/issues/797)) ([5d66d50](https://github.com/promptctl/cc-candybar/commit/5d66d500b01f137d9d9a6bdbec6d0664ede19584))\n* **colour:** the door's ✖ is red as each depth draws it, the theme's own wherever one reads (87n6) ([#803](https://github.com/promptctl/cc-candybar/issues/803)) ([da23aa8](https://github.com/promptctl/cc-candybar/commit/da23aa8eef006c7d3ab59ca80d78ed17d712ef01))\n* **test:** a registry's teardown ends the runs held over it (y1ff) ([#804](https://github.com/promptctl/cc-candybar/issues/804)) ([414ac46](https://github.com/promptctl/cc-candybar/commit/414ac46b373d30c9a48f0b105345462e9a64bd0f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-798",
       "ref": "refs/pull/798/merge",
       "sha": "2110d13b75802b5d0f38a1127a437e3a4a500915",
@@ -34,21 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T05:25:40-07:00",
           "message": "fix: every staged file is published through one operation, under a name unique to its call (ooi7)\n\nTwo processes writing one file staged at one shared name, so one could\npublish the other's half-written bytes and the other's rename then failed\nENOENT. Staging now names the file per call, syncs it before the publish,\nand removes it on failure, saying in the write's own error when it cannot.\nThe session state file's writes join one chain, so its flush is async and\nno write supersedes another.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "414ac46b373d30c9a48f0b105345462e9a64bd0f",
-      "timestamp": "2026-11-18T15:10:28.858Z",
-      "commits": [
-        {
-          "sha": "414ac46b373d30c9a48f0b105345462e9a64bd0f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T08:09:26-07:00",
-          "message": "fix(test): a registry's teardown ends the runs held over it (y1ff) (#804)\n\n* fix(test): a file that leaves a source held fails at its own end, and two files end their prepared config whole (y1ff)\n\n* fix(test): a prepared config hands out neither its registry nor its runs, so it ends only whole (y1ff)\n\n* fix(test): a registry's teardown ends the runs held over it (y1ff)"
         }
       ]
     },
