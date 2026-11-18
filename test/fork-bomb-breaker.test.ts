@@ -12,7 +12,7 @@ import {
   listRegistryFiles,
   readRegistryEntry,
   realBreakerDeps,
-  releaseRegistration,
+  removeEntry,
   type BreakerDeps,
   type RegistryEntry,
 } from "../src/daemon/fork-bomb-breaker";
@@ -160,37 +160,46 @@ describe("readRegistryEntry", () => {
     expect(readRegistryEntry(p)).toEqual({ pid: 123, startTime: "st" });
   });
 
-  test("startTime absent → null (unfingerprinted host)", async () => {
+  test("startTime absent → judged by pid alone (unfingerprinted host)", async () => {
     const p = path.join(dir, "pid-123.json");
     fs.writeFileSync(p, JSON.stringify({ pid: 123 }));
     expect(readRegistryEntry(p)).toEqual({ pid: 123, startTime: null });
   });
 
-  test("missing file → null", async () => {
-    expect(readRegistryEntry(path.join(dir, "nope.json"))).toBeNull();
+  test("missing file → null (its daemon released it since the listing)", async () => {
+    expect(readRegistryEntry(path.join(dir, "pid-123.json"))).toBeNull();
   });
 
-  test("corrupt JSON → null", async () => {
-    const p = path.join(dir, "pid-123.json");
-    fs.writeFileSync(p, "{not json");
-    expect(readRegistryEntry(p)).toBeNull();
+  // The pid is the entry's name; content only adds the start time.
+  test("a start time that cannot be read leaves the entry judged by its pid alone", async () => {
+    const corrupt = path.join(dir, "pid-123.json");
+    fs.writeFileSync(corrupt, "{not json");
+    // A folder at the entry's path reads EISDIR for any user, root included.
+    const unreadable = path.join(dir, "pid-124.json");
+    fs.mkdirSync(unreadable);
+    const stranger = path.join(dir, "pid-125.json");
+    fs.writeFileSync(stranger, JSON.stringify({ pid: 9, startTime: 5 }));
+    const blank = path.join(dir, "pid-126.json");
+    fs.writeFileSync(blank, JSON.stringify({ pid: 126, startTime: "" }));
+    expect(
+      [corrupt, unreadable, stranger, blank].map(readRegistryEntry),
+    ).toEqual([
+      { pid: 123, startTime: null },
+      { pid: 124, startTime: null },
+      { pid: 125, startTime: null },
+      { pid: 126, startTime: null },
+    ]);
   });
 
-  test("non-integer pid → null", async () => {
-    const p = path.join(dir, "pid-x.json");
-    fs.writeFileSync(p, JSON.stringify({ pid: 1.5 }));
-    expect(readRegistryEntry(p)).toBeNull();
-  });
-
-  test("zero pid → null (would signal our own process group via kill(0,0))", async () => {
-    const p = path.join(dir, "pid-0.json");
-    fs.writeFileSync(p, JSON.stringify({ pid: 0 }));
-    expect(readRegistryEntry(p)).toBeNull();
-  });
-
-  test("negative pid → null", async () => {
-    const p = path.join(dir, "pid-neg.json");
-    fs.writeFileSync(p, JSON.stringify({ pid: -7 }));
+  test.each([
+    "pid-x.json",
+    "pid-0.json",
+    "pid-.json",
+    "pid--7.json",
+    "stray.json",
+  ])("a name admission never writes (%s) → null", async (name) => {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, JSON.stringify({ pid: 7, startTime: "st" }));
     expect(readRegistryEntry(p)).toBeNull();
   });
 });
@@ -204,8 +213,10 @@ describe("listRegistryFiles", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("nonexistent dir → empty list, never throws", async () => {
-    expect(listRegistryFiles(dir)).toEqual([]);
+  // A file at the registry's path reads ENOTDIR for any user, root included.
+  test("a registry that cannot be listed throws, naming the error, never reads as empty", async () => {
+    fs.writeFileSync(dir, "not a folder");
+    expect(() => listRegistryFiles(dir)).toThrow(/ENOTDIR/);
   });
 
   test("lists only .json files, full paths", async () => {
@@ -234,7 +245,8 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   const registryWorld = (override?: string) => {
     const env = { ...process.env };
     delete env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
-    if (override !== undefined) env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = override;
+    if (override !== undefined)
+      env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = override;
     return worldOf(hostOf(env));
   };
 
@@ -245,9 +257,11 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     fs.symlinkSync(real, link);
     const registryDir = path.join(link, "daemons");
     try {
-      expect(() => realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir)).toThrow(
-        /symlink/,
-      );
+      expect(() =>
+        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
+          registryDir,
+        ),
+      ).toThrow(/symlink/);
     } finally {
       fs.unlinkSync(link);
       fs.rmSync(real, { recursive: true, force: true });
@@ -260,7 +274,9 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
     const registryDir = path.join(root, "daemons");
     try {
       expect(() =>
-        realBreakerDeps(registryWorld(), null, registryDir).ensureDirSafe(registryDir),
+        realBreakerDeps(registryWorld(), null, registryDir, () => {}).ensureDirSafe(
+          registryDir,
+        ),
       ).not.toThrow();
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -274,7 +290,9 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
       // The parent here is os.tmpdir() itself, which on a shared-/tmp
       // platform would fail the two-level check — proving the override path
       // deliberately does not apply it.
-      expect(() => realBreakerDeps(registryWorld(dir), null, dir).ensureDirSafe(dir)).not.toThrow();
+      expect(() =>
+        realBreakerDeps(registryWorld(dir), null, dir, () => {}).ensureDirSafe(dir),
+      ).not.toThrow();
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -299,12 +317,40 @@ describe("realBreakerDeps writeEntry (no staged file left)", () => {
     const identity = { pid: 123, startTime: "st" };
     try {
       expect(() =>
-        realBreakerDeps(WORLD, null, dir).writeEntry(filePath, identity),
+        realBreakerDeps(WORLD, null, dir, () => {}).writeEntry(filePath, identity),
       ).toThrow();
       expect(fs.readdirSync(dir)).toEqual(["pid-123.json"]);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("realBreakerDeps removeFile (the sweep's removal)", () => {
+  test("a dead entry it cannot remove is warned of, and the sweep goes on", () => {
+    const dir = freshDir();
+    const filePath = path.join(dir, "pid-123.json");
+    fs.mkdirSync(path.join(filePath, "occupied"), { recursive: true });
+    const warned: string[] = [];
+    try {
+      realBreakerDeps(WORLD, null, dir, (m) => warned.push(m)).removeFile(
+        filePath,
+      );
+      expect(warned).toEqual([
+        expect.stringContaining("a dead entry could not be removed"),
+      ]);
+      expect(warned[0]).toContain(filePath);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an entry gone already is removed, with nothing said", () => {
+    const warned: string[] = [];
+    realBreakerDeps(WORLD, null, freshDir(), (m) => warned.push(m)).removeFile(
+      path.join(freshDir(), "pid-123.json"),
+    );
+    expect(warned).toEqual([]);
   });
 });
 
@@ -378,18 +424,33 @@ describe("admitDaemon", () => {
     expect(writeEntry).not.toHaveBeenCalled();
   });
 
-  test("isolated, corrupt/unreadable entries excluded (fail-open undercount)", async () => {
+  test("isolated, entries that name no process are excluded", async () => {
     const result = await admitDaemon(
       baseDeps({
         ceiling: 1,
         listFiles: () => ["/fake/registry/corrupt.json"],
-        readEntry: () => null, // unreadable — excluded from the count entirely
+        readEntry: () => null, // gone, or a name admission never writes
         isSameLiveProcess: async () => true,
       }),
     );
-    // The corrupt entry never enters the live count, so a ceiling of 1 still
-    // has room for us.
+    // It never enters the live count, so a ceiling of 1 still has room for us.
     expect(result.decision.allow).toBe(true);
+  });
+
+  // The boot refuses on the throw (server.ts), naming it.
+  test("isolated, a registry that cannot be listed rejects the admission with its error and registers nothing", async () => {
+    const writeEntry = jest.fn();
+    await expect(
+      admitDaemon(
+        baseDeps({
+          listFiles: () => {
+            throw new Error("EMFILE: too many open files, scandir");
+          },
+          writeEntry,
+        }),
+      ),
+    ).rejects.toThrow(/EMFILE/);
+    expect(writeEntry).not.toHaveBeenCalled();
   });
 
   test("isolated, dead sibling entries are swept and don't count against the ceiling", async () => {
@@ -429,34 +490,31 @@ describe("admitDaemon", () => {
   });
 });
 
-// ─── releaseRegistration: only remove if it still names us ─────────────────
+// ─── removeEntry: gone is removed, any other failure is said ───────────────
 
-describe("releaseRegistration", () => {
-  test("removes the entry when it still names our pid", async () => {
+describe("removeEntry", () => {
+  test("removes our entry", async () => {
     const removeFile = jest.fn();
-    releaseRegistration(
-      "/fake/pid-42.json",
-      42,
-      () => ({ pid: 42, startTime: "st" }),
-      removeFile,
-    );
+    removeEntry("/fake/pid-42.json", removeFile);
     expect(removeFile).toHaveBeenCalledWith("/fake/pid-42.json");
   });
 
-  test("does not remove when a different pid now owns the entry", async () => {
-    const removeFile = jest.fn();
-    releaseRegistration(
-      "/fake/pid-42.json",
-      42,
-      () => ({ pid: 999, startTime: "st" }),
-      removeFile,
-    );
-    expect(removeFile).not.toHaveBeenCalled();
+  test("an entry gone already is released", async () => {
+    expect(() =>
+      removeEntry("/fake/pid-42.json", () => {
+        throw Object.assign(new Error("ENOENT: no such file or directory"), {
+          code: "ENOENT",
+        });
+      }),
+    ).not.toThrow();
   });
 
-  test("does not remove when the entry is unreadable/absent", async () => {
-    const removeFile = jest.fn();
-    releaseRegistration("/fake/pid-42.json", 42, () => null, removeFile);
-    expect(removeFile).not.toHaveBeenCalled();
+  // The shutdown step logs it (server.ts).
+  test("a removal that fails throws its error", async () => {
+    expect(() =>
+      removeEntry("/fake/pid-42.json", () => {
+        throw new Error("EACCES: permission denied, unlink");
+      }),
+    ).toThrow(/EACCES/);
   });
 });
