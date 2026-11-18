@@ -16,7 +16,7 @@ import { inspect } from "node:util";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { waitWithin } from "../utils/reading.js";
 import type { DaemonLogger } from "../utils/logger.js";
-import { checkoutLocation } from "../utils/git-root.js";
+import type { CheckoutLocation } from "../utils/git-root.js";
 import {
   failedWith,
   RENDER_ANSWERS,
@@ -69,17 +69,24 @@ function failed(
   };
 }
 
+// Where a directory sits in its repository: the disk's answer for a session
+// on this machine, a fixture's for a faked one.
+export type Locate = (dir: string) => CheckoutLocation;
+
 // [LAW:effects-at-boundaries] The request's context as both its turns take
-// it: the checkout its directory is in, read from the disk by the host, so
-// the renderer reads no file for it and the two turns read one location.
-export function located(req: CheckedRenderRequest): CheckedRenderRequest {
+// it: the checkout its directory is in, read by the host, so the renderer
+// reads no file for it and the two turns read one location.
+export function located(
+  req: CheckedRenderRequest,
+  locate: Locate,
+): CheckedRenderRequest {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
   return {
     ...req,
     hookData: {
       ...req.hookData,
       ...(dir !== undefined &&
-        path.isAbsolute(dir) && { location: checkoutLocation(dir) }),
+        path.isAbsolute(dir) && { location: locate(dir) }),
     },
   };
 }
@@ -100,6 +107,7 @@ export async function answerStatusline(
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
   log: DaemonLogger,
+  locate: Locate,
   arrived: CheckedRenderRequest,
   environment: SessionEnvironment,
   id: RequestId,
@@ -107,7 +115,7 @@ export async function answerStatusline(
   waitEndsAt: number,
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
-  const req = located(arrived);
+  const req = located(arrived, locate);
   const session = req.hookData.session_id;
   // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
   // the host's one path to the renderer.

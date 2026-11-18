@@ -9,12 +9,8 @@ import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
-import {
-  checkConfig,
-  NO_REPO,
-  prepareConfig,
-  type CheckOutcome,
-} from "../src/check";
+import { checkConfig, type CheckOutcome } from "../src/check";
+import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import { SessionState } from "../src/renderer/session-state";
@@ -816,13 +812,11 @@ test("a layer that could not be read fails the load naming it", () => {
     gates: bareGates(),
   });
   try {
-    expect(loaded.snapshot.chain.map((l) => [l.role, l.content.kind])).toEqual(
-      [
-        ["user", "text"],
-        ["project", "unreadable"],
-        ["local", "absent"],
-      ],
-    );
+    expect(loaded.snapshot.chain.map((l) => [l.role, l.content.kind])).toEqual([
+      ["user", "text"],
+      ["project", "unreadable"],
+      ["local", "absent"],
+    ]);
     expect(loaded.kind).toBe("failed");
     expect(loaded.error).toContain(projectFile);
     expect(loaded.error).toContain("not a file");

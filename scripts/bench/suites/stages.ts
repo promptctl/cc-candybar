@@ -1,5 +1,6 @@
-// The stages of a draw, timed in-process through the seam the check command
-// draws through: load a config, compile and bind it, draw it.
+// The stages of a draw, timed in-process through the tests' in-process rig
+// (test/helpers/prepared-config.ts): load a config, compile and bind it, draw
+// it.
 //
 // This is NOT the cost of a tick. It has no render cache, no session state, no
 // client hints and no waiting on sources; it draws the check fixture's payload.
@@ -17,7 +18,7 @@ import {
   prepareConfig,
   renderEffective,
   type PreparedConfig,
-} from "../../../src/check.js";
+} from "../../../test/helpers/prepared-config.js";
 import { DEFAULT_DSL_CONFIG } from "../../../src/config/default-dsl-config.js";
 import { homeLayer, loadSnapshot } from "../../../src/config/dsl-loader.js";
 import {

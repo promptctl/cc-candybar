@@ -492,7 +492,7 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toMatch(
-      /1 render error[^\n]*\n {2}variable "stamp": cannot refresh: cache key: .*no key/,
+      /1 render error[^\n]*\n {2}variable "stamp" cannot refresh: cache key: .*no key/,
     );
   });
 
@@ -514,10 +514,10 @@ describe("checkConfig — explicit target", () => {
       await checkConfig(world, daemonGates(), p, dir),
     );
     expect(message).toMatch(
-      /variable "rel": cannot refresh: refused: file\.path must be an absolute path/,
+      /variable "rel" cannot refresh: refused: file\.path must be an absolute path/,
     );
     expect(message).toMatch(
-      /variable "bare": cannot refresh: refused: parse\.regex must contain a capture group/,
+      /variable "bare" cannot refresh: refused: parse\.regex must contain a capture group/,
     );
   });
 
@@ -541,40 +541,11 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
-  // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
-  // check's rich-but-static fixture can never drive true on its own (unlike
-  // every OTHER field a segment might gate on, which checkPayload just
-  // supplies richly) — so a segment gated on it is otherwise invisible to
-  // check no matter how broken its content is. Proves the SECOND render
-  // pass (loadRegisterRender) catches this: the same evaluation-stage error
-  // as the test above, but reachable ONLY behind `.preset.customized`.
-  it("reports a segment error reachable only behind .preset.customized as fatal", async () => {
-    const p = write(
-      "customized-gate-error.json5",
-      `{
-        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
-        segments: {
-          a: { template: 'ok' },
-          layoutStatus: {
-            template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}',
-            when: '{{ .preset.customized }}',
-          },
-        },
-        root: { h: ['a', 'layoutStatus'] },
-      }`,
-    );
-    const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
-    expect(message).toContain('segment "layoutStatus"');
-    expect(message).toContain("(under .preset.customized = true)");
-  });
-
-  // brandon-layout-edit-2gc.5 PR review: an UNCONDITIONAL segment error (no
-  // `when` at all — the SAME fixture as the "cycle action" test above)
-  // fails identically in BOTH render passes (they share config/store/
-  // registry, differing only in `presetCustomized`). Proves it's reported
-  // exactly ONCE, not double-counted with a misleading "(under
-  // .preset.customized = true)" tag implying it's specific to that gate.
-  it("does not double-report an unconditional segment error across both render passes", async () => {
+  // An UNCONDITIONAL segment error (no `when` at all — the SAME fixture as
+  // the "cycle action" test above) fails identically in every preset's pass.
+  // It is reported exactly ONCE, untagged, as the bar a fresh session opens
+  // on shows it.
+  it("does not double-report an unconditional segment error across the presets' passes", async () => {
     const p = write(
       "unconditional-error-dedup.json5",
       `{
@@ -585,7 +556,7 @@ describe("checkConfig — explicit target", () => {
     );
     const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 1 render error");
-    expect(message).not.toContain("(under .preset.customized = true)");
+    expect(message).not.toContain("(under");
     expect(message.split('segment "chip"').length - 1).toBe(1);
   });
 
@@ -737,7 +708,7 @@ describe("checkConfig — explicit target", () => {
     expect(message).not.toContain("(under");
   });
 
-  it("an error only other presets reach is tagged once per preset, customized only where it alone reaches it", async () => {
+  it("an error only other presets reach is tagged once, naming each preset that reaches it", async () => {
     const p = write(
       "segment-several-presets.json5",
       `{
@@ -746,7 +717,7 @@ describe("checkConfig — explicit target", () => {
         presets: {
           a: {},
           b: { root: { h: ['x', 'broken'] } },
-          c: { root: { h: ['x', { seg: 'broken', when: '{{ .preset.customized }}' }] } },
+          c: { root: { h: ['x', 'broken'] } },
         },
         segments: {
           x: { template: 'x' },
@@ -758,7 +729,7 @@ describe("checkConfig — explicit target", () => {
     const message = expectFatal(await checkConfig(world, daemonGates(), p, dir));
     expect(message).toContain("config renders with 1 render error");
     expect(message).toContain(
-      '(under preset "b"; preset "c", .preset.customized = true)',
+      '(under preset "b"; preset "c")',
     );
   });
 

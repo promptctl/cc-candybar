@@ -10,6 +10,7 @@ import {
   NOTHING_TO_SETTLE,
   type StatuslineAnswer,
 } from "./statusline-answer.js";
+import { checkoutLocation } from "../utils/git-root.js";
 import { checkRenderRequest } from "./render-checkpoint.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
@@ -418,6 +419,7 @@ export async function replyTo(
       clock,
       parts.closing,
       parts.log,
+      checkoutLocation,
       checked.req,
       // [LAW:one-source-of-truth] The book's, the newest request's, so a
       // request that arrived behind a newer one runs nothing in its older

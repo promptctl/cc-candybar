@@ -10,12 +10,8 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  checkConfig,
-  NO_REPO,
-  prepareConfig,
-  type CheckOutcome,
-} from "../src/check";
+import { checkConfig, type CheckOutcome } from "../src/check";
+import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { until } from "./helpers/until";

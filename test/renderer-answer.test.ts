@@ -9,6 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
@@ -720,6 +721,7 @@ describe("the session's config, ahead of its request", () => {
       systemTimekeeper,
       new AbortController().signal,
       () => {},
+      checkoutLocation,
       checked(),
       TEST_ENVIRONMENT,
       REQUEST,
@@ -847,6 +849,7 @@ describe("two requests of one session at different keys", () => {
         systemTimekeeper,
         new AbortController().signal,
         () => {},
+        checkoutLocation,
         checked(pane),
         TEST_ENVIRONMENT,
         id as RequestId,

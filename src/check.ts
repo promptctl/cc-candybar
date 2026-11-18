@@ -3,413 +3,92 @@
 // Config diagnostics otherwise surface VISUALLY (an indicator beside the bar's
 // settings door, read in its viewer), a channel a blind config author never
 // sees.
-// This command runs the production pipeline and projects its verdict onto a
-// text + exit-code contract a script can close its own loop on:
+// This command draws the bar as the daemon draws it and projects its verdict
+// onto a text + exit-code contract a script can close its own loop on:
 //   0 — config loads and renders (warnings, if any, on stderr)
 //   1 — config is invalid (parse / validate / register / render failure)
 //   2 — usage error or a named file could not be read
 //
 // `--render` adds one thing to that contract: the bar it rendered, on stdout
-// beneath the verdict (brandon-check-m2a). The pipeline already computed it, and
-// for an author who cannot look at a live bar it is the only place the layout,
-// the glyphs and the colours are readable at all.
+// beneath the verdict. For an author who cannot look at a live bar it is the
+// only place the layout, the glyphs and the colours are readable at all.
 //
-// [LAW:single-enforcer] No parallel validation path: the verdict is reached
-// through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in draw-bar.ts) — discover →
-// loadSnapshot → registerDslConfig → deriveActionValidators → drawDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path as far as the Frame, and
-// encoding a Frame refuses nothing: it is the print's, so a verdict with no
-// `--render` encodes nothing. Check additionally waits, before each pass, for
-// the shell/file runs that pass's payload started, under one bounded settle
-// window for the whole verdict; the daemon's first cold render does not (its
-// next render shows what check showed).
+// [LAW:single-enforcer] No parallel validation path: the verdict is read off
+// statusline requests answered in this process by the daemon's own parts
+// (src/daemon/local-bar.ts) — the host's discovery, a collector over a faked
+// session's owners, the main renderer, and the request's answer — so "check
+// passes" and "the daemon renders" cannot diverge. Each request turn's record
+// notes every fault its frame met, which is what the verdict reads.
 
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
-import { repoGateLines, type ApprovedRepo } from "./config/loader/repo-gate.js";
-import {
-  discover,
-  installedRoots,
-  layerOf,
-  readLayer,
-  readShared,
-  sessionPlugins,
-  snapshotOf,
-} from "./daemon/config-discovery/discover.js";
+import { repoGateLines } from "./config/loader/repo-gate.js";
+import { discover, readShared } from "./daemon/config-discovery/discover.js";
 import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
-import {
-  loadSnapshot,
-  ConfigError,
-  refuseDrops,
-  type DroppedPlugin,
-  type ConfigLayer,
-} from "./config/dsl-loader.js";
+import { loadSnapshot, type ConfigLayer } from "./config/dsl-loader.js";
 import { chainName, cliConfigTarget } from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
-import type { ValidatedConfig } from "./config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
-import { VariableStore } from "./var-system/store.js";
 import type { World } from "./host";
-import { timeoutSignal } from "./time";
-import { SourceRegistry } from "./var-system/sources.js";
-import { SourceRuns } from "./daemon/source-runs.js";
-import { CheckRuns } from "./check-runs.js";
-import { SessionState } from "./renderer/session-state.js";
-import {
-  bindPayload,
-  drawDsl,
-  registerDslConfig,
-  type CompiledConfig,
-  type RenderWarning,
-} from "./dsl/render.js";
-import { ansiOf, type Frame } from "./render/frame.js";
+import { ansiOf, parseFrame, type Frame } from "./render/frame.js";
+import type { TurnRecord } from "./renderer-interface/interface.js";
 import type { Gates } from "./daemon/foundations/gates.js";
 import { daemonGates } from "./daemon/foundations/update-keys.js";
-import { instantOf, type Instant } from "./utils/instant.js";
-import { perSetting } from "./config/setting-projections.js";
+import { instantOf } from "./utils/instant.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
-  composePayload,
-  renderOptionsOf,
-  instantFacts,
-  type RenderPayload,
-  type ViewPayload,
-} from "./renderer/render-payload.js";
-import { type Readings } from "./daemon/readings.js";
-import { assembleFacts } from "./daemon/facts-assembly.js";
-import { sessionIdOf } from "./daemon/foundations/session-id.js";
-import type { ClientHints } from "./daemon/foundations/protocol.js";
-import type { CheckedHookData } from "./renderer-interface/request-context.js";
-import type { GitInfo } from "./segments/git.js";
-import type { TranscriptUsage } from "./segments/session.js";
-import type { MetricsFold } from "./segments/metrics.js";
-import type { AutoCompactWindow } from "./segments/autocompact.js";
-import { oneDay } from "./daemon/foundations/today-facts.js";
-import { IDLE, type TodayFacts } from "./facts/world-state.js";
-import { ABSENT, ok } from "./utils/outcome.js";
-import {
-  resolveEffectiveGlobals,
-  type EffectiveGlobals,
-} from "./config/effective-globals.js";
-import { LAYER_ROLES, layerFlags } from "./config/layer-role.js";
+  sessionIdOf,
+  type SessionId,
+} from "./daemon/foundations/session-id.js";
+import { PROTOCOL_VERSION } from "./daemon/foundations/protocol.js";
 import { plainEnvironment } from "./daemon/foundations/session-env.js";
+import { checkRenderRequest } from "./daemon/render-checkpoint.js";
+import { EMPTY_STORED_STATE } from "./renderer-interface/stored-state.js";
+import {
+  readFaults,
+  KEPT_FAULTS,
+  type Fault,
+} from "./renderer-interface/noted-faults.js";
+import { columnsReserving } from "./utils/terminal-width.js";
+import {
+  localBar,
+  type LocalDraw,
+  type RendererBuilder,
+} from "./daemon/local-bar.js";
+import {
+  CHECK_HINTS,
+  checkDaemonFacts,
+  CHECK_HOME,
+  checkHook,
+  checkLocate,
+  checkOwners,
+} from "./check-fixture.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
 // evaluate in full before any width-driven wrap/pagination, so width shapes
 // layout, never diagnostics.
 //
-// It is also the width `--render` prints at, because there is ONE render here
-// and the printed bar is it [LAW:one-source-of-truth]. Laying the preview out at
+// It is also the width `--render` prints at, because the printed bar is the
+// one the verdict read [LAW:one-source-of-truth]. Laying the preview out at
 // `process.stdout.columns` instead would bless one bar and show another, and it
 // would read a terminal the author this exists for does not have — a piped
-// stdout has no columns.
+// stdout has no columns. The client reports the terminal's columns, and the
+// bar is drawn that wide less Claude Code's reserve, so the fixture's client
+// reports the reserve beside it.
 const CHECK_WIDTH = 200;
 
 // How long the verdict waits for an async source's runs — a shell or file
-// read — before rendering with whatever it holds (and naming the stragglers as
+// read — before drawing with whatever it holds (and naming the stragglers as
 // a warning). Generous against a slow `uptime`, short against a hung command.
+// [LAW:no-ambient-temporal-coupling] One deadline every pass's wait shares, so
+// a hung command costs the budget once, never once per pass.
 const SOURCE_SETTLE_MS = 5000;
 
-// [LAW:no-ambient-temporal-coupling] The one deadline a verdict's waits share:
-// the fresh payload's first runs, then the runs each pass's payload starts (a
-// `key` or `depends_on` over `.preset.effective` re-reads when the preset
-// moves). One window rather than one per wait, so a hung command costs the
-// budget once, never once per pass — a wait under a spent window ends at once.
-// It is opened where the runs start (the prepared config's first bind), not
-// before the load, so compile time is never charged to the sources. `ms` is
-// what the straggler warning names.
-export interface SettleWindow {
-  readonly ms: number;
-  readonly signal: AbortSignal;
-}
-
-function settleWindow(clock: World["clock"], ms: number): SettleWindow {
-  return { ms, signal: timeoutSignal(clock, ms) };
-}
-
-// The sources still out when a wait under `settle` ended, named as the
-// warning the verdict carries; empty when every run answered. A value not
-// answered yet is drawn as pending (its loading cell), never as a default: a
-// default stands in for a failure, not a wait.
-function stragglers(
-  settle: SettleWindow,
-  pending: readonly string[],
-): readonly string[] {
-  return pending.length === 0
-    ? []
-    : [
-        `source${pending.length === 1 ? "" : "s"} still running after ${settle.ms} ms, drawn as pending: ${pending.join(", ")}`,
-      ];
-}
-
-// [LAW:one-source-of-truth] The one composition of what a check pass binds:
-// the representative payload under `effective`, at `width`, through the seam a
-// session's view reads. The prepare-time bind and every pass's bind go
-// through it, so the first pass's payload is the prepared one and its key
-// reactions fire only for inputs the preset actually moved.
-function bindPass(
-  {
-    layers,
-    config,
-    compiled,
-    store,
-    registry,
-    runs,
-  }: Pick<
-    PreparedConfig,
-    "layers" | "config" | "compiled" | "store" | "registry" | "runs"
-  >,
-  effective: EffectiveGlobals,
-  width: number,
-  at: Instant,
-): { drawn: unknown; opts: ReturnType<typeof renderOptionsOf> } {
-  const opts = renderOptionsOf(effective, width);
-  const drawn = bindPayload(
-    compiled,
-    store,
-    registry,
-    checkPayload(config, effective, layers.at(-1) ?? null, at),
-    opts,
-    effective,
-    CHECK_SESSION,
-    runs.readings,
-  );
-  return { drawn, opts };
-}
-
-// What `check` composes its representative payload from: one faked Claude Code
-// session whose owners all answer, as typed readings, through the same
-// composition (`composePayload`) the daemon's view draws through.
-// [LAW:verifiable-goals] It is deliberately RICH (dirty git with every
-// worktree count, an upstream, a stash, a recent commit; home set; live
-// session/today/context/metrics/rate-limit data) so gated segments actually
-// RENDER their content instead of gating off. A minimal payload would let a
-// field-name typo in the git/directory/metrics/budget branches slip through —
-// those branches only run when their data is present.
-//
-// `effective` is threaded in exactly as the daemon threads it (draw-bar.ts
-// resolves one EffectiveGlobals struct per render and feeds BOTH the
-// payload's `*.effective` fields and BuildLineOptions/basePalette below)
-// [LAW:one-source-of-truth].
-//
-// test/example-configs.test.ts asserts rendered content against these literal
-// values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
-// fails that suite loudly rather than drifting silently.
-//
-// [LAW:types-are-the-program] The readings are the owners' own types, so a
-// field the daemon's payload requires is a compile error here until the
-// fixture carries it. `term` is the draw's (bindPayload writes it from the
-// width), so it is left out; `today` is the draw's projection of the
-// document's facts, handed beside the payload as a draw hands it.
-export type CheckPayload = Omit<ViewPayload, "term"> &
-  ReturnType<typeof instantFacts>;
-
-const CHECK_HOME = "/home/tester";
-const CHECK_SESSION = sessionIdOf("test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b");
-
-// The hints the fixture's client sends: in tmux pane `%0`, and `ssh: true` for
-// the same reason `tmux.session` is populated — this fixture deliberately
-// satisfies every gate so a when-gated segment RENDERS and its template gets
-// checked. A local-looking fixture would gate the host segment off and let a
-// typo inside it ship.
-const CHECK_HINTS: ClientHints = {
-  tmux: { socket: "/tmp/tmux.sock", pane: "%0", truecolor: null },
-  ssh: true,
-};
-
-function checkHook(at: Instant): CheckedHookData {
-  const nowSec = Math.floor(at);
-  return {
-    hook_event_name: "Status",
-    session_id: CHECK_SESSION,
-    version: "1.15.0",
-    cwd: `${CHECK_HOME}/code/cc-candybar/src`,
-    transcript_path: `${CHECK_HOME}/.claude/projects/x/test.jsonl`,
-    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
-    // An effort level, so the model cell draws its effort gauge and gets that
-    // template checked. Not max: max climbs a frame a second, and `check`
-    // renders at the wall clock, so its bar (and every doc fence pinned to
-    // it) would change from one second to the next. Every level computes
-    // max's bubble, so xhigh evaluates it too.
-    effort: { level: "xhigh" },
-    workspace: {
-      current_dir: `${CHECK_HOME}/code/cc-candybar/src`,
-      project_dir: `${CHECK_HOME}/code/cc-candybar`,
-      added_dirs: [],
-    },
-    // The hook's instantaneous fields the payload lays over the document's
-    // transcript folds: the session's cost, durations and lines, and the
-    // native context window.
-    cost: {
-      total_cost_usd: 0.39,
-      total_duration_ms: 930_000,
-      total_api_duration_ms: 4_200,
-      total_lines_added: 512,
-      total_lines_removed: 88,
-    },
-    context_window: {
-      total_input_tokens: 241_400,
-      total_output_tokens: 0,
-      context_window_size: 1_000_000,
-      used_percentage: 76,
-      remaining_percentage: 24,
-      current_usage: {
-        input_tokens: 48_487,
-        output_tokens: 0,
-        cache_creation_input_tokens: 0,
-        cache_read_input_tokens: 0,
-      },
-    },
-    rate_limits: {
-      five_hour: { used_percentage: 63, resets_at: nowSec + 2 * 3600 },
-      seven_day: { used_percentage: 21, resets_at: nowSec + 5 * 86400 },
-    },
-  };
-}
-
-// What every owner reads for the fixture's session, each in the type the owner
-// gives it. Every declared source reads absent: `check` runs no plugin program
-// and has no session, and absent is what a session reads before its program
-// first writes. So a segment gated on `hasKey` is hidden, and an unguarded
-// read fails the check with the missing-field error that session's bar would
-// draw.
-function checkReadings(
-  config: Pick<ValidatedConfig, "variables">,
-  at: Instant,
-): Readings {
-  const nowSec = Math.floor(at);
-  const sources = Object.entries(config.variables).flatMap(([name, decl]) =>
-    decl.kind === "source" ? [name] : [],
-  );
-  return {
-    lanes: {
-      git: ok<GitInfo>({
-        branch: "main",
-        status: "dirty",
-        aheadBehind: ok({ ahead: 2, behind: 1 }),
-        head: ok("abc1234def5678"),
-        workingTree: { staged: 3, unstaged: 2, untracked: 1, conflicts: 0 },
-        sha: ok("abc1234"),
-        operation: ok("rebase"),
-        committedAt: ok(nowSec - 780),
-        stashCount: ok(1),
-        upstream: ok("origin/main"),
-        repoName: ok("cc-candybar"),
-        repoUrl: ok("https://github.com/promptctl/cc-candybar"),
-        // A branch with no PR: no PR keys, as the fixture has always had none.
-        pullRequest: ABSENT,
-      }),
-      usage: ok<TranscriptUsage>({
-        calculatedCost: 0.39,
-        tokens: 241400,
-        tokenBreakdown: null,
-      }),
-      context: ok(48487),
-      metrics: ok<MetricsFold>({
-        lastResponseTime: 8.2,
-        messageCount: 8,
-        nonPrompts: 0,
-      }),
-      activity: ABSENT,
-      tmuxSession: ok("work"),
-      hostName: ok("tester-box"),
-      hostUser: ok("tester"),
-      cache: ok(nowSec + 15 * 60),
-      speed: ABSENT,
-      // A set window with a step each way, so the when-gated `autocompact`
-      // control renders all of its cells.
-      autoCompact: ok<AutoCompactWindow>(400_000),
-      sources: new Map(sources.map((name) => [name, ABSENT])),
-      // The runs and the environment reach the view through its holder
-      // (check-runs.ts), not the payload.
-      runs: new Map(),
-      env: new Map(),
-      // `check` runs no doctor.
-      doctor: ABSENT,
-    },
-    // [LAW:one-source-of-truth] One day's sums, which the draw projects to its
-    // own day (`todayOf`) as the daemon's draw does.
-    today: ok<TodayFacts>({ sums: oneDay(at, 12.5, 3_400_000), own: {} }),
-    faults: [],
-  };
-}
-
-export function checkPayload(
-  config: ValidatedConfig,
-  effective: EffectiveGlobals,
-  configPath: string | null,
-  // The instant the render this payload feeds is drawn at, so its reset times
-  // sit where the render's own countdowns measure them from.
-  at: Instant,
-): CheckPayload {
-  const hookData = checkHook(at);
-  // [LAW:one-source-of-truth] The document is the session's, stamped once, and
-  // both the payload and the draw's `today` are read from it.
-  const document = assembleFacts(
-    undefined,
-    CHECK_SESSION,
-    checkReadings(config, at),
-    {
-      update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
-      fileEvents: [],
-      launcher: [],
-      rendererEnded: null,
-      actFailed: null,
-    },
-    at,
-  );
-  const { term: _term, ...payload } = composePayload(
-    document,
-    {
-      hookData,
-      hints: CHECK_HINTS,
-      home: CHECK_HOME,
-    },
-    {
-      // Every source the config declares, as the fixture document carries.
-      sources: Object.keys(document.sources),
-      effective,
-      configFacts: {
-        // One change made since edit mode opened, one unsaved setting and every
-        // setting resettable, so every part of the settings menu's save cell,
-        // each control's ↺, and edit mode's save and cancel cells, each gated
-        // on having something to do, renders and gets its template checked.
-        unsaved: 1,
-        resettable: perSetting(
-          () => true,
-        ) satisfies RenderPayload["resettable"],
-        // The field the theme gear's `⤓ default for <theme>` reads, spelled as
-        // the daemon spells it (themeDefaultSave, src/renderer/setting-drafts.ts):
-        // the theme in force, whose swatch the cell draws, and no save under a
-        // rule-chosen theme. Check opens no trigger, so it never draws the cell;
-        // a render that opens the gear over this payload does
-        // (settings-menu-seams).
-        themeDefault:
-          effective.theme.kind === "decided"
-            ? { differs: true, theme: effective.theme.name }
-            : { differs: false },
-        // The config file is the one being checked, as the daemon's is the one
-        // it loaded, so a template that reads its siblings (the demo configs'
-        // switcher) is checked against where it really is; the bundled default
-        // has no file, and a stand-in keeps the quick-action tray's `↗ config`
-        // drawn.
-        configPath:
-          configPath ?? `${CHECK_HOME}/.config/cc-candybar/config.json5`,
-        // Every layer writable, so the save cell draws every link it can and
-        // each gets its template checked.
-        layers: layerFlags(LAYER_ROLES),
-      },
-      // One step each way, so undo, redo and back render.
-      history: { undo: 1, redo: 1, sinceEdit: 1 },
-      back: 1,
-    },
-  );
-  return { ...payload, ...instantFacts(document.builtins, at) };
-}
+// The session a fresh bar is drawn for, and each other preset's beside it.
+const CHECK_SESSION = "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b";
 
 // [LAW:dataflow-not-control-flow] The check result is DATA — a pure function of
 // the target file's contents — discriminated into the three outcomes the exit-
@@ -439,17 +118,17 @@ export type CheckOutcome =
       readonly message: string;
     };
 
-// Run the daemon's load-and-render pipeline against one config target.
+// Draw the config one target names, as the daemon would draw it, and read the
+// verdict off what each draw met.
 //
 // With no target, the chain is discovered exactly as the daemon discovers it
 // for a client with no override (project/cwd → XDG), so the file this checks
 // IS the file the daemon would load from this directory, and the advisories
-// are discovery's own notices, the SAME the bar renders
-// ([LAW:one-source-of-truth]): `check` reports what the bar would, never a
-// re-derivation of it. The CLI's own `$CC_CANDYBAR_CONFIG` enters as the
-// target (checkCommandPlan), the way the statusline client sends it as a
-// hint — a set override always names the file, so an absent one is
-// `unreadable` here, never a clean verdict about the bundled default.
+// are the bar's own ([LAW:one-source-of-truth]): `check` reports what the bar
+// would, never a re-derivation of it. The CLI's own `$CC_CANDYBAR_CONFIG`
+// enters as the target (checkCommandPlan), the way the statusline client
+// sends it as a hint — a set override always names the file, so an absent one
+// is `unreadable` here, never a clean verdict about the bundled default.
 //
 // [LAW:no-silent-failure] With an explicit target, the named file must exist
 // and be readable — a missing file is `unreadable`, never a fall-through to the
@@ -468,11 +147,10 @@ export async function checkConfig(
   // verdict, so a caller that means to see the deadline reached names a
   // budget of its own instead of waiting out the command's.
   settleMs: number = SOURCE_SETTLE_MS,
+  // What builds the renderer the bar is drawn by: the daemon's main renderer,
+  // unless a test wraps it to watch what it presents.
+  build?: RendererBuilder,
 ): Promise<CheckOutcome> {
-  // Advisories accumulate from discovery onward, independent of load
-  // success — mirror of the render cache's settle.
-  const warnings: string[] = [];
-
   // [LAW:single-enforcer] The daemon's discovery, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
   const configPath = explicitConfigPath(cwd, target, world.host.home);
@@ -503,437 +181,388 @@ export async function checkConfig(
           ? unread.content.error
           : "not found",
     };
-  warnings.push(...snapshot.notices, ...repoGateLines(repos));
   const layers = snapshot.chain
     .filter((l) => l.content.kind === "text")
     .map((l): ConfigLayer => ({ path: l.path, role: l.role }));
-
-  try {
-    const rendered = await loadRegisterRender(
-      world,
-      gates,
-      snapshot,
-      cwd,
-      warnings,
-      settleMs,
-    );
-    return { kind: "clean", layers, warnings, rendered };
-  } catch (e) {
-    // Same classification the render cache's load applies: ConfigError and
-    // register/render throws (template parse, MissingFieldError, action arity)
-    // are all author-facing diagnostics — the daemon would surface each as
-    // the bar's error, so check surfaces each as fatal text.
-    if (e instanceof ConfigError) warnings.push(...e.warnings);
-    const message =
-      e instanceof ConfigError
-        ? e.message
-        : e instanceof Error
-          ? e.message
-          : String(e);
-    return { kind: "fatal", layers, message, warnings };
-  }
+  const verdict = await drawnVerdict(world, gates, snapshot, {
+    cwd,
+    args: target === undefined ? [] : ["--config", target],
+    settleMs,
+    build,
+  });
+  // Discovery's question about a repository the bar would not run is the
+  // host's to ask, so it is the host's line here too.
+  const warnings = [...verdict.warnings, ...repoGateLines(repos)];
+  return verdict.kind === "clean"
+    ? { kind: "clean", layers, warnings, rendered: verdict.rendered }
+    : { kind: "fatal", layers, message: verdict.message, warnings };
 }
 
-// A config loaded, validated, registered, and settled under the fresh
-// session's payload — the daemon's buildState, in the daemon's order
-// [LAW:single-enforcer]. `check` renders its verdict on it, so it cannot
-// drift into a partial copy of the daemon's. The caller owns `registry` and disposes it; the register pass's
-// advisory `loadWarnings` (partial declaration failures) land in `warnings` —
-// the same channel RenderCache merges them into. A source still running at
-// the deadline is named by the pass that draws without it (renderEffective),
-// never here, so one straggler is one line however many passes reach it.
-// `settle` is the one window every wait on this config shares — opened when
-// its sources' runs started, read by each pass — so no caller can give the
-// passes a window the prepare did not open.
-export interface PreparedConfig {
-  readonly settle: SettleWindow;
-  readonly layers: readonly string[];
-  // Plugins the config lists that did not load; each fails the verdict.
-  readonly droppedPlugins: readonly DroppedPlugin[];
-  readonly config: ValidatedConfig;
-  readonly compiled: CompiledConfig;
-  readonly store: VariableStore;
-  readonly registry: SourceRegistry;
-  // What holds the registry's runs.
-  readonly runs: CheckRuns;
-  // [LAW:single-enforcer] The one teardown of what a prepare opened: the
-  // registry, its runs' holder and the check's own owner of those runs.
-  [Symbol.dispose](): void;
+// One preset's bar: the session it is drawn for, the pick it opens with (none
+// for the preset a fresh session opens in), and the preset that is.
+interface Pass {
+  readonly session: SessionId;
+  readonly pick: string | null;
+  readonly preset: string | null;
 }
 
-// The repository a chain loads with: its approved project.
-export interface RepoSession {
-  readonly repo: ApprovedRepo | null;
-}
-
-// No approved project.
-export const NO_REPO: RepoSession = { repo: null };
-
-// A chain named outright, discovered as the daemon discovers one — each file
-// read, the definitions it lists, the plugins of `repo` and the checkout of
-// `cwd` — then prepared. Discovery's notices (a plugin root that cannot be
-// listed) land in `warnings` first.
-export async function prepareConfig(
-  world: World,
-  chain: readonly ConfigLayer[],
-  { repo }: RepoSession,
-  cwd: string,
-  warnings: string[],
-  // The instant the view's first payload is stamped at: the one its renders
-  // are drawn at.
-  at: Instant,
-  settleMs: number = SOURCE_SETTLE_MS,
-): Promise<PreparedConfig> {
-  const locs = locations(world.host);
-  const snapshot = snapshotOf(
-    sessionPlugins(locs, installedRoots(locs), repo, cwd),
-    chain.map((l) => layerOf(l.role, l.path, readLayer(l.path), locs.home)),
-  );
-  warnings.push(...snapshot.notices);
-  return prepareSnapshot(world, snapshot, cwd, warnings, at, settleMs);
-}
-
-// [LAW:effects-at-boundaries] What discovery found, loaded and prepared: the
-// load reads every text from the snapshot.
-export async function prepareSnapshot(
-  world: World,
+// [LAW:verifiable-goals] Every preset a session can switch to is a bar the
+// daemon renders, so every one is a pass: a segment only one preset places,
+// or a rule in one preset's globals, is otherwise compiled and never
+// evaluated, and exit 0 blesses a bar that throws on the first switch. The
+// fresh session's pass first, then each other preset's in name order, each
+// drawn for a session of its own whose stored pick is that preset. The names
+// are read off one parse of the chain here; each pass's draw says which
+// preset it drew, which the verdict holds to the one asked. A chain that does
+// not parse here draws the fresh pass alone, whose load error is the verdict.
+function passesOf(
   snapshot: ConfigSnapshot,
-  cwd: string,
-  warnings: string[],
-  at: Instant,
-  settleMs: number = SOURCE_SETTLE_MS,
-): Promise<PreparedConfig> {
-  // Each file's own advisories (an editability notice naming a duplicate key)
-  // land before its validation, so a fatal outcome still carries them.
-  const layers = snapshot.chain
-    .filter((l) => l.content.kind === "text")
-    .map((l) => l.path);
-  const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
-    warned: (w) => warnings.push(...w),
+  home: string,
+): { readonly passes: readonly Pass[]; readonly dropped: number } {
+  const fresh = (preset: string | null): Pass => ({
+    session: sessionIdOf(CHECK_SESSION),
+    pick: null,
+    preset,
   });
-  // [LAW:no-silent-failure] The bar draws past a placement of an undeclared
-  // segment; a check refuses it, as the file's author has to fix it.
-  refuseDrops(loaded.dropped);
-  const { config } = loaded;
-
-  const store = new VariableStore(world.clock);
-  // [LAW:single-enforcer] A one-shot's own owner of its sources' runs: no
-  // daemon shares them, and the check closes them with the registry whose
-  // runs they are.
-  const sourceRuns = new SourceRuns({
-    launcher: world.launcher,
-    clock: world.clock,
-  });
-  const registry = new SourceRegistry(
-    store,
-    config.globals.default_empty_value ?? "",
-    new SessionState(),
-    null,
-  );
-  const runs = new CheckRuns(
-    sourceRuns,
-    registry,
-    at,
-    plainEnvironment(world.host.env),
-  );
-  const dispose = (): void => {
-    registry.dispose();
-    runs.close();
-    sourceRuns.close();
-  };
+  let loaded: ReturnType<typeof loadSnapshot>;
   try {
-    // [LAW:single-enforcer] check draws `run` links as the daemon does, and
-    // signs them as the preview it is: it opens no key file.
-    const compiled = registerDslConfig(config, registry, {
-      cwd,
-      signer: previewSigner(),
+    // The renderer's load says what this one warns, so nothing here repeats
+    // it.
+    loaded = loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, {
+      warned: () => {},
     });
-    warnings.push(...compiled.loadWarnings);
-    // A view's inputs are pending until its source answers, and a source
-    // whose `key` or `depends_on` reads one first runs when it answers — so
-    // the payload a fresh session draws from is bound before the wait, or
-    // those sources would not have started: the constant this check draws by,
-    // through the seam a session's view reads.
-    const effective = resolveEffectiveGlobals(
-      config,
-      () => null,
-      () => false,
-    );
-    const settle = settleWindow(world.clock, settleMs);
-    bindPass(
-      { layers, config, compiled, store, registry, runs },
-      effective,
-      CHECK_WIDTH,
-      at,
-    );
-    // [LAW:no-ambient-temporal-coupling] An async source's first run — a shell
-    // or file read — completes after registration; a prepared config's store
-    // holds what the sources YIELDED, not their pre-scan fallbacks (a json
-    // document with no default draws its loading cell until it is scanned).
-    // The holder owns the "every run complete" state; a source still out at
-    // the deadline is left to the pass that draws without it.
-    await runs.settled(settle.signal);
-    return {
-      settle,
-      layers,
-      droppedPlugins: [
-        ...loaded.installed.dropped,
-        ...loaded.layers.flatMap((l) => l.plugins.dropped),
-      ],
-      config,
-      compiled,
-      store,
-      registry,
-      runs,
-      [Symbol.dispose]: dispose,
-    };
-  } catch (e) {
-    dispose();
-    throw e;
+  } catch {
+    // [LAW:no-silent-failure] The renderer's load fails the same way, and
+    // its error is the fresh pass's.
+    return { passes: [fresh(null)], dropped: 0 };
   }
+  const { config } = loaded;
+  const opens = effectivePresetName(
+    null,
+    config.globals.preset,
+    config.presets,
+  );
+  const others = [...presetNames(config.presets)]
+    .filter((p) => p !== opens)
+    .sort();
+  return {
+    passes: [
+      fresh(opens),
+      ...others.map(
+        (preset, i): Pass => ({
+          session: sessionIdOf(`${CHECK_SESSION}-${i + 1}`),
+          pick: preset,
+          preset,
+        }),
+      ),
+    ],
+    // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, and
+    // its notice is a load warning, so only the verdict can say the config
+    // asked for something it did not get.
+    dropped:
+      loaded.installed.dropped.length +
+      loaded.layers.reduce((n, l) => n + l.plugins.dropped.length, 0),
+  };
 }
 
-// [LAW:no-silent-failure] A segment whose template THROWS while evaluating
-// (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
-// partially-declared variable) renders as a visible ⚠ error cell — partial
-// rendering, the daemon's channel for a human looking at the bar. The blind
-// authoring agent is not looking at the bar; check collects the same errors
-// through the render's observer seam — a segment's ⚠, a globals rule the
-// render could not honour (brandon-themes-dzl), and a layout `when` that threw
-// (brandon-unfiled-3248.ryf) — and fails the verdict, so
-// exit 0 never blesses a bar the daemon would render a complaint on.
-//
-// One pass: the view bound to this pass's payload, the runs that bind started
-// (a source keyed on an input the payload moved) awaited under the prepared
-// config's window, and the draw over what they yielded
-// [LAW:no-ambient-temporal-coupling] — the daemon's request order, where a
-// request awaits its world state's first readings before it answers. A
-// source still out at the deadline is this pass's advisory, so the verdict
-// names the preset that drew without it.
-export async function renderEffective(
-  prepared: PreparedConfig,
-  effective: EffectiveGlobals,
-  width: number,
-  at: Instant,
-): Promise<{
-  rendered: Frame;
-  failures: Map<string, string>;
-  advisories: Set<string>;
-}> {
-  // [LAW:types-are-the-program] Keyed by the failing thing's own LABEL, not
-  // appended to a list — each can fail at most once per pass, so this is the
-  // strongest true shape (dedupe-by-construction within one pass). The key
-  // carries WHAT failed because two different domains report here — a
-  // segment, or a globals slot whose rule the render could not honour — and
-  // a bare name could not tell them apart
-  // (nor stop a segment named `globals.palette` from displacing the slot).
-  const failures = new Map<string, string>();
-  // What check lists beside its verdict without failing it: a source still
-  // running at the pass's deadline, which the bar draws as pending.
-  const advisories = new Set<string>();
-  // [LAW:types-are-the-program] Exhaustive over every kind a render can warn
-  // of, so a new kind is a compile error here until check says what it means.
-  const warned = (warning: RenderWarning): void => {
-    switch (warning.kind) {
-      // [LAW:no-silent-failure] A globals rule the render could not honour —
-      // its template threw, or a palette rule named no installed theme — is a
-      // real finding for a headless pass: the bar would render that slot's
-      // floor with nobody watching the bar. Keyed by its slot so two failing
-      // slots are two findings; the message names the path(s) the rule was
-      // written at, which may be a preset's globals rather than the config's.
+// What one pass's draw met, read off its request turn's record.
+interface PassReading {
+  readonly pass: Pass;
+  readonly frame: Frame | null;
+  // A load error, or the placements no file declares: the config itself
+  // failed, whatever its bar drew.
+  readonly fatal: string | null;
+  readonly failures: readonly string[];
+  readonly advisories: readonly string[];
+}
+
+// The value a record notes under `key`, last as noted.
+function noted(record: TurnRecord, key: string): string | undefined {
+  return record.findLast(([k]) => k === key)?.[1];
+}
+
+// [LAW:types-are-the-program] Each fault's meaning for the verdict, by kind.
+// An error is the config's failure; a warning the walk met is a render error
+// the bar draws past; a warning about what the bar stands on is an advisory.
+// A kind this list does not name fails the verdict, naming it, until it says.
+function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
+  const threw = draw.turns.find((t) => t.kind === "threw");
+  const { answer } = draw;
+  // [LAW:no-silent-failure] A draw that threw is the renderer's own bug: it
+  // is that pass's one failure, so it neither loses what the other passes
+  // find nor drops the preset that reached it.
+  if (threw?.kind === "threw" || !answer.resp.ok || !("frame" in answer.resp))
+    return {
+      pass,
+      frame: null,
+      fatal: null,
+      failures: [
+        `render: ${
+          threw?.kind === "threw"
+            ? threw.failure.message
+            : answer.resp.ok
+              ? "the answer carried no frame"
+              : answer.resp.error
+        }`,
+      ],
+      advisories: [],
+    };
+  const frame = parseFrame(answer.resp.frame);
+  // The request's turn, which an answer that carried a frame took last.
+  const record = draw.turns.at(-1)?.record ?? [];
+  const note = noted(record, "faults");
+  if (note === undefined)
+    throw new Error(
+      `the request turn for session ${pass.session} noted no faults`,
+    );
+  const faults = readFaults(note);
+  // [LAW:no-silent-failure] Each pass's session is drawn once, so its record
+  // is its session's first and holds the list.
+  if (faults === KEPT_FAULTS)
+    throw new Error(
+      `the request turn for session ${pass.session} kept faults no record of it noted`,
+    );
+  const fatal: string[] = [];
+  const dropped: string[] = [];
+  const failures: string[] = [];
+  const advisories: string[] = [];
+  const met = (fault: Fault): void => {
+    switch (fault.kind) {
+      case "load":
+        if (fault.level === "error") fatal.push(fault.message);
+        // One advisory per line the load warned, as each is its own.
+        else advisories.push(...fault.message.split("\n"));
+        return;
+      // [LAW:no-silent-failure] The bar draws past a placement of an
+      // undeclared segment; a check refuses it, as the file's author has to
+      // fix it.
+      case "dropped":
+        dropped.push(fault.message);
+        return;
+      case "refused-args":
+      case "hints":
+      case "update-act":
+      case "click":
+        failures.push(`${fault.kind}: ${fault.message}`);
+        return;
+      // A globals rule the render could not honour: the bar renders that
+      // slot's floor with nobody watching the bar.
       case "rule":
-        failures.set(`${warning.slot} rule`, warning.message);
+        failures.push(`${fault.subject} rule: ${fault.message}`);
         return;
       // A placement that drew its ⚠ cell in its place.
       case "segment":
-        failures.set(`segment "${warning.placement}"`, warning.message);
+        failures.push(`segment "${fault.subject}": ${fault.message}`);
         return;
-      // A layout `when` that threw: the bar hides what it gates, which a
-      // headless pass would otherwise bless.
+      // A layout `when` that threw hides what it gates, and a variable that
+      // cannot refresh draws its last value: a bar quietly wrong.
       case "when":
-        failures.set(warning.where, warning.error);
-        return;
-      // A variable that cannot refresh draws its last value; a headless pass
-      // would bless a bar that has quietly stopped moving.
       case "refresh":
-        failures.set(
-          `variable "${warning.variable}"`,
-          `cannot refresh: ${warning.error}`,
-        );
+        failures.push(fault.message);
+        return;
+      // The bar drew from facts the host could not stamp: what it shows is
+      // not what the config draws.
+      case "facts":
+        failures.push(`facts: ${fault.message}`);
+        return;
+      // What the daemon itself stands on, which says nothing of the config.
+      case "file-events":
+      case "lifeline":
+      case "launch-pipes":
+      case "renderer-ended":
+      case "act-failed":
+      case "config-watch":
+      case "update-failed":
+        advisories.push(fault.message);
         return;
       default:
-        warning satisfies never;
+        failures.push(`${fault.kind}: ${fault.message}`);
     }
   };
-  const { config, compiled, store, registry, runs, settle } = prepared;
-  const { drawn, opts } = bindPass(prepared, effective, width, at);
-  for (const line of stragglers(settle, await runs.settled(settle.signal)))
-    advisories.add(line);
-  const { frame, warnings } = drawDsl(
-    config,
-    compiled,
-    store,
-    registry,
-    drawn,
-    at,
-    opts,
-    effective,
-  );
-  for (const warning of warnings) warned(warning);
-  return { rendered: frame, failures, advisories };
+  faults.forEach(met);
+  const drew = noted(record, "preset");
+  if (pass.preset !== null && drew !== pass.preset)
+    failures.push(
+      `render: the session asked for preset "${pass.preset}" drew preset "${drew}"`,
+    );
+  // The sources never answered when the wait ended, as the draw's record
+  // names them (`name:why`).
+  const out = (noted(record, "sourcesPending") ?? "-")
+    .split(",")
+    .flatMap((entry) => {
+      const colon = entry.lastIndexOf(":");
+      return colon > 0 && entry.slice(colon + 1) === "unread"
+        ? [entry.slice(0, colon)]
+        : [];
+    });
+  if (out.length > 0)
+    advisories.push(
+      `source${out.length === 1 ? "" : "s"} still running after ${settleMs} ms, drawn as pending: ${out.join(", ")}`,
+    );
+  return {
+    pass,
+    frame,
+    fatal:
+      fatal.length > 0
+        ? fatal.join("\n")
+        : dropped.length > 0
+          ? dropped.join("\n")
+          : null,
+    failures,
+    advisories,
+  };
 }
 
-// The verdict: the prepared config rendered under every preset, every render
-// error a failure. Returns the line a fresh session renders.
-async function loadRegisterRender(
+type Verdict =
+  | {
+      readonly kind: "clean";
+      readonly rendered: Frame;
+      readonly warnings: readonly string[];
+    }
+  | {
+      readonly kind: "fatal";
+      readonly message: string;
+      readonly warnings: readonly string[];
+    };
+
+// The bar drawn under every preset, through a bar of the daemon's own parts
+// over the faked session, every render error a failure. Its frame is the one
+// a fresh session draws.
+async function drawnVerdict(
   world: World,
   gates: Gates,
   snapshot: ConfigSnapshot,
-  cwd: string,
-  warnings: string[],
-  settleMs: number,
-): Promise<Frame> {
-  // [LAW:effects-at-boundaries] One instant for every pass, so the passes
-  // differ only in the preset they render; one settle window for every wait.
-  const at = instantOf(new Date(world.clock.now()));
-  const prepared = await prepareSnapshot(
-    world,
-    snapshot,
+  {
     cwd,
-    warnings,
-    at,
+    args,
     settleMs,
-  );
-  const { config } = prepared;
-  try {
-    // The gates the daemon derives when it loads this config, over the keys
-    // its own links hold: an action table that cannot gate fails here as it
-    // fails that load.
-    gates.state.gateFor(config);
-    gates.config.gateFor(config);
-
-    // [LAW:verifiable-goals] Every preset a session can switch to is a bar
-    // the daemon renders, so every one is a pass: a segment only one preset
-    // places, or a rule in one preset's globals, is otherwise compiled and
-    // never evaluated, and exit 0 blesses a bar that throws on the first
-    // switch (brandon-check-ew8j). Each preset renders twice — once as a
-    // fresh session sees it, once with `.preset.customized` true, the one
-    // gate the rich fixture cannot drive on its own (it is a daemon-resolved
-    // fact about session state, not a hookData field). The resolution is THE
-    // daemon's (resolveEffectiveGlobals) with the session's preset pick as
-    // the only input that varies, so each pass renders what a session on
-    // that preset would — edit mode off, nothing else clicked.
-    // The preset a session that has picked none opens in.
-    const freshPreset = effectivePresetName(
-      null,
-      config.globals.preset,
-      config.presets,
+    build,
+  }: {
+    readonly cwd: string;
+    readonly args: readonly string[];
+    readonly settleMs: number;
+    readonly build: RendererBuilder | undefined;
+  },
+): Promise<Verdict> {
+  // [LAW:effects-at-boundaries] One instant for every pass's fixture, so the
+  // passes differ only in the preset they render.
+  const at = instantOf(new Date(world.clock.now()));
+  const { home } = world.host;
+  const { passes, dropped } = passesOf(snapshot, home);
+  // Each pass's request, as its client sends it, through the checkpoint the
+  // daemon's requests cross. [LAW:one-source-of-truth] `check` runs in the
+  // session's own shell, so its process environment is the session's.
+  const requests = passes.map((pass) => {
+    const checked = checkRenderRequest(
+      {
+        v: PROTOCOL_VERSION,
+        kind: "render",
+        hookData: checkHook(at, pass.session, cwd),
+        args: ["cc-candybar", ...args],
+        cwd,
+        encoding: "frame",
+        env: plainEnvironment(world.host.env),
+        termCols: columnsReserving(CHECK_WIDTH),
+        ...CHECK_HINTS,
+      },
+      { firstSightOfUnknownHookField: () => false },
+      () => {},
+      home,
     );
-    // [LAW:no-silent-failure] Nothing a config authors makes a render throw
-    // — every fault it can hold is a ⚠ cell or a warning — so a throw is the
-    // renderer's own bug, and one pass's throw must neither lose the
-    // failures the other passes find nor drop the preset that reached it: it
-    // is caught here and becomes that pass's one failure. `rendered` is
-    // absent exactly then.
-    const render = async (preset: string, customized: boolean) => {
-      const effective = resolveEffectiveGlobals(
-        config,
-        (key) => (key === "preset" ? preset : null),
-        () => customized,
+    if (!checked.ok)
+      throw new Error(
+        `check's own request was refused: ${checked.problems.join("; ")}`,
       );
-      let pass: {
-        rendered?: Frame;
-        failures: Map<string, string>;
-        advisories: ReadonlySet<string>;
-      };
-      try {
-        pass = await renderEffective(prepared, effective, CHECK_WIDTH, at);
-      } catch (e) {
-        pass = {
-          failures: new Map([
-            ["render", e instanceof Error ? e.message : String(e)],
-          ]),
-          advisories: new Set(),
-        };
-      }
-      return { preset, customized, ...pass };
-    };
-    // [LAW:one-source-of-truth] The passes run one after another: they share
-    // the one view, and each binds it to its own payload before it draws.
-    const primary = await render(freshPreset, false);
-    const outs = [primary, await render(freshPreset, true)];
-    for (const p of presetNames(config.presets)) {
-      if (p === freshPreset) continue;
-      outs.push(await render(p, false), await render(p, true));
-    }
-
-    // [LAW:one-source-of-truth] One line per (what, why) — the line's text —
-    // however many passes reach it, for failures and advisories alike: an
-    // unconditional error fires in every pass, and reporting it once per
-    // preset would count one bug N times; the same segment failing for two
-    // different reasons is two lines. A line the fresh session's own pass
-    // shows is reported bare — that is the bar a session opens on; any other
-    // is tagged with the presets that reach it, and
-    // `.preset.customized = true` only where that preset's plain pass did
-    // not, so the reader knows which switch exposes it.
-    const reported = (
-      linesOf: (out: (typeof outs)[number]) => Iterable<string>,
-    ): string[] => {
-      const found = new Map<string, Map<string, Set<boolean>>>();
-      for (const out of outs) {
-        for (const line of linesOf(out)) {
-          const reached = found.get(line) ?? new Map<string, Set<boolean>>();
-          reached.set(
-            out.preset,
-            (reached.get(out.preset) ?? new Set()).add(out.customized),
-          );
-          found.set(line, reached);
-        }
-      }
-      return [...found].map(([line, reached]) => {
-        if (reached.get(freshPreset)?.has(false)) return line;
-        const where = [...reached].map(([preset, passes]) =>
-          [
-            ...(preset === freshPreset ? [] : [`preset "${preset}"`]),
-            ...(passes.has(false) ? [] : [".preset.customized = true"]),
-          ].join(", "),
-        );
-        return `${line} (under ${where.join("; ")})`;
-      });
-    };
-    warnings.push(...reported((out) => out.advisories));
-    const errors = reported((out) =>
-      [...out.failures].map(([label, message]) => `${label}: ${message}`),
-    );
-    const bar = primary.rendered;
-    // [LAW:no-silent-failure] A dropped plugin leaves a bar that renders, so
-    // only the verdict can say the config asked for something it did not get.
-    // Each drop is already a warning line; the verdict counts them.
-    const drops = prepared.droppedPlugins.length;
-    const failures = [
-      ...(drops > 0
-        ? [
-            `${drops} plugin${drops === 1 ? "" : "s"} did not load (named in the warnings)`,
-          ]
-        : []),
-      ...(errors.length > 0 || bar === undefined
-        ? [
-            `config renders with ${errors.length} render error${
-              errors.length === 1 ? "" : "s"
-            } (the daemon would show them on the bar):\n` +
-              errors.map((m) => `  ${m}`).join("\n"),
-          ]
-        : []),
-    ];
-    if (failures.length > 0 || bar === undefined) {
-      throw new Error(failures.join("\n"));
-    }
-    return bar;
+    return { pass, ...checked };
+  });
+  const first = requests[0];
+  if (first === undefined) throw new Error("check drew no pass");
+  const bar = localBar({
+    world,
+    gates,
+    // [LAW:single-enforcer] check draws `run` links as the daemon does, and
+    // signs them as the preview it is: it opens no key file.
+    linkSigner: previewSigner(),
+    stateDir: stateDir(world.host),
+    home: CHECK_HOME,
+    locate: checkLocate,
+    origin: first.req.requested,
+    snapshot,
+    stored: {
+      ...EMPTY_STORED_STATE,
+      sessions: Object.fromEntries(
+        passes.flatMap((p) =>
+          p.pick === null ? [] : [[p.session, { preset: p.pick }]],
+        ),
+      ),
+    },
+    owners: (sourceRuns, log) => checkOwners(at, sourceRuns, log),
+    daemon: () => checkDaemonFacts(at),
+    build,
+  });
+  const read: PassReading[] = [];
+  try {
+    // [LAW:no-ambient-temporal-coupling] One deadline every pass's wait
+    // shares, from the first request on.
+    const waitEndsAt = world.clock.monotonic() + settleMs;
+    // The passes run one after another, as one session's requests would.
+    for (const { pass, req, environment } of requests)
+      read.push(
+        readPass(pass, await bar.draw(req, environment, waitEndsAt), settleMs),
+      );
   } finally {
     // A one-shot check must not leak the timers, watches and children the
     // config declared past the verdict.
-    prepared[Symbol.dispose]();
+    await bar.close();
   }
+  const [primary] = read;
+  if (primary === undefined) throw new Error("check drew no pass");
+  // [LAW:one-source-of-truth] One line per (what, why) — the line's text —
+  // however many passes reach it, for failures and advisories alike: an
+  // unconditional error fires in every pass, and reporting it once per
+  // preset would count one bug N times. A line the fresh session's own pass
+  // shows is reported bare — that is the bar a session opens on; any other is
+  // tagged with the presets that reach it, so the reader knows which switch
+  // exposes it.
+  const reported = (linesOf: (r: PassReading) => readonly string[]) => {
+    const found = new Map<string, string[]>();
+    for (const r of read)
+      for (const line of linesOf(r))
+        found.set(line, [
+          ...(found.get(line) ?? []),
+          ...(r === primary ? [] : [`preset "${r.pass.preset}"`]),
+        ]);
+    return [...found].map(([line, presets]) =>
+      linesOf(primary).includes(line)
+        ? line
+        : `${line} (under ${presets.join("; ")})`,
+    );
+  };
+  const warnings = reported((r) => r.advisories);
+  if (primary.fatal !== null)
+    return { kind: "fatal", message: primary.fatal, warnings };
+  const errors = [
+    ...bar.errors(),
+    ...reported((r) => [...(r.fatal === null ? [] : [r.fatal]), ...r.failures]),
+  ];
+  const failures = [
+    ...(dropped > 0
+      ? [
+          `${dropped} plugin${dropped === 1 ? "" : "s"} did not load (named in the warnings)`,
+        ]
+      : []),
+    ...(errors.length > 0
+      ? [
+          `config renders with ${errors.length} render error${
+            errors.length === 1 ? "" : "s"
+          } (the daemon would show them on the bar):\n` +
+            errors.map((m) => `  ${m}`).join("\n"),
+        ]
+      : []),
+  ];
+  return failures.length > 0 || primary.frame === null
+    ? { kind: "fatal", message: failures.join("\n"), warnings }
+    : { kind: "clean", rendered: primary.frame, warnings };
 }
 
 const EXIT_CLEAN = 0;

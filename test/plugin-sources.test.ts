@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
@@ -909,6 +910,7 @@ function statusline(r: Rig, configFile: string) {
       systemTimekeeper,
       new AbortController().signal,
       () => {},
+      checkoutLocation,
       checked.req,
       TEST_ENVIRONMENT,
       ++id as RequestId,

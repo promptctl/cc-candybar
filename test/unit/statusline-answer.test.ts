@@ -9,6 +9,7 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
+import { checkoutLocation } from "../../src/utils/git-root";
 import { TEST_ENVIRONMENT } from "../helpers/session-environment";
 import {
   eventRenderer,
@@ -192,6 +193,7 @@ async function answer(
     CLOCK,
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
+    checkoutLocation,
     REQ,
     TEST_ENVIRONMENT,
     REQUEST,
@@ -545,6 +547,7 @@ describe("the request's wait, between its context and its request", () => {
       CLOCK,
       NOT_CLOSING,
       () => {},
+      checkoutLocation,
       REQ,
       TEST_ENVIRONMENT,
       REQUEST,

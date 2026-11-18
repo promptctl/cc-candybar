@@ -52,7 +52,7 @@ import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
-import { checkPayload } from "../src/check";
+import { checkPayload } from "./helpers/check-payload";
 import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";

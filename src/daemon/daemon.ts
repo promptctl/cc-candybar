@@ -71,6 +71,7 @@ import {
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
+import { checkoutLocation } from "../utils/git-root.js";
 import { DoctorSource } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
@@ -689,7 +690,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
                 const req = frameFeeds.latest(sessionId);
                 return req === null
                   ? []
-                  : [{ context: located(req), worldState }];
+                  : [{ context: located(req, checkoutLocation), worldState }];
               },
             ),
           },
