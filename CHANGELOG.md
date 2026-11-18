@@ -1,3 +1,9 @@
+## [1.232.1](https://github.com/promptctl/cc-candybar/compare/v1.232.0...v1.232.1) (2026-11-18)
+
+### Bug Fixes
+
+* every staged file is published through one operation, under a name unique to its call (ooi7) ([#798](https://github.com/promptctl/cc-candybar/issues/798)) ([36b0c26](https://github.com/promptctl/cc-candybar/commit/36b0c268535b139534bb9b29bd59ac0a0621b719))
+
 ## [1.232.0](https://github.com/promptctl/cc-candybar/compare/v1.231.0...v1.232.0) (2026-11-18)
 
 ### Features
