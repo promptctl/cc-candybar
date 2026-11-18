@@ -35041,6 +35041,7 @@ var failedOf = (d) => ({
 });
 var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
 var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var UNSEEN = "unseen";
 function entryAt(at) {
   try {
     const s = fs_default.lstatSync(at, { bigint: true });
@@ -35054,8 +35055,6 @@ var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
   dirs = /* @__PURE__ */ new Map();
   polled = /* @__PURE__ */ new Map();
-  // Each handle's slot and holder, for a follow that keeps it.
-  owners = /* @__PURE__ */ new WeakMap();
   // The next sweep's cancel, armed exactly while a path is polled.
   sweep = null;
   counters;
@@ -35090,9 +35089,9 @@ var WatcherRegistry = class {
     }
     const shared = this.slots.get(key);
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
+    if (shared !== void 0) this.sighted(shared.polled);
     const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate, seen: /* @__PURE__ */ new Map() };
-    this.sighted(slot, holder);
+    const holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
   }
@@ -35103,13 +35102,20 @@ var WatcherRegistry = class {
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
-    const owned = this.owners.get(followed.watch.handle);
-    if (owned !== void 0) this.sighted(owned.slot, owned.holder);
+    if (followed.move === "kept")
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
     return followed;
   }
-  // A holder's baselines: one lstat of each path its slot polls.
-  sighted(slot, holder) {
-    for (const { path: at } of slot.polled) holder.seen.set(at, entryAt(at));
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  sighted(records) {
+    for (const record2 of records)
+      if (entryAt(record2.path) !== record2.entry) record2.entry = UNSEEN;
   }
   opened(key, targets) {
     const slot = {
@@ -35288,7 +35294,7 @@ var WatcherRegistry = class {
     slot.debounce = debounce;
   }
   makeHandle(slot, holder) {
-    const handle = {
+    return {
       get deaf() {
         return slot.listeners.flatMap(
           ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
@@ -35303,8 +35309,6 @@ var WatcherRegistry = class {
         this.slots.delete(slot.key);
       }
     };
-    this.owners.set(handle, { slot, holder });
-    return handle;
   }
   closeHandle(at, handle, cause) {
     try {
@@ -35340,11 +35344,19 @@ var WatcherRegistry = class {
     if (this.polled.size === 0) this.disarmSweep();
     if (this.counters) this.counters.watchersClosed++;
   }
-  // The record for a polled path, the one already held or a new one.
+  // The record for a polled path: a new one read now, so only a change after
+  // the acquire is a change; or the one already held, sighted.
   polledAt(at) {
     const held2 = this.polled.get(at);
-    if (held2 !== void 0) return held2;
-    const record2 = { path: at, slots: /* @__PURE__ */ new Set() };
+    if (held2 !== void 0) {
+      this.sighted([held2]);
+      return held2;
+    }
+    const record2 = {
+      path: at,
+      entry: entryAt(at),
+      slots: /* @__PURE__ */ new Set()
+    };
     this.polled.set(at, record2);
     return record2;
   }
@@ -35352,10 +35364,11 @@ var WatcherRegistry = class {
   // path is polled and the registry is open. The reads are synchronous, so no
   // two sweeps overlap and no older read lands over a newer one.
   // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path, so a mount under a polled path that stops
-  // answering stops every bar until it answers. The paths are a session's own
-  // files (its transcript, its settings, its config, its git directory), which
-  // the daemon reads on this thread to render anyway.
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
   armSweep() {
     if (this.sweep !== null || this.closed || this.polled.size === 0) return;
     this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
@@ -35367,22 +35380,15 @@ var WatcherRegistry = class {
     this.sweep = null;
   }
   // [LAW:dataflow-not-control-flow] The same read for every polled path each
-  // sweep. A slot where some holder's baseline differs from it fires, by its
-  // path, through the slot's debounce, as a directory watch reports a child,
-  // and every holder's baseline becomes it.
+  // sweep. A path whose entry differs fires every slot that names it, by its
+  // path, through the slot's debounce, as a directory watch reports a child.
   readPolled() {
     for (const record2 of this.polled.values()) {
       const now2 = entryAt(record2.path);
-      for (const slot of record2.slots) {
-        let moved2 = false;
-        for (const holder of slot.holders) {
-          if (holder.seen.get(record2.path) === now2) continue;
-          holder.seen.set(record2.path, now2);
-          moved2 = true;
-        }
-        if (moved2)
-          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
-      }
+      if (now2 === record2.entry) continue;
+      record2.entry = now2;
+      for (const slot of record2.slots)
+        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
     }
   }
   // The slots held now.
