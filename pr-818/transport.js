@@ -35091,15 +35091,19 @@ var WatcherRegistry = class {
     const slot = shared ?? this.opened(key, targets);
     const holder = { onInvalidate };
     slot.holders.add(holder);
+    this.reread(slot.polled);
     return this.makeHandle(slot, holder);
   }
   // The held watch following `spec` (`followWatch`).
   follow(held2, spec, onInvalidate) {
-    return followWatch(
+    const followed = followWatch(
       held2,
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
+    if (followed.move === "kept")
+      this.reread(this.slots.get(followed.watch.key)?.polled ?? []);
+    return followed;
   }
   opened(key, targets) {
     const slot = {
@@ -35365,7 +35369,16 @@ var WatcherRegistry = class {
   // sweep. A path whose entry differs fires every slot that names it, by its
   // path, through the slot's debounce, as a directory watch reports a child.
   readPolled() {
-    for (const record2 of this.polled.values()) {
+    this.reread(this.polled.values());
+  }
+  // [LAW:no-ambient-temporal-coupling] Every acquire and every follow reads
+  // its polled paths now, as the sweep does. A holder follows right after it
+  // reads, and a baseline older than that read hides any change that undoes
+  // what it read before the next sweep: a file made and removed within one
+  // period reads the same at both sweeps. A path that moved since the last
+  // sweep fires, a spare re-read and never a missed one.
+  reread(records) {
+    for (const record2 of records) {
       const now2 = entryAt(record2.path);
       if (now2 === record2.entry) continue;
       record2.entry = now2;

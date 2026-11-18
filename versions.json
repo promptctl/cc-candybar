@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-818",
+      "ref": "refs/pull/818/merge",
+      "sha": "c03f18c195478c80a5f2eefa865e832387e749c8",
+      "timestamp": "2026-11-18T17:58:15.450Z",
+      "commits": [
+        {
+          "sha": "c03f18c195478c80a5f2eefa865e832387e749c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:57:02-07:00",
+          "message": "Merge 5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T10:56:43-07:00",
+          "message": "fix(watchers): every acquire and follow reads its polled paths now, so a file made and removed inside one sweep is heard (hqoo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-815",
       "ref": "refs/pull/815/merge",
       "sha": "15fd30750a101cdcad91cf7b735845f857d05bb3",
@@ -27,28 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:33:34-07:00",
           "message": "fix(storage): a plugin storage folder's fault clears when the OS or the disk answers again (oiyf)\n\nA refused or erroring watch, a failed stat, or a folder that cannot be\nmade each stands only while that answer does: the registry's period\nreopens the watch, every judgment stats again, and every hold, period\nand catch-up makes the folder again. A folder that cannot be made holds\nno watch. Each fault source is logged and counted on its own moves, and\na generation that closes logs the faults it ended with.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-817",
-      "ref": "refs/pull/817/merge",
-      "sha": "4a445f22d76427e62ae41a1120e71809042dc489",
-      "timestamp": "2026-11-18T17:45:16.709Z",
-      "commits": [
-        {
-          "sha": "4a445f22d76427e62ae41a1120e71809042dc489",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:44:14-07:00",
-          "message": "Merge b45e383da4df96bf22238568f1943ce1346309fe into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "b45e383da4df96bf22238568f1943ce1346309fe",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:44:03-07:00",
-          "message": "fix(daemon): a fork-bomb registry that cannot be listed refuses an isolated boot, naming why (g75t)\n"
         }
       ]
     },
