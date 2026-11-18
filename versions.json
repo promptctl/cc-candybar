@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-830",
+      "ref": "refs/pull/830/merge",
+      "sha": "adc69d751d59ffd001142032f101aad83e48b37f",
+      "timestamp": "2026-11-18T21:01:23.719Z",
+      "commits": [
+        {
+          "sha": "adc69d751d59ffd001142032f101aad83e48b37f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T21:00:20Z",
+          "message": "Merge 66dea5c61e26678f0774ababeac95ab797f69bfc into c27a4e0e74255d340737ceb295fc044543bde560\n"
+        },
+        {
+          "sha": "66dea5c61e26678f0774ababeac95ab797f69bfc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T14:00:04-07:00",
+          "message": "fix(config): a load takes the installed layer as a value its caller builds, so a click's loads share one, and plugins are laid over a base one way (70xn)\n"
+        },
+        {
+          "sha": "1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T13:07:47-07:00",
+          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "c27a4e0e74255d340737ceb295fc044543bde560",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-18T20:10:57Z",
           "message": "chore(release): set `package.json` to 1.232.5\n\n## [1.232.5](https://github.com/promptctl/cc-candybar/compare/v1.232.4...v1.232.5) (2026-11-18)\n\n### Bug Fixes\n\n* **plugins:** a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k) ([#820](https://github.com/promptctl/cc-candybar/issues/820)) ([f72209a](https://github.com/promptctl/cc-candybar/commit/f72209a57f1948648b44508adcfa2a143579eaf8))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-830",
-      "ref": "refs/pull/830/merge",
-      "sha": "2420321114bcabfa9dedaaadb6bd101b19e6a623",
-      "timestamp": "2026-11-18T20:09:06.349Z",
-      "commits": [
-        {
-          "sha": "2420321114bcabfa9dedaaadb6bd101b19e6a623",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:07:58-07:00",
-          "message": "Merge 1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c into f72209a57f1948648b44508adcfa2a143579eaf8\n"
-        },
-        {
-          "sha": "1ce6f03a1e7dc341fbaa8dd06a5584e5ef2fb02c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:07:47-07:00",
-          "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
         }
       ]
     },

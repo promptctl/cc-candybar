@@ -50988,7 +50988,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.4";
+var PACKAGE_VERSION = "1.232.5";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -83525,11 +83525,12 @@ function noFile(dflt) {
 }
 function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
   const parsed2 = parseDslFile(path45, source, allowedPalettes, (refs, names) => {
-    const layer = applyPlugins(
+    const layer = layPlugins(
       listedPlugins(refs, path45, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      (c, plugin, replaces) => checkPlugin(c, plugin, replaces, path45, allowedPalettes)
+      path45,
+      allowedPalettes
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -83559,13 +83560,26 @@ function loadConfigSource(path45, source, dflt, ctx, allowedPalettes) {
     config: standing2.config
   };
 }
-function installedLayer(files, ctx, dflt, allowedPalettes) {
+function layPlugins(files, ctx, base, label2, allowedPalettes) {
   return applyPlugins(
     files,
     ctx,
-    { config: dflt, rendering: /* @__PURE__ */ new Map() },
-    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, "<installed plugins>", allowedPalettes)
+    base,
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, label2, allowedPalettes)
   );
+}
+function installedBase(snapshot, home, dflt) {
+  const ctx = { checkout: snapshot.checkout, home };
+  return {
+    ctx,
+    layer: layPlugins(
+      snapshot.plugins,
+      ctx,
+      { config: dflt, rendering: /* @__PURE__ */ new Map() },
+      "<installed plugins>",
+      void 0
+    )
+  };
 }
 function strayDrop({ path: file, scope }) {
   const root = import_node_path38.default.dirname(file);
@@ -83576,26 +83590,20 @@ function strayDrop({ path: file, scope }) {
     reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path38.default.join(root, "<name>", DEFINITION_FILE)}`
   };
 }
-function loadSnapshot(snapshot, home, dflt, trace, allowedPalettes) {
-  const { ctx, plugins: plugins2, base, layers } = mergeChain(
-    snapshot,
-    home,
-    dflt,
-    trace,
-    allowedPalettes
-  );
-  return validateChain(ctx, plugins2, base, layers, trace, allowedPalettes);
+function loadSnapshot(snapshot, installed, trace) {
+  const { ctx, plugins: plugins2, base, layers } = mergeChain(snapshot, installed, trace);
+  return validateChain(ctx, plugins2, base, layers, trace, void 0);
 }
-function inheritedConfig(snapshot, home, dflt) {
-  const { base, layers } = mergeChain(snapshot, home, dflt, {
+function inheritedConfig(snapshot, installed) {
+  const { base, layers } = mergeChain(snapshot, installed, {
     warned: () => {
     }
   });
   return layers.at(-1)?.config ?? base;
 }
-function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
-  const ctx = { checkout: snapshot.checkout, home };
-  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
+function mergeChain(snapshot, installed, trace) {
+  const { ctx } = installed;
+  const merged = installed.layer;
   const plugins2 = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)]
@@ -83626,7 +83634,7 @@ function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
           rendering: below?.rendering ?? plugins2.rendering
         }
       },
-      allowedPalettes
+      void 0
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path: path45 });
@@ -87624,7 +87632,8 @@ function seenBy(layer, read2) {
   return {
     ...layer,
     below: held2(chain2.filter((l) => rank(l.role) < rank(layer.role))),
-    above: held2(chain2.filter((l) => rank(l.role) > rank(layer.role)))
+    above: held2(chain2.filter((l) => rank(l.role) > rank(layer.role))),
+    installed: installedBase(layer.snapshot, layer.home, DEFAULT_DSL_CONFIG)
   };
 }
 function heldLayer(layer, text4) {
@@ -87686,11 +87695,7 @@ function loadedOrNull(into, text4) {
 }
 function inheritedOf(into) {
   try {
-    return inheritedConfig(
-      heldSnapshot(into, into.below),
-      into.home,
-      DEFAULT_DSL_CONFIG
-    );
+    return inheritedConfig(heldSnapshot(into, into.below), into.installed);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     throw new BadVerbArgs(
@@ -87704,13 +87709,10 @@ function chainOver(into, text4) {
     ...text4 !== null ? [heldLayer(into, text4)] : [],
     ...into.above
   ];
-  return loadSnapshot(
-    heldSnapshot(into, layers),
-    into.home,
-    DEFAULT_DSL_CONFIG,
-    { warned: () => {
-    } }
-  );
+  return loadSnapshot(heldSnapshot(into, layers), into.installed, {
+    warned: () => {
+    }
+  });
 }
 function writtenConfig(into, chain2) {
   const upTo = /* @__PURE__ */ new Set([...into.below.map((l) => l.path), into.path]);
@@ -90603,8 +90605,7 @@ function resolveLoad(cwd2, chain2) {
   try {
     const loaded = loadSnapshot(
       chain2.snapshot,
-      chain2.locs.home,
-      DEFAULT_DSL_CONFIG,
+      installedBase(chain2.snapshot, chain2.locs.home, DEFAULT_DSL_CONFIG),
       { warned: (w) => warnings.push(...w) }
     );
     const inputs = {
@@ -94144,9 +94145,10 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
     strays,
     notices,
     // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against. Nothing
-    // watches for a `.git` appearing above it: an ancestor watch per session
-    // is the cost, a reload the remedy.
+    // becomes the checkout its plugins' data paths resolve against.
+    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
+    // above it, since an ancestor watch per session is the cost; the next
+    // rediscovery reads the new checkout.
     checkout: checkoutOf(cwd2)
   };
 }
