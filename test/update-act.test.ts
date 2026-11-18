@@ -906,6 +906,11 @@ describe("the update watch: one turn at a time on the act files", () => {
     expect(logged).toContainEqual(
       expect.stringContaining("act 1 unwatched for 3600000ms"),
     );
+    // A daemon says where its budget for a job starts, so one started while
+    // the act ran is seen granting a whole budget again.
+    expect(logged).toContainEqual(
+      "apply-update: act 1: this daemon's budget for its job starts unspent",
+    );
     await until(
       () => !processLauncher.jobGroupAlive(pid),
       "the timed-out act to end",

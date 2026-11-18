@@ -7,7 +7,7 @@
 // [LAW:one-source-of-truth] The acts directory is the one answer to "is an
 // act running on this bundle, and how did the last one end". No daemon holds
 // that answer in memory; each judges the directory when it asks. How long an
-// act has been watched running is the watching daemon's own (`watchedAt`).
+// act has been watched running is the watching daemon's own (`looked`).
 //
 // Layout: `<state>/update-act/<bundle key>/<n>/` per act, `n` counting up.
 // Each act directory holds `record.json` (what was started, by whom it is
@@ -54,35 +54,70 @@ export interface ActRecord {
 // machine sleeps, and an act ended on wake for a lid closed mid-build tears
 // the bundle it was writing. No Node clock counts awake time alone (on macOS
 // `process.hrtime` and `os.uptime` both count sleep), so it is observed: each
-// look spends the span since the look before it, and the spans it does not
-// spend are kept beside, so a timeout says how it came to be.
+// look spends the wait since the look before it, and the waits it does not
+// spend are kept beside, so a timeout says how it came to be. `ended` once
+// this daemon has ended the job, which it does once.
 export interface Watched {
   readonly job: ActRecord;
   readonly spentMs: number;
   readonly unwatchedMs: number;
   readonly lookedAt: Monotonic;
+  readonly ended: boolean;
 }
 
-// [LAW:no-ambient-temporal-coupling] One look at a running act's job, at
-// `now`. A span longer than `longestLookMs` is time nobody watched (a sleep, a
-// stalled daemon) and is not spent; a dark wake spends the polls it stays
+// [LAW:types-are-the-program] What one look made of the wait before it: the
+// first this daemon had of the job, a wait it watched, or one nobody did.
+export type Look =
+  | { readonly kind: "first"; readonly watched: Watched }
+  | {
+      readonly kind: "spent" | "unwatched";
+      readonly watched: Watched;
+      readonly waitedMs: number;
+    };
+
+// [LAW:no-ambient-temporal-coupling] One look at a running act's job, begun
+// at `began` and done at `done`. The wait runs from the end of the look
+// before to the start of this one, so a slow read is never taken for a
+// sleep. A wait longer than `longestLookMs` is time nobody watched (a sleep,
+// a stalled daemon) and is not spent; a dark wake spends the polls it stays
 // awake for after its first look. A job this daemon has not watched before
 // starts unspent: the spend lives in the watching daemon, so a daemon that
-// starts while an act runs gives it a whole budget again, and says so when it
-// first sees it run.
-export function watchedAt(
+// starts while an act runs gives it a whole budget again.
+export function looked(
   prev: Watched | null,
   job: ActRecord,
-  now: Monotonic,
+  began: Monotonic,
+  done: Monotonic,
   longestLookMs: number,
-): Watched {
+): Look {
   if (prev === null || !sameJob(prev.job, job)) {
-    return { job, spentMs: 0, unwatchedMs: 0, lookedAt: now };
+    return {
+      kind: "first",
+      watched: {
+        job,
+        spentMs: 0,
+        unwatchedMs: 0,
+        lookedAt: done,
+        ended: false,
+      },
+    };
   }
-  const since = spanMs(prev.lookedAt, now);
-  return since <= longestLookMs
-    ? { ...prev, spentMs: prev.spentMs + since, lookedAt: now }
-    : { ...prev, unwatchedMs: prev.unwatchedMs + since, lookedAt: now };
+  const waitedMs = spanMs(prev.lookedAt, began);
+  return waitedMs <= longestLookMs
+    ? {
+        kind: "spent",
+        watched: { ...prev, spentMs: prev.spentMs + waitedMs, lookedAt: done },
+        waitedMs,
+      }
+    : {
+        kind: "unwatched",
+        watched: {
+          ...prev,
+          unwatchedMs: prev.unwatchedMs + waitedMs,
+          lookedAt: done,
+        },
+        waitedMs,
+      };
 }
 
 // One act as read from disk. `alive` is read before `end`: a job writes its
@@ -232,17 +267,19 @@ function parsedRecord(file: string, text: string): ActRecord {
     "identity" in r &&
     typeof r.identity === "string" &&
     "pid" in r &&
+    typeof r.pid === "number" &&
     Number.isSafeInteger(r.pid) &&
     "startTime" in r &&
     (r.startTime === null || typeof r.startTime === "string") &&
     "started" in r &&
+    typeof r.started === "number" &&
     Number.isFinite(r.started)
   ) {
     return {
       identity: r.identity,
-      pid: r.pid as number,
+      pid: r.pid,
       startTime: r.startTime,
-      started: r.started as number,
+      started: r.started,
     };
   }
   throw new Error(`${file}: not an act record: ${text.slice(0, 200)}`);
@@ -266,7 +303,7 @@ interface Known {
   final: ActFacts | null;
 }
 
-export const sameJob = (a: ActRecord, b: ActRecord): boolean =>
+const sameJob = (a: ActRecord, b: ActRecord): boolean =>
   a.pid === b.pid && a.startTime === b.startTime;
 
 // [LAW:effects-at-boundaries] The edge that reads acts. Who the recorded job
@@ -335,8 +372,11 @@ export function makeActReader(
 // running beside this one on the bundle, ends an act whose recorded
 // `deadline` its wall clock has passed, and reads a missing one as passed.
 // Written past any clock, it never passes, so for an act this release starts
-// the watched budget is the one bound. Nothing of this release reads it; it
-// stays while a release that does can still run on a bundle this one wrote.
+// the watched budget is the one bound. Nothing of this release reads it. The
+// two meet whenever a daemon of such a release still runs as a newer one's
+// daemon claims an act on its bundle, which an upgrade from any such release
+// brings about, so it goes once no release that reads it can be upgraded
+// from.
 export const INERT_DEADLINE = Number.MAX_SAFE_INTEGER;
 type StoredRecord = ActRecord & { readonly deadline: typeof INERT_DEADLINE };
 

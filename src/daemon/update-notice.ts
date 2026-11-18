@@ -29,10 +29,8 @@ import {
   endOverdue,
   judgeAct,
   makeActReader,
-  sameJob,
-  watchedAt,
+  looked,
   type ActFacts,
-  type ActRecord,
   type Watched,
 } from "./update-act";
 import type { ProcessProbe } from "./process-fingerprint";
@@ -56,7 +54,7 @@ import {
   updateIdentity,
   wordsOf,
 } from "./foundations/update-offer";
-import type { Timekeeper } from "../time.js";
+import type { Monotonic, Timekeeper } from "../time.js";
 
 // [LAW:dataflow-not-control-flow] The command the act runs, by the update it
 // applies. Nothing downstream asks which kind it is.
@@ -361,31 +359,34 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // daemon on the bundle watches, so the first to spend the budget ends it,
   // and it ends a job once: the end's own escalation takes it from there.
   let watched: Watched | null = null;
-  let ended: ActRecord | null = null;
-  function endIfOverdue(facts: ActFacts | null): void {
-    if (!facts?.alive) {
-      watched = null;
-      return;
-    }
-    const was = watched;
-    watched = watchedAt(
+  function endIfOverdue(facts: ActFacts | null, began: Monotonic): void {
+    if (!facts?.alive) return;
+    const look = looked(
       watched,
       facts.record,
+      began,
       clock.monotonic(),
       LONGEST_LOOK_MS,
     );
-    // [LAW:nothing-unseen] A span the budget did not spend is said, so a
-    // budget that stopped counting reads as one.
-    if (was !== null && watched.unwatchedMs > was.unwatchedMs) {
+    watched = look.watched;
+    // [LAW:nothing-unseen] Where this daemon's budget for a job starts, and
+    // every wait it did not spend, are said, so a budget that stopped
+    // counting reads as one.
+    if (look.kind === "first") {
       log(
         "info",
-        `apply-update: act ${facts.act} unwatched for ${watched.unwatchedMs - was.unwatchedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`,
+        `apply-update: act ${facts.act}: this daemon's budget for its job starts unspent`,
       );
     }
-    if (watched.spentMs <= ACT_TIMEOUT_MS) return;
-    if (ended !== null && sameJob(ended, facts.record)) return;
-    ended = facts.record;
+    if (look.kind === "unwatched") {
+      log(
+        "info",
+        `apply-update: act ${facts.act} unwatched for ${look.waitedMs}ms (a sleep or a stalled daemon); ${watched.spentMs}ms of its budget spent`,
+      );
+    }
+    if (watched.ended || watched.spentMs <= ACT_TIMEOUT_MS) return;
     const { stands, signalled } = endOverdue(actsDir, facts, launcher);
+    watched = { ...watched, ended: true };
     const why = stands ? "timed out" : "outlived its verdict";
     const ending = signalled ? "ending it" : "its group took no signal";
     log(
@@ -399,8 +400,9 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // now.
   async function watchAct(): Promise<void> {
     const read = await touchActs(async () => {
+      const began = clock.monotonic();
       const facts = await acts.read();
-      if (!closed) endIfOverdue(facts);
+      if (!closed) endIfOverdue(facts, began);
       return facts;
     });
     if (closed || !read.ok) return;
@@ -408,10 +410,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
     const was = seen;
     seen = next;
     if (was === null && next.kind === "running") {
-      log(
-        "info",
-        `apply-update: act ${next.act} is running; watching it, with this daemon's budget unspent`,
-      );
+      log("info", `apply-update: act ${next.act} is running; watching it`);
     }
     const ended = was?.kind === "running" && next.kind !== "running";
     const succeeded = ended && next.kind === "succeeded";
@@ -433,16 +432,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
   // has answered, as limits.ts's are: a slow read delays the next.
   let clearTick: (() => void) | undefined;
   async function tick(): Promise<void> {
-    // [LAW:no-silent-failure] A look that throws is logged and the next look
-    // still comes: the watch is what ends a wedged act.
-    try {
-      await actTurn(watchAct);
-    } catch (err) {
-      log(
-        "error",
-        `apply-update: a look at the acts failed: ${(err as Error).message}`,
-      );
-    }
+    await actTurn(watchAct);
     if (closed) return;
     clearTick = clock.after(ACT_POLL_MS, () => void tick(), { unref: true });
   }
@@ -493,21 +483,15 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
         }
         // The child inherits the daemon's environment (PATH included): no env
         // is passed, so nothing about the command is composed from data.
-        const claimed = await touchActs(() =>
-          claimAct(
-            launcher,
-            actsDir,
-            newest === null ? null : newest.act,
-            updateIdentity(update),
-            { ...command, category: "update.apply" },
-            clock.now(),
-            readStart,
-          ),
+        const claim = await claimAct(
+          launcher,
+          actsDir,
+          newest === null ? null : newest.act,
+          updateIdentity(update),
+          { ...command, category: "update.apply" },
+          clock.now(),
+          readStart,
         );
-        if (closed) throw new DaemonClosing("apply-update");
-        if (!claimed.ok)
-          throw new BadVerbArgs(`apply-update: ${claimed.error}`);
-        const claim = claimed.value;
         if (!claim.ok) {
           throw new BadVerbArgs(`apply-update: ${claim.reason}`);
         }
