@@ -231,6 +231,8 @@ function holdKey(root: string): string {
 // watched: a directory it cannot open is a refusal it logs, counts and
 // retries every period, and the period is what refreshes a repo whose watch
 // is refused. So the walk decides nothing about failure.
+// [LAW:dataflow-not-control-flow] One shape for both layouts: the stat of
+// each directory names it for the key and decides nothing.
 //
 // HEAD and the index are polled, so a git directory deleted and recreated at
 // its path (`worktree remove` then `worktree add` of the same name, `rm -rf`
@@ -251,31 +253,48 @@ function watchSpec(gitDir: string, commonDir: string): WatchSpec {
 }
 
 // `root` and every directory below it, sorted so equal trees spell equal
-// keys. Each one reached is a target whatever it is: one that cannot be
-// listed (a reftable repo's `refs/heads` is a file, a folder at mode 000) is
-// the registry's to refuse, and the pass after it can be listed reaches what
-// is below it. A link is a target git reads refs through, never descended
-// into, so a link loop is one target.
-// [LAW:effects-at-boundaries] exception: a synchronous read on the thread
-// that renders, as the spec's stats are, one per refs directory a pass.
+// keys. Each directory reached is a target whatever becomes of it: one that
+// cannot be listed (a reftable repo's `refs/heads` is a file, a folder at mode
+// 000) is the registry's to refuse, and the pass after it can be listed
+// reaches what is below it. A link to a directory is one git reads refs
+// through, so it is a target and walked; a folder walked once is not walked
+// again, so a link loop ends. A link to a file is a ref (a symbolic one), and
+// a dangling one is no directory, so neither is a target.
+// [LAW:effects-at-boundaries] exception: a stat and a listing per refs
+// directory each pass, on the thread that renders, as the spec's stats are.
 function refsDirs(root: string): string[] {
   const dirs: string[] = [];
+  const walked = new Set<string>();
   const walk = (dir: string): void => {
     dirs.push(dir);
     let entries: fs.Dirent[];
     try {
+      const { dev, ino } = fs.statSync(dir);
+      const id = `${dev}:${ino}`;
+      if (walked.has(id)) return;
+      walked.add(id);
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      // The registry's to refuse (above).
       return;
     }
     for (const entry of entries) {
       const child = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(child);
-      else if (entry.isSymbolicLink()) dirs.push(child);
+      if (entry.isDirectory() || (entry.isSymbolicLink() && isFolder(child)))
+        walk(child);
     }
   };
   walk(root);
   return dirs.sort();
+}
+
+// Whether a link leads to a folder; one that dangles leads nowhere.
+function isFolder(at: string): boolean {
+  try {
+    return fs.statSync(at).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 // [LAW:one-source-of-truth] The branch one pass read — never the stored one,

@@ -1451,6 +1451,46 @@ describe("GitDataProvider holds a repo's watch across its values", () => {
     }
   });
 
+  test("a link to a folder is walked once, so a loop ends; a link to a ref file or nowhere is no target", async () => {
+    const { counters, watchers, repo } = await refsRig((heads) => {
+      fs.mkdirSync(path.join(heads, "team", "a"), { recursive: true });
+      fs.symlinkSync(path.join(heads, "team"), path.join(heads, "team", "a", "loop"));
+      fs.writeFileSync(path.join(heads, "main"), "0");
+      fs.symlinkSync(path.join(heads, "main"), path.join(heads, "current"));
+      fs.symlinkSync(path.join(heads, "gone"), path.join(heads, "dangling"));
+    });
+    try {
+      // `refs/heads`, `team`, `team/a` and the loop's link.
+      expect(watchers.dirWatches()).toBe(4);
+      expect(counters).toMatchObject({ watchersOpened: 1, watchRefusals: 0 });
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  test("a ref moved two directories below `refs/heads` is heard", async () => {
+    let deep = "";
+    const { svc, repo } = await refsRig((heads) => {
+      deep = path.join(heads, "fix", "deep");
+      fs.mkdirSync(deep, { recursive: true });
+    });
+    try {
+      let i = 0;
+      const before = svc.getStats().changes;
+      await untilHeard(
+        () => {
+          const lock = path.join(deep, "thing.lock");
+          fs.writeFileSync(lock, String(i++));
+          fs.renameSync(lock, path.join(deep, "thing"));
+        },
+        () => svc.getStats().changes > before,
+        "the ref's move",
+      );
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
   // Root ignores directory permissions, so the condition cannot be built.
   (process.getuid?.() === 0 ? test.skip : test)(
     "a refs directory that cannot be listed is the registry's refusal, and its siblings are watched",
