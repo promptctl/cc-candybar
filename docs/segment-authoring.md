@@ -93,7 +93,9 @@ asks about "this repo" answers for the session's repo. It runs in the
 session's environment, the one Claude Code gave the statusline, so a script on
 that `PATH` is found. It sees only the variables it needs: `HOME`, `LANG`,
 `LC_ALL`, `LC_CTYPE`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `TMPDIR`, `USER`,
-and any more it names in `env` (Step 2). A command the
+the XDG base directories (`XDG_CONFIG_HOME` and the rest), and any more it
+names in `env` (Step 2), such as `SSH_AUTH_SOCK` for a command that reaches a
+remote over ssh. A command the
 shell cannot find fails its run with `exited with code 127`, followed by
 what the shell wrote to stderr, and
 what that failure renders as depends on the `default` you declare (Step 2).

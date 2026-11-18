@@ -874,7 +874,9 @@ describe("the run owner", () => {
     const ended = await o.runs.start(o.run("true", sessionIdOf("unheard")));
     expect(ended.outcome).toEqual({
       kind: "failed",
-      reason: expect.stringMatching(/^not run: no request from this session/),
+      reason: expect.stringMatching(
+        /^not run: the daemon holds no request from this session/,
+      ),
     });
     expect(o.held).toEqual([]);
     expect(o.runs.stats()).toMatchObject({ running: 0, failed: 1 });
@@ -1010,6 +1012,8 @@ describe("the session's process environment", () => {
       API_HOST: "prod",
       CLAUDE_CODE_SESSION_ID: "stale-sid",
       CLAUDE_CONFIG_DIR: "/reported/.claude",
+      TMUX: "/tmp/tmux-501/default,1,0",
+      TMUX_PANE: "%3",
     };
     // What a child gets, asked of a real one: `env` prints it.
     const childSees = async (

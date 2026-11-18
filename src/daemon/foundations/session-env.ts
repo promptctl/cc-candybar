@@ -6,6 +6,7 @@
 
 import type { SessionId } from "./session-id";
 import { ABSENT, ok, type Asked, type Outcome } from "../../utils/outcome";
+import { CLAUDE_CONFIG_DIR_ENV } from "../../claude-settings";
 
 // A process environment as plain data: its set variables.
 export type Environment = Readonly<Record<string, string>>;
@@ -34,12 +35,13 @@ export function variableOf(env: Environment, name: string): Outcome<string> {
 // has no environment to run a program in, and the host's own is never one.
 export type SessionEnvironment = Asked<Environment>;
 
-// The reason a session heard only from the book holds no environment: the
-// host never writes one to disk, since it carries keys and tokens.
+// The reason the book holds no environment for a session: the host never
+// writes one to disk, since it carries keys and tokens, and drops a session's
+// with the rest of it when the book's bound drops the session.
 export const NOT_HEARD: SessionEnvironment = {
   kind: "failed",
   reason:
-    "no request from this session since the daemon started, so its environment is not known yet",
+    "the daemon holds no request from this session, so its environment is not known: none has arrived since the daemon started, or the session was among the oldest of more sessions than the daemon keeps",
 };
 
 // What the host knows of a session that a program run for it reads from its
@@ -52,20 +54,33 @@ export interface SessionFacts {
   readonly claudeConfigDir: string | undefined;
 }
 
-// The session's facts over its reported environment. The client resolved the
+// The reported variables the host never passes on. The client resolved the
 // Claude Code directory to an absolute path, which wins over the variable it
-// read; a default directory is the variable unset.
+// read. tmux hands a closed pane's id to the next pane opened, and the host
+// holds a session's environment past the client that reported it, so a run
+// started from it after its pane closed would name another pane.
+const NOT_PASSED_ON: readonly string[] = [
+  CLAUDE_CONFIG_DIR_ENV,
+  "TMUX",
+  "TMUX_PANE",
+];
+
+// The session's facts over its reported environment; a default Claude Code
+// directory is the variable unset.
 export function sessionEnvironment(
   reported: Environment,
   facts: SessionFacts,
 ): Environment {
-  const { CLAUDE_CONFIG_DIR: _reportedDir, ...rest } = reported;
   return {
-    ...rest,
+    ...Object.fromEntries(
+      Object.entries(reported).filter(
+        ([name]) => !NOT_PASSED_ON.includes(name),
+      ),
+    ),
     CLAUDE_CODE_SESSION_ID: facts.sessionId,
     CLAUDE_PROJECT_DIR: facts.projectDir,
     ...(facts.claudeConfigDir !== undefined && {
-      CLAUDE_CONFIG_DIR: facts.claudeConfigDir,
+      [CLAUDE_CONFIG_DIR_ENV]: facts.claudeConfigDir,
     }),
   };
 }

@@ -283,11 +283,12 @@ function gitAt({
 export function declareLanes(
   owners: KeyedOwners,
   holds: Holds,
-  facts: ViewFacts,
-  // The session's environment its shell runs run in, which stays in the host.
-  environment: SessionEnvironment,
+  // The session's keys, and the environment its runs run in, which stays in
+  // the host.
+  facts: ViewFacts & { readonly environment: SessionEnvironment },
   sources: Subscribed,
 ): Declaration {
+  const { environment } = facts;
   const pane = facts.hints.tmux ?? null;
   // [LAW:no-silent-failure] A lane whose declaration throws is a bug in its
   // owner, reported to the caller, while every other lane declares.

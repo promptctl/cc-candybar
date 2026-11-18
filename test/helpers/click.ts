@@ -3,6 +3,7 @@
 // content and drive it through the REAL daemon path, so assertions track "what
 // effects does this click apply" rather than the exact wire encoding.
 
+import { TEST_ENV } from "./session-environment";
 import { bareGates } from "./gates";
 import { HOST } from "./host";
 import type { Host } from "../../src/host";
@@ -123,7 +124,7 @@ export function hearRender(
 export function heardRequest(
   sessionId: string,
   dir = "/tmp/proj",
-  hints: Partial<RenderRequest> = {},
+  hints: Partial<Omit<RenderRequest, "env">> = {},
 ): CheckedRenderRequest {
   const checked = checkRenderRequest(
     {
@@ -139,6 +140,7 @@ export function heardRequest(
       },
       args: ["cc-candybar"],
       cwd: dir,
+      env: TEST_ENV,
       ...hints,
     },
     { firstSightOfUnknownHookField: () => false },

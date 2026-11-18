@@ -394,8 +394,10 @@ export class SourceRuns {
         name: `source.${kind}`,
         scope: "daemon",
         keyOf: (run) => run.digest,
-        fields: ({ digest, run: { identity } }, holders) =>
-          `digest=${shortDigest(digest)} where=${valueOf(whereOf(identity.read))} sharedBy=${holders}`,
+        // [LAW:nothing-unseen] Its declaration's digest beside its own, so
+        // the entry is found from the session's subscriptions that name it.
+        fields: ({ digest, run }, holders) =>
+          `digest=${shortDigest(digest)} declared=${shortDigest(run.digest)} where=${valueOf(whereOf(run.identity.read))} sharedBy=${holders}`,
         // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
         // readers through this one function; text/regex/json are three
         // parsers through it.
@@ -507,9 +509,9 @@ export function declareRuns(
 
 // [LAW:types-are-the-program] A run as the host keys and spawns it: an
 // accepted declaration with the variables it names, at their values in the
-// session's environment (spec ADR-8). Its digest is over both, so sessions
-// whose named values agree share one run and one whose value differs gets
-// its own. A named variable the session does not set is absent from `env`,
+// session's environment (spec ADR-8). Its digest is over the declaration's
+// digest and those values, so sessions whose named values agree share one
+// run and one whose value differs gets its own. A named variable the session does not set is absent from `env`,
 // as it is from the process.
 export interface SessionRun {
   readonly digest: string;
@@ -540,6 +542,6 @@ function sessionRunOf(
   );
   return {
     kind: "ok",
-    value: { digest: digestOf({ identity: run.identity, env }), run, env },
+    value: { digest: digestOf({ run: run.digest, env }), run, env },
   };
 }

@@ -9,7 +9,7 @@ import {
 } from "../../src/daemon/foundations/session-id";
 import { NOT_HEARD } from "../../src/daemon/foundations/session-env";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
-import { TEST_ENVIRONMENT } from "../helpers/session-environment";
+import { TEST_ENV, TEST_ENVIRONMENT } from "../helpers/session-environment";
 import { SESSION_BOOK_FILE, SessionBook } from "../../src/daemon/session-book";
 import type { SessionFileStorage } from "../../src/daemon/session-state-file";
 import type {
@@ -24,7 +24,7 @@ const S2 = sessionIdOf("s2");
 function request(
   session: string,
   dir = "/p",
-  hints: Partial<RenderRequest> = {},
+  hints: Partial<Omit<RenderRequest, "env">> = {},
 ): CheckedRenderRequest {
   const checked = checkRenderRequest(
     {
@@ -40,6 +40,7 @@ function request(
       },
       args: ["cc-candybar"],
       cwd: dir,
+      env: TEST_ENV,
       ...hints,
     },
     { firstSightOfUnknownHookField: () => false },
@@ -231,7 +232,10 @@ describe("the book", () => {
     const { storage: kept, saves } = storage();
     const book = loaded(kept);
     book.heard(request("s1", "/p"), TEST_ENVIRONMENT);
-    book.heard(request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }), TEST_ENVIRONMENT);
+    book.heard(
+      request("s1", "/p", { claudeConfigDir: "/u/.claude-x" }),
+      TEST_ENVIRONMENT,
+    );
     expect(saves).toHaveLength(3);
     expect(saves.at(-1)).toEqual({
       [S1]: { ...durable("/p"), claudeConfigDir: "/u/.claude-x" },
@@ -254,6 +258,7 @@ describe("the book", () => {
           workspace: { current_dir: "/p", project_dir: "p", added_dirs: [] },
         },
         args: ["cc-candybar"],
+        env: TEST_ENV,
         cwd: "/p",
       },
       { firstSightOfUnknownHookField: () => false },
@@ -269,7 +274,8 @@ describe("the book", () => {
   test("the book holds its newest sessions and drops the oldest", () => {
     const { storage: kept, saves } = storage();
     const book = loaded(kept);
-    for (let i = 0; i <= 256; i += 1) book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
+    for (let i = 0; i <= 256; i += 1)
+      book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
     expect(Object.keys(saves.at(-1)!)).toHaveLength(256);
     expect(book.contextOf(sessionIdOf("s0"), null)).toBeNull();
     expect(book.contextOf(sessionIdOf("s256"), null)?.durable).toEqual(
@@ -297,7 +303,8 @@ describe("the book", () => {
   test("a session heard again moves to the newest end, so the bound drops the one heard longest ago", () => {
     const { storage: kept } = storage();
     const book = loaded(kept);
-    for (let i = 0; i < 256; i += 1) book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
+    for (let i = 0; i < 256; i += 1)
+      book.heard(request(`s${i}`, `/p${i}`), TEST_ENVIRONMENT);
     book.heard(request("s0", "/p0"), TEST_ENVIRONMENT);
     book.heard(request("s256", "/p256"), TEST_ENVIRONMENT);
     expect(book.contextOf(sessionIdOf("s0"), null)?.durable).toEqual(

@@ -557,13 +557,7 @@ export class Collector {
         acquired,
         released,
       } = holds.declare(() =>
-        declareLanes(
-          this.deps.owners,
-          holds,
-          locator,
-          locator.environment,
-          subscriptions,
-        ),
+        declareLanes(this.deps.owners, holds, locator, subscriptions),
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);

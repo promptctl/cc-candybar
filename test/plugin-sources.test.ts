@@ -4,6 +4,7 @@
 // function ran. Every view here is the daemon's own: a render cache over the
 // payload providers, declared by `declareLanes`, drawn from `sessionSource`.
 
+import { TEST_ENV } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import { NO_DOCTOR } from "./helpers/payload-owners";
@@ -11,7 +12,8 @@ import {
   eventRenderer,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES, NOTHING_STORED,
+  NO_PUSHES,
+  NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
 import { TEST_SESSION } from "./helpers/payload-session";
@@ -893,6 +895,7 @@ function statusline(r: Rig, configFile: string) {
         args: ["cc-candybar", "--config", configFile],
         cwd: dir,
         encoding: "frame",
+        env: TEST_ENV,
       },
       { firstSightOfUnknownHookField: () => false },
       () => {},

@@ -26,7 +26,10 @@ export const NO_DOCTOR: Pick<DoctorSource, "declare"> = {
   },
 };
 import type { ClaudeHookData } from "../../src/utils/claude";
-import type { CheckedHookData } from "../../src/renderer-interface/request-context";
+import type {
+  CheckedHookData,
+  ViewFacts,
+} from "../../src/renderer-interface/request-context";
 import type { GitInfo } from "../../src/segments/git";
 import type { TmuxHint } from "../../src/tmux-hint";
 import type { MetricsFold } from "../../src/segments/metrics";
@@ -441,17 +444,22 @@ export function settled<T extends PayloadNode>(value: T | Pending): T {
 // providers; disposing it closes the view's home.
 function openHome(
   owners: unknown,
-  facts: Parameters<typeof declareLanes>[2],
+  facts: ViewFacts,
   clock: TranscriptClock = systemTimekeeper,
 ): Disposable & { lanes: () => ReturnType<typeof declareLanes>["lanes"] } {
   const holds = new HoldsClass();
   const keyed = withTranscriptLanes(owners as KeyedOwners, clock);
-  const { lanes, faults } = declareLanes(keyed, holds, facts, TEST_ENVIRONMENT, {
-    plugins: new Map(),
-    runs: new Map(),
-    env: [],
-    doctor: null,
-  });
+  const { lanes, faults } = declareLanes(
+    keyed,
+    holds,
+    { ...facts, environment: TEST_ENVIRONMENT },
+    {
+      plugins: new Map(),
+      runs: new Map(),
+      env: [],
+      doctor: null,
+    },
+  );
   // [LAW:no-silent-failure] An owner whose declaration throws is a broken
   // fixture, failed here with its stack, as the daemon logs it as an error.
   // The home ends what it built: its holds, and the trigger whose period a
@@ -474,7 +482,7 @@ function openHome(
 // transcript's watch or period makes one, landed.
 export async function readTranscriptLanes(
   owners: unknown,
-  facts: Parameters<typeof declareLanes>[2],
+  facts: ViewFacts,
   clock: TranscriptClock = systemTimekeeper,
 ): Promise<void> {
   using home = openHome(owners, facts, clock);
@@ -487,7 +495,7 @@ export async function readTranscriptLanes(
 // view's home closes with the case's cleanups.
 export function declaredLanes(
   owners: unknown,
-  facts: Parameters<typeof declareLanes>[2],
+  facts: ViewFacts,
   cleanups: Array<() => void>,
 ): () => ReturnType<typeof declareLanes>["lanes"] {
   const home = openHome(owners, facts);

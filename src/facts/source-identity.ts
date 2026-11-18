@@ -64,7 +64,8 @@ declare const RUN: unique symbol;
 
 // [LAW:types-are-the-program] An identity with the digest that names it. The
 // brand means a `Run` is built only by `runOf`, so its digest cannot disagree
-// with its identity, and the host keys by the digest without hashing again.
+// with its identity, and nothing hashes the identity again: a shell run's
+// key is this digest with its session's values (src/daemon/source-runs.ts).
 export interface Run {
   readonly digest: string;
   readonly identity: SourceIdentity;

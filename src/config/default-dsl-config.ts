@@ -243,11 +243,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // arrived over SSH. All three come through the augmented payload rather
     // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
     //
-    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
-    //     DAEMON, which is detached and serves every session for this user at
-    //     once — its `SSH_*` env describes whichever shell happened to spawn
-    //     it. The fact is captured by the live client and carried as a wire
-    //     hint (the `termCols` pattern); the payload is the only honest source.
+    //   • `host.ssh` is the client's judgement over three variables (any of
+    //     `SSH_CONNECTION`, `SSH_CLIENT`, `SSH_TTY` set), carried as a wire
+    //     hint (the `termCols` pattern), so the payload holds one boolean that
+    //     the bar and the doctor read alike; an `env` variable reads one
+    //     string.
     //   • `host.name`/`host.user` are machine facts the daemon reads directly,
     //     so they cost two syscalls instead of a per-render subprocess.
     //

@@ -654,9 +654,8 @@ export function optionalStringSpec(): FieldSpec<string> {
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // [LAW:parse-dont-validate] An optional list of environment variable names:
-// what a shell source's command reads, or the base set every shell source
-// reads. Present-and-wrong reports one issue and omits, as the other optional
-// specs do.
+// what a shell source's command reads, beyond the base set. Present-and-wrong
+// reports one issue and omits, as the other optional specs do.
 export function optionalEnvNamesSpec(): FieldSpec<readonly string[]> {
   return {
     required: false,

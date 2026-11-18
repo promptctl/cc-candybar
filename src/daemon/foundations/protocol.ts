@@ -71,8 +71,9 @@ export interface RenderRequest {
   // The environment Claude Code gave the client: its set variables. The host
   // keeps it with the session and runs the session's programs in it; it is
   // never a hint, because no renderer input may carry it (keys and tokens).
-  // Absent from a client too old to send it.
-  env?: Record<string, string>;
+  // Required of every sender here, though the checkpoint still meets a
+  // client too old to send it.
+  env: Record<string, string>;
   // ─── Client hints ────────────────────────────────────────────────────────
   // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
   // the trust boundary and trusted by the daemon. The daemon is detached and

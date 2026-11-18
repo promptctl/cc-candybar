@@ -419,7 +419,10 @@ export async function replyTo(
       parts.closing,
       parts.log,
       checked.req,
-      checked.environment,
+      // [LAW:one-source-of-truth] The book's, the newest request's, so a
+      // request that arrived behind a newer one runs nothing in its older
+      // environment.
+      parts.sessionBook.environmentOf(checked.req.hookData.session_id),
       order,
       // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
       // fixed at its arrival: early enough before its client hangs up to

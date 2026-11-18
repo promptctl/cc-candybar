@@ -289,7 +289,6 @@ describe("a session's transcript", () => {
     // this request arrived after: the trigger reads it, not the request.
     expect(messagesOf(warm)).toBe(1);
   });
-
 });
 
 // A first read still on its way.
@@ -551,7 +550,10 @@ describe("the renderer's subscriptions", () => {
   test("a session named like an object's inherited member subscribes to nothing it was not handed", () => {
     const { owners } = handLanded();
     const { collector, logged } = collectorOver(owners);
-    collector.requested(requestAt("/a", sessionIdOf("constructor")), TEST_ENVIRONMENT);
+    collector.requested(
+      requestAt("/a", sessionIdOf("constructor")),
+      TEST_ENVIRONMENT,
+    );
     expect(() => collector.subscribed({ sources: {} })).not.toThrow();
     expect(logged.filter((line) => !line.startsWith("info"))).toEqual([]);
   });
@@ -584,7 +586,9 @@ describe("the sweep", () => {
     // The last session gone, the sweep stops.
     expect(clock.pending()).toBe(0);
     // The renderer let go of the session's document, so seq 1 is taken.
-    expect(collector.requested(requestAt("/a"), TEST_ENVIRONMENT).seq).toBe(first.seq);
+    expect(collector.requested(requestAt("/a"), TEST_ENVIRONMENT).seq).toBe(
+      first.seq,
+    );
   });
 
   test("a wait on a session the sweep retires ends with it", async () => {
@@ -824,12 +828,17 @@ test("a lane whose declaration throws is reported, takes no hold, and stops no o
   // The git hold an earlier declaration took goes with the one that threw.
   holds.declare(() => take("git"));
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, facts, TEST_ENVIRONMENT, {
-      plugins: new Map(),
-      runs: new Map(),
-      env: [],
-      doctor: null,
-    }),
+    declareLanes(
+      owners,
+      holds,
+      { ...facts, environment: TEST_ENVIRONMENT },
+      {
+        plugins: new Map(),
+        runs: new Map(),
+        env: [],
+        doctor: null,
+      },
+    ),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^git: .*resolver bug/),
@@ -876,15 +885,20 @@ test("a run whose declaration throws answers its failure, and every other run an
     },
   } as unknown as KeyedOwners;
   const declared = holds.declare(() =>
-    declareLanes(owners, holds, requestAt("/w"), TEST_ENVIRONMENT, {
-      plugins: new Map(),
-      runs: new Map([
-        [broken.digest, judgeRun(broken)],
-        [fine.digest, judgeRun(fine)],
-      ]),
-      env: [],
-      doctor: null,
-    }),
+    declareLanes(
+      owners,
+      holds,
+      { ...requestAt("/w"), environment: TEST_ENVIRONMENT },
+      {
+        plugins: new Map(),
+        runs: new Map([
+          [broken.digest, judgeRun(broken)],
+          [fine.digest, judgeRun(fine)],
+        ]),
+        env: [],
+        doctor: null,
+      },
+    ),
   );
   expect(declared.result.faults).toEqual([
     expect.stringMatching(/^run [0-9a-f]+: .*watch bug/),

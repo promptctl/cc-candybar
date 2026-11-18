@@ -9,6 +9,7 @@
 // view composition (test/helpers/session-rig.ts) and narrow fakes for the host
 // parts its side still reaches; no daemon is built.
 
+import { TEST_ENV } from "./helpers/session-environment";
 import { TEST_ENVIRONMENT } from "./helpers/session-environment";
 import { daemonFactsOf } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
@@ -153,6 +154,7 @@ function checked(pane?: string): CheckedRenderRequest {
       args: ["cc-candybar", "--config", configFile, "--bogus"],
       cwd: PROJECT,
       encoding: "frame",
+      env: TEST_ENV,
       ...(pane === undefined
         ? {}
         : { tmux: { socket: "/tmp/tmux.sock", pane, truecolor: null } }),
