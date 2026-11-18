@@ -2,45 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-819",
-      "ref": "refs/pull/819/merge",
-      "sha": "11ab7db9620bc9a6926ceda1aa9d56ee745963cd",
-      "timestamp": "2026-11-18T21:02:00.676Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "faf3e3eb7acc2326880d6a32d25e68576a6f6cb9",
+      "timestamp": "2026-11-18T21:09:10.257Z",
       "commits": [
         {
-          "sha": "11ab7db9620bc9a6926ceda1aa9d56ee745963cd",
+          "sha": "faf3e3eb7acc2326880d6a32d25e68576a6f6cb9",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:00:55Z",
-          "message": "Merge fa0d4670db28d1396a195390907235efa4c58fef into c27a4e0e74255d340737ceb295fc044543bde560\n"
-        },
-        {
-          "sha": "fa0d4670db28d1396a195390907235efa4c58fef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:15:07-07:00",
-          "message": "fix(daemon): the registry has one removal, whose failure the sweep warns of, and its entry name one spelling (v5fj)\n"
-        },
-        {
-          "sha": "c1c2736ec63719bfe29cecc64022a0ca2e4539d8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:18:09-07:00",
-          "message": "fix(daemon): a fork-bomb registry release removes our own entry, and an empty start time names no process (v5fj)\n"
-        },
-        {
-          "sha": "7cfed5000c39d87048793276c2cd230d5e731191",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:06:30-07:00",
-          "message": "fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n"
-        },
-        {
-          "sha": "c70031589123c922c32bb3bf82a126e9112fd732",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:59:23-07:00",
-          "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
+          "timestamp": "2026-11-18T14:08:06-07:00",
+          "message": "fix(daemon): a fork-bomb registry that cannot be listed refuses an isolated boot, and no entry is left out of its count (v5fj) (#819)\n\n* fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n\n* fix(daemon): a fork-bomb registry entry is judged by the pid its name carries, so no entry is left out of the count (v5fj)\n\n* fix(daemon): a fork-bomb registry release removes our own entry, and an empty start time names no process (v5fj)\n\n* fix(daemon): the registry has one removal, whose failure the sweep warns of, and its entry name one spelling (v5fj)"
         }
       ]
     },
@@ -70,43 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T13:07:47-07:00",
           "message": "fix(config): a checkout's installed-plugin layer is held only by the render states that loaded it (70xn)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c27a4e0e74255d340737ceb295fc044543bde560",
-      "timestamp": "2026-11-18T20:12:13.396Z",
-      "commits": [
-        {
-          "sha": "c27a4e0e74255d340737ceb295fc044543bde560",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T20:10:57Z",
-          "message": "chore(release): set `package.json` to 1.232.5\n\n## [1.232.5](https://github.com/promptctl/cc-candybar/compare/v1.232.4...v1.232.5) (2026-11-18)\n\n### Bug Fixes\n\n* **plugins:** a storage folder's fault stands only while its answer does, and the owner's own triggers ask again (9z3k) ([#820](https://github.com/promptctl/cc-candybar/issues/820)) ([f72209a](https://github.com/promptctl/cc-candybar/commit/f72209a57f1948648b44508adcfa2a143579eaf8))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-829",
-      "ref": "refs/pull/829/merge",
-      "sha": "c0dd3d4834b60b84bcce0ba11e314eea67bd89a0",
-      "timestamp": "2026-11-18T20:06:26.281Z",
-      "commits": [
-        {
-          "sha": "c0dd3d4834b60b84bcce0ba11e314eea67bd89a0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:05:09-07:00",
-          "message": "Merge f2624392d06b0f6931d2adb644af4ab53ff018db into f72209a57f1948648b44508adcfa2a143579eaf8\n"
-        },
-        {
-          "sha": "f2624392d06b0f6931d2adb644af4ab53ff018db",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T13:04:46-07:00",
-          "message": "fix(edit): a session releases an ended placement's state when its view meets the config\n\nA placement's edit chrome, configure level and unsaved values are released wherever a session's view opens over a config that no longer holds the placement: viewing, idle, evicted, restarted, or moved to another config, and after a hand edit as well as a click. The clicking session's release joins its click's step, so undo restores it.\n"
         }
       ]
     },
