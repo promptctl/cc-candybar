@@ -30525,12 +30525,6 @@ function defaultSocketPath() {
   const uid = os_default.userInfo().uid;
   return import_node_path5.default.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
-function leasePathFor(sockPath) {
-  return `${sockPath}.lease`;
-}
-function leasePath(host) {
-  return leasePathFor(socketPath(host));
-}
 function sessionStatePath(host) {
   return import_node_path5.default.join(stateDir(host), "session-state.json");
 }
@@ -30556,7 +30550,6 @@ function logPath(host) {
 function daemonPaths(host) {
   return {
     socket: socketPath(host),
-    lease: leasePath(host),
     state: stateDir(host),
     registry: daemonRegistryDir(host),
     log: logPath(host),
@@ -50771,12 +50764,56 @@ var refusedRender = (problems) => ({
 init_globals();
 init_os();
 var import_node_path14 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const token = res.stdout.trim();
+    if (token.length > 0) return { kind: "start", token };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process.kill(pid2, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    startTime: (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+function sameProcess(a, b) {
+  if (a.pid !== b.pid) return "different";
+  if (a.startTime === null || b.startTime === null) return "incomparable";
+  return a.startTime === b.startTime ? "same" : "different";
+}
+
+// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path14.default.join(stateDir2, "update-act", key);
 }
 function looked(prev, job, began, done, longestLookMs) {
-  if (prev === null || !sameJob(prev.job, job)) {
+  if (prev === null || !sameRecord(prev.job, job)) {
     return {
       kind: "first",
       watched: {
@@ -50861,7 +50898,7 @@ var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
 async function isRecordedJob(record2, read2, jobs, boot) {
   if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
-  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
+  return leader.kind === "unavailable" || sameProcess(record2, { pid: record2.pid, startTime: leader.token }) !== "different";
 }
 function readRecord(actDir) {
   const file = recordOf(actDir);
@@ -50886,15 +50923,16 @@ function parsedRecord(file, text4) {
   }
   throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
-var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
+var sameRecord = (a, b) => a.identity === b.identity && a.pid === b.pid && a.startTime === b.startTime && a.started === b.started;
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
     const actDir = import_node_path14.default.join(dir, String(act2));
     const record2 = readRecord(actDir);
     if (record2 === null) return null;
-    if (known === null || !sameJob(known.record, record2)) {
+    if (known === null || known.act !== act2 || !sameRecord(known.record, record2)) {
       known = {
+        act: act2,
         record: record2,
         ours: await isRecordedJob(record2, read2, jobs, bootedAt(clock)),
         final: null
@@ -95587,43 +95625,6 @@ function productionClaudeInputEdge(launcher) {
   return {
     read: (hint) => read(launcher, hint),
     type: (hint, line) => type2(launcher, hint, line)
-  };
-}
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  return {
-    alive: (pid2) => {
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: (pid2) => readStartTime(pid2, launcher.launch)
   };
 }
 

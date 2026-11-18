@@ -2,67 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-832",
-      "ref": "refs/pull/832/merge",
-      "sha": "5c3e9de502ce36aa5d506a6a7833d5c3407be628",
-      "timestamp": "2026-11-18T23:23:57.287Z",
-      "commits": [
-        {
-          "sha": "5c3e9de502ce36aa5d506a6a7833d5c3407be628",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T23:22:58Z",
-          "message": "Merge a084d78f4d7356c896b6c528f0422b6a1b3a4e5e into 6db78e6845ec05fb92f537361e8ae36e8ed6a1fe\n"
-        },
-        {
-          "sha": "a084d78f4d7356c896b6c528f0422b6a1b3a4e5e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:54:05-07:00",
-          "message": "test(daemon): the old-release rule reads ps itself, so a respelled token fails it (m5bq)\n"
-        },
-        {
-          "sha": "96a5a32d55abb6a94b898a2ab9ff263b1dabd26c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:53:34-07:00",
-          "message": "fix(daemon): start-time tokens keep the spelling every release reads, and a daemon that cannot name itself refuses to boot (m5bq)\n\nLeases, registry entries and act records are read by daemons of every\nrelease, which judge an owner by raw equality of the `ps -o lstart=` token.\nA token spelled any other way (a source tag, a /proc reading) reads to an\nolder daemon as a different process, so it reclaims a live newer daemon's\nsocket and its sweep deletes live entries. The token is `ps`'s again on\nevery host, unchanged, and tests hold a written lease and registry entry to\nthe old rule.\n\nA daemon refuses to boot when it cannot read its own start time, so every\nrecord it writes names it, and a lease's start time is non-null in its type;\nnull survives only in records older releases wrote, which compare as\nincomparable. kill(pid,0)'s EPERM is a pid of another user's and so no\nprocess of ours. Arbitration takes a lease naming our own pid as stale. The\nact reader knows an act by its number and its record field for field, never\nby the liveness-oriented identity comparison.\n"
-        },
-        {
-          "sha": "2041a23d2f3f0f22b065aeeb4bda4d67e1db40b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:37:39-07:00",
-          "message": "fix(daemon): a start-time token names the source that read it, and tokens from two sources are never a mismatch (m5bq)\n\nEach token is tagged `proc:` or `ps:`, and the one identity comparison\nanswers same, different or incomparable: a pair read by two sources, or\nmissing a start time, is incomparable and judged by liveness alone. So a\nlive daemon from before the tags is never taken for a recycled pid by the\narbitration, the fork-bomb registry's sweep or the update act, which now\nasks the same comparison.\n\nThe host's source is settled once from the platform. The liveness fold\ncarries why it decided into the arbitration's line, so an owner spared\nbecause its start time could not be read says so. A stat line with no\ncommand-name paren reads as having no start time.\n"
-        },
-        {
-          "sha": "53ba6696ce6eaf2df73859b4804012f608b7a784",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:25:00-07:00",
-          "message": "fix(daemon): a process identity carries its start-time wherever the kernel keeps one, and a failed lease write refuses the boot (m5bq)\n\nA lease outliving its owner is judged by its owner's identity, so the\nidentity has to hold up: on Linux the start-time is read from /proc (the\nstat's start-time beside the boot id) with no subprocess, and ps stays for\nhosts without /proc. Liveness is asked first, so a dead pid is stale with\nno start-time read at all, which is the common case after a daemon's exit.\n\nThe ownership self-check and the arbitration compare identities through one\nfunction, pid and start-time alike. A lease write that fails refuses the\nboot with its reason, rather than serving until the self-check calls the\ndaemon displaced. The exit test is folded into the one that proves no\nremoval runs, and the reason the lease stays is kept once, at the write.\n"
-        },
-        {
-          "sha": "f5030f2ba5be6d6d1c0f76bf2ce7d964270b1bd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:14:05-07:00",
-          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "6db78e6845ec05fb92f537361e8ae36e8ed6a1fe",
-      "timestamp": "2026-11-18T23:14:21.901Z",
+      "sha": "cd50aea5c94fd0ade68b7e1781ec29d6b93ca2e0",
+      "timestamp": "2026-11-18T23:30:11.864Z",
       "commits": [
         {
-          "sha": "6db78e6845ec05fb92f537361e8ae36e8ed6a1fe",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-18T23:13:08Z",
-          "message": "chore(release): set `package.json` to 1.232.9\n\n## [1.232.9](https://github.com/promptctl/cc-candybar/compare/v1.232.8...v1.232.9) (2026-11-18)\n\n### Bug Fixes\n\n* **test:** the quiet-text sweep draws each row under the theme it names (s33) ([#810](https://github.com/promptctl/cc-candybar/issues/810)) ([26c913b](https://github.com/promptctl/cc-candybar/commit/26c913b5ff08b9203ff635608f0e7130723b0159))\n"
+          "sha": "cd50aea5c94fd0ade68b7e1781ec29d6b93ca2e0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T16:29:12-07:00",
+          "message": "fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq) (#832)\n\n* fix(daemon): a daemon's exit leaves the socket lease, so a displaced daemon can no longer unlink a newer daemon's lease (m5bq)\n\nRemoving the lease at exit was a read and then an unlink of a shared name.\nA newer daemon's publish landing between the two was the lease the unlink\ntook, and an absent lease drains that newer daemon at its next ownership\ncheck and lets the next EADDRINUSE reclaim its live socket. POSIX has no\nunlink-if-still-mine, so no removal of the shared name can be confined to\nthe lease this daemon published.\n\nPublishing is now the lease's one mutation. A lease its owner left names a\ndead process identity, which arbitration reclaims as it does an absent\none, and the next publish replaces it. The unused lease path accessor goes\nwith the removal.\n\n* fix(daemon): a process identity carries its start-time wherever the kernel keeps one, and a failed lease write refuses the boot (m5bq)\n\nA lease outliving its owner is judged by its owner's identity, so the\nidentity has to hold up: on Linux the start-time is read from /proc (the\nstat's start-time beside the boot id) with no subprocess, and ps stays for\nhosts without /proc. Liveness is asked first, so a dead pid is stale with\nno start-time read at all, which is the common case after a daemon's exit.\n\nThe ownership self-check and the arbitration compare identities through one\nfunction, pid and start-time alike. A lease write that fails refuses the\nboot with its reason, rather than serving until the self-check calls the\ndaemon displaced. The exit test is folded into the one that proves no\nremoval runs, and the reason the lease stays is kept once, at the write.\n\n* fix(daemon): a start-time token names the source that read it, and tokens from two sources are never a mismatch (m5bq)\n\nEach token is tagged `proc:` or `ps:`, and the one identity comparison\nanswers same, different or incomparable: a pair read by two sources, or\nmissing a start time, is incomparable and judged by liveness alone. So a\nlive daemon from before the tags is never taken for a recycled pid by the\narbitration, the fork-bomb registry's sweep or the update act, which now\nasks the same comparison.\n\nThe host's source is settled once from the platform. The liveness fold\ncarries why it decided into the arbitration's line, so an owner spared\nbecause its start time could not be read says so. A stat line with no\ncommand-name paren reads as having no start time.\n\n* fix(daemon): start-time tokens keep the spelling every release reads, and a daemon that cannot name itself refuses to boot (m5bq)\n\nLeases, registry entries and act records are read by daemons of every\nrelease, which judge an owner by raw equality of the `ps -o lstart=` token.\nA token spelled any other way (a source tag, a /proc reading) reads to an\nolder daemon as a different process, so it reclaims a live newer daemon's\nsocket and its sweep deletes live entries. The token is `ps`'s again on\nevery host, unchanged, and tests hold a written lease and registry entry to\nthe old rule.\n\nA daemon refuses to boot when it cannot read its own start time, so every\nrecord it writes names it, and a lease's start time is non-null in its type;\nnull survives only in records older releases wrote, which compare as\nincomparable. kill(pid,0)'s EPERM is a pid of another user's and so no\nprocess of ours. Arbitration takes a lease naming our own pid as stale. The\nact reader knows an act by its number and its record field for field, never\nby the liveness-oriented identity comparison.\n\n* test(daemon): the old-release rule reads ps itself, so a respelled token fails it (m5bq)"
         }
       ]
     },
