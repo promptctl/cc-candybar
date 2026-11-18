@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-827",
+      "ref": "refs/pull/827/merge",
+      "sha": "27741fdffa9530e0fd49804dbc4e86f1fd773a04",
+      "timestamp": "2026-11-18T22:11:31.949Z",
+      "commits": [
+        {
+          "sha": "27741fdffa9530e0fd49804dbc4e86f1fd773a04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T22:10:26Z",
+          "message": "Merge b915434fd9766a434c95b1a3db11aa64881084b4 into a60f0ec526fedc5ba857fde3060c85687dc4e6ff\n"
+        },
+        {
+          "sha": "b915434fd9766a434c95b1a3db11aa64881084b4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:38:33-07:00",
+          "message": "refactor(acts): a slash line is typed only in its pane's turn (clno)\n"
+        },
+        {
+          "sha": "414872c94604a028720268f45bc9440a51a65696",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:30:45-07:00",
+          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
+        },
+        {
+          "sha": "7618c74eb054bf8ccab3e358cde2f74a178ddacf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T12:27:06-07:00",
+          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "a60f0ec526fedc5ba857fde3060c85687dc4e6ff",
@@ -13,85 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-18T22:02:20Z",
           "message": "chore(release): set `package.json` to 1.232.7\n\n## [1.232.7](https://github.com/promptctl/cc-candybar/compare/v1.232.6...v1.232.7) (2026-11-18)\n\n### Bug Fixes\n\n* **config:** each load builds its installed-plugin layer, and nothing keeps one past it (70xn) ([#830](https://github.com/promptctl/cc-candybar/issues/830)) ([6d3c06f](https://github.com/promptctl/cc-candybar/commit/6d3c06faf1789732872268f46aba7d8531c992ce))\n* **watchers:** where the recursive watch is Node's own walk, the registry hears a tree as a watch on each directory, each refused or heard on its own (cimv) ([#824](https://github.com/promptctl/cc-candybar/issues/824)) ([c8a92c4](https://github.com/promptctl/cc-candybar/commit/c8a92c406ada8c34ff102fb22f8e050196acde2a))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-813",
-      "ref": "refs/pull/813/merge",
-      "sha": "72b69b75391605fdacdd5b8b03e2b6075bb5fbf4",
-      "timestamp": "2026-11-18T21:57:26.265Z",
-      "commits": [
-        {
-          "sha": "72b69b75391605fdacdd5b8b03e2b6075bb5fbf4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:56:13Z",
-          "message": "Merge 2f10e53defc3b9ac0f08ff02ca08f47eb233a10c into 6d3c06faf1789732872268f46aba7d8531c992ce\n"
-        },
-        {
-          "sha": "2f10e53defc3b9ac0f08ff02ca08f47eb233a10c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T14:56:01-07:00",
-          "message": "fix(site): the demo's git answers the ask for the variables every read unsets (a623)\n"
-        },
-        {
-          "sha": "eab2160f5f05ca4a869eefd201591ae673205cd5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:26:20-07:00",
-          "message": "fix(git): an ask that fails other than by an exit is the read's result as it stands (a623)\n"
-        },
-        {
-          "sha": "ac793a5b879a36352578c10551ddb14b5e7a4ca5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:21:32-07:00",
-          "message": "fix(git): a failed ask is a read that never started; the ask runs in the read's directory; forge reads unset GH_REPO (a623)\n"
-        },
-        {
-          "sha": "7f06f2d8df729fa5cff3627a98600f2ea5d13bf0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:07:44-07:00",
-          "message": "fix(git): a git or forge read unsets the repository variables of the shell that spawned the daemon (a623)\n\nEvery git read, forge CLI launch and the doctor's forge probe now launch\nthrough one asker that unsets the variables `git rev-parse\n--local-env-vars` names, asked of git once. The daemon's environment is\nthe spawning shell's, so a hook's or vcsh's GIT_DIR pointed every\nsession's read at that shell's repository. An ask that fails is the\nread's own failed launch, never a read with the variables.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-827",
-      "ref": "refs/pull/827/merge",
-      "sha": "539df983552f75a90c0b67f484ee0695cf52af6a",
-      "timestamp": "2026-11-18T21:54:54.459Z",
-      "commits": [
-        {
-          "sha": "539df983552f75a90c0b67f484ee0695cf52af6a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T21:53:54Z",
-          "message": "Merge 83f7872cc707f01a6ad6e4cfe642c3736184cbab into 6d3c06faf1789732872268f46aba7d8531c992ce\n"
-        },
-        {
-          "sha": "83f7872cc707f01a6ad6e4cfe642c3736184cbab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:38:33-07:00",
-          "message": "refactor(acts): a slash line is typed only in its pane's turn (clno)\n"
-        },
-        {
-          "sha": "b0faf63fba5030da3b5052cc0308b8f59f9b6505",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:30:45-07:00",
-          "message": "docs(acts): the input edge's comments say who reads and who types through it (clno)\n"
-        },
-        {
-          "sha": "280dd713b6170508dbb1bcd1cf327c4a6761b251",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T12:27:06-07:00",
-          "message": "fix(acts): a lane's restart reads the pane through the claude-input edge Acts types through, and the lane edge carries none (clno)\n"
         }
       ]
     },
@@ -136,28 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:14:02-07:00",
           "message": "fix(test): the quiet-text sweep draws each row under the theme it names (s33)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-809",
-      "ref": "refs/pull/809/merge",
-      "sha": "600bd0db5eeea53bbd6dae305232b904fb52179e",
-      "timestamp": "2026-11-18T16:43:14.262Z",
-      "commits": [
-        {
-          "sha": "600bd0db5eeea53bbd6dae305232b904fb52179e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T16:42:04Z",
-          "message": "Merge 796f90cada624b9c3496f4c4b5cd82d114294fb2 into 556287991e7955f7a9fbfc4a12b9ded691a25344\n"
-        },
-        {
-          "sha": "796f90cada624b9c3496f4c4b5cd82d114294fb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T09:11:12-07:00",
-          "message": "fix(edit): a click releases every state key its change of the config ends, so a re-added placement's library opens closed (t2yz)\n"
         }
       ]
     }
