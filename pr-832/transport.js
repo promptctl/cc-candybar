@@ -50764,6 +50764,71 @@ var refusedRender = (problems) => ({
 init_globals();
 init_os();
 var import_node_path14 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/process-fingerprint.ts
+init_globals();
+async function readStartTime(pid2, launch) {
+  const res = await launch({
+    bin: "ps",
+    args: ["-o", "lstart=", "-p", String(pid2)],
+    category: "process-fingerprint",
+    timeoutMs: 2e3,
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    envOverlay: { LC_ALL: "C", TZ: "UTC" }
+  });
+  if (res.ok) {
+    const lstart = res.stdout.trim();
+    if (lstart.length > 0) return { kind: "start", token: `ps:${lstart}` };
+    return { kind: "unavailable", detail: "ps produced no start-time" };
+  }
+  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
+}
+var HOST_SOURCE = process.platform === "linux" ? "proc" : "ps";
+function systemProbe(launcher) {
+  return {
+    alive: (pid2) => {
+      try {
+        process.kill(pid2, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    },
+    startTime: HOST_SOURCE === "proc" ? readProcStartTime : (pid2) => readStartTime(pid2, launcher.launch)
+  };
+}
+async function readProcStartTime(pid2) {
+  let bootId;
+  let stat3;
+  try {
+    bootId = (await fs_default.promises.readFile("/proc/sys/kernel/random/boot_id", "utf8")).trim();
+    stat3 = await fs_default.promises.readFile(`/proc/${pid2}/stat`, "utf8");
+  } catch (e) {
+    return { kind: "unavailable", detail: e.message };
+  }
+  const ticks = procStatStartTime(stat3);
+  return ticks === null ? { kind: "unavailable", detail: `unparseable /proc/${pid2}/stat` } : { kind: "start", token: `proc:${bootId}:${ticks}` };
+}
+function procStatStartTime(stat3) {
+  const close = stat3.lastIndexOf(")");
+  if (close === -1) return null;
+  const ticks = stat3.slice(close + 1).trim().split(" ")[22 - 3];
+  return ticks !== void 0 && /^\d+$/.test(ticks) ? ticks : null;
+}
+var sourceOf = (token) => token.startsWith("proc:") ? "proc" : token.startsWith("ps:") ? "ps" : "untagged";
+function sameProcess(a, b) {
+  if (a.pid !== b.pid) return "different";
+  if (a.startTime === null || b.startTime === null) return "incomparable";
+  if (sourceOf(a.startTime) !== sourceOf(b.startTime)) return "incomparable";
+  return a.startTime === b.startTime ? "same" : "different";
+}
+
+// src/daemon/update-act.ts
 function actsDir(stateDir2, entryPath) {
   const key = createHash("sha256").update(entryPath).digest("hex").slice(0, 16);
   return import_node_path14.default.join(stateDir2, "update-act", key);
@@ -50854,7 +50919,7 @@ var bootedAt = (clock) => clock.now() - os_default.uptime() * 1e3;
 async function isRecordedJob(record2, read2, jobs, boot) {
   if (record2.started <= boot || !jobs.jobGroupAlive(record2.pid)) return false;
   const leader = await read2(record2.pid);
-  return record2.startTime === null || leader.kind === "unavailable" || leader.token === record2.startTime;
+  return leader.kind === "unavailable" || sameProcess(record2, { pid: record2.pid, startTime: leader.token }) !== "different";
 }
 function readRecord(actDir) {
   const file = recordOf(actDir);
@@ -50879,7 +50944,7 @@ function parsedRecord(file, text4) {
   }
   throw new Error(`${file}: not an act record: ${text4.slice(0, 200)}`);
 }
-var sameJob = (a, b) => a.pid === b.pid && a.startTime === b.startTime;
+var sameJob = (a, b) => sameProcess(a, b) !== "different";
 function makeActReader(dir, read2, jobs, clock) {
   let known = null;
   async function factsOf(act2) {
@@ -51062,7 +51127,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.7";
+var PACKAGE_VERSION = "1.232.8";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -90847,14 +90912,14 @@ function fallbackState(cwd2, snapshot, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
+function openView(state, cwd2, facts, { source: sourceOf2, changed, log }) {
   const sessionId2 = facts.hookData.session_id;
   const registry = state.registry.view();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const requested = observable.box(facts, { deep: false });
   let source;
   try {
-    source = sourceOf({
+    source = sourceOf2({
       sessionId: sessionId2,
       state,
       store: registry.variableStore,
@@ -95583,72 +95648,6 @@ function productionClaudeInputEdge(launcher) {
     read: (hint) => read(launcher, hint),
     type: (hint, line) => type2(launcher, hint, line)
   };
-}
-
-// src/daemon/process-fingerprint.ts
-init_globals();
-async function readStartTime(pid2, launch) {
-  const res = await launch({
-    bin: "ps",
-    args: ["-o", "lstart=", "-p", String(pid2)],
-    category: "process-fingerprint",
-    timeoutMs: 2e3,
-    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
-    // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound. LC_ALL=C fixes
-    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
-    // can't make one live process render two different start-time strings.
-    envOverlay: { LC_ALL: "C", TZ: "UTC" }
-  });
-  if (res.ok) {
-    const token = res.stdout.trim();
-    if (token.length > 0) return { kind: "start", token };
-    return { kind: "unavailable", detail: "ps produced no start-time" };
-  }
-  const detail = res.reason === "spawn-error" ? res.error ?? "ps spawn failed" : `ps ${res.reason} (exit ${res.exitCode})`;
-  return { kind: "unavailable", detail };
-}
-function systemProbe(launcher) {
-  let source;
-  const chosen = () => {
-    const bootId = readBootId();
-    return bootId === null ? (pid2) => readStartTime(pid2, launcher.launch) : (pid2) => readProcStartTime(pid2, bootId);
-  };
-  return {
-    alive: (pid2) => {
-      try {
-        process.kill(pid2, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
-      }
-    },
-    startTime: async (pid2) => (source ??= chosen())(pid2)
-  };
-}
-function readBootId() {
-  try {
-    return fs_default.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
-  } catch (e) {
-    const code2 = e.code;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return null;
-    throw e;
-  }
-}
-async function readProcStartTime(pid2, bootId) {
-  let stat3;
-  try {
-    stat3 = await fs_default.promises.readFile(`/proc/${pid2}/stat`, "utf8");
-  } catch (e) {
-    return { kind: "unavailable", detail: e.message };
-  }
-  const ticks = procStatStartTime(stat3);
-  return ticks === null ? { kind: "unavailable", detail: `unparseable /proc/${pid2}/stat` } : { kind: "start", token: `${bootId}:${ticks}` };
-}
-function procStatStartTime(stat3) {
-  const fields2 = stat3.slice(stat3.lastIndexOf(")") + 1).trim().split(" ");
-  const ticks = fields2[22 - 3];
-  return ticks !== void 0 && /^\d+$/.test(ticks) ? ticks : null;
 }
 
 // src/daemon/file-storage.ts
