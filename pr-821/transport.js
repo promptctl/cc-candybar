@@ -35054,6 +35054,8 @@ var WatcherRegistry = class {
   slots = /* @__PURE__ */ new Map();
   dirs = /* @__PURE__ */ new Map();
   polled = /* @__PURE__ */ new Map();
+  // Each handle's slot and holder, for a follow that keeps it.
+  owners = /* @__PURE__ */ new WeakMap();
   // The next sweep's cancel, armed exactly while a path is polled.
   sweep = null;
   counters;
@@ -35089,9 +35091,9 @@ var WatcherRegistry = class {
     const shared = this.slots.get(key);
     for (const { dir } of shared?.listeners ?? []) this.judged(dir, "acquire");
     const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
+    const holder = { onInvalidate, seen: /* @__PURE__ */ new Map() };
+    this.sighted(slot, holder);
     slot.holders.add(holder);
-    this.reread(slot.polled);
     return this.makeHandle(slot, holder);
   }
   // The held watch following `spec` (`followWatch`).
@@ -35101,9 +35103,13 @@ var WatcherRegistry = class {
       spec,
       (key, targets) => this.acquire(key, targets, onInvalidate)
     );
-    const slot = this.slots.get(followed.watch.key);
-    if (slot !== void 0) this.reread(slot.polled);
+    const owned = this.owners.get(followed.watch.handle);
+    if (owned !== void 0) this.sighted(owned.slot, owned.holder);
     return followed;
+  }
+  // A holder's baselines: one lstat of each path its slot polls.
+  sighted(slot, holder) {
+    for (const { path: at } of slot.polled) holder.seen.set(at, entryAt(at));
   }
   opened(key, targets) {
     const slot = {
@@ -35282,7 +35288,7 @@ var WatcherRegistry = class {
     slot.debounce = debounce;
   }
   makeHandle(slot, holder) {
-    return {
+    const handle = {
       get deaf() {
         return slot.listeners.flatMap(
           ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
@@ -35297,6 +35303,8 @@ var WatcherRegistry = class {
         this.slots.delete(slot.key);
       }
     };
+    this.owners.set(handle, { slot, holder });
+    return handle;
   }
   closeHandle(at, handle, cause) {
     try {
@@ -35332,17 +35340,11 @@ var WatcherRegistry = class {
     if (this.polled.size === 0) this.disarmSweep();
     if (this.counters) this.counters.watchersClosed++;
   }
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, which the acquire reads
-  // again (`reread`).
+  // The record for a polled path, the one already held or a new one.
   polledAt(at) {
     const held2 = this.polled.get(at);
     if (held2 !== void 0) return held2;
-    const record2 = {
-      path: at,
-      entry: entryAt(at),
-      slots: /* @__PURE__ */ new Set()
-    };
+    const record2 = { path: at, slots: /* @__PURE__ */ new Set() };
     this.polled.set(at, record2);
     return record2;
   }
@@ -35365,27 +35367,22 @@ var WatcherRegistry = class {
     this.sweep = null;
   }
   // [LAW:dataflow-not-control-flow] The same read for every polled path each
-  // sweep. A path whose entry differs fires every slot that names it, by its
-  // path, through the slot's debounce, as a directory watch reports a child.
+  // sweep. A slot where some holder's baseline differs from it fires, by its
+  // path, through the slot's debounce, as a directory watch reports a child,
+  // and every holder's baseline becomes it.
   readPolled() {
-    this.reread(this.polled.values());
-  }
-  // [LAW:no-ambient-temporal-coupling] Every acquire and every follow reads
-  // its polled paths now, as the sweep does, because a baseline older than a
-  // holder's read hides a change that undoes what it read before the next
-  // sweep: a file made and removed within one period reads the same at both
-  // sweeps. A holder that follows before it reads hears whatever moves after
-  // the follow at the next sweep; one that reads first leaves the span
-  // between its read and its follow unwatched. A path that moved since the
-  // last sweep fires every slot on it, a spare re-read for any that already
-  // read it.
-  reread(records) {
-    for (const record2 of records) {
+    for (const record2 of this.polled.values()) {
       const now2 = entryAt(record2.path);
-      if (now2 === record2.entry) continue;
-      record2.entry = now2;
-      for (const slot of record2.slots)
-        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      for (const slot of record2.slots) {
+        let moved2 = false;
+        for (const holder of slot.holders) {
+          if (holder.seen.get(record2.path) === now2) continue;
+          holder.seen.set(record2.path, now2);
+          moved2 = true;
+        }
+        if (moved2)
+          this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+      }
     }
   }
   // The slots held now.

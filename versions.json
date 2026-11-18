@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-821",
+      "ref": "refs/pull/821/merge",
+      "sha": "0e0a782d8a08d35e116a9000e5d4873d37b8c7df",
+      "timestamp": "2026-11-18T18:27:00.378Z",
+      "commits": [
+        {
+          "sha": "0e0a782d8a08d35e116a9000e5d4873d37b8c7df",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:25:50-07:00",
+          "message": "Merge 033f506cc732786a8a78f9f6a0e7f6210417f1a2 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
+        },
+        {
+          "sha": "033f506cc732786a8a78f9f6a0e7f6210417f1a2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T11:24:55-07:00",
+          "message": "fix(watchers): each holder of a polled path keeps its own baseline, set by its acquire and follow, and only the sweep fires (9bj6)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-816",
       "ref": "refs/pull/816/merge",
       "sha": "a2dc324d8296b168943b0f73533497d2009c5a80",
@@ -63,35 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T10:59:23-07:00",
           "message": "fix(daemon): a fork-bomb registry or entry that cannot be read refuses an isolated boot, naming the error (v5fj)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-818",
-      "ref": "refs/pull/818/merge",
-      "sha": "7105107b7a3e935382c12e9fc50347ee07d1b969",
-      "timestamp": "2026-11-18T18:18:08.268Z",
-      "commits": [
-        {
-          "sha": "7105107b7a3e935382c12e9fc50347ee07d1b969",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T18:16:56Z",
-          "message": "Merge 965c6949e718a856760eaa8c656af6707e3194a5 into fd629edab3c2116a266ec18501d1ce208592daaf\n"
-        },
-        {
-          "sha": "965c6949e718a856760eaa8c656af6707e3194a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T11:16:43-07:00",
-          "message": "fix(watchers): every follow reads the slot it holds, and the baseline's comments say what order hears a change (hqoo)\n"
-        },
-        {
-          "sha": "5e9ced6cd55d97dc954d94c46889dc0cc8aa6ff9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T10:56:43-07:00",
-          "message": "fix(watchers): every acquire and follow reads its polled paths now, so a file made and removed inside one sweep is heard (hqoo)\n"
         }
       ]
     },

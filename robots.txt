@@ -1,7 +1,7 @@
 User-agent: *
+Disallow: /cc-candybar/pr-821/
 Disallow: /cc-candybar/pr-816/
 Disallow: /cc-candybar/pr-819/
-Disallow: /cc-candybar/pr-818/
 Disallow: /cc-candybar/pr-820/
 Disallow: /cc-candybar/pr-808/
 Disallow: /cc-candybar/pr-813/
