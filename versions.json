@@ -4,15 +4,22 @@
     {
       "version": "pr-804",
       "ref": "refs/pull/804/merge",
-      "sha": "347c45d6bc63fcbb9cc462c21cdf520447425f69",
-      "timestamp": "2026-11-18T14:25:04.257Z",
+      "sha": "1111a2616218986ead315047b8f33f534fddd564",
+      "timestamp": "2026-11-18T14:30:13.568Z",
       "commits": [
         {
-          "sha": "347c45d6bc63fcbb9cc462c21cdf520447425f69",
+          "sha": "1111a2616218986ead315047b8f33f534fddd564",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T07:24:01-07:00",
-          "message": "Merge 34e6e3bc03915db5339e88399e890cfe1495a4eb into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+          "timestamp": "2026-11-18T07:29:10-07:00",
+          "message": "Merge 6ca978190e8fd2479a6f1795fc19c242f2936f95 into 5d66d500b01f137d9d9a6bdbec6d0664ede19584\n"
+        },
+        {
+          "sha": "6ca978190e8fd2479a6f1795fc19c242f2936f95",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T07:29:00-07:00",
+          "message": "fix(test): a prepared config hands out neither its registry nor its runs, so it ends only whole (y1ff)\n"
         },
         {
           "sha": "34e6e3bc03915db5339e88399e890cfe1495a4eb",
