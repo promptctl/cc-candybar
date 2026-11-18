@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "0b6f815cbfb0a4fae522cf79a7757c5c88ce1287",
-      "timestamp": "2026-11-18T00:55:15.575Z",
+      "sha": "56372f0bd83dcf930c0554eda0b7556027be5d9e",
+      "timestamp": "2026-11-18T01:02:02.685Z",
       "commits": [
         {
-          "sha": "0b6f815cbfb0a4fae522cf79a7757c5c88ce1287",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-17T17:54:11-07:00",
-          "message": "fix(test): the request-limits config stops being a fifo before its hold ends (6sc) (#790)\n\nOn macOS the config watch heard the test's write to the fifo and re-read the path after the writer closed, blocking the daemon's loop for good. A plain file is renamed over the fifo while the render's read still holds the loop, so the render reads on through its open descriptor and every later open of the path gets a plain file."
+          "sha": "56372f0bd83dcf930c0554eda0b7556027be5d9e",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-18T01:01:12Z",
+          "message": "chore(release): set `package.json` to 1.230.1\n\n## [1.230.1](https://github.com/promptctl/cc-candybar/compare/v1.230.0...v1.230.1) (2026-11-18)\n\n### Bug Fixes\n\n* **test:** the request-limits config stops being a fifo before its hold ends (6sc) ([#790](https://github.com/promptctl/cc-candybar/issues/790)) ([0b6f815](https://github.com/promptctl/cc-candybar/commit/0b6f815cbfb0a4fae522cf79a7757c5c88ce1287))\n"
         }
       ]
     }
