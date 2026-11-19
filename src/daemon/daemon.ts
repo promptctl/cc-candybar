@@ -585,7 +585,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   }
   const declared = new Map<
     RendererName,
-    Pick<Subscriptions, "sources" | "lanes" | "managedFolders">
+    Pick<Subscriptions, "sources" | "lanes"> & {
+      readonly managedFolders: ReadonlySet<string>;
+    }
   >();
   const aggregate = (): void => {
     const sources: Record<SessionId, Subscriptions["sources"][SessionId]> = {};
@@ -595,8 +597,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     // renderer's part. Shared providers see the current owner's demands.
     for (const [name, subscription] of declared) {
       for (const folder of subscription.managedFolders) folders.add(folder);
-      for (const [id, values] of Object.entries(subscription.sources))
-        if (nameOf(id as SessionId) === name) sources[id as SessionId] = values;
+      for (const [id, values] of Object.entries(subscription.sources)) {
+        if (nameOf(id as SessionId) !== name) continue;
+        // [LAW:single-enforcer] A source read uses this renderer's admitted
+        // folders. Another renderer holding the same path confers no access.
+        sources[id as SessionId] = values.filter(
+          (source) =>
+            source.kind !== "plugin" ||
+            subscription.managedFolders.has(source.folder),
+        );
+      }
       for (const [id, values] of Object.entries(subscription.lanes))
         if (nameOf(id as SessionId) === name) lanes[id as SessionId] = values;
     }
@@ -678,9 +688,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
       {
         subscribed: (subscriptions) => {
+          const managedFolders = configDiscovery.admitManagedFolders(
+            name,
+            subscriptions.managedFolders,
+            declared.get(name)?.managedFolders,
+          );
           declared.set(name, {
             sources: subscriptions.sources,
-            managedFolders: subscriptions.managedFolders,
+            managedFolders,
             lanes: subscriptions.lanes,
           });
           aggregate();

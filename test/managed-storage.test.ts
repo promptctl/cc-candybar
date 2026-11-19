@@ -26,6 +26,7 @@ import type { Current } from "../src/utils/reading";
 import { until } from "./helpers/until";
 import { fakeWatches } from "./helpers/fake-watches";
 import { handDelivery, type HandDelivery } from "./helpers/hand-delivery";
+import { SourceFiles } from "../src/daemon/source-files";
 
 // [LAW:behavior-not-structure] The managed storage owner through what it
 // shows: what a session's lane reads, the refresh and sweep events it writes,
@@ -50,7 +51,9 @@ interface Rig {
 
 const rigs: Rig[] = [];
 
-function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
+function rig(
+  opts: { identityOf?: IdentityRead; files?: SourceFiles } = {},
+): Rig {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "managed-storage-")),
   );
@@ -79,6 +82,7 @@ function rig(opts: { identityOf?: IdentityRead } = {}): Rig {
     logger,
     fileEvents,
     identityOf: opts.identityOf,
+    files: opts.files,
   });
   const wanted = new Set([folder]);
   const made: Rig = {
@@ -207,22 +211,28 @@ describe("ManagedStorage reads", () => {
     });
   });
 
-  test("a file declared before its folder is followed reads the path and refreshes once the watch opens", async () => {
+  test("a file waits for its folder to be followed before any bytes are read", async () => {
     const watches = fakeWatches();
-    const r = rig();
+    const reads: string[] = [];
+    const r = rig({
+      files: new SourceFiles((file, signal) => {
+        reads.push(file);
+        return fs.promises.readFile(file, { encoding: "utf8", signal });
+      }),
+    });
     fs.mkdirSync(r.folder);
-    r.write(A, '"a"');
+    r.write(A, '"kept file"');
     const lane = r.storage.declare(new Holds(), r.folder, A);
-    expect(await answered(lane)).toEqual(ok("a"));
+    expect(await answered(lane)).toEqual(ABSENT);
+    expect(reads).toEqual([]);
     expect(watches).toHaveLength(0);
-    r.write(A, '"before following"');
     r.follow();
     await until(
-      () =>
-        JSON.stringify(lane.current()) ===
-        JSON.stringify(ok("before following")),
+      () => lane.current().kind === "ok",
       "the watch's first refresh",
     );
+    expect(lane.current()).toEqual(ok("kept file"));
+    expect(reads).toEqual([path.join(r.folder, `${A}.json`)]);
   });
 
   test("a program's write reaches its session's lane through the folder's watch", async () => {
@@ -511,11 +521,22 @@ describe("ManagedStorage watches", () => {
   });
 
   // Nothing asked the OS again, so nothing cleared.
-  test("a faulted folder no longer followed leaves without a clear", () => {
-    const r = rig();
+  test("a faulted folder no longer followed settles an outstanding lane without reading the path", async () => {
+    const reads: string[] = [];
+    const r = rig({
+      files: new SourceFiles((file, signal) => {
+        reads.push(file);
+        return fs.promises.readFile(file, { encoding: "utf8", signal });
+      }),
+    });
     fakeWatches(new Set([r.folder]));
     r.follow();
+    r.write(A, '"must not read"');
+    const lane = r.storage.declare(new Holds(), r.folder, A);
+    expect(await answered(lane)).toMatchObject({ kind: "failed" });
     r.storage.follow(new Set());
+    expect(await answered(lane)).toEqual(ABSENT);
+    expect(reads).toEqual([]);
     expect(faultLines(r)).toEqual([started("refused")]);
     expect(r.storage.stats().folders).toBe(0);
   });
