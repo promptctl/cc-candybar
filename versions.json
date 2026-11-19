@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "2d21da5a247382b00e6ea729e0e1081bcecc4376",
+      "timestamp": "2026-11-19T18:49:43.110Z",
+      "commits": [
+        {
+          "sha": "2d21da5a247382b00e6ea729e0e1081bcecc4376",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:48:23-07:00",
+          "message": "fix(client): show startup and timeout feedback in the statusline (#900)"
+        }
+      ]
+    },
+    {
       "version": "pr-902",
       "ref": "refs/pull/902/merge",
       "sha": "33e37f14320d82787cff0a2e52b5912fa1b05f5d",
@@ -95,28 +110,6 @@
       ]
     },
     {
-      "version": "pr-900",
-      "ref": "refs/pull/900/merge",
-      "sha": "a26c540a71dfade059f300dac9eb9677a96972e5",
-      "timestamp": "2026-11-19T18:43:11.429Z",
-      "commits": [
-        {
-          "sha": "a26c540a71dfade059f300dac9eb9677a96972e5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T18:42:00Z",
-          "message": "Merge ae734ef70d8901a5546b862389b0b1f13687bdbd into 059ece30eb17a3358d9abdd230f2cd671892624c\n"
-        },
-        {
-          "sha": "ae734ef70d8901a5546b862389b0b1f13687bdbd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:36:07-07:00",
-          "message": "fix(client): show startup and timeout feedback in the statusline\n"
-        }
-      ]
-    },
-    {
       "version": "pr-901",
       "ref": "refs/pull/901/merge",
       "sha": "77ffd37fa04ff8ba522e396f231876d5dbb9c9b9",
@@ -135,21 +128,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:25:47-07:00",
           "message": "fix(settings): fold every pick through one setting table and warn on stale picks\n\nA session pick its setting can no longer hold (an uninstalled or retired theme, an undeclared style or preset, a dropped effect, an out-of-range value, a placement value outside its declaration) now reads through its setting's one parse as stale. The fold draws what lies beneath it and reports which rung decided, and the frame shows one stale warning per stale pick that decided, naming the setting, the spelling held, what the bar wears and what the setting can hold. Every save releases every pick that is not a draft against the config it wrote, and a state variable may no longer read a setting's session key.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "059ece30eb17a3358d9abdd230f2cd671892624c",
-      "timestamp": "2026-11-19T18:41:57.777Z",
-      "commits": [
-        {
-          "sha": "059ece30eb17a3358d9abdd230f2cd671892624c",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T18:40:41Z",
-          "message": "chore(release): set `package.json` to 1.235.7\n\n## [1.235.7](https://github.com/promptctl/cc-candybar/compare/v1.235.6...v1.235.7) (2026-11-19)\n\n### Bug Fixes\n\n* **sources:** preserve pending observations and distinguish dependency keys ([#893](https://github.com/promptctl/cc-candybar/issues/893)) ([03ed302](https://github.com/promptctl/cc-candybar/commit/03ed3028670db49aa13cedc4dad7687564282cfc))\n"
         }
       ]
     },
