@@ -14,7 +14,7 @@ import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
-import { clickSessionOf } from "../src/click/wire";
+import { admitClick } from "../src/click/wire";
 import { instantOf, type Instant, type Tick } from "../src/utils/instant";
 import {
   sessionIdOf,
@@ -192,7 +192,7 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(clickSessionOf(verb, v)).toEqual({ ok: true, id: SID });
+    expect(admitClick(verb, v)).toMatchObject({ scope: "session", session: SID });
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

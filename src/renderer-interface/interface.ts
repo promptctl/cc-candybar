@@ -8,10 +8,8 @@
 // [LAW:types-are-the-program] The unions hold only the arms something produces
 // and something consumes; each later step adds its own.
 
-import type {
-  ParsedSessionId,
-  SessionId,
-} from "../daemon/foundations/session-id";
+import type { SessionId } from "../daemon/foundations/session-id";
+import type { AdmittedClick } from "../click/wire";
 import type { Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
@@ -207,19 +205,11 @@ export type Event =
       readonly outcome: EffectOutcome;
     }
   | {
-      // A click on a link the bar drew: the renderer decides what it means
-      // and acts on it in this turn, so the output names what the act moved.
+      // A click admitted by the host, with its decoded arguments.
       readonly kind: "click";
-      readonly verb: string;
-      readonly value: string;
-      // The click's session as it crossed the host's session-id checkpoint:
-      // null when the click names none.
-      readonly session: ParsedSessionId | null;
+      readonly click: AdmittedClick;
       readonly arrival: ClickArrival;
-      // [LAW:one-source-of-truth] The click's session as the host's book
-      // holds it: what it renders from, and, once heard since the daemon
-      // started, the request whose hints are the pane its lanes follow. Null
-      // when the click names no session, or the book holds none of it.
+      // A scoped click's context, once the host has heard from its session.
       readonly context: SessionContext | null;
     }
   | {

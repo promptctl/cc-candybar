@@ -37,10 +37,10 @@ import {
   MENU_NS,
   MENU_PAGE_NS,
 } from "../config/reserved-names.js";
-import { decodeWire } from "../daemon/foundations/verb-error";
+import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
   parseSessionId,
-  type ParsedSessionId,
+  type SessionId,
 } from "../daemon/foundations/session-id";
 
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
@@ -58,9 +58,8 @@ export const isBarLink = (url: string): boolean =>
 // the installer.
 export const APP_NAME = "CCCandybarURLHandler";
 
-// [LAW:one-source-of-truth] The verb vocabulary. The daemon's VERBS registry
-// keys off these and every emitter builds effects with them, so the emitted
-// verb and the dispatched handler cannot name-drift.
+// [LAW:one-source-of-truth] The verb vocabulary used by emitters, the host's
+// admission and the renderer's handler table.
 export const VERB_DISPATCH = "dispatch";
 export const VERB_SET_STATE = "set-state";
 // [LAW:types-are-the-program] A RELATIVE state nudge: its args are
@@ -292,10 +291,8 @@ function clickDoes(effects: readonly Effect[]): string {
   return rest.length > 0 ? `${face} and ${rest.length} more` : face;
 }
 
-// [LAW:types-are-the-program] A parsed effect as the dispatcher sees it: the verb
-// and the still-encoded segment tail. The tail stays encoded because the target
-// verb's handler decodes its own segments at its boundary (single-enforcer per
-// verb) — the same contract a direct (non-dispatch) click URL hands a handler.
+// A parsed link effect with its encoded argument tail. Admission decodes
+// the tail using the same argument layout for direct and dispatch links.
 export interface ParsedEffect {
   readonly verb: string;
   readonly value: string;
@@ -416,8 +413,8 @@ export type HandlerUrl =
 // in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
 //
 // [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
-// to the verb; each verb's handler decodes its own value at its boundary (the
-// verb that owns the structure owns its decode). A whole-value decode here would
+// to admission, where the verb determines its argument layout. A
+// whole-value decode here would
 // un-escape structural separators inside a nested value — the exact hazard that
 // made compound clicks unrepresentable — so it is deliberately absent.
 export function parseHandlerUrl(rawUrl: string): HandlerUrl {
@@ -466,58 +463,126 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_COPY_DIAGNOSTIC,
 ]);
 
-// [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
-// id — the set `dispatch` reads to know which session a failing click should
-// surface its error in. Membership here is the fact; a verb that carries the
-// session id first joins by one row, not one more `||`.
-const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC,
-]);
+// [LAW:types-are-the-program] Only copy and open carry no session of their own.
+type GlobalVerb = typeof VERB_COPY | typeof VERB_OPEN_VSCODE;
+export type SessionVerb = Exclude<EffectVerb, GlobalVerb>;
 
-// [LAW:one-source-of-truth] The session a click is in: the first segment of
-// its first session-bearing effect — every SESSION_FIRST_VERBS member carries
-// it there — or none. Dispatch surfaces a failed step in that session's bar,
-// and the renderer counts the click as that session's activity
-// (src/renderer/menu-idle.ts). [LAW:single-enforcer] It is read as it crosses
-// the one session-id checkpoint, so every reader of a click's session reads
-// the same checked value; one that fails is no session's, and its verb
-// refuses the click.
-export function clickSessionOf(
-  verb: string,
-  value: string,
-): ParsedSessionId | null {
-  return sessionOfEffects(
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }],
-  );
+interface RejectedStep {
+  readonly kind: "invalid";
+  readonly reason: string;
 }
 
-function sessionOfEffects(
-  effects: readonly ParsedEffect[],
-): ParsedSessionId | null {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
-  // Only the session's own segment is read: a step's malformed argument is
-  // that step's error to hold on the bar, after the click has found its
-  // session.
-  const sid =
-    bearing === undefined
-      ? ""
-      : decodeWire(() => decodeFirstSegment(bearing.value));
-  return sid === "" ? null : parseSessionId(sid);
+export type GlobalStep =
+  | RejectedStep
+  | {
+      readonly kind: "global";
+      readonly verb: GlobalVerb;
+      readonly value: string;
+    };
+
+export type ClickStep =
+  | GlobalStep
+  | {
+      readonly kind: "session";
+      readonly verb: SessionVerb;
+      readonly args: readonly string[];
+    };
+
+export type AdmittedClick =
+  | {
+      readonly scope: "global";
+      readonly verb: string;
+      readonly steps: readonly GlobalStep[];
+    }
+  | {
+      readonly scope: "session";
+      readonly verb: string;
+      readonly session: SessionId;
+      readonly steps: readonly ClickStep[];
+    };
+
+export const VERB_NAMES: readonly string[] = Object.freeze([
+  ...Object.keys(SAYS),
+  VERB_DISPATCH,
+]);
+
+function isEffectVerb(verb: string): verb is EffectVerb {
+  return Object.hasOwn(SAYS, verb);
+}
+
+// [LAW:parse-dont-validate] A direct URL and a dispatch both become ordered
+// steps. Only this boundary decodes the URL's arguments and admits its session.
+// An invalid session cannot reach a renderer. An invalid argument after a
+// valid session is that step's failure, so the bar can report it and the
+// other steps still run in order.
+export function admitClick(verb: string, value: string): AdmittedClick {
+  if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
+    throw new BadVerbArgs(`unknown click verb: ${verb}`);
+
+  const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+  const global: GlobalStep[] = [];
+  let scoped: { id: SessionId; steps: ClickStep[] } | undefined;
+
+  for (const step of batchAdjacentWrites(raw)) {
+    const name = step.verb;
+    if (!isEffectVerb(name)) {
+      (scoped?.steps ?? global).push({
+        kind: "invalid",
+        reason: `unknown effect verb "${name}"`,
+      });
+      continue;
+    }
+    if (name === VERB_COPY || name === VERB_OPEN_VSCODE) {
+      try {
+        (scoped?.steps ?? global).push({
+          kind: "global",
+          verb: name,
+          value: decodeWire(() => decodeURIComponent(step.value)),
+        });
+      } catch (e) {
+        if (!(e instanceof BadVerbArgs)) throw e;
+        (scoped?.steps ?? global).push({
+          kind: "invalid",
+          reason: `${name}: ${e.message}`,
+        });
+      }
+      continue;
+    }
+
+    // Back and Cancel take only the session as their whole value. The other
+    // session verbs delimit arguments with slashes before percent decoding.
+    const segmented = SEGMENTED_VERBS.has(name);
+    const claimed = decodeWire(() =>
+      segmented
+        ? decodeFirstSegment(step.value)
+        : decodeURIComponent(step.value),
+    );
+    if (scoped === undefined) {
+      const parsed = parseSessionId(claimed);
+      if (!parsed.ok) throw new BadVerbArgs(`session id ${parsed.problem}`);
+      scoped = { id: parsed.id, steps: [...global] };
+    } else if (scoped.id !== claimed) {
+      throw new BadVerbArgs("a click cannot name more than one session");
+    }
+
+    const separator = segmented ? step.value.indexOf("/") : -1;
+    try {
+      const args =
+        separator === -1
+          ? []
+          : decodeWire(() =>
+              step.value
+                .slice(separator + 1)
+                .split("/")
+                .map(decodeURIComponent),
+            );
+      scoped.steps.push({ kind: "session", verb: name, args });
+    } catch (e) {
+      if (!(e instanceof BadVerbArgs)) throw e;
+      scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
+    }
+  }
+  return scoped === undefined
+    ? { scope: "global", verb, steps: global }
+    : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
 }

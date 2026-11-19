@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SessionState } from "../src/renderer/session-state";
-import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/renderer/verbs";
+import { BadVerbArgs } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import {
+  VERB_NAMES,
+  admitClick,
   encodeSegments,
   VERB_STEP_STATE,
 } from "../src/click/wire";
@@ -94,24 +96,15 @@ describe("click protocol", () => {
     expect(ctx.effects).toEqual([]);
   });
 
-  test("VERBS lookup is prototype-pollution-safe", () => {
-    // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
-    // object — wire-level untrusted verb names like `__proto__` and
-    // `constructor` are non-members, not truthy hits on Object.prototype.
-    // A future revert to `Readonly<Record<string, VerbHandler>>` would
-    // let those names return prototype functions, bypass the `!handler`
-    // check in handleClick, then crash on `handler(value, ctx)` as
-    // RENDER_FAILED instead of the intended BAD_REQUEST.
-    // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
-    // so the regression reads as "verb table leaks Object.prototype"
-    // rather than as a type-only diff a reviewer might wave through.
+  test("VERB_NAMES lookup is prototype-pollution-safe", () => {
+    // External verb names are admitted only from the link vocabulary.
     for (const poison of [
       "__proto__",
       "constructor",
       "toString",
       "hasOwnProperty",
     ]) {
-      expect(VERBS.get(poison)).toBeUndefined();
+      expect(() => admitClick(poison, "a")).toThrow(BadVerbArgs);
     }
   });
 

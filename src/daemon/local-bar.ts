@@ -261,7 +261,8 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       return { answer, turns: turns.slice(from), facts };
     },
     click: (event) => {
-      if (event.session?.ok) collector.clicked(event.session.id);
+      if (event.click.scope === "session")
+        collector.clicked(event.click.session);
       return answering.answer(() => ({ kind: "event", event }));
     },
     noted: (key, endsAt) =>

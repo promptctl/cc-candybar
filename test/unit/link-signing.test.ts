@@ -32,8 +32,11 @@ describe("a link the bar draws", () => {
     for (const delivery of [FORWARDED, CLI])
       expect(parseClick(signed, delivery, TEST_SIGNER)).toEqual({
         kind: "link",
-        verb: "dispatch",
-        value: COPY.slice("cc-candybar://dispatch/".length),
+        click: {
+          scope: "global",
+          verb: "dispatch",
+          steps: [{ kind: "global", verb: VERB_COPY, value: "rm -rf ~" }],
+        },
         link: COPY,
         delivery,
       });

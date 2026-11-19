@@ -23,7 +23,7 @@ import { FEED_PERIODS, Feeds } from "../../src/renderer/feeds";
 // and an idle close is refused, so a test that clicks hands in the act it
 // means to observe.
 export const NO_VERBS: RendererVerbs = {
-  handler: () => undefined,
+  click: () => {},
   closeIdle: () => {
     throw new Error("this rig closes no menus");
   },

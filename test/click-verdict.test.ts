@@ -83,6 +83,18 @@ test("a forged copy link is refused at once, saying why, and the clipboard is un
   for (const event of h.events) expect(event).toContain("outcome=bad-request");
 });
 
+test("a signed link with an invalid session is refused in the forwarder verdict", async () => {
+  const h = host();
+  const url = TEST_SIGNER.signLink("cc-candybar://undo/%C0");
+  const answered = await h.frame(url);
+
+  expect(answered.verdict).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  await answered.land();
+  expect(h.events).toEqual([expect.stringContaining("outcome=bad-request")]);
+  expect(h.events[0]).toContain("verb=undo");
+  expect(h.events[0]).not.toContain("mailbox=");
+});
+
 test("a link the bar drew is told verified before its click lands, and then lands", async () => {
   let release = () => {};
   const h = host(new Promise<void>((done) => (release = done)));

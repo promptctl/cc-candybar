@@ -46,7 +46,6 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { linkClick } from "./helpers/click";
 import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
-import { VERBS } from "../src/renderer/verbs";
 import type { VerbContext } from "../src/renderer/verbs";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";

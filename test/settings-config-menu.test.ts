@@ -38,7 +38,7 @@ import {
   renderOptionsOf,
 } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { type VerbContext } from "../src/renderer/verbs";
 import {
   fileHeldSettings,
   settingCounts,

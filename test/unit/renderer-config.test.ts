@@ -1,3 +1,4 @@
+import { admitClick } from "../../src/click/wire";
 // The main renderer draws from the config snapshots its host hands in and
 // nothing else: every layer here names a file that does not exist, and the
 // unit project refuses any read outside the package, so a renderer that opened
@@ -246,9 +247,7 @@ test("a click on a session with no live context waits for the config of the orig
   const parked = answered(
     await handIn(r, {
       kind: "click",
-      verb: VERB_SET_CONFIG,
-      value: encodeSegments([session, "user", "palette", palette]),
-      session: { ok: true, id: session },
+      click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette])),
       arrival: { via: "link", delivery: { kind: "cli" } },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },

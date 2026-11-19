@@ -23,7 +23,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { encodeSegments } from "../src/click/wire";
-import { VERBS, type VerbContext } from "../src/renderer/verbs";
+import { type VerbContext } from "../src/renderer/verbs";
 import { SessionState } from "../src/renderer/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
