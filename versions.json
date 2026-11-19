@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "9a5e1ff947d4433ff5508b0fc0bfc0c0b9426c50",
+      "timestamp": "2026-11-19T09:56:50.892Z",
+      "commits": [
+        {
+          "sha": "9a5e1ff947d4433ff5508b0fc0bfc0c0b9426c50",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:55:44Z",
+          "message": "Merge e656ae2280cbfbf0a220d1f253ccf6ab47e34fde into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "e656ae2280cbfbf0a220d1f253ccf6ab47e34fde",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:55:29-07:00",
+          "message": "fix(test): a test daemon runs on the arguments the client ships, and its signal is named for what it reaches (f6eo)\n\nThe source entry resolves tsx's loader through the package's exports and puts\nit in front of the client's own daemon arguments, heap cap included. Because\nthe client refuses to spawn on a malformed memory budget, the tests of the\ndaemon's own refusal run it by hand. killTree becomes signalDaemon.\n"
+        },
+        {
+          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:38:14-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-839",
       "ref": "refs/pull/839/merge",
       "sha": "c195d0903eacfae45f17512a4f09be205b232cc7",
@@ -56,28 +85,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:35:58-07:00",
           "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "4cf51b4d27acfcbb333b283cbbf330de687e5ded",
-      "timestamp": "2026-11-19T09:47:12.841Z",
-      "commits": [
-        {
-          "sha": "4cf51b4d27acfcbb333b283cbbf330de687e5ded",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:45:59-07:00",
-          "message": "Merge a19ec2b1c69b3c896acfca239817b62ce6900f64 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:38:14-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
         }
       ]
     },
