@@ -100,6 +100,14 @@ export interface ClaudeHookData {
   };
 }
 
+// [LAW:types-are-the-program] A render can omit the current directory. The
+// host supplies it from the client's cwd before handing it to a renderer.
+export type RenderHookData = Omit<ClaudeHookData, "workspace"> & {
+  readonly workspace: Omit<ClaudeHookData["workspace"], "current_dir"> & {
+    readonly current_dir?: string;
+  };
+};
+
 // The directories a session's Claude Code keeps its transcripts under:
 // the one its client detected (the `claudeConfigDir` hint), else the two
 // default locations that exist.

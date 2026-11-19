@@ -73,6 +73,8 @@ The host maintains the tmux pane from effective settings. The ordinary statuslin
 
 `createDaemon` prepares the shared host. In production the socket owner calls `serve()` to load the stores and obtain the request-capable daemon, then arms the background work. Shutdown seals admission, drains the renderer journal, and cancels remaining work before releasing the shared resources.
 
+The render checkpoint accepts an absolute `workspace.current_dir`. If the hook omits it, the host uses the checked cwd reported by the client. A relative workspace directory is refused before checkout observation. The renderer receives the checked workspace directory and the host's checkout observation. [LAW:single-enforcer]
+
 `docs/design/inventory/verbs.md` classifies some of this differently, because it was written for an earlier cut. This table overrides it.
 
 ## Areas

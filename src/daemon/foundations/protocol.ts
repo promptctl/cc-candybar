@@ -1,7 +1,7 @@
 import type { RequestId } from "../../renderer-interface/interface.js";
 import path from "node:path";
 import type { Duplex } from "node:stream";
-import type { ClaudeHookData } from "../../utils/claude";
+import type { RenderHookData } from "../../utils/claude";
 import type { StatsSnapshot } from "./stats-snapshot";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../../tmux-hint";
@@ -57,7 +57,7 @@ export const TOTAL_BUDGET_MS = 150;
 export interface RenderRequest {
   v: number;
   kind: "render";
-  hookData: ClaudeHookData;
+  hookData: RenderHookData;
   // The client's own path, then the flags the statusline command gave it —
   // the native binary's, the Node script's, never the node interpreter's.
   // The config flags following it are parsed by the host, which reports

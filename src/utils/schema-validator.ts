@@ -5,7 +5,7 @@
 // accumulate into a ValidationReport — callers decide what to do with them.
 // No early exits, no control-flow branches that skip checks.
 
-import type { ClaudeHookData } from "./claude";
+import type { RenderHookData } from "./claude";
 
 export interface ValidationReport {
   // Required fields that were absent or had wrong types.
@@ -50,7 +50,6 @@ const REQUIRED_FIELDS: Array<
   ["model.id", "string"],
   ["model.display_name", "string"],
   ["workspace", "object"],
-  ["workspace.current_dir", "string"],
   ["workspace.project_dir", "string"],
 ];
 
@@ -58,14 +57,15 @@ const REQUIRED_FIELDS: Array<
 // present value of the wrong kind is the same type mismatch a required
 // field's would be — past this border an optional field is either absent or
 // exactly its declared kind.
-const OPTIONAL_FIELDS: Array<[string, "string-list"]> = [
+const OPTIONAL_FIELDS: Array<[string, "string" | "string-list"]> = [
+  ["workspace.current_dir", "string"],
   ["workspace.added_dirs", "string-list"],
 ];
 
 /**
  * Validate raw hookData received over the wire against the known Anthropic schema.
  *
- * Returns the data typed as ClaudeHookData alongside a ValidationReport.
+ * Returns the data typed as RenderHookData alongside a ValidationReport.
  * Never throws — divergences are reported, not thrown. The daemon decides
  * how to surface them (the daemon's log warn/info).
  *
@@ -74,7 +74,7 @@ const OPTIONAL_FIELDS: Array<[string, "string-list"]> = [
  * because this boundary guarantees their presence.
  */
 export function validateHookData(raw: unknown): {
-  data: ClaudeHookData;
+  data: RenderHookData;
   report: ValidationReport;
 } {
   const report: ValidationReport = {
@@ -102,7 +102,7 @@ export function validateHookData(raw: unknown): {
 
   for (const [path, expectedType] of OPTIONAL_FIELDS) {
     const value = resolvePath(obj, path);
-    const got = value === undefined ? expectedType : listKind(value);
+    const got = value === undefined ? expectedType : optionalKind(value);
     if (got !== expectedType) {
       report.typeMismatches.push({ path, expected: expectedType, got });
     }
@@ -114,7 +114,7 @@ export function validateHookData(raw: unknown): {
     }
   }
 
-  return { data: raw as ClaudeHookData, report };
+  return { data: raw as RenderHookData, report };
 }
 
 // [LAW:parse-dont-validate] A value's kind in REQUIRED_FIELDS' vocabulary.
@@ -130,7 +130,7 @@ function kindOf(value: unknown): string {
 
 // The "string-list" kind: an array every element of which is a well-formed
 // string, else the value's ordinary kind.
-function listKind(value: unknown): string {
+function optionalKind(value: unknown): string {
   return Array.isArray(value) && value.every((v) => kindOf(v) === "string")
     ? "string-list"
     : kindOf(value);
