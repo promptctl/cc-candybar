@@ -1,3 +1,9 @@
+## [1.233.0](https://github.com/promptctl/cc-candybar/compare/v1.232.15...v1.233.0) (2026-11-19)
+
+### Features
+
+* **config:** offer layered and isolated file selection ([#861](https://github.com/promptctl/cc-candybar/issues/861)) ([c708550](https://github.com/promptctl/cc-candybar/commit/c7085504a53576be27550693c5b9d96a1afd8f94))
+
 ## [1.232.15](https://github.com/promptctl/cc-candybar/compare/v1.232.14...v1.232.15) (2026-11-19)
 
 ### Bug Fixes
