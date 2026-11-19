@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-850",
+      "ref": "refs/pull/850/merge",
+      "sha": "3f12ea2bfc18ceae7b27033874f4da76d33a9fd1",
+      "timestamp": "2026-11-19T10:32:40.101Z",
+      "commits": [
+        {
+          "sha": "3f12ea2bfc18ceae7b27033874f4da76d33a9fd1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:30:12-07:00",
+          "message": "Merge 534fddf2b122cd8a0ed3968e313a5057194bcf53 into 5702b0a6f481af905b25fe6469d345b86a5c5bb3\n"
+        },
+        {
+          "sha": "534fddf2b122cd8a0ed3968e313a5057194bcf53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:29:09-07:00",
+          "message": "refactor(config): share discovery observations and file reads (ibyq.i9x)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-845",
       "ref": "refs/pull/845/merge",
       "sha": "139cc2c6ba6361fde7008553a5a93919d84e7610",
