@@ -12,7 +12,7 @@
 //   2. Two adjacent segments are always joined by a filled arrow, whatever
 //      their grounds: no thin divider is drawn in its place.
 
-import { drawPayload } from "./helpers/draw-payload";
+import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
@@ -48,14 +48,63 @@ function chevronCount(rendered: Pick<Frame, "rows">): number {
   return textOf(rendered).split(CHEVRON).length - 1;
 }
 
-function render(src: string, hookData: Record<string, unknown>): Frame {
+function draw(src: string, hookData: Record<string, unknown>) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;
+  const registry = new SourceRegistry(store, config.globals.default_empty_value, sessionState);
+  try {
+    const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+    return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS);
+  } finally {
+    registry.dispose();
+  }
 }
+
+function render(src: string, hookData: Record<string, unknown>): Frame {
+  return draw(src, hookData).frame;
+}
+
+describe("input reading in a statusline cell", () => {
+  test.each(["(empty)", "7"])("an invalid number draws its failure with global empty value %s", (empty) => {
+    const src = `{
+      globals: { default_empty_value: '${empty}' },
+      variables: { count: { kind: 'input', path: 'count', type: 'number' } },
+      segments: { sample: { template: 'count={{ .count }}' } },
+      root: { h: ['${SETTINGS_ANCHOR}', 'sample'] },
+    }`;
+    const bad = draw(src, { count: "bad input" });
+    expect(textOf(bad.frame)).toContain("⚠");
+    expect(textOf(bad.frame)).not.toContain("count=");
+    expect(segmentErrorsOf(bad.warnings)).toEqual([
+      expect.stringMatching(/variable "count": Cannot cast "bad input" to number/),
+    ]);
+
+    const good = draw(src, { count: 0 });
+    expect(textOf(good.frame)).toContain("count=0");
+    expect(segmentErrorsOf(good.warnings)).toEqual([]);
+  });
+
+  test("an authored default answers an invalid typed reading, and omission still defaults to string", () => {
+    const src = `{
+      globals: { default_empty_value: 'global empty' },
+      variables: { name: { kind: 'input', path: 'name' } },
+      segments: {
+        sample: {
+          vars: {
+            count: { kind: 'input', path: 'count', type: 'number', default: -1 },
+            label: { kind: 'template', template: '{{ .name }}' },
+          },
+          template: '{{ .sample.label }}={{ .sample.count }}',
+        },
+      },
+      root: { h: ['${SETTINGS_ANCHOR}', 'sample'] },
+    }`;
+    const result = draw(src, { name: true, count: "bad input" });
+    expect(textOf(result.frame)).toContain("true=-1");
+    expect(segmentErrorsOf(result.warnings)).toEqual([]);
+  });
+});
 
 describe("segment is the rendering unit (2de.10)", () => {
   test("a unit with internal clickable regions renders as ONE strip item — no internal chevron", () => {

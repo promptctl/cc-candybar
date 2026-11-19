@@ -9,6 +9,7 @@
 import {
   type ParseDecl,
   type SourceDefault,
+  type DslConfig,
   type EnvVarDecl,
   type FileVarDecl,
   type InputVarDecl,
@@ -18,6 +19,9 @@ import {
   type TemplateVarDecl,
   type TimeVarDecl,
   type AuthoredVariableDecl,
+  type ResolvedVariableDecl,
+  type ValidatedConfig,
+  type VariableDecl,
 } from "../dsl-types.js";
 import { isJsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
@@ -107,6 +111,12 @@ function literalValueSpec(): FieldSpec<string | number | boolean> {
   };
 }
 
+// [LAW:one-source-of-truth] Validation and the resolved declaration use the
+// same type for an omitted input/template type.
+const DEFAULT_VARIABLE_TYPE = "string";
+const VARIABLE_TYPES = [DEFAULT_VARIABLE_TYPE, "number", "boolean"] as const;
+const VARIABLE_TYPE = optionalEnumSpec(VARIABLE_TYPES);
+
 // [LAW:types-are-the-program] A typed variable's `default` (`input`,
 // `template`) carries the cross-field invariant — it must match the declared
 // `type` (an absent or invalid `type` defaults the check to "string"). A field spec receives the WHOLE record, so it
@@ -120,11 +130,42 @@ function typedDefaultSpec(): FieldSpec<string | number | boolean> {
     required: false,
     json: { type: ["string", "number", "boolean"] },
     parse: (ctx, path, _field, raw) => {
-      const t = raw.type;
       const expected =
-        t === "number" || t === "boolean" || t === "string" ? t : "string";
+        VARIABLE_TYPES.find((type) => type === raw.type) ??
+        DEFAULT_VARIABLE_TYPE;
       return optionalTypedDefault(ctx, path, raw, expected);
     },
+  };
+}
+
+function resolveTypes(
+  decls: Readonly<Record<string, VariableDecl>>,
+): Readonly<Record<string, ResolvedVariableDecl>> {
+  return Object.fromEntries(
+    Object.entries(decls).map(
+      ([name, decl]): [string, ResolvedVariableDecl] => [
+        name,
+        decl.kind === "input" || decl.kind === "template"
+          ? { ...decl, type: decl.type ?? DEFAULT_VARIABLE_TYPE }
+          : decl,
+      ],
+    ),
+  );
+}
+
+// [LAW:single-enforcer] Lower global and segment-local declarations at the
+// final loader checkpoint so synthesized declarations use the same rule.
+export function resolveVariableTypes(
+  config: DslConfig,
+): Pick<ValidatedConfig, "variables" | "segments"> {
+  return {
+    variables: resolveTypes(config.variables),
+    segments: Object.fromEntries(
+      Object.entries(config.segments).map(([name, { vars, ...seg }]) => [
+        name,
+        vars === undefined ? seg : { ...seg, vars: resolveTypes(vars) },
+      ]),
+    ),
   };
 }
 
@@ -277,7 +318,7 @@ function inputPathSpec(): FieldSpec<string> {
 
 const INPUT_FIELDS: FieldSpecMap<Omit<InputVarDecl, "kind">> = {
   path: inputPathSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"] as const),
+  type: VARIABLE_TYPE,
   default: typedDefaultSpec(),
 };
 const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
@@ -305,7 +346,7 @@ function noCachePolicy(why: string): Readonly<Record<string, string>> {
 }
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),
-  type: optionalEnumSpec(["string", "number", "boolean"] as const),
+  type: VARIABLE_TYPE,
   default: typedDefaultSpec(),
 };
 // [LAW:no-silent-failure] A template variable is a computed that tracks every

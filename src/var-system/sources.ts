@@ -313,13 +313,9 @@ function coerceToType(raw: unknown, type: VarType): VarValue {
   return toBool(raw);
 }
 
-// Type-appropriate zero used as the final backstop in the fallback chain when
-// neither per-variable default nor defaultEmptyValue can be coerced.
-function zeroValue(type: VarType): VarValue {
-  if (type === "number") return 0;
-  if (type === "boolean") return false;
-  return "";
-}
+// [LAW:dataflow-not-control-flow] A missing path has an empty value even if
+// the configured empty text cannot be represented in the input's type.
+const EMPTY_INPUT = { string: "", number: 0, boolean: false } as const;
 
 // ─── SourceRegistry ───────────────────────────────────────────────────────────
 
@@ -454,15 +450,14 @@ export class SourceRegistry {
   // rather than silently returning empty strings.
   private readonly sessionState: SessionStateReader | undefined;
 
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
+  // defaultEmptyValue is the config's cosmetic `default_empty_value`.
   //
   // sessionState lets the daemon inject its singleton so state-kind variables
   // share one MobX atom and one disk-persistence layer with the click verbs.
   // Omitted in tests that don't exercise state vars.
   constructor(
     private readonly store: VariableStore,
-    private readonly defaultEmptyValue: VarValue = "",
+    private readonly defaultEmptyValue: string = EMPTY_INPUT.string,
     sessionState?: SessionStateReader,
     // The directory home a session's view reads through to (`view()`).
     private readonly parent: SourceRegistry | null = null,
@@ -547,8 +542,8 @@ export class SourceRegistry {
     );
   }
 
-  // [LAW:single-enforcer] The one reading of an input: its path's value cast
-  // to its type, else the fallback chain with the failure recorded.
+  // [LAW:single-enforcer] Cast a present input or report its failed read.
+  // An answered payload with a missing path has its own empty-value policy.
   private inputAt(
     name: string,
     path: string,
@@ -567,24 +562,15 @@ export class SourceRegistry {
     }
     const raw = resolved.value;
     if (raw === undefined) {
-      return this.fallbackOf(
-        name,
-        type,
-        varDefault,
-        `input path "${path}" not found in payload`,
-      );
+      this.recordError(name, `input path "${path}" not found in payload`);
+      return varDefault ?? this.emptyInput(type);
     }
     try {
       const value = coerceToType(raw, type);
       this.lastErrors.delete(name);
       return value;
     } catch (e) {
-      return this.fallbackOf(
-        name,
-        type,
-        varDefault,
-        e instanceof Error ? e.message : String(e),
-      );
+      return this.failedScalar(name, e, varDefault);
     }
   }
 
@@ -593,7 +579,7 @@ export class SourceRegistry {
   // it is handed in; an unset variable is the fallback, with the reason on
   // the variable. Always a string: env vars are text by nature.
   declareEnv(name: string, envVar: string, varDefault?: string): void {
-    const fallback = this.stringInitial(varDefault);
+    const fallback = varDefault ?? this.defaultEmptyValue;
     this.store.defineBox(name, "string", pendingOf("unread"));
     runInAction(() => this.envNames.push(envVar));
     this.cleanups.push(
@@ -736,7 +722,7 @@ export class SourceRegistry {
     name: string,
     varDefault: string | undefined,
   ): Publish {
-    const fallback = this.stringInitial(varDefault);
+    const fallback = varDefault ?? this.defaultEmptyValue;
     this.store.defineBox(name, "string", fallback);
     return (outcome) => {
       this.noteOutcome(name, outcome);
@@ -877,33 +863,7 @@ export class SourceRegistry {
           this.lastErrors.delete(name);
           throw pending;
         }
-        const message = e instanceof Error ? e.message : String(e);
-        // Recorded either way, so `cc-candybar vars` names the failure even
-        // when an authored default makes the read succeed.
-        this.recordError(name, message);
-        // [LAW:no-silent-failure] A derivation that FAILED is not a value. With
-        // no authored `default`, the read is the failure — the same contract a
-        // non-ok document has (unwrapDocument in template-engine/scope.ts): the
-        // segment reading it renders ⚠ naming this variable and the reason,
-        // instead of a blank that reads exactly
-        // like an author who wanted a blank. Before this, a template throwing
-        // (`{{ ramp … }}` outside any segment is the one that found it) read as
-        // empty and check exited 0 (brandon-var-sources-1p6).
-        //
-        // An authored `default` is the author SAYING a failure here is
-        // tolerable, which is the only thing that field has ever meant for a
-        // template variable — so it keeps meaning it rather than becoming a knob
-        // with no effect. [LAW:types-are-the-program] the discriminator is the
-        // optionality already in the declaration; no new flag.
-        //
-        // `globals.default_empty_value` deliberately does NOT tolerate: it is a
-        // global cosmetic floor for absent values, and letting it stand in for a
-        // per-variable `default` would let one unrelated global silently switch
-        // this loudness back off for every template in the config.
-        if (fallback === undefined) {
-          throw new Error(`variable "${name}": ${message}`);
-        }
-        return fallback;
+        return this.failedScalar(name, e, fallback);
       }
     });
   }
@@ -924,7 +884,7 @@ export class SourceRegistry {
       );
     }
     const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(undefined);
+    const fallback = opts.varDefault ?? this.defaultEmptyValue;
     this.store.defineComputed(name, "string", () => {
       // [LAW:parse-dont-validate] The view's checked session, the same one
       // the payload hands `session.id`.
@@ -1138,31 +1098,27 @@ export class SourceRegistry {
     };
   }
 
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
-  private fallbackOf(
+  // [LAW:no-silent-failure] Only a variable's own default tolerates a failed
+  // input cast or derivation. The failure still appears in variable diagnostics.
+  private failedScalar(
     name: string,
-    type: VarType,
-    varDefault: VarValue | undefined,
-    errorMessage: string,
+    cause: unknown,
+    fallback: VarValue | undefined,
   ): VarValue {
-    this.recordError(name, errorMessage);
-    if (varDefault !== undefined) return varDefault;
-    try {
-      return coerceToType(this.defaultEmptyValue, type);
-    } catch {
-      return zeroValue(type);
-    }
+    const message = cause instanceof Error ? cause.message : String(cause);
+    this.recordError(name, message);
+    if (fallback === undefined)
+      throw new Error(`variable "${name}": ${message}`);
+    return fallback;
   }
 
-  // Initial string value for shell/file boxes before the first async run.
-  private stringInitial(varDefault: string | undefined): string {
-    if (varDefault !== undefined) return varDefault;
-    if (typeof this.defaultEmptyValue === "string")
-      return this.defaultEmptyValue;
-    return "";
+  private emptyInput(type: VarType): VarValue {
+    try {
+      return coerceToType(this.defaultEmptyValue, type);
+    } catch (e) {
+      if (!(e instanceof TypeError)) throw e;
+      return EMPTY_INPUT[type];
+    }
   }
 
   private recordError(name: string, message: string): void {

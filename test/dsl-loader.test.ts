@@ -362,7 +362,11 @@ describe("loadDslConfig — variable source kinds", () => {
       FILE,
       `{ variables: { sid: { kind: "input", path: "session.id" } } }`,
     );
-    expect(ok.variables.sid).toEqual({ kind: "input", path: "session.id" });
+    expect(ok.variables.sid).toEqual({
+      kind: "input",
+      path: "session.id",
+      type: "string",
+    });
   });
 
   test("env: requires name", () => {
@@ -455,14 +459,14 @@ describe("loadDslConfig — variable source kinds", () => {
     expect(refused.map((i) => i.message)).toEqual([
       "variables.x.cache was removed: a template variable recomputes whenever a variable it reads changes, so it takes no cache policy — delete the key",
     ]);
-    const ok = parseAndValidate(
-      FILE,
-      `{ variables: { cwd_short: { kind: "template", template: "static" } } }`,
-    );
+    const source = `{ variables: { cwd_short: { kind: "template", template: "static" } } }`;
+    const ok = parseAndValidate(FILE, source);
     expect(ok.variables.cwd_short).toEqual({
       kind: "template",
       template: "static",
+      type: "string",
     });
+    expect(parseDslConfig(FILE, source).variables?.cwd_short).not.toHaveProperty("type");
   });
 
   test("template: a type is one an input may have", () => {
