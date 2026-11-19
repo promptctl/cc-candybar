@@ -3,6 +3,9 @@ import { identityKey } from "../../utils/folder-identity.js";
 
 export type FileObservations = ReadonlyMap<string, string>;
 
+const failedEntry = (code: string | undefined) => `error:${code}`;
+export const absentPolledEntry = failedEntry("ENOENT");
+
 // [LAW:one-source-of-truth] The same revision describes an opened file to
 // its reader and a path to the poll sweep. A directory's timestamps are
 // about its children, which an individual polled path does not watch.
@@ -20,6 +23,6 @@ export function readPolledEntry(at: string): string {
   try {
     return polledEntryOf(lstatSync(at, { bigint: true }));
   } catch (error) {
-    return `error:${(error as NodeJS.ErrnoException).code}`;
+    return failedEntry((error as NodeJS.ErrnoException).code);
   }
 }

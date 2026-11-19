@@ -16,6 +16,7 @@ import type {
 } from "../../config/config-snapshot.js";
 import type { Checkout } from "../../utils/git-root.js";
 import type { Unchecked } from "../../utils/presence.js";
+import type { StateObservation } from "../state-file.js";
 import { repoConfigs } from "./repo-configs.js";
 import type { LayerRole } from "../../config/layer-role.js";
 import {
@@ -48,8 +49,8 @@ import type { PluginScope } from "../../config/loader/plugin-scope.js";
 import {
   repoUnreadNotice,
   type ApprovedRepo,
-  type RepoAnswers,
   type RepoGate,
+  type RepoConfigBook,
 } from "../../config/loader/repo-gate.js";
 
 // One plugin root as discovery listed it: each folder's definition, read, and
@@ -70,7 +71,7 @@ export interface RootListing {
 // batch of origins discovered together reads each of them once.
 export interface SharedFacts {
   readonly locs: Locations;
-  readonly answers: () => RepoAnswers;
+  readonly answers: () => StateObservation<RepoConfigBook>;
   readonly installed: readonly RootListing[];
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
@@ -87,10 +88,11 @@ export function readShared(
 ): SharedFacts {
   const files = discoveryFiles(source);
   const included = new Map<string, readonly string[]>();
-  let answers: RepoAnswers | undefined;
+  const book = repoConfigs(world.stateDir, files.stateText);
+  let answers: StateObservation<RepoConfigBook> | undefined;
   return {
     locs: world.locations,
-    answers: () => (answers ??= repoConfigs(world.stateDir).read()),
+    answers: () => (answers ??= book.observe()),
     installed: installedRoots(world.locations, files),
     files,
     // The same bytes can name different physical files relative to their
@@ -301,11 +303,11 @@ export function snapshotOf(
 // names, and the working directory its checkout is found from.
 export type DiscoverQuery = ConfigQuery & { readonly cwd: string };
 
-// [LAW:single-enforcer] What the render cache watches beside what the load
-// names: every candidate location of the chain, there or not, and the plugin
-// roots searched, so a file or a root appearing reloads.
+// [LAW:single-enforcer] Discovery names every candidate layer, repository
+// answer file it consulted, and plugin root it searched. A new file in
+// those locations can change the snapshot.
 export interface ConfigTargets {
-  readonly candidates: readonly string[];
+  readonly files: readonly string[];
   readonly roots: readonly string[];
 }
 
@@ -333,7 +335,7 @@ export function discover(
 ): Discovered {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations, candidates } = search;
+  const { resolution, question, locations, watchedFiles } = search;
   const { repos } = resolution;
   const session = sessionPlugins(
     locs,
@@ -359,7 +361,7 @@ export function discover(
   return {
     snapshot: { ...snapshotOf(session, chain), repo: question, notices },
     targets: {
-      candidates,
+      files: watchedFiles,
       roots: [
         ...new Set([
           ...pluginRoots(locs, repos.plugins).map((r) => r.dir),

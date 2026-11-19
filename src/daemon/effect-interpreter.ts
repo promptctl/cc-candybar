@@ -7,7 +7,11 @@
 // puts back the files already written. No renderer writes a config file, or
 // Claude Code's settings.
 
-import fs from "node:fs";
+import {
+  writeRevisions,
+  type FileRewrite,
+  type FileRetirement,
+} from "./file-rewrites.js";
 import {
   addressText,
   applyChanges,
@@ -26,12 +30,7 @@ import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
-import { resolvedTarget, writeAtomic } from "../utils/atomic-write.js";
-
-const writeText = (file: string, text: string | null): void =>
-  text === null
-    ? fs.rmSync(resolvedTarget(file), { force: true })
-    : writeAtomic(file, text);
+import { asError, resolvedTarget } from "../utils/atomic-write.js";
 
 const said = (read: Read | "object"): string =>
   read === "object"
@@ -41,13 +40,6 @@ const said = (read: Read | "object"): string =>
       : read.kind === "file"
         ? "the file as it was read"
         : read.text;
-
-// A file as it stood, and as the turn's changes leave it.
-interface Rewrite {
-  readonly file: string;
-  readonly was: string | null;
-  readonly will: string | null;
-}
 
 export type ApproveRepo = Extract<Act, { kind: "approve-repo" }>;
 
@@ -107,9 +99,10 @@ export function performChanges(
   book: TrustBook | null,
   files: ConfigWriteFiles,
 ): ConfigLanding {
-  const rewrites = new Map<string, Rewrite>();
+  const rewrites = new Map<string, FileRewrite>();
   // The files a local layer's change lands in: the ones git never shows.
   const local = new Set<string>();
+  let retire: FileRetirement | null = null;
   let answered: readonly string[] = [];
   // [LAW:no-silent-failure] An answer is for the repository its origin asks
   // about as discovery last found it, or none is recorded.
@@ -162,42 +155,46 @@ export function performChanges(
         rewrites.set(excluded.value.file, excluded.value);
     }
     if (book !== null && book.answers.length > 0) {
-      const planned = answeredBook(book.stateDir, book.answers);
+      const planned = answeredBook(book.stateDir, book.answers, files.readText);
       if (planned.kind === "failed")
         return {
           kind: "failed",
           reason: `the repository answers were not recorded: ${planned.reason} — nothing was written`,
         };
-      const { file, text } = planned.value;
+      const { rewrite } = planned.value;
+      retire = planned.value.retire;
       answered = planned.value.said;
-      if (text !== null) {
-        const at = resolvedTarget(file);
-        rewrites.set(at, { file: at, was: files.readText(at), will: text });
+      if (rewrite !== null) {
+        const file = resolvedTarget(rewrite.file);
+        rewrites.set(file, { ...rewrite, file });
       }
     }
   } catch (e) {
-    return { kind: "failed", reason: `config read failed: ${message(e)}` };
+    return {
+      kind: "failed",
+      reason: `config read failed: ${asError(e).message}`,
+    };
   }
-  const written: Rewrite[] = [];
+  let landed: readonly string[];
   try {
-    for (const rewrite of rewrites.values()) {
-      writeText(rewrite.file, rewrite.will);
-      written.push(rewrite);
-    }
-    for (const line of answered) book!.said(line);
-    return { kind: "ok", files: written.map(({ file }) => file) };
+    landed = writeRevisions(rewrites.values(), retire);
   } catch (e) {
-    return { kind: "failed", reason: putBack(written, e) };
+    return {
+      kind: "failed",
+      reason: `config write failed: ${asError(e).message}`,
+    };
   }
+  for (const line of answered) book?.said(line);
+  return { kind: "ok", files: landed };
 }
 
 // The rewrite of the exclude file of `file`'s repository that names it, or
 // absent when it is in no checkout or already named.
 function excludeRewrite(
   file: string,
-  rewrites: ReadonlyMap<string, Rewrite>,
+  rewrites: ReadonlyMap<string, FileRewrite>,
   readText: ConfigWriteFiles["readText"],
-): Outcome<Rewrite> {
+): Outcome<FileRewrite> {
   const root = gitRootOf(path.dirname(file));
   if (root === undefined) return ABSENT;
   const at = sharedExcludeOf(root);
@@ -219,17 +216,3 @@ function excludeRewrite(
   const lead = text === "" || text.endsWith("\n") ? "" : "\n";
   return ok({ file: exclude, was, will: `${text}${lead}${entry}\n` });
 }
-
-// The files a failed write already wrote, put back as they stood.
-function putBack(written: readonly Rewrite[], cause: unknown): string {
-  const reason = `config write failed: ${message(cause)}`;
-  try {
-    for (const { file, was } of [...written].reverse()) writeText(file, was);
-    return `${reason} — nothing was written`;
-  } catch (e) {
-    return `${reason}; and putting back what was written failed, so it is half-written: ${message(e)}`;
-  }
-}
-
-const message = (e: unknown): string =>
-  e instanceof Error ? e.message : String(e);

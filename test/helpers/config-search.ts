@@ -6,6 +6,8 @@ import { configQuery, type ConfigResolution, type Locations } from "../../src/co
 
 import type { RepoAnswers } from "../../src/config/loader/repo-gate";
 
+export const observedAnswers = (result: RepoAnswers) => ({ result, paths: [], source: null });
+
 export const resolutionOf = (
   locs: Locations,
   answers: RepoAnswers,
@@ -14,7 +16,7 @@ export const resolutionOf = (
 ): ConfigResolution =>
   searchConfig(
     locs,
-    () => answers,
+    () => observedAnswers(answers),
     "kind" in scope ? scope : { kind: "chain", projectDir: scope.projectDir, path: scope.configFile },
     files,
   ).resolution;

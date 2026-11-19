@@ -36,7 +36,7 @@ import {
   observeConfigLocations,
   searchConfig,
 } from "../src/daemon/config-discovery/config-search";
-import { resolutionOf } from "./helpers/config-search";
+import { observedAnswers, resolutionOf } from "./helpers/config-search";
 import { diskFiles } from "../src/daemon/config-discovery/discovery-files";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
 
@@ -51,7 +51,7 @@ const approving = (...dirs: string[]): RepoAnswers => ({
 // repositories are approved and ship no plugins.
 const collisionsOf = (locs: Locations, projectDir?: string) =>
   configCollisionNotice(
-    searchConfig(locs, () => approving(), { kind: "chain", projectDir }).locations,
+    searchConfig(locs, () => observedAnswers(approving()), { kind: "chain", projectDir }).locations,
   );
 
 const NOTHING_GATED = {
@@ -341,14 +341,14 @@ describe("the config search", () => {
       writeFileSync(overlay, VALID_CFG);
       symlinkSync(overlay, alias);
       const query = { kind: "chain", projectDir: dir, path: alias } as const;
-      const answers = () => approving(dir);
+      const answers = () => observedAnswers(approving(dir));
       const snapshot = searchConfig(locs, answers, query);
       expect(snapshot.resolution.layers).toEqual([{ path: alias, role: "user" }]);
       expect(chainPlaces(snapshot.resolution, snapshot.locations)).not.toContainEqual({
         path: overlay,
         role: "project",
       });
-      expect(snapshot.candidates).toEqual(expect.arrayContaining([alias, overlay]));
+      expect(snapshot.watchedFiles).toEqual(expect.arrayContaining([alias, overlay]));
 
       rmSync(alias);
       writeFileSync(alias, VALID_CFG);
@@ -490,7 +490,7 @@ test.each([
   const locs = isolated("/config-home");
   const file = "/asked.json5";
   const checked: string[] = [];
-  const readAnswers = jest.fn(() => approving());
+  const readAnswers = jest.fn(() => observedAnswers(approving()));
   const { resolution, question } = searchConfig(
     locs,
     readAnswers,

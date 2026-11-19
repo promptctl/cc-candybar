@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { decodeAnsi } from "@promptctl/rich-js";
 import { textOf } from "../../../src/render/frame";
@@ -20,12 +20,14 @@ import {
   renderRequest,
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
-import { VERB_RUN, VERB_SET_STATE } from "../../../src/click/wire";
+import { VERB_REPO_CONFIG, VERB_RUN, VERB_SET_STATE } from "../../../src/click/wire";
 import { linksOf } from "../../../src/click/read";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
 import { TEST_ENV } from "../../helpers/session-environment";
+import { readDiagnostics } from "../../helpers/diagnostics-viewer";
+import { repoConfigs } from "../../../src/daemon/config-discovery/repo-configs";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -493,6 +495,105 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("one project approval from an earlier frame covers both renderers, a config edit and a host restart", async () => {
+  const isolated = prepareIsolatedDaemonEnv("cc-candybar-one-approval");
+  const project = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-approved-project-")),
+  );
+  const alternate = path.join(project, "worktree.mjs");
+  const writeProject = (label: string, rows = ["agreed"]) =>
+    fs.writeFileSync(
+      path.join(project, ".cc-candybar.json5"),
+      JSON.stringify({
+        segments: { agreed: { template: label } },
+        root: { h: rows },
+      }),
+    );
+  const session = (renderer: string, afterRestart: boolean) =>
+    `approval-${renderer}-${afterRestart ? "restarted" : "initial"}`;
+  const draw = (renderer: "main" | "worktree", afterRestart = false) =>
+    frameRequest(isolated.sockPath, {
+      ...renderBody(session(renderer, afterRestart), project),
+      ...(renderer === "worktree" && {
+        env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+        client: { kind: "node", bundle: alternate, source: null },
+      }),
+    });
+  const bothSee = (labels: readonly string[], afterRestart = false) =>
+    until(
+      async () => {
+        const frames = await Promise.all([
+          draw("main", afterRestart),
+          draw("worktree", afterRestart),
+        ]);
+        return frames.map(textOf).every((text) => labels.every((label) => text.includes(label)));
+      },
+      () => `both renderers to show ${labels.join(", ")}`,
+      8_000,
+    );
+  let daemon: RunningDaemon | undefined;
+  try {
+    execFileSync("git", ["init", "-q", project]);
+    worktreeBundle(alternate);
+    writeProject("PROJECT-APPROVED");
+    daemon = await spawnDaemonWithEnv(isolated.env);
+    const before = await draw("main");
+    expect(textOf(before)).not.toContain("PROJECT-APPROVED");
+    expect(textOf(await draw("worktree"))).not.toContain("PROJECT-APPROVED");
+    const pages = await readDiagnostics(
+      isolated.sockPath,
+      session("main", false),
+      project,
+      before,
+    );
+    const approve = findUrl(
+      pages.flatMap(({ rendered }) => linksOf(rendered).map(({ url }) => url)),
+      (effects) =>
+        effects.some(
+          ({ verb, args }) =>
+            verb === VERB_REPO_CONFIG && args[2] === "approved",
+        ),
+    );
+    if (approve === undefined) throw new Error("missing repository approval");
+    expect(textOf(await draw("main"))).not.toContain("PROJECT-APPROVED");
+    await click(isolated.sockPath, approve, 20_000);
+    await bothSee(["PROJECT-APPROVED"]);
+    const plugin = path.join(project, ".cc-candybar", "plugins", "marker");
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      "{ segments: { row: { template: 'NEW-PLUGIN' } } }",
+    );
+    fs.writeFileSync(
+      path.join(project, ".cc-candybar.local.json5"),
+      "{ segments: { local: { template: 'NEW-LOCAL' } } }",
+    );
+    writeProject("PROJECT-EDITED", ["agreed", "local", "repo.marker.row"]);
+    const edited = ["PROJECT-EDITED", "NEW-LOCAL", "NEW-PLUGIN"];
+    await bothSee(edited);
+    await daemon.stop();
+    daemon = await spawnDaemonWithEnv(isolated.env);
+    await bothSee(edited, true);
+    const after = await readDiagnostics(
+      isolated.sockPath,
+      session("main", true),
+      project,
+      await draw("main", true),
+    );
+    expect(
+      after.some(({ text }) => text.includes("a cc-candybar config for")),
+    ).toBe(false);
+    expect(repoConfigs(isolated.stateDir).read()).toEqual({
+      kind: "ok",
+      value: { [project]: "approved" },
+    });
+  } finally {
+    await daemon?.stop();
+    isolated.removeTmpDirs();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("the named renderer receives its pane control and earlier statusline run", async () => {
   const daemon = await spawnIsolatedDaemon("ccb-named-clicks");

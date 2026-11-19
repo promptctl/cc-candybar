@@ -362,10 +362,12 @@ export function rendererHost(
         waited.push(config.settled);
       }
     }
+    // [LAW:dataflow-not-control-flow] Every landed file, including a
+    // repository decision, invalidates the origins that actually used it.
     const moved =
-      landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0)
+      landed.kind === "ok" && landed.files.length > 0
         ? (recordTaken("landed config discovery", () =>
-            world.configs.landed(landed.files, answers.length > 0),
+            world.configs.landed(landed.files),
           ) ?? [])
         : [];
     const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];

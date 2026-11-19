@@ -4,8 +4,9 @@
 // let go with its watch when it is not; a landing discovers again only the
 // origins whose chain holds a written file and answers those that moved; a
 // hand edit an origin's watch hears moves that origin; and an answer to the
-// trust book moves every origin with a repository to ask about.
+// trust book moves every origin that consulted it.
 
+import { writeStatePlan } from "./helpers/state-file";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,6 +18,7 @@ import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
 import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
 import { discover, readShared } from "../src/daemon/config-discovery/discover";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
 import {
   diskFiles,
   type DiscoveryFiles,
@@ -82,7 +84,7 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
+function discoveryRig(files = diskFiles, clock = systemTimekeeper, state = stateDir(HOST)) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -101,7 +103,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
   const delivered: Array<readonly [RendererName, string]> = [];
   const service = new ConfigDiscovery({
     locations: locations(HOST),
-    stateDir: stateDir(HOST),
+    stateDir: state,
     watchers,
     files: () => files,
     log: (_level, line) => logged.push(line),
@@ -116,7 +118,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
   cleanups.push(() => watchers.closeAll());
   cleanups.push(() => service.close());
   const discovery = service.forRenderer(MAIN_RENDERER);
-  return { service, discovery, counters, moved, logged, delivered };
+  return { service, discovery, watchers, counters, moved, logged, delivered };
 }
 
 const textOfLayer = (
@@ -160,11 +162,11 @@ test("a landing discovers again only the origins whose chain holds a written fil
   const { origin: b } = named("b");
   discovery.follow([a, b]);
   fs.writeFileSync(file, "{ globals: {} }");
-  expect(discovery.landed([file], false)).toEqual([a]);
+  expect(discovery.landed([file])).toEqual([a]);
   expect(textOfLayer(discovery, a, file)).toBe("{ globals: {} }");
   expect(logged.at(-1)).toMatch(/why=landed followed=2 discovered=1 moved=1$/);
   // A landing that moved nothing answers none.
-  expect(discovery.landed([file], false)).toEqual([]);
+  expect(discovery.landed([file])).toEqual([]);
 });
 
 test("a landing on the resolved target refreshes every origin holding an alias", () => {
@@ -177,7 +179,7 @@ test("a landing on the resolved target refreshes every origin holding an alias",
   discovery.follow([direct, linked]);
 
   fs.writeFileSync(file, "{ globals: { padding: 3 } }");
-  expect(discovery.landed([file], false)).toEqual([direct, linked]);
+  expect(discovery.landed([file])).toEqual([direct, linked]);
   expect(textOfLayer(discovery, linked, alias)).toBe(
     "{ globals: { padding: 3 } }",
   );
@@ -222,6 +224,83 @@ test("an answer to the trust book moves every origin with a repository to ask ab
   expect(discovery.snapshotOf(origin)?.repo?.standing).toBe(answer);
 });
 
+test.each(["landed", "polled"] as const)(
+  "a %s repository answer reaches both layered renderers after the question disappears",
+  (how) => {
+    const state = project("answers");
+    const book = repoConfigs(state);
+    const dir = project("project");
+    const plugins = project("project/.cc-candybar/plugins");
+    const stray = path.join(plugins, "notes.txt");
+    fs.writeFileSync(stray, "ordinary loose file");
+    const { file } = named("base");
+    const main = originOf(dir, dir, file);
+    const other = originOf(dir, project("second-cwd"), file);
+    const isolated = {
+      ...main,
+      target: requestedConfigTarget(file, undefined, "config-only"),
+    };
+    const clock = heldClock(new Date());
+    const { service, discovery, delivered } = discoveryRig(
+      diskFiles,
+      clock,
+      state,
+    );
+    const name = rendererNameOf("worktree");
+    const worker = service.forRenderer(name);
+    const listed = (holder: RendererConfigs, origin: RenderOrigin) =>
+      holder.snapshotOf(origin)?.strays.map(({ path }) => path);
+    writeStatePlan(book.plan(() => ({ [dir]: "approved" })));
+    discovery.follow([main, isolated]);
+    worker.follow([other]);
+    expect(discovery.snapshotOf(main)?.repo).toBeNull();
+    expect(listed(discovery, main)).toEqual([stray]);
+    expect(listed(worker, other)).toEqual([stray]);
+    const isolatedBefore = discovery.snapshotOf(isolated);
+
+    writeStatePlan(book.plan(() => ({ [dir]: "declined" })));
+    if (how === "landed") {
+      expect(discovery.landed([repoConfigsPath(state)])).toEqual([main]);
+      expect(delivered).toEqual([[name, originKey(other)]]);
+    } else {
+      clock.advance(POLL_MS + DEBOUNCE_MS);
+      expect(delivered).toEqual([
+        [MAIN_RENDERER, originKey(main)],
+        [name, originKey(other)],
+      ]);
+    }
+    expect(listed(discovery, main)).toEqual([]);
+    expect(listed(worker, other)).toEqual([]);
+    expect(discovery.snapshotOf(isolated)).toBe(isolatedBefore);
+  },
+);
+
+test("a layered renderer follows the older repository book until the first answer promotes it", () => {
+  const state = project("migration");
+  const old = path.join(state, "repo-configs.json");
+  const dir = project("project");
+  fs.writeFileSync(path.join(dir, ".cc-candybar.json5"), "{}");
+  const origin = originOf(dir, dir);
+  const clock = heldClock(new Date());
+  const { discovery, moved } = discoveryRig(diskFiles, clock, state);
+  fs.writeFileSync(old, JSON.stringify({ [dir]: "declined" }));
+  discovery.follow([origin]);
+  const standing = () => discovery.snapshotOf(origin)?.repo?.standing;
+  expect(standing()).toBe("declined");
+
+  fs.writeFileSync(old, JSON.stringify({ [dir]: "approved" }));
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(standing()).toBe("approved");
+  writeStatePlan(repoConfigs(state).plan(() => ({ [dir]: "declined" })));
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(standing()).toBe("declined");
+  expect(fs.existsSync(old)).toBe(false);
+  fs.unlinkSync(repoConfigsPath(state));
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(standing()).toBe("awaiting");
+  expect(moved).toEqual([originKey(origin), originKey(origin), originKey(origin)]);
+});
+
 test("only an isolated config skips the project's plugin discovery and watch", () => {
   const projectDir = project("project-with-plugin");
   const { file } = named("explicit");
@@ -232,7 +311,7 @@ test("only an isolated config skips the project's plugin discovery and watch", (
   fs.writeFileSync(path.join(folder, "plugin.json5"), "{}");
 
   const visited: string[] = [];
-  const { discovery, logged } = discoveryRig({
+  const { discovery, watchers, logged } = discoveryRig({
     ...diskFiles,
     folders(dir) {
       visited.push(dir);
@@ -244,7 +323,9 @@ test("only an isolated config skips the project's plugin discovery and watch", (
     ...layered,
     target: requestedConfigTarget(file, undefined, "config-only"),
   };
+  expect(watchers.size()).toBe(0);
   discovery.follow([isolated]);
+  expect(watchers.size()).toBe(1);
   expect(discovery.snapshotOf(isolated)?.repo).toBeNull();
   expect(visited).not.toContain(repositoryPlugins);
   expect(logged.some((line) => line.includes(repositoryPlugins))).toBe(false);
@@ -334,7 +415,7 @@ test("a landed write synchronously returns only the writer's reloads and routes 
   first.follow([origin]);
   second.follow([origin]);
   fs.writeFileSync(file, "{ globals: {} }");
-  expect(first.landed([file], false)).toEqual([origin]);
+  expect(first.landed([file])).toEqual([origin]);
   expect(delivered).toEqual([[name, originKey(origin)]]);
   expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
   expect(textOfLayer(second, origin, file)).toBe("{ globals: {} }");
@@ -407,7 +488,7 @@ test("one failed rediscovery leaves the writer and another holder the successful
   for (const { file } of [a, b]) fs.writeFileSync(file, next);
 
   refuse = true;
-  expect(writer.landed([a.file, b.file], false)).toEqual([a.origin]);
+  expect(writer.landed([a.file, b.file])).toEqual([a.origin]);
   expect(delivered).toEqual([[name, originKey(a.origin)]]);
   expect(textOfLayer(second, a.origin, a.file)).toBe(next);
   expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
@@ -607,15 +688,19 @@ function countingText(
 function physicalDiscovery(
   dataHome: string,
   reads: string[],
-  opens?: string[],
+  { opens, state = path.join(root, "state"), clock = heldClock(new Date()) }: {
+    opens?: string[];
+    state?: string;
+    clock?: ReturnType<typeof heldClock>;
+  } = {},
 ) {
   const watchers = new WatcherRegistry({
-    clock: heldClock(new Date()),
+    clock,
     logger: () => {},
   });
   const service = new ConfigDiscovery({
     locations: { ...locations(HOST), dataHome, dataDirs: [] },
-    stateDir: stateDir(HOST),
+    stateDir: state,
     watchers,
     openText: countingText(reads, opens),
     log: () => {},
@@ -627,6 +712,58 @@ function physicalDiscovery(
   );
   return service;
 }
+
+test("the two renderers and an answer written through the host read each book revision once", () => {
+  const state = project("book-state");
+  const book = repoConfigsPath(state);
+  const dir = project("repository");
+  fs.writeFileSync(path.join(dir, ".cc-candybar.json5"), "{}");
+  writeStatePlan(repoConfigs(state).plan(() => ({ [dir]: "declined" })));
+  const { file } = named("base");
+  const a = originOf(dir, dir, file);
+  const b = originOf(dir, project("another-cwd"), file);
+  const only = {
+    ...a,
+    target: requestedConfigTarget(file, undefined, "config-only"),
+  };
+  const reads: string[] = [];
+  const opens: string[] = [];
+  const service = physicalDiscovery(project("data"), reads, { opens, state });
+  const main = service.forRenderer(MAIN_RENDERER);
+  const worker = service.forRenderer(rendererNameOf("worktree"));
+  main.follow([only]);
+  expect(opens).not.toContain(book);
+  main.follow([only, a]);
+  worker.follow([b]);
+  expect(reads.filter((path) => path === book)).toHaveLength(1);
+  const beforeWrite = opens.length;
+  const result = performChanges(
+    [],
+    {
+      stateDir: state,
+      answers: [
+        {
+          kind: "approve-repo",
+          id: 1 as EffectId,
+          session: sessionIdOf("worktree"),
+          origin: b,
+          dir,
+          answer: "approved",
+        },
+      ],
+      said: () => {},
+    },
+    worker,
+  );
+  expect(result).toEqual({ kind: "ok", files: [book] });
+  // The same fresh observation supplies both the plan and the rollback bytes.
+  expect(opens.slice(beforeWrite)).toEqual([book]);
+  expect(reads.filter((path) => path === book)).toHaveLength(1);
+  expect(worker.landed([book])).toEqual([b]);
+  expect(worker.snapshotOf(b)?.repo?.standing).toBe("approved");
+  expect(main.snapshotOf(a)?.repo?.standing).toBe("approved");
+  expect(reads.filter((path) => path === book)).toHaveLength(2);
+});
 
 const changePadding = (text: string) =>
   text.replace("padding: 1", "padding: 2");
@@ -648,7 +785,7 @@ test.each([
     const { origin, file } = named("shared-write", initial);
     const reads: string[] = [];
     const opens: string[] = [];
-    const service = physicalDiscovery(project("empty-data"), reads, opens);
+    const service = physicalDiscovery(project("empty-data"), reads, { opens });
     const first = service.forRenderer(MAIN_RENDERER);
     const second = service.forRenderer(rendererNameOf("worktree"));
     first.follow([origin]);
@@ -664,13 +801,34 @@ test.each([
     expect(reads).toHaveLength(1 + newReads);
     if (landed.kind !== "ok") throw new Error(landed.reason);
 
-    expect(second.landed(landed.files, false)).toEqual([origin]);
+    expect(second.landed(landed.files)).toEqual([origin]);
     expect(opens).toEqual([file, file, file]);
     expect(reads).toHaveLength(2 + newReads);
     for (const consumer of [first, second])
       expect(textOfLayer(consumer, origin, file)).toBe(changePadding(current));
   },
 );
+
+test("a dangling plugin definition stays quiet until its target appears", () => {
+  const data = project("data");
+  const plugin = path.join(project("data/cc-candybar/plugins/widget"), "plugin.json5");
+  const target = path.join(root, "definition.json5");
+  fs.symlinkSync(target, plugin);
+  const { file, origin: base } = named("session");
+  const origin = { ...base, target: requestedConfigTarget(file, undefined, "config-only") };
+  const clock = heldClock(new Date());
+  const opens: string[] = [];
+  const service = physicalDiscovery(data, [], { clock, opens });
+  const renderer = service.forRenderer(MAIN_RENDERER);
+  renderer.follow([origin]);
+  const definition = () => renderer.snapshotOf(origin)?.plugins.find((p) => p.path === plugin)?.definition;
+  expect(definition()?.kind).toBe("unreadable");
+  clock.advance(3 * POLL_MS + DEBOUNCE_MS);
+  expect(opens.filter((at) => at === file)).toEqual([file]);
+  fs.writeFileSync(target, "{}");
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(definition()).toMatchObject({ kind: "text", text: "{}" });
+});
 
 test("a held layer replaced by a directory cannot be overwritten by an edit", () => {
   const initial = '{ globals: { padding: 1 } }';
@@ -774,7 +932,7 @@ test("a project cannot inherit another origin's approval through the same physic
   const same = path.join(other, ".cc-candybar.json5");
   fs.writeFileSync(config, "{}");
   fs.linkSync(config, same);
-  answerRepo(approved);
+  writeStatePlan(repoConfigs(path.join(root, "state")).plan(() => ({ [approved]: "approved" })));
   const reads: string[] = [];
   const service = physicalDiscovery(project("empty-data"), reads);
   const first = service.forRenderer(MAIN_RENDERER);

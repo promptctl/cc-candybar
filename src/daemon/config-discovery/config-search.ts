@@ -8,7 +8,7 @@ import type { RepoQuestion } from "../../config/config-snapshot.js";
 import {
   gateRepos,
   repoQuestion,
-  type RepoAnswers,
+  type RepoConfigBook,
   type RepoGate,
   type RepoDir,
   type RepoProject,
@@ -24,6 +24,7 @@ import {
   type Locations,
 } from "../../config/loader/chain-places.js";
 import { discoveryFiles, type DiscoveryFiles } from "./discovery-files.js";
+import type { StateObservation } from "../state-file.js";
 
 type ObservedLocation = ConfigLocation & {
   readonly unchecked: readonly Unchecked[];
@@ -94,14 +95,14 @@ const NO_REPOS: RepoGate = {
 
 export function searchConfig(
   locs: Locations,
-  readAnswers: () => RepoAnswers,
+  readAnswers: () => StateObservation<RepoConfigBook>,
   query: ConfigQuery,
   files = discoveryFiles(),
 ): {
   readonly resolution: ConfigResolution;
   readonly question: RepoQuestion | null;
   readonly locations: readonly ObservedLocation[];
-  readonly candidates: readonly string[];
+  readonly watchedFiles: readonly string[];
 } {
   const searched = configLocations(locs, query);
   const selected =
@@ -136,11 +137,13 @@ export function searchConfig(
     query.kind === "chain" ? query.projectDir : undefined,
     files,
   );
-  const answers = query.kind === "file" ? null : readAnswers();
+  // [LAW:one-source-of-truth] An isolated query consults no decisions. A
+  // layered query derives its gate, question and watch paths from one read.
+  const book = query.kind === "file" ? null : readAnswers();
   const repos =
-    answers === null ? NO_REPOS : gateRepos(answers, dirs, seen.project);
+    book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
   const question =
-    answers === null ? null : repoQuestion(answers, dirs, seen.project);
+    book === null ? null : repoQuestion(book.result, dirs, seen.project);
   const layers: ConfigLayer[] = found
     .filter(
       ({ role, directory }) =>
@@ -170,7 +173,12 @@ export function searchConfig(
     : problem === undefined
       ? { ...common, kind: "missing", path: home }
       : { ...common, kind: "unreadable", ...problem };
-  return { resolution, question, locations, candidates };
+  return {
+    resolution,
+    question,
+    locations,
+    watchedFiles: [...candidates, ...(book?.paths ?? [])],
+  };
 }
 
 // [LAW:no-silent-failure] The failure to inspect a project is independent of

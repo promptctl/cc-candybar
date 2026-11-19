@@ -1,9 +1,9 @@
-// [LAW:behavior-not-structure] A repository's cc-candybar configs — its cwd
-// and project layers and its `.cc-candybar/plugins/` — load only once the user
-// approved the repository, and every resolution (the render, `check`, the
-// durable writer) answers the same way. The answer is per repository, holds
+// [LAW:behavior-not-structure] A repository's cc-candybar configs — its project
+// and local layers and its `.cc-candybar/plugins/` — load only once the user
+// approved the repository, and every resolution (the render and the durable writer) answers the same way. The answer is per repository, holds
 // across edits (nothing here hashes a file) and covers every linked worktree.
 
+import { writeStatePlan } from "./helpers/state-file";
 import { bareGates } from "./helpers/gates";
 import { HOST, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
@@ -23,13 +23,12 @@ import {
   type ReloadedEntry,
 } from "../src/renderer/render-cache";
 import {
-  recordAnswer,
   repoConfigs,
   repoConfigsPath,
 } from "../src/daemon/config-discovery/repo-configs";
 import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
-import { answerRepo } from "./helpers/repo-approval";
+import { answerRepo, recordAnswer } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
@@ -333,7 +332,7 @@ describe("the book in the state directory", () => {
 
   test("the first answer recorded writes it into the folder, with the answer", () => {
     write(loose(), { [project]: "approved" });
-    repoConfigs(state()).update((book) => ({ ...book, [other()]: "declined" }));
+    writeStatePlan(repoConfigs(state()).plan((book) => ({ ...book, [other()]: "declined" })));
     const filed = {
       kind: "ok",
       value: { [project]: "approved", [other()]: "declined" },
@@ -344,6 +343,55 @@ describe("the book in the state directory", () => {
     ).toEqual(filed.value);
   });
 
+  test("retiring an imported symlink leaves its target and makes a deliberate reset stick", () => {
+    const external = path.join(root, "archived-answers.json");
+    write(external, { [project]: "approved" });
+    fs.mkdirSync(state());
+    fs.symlinkSync(external, loose());
+    const store = repoConfigs(state());
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
+    expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(external, "utf8"))).toEqual({ [project]: "approved" });
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("an explicit write retires the leftover loose copy from an earlier upgrade", () => {
+    write(loose(), { [project]: "approved" });
+    write(repoConfigsPath(state()), { [project]: "declined" });
+    const store = repoConfigs(state());
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "declined" } });
+    expect(fs.existsSync(loose())).toBe(true);
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "approved" })));
+    const backups = fs.readdirSync(state()).filter((name) => name.startsWith("repo-configs.json.migrated-"));
+    expect(backups).toHaveLength(1);
+    expect(JSON.parse(fs.readFileSync(path.join(state(), backups[0]!), "utf8"))).toEqual({ [project]: "approved" });
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("a dangling legacy link cannot revive an answer after the current book is reset", () => {
+    fs.mkdirSync(state());
+    const target = path.join(root, "offline-answers.json");
+    fs.symlinkSync(target, loose());
+    const store = repoConfigs(state());
+    writeStatePlan(store.plan(() => ({ [project]: "declined" })));
+    expect(fs.lstatSync(loose(), { throwIfNoEntry: false })).toBeUndefined();
+    write(target, { [project]: "approved" });
+    fs.unlinkSync(repoConfigsPath(state()));
+    expect(store.read()).toEqual({ kind: "ok", value: {} });
+  });
+
+  test("a current book explicitly linked to the older name keeps its backing file", () => {
+    write(loose(), { [project]: "approved" });
+    fs.mkdirSync(path.dirname(repoConfigsPath(state())));
+    fs.symlinkSync(loose(), repoConfigsPath(state()));
+    const store = repoConfigs(state());
+    writeStatePlan(store.plan((book) => ({ ...book, [other()]: "declined" })));
+    expect(store.read()).toEqual({ kind: "ok", value: { [project]: "approved", [other()]: "declined" } });
+    expect(fs.lstatSync(repoConfigsPath(state())).isSymbolicLink()).toBe(true);
+  });
+
   test("is not read once the folder holds a book", () => {
     write(loose(), { [project]: "approved" });
     write(repoConfigsPath(state()), { [project]: "declined" });
@@ -351,6 +399,16 @@ describe("the book in the state directory", () => {
       kind: "ok",
       value: { [project]: "declined" },
     });
+  });
+
+  test("a failure reaching the current book is reported by both a read and an update", () => {
+    write(loose(), { [project]: "approved" });
+    fs.writeFileSync(path.dirname(repoConfigsPath(state())), "ordinary file");
+    const store = repoConfigs(state());
+    const failed = { kind: "failed", reason: expect.stringContaining("ENOTDIR") };
+    expect(store.read()).toMatchObject(failed);
+    expect(writeStatePlan(store.plan(() => ({})))).toMatchObject(failed);
+    expect(JSON.parse(fs.readFileSync(loose(), "utf8"))).toEqual({ [project]: "approved" });
   });
 });
 
@@ -432,20 +490,19 @@ describe("a repository's worktrees answer as the repository", () => {
     expect(resolveAt(answers, project).repos.awaiting).toEqual([]);
   });
 
-  test("a worktree's own answer that disagrees with its repository's asks, loads nothing, and the answer supersedes it", () => {
+  test("the project decision covers its worktrees even when an older worktree entry disagrees", () => {
     const legacy = { [project]: "approved", [wt]: "declined" } as const;
     expect(resolveAt(book(legacy), wt)).toMatchObject({
-      layers: [],
-      repos: { plugins: null, approved: [], awaiting: [project] },
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
+      repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
     });
-    // One that agrees changes nothing.
-    expect(
-      resolveAt(book({ [project]: "approved", [wt]: "approved" }), wt).repos
-        .approved,
-    ).toEqual([wt]);
+    expect(resolveAt(book({ [project]: "declined", [wt]: "approved" }), wt)).toMatchObject({
+      layers: [],
+      repos: { plugins: null, approved: [], awaiting: [], declined: [project] },
+    });
 
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => legacy);
+    writeStatePlan(state.plan(() => legacy));
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",
       value: { superseded: [wt], absent: [], unchecked: [] },
@@ -459,7 +516,7 @@ describe("a repository's worktrees answer as the repository", () => {
   test("an entry whose directory is gone is kept and named, and the answer is recorded", () => {
     const gone = path.join(root, "removed-worktree");
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => ({ [gone]: "approved" }));
+    writeStatePlan(state.plan(() => ({ [gone]: "approved" })));
     expect(recordAnswer(state, project, "declined")).toEqual({
       kind: "ok",
       value: { superseded: [], absent: [gone], unchecked: [] },
@@ -490,7 +547,7 @@ describe("a repository's worktrees answer as the repository", () => {
     const moved = path.join(root, "moved");
     fs.renameSync(wt, moved);
     const state = repoConfigs(path.join(root, "state"));
-    state.update(() => ({ [moved]: "approved" }));
+    writeStatePlan(state.plan(() => ({ [moved]: "approved" })));
     expect(resolveAt(state.read() as RepoAnswers, moved).repos).toMatchObject({
       approved: [moved],
       unproven: [{ dir: moved }],

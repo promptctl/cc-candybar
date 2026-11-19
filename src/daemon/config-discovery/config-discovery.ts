@@ -25,9 +25,12 @@ import {
   readTextIfPresent,
   type withRegularTextFile,
 } from "../../utils/regular-text.js";
-import type { FileObservations } from "../foundations/polled-entry.js";
+import {
+  absentPolledEntry,
+  type FileObservations,
+} from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
-import { repoConfigsPath } from "./repo-configs.js";
+import { resolvedTarget } from "../../utils/atomic-write.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
@@ -38,7 +41,6 @@ import {
   watchTargetsOf,
   type HeldWatch,
   type PathsWatch,
-  type WatcherHandle,
 } from "../foundations/watch-targets.js";
 
 // One origin followed: what discovery found there last, its digest, and the
@@ -67,12 +69,12 @@ export interface RendererConfigs {
   path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
   repoDir(origin: RenderOrigin): string | null | undefined;
   readText(file: string): string | null;
-  landed(files: readonly string[], answered: boolean): readonly RenderOrigin[];
+  landed(files: readonly string[]): readonly RenderOrigin[];
 }
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly watchers: Pick<WatcherRegistry, "batch">;
-  readonly files?: () => Partial<DiscoveryFiles>;
+  readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
@@ -88,14 +90,12 @@ export class ConfigDiscovery {
   private readonly watches: ReturnType<WatcherRegistry["batch"]>;
   private readonly invalidated = new Set<string>();
   private readonly texts: ConfigText;
-  // [LAW:one-source-of-truth] The user's answers for repositories are one
-  // fact for the whole daemon, so one watch follows them, never one per
-  // origin.
-  private readonly answersWatch: WatcherHandle;
   private closed = false;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
     this.texts = new ConfigText(deps.openText);
+    // [LAW:one-source-of-truth] Every origin follows the files it consulted.
+    // The shared registry polls each path once across their subscriptions.
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
     this.watches = deps.watchers.batch(() => {
@@ -103,14 +103,6 @@ export class ConfigDiscovery {
       this.invalidated.clear();
       this.heard(keys, "config-watch");
     });
-    const answers = repoConfigsPath(deps.stateDir);
-    this.answersWatch = this.watches.acquire(
-      `repo-configs:${answers}`,
-      { dirs: [], polled: [answers] },
-      () => {
-        for (const key of this.asking()) this.invalidated.add(key);
-      },
-    );
   }
 
   // [LAW:single-enforcer] Use the same holder to name demands, send a config
@@ -140,7 +132,7 @@ export class ConfigDiscovery {
       // same descriptor cache as discovery. The held snapshots only name it.
       readText: (file) =>
         readTextIfPresent(file, (at) => this.texts.read(at).text),
-      landed: (files, answered) => this.landed(renderer, files, answered),
+      landed: (files) => this.landed(renderer, files),
     };
   }
 
@@ -180,20 +172,16 @@ export class ConfigDiscovery {
     );
   }
 
-  // Rediscover origins watching one of the files the turn actually wrote, or
-  // asking about repository trust when the turn answered the book.
+  // Rediscover origins watching one of the files the turn actually wrote.
   // The writer reloads in this slot; the other holders get their own turns.
   private landed(
     writer: RendererName,
     files: readonly string[],
-    answered: boolean,
   ): readonly RenderOrigin[] {
     const changed = new Set(files);
     const touched = [...this.followed]
-      .filter(
-        ([, { snapshot, filePaths }]) =>
-          (answered && snapshot.repo !== null) ||
-          filePaths.some((file) => changed.has(file)),
+      .filter(([, { filePaths }]) =>
+        filePaths.some((file) => changed.has(file)),
       )
       .map(([key]) => key);
     return this.publish(this.rediscovered(touched, "landed"), writer);
@@ -209,17 +197,9 @@ export class ConfigDiscovery {
     if (this.closed) return;
     this.closed = true;
     this.invalidated.clear();
-    this.answersWatch.release();
     for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
     this.texts.clear();
-  }
-
-  // The origins an answer to the trust book can move.
-  private asking(): readonly string[] {
-    return [...this.followed]
-      .filter(([, { snapshot }]) => snapshot.repo !== null)
-      .map(([key]) => key);
   }
 
   // A watch heard `keys`' origins may have changed: those whose snapshot
@@ -288,14 +268,23 @@ export class ConfigDiscovery {
   // from the same descriptor as the snapshot's text.
   private batch(): DiscoveryBatch {
     const observed = new Map<string, string>();
+    const readText = (file: string): string => {
+      const read = this.texts.read(file);
+      observed.set(file, read.entry);
+      return read.text;
+    };
     const facts = readShared(this.deps, {
       ...diskFiles,
-      text: textFrom((path) => {
-        const read = this.texts.read(path);
-        observed.set(path, read.entry);
-        return read.text;
-      }),
+      text: textFrom(readText),
       ...this.deps.files?.(),
+      stateText: (file) => {
+        const target = resolvedTarget(file);
+        const text = readTextIfPresent(target, readText);
+        // [LAW:one-source-of-truth] The book and its writer use the same
+        // final target. A dangling link itself is still present to lstat.
+        if (text === null) observed.set(target, absentPolledEntry);
+        return text;
+      },
     });
     return { facts, observed };
   }
@@ -379,7 +368,7 @@ function watchTargetsFor(found: Discovered): PathsWatch {
   const { roots } = targets;
   return watchTargetsOf({
     named: [
-      ...targets.candidates,
+      ...targets.files,
       ...roots,
       ...snapshot.plugins.map((p) => p.path),
       ...snapshot.chain.flatMap((l) =>

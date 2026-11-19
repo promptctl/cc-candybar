@@ -10,7 +10,10 @@ import {
 } from "../../utils/git-root.js";
 import { oncePerPath } from "../../utils/once-per-path.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
-import { readRegularTextSync } from "../../utils/regular-text.js";
+import {
+  readRegularTextSync,
+  readTextIfPresent,
+} from "../../utils/regular-text.js";
 import { listFolders } from "./plugin-folders.js";
 
 export type TextRead = Exclude<Layer["content"], { kind: "absent" }>;
@@ -20,6 +23,7 @@ export interface DiscoveryFiles {
   readonly realpath: (path: string) => string | Unchecked;
   readonly folders: typeof listFolders;
   readonly text: (path: string) => TextRead;
+  readonly stateText: (path: string) => string | null;
   readonly worktree: (dir: string) => WorktreeLink;
   readonly checkout: (cwd: string) => Checkout;
 }
@@ -52,6 +56,7 @@ export const diskFiles: DiscoveryFiles = {
   },
   folders: listFolders,
   text: textFrom(readRegularTextSync),
+  stateText: readTextIfPresent,
   worktree: worktreeLink,
   checkout: checkoutOf,
 };
@@ -85,6 +90,7 @@ export function discoveryFiles(
     realpath: oncePerPath(files.realpath),
     folders: oncePerPath(files.folders),
     text: oncePerPath(files.text),
+    stateText: files.stateText,
     worktree: oncePerPath(files.worktree),
     checkout: oncePerPath(files.checkout),
   };
