@@ -1181,7 +1181,6 @@ describe("the host performing lane acts", () => {
         ...input,
       },
       run: missing,
-      applyUpdate: missing,
       lanes: { edge, host },
       closing: () => false,
       log: (level, msg) => void logs.push(`${level} ${msg}`),

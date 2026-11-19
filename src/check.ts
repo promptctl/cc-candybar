@@ -35,7 +35,7 @@ import type { World } from "./host";
 import { ansiOf, parseFrame, type Frame } from "./render/frame.js";
 import type { TurnRecord } from "./renderer-interface/interface.js";
 import type { Gates } from "./daemon/foundations/gates.js";
-import { daemonGates } from "./daemon/foundations/update-keys.js";
+import { createGates } from "./daemon/foundations/gates.js";
 import { instantOf } from "./utils/instant.js";
 import { effectivePresetName, presetNames } from "./config/presets.js";
 import {
@@ -138,7 +138,7 @@ export type CheckOutcome =
 // read.)
 export async function checkConfig(
   world: World,
-  // The gates the daemon holds (`daemonGates`), so what `check` refuses is
+  // The gates the daemon holds (`createGates`), so what `check` refuses is
   // what the daemon's load refuses.
   gates: Gates,
   target: string | undefined,
@@ -340,7 +340,6 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
         return;
       case "refused-args":
       case "hints":
-      case "update-act":
       case "click":
         failures.push(`${fault.kind}: ${fault.message}`);
         return;
@@ -369,7 +368,6 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
       case "renderer-ended":
       case "act-failed":
       case "config-watch":
-      case "update-failed":
         advisories.push(fault.message);
         return;
       default:
@@ -494,7 +492,7 @@ async function drawnVerdict(
       ),
     },
     owners: (sourceRuns, log) => checkOwners(at, sourceRuns, log),
-    daemon: () => commandDaemonFacts(at),
+    daemon: commandDaemonFacts,
     build,
   });
   const read: PassReading[] = [];
@@ -685,7 +683,7 @@ export async function checkCommandPlan(
         // resolution, the seam for its direct callers, passes it through.
         await checkConfig(
           world,
-          daemonGates(),
+          createGates(),
           cliConfigTarget(parsed.target, world.host, cwd).path,
           cwd,
         ),

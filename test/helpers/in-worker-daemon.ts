@@ -9,7 +9,6 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
-import { pathToFileURL } from "node:url";
 
 import { handleConnection } from "../../src/daemon/connection";
 import {
@@ -36,7 +35,7 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
-import { daemonGates } from "../../src/daemon/foundations/update-keys";
+import { createGates } from "../../src/daemon/foundations/gates";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -57,7 +56,6 @@ export function bundleAt(
 ): RunningBundle {
   const file = path.join(checkout, "dist", "index.mjs");
   return {
-    entryUrl: pathToFileURL(file).href,
     digest,
     path: file,
     node: [process.execPath],
@@ -94,10 +92,9 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
       // test/setup.ts points it at a closed port.
-      registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.
-      gates: daemonGates(),
+      gates: createGates(),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {
@@ -152,21 +149,6 @@ function placeEnv(env: NodeJS.ProcessEnv): void {
   const placed = { ...env };
   for (const key of Object.keys(process.env)) delete process.env[key];
   Object.assign(process.env, placed);
-}
-
-// A daemon a case arms, for what only an armed daemon does: the update notice.
-// Its memory backstop and bundle watch end a daemon through `exit`, so they get
-// nothing to act on: no file to stat, and a limit past any worker's memory.
-export function startArmedDaemon(
-  env: NodeJS.ProcessEnv,
-  bundle: RunningBundle,
-): InWorkerDaemon {
-  const started = startDaemon(env, {
-    bundle: { ...bundle, targets: [] },
-    memoryLimitBytes: Number.MAX_SAFE_INTEGER,
-  });
-  started.daemon.arm();
-  return started;
 }
 
 // A bar on a daemon in this worker (test/helpers/drive-bar.ts).

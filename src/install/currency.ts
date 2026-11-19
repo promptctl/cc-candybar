@@ -9,7 +9,6 @@
 
 import { ABSENT, failed, type Outcome } from "../utils/outcome";
 import { timeoutSignal, type Timekeeper } from "../time";
-import { formatVersion, type Version } from "../facts/world-state";
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
@@ -22,6 +21,16 @@ type Parsed<T> = Exclude<Outcome<T>, { kind: "absent" }>;
 // takes `Version` and never re-checks the shape. The failure is typed, not
 // thrown: on either side it flows into the `unchecked` verdict, so the
 // advisory check can never take the install down with it.
+// [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
+// semantic-release on `main` mints nothing else, and the ordering the currency
+// verdict needs is total only over that shape — so the parser refuses anything
+// else rather than admitting a prerelease it could not order.
+export type Version = readonly [major: number, minor: number, patch: number];
+
+export function formatVersion(v: Version): string {
+  return v.join(".");
+}
+
 export function parseReleaseVersion(text: string): Parsed<Version> {
   const m = RELEASE_VERSION.exec(text);
   return m
@@ -43,8 +52,7 @@ function compareVersions(
 
 export const REGISTRY_URL = "https://registry.npmjs.org";
 
-// [LAW:one-source-of-truth] The published package's name, here in the leaf
-// both the install banner and the daemon's release watch read it from.
+// [LAW:one-source-of-truth] The name used by the installer and registry lookup.
 export const PACKAGE_NAME = "@promptctl/cc-candybar";
 
 // The check rides at the end of an install; it may not hang one. A registry
@@ -53,8 +61,7 @@ export const REGISTRY_TIMEOUT_MS = 5_000;
 
 // [LAW:effects-at-boundaries] The one network effect in the install path. It
 // takes `fetch`, the registry and the clock its timeout runs on as parameters
-// so the pure core above and the tests never touch the wire; the caller hands in the global and REGISTRY_URL
-// (or the daemon's `CC_CANDYBAR_REGISTRY_URL` override). Every way the lookup can
+// so the pure core above and the tests never touch the wire. Every way the lookup can
 // fail to answer — refused, timed out, non-2xx, unparseable body, dist-tag not
 // a release — collapses to `failed` with its reason preserved, and a registry
 // that lists no `latest` tag at all is `absent`. [LAW:no-silent-failure] None

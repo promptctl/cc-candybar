@@ -50,6 +50,14 @@ beforeAll(() => {
 const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
   [
+    "retired update setting in every globals block",
+    `{
+      globals: { updateNotice: false },
+      editGlobals: { updateNotice: true },
+      presets: { old: { globals: { updateNotice: false } } },
+    }`,
+  ],
+  [
     "rows-form root (merges by row name)",
     `{ segments: { a: { template: 'a' } }, root: { rows: { extra: { h: ['a'] } } } }`,
   ],

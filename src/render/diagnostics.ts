@@ -76,12 +76,6 @@ export const WARNING_SEVERITY: DiagnosticSeverity = {
   level: "warning",
   glyph: DIAGNOSTIC_LEVELS.warning.glyph,
 };
-// An update notice: nothing is wrong and the bar runs. It is an offer with
-// three answers, not an alarm, and its glyph says so.
-export const UPDATE_SEVERITY: DiagnosticSeverity = {
-  level: "info",
-  glyph: "⬆",
-};
 // A repository's config waiting on the user's answer before anything in it
 // runs: the state it reports is the safe one, so it is a question, not a
 // warning, and its glyph is a lock.
@@ -103,8 +97,7 @@ const colorsOf = (severity: DiagnosticSeverity): DiagnosticColors =>
 
 // [LAW:parse-dont-validate] A run of words sharing one click, or none: a plain
 // message's first line copies what ⧉ copies and its other lines carry no
-// click, while an update notice's and a repository question's answers each
-// carry their own. A copy click names its message by key, never by the text
+// click, while a repository question's answers each carry their own. A copy click names its message by key, never by the text
 // it copies, so a frame's bytes do not grow with that text. The text
 // is sanitized at construction — `diagnosticSpan` is the only constructor — so
 // every span the viewer meets is already safe to emit, whatever produced it.

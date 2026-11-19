@@ -64,7 +64,7 @@ export function checkPayload(
     undefined,
     CHECK_SESSION,
     readings,
-    commandDaemonFacts(at),
+    commandDaemonFacts(),
     at,
   );
   const { term: _term, ...payload } = composePayload(

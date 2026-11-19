@@ -212,8 +212,7 @@ describe("install — clobber protection", () => {
   });
 
   // brandon-effects-2gka.21e: the doctor's effectRefresh fix writes
-  // `statusLine.refreshInterval`, and the update notice's [upgrade] re-runs
-  // install — which must change only the command it owns.
+  // `statusLine.refreshInterval`. Reinstalling changes only the command.
   test("re-install keeps every other statusLine key and every other byte", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });

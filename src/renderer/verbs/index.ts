@@ -98,7 +98,6 @@ import {
   batchAdjacentWrites,
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
-  VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
@@ -1224,13 +1223,6 @@ const redo: VerbHandler = (value, ctx) => {
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
-// [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
-// click (brandon-build-notice-5d6). The wire carries only the session id (for
-// click.error surfacing); the daemon's update watch decides what to run from
-// its own provenance, so no command or version ever arrives from a URL.
-const applyUpdate: VerbHandler = (value, ctx) =>
-  ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
-
 // ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
 
 // A run of the session's doctor, asked by this click (src/renderer/doctor.ts).
@@ -1540,7 +1532,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_REDO, redo],
   [VERB_BACK, back],
   [VERB_REWIND, rewind],
-  [VERB_APPLY_UPDATE, applyUpdate],
   [VERB_DOCTOR_RUN, doctorRun],
   [VERB_DOCTOR_FIX, doctorFix],
   [VERB_DOCTOR_MARK, doctorMark],

@@ -49,7 +49,7 @@ export const SUBMENUS: Readonly<
   >
 > = {
   gear: { beside: "theme", trigger: "⚙" },
-  toggles: { beside: "updateNotice", trigger: "🧪 toggles" },
+  toggles: { beside: "padding", trigger: "🧪 toggles" },
 };
 export const SUBMENU_NAMES = Object.keys(SUBMENUS) as readonly SubmenuName[];
 

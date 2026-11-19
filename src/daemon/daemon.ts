@@ -20,10 +20,7 @@ import type { CheckedRenderRequest } from "../renderer-interface/request-context
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
-import { actsDir } from "./update-act";
 import type { Gates } from "./foundations/gates";
-import { makeUpdateWatch } from "./update-notice";
-import { newUpdateFact } from "./update-fact";
 import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { stableAttachPreload } from "../install/index.js";
@@ -82,15 +79,10 @@ import type { SessionEnvironment } from "./foundations/session-env.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
-  // The entry's own URL, whose checkout the update notice assesses.
-  readonly entryUrl: string;
   // The digest of the source it was built from, `null` for one that carries
-  // none: what the update notice assesses that checkout against, and what
-  // daemon-stats tells one build of a version from another by.
+  // none. Daemon stats use it to distinguish builds of the same version.
   readonly digest: string | null;
-  // The file the entry was loaded from, as the build watch and the update
-  // notice read it: what daemon-stats and the doctor's click name the install
-  // by.
+  // The file the daemon loaded, used to identify its installation.
   readonly path: string;
   // What a bar pane runs, and what a click in a tmux status line runs to hand
   // the click back.
@@ -153,8 +145,6 @@ export interface DaemonAdapters {
   // [LAW:one-type-per-behavior] Where the renderer runs: in this process, or
   // in a process of its own (src/daemon/renderer-process.ts).
   readonly renderer: RendererPort;
-  // The registry the update notice asks which release is newest.
-  readonly fetch: typeof fetch;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
 }
@@ -174,15 +164,13 @@ export interface DaemonInputs extends DaemonAdapters {
   // aimed at a temporary directory writes nowhere else.
   readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
   readonly memoryLimitBytes: number;
-  readonly registryUrl: string;
   // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
   // requests by, and every timer its pieces set. A test holds it by hand.
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
   // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // value, built by the root with `daemonGates` (the update notice's links need
-  // the keys it holds), so two daemons in one process share none.
+  // gate registry, so two daemons in one process share none.
   readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
@@ -240,16 +228,7 @@ export interface Daemon {
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
-  const {
-    bundle,
-    memoryLimitBytes,
-    registryUrl,
-    clock,
-    exit,
-    paths,
-    gates,
-    host,
-  } = inputs;
+  const { bundle, memoryLimitBytes, clock, exit, paths, gates, host } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
@@ -290,9 +269,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<
-    Pick<DaemonFacts, "fileEvents" | "launcher" | "rendererEnded" | "actFailed">
-  >(
+  const daemonFaults = observable.box<DaemonFacts>(
     { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural },
   );
@@ -337,9 +314,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       restateFaults();
     },
   });
-  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
-  // through this one probe, so a probe handed in reaches both. The process entry
-  // (server.ts) asks its own before this daemon exists.
+  // The lane edge's process probe is supplied by the host.
   const probe = inputs.probe(launcher);
   const linkSigner = linkSignerOver(inputs.linkKey);
   // [LAW:single-enforcer] The renderer's stored state, held here: every
@@ -461,7 +436,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     launch: clickLaunchVia(launcher),
     claudeInput: inputs.claudeInput(launcher),
     run: (run) => runs.start(run),
-    applyUpdate: () => updateWatch.act(),
     lanes: {
       edge: inputs.laneEdge(
         launcher,
@@ -564,10 +538,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   }: CheckedRenderRequest): readonly string[] {
     return tmux === null || tmux === undefined ? [] : [tmux.socket];
   }
-  // [LAW:one-source-of-truth] The daemon's one update fact: the update watch
-  // writes it and every session's facts document reads it, so the box exists
-  // before either.
-  const updateFact = newUpdateFact();
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // found when they resume: every followed origin is discovered again, and
   // each one that moved gets its `config` turn. Every feed redraws when
@@ -590,47 +560,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         return;
     }
   });
-  // One cadence for "how often does the daemon look at its build on disk" —
-  // the binary watch (exit on a changed bundle) and the update watch (does the
-  // bundle match `src/`) both sample on it.
-  const BIN_CHECK_INTERVAL_MS = 60 * 1000;
-  // The registry is a network resource with releases hours apart; ask rarely.
-  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
   const binaryWatch = makeBinaryWatch({
     clock,
     targets: bundle.targets,
-    intervalMs: BIN_CHECK_INTERVAL_MS,
+    intervalMs: 60 * 1000,
     stat: inputs.stat,
-    // The update notice's act rewrites the bundle, and a restart in the middle
-    // would start the next daemon from a half-written one: a restart waits for
-    // it. A success samples again at once; after a failure the next tick does.
-    held: () => updateWatch.running(),
     exit: () => exit(0),
-    log,
-  });
-
-  // [LAW:single-enforcer] The daemon is the process that observes the bundle
-  // it runs (the binary watch restarts it on rebuild), so it is the one place
-  // that knows whether something newer than that bundle exists — the source
-  // beside it, or a published release — and the one owner of the notice's
-  // clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
-  // its own, folded between the error and warning channels.
-  const updateWatch = makeUpdateWatch({
-    fact: updateFact,
-    clock,
-    launcher,
-    probe,
-    entryUrl: bundle.entryUrl,
-    digest: bundle.digest,
-    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
-    // this daemon runs from.
-    actsDir: actsDir(paths.state, bundle.path),
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
-    registryUrl,
-    fetchImpl: inputs.fetch,
-    onApplied: () => binaryWatch.checkNow(),
     log,
   });
 
@@ -640,10 +575,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // after a request, so the parts exist by then.
   const collector = new Collector({
     owners: payloadProviders,
-    daemon: () => ({
-      update: { newer: updateFact.get(), ...updateWatch.acts() },
-      ...daemonFaults.get(),
-    }),
+    daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
     deliver: (event) =>
@@ -757,7 +689,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     tmuxStatusLines,
     declaredStatusLines,
     frameFeeds,
-    updateWatch,
     limits,
     collector,
     renderer: rendererHost(
@@ -837,7 +768,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       serve();
       fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
-      updateWatch.arm();
       limits.arm();
       link.arm();
     },
@@ -870,7 +800,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
-        ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
