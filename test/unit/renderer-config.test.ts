@@ -23,6 +23,7 @@ import { textOf, type Frame } from "../../src/render/frame";
 import type {
   Effect,
   Event,
+  EventInput,
   Present,
   Renderer,
   RendererOutput,
@@ -32,10 +33,11 @@ import type { CheckedRenderRequest } from "../../src/renderer-interface/request-
 import { mainRendererOf } from "../../src/renderer/main";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
-import { instantOf, type Tick } from "../../src/utils/instant";
+import { instantOf, readingsAt, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
+import { heldClock } from "../helpers/held-clock";
 import { viewFacts } from "../helpers/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -207,6 +209,89 @@ test("a session's bar draws from the layer text its origin's snapshot carries", 
   expect(configLoads(logged)).toEqual([
     expect.stringContaining(`cause=open state=built files=${USER_FILE} `),
   ]);
+});
+
+test("a fresh renderer replays a drawn bar, a click, a scheduled draw and a config reload", async () => {
+  const session = sessionIdOf("replay");
+  const context = contextOf(session);
+  const origin = context.requested;
+  const palette = [...listResolvablePaletteNames()][0]!;
+  const live = renderer(new Map());
+  const clock = heldClock(new Date(1_700_000_000_000));
+  const recording: EventInput[] = [];
+  const outputs: RendererOutput[] = [];
+  // Keep snapshots of data at the boundary. A later turn may retire the
+  // state that supplied an earlier answer.
+  const turn = async (event: Event, afterMs: number) => {
+    clock.advance(afterMs);
+    const input: EventInput = {
+      kind: "event",
+      ...readingsAt(clock),
+      event,
+    };
+    recording.push(structuredClone(input));
+    const result = answered(await live.r.answer(input));
+    outputs.push(structuredClone(result));
+    return result;
+  };
+  await turn(
+    {
+      kind: "start",
+      viewers: {
+        [session]: {
+          lanes: { statusline: { subscribers: 1, drawing: true } },
+          shown: true,
+          joined: 1,
+        },
+      },
+      sessions: [{ context, worldState: worldStateOf(session) }],
+      configs: [{ origin, config: snapshotOf(CONFIG) }],
+    },
+    0,
+  );
+  const first = await turn(
+    { kind: "request", id: 1 as RequestId, context },
+    10,
+  );
+  expect(textOf(presentOf(first.effects).frame)).toContain(SAID);
+  const click = await turn(
+    {
+      kind: "click",
+      click: admitClick(
+        VERB_SET_CONFIG,
+        encodeSegments([session, "user", "palette", palette]),
+        TEST_SIGNER,
+      ).click,
+      arrival: { via: "link", delivery: { kind: "cli" } },
+      context: { session, durable: { origin }, live: null },
+    },
+    10,
+  );
+  expect(click.effects).toContainEqual(
+    expect.objectContaining({ kind: "change" }),
+  );
+  const due = await turn({ kind: "due" }, 1_980);
+  expect(due.frames).toContainEqual(expect.objectContaining({ session }));
+  await turn(
+    {
+      kind: "config",
+      origin,
+      config: snapshotOf(CONFIG.replace(SAID, "after replayed reload")),
+    },
+    100,
+  );
+  const last = await turn(
+    { kind: "request", id: 2 as RequestId, context },
+    100,
+  );
+  expect(textOf(presentOf(last.effects).frame)).toContain(
+    "after replayed reload",
+  );
+
+  const replay = renderer(new Map());
+  for (const [index, input] of recording.entries())
+    expect(await replay.r.answer(input)).toEqual(outputs[index]);
+  expect(replay.logged).toEqual(live.logged);
 });
 
 test("a snapshot whose layer will not parse draws the bundled bar, with its error on the indicator", async () => {
