@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-844",
+      "ref": "refs/pull/844/merge",
+      "sha": "d3796148d0fdf0dc59352bb4b9a1f4576bf1e1c7",
+      "timestamp": "2026-11-19T10:11:19.409Z",
+      "commits": [
+        {
+          "sha": "d3796148d0fdf0dc59352bb4b9a1f4576bf1e1c7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:10:09-07:00",
+          "message": "Merge 3da5befb66b28d5d85cae0924d6bececa98a80dd into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:46-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-842",
       "ref": "refs/pull/842/merge",
       "sha": "4e6ce433914c7534f055602ba563a5174e1848a4",
