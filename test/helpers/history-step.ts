@@ -123,9 +123,3 @@ export const redoOf = (
   sid: SessionId,
   files: ConfigFiles,
 ): Step => clickOf(history, files, (journal) => journal.redo(sid));
-
-export const rewindOf = (
-  history: SettingsHistory,
-  sid: SessionId,
-  files: ConfigFiles,
-): Step => clickOf(history, files, (journal) => journal.rewind(sid));

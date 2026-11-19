@@ -52,7 +52,6 @@ import {
   EDIT_MODE_GATE,
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_REF,
-  EDIT_TOGGLE_ACTION,
   PLACEMENT_DRAFT_NS,
 } from "./loader/edit-mode.js";
 import { EDIT_NS, isReservedName } from "./reserved-names.js";
@@ -93,14 +92,10 @@ export const EDIT_LIVE_KEY = `${EDIT_NS}live`;
 export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 // Leaving edit mode, kept: `✓ save` while there is something to keep, `✓ done`
 // while there is not. The two are one action: write the session's unsaved
-// settings (a placement's configure-mode picks among them — the layout edits
-// were written as they were made), then leave.
+// settings and layout as one transaction, then leave.
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
-const EDIT_SAVE_ACTION = `${EDIT_NS}save`;
-// `↩ cancel`: put back everything changed since edit mode opened, then leave
-// (src/renderer/settings-history.ts `rewind`).
+// `↩ cancel` discards the draft and leaves edit mode.
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-const EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 // How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
 // — the daemon's own count, read by the cells' labels and gates; a ref, never
 // a second counter. How many settings are unsaved is the settings menu's own
@@ -989,37 +984,22 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   // `(?)` alone trails the bar's last row.
   const live: LayoutNode = { kind: "segment", name: EDIT_LIVE_KEY };
   const tail: LayoutNode = help;
-  // Leaving edit mode, minted once like the `(?)`: the same toggle the menu's
-  // `✎ arrange` fires, and what leaving closes is the nest's
-  // (src/config/disclosure-nest.ts). `✓` also saves; the menu's `✎ done` does
-  // not, and leaves anything unsaved to the `💾 save` beside it.
   artifacts.variables[EDIT_CHANGES_VAR] = {
     kind: "input",
     path: "history.sinceEdit",
     type: "number",
     default: 0,
   };
-  // [LAW:one-type-per-behavior] Saving is the settings menu's own `save`
-  // action, so the two write the same drafts; only the layer is a different
-  // value. Edit mode keeps what it made in the user's own file, as its layout
-  // edits are, where the menu's asks.
-  artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
-  artifacts.actions[EDIT_DONE_SEG] = {
-    do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION],
-  };
+  // [LAW:one-type-per-behavior] The same save used in settings commits
+  // and closes the draft when edit mode is active.
+  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
   artifacts.segments[EDIT_DONE_SEG] = {
     template:
       `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "✓ save" }}` +
       `{{ else }}{{ action "${EDIT_DONE_SEG}" "✓ done" }}{{ end }}`,
     when: EDIT_MODE_GATE,
   };
-  // [LAW:one-source-of-truth] Cancel is the rewind and then the same toggle
-  // `✓` fires, as one click: the rewind is the face, the toggle rides along
-  // (`do`), so leaving edit mode closes exactly what it closes everywhere.
-  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
-  artifacts.actions[EDIT_CANCEL_SEG] = {
-    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION],
-  };
+  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
   // nothing changed there is nothing to discard.
   artifacts.segments[EDIT_CANCEL_SEG] = {

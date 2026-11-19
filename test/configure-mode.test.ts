@@ -149,7 +149,11 @@ function configureBar(src: string, preset?: string) {
     expect(hits.size).toBe(1);
     return [...hits][0]!;
   };
-  return { config, sessionState, render, click, urlWriting, ctx };
+  const enter = async () => {
+    sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
+    await click(urlWriting(render(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+  };
+  return { config, sessionState, render, click, urlWriting, enter, ctx };
 }
 
 const draftKey = (id: string, setting: string): string =>
@@ -356,42 +360,43 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(after).toContain(CONFIGURE_GLYPH);
   });
 
-  test("edit mode's ✓ save writes the configured placement's picks, then leaves", async () => {
+  test("edit mode previews the configured placement and commits its settings on Save", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
-    await rt.click(rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1"));
-    const save = linkUrls(rt.render()).find((u) => {
-      const effects = effectsOf(u);
-      return (
-        effects.some((e) => e.verb === VERB_SAVE) &&
-        effects.some(
-          (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
-        )
-      );
-    });
+    await rt.enter();
+    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs"));
+    const edit = rt.urlWriting(rt.render(), draftKey("vcs", "depth"), "1");
+    await rt.click(edit);
+    const drafted = rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"));
+    expect(drafted).toBe("3");
+    expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
+    expect(durable.text()).toBe(SRC);
+    await CLICK_VERBS.get(VERB_UNDO)!(SID, rt.ctx);
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"))).toBeNull();
+    await CLICK_VERBS.get("redo")!(SID, rt.ctx);
+    expect(rt.ctx.edits.view.get(SID, draftKey("vcs", "depth"))).toBe(drafted);
+    const save = linkUrls(rt.render()).find((u) =>
+      effectsOf(u).some((e) => e.verb === VERB_SAVE),
+    );
     expect(save).toBeDefined();
     await rt.click(save!);
     expect(durable.text()).toContain(`{ seg: "vcs", settings: { depth: 3 } }`);
     expect(rt.sessionState.get(SID, draftKey("vcs", "depth"))).toBeNull();
-    expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
+    expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
   });
 
-  test("✎ done leaves edit mode and closes the settings left open", async () => {
+  test("✓ done leaves edit mode and closes the settings left open", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs");
+    await rt.enter();
+    rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs"));
     const done = linkUrls(rt.render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
-      ),
+      effectsOf(u).some((e) => e.verb === VERB_SAVE),
     );
     await rt.click(done!);
-    expect(rt.sessionState.get(SID, EDIT_MODE_KEY)).toBe(DISCLOSURE_CLOSED);
-    // Cleared, as a fresh session holds it.
+    expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
     expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
-    // Arranging again starts with nothing configured.
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await rt.enter();
     expect(textOf(rt.render())).not.toContain("◀ form ▶");
   });
 
@@ -649,23 +654,17 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
   test("every control that leaves edit mode closes the configured placement", async () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
-    configurePlacement(rt.sessionState, SID, "default", "vcs2");
-    // The menu's own ✎ control sits on its first line.
-    rt.sessionState.set(SID, SETTINGS_ANCHOR, SETTINGS_OPEN);
-    const leaving = linkUrls(rt.render()).filter((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
-      ),
-    );
-    // ✎ done on the bar and ✎ in the menu.
-    expect(new Set(leaving).size).toBe(2);
-    for (const url of new Set(leaving)) {
-      configurePlacement(rt.sessionState, SID, "default", "vcs2");
-      await rt.click(url);
-      expect([url, rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)]).toEqual([
-        url,
-        null,
-      ]);
+    for (const leaves of [
+      (e: ReturnType<typeof effectsOf>[number]) => e.verb === VERB_SAVE,
+      (e: ReturnType<typeof effectsOf>[number]) =>
+        e.args[1] === EDIT_MODE_KEY && e.args[2] === DISCLOSURE_CLOSED,
+    ]) {
+      await rt.enter();
+      rt.sessionState.set(SID, EDIT_CONFIGURE_KEY, configureMember("default", "vcs2"));
+      const leaving = linkUrls(rt.render()).find((u) => effectsOf(u).some(leaves));
+      await rt.click(leaving!);
+      expect(rt.sessionState.get(SID, EDIT_CONFIGURE_KEY)).toBeNull();
+      expect(rt.ctx.edits.view.get(SID, EDIT_MODE_KEY)).toBeNull();
     }
   });
 
