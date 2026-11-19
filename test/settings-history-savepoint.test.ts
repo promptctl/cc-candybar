@@ -16,7 +16,6 @@ import {
 import { fileHistoryStorage } from "../src/daemon/history-file";
 import { HeldStores } from "../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../src/daemon/session-state-file";
-import { emptyStores } from "./helpers/doctor-facts";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { readConfigText } from "../src/utils/atomic-write";
 import { redoOf, rewindOf, undoOf, inPlace } from "./helpers/history-step";
@@ -333,7 +332,6 @@ describe("the savepoint survives a restart", () => {
     const stores = new HeldStores({
       session: ephemeralSessionFile(),
       history: fileHistoryStorage(historyFile, () => {}),
-      doctor: emptyStores(),
     });
     stores.load();
     return stores;

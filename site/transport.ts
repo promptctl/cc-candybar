@@ -12,7 +12,7 @@ import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
@@ -20,7 +20,6 @@ import { EPHEMERAL_HISTORY_STORAGE } from "../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../src/daemon/session-state-file";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
 import { PROTOCOL_VERSION, type ClickRequest, type ReaderRenderRequest, type Response } from "../src/daemon/foundations/protocol";
-import { REGISTRY_URL } from "../src/install/currency";
 import { composeBar, parseFrame, type Frame } from "../src/render/frame";
 import type { ClaudeHookData } from "../src/utils/claude";
 import { DURATION, INITIAL_MOMENT, INITIAL_REPO, STEPS, type Entry, type Moment, type ScenarioRepo, type Step } from "./scenario";
@@ -76,19 +75,17 @@ const paths = daemonPaths(HOST);
 const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 const pageDaemon = createDaemon({
   ...adapters,
-  gates: daemonGates(),
+  gates: createGates(),
   paths,
   host: HOST,
   bundle: {
-    entryUrl: "file:///app/dist/index.mjs",
     digest: null,
     path: "/app/dist/index.mjs",
     node: [],
     targets: [],
   },
   rendererName: MAIN_RENDERER,
-  // Its picks and history live only as long as the page; the doctor files
-  // its documents on the simulated machine, as a daemon's profile does.
+  // Its picks and history live only as long as the page.
   profile: (name, log) => ({
     ...adapters.profile(name, log),
     session: ephemeralSessionFile(),
@@ -97,7 +94,6 @@ const pageDaemon = createDaemon({
   // Its sessions are the page's own, for as long as it is open.
   sessionBook: () => ephemeralSessionFile(),
   memoryLimitBytes: memoryLimitBytes(HOST.env),
-  registryUrl: REGISTRY_URL,
   clock: WORLD.clock,
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);

@@ -21,7 +21,6 @@ export const TABS = [
   // `📐`, because `▦` is the preset control's glyph.
   { member: "layout", label: "📐 layout" },
   { member: "config", label: "⚙ config" },
-  { member: "tools", label: "🧰 tools" },
 ] as const;
 export type TabName = (typeof TABS)[number]["member"];
 // [LAW:types-are-the-program] Total over TABS: the one place the totality
@@ -49,7 +48,7 @@ export const SUBMENUS: Readonly<
   >
 > = {
   gear: { beside: "theme", trigger: "⚙" },
-  toggles: { beside: "updateNotice", trigger: "🧪 toggles" },
+  toggles: { beside: "padding", trigger: "🧪 toggles" },
 };
 export const SUBMENU_NAMES = Object.keys(SUBMENUS) as readonly SubmenuName[];
 
@@ -110,10 +109,8 @@ export const settingsByPlace = (): readonly PlaceSettings[] =>
     }))
     .filter(({ names }) => names.length > 0);
 
-// Why a subscriber of `lane` is refused, naming everything that admits it: the
-// switch, and for a lane that needs tmux, a session inside a tmux pane — the
-// refusal does not know which one failed, so it names both.
+// The preference that admits a subscriber of this lane.
 export const laneOffReason = (lane: Lane): string => {
-  const { setting, on, inTmux } = LANES[lane].switch;
-  return `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on)}${inTmux ? "; it runs only for a session inside a tmux pane" : ""}`;
+  const { setting, on } = LANES[lane].switch;
+  return `${LANES[lane].label} is off — turn it on in the settings menu's ${settingMenuPath(setting)}, or set globals.${setting}: ${JSON.stringify(on)}`;
 };

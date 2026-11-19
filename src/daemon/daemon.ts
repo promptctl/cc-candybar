@@ -20,13 +20,8 @@ import type { CheckedRenderRequest } from "../renderer-interface/request-context
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
-import { actsDir } from "./update-act";
 import type { Gates } from "./foundations/gates";
-import { makeUpdateWatch } from "./update-notice";
-import { newUpdateFact } from "./update-fact";
-import type { ProcessProbe } from "./process-fingerprint";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
-import { stableAttachPreload } from "../install/index.js";
 import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
 import { FileEventDelivery } from "./cache/file-events";
@@ -37,22 +32,19 @@ import { SourceRuns } from "./source-runs";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, type LimitsDeps } from "./limits";
-import type { DoctorMachineEdge } from "../doctor/ports";
 import { RenderSightings } from "./render-sightings";
 import { Collector } from "./collector.js";
 import { FrameFeeds } from "./frame-feed.js";
-import { type Lane, type LaneSwitches } from "../config/lanes.js";
 import {
   LIST_CLIENTS_FORMAT,
   LIST_PANES_FORMAT,
   PaneVisibility,
 } from "./pane-visibility.js";
 import { runTmuxAsync } from "../proc/tmux.js";
-import { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
-import { shellWord } from "../shell-word.js";
+import { RetiredTmuxStatus } from "./retired-tmux-status.js";
+import type { BarPaneEdge } from "./lane-setup.js";
 import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
-import type { LaneEdge } from "./lane-setup.js";
 import { Acts } from "./acts.js";
 import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
@@ -72,29 +64,19 @@ import {
 } from "../utils/event-hold.js";
 import { located } from "./statusline-answer.js";
 import { checkoutLocation } from "../utils/git-root.js";
-import { DoctorSource, daemonSighted } from "./cache/doctor.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
-import { followingOf } from "../renderer-interface/interface.js";
-import type { SessionId } from "./foundations/session-id.js";
-import type { SessionEnvironment } from "./foundations/session-env.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
-  // The entry's own URL, whose checkout the update notice assesses.
-  readonly entryUrl: string;
   // The digest of the source it was built from, `null` for one that carries
-  // none: what the update notice assesses that checkout against, and what
-  // daemon-stats tells one build of a version from another by.
+  // none. Daemon stats use it to distinguish builds of the same version.
   readonly digest: string | null;
-  // The file the entry was loaded from, as the build watch and the update
-  // notice read it: what daemon-stats and the doctor's click name the install
-  // by.
+  // The file the daemon loaded, used to identify its installation.
   readonly path: string;
-  // What a bar pane runs, and what a click in a tmux status line runs to hand
-  // the click back.
+  // What a bar pane runs.
   readonly node: readonly string[];
   // The files the binary watch stats: a change to any of them restarts the
   // daemon.
@@ -122,25 +104,8 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  // The doctor's reads of the machine, under the daemon's state directory.
-  readonly doctorEdge: (
-    launcher: Launcher,
-    host: Host,
-    stateDir: string,
-  ) => DoctorMachineEdge;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
-  // What the daemon asks the machine about a pid: whether a process is there, and
-  // when it started.
-  readonly probe: (launcher: Launcher) => ProcessProbe;
-  // What turning an animation lane on or off does to the machine: it is told
-  // which lanes a session's feed follows, and ends its waits with the daemon.
-  readonly laneEdge: (
-    launcher: Launcher,
-    following: (sessionId: SessionId) => ReadonlySet<Lane>,
-    closing: AbortSignal,
-    probe: ProcessProbe,
-    environmentOf: (session: SessionId) => SessionEnvironment,
-  ) => LaneEdge;
+  readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   // [LAW:one-source-of-truth] The link key, asked for at each use: every
   // click is opened with it and every renderer draws with it.
   readonly linkKey: () => Asked<Buffer>;
@@ -154,8 +119,6 @@ export interface DaemonAdapters {
   // [LAW:one-type-per-behavior] Where the renderer runs: in this process, or
   // in a process of its own (src/daemon/renderer-process.ts).
   readonly renderer: RendererPort;
-  // The registry the update notice asks which release is newest.
-  readonly fetch: typeof fetch;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
 }
@@ -175,15 +138,13 @@ export interface DaemonInputs extends DaemonAdapters {
   // aimed at a temporary directory writes nowhere else.
   readonly paths: Pick<DaemonPaths, "socket" | "state" | "watchProbe">;
   readonly memoryLimitBytes: number;
-  readonly registryUrl: string;
   // [LAW:effects-at-boundaries] The daemon's clock: what it draws and times
   // requests by, and every timer its pieces set. A test holds it by hand.
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
   // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // value, built by the root with `daemonGates` (the update notice's links need
-  // the keys it holds), so two daemons in one process share none.
+  // gate registry, so two daemons in one process share none.
   readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
@@ -241,16 +202,7 @@ export interface Daemon {
 }
 
 export function createDaemon(inputs: DaemonInputs): Daemon {
-  const {
-    bundle,
-    memoryLimitBytes,
-    registryUrl,
-    clock,
-    exit,
-    paths,
-    gates,
-    host,
-  } = inputs;
+  const { bundle, memoryLimitBytes, clock, exit, paths, gates, host } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
@@ -291,9 +243,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // compared whole, so a restatement that moved nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
-  const daemonFaults = observable.box<
-    Pick<DaemonFacts, "fileEvents" | "launcher" | "rendererEnded" | "actFailed">
-  >(
+  const daemonFaults = observable.box<DaemonFacts>(
     { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
     { deep: false, equals: compareStructural },
   );
@@ -338,10 +288,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       restateFaults();
     },
   });
-  // [LAW:one-source-of-truth] The update watch and the lane edge read a pid
-  // through this one probe, so a probe handed in reaches both. The process entry
-  // (server.ts) asks its own before this daemon exists.
-  const probe = inputs.probe(launcher);
   const linkSigner = linkSignerOver(inputs.linkKey);
   // [LAW:single-enforcer] The renderer's stored state, held here: every
   // renderer is built from what it holds then, and every turn's stored writes
@@ -378,8 +324,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     },
     node: bundle.node,
   });
-  // Building starts nothing: only the daemon that won the socket arms them, so
-  // the page answers the doctor's `serving` with no timer counting its memory.
+  // [LAW:effects-at-boundaries] Only the daemon that won the socket arms its limits.
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -413,28 +358,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     watchers: watcherRegistry,
     fileEvents,
   });
-  // [LAW:single-enforcer] The daemon's one reader of the doctor's facts: the
-  // collector holds the run a session's renderer subscribes to.
-  const doctorSource = new DoctorSource({
-    // The doctor's edge sets no signal of its own, so each read's launches
-    // carry the read's.
-    edge: (signal) =>
-      inputs.doctorEdge(
-        { ...launcher, launch: (opts) => launcher.launch({ ...opts, signal }) },
-        host,
-        paths.state,
-      ),
-    sighted: (sessionId, now) =>
-      daemonSighted(
-        sessionId,
-        renderSightings.ofSession(sessionId, now),
-        limits.serving(),
-        bundle.path,
-      ),
-    clock,
-    logger: log,
-    ledger: refreshLedger,
-  });
   const payloadProviders = createPayloadProviders({
     launcher,
     host,
@@ -444,7 +367,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     logger: log,
     ledger: refreshLedger,
     sourceRuns,
-    doctor: doctorSource,
   });
   const { managedStorage } = payloadProviders;
   // [LAW:no-ambient-temporal-coupling] The one owner of every `run` program in
@@ -462,58 +384,25 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     launch: clickLaunchVia(launcher),
     claudeInput: inputs.claudeInput(launcher),
     run: (run) => runs.start(run),
-    applyUpdate: () => updateWatch.act(),
-    lanes: {
-      edge: inputs.laneEdge(
-        launcher,
-        // [LAW:one-source-of-truth] The lanes following a session, read as the
-        // viewers the renderer is handed are.
-        (sessionId) => followingOf(frameFeeds.viewersOf(sessionId)),
-        closing.signal,
-        probe,
-        (session) => sessionBook.environmentOf(session),
-      ),
+    barPane: {
+      edge: inputs.barPaneEdge(launcher),
       // A bar pane runs this bundle under the node running it now, with the
       // flags it runs with (tsx's loader, under the test harness).
       host: {
         bundle: bundle.path,
         node: bundle.node,
         socket: paths.socket,
-        preload: stableAttachPreload(bundle.path, host),
       },
     },
     closing: () => closing.signal.aborted,
     log,
   });
-  // [LAW:single-enforcer] The one writer of the tmux status line lane's tmux
-  // state (src/daemon/tmux-status.ts).
-  const tmuxStatusLines: TmuxStatusLines = new TmuxStatusLines({
-    edge: {
-      run: (socket, args, stdin) =>
-        runTmuxAsync(launcher, { socket }, "tmux-status", args, stdin),
-    },
-    subscribe: (sessionId, sub) => frameFeeds.subscribe(sessionId, sub),
-    sessionInPane: (socket, pane) =>
-      frameFeeds.newestWhere(
-        ({ hints: { tmux } }) =>
-          tmux !== null &&
-          tmux !== undefined &&
-          tmux.socket === socket &&
-          tmux.pane === pane,
-      ),
-    handler: [
-      `CC_CANDYBAR_SOCKET=${shellWord(paths.socket)}`,
-      ...[...bundle.node, bundle.path].map(shellWord),
-      "url-handle",
-    ].join(" "),
-    owner: paths.socket,
+  const retiredTmuxStatus = new RetiredTmuxStatus(
+    paths.socket,
+    (socket, args, stdin) =>
+      runTmuxAsync(launcher, { socket }, "tmux-status-migration", args, stdin),
+    clock,
     log,
-  });
-  // [LAW:single-enforcer] The rows the renderer declares on, followed to each
-  // session's newest pane.
-  const declaredStatusLines = new DeclaredStatusLines(
-    tmuxStatusLines,
-    (sessionId) => frameFeeds.latest(sessionId)?.hints.tmux,
   );
   const declaredBarPanes = new DeclaredBarPanes(
     (sessionId) => {
@@ -561,11 +450,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       ]),
     // The servers of the sessions someone is watching.
     sockets: () => new Set(frameFeeds.watchedRequests().flatMap(tmuxServersOf)),
-    // A status line's view moves which held pane draws its session.
-    onAnswer: (socket, status) => {
-      tmuxStatusLines.answered(socket, status);
-      frameFeeds.announce();
-    },
     onChange: () => frameFeeds.announce(),
     intervalMs: 1000,
     log,
@@ -577,10 +461,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   }: CheckedRenderRequest): readonly string[] {
     return tmux === null || tmux === undefined ? [] : [tmux.socket];
   }
-  // [LAW:one-source-of-truth] The daemon's one update fact: the update watch
-  // writes it and every session's facts document reads it, so the box exists
-  // before either.
-  const updateFact = newUpdateFact();
   // [LAW:no-silent-failure] An edit made while file events went unheard is
   // found when they resume: every followed origin is discovered again, and
   // each one that moved gets its `config` turn. Every feed redraws when
@@ -603,47 +483,12 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         return;
     }
   });
-  // One cadence for "how often does the daemon look at its build on disk" —
-  // the binary watch (exit on a changed bundle) and the update watch (does the
-  // bundle match `src/`) both sample on it.
-  const BIN_CHECK_INTERVAL_MS = 60 * 1000;
-  // The registry is a network resource with releases hours apart; ask rarely.
-  const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-
   const binaryWatch = makeBinaryWatch({
     clock,
     targets: bundle.targets,
-    intervalMs: BIN_CHECK_INTERVAL_MS,
+    intervalMs: 60 * 1000,
     stat: inputs.stat,
-    // The update notice's act rewrites the bundle, and a restart in the middle
-    // would start the next daemon from a half-written one: a restart waits for
-    // it. A success samples again at once; after a failure the next tick does.
-    held: () => updateWatch.running(),
     exit: () => exit(0),
-    log,
-  });
-
-  // [LAW:single-enforcer] The daemon is the process that observes the bundle
-  // it runs (the binary watch restarts it on rebuild), so it is the one place
-  // that knows whether something newer than that bundle exists — the source
-  // beside it, or a published release — and the one owner of the notice's
-  // clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
-  // its own, folded between the error and warning channels.
-  const updateWatch = makeUpdateWatch({
-    fact: updateFact,
-    clock,
-    launcher,
-    probe,
-    entryUrl: bundle.entryUrl,
-    digest: bundle.digest,
-    // [LAW:one-source-of-truth] Keyed by the bundle the act rewrites, the one
-    // this daemon runs from.
-    actsDir: actsDir(paths.state, bundle.path),
-    intervalMs: BIN_CHECK_INTERVAL_MS,
-    releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
-    registryUrl,
-    fetchImpl: inputs.fetch,
-    onApplied: () => binaryWatch.checkNow(),
     log,
   });
 
@@ -653,10 +498,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // after a request, so the parts exist by then.
   const collector = new Collector({
     owners: payloadProviders,
-    daemon: () => ({
-      update: { newer: updateFact.get(), ...updateWatch.acts() },
-      ...daemonFaults.get(),
-    }),
+    daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId) => frameFeeds.isWatched(sessionId),
     deliver: (event) =>
@@ -751,7 +593,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const parts: DaemonParts = {
     closing: closing.signal,
     home: host.home,
-    tmp: host.tmp,
     launcher,
     log,
     clock,
@@ -767,10 +608,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     payloadProviders,
     runs,
     sourceRuns,
-    tmuxStatusLines,
-    declaredStatusLines,
+    retiredTmuxStatus,
     frameFeeds,
-    updateWatch,
     limits,
     collector,
     renderer: rendererHost(
@@ -783,22 +622,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
           collector.subscribed(subscriptions);
           frameFeeds.switched(subscriptions.lanes);
           declaredBarPanes.declare(subscriptions.lanes);
-          // [LAW:one-source-of-truth] The rows held are the sessions whose
-          // view switches the tmux status line on.
-          declaredStatusLines.declare(
-            (
-              Object.entries(subscriptions.lanes) as Array<
-                [SessionId, LaneSwitches]
-              >
-            ).flatMap(([session, lanes]) =>
-              lanes.tmuxStatus ? [session] : [],
-            ),
-          );
         },
         frames: (frames) => frameFeeds.took(frames),
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
-        writableSettings: (session) => collector.writableSettings(session),
         // The daemon waits on no turn's note.
         recorded: () => {},
       },
@@ -851,7 +678,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       serve();
       fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
-      updateWatch.arm();
       limits.arm();
       link.arm();
     },
@@ -870,12 +696,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // close's.
         ["renderer wake close", () => parts.renderer.closeWake()],
         ["renderer close begins", () => link.beginClose()],
-        // [LAW:single-enforcer] Every tmux status line this daemon laid out is put
-        // back before it goes (src/daemon/tmux-status.ts).
-        // [LAW:no-ambient-temporal-coupling] Before any of the renderer's turns:
-        // one waits behind whatever turn the renderer is in, which can outlast
-        // shutdown's backstop, while this waits only on its own tmux calls.
-        ["tmuxStatusLines close", () => tmuxStatusLines.close()],
         // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
         // every click ahead of it lands whole, and none behind it begins.
         ["renderer journal close", rendererStep("close-journal")],
@@ -884,7 +704,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // launcher's lifeline goes.
         ["launches abort", () => closing.abort(new Error("the daemon closed"))],
         ["frameFeeds close", () => frameFeeds.close()],
-        ["updateWatch close", () => updateWatch.close()],
         ["binaryWatch close", () => binaryWatch.close()],
         ["limits disarm", () => limits.disarm()],
         // Before the sources and the storage its states hold.
@@ -898,7 +717,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         // After the collector, which holds every session's runs: its close
         // releases them first, so this close drops nothing still held.
         ["sourceRuns close", () => sourceRuns.close()],
-        ["doctorSource close", () => doctorSource.close()],
         ["fileEvents close", () => fileEvents.close()],
         ["watcherRegistry close", () => watcherRegistry.closeAll()],
         // Last of the stores' writers: a run that ends in the teardown holds

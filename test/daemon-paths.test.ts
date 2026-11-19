@@ -75,7 +75,6 @@ describe("a daemon aimed by its paths value", () => {
     second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
     await second.session.flush();
     second.history.save(new Map());
-    second.doctor.clicked.update((seen) => [...seen, "kitty"]);
 
     const own = path.join(aimed.state, "renderers", "second", "state");
     expect(tree(aimed.state).filter((f) => !f.startsWith("renderers"))).toEqual(
@@ -85,7 +84,6 @@ describe("a daemon aimed by its paths value", () => {
       [
         path.basename(aimed.sessionState),
         path.basename(aimed.settingsHistory),
-        expect.stringMatching(/clicked/),
       ].sort(),
     );
   });
@@ -105,11 +103,14 @@ describe("a daemon aimed by its paths value", () => {
       daemonLog.log("info", "a line");
       await daemonLog.drained();
 
+      const retiredFile = path.join(aimed.state, "doctor-marks.json");
+      const retiredContents = '{"already recorded":"drawn"}\n';
+      fs.mkdirSync(aimed.state, { recursive: true });
+      fs.writeFileSync(retiredFile, retiredContents);
       const storage = adapters.profile(MAIN_RENDERER, () => {});
       storage.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
       await storage.session.flush();
       storage.history.save(new Map());
-      storage.doctor.clicked.update((seen) => [...seen, "kitty"]);
       adapters.linkKey();
       const limits = adapters.limits({
         startedAtMs: 0,
@@ -125,6 +126,7 @@ describe("a daemon aimed by its paths value", () => {
 
       expect(logLines(aimed.log).join("\n")).toContain("a line");
       expect(fs.existsSync(aimed.sessionState)).toBe(true);
+      expect(fs.readFileSync(retiredFile, "utf8")).toBe(retiredContents);
       expect(fs.existsSync(path.join(aimed.state, "link.key"))).toBe(true);
       expect(fs.existsSync(path.join(aimed.state, "report.txt"))).toBe(true);
       expect(ambient.flatMap(tree)).toEqual([]);

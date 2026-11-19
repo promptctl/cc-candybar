@@ -83,7 +83,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` / `save` / `doctor` / `slash` / `run` / `do`. A `set` or a `persist`
+`reset` / `undo` / `redo` / `save` / `slash` / `run` / `do`. A `set` or a `persist`
 declares exactly one value source:
 
 | declaration | click effect |
@@ -105,9 +105,6 @@ declares exactly one value source:
 | `{ do: ["first", "second", …] }` | fire several declared actions in ONE click — the first is the click's face (its display and current-state mark), the rest ride along; their session writes land together or not at all — see below |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
-| `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
-| `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
-| `{ doctor: "mark", check: "nerdFont", mark: "drawn" }` | record what you saw of the glyphs that check's fresh verdict shows — `"drawn"` (shapes) or `"boxes"` — then re-run; refused loudly when the verdict shows nothing to look at. Only a check that takes a mark (`nerdFont`) may be named. The mark is kept for good — later sessions and `cc-candybar doctor` read it — and holds for that terminal, the font it was read to draw with, and those glyphs only |
 | `{ slash: "/compact" }` | type the slash command into THIS session's Claude Code prompt and submit it, through its tmux pane. The line is `/` then a command name, one line, no control characters — anything else is a load error. A draft in the prompt is stashed and comes back after; mid-turn, Claude Code runs the command or queues it. The click is refused in the bar, typing nothing, outside tmux, while a dialog or picker is open, while you hold a ctrl+s stash, or while the pane is in tmux copy mode. A click is honoured only as a line the config declares |
 | `{ run: ["<program>", "<arg>", …], env: { NAME: "template" }, refreshes: ["<source>"] }` | run the program with the arguments and environment the bar drew — no shell — after the click returns; each source in `refreshes` reads as loading until the program exits, then shows what it wrote. A failure, or a link the daemon did not draw, is the click's error in the bar — see below |
 
@@ -543,23 +540,6 @@ themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighte
 ```
 
 ### The display globals: colorCompatibility, autoWrap, padding
-
-`updateNotice` is
-the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
-[dismiss] [disable]` row the daemon shows above the bar when the bundle
-rendering it was built from source other than the `src/` beside it — an
-identity check, so a checkout to an older commit trips it too — or, for a
-published install, when the registry's latest release is newer than the
-installed one. Its `[disable]` affordance IS
-`{ persist: "updateNotice", to: "false" }` — the config file, durably — and
-sets this session's pick to `false` in the same click, since a session pick
-outranks the file. Like the other display globals it has a session half, the
-settings menu's `☑ update notice` toggle, read back as
-`.updateNotice.effective`, so it is how a disabled notice is turned back on
-from the bar. The row's own `[dismiss]` is
-a different thing: it writes the session key `update.dismissed` with the
-identity of the newer thing, so a dismissal lapses by itself the next time
-something newer appears.
 
 `menuTimeout` (seconds, 15–600, default 120) is how long a session's open
 menus — every disclosure body and dropped `{{ menu }}` — stay open with no
@@ -1481,7 +1461,7 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   "Save as preset" above).
 - **`🎨 look`** holds effect, endcaps, fade in/out and the animation speed; **`📐 layout`** holds
   `+ preset`, which keeps the bar as a new preset and switches to it;
-  **`⚙ config`** holds wrap, padding, the update notice and `🧪 toggles`.
+  **`⚙ config`** holds wrap, padding and `🧪 toggles`.
   Every setting is ONE control, in
   exactly one place. A control shows `↺` while resetting it would change
   something — it holds a draft, or your config file holds a value for it —
@@ -1499,43 +1479,6 @@ there is nothing to go back to), and the bar's row closes up where the door was.
   control at all.
 - **`✎ arrange`** enters edit mode (and `✎ done` leaves it, as `✓ done` and `↩ cancel` do on the edit row). The
   menu stays open, so `◁ back` and the tabs stay in reach while you arrange.
-- **`🧰 tools`** holds the `🩺 doctor`: click it and one row per check drops
-  under it, `✓ <check>` or `✗ <check> — <reason>`, with a `[fix]` when the
-  doctor can repair it. A check probes your setup for something that is
-  silently wrong. `config` passes when your config file loads with no
-  warning, no other config file sits unread behind it in the search order,
-  and everything it declares is used: no variable nothing reads, no action
-  nothing clicks, no helper nothing calls, no segment absent from every
-  preset. `URL handler` passes when a `cc-candybar://` link reaches the
-  daemon through the handler app, the forwarder `cc-candybar install` builds:
-  in the bar that link is the doctor click itself, and `cc-candybar doctor`
-  opens one of its own and waits up to five seconds for it, naming what is
-  missing when it does not come back. `tmux truecolor` passes when Claude Code draws the bar in full
-  colour inside tmux; its `[fix]` writes `CLAUDE_CODE_TMUX_TRUECOLOR=1` into
-  the `env` of the settings file whose value Claude Code would use — your
-  `~/.claude/settings.json` when no file sets it, or the project's
-  `.claude/settings.local.json` over a value in its shared
-  `.claude/settings.json` — which takes effect for Claude Code sessions
-  started afterwards, and the row says so. A value in managed settings gets
-  no `[fix]`: the row names that file instead. `UTF-8` passes unless
-  tmux writes to your terminal without UTF-8, which turns every glyph on the
-  bar into `_` (attach with `tmux -u`, or start tmux under a UTF-8 locale).
-  `terminal width` passes when the statusline client could measure the
-  terminal; otherwise the bar is laid out for 120 columns. `Nerd Font` passes when
-  the terminal drawing the bar has the private-use glyphs your bar draws
-  (its joiner's, and any your config's text writes): kitty from 0.36, WezTerm and Ghostty ship
-  their own, and for iTerm2 and Alacritty the doctor reads the font they are
-  set to and asks the system whether it has them (counting the glyphs
-  iTerm2's built-in Powerline glyphs draw). A terminal across ssh is on
-  another machine, so its font is not read. When it cannot tell, or the
-  font lacks them, the row shows the glyphs with `[✓ shapes] [✗ boxes]` —
-  what you mark is the answer for that terminal, that font and those glyphs. The checks reason over
-  the facts the statusline client reported on the session's last render —
-  not the daemon's own environment. `cc-candybar doctor` runs the same checks
-  from a shell, with the exit code as the verdict; where the bar's row names
-  one problem and counts the rest, it lists every one. It checks the config a
-  session started in that directory would load; `cc-candybar doctor <file>`
-  checks the file a statusline command names with `--config`.
 
 Preset, style, variation, shade and endcaps are each `◀ label ▶`: `◀` and `▶`
 apply the previous and next value, and clicking the label opens the list of
@@ -2492,8 +2435,8 @@ Give the second its own id and each copy's menu opens on its own:
 ### A setting value the setting does not have
 
 A `set` on a setting's key (`theme`, `style`, `effect`, `preset`, `endcaps`,
-`variation`, `shade`, `autoWrap`, `padding`, `updateNotice`, `menuTimeout`,
-`transitions`, `animationSpeed`, `renderer`, `experimentalBand`, `experimentalStatusline`,
+`variation`, `shade`, `autoWrap`, `padding`, `menuTimeout`,
+`transitions`, `animationSpeed`, `experimentalStatusline`,
 `experimentalPane`) may only write members of
 that setting's domain. Anything else would load, be admitted by the click
 gate, and change nothing. The check covers a `to`, a `cycle`'s members, a

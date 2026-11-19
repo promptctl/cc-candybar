@@ -6,17 +6,14 @@ import type { VerbContext } from "../src/renderer/verbs";
 import {
   encodeSegments,
   VERB_STEP_STATE,
-  VERB_APPLY_UPDATE,
 } from "../src/click/wire";
 import {
-  actsOf,
-  performActs,
+  clickUrl,
   recordRender,
   testVerbContext,
   verbContextWith,
   CLICK_VERBS,
 } from "./helpers/click";
-import { lastClickError } from "../src/daemon/foundations/click-error";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -89,6 +86,14 @@ describe("SessionState", () => {
 });
 
 describe("click protocol", () => {
+  test("a link from the retired upgrade notice is refused without an effect", async () => {
+    const ctx = testVerbContext(new SessionState());
+    await expect(
+      clickUrl("cc-candybar://dispatch/e=apply-update%2Fs1", ctx),
+    ).rejects.toThrow(/apply-update/);
+    expect(ctx.effects).toEqual([]);
+  });
+
   test("VERBS lookup is prototype-pollution-safe", () => {
     // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
     // object — wire-level untrusted verb names like `__proto__` and
@@ -122,45 +127,6 @@ describe("click protocol", () => {
       const handler = CLICK_VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }
-  });
-});
-
-describe("apply-update verb", () => {
-  // [LAW:effects-at-boundaries] The wire carries only the session id; the
-  // handler's whole job is asking the host for the update watch's act.
-  test("a session id asks the host for one apply-update act; a missing or unsafe one is BadVerbArgs and asks none", async () => {
-    const ctx: VerbContext = testVerbContext(new SessionState());
-    const handler = CLICK_VERBS.get(VERB_APPLY_UPDATE)!;
-    await handler(encodeURIComponent("sess-1"), ctx);
-    expect(actsOf(ctx)).toEqual([
-      { kind: "apply-update", id: expect.any(Number), session: "sess-1" },
-    ]);
-    expect(() => handler("", ctx)).toThrow(BadVerbArgs);
-    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(
-      BadVerbArgs,
-    );
-    expect(actsOf(ctx)).toHaveLength(1);
-  });
-
-  test("an act the update watch refuses settles refused, and its reason is held on the session's bar", async () => {
-    const sessionState = new SessionState();
-    const ctx: VerbContext = testVerbContext(sessionState);
-    await CLICK_VERBS.get(VERB_APPLY_UPDATE)!(
-      encodeURIComponent("sess-1"),
-      ctx,
-    );
-    expect(
-      await performActs(ctx, {
-        applyUpdate: async () => {
-          throw new BadVerbArgs("already rebuilding…");
-        },
-      }),
-    ).toEqual([
-      { kind: "refused", reason: "apply-update: already rebuilding…" },
-    ]);
-    expect(lastClickError(sessionState, sessionIdOf("sess-1"))?.text).toBe(
-      "apply-update: already rebuilding…",
-    );
   });
 });
 

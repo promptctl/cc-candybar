@@ -55,7 +55,6 @@ export function checkPayload(
       sources: new Map(sources.map((name) => [name, ABSENT])),
       runs: new Map(),
       env: new Map(),
-      doctor: ABSENT,
     },
     today: ok({ sums: checkDay(at).sums, own: {} }),
     faults: [],
@@ -64,7 +63,7 @@ export function checkPayload(
     undefined,
     CHECK_SESSION,
     readings,
-    commandDaemonFacts(at),
+    commandDaemonFacts(),
     at,
   );
   const { term: _term, ...payload } = composePayload(

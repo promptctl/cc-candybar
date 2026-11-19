@@ -140,26 +140,6 @@ export const VERB_BACK = "back";
 // Saving is the settings menu's `save`; leaving edit mode releases the
 // savepoint.
 export const VERB_REWIND = "rewind";
-// [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
-// 5d6): rebuild a source checkout, or stage the newer release over an
-// install. Args: `[sessionId]` — carried for click.error surfacing only. The
-// verb takes NO command and NO version: the daemon runs the act its own
-// provenance implies (src/daemon/update-notice.ts), so nothing a URL carries
-// ever reaches a shell.
-export const VERB_APPLY_UPDATE = "apply-update";
-
-// [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a). `doctor-run`
-// args: `[sessionId]` — runs every check over the session's RECORDED client
-// hints and writes the report into that session's state. `doctor-fix` args:
-// `[sessionId, checkName]` — re-probes that one check and performs the fix its
-// verdict carries, then re-runs. The check name is gated by membership in
-// `CHECKS` (src/doctor/checks.ts); no command, path, or value ever rides the
-// URL — the fix is whatever the check's own verdict describes. `doctor-mark`
-// args: `[sessionId, checkName, mark]` — records the user's mark on the glyphs
-// that check's fresh verdict shows, under the sighting they are, then re-runs.
-export const VERB_DOCTOR_RUN = "doctor-run";
-export const VERB_DOCTOR_FIX = "doctor-fix";
-export const VERB_DOCTOR_MARK = "doctor-mark";
 
 // [LAW:effects-at-boundaries] Type a slash command into the session's Claude
 // Code prompt through its tmux pane. Args: `[sessionId, line]` — the line must
@@ -195,17 +175,6 @@ export interface EvaluatedRun {
   readonly run: readonly string[];
   readonly env: Readonly<Record<string, string>>;
 }
-
-// A click on one of the ranges the daemon draws in a tmux status line (lane
-// C, src/daemon/tmux-status.ts), as the server's MouseDown1Status binding
-// sends it. Args: `[socket, pane number, range]` — the daemon looks the range
-// up in the frame it drew there and runs the link it marks, so no link rides
-// the URL. Not a leaf verb: the link's own verb is the click's.
-export const VERB_TMUX_STATUS_CLICK = "tmux-status-click";
-// [LAW:one-source-of-truth] How every status-line click starts: the binding
-// writes it, and the host reads a click that starts so as a range, never a
-// link, which carries no signature because tmux expands it.
-export const STATUS_LINE_CLICK_PREFIX = `${URL_SCHEME}://${VERB_TMUX_STATUS_CLICK}/`;
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
@@ -256,8 +225,7 @@ function saidCopy(text: string): string {
 // [LAW:one-source-of-truth] Every verb a click can fire, and what it does in
 // words, read off the args the click carries, so the text cannot say anything
 // the click does not do. A verb says a phrase per write. VERB_DISPATCH is the
-// list these ride in, and tmux-status-click arrives as a whole URL from
-// outside a draw, so neither is ever an effect.
+// list these ride in, so dispatch is never an effect.
 const SAYS = {
   [VERB_SET_STATE]: ([, ...pairs]) =>
     pairs.flatMap((key, i) =>
@@ -292,10 +260,6 @@ const SAYS = {
   [VERB_REDO]: () => ["redo"],
   [VERB_BACK]: () => ["go back"],
   [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_APPLY_UPDATE]: () => ["update cc-candybar"],
-  [VERB_DOCTOR_RUN]: () => ["run doctor"],
-  [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
-  [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
   [VERB_SLASH]: ([, line]) => [`type ${line}`],
   [VERB_RUN]: ([, action]) => [`run ${action}`],
   [VERB_REPO_CONFIG]: ([, dir, answer]) => [`mark config in ${dir} ${answer}`],
@@ -438,7 +402,7 @@ export function splitVerb(s: string): ParsedEffect {
 
 // [LAW:parse-dont-validate] A whole `cc-candybar://` link as a click, or why
 // it is not one: the daemon reads every link this way, whether the URL
-// handler app forwarded it raw or a tmux status line's range marked it.
+// handler app forwarded it raw.
 export type HandlerUrl =
   | { readonly ok: true; readonly verb: string; readonly value: string }
   | { readonly ok: false; readonly problem: string };
@@ -496,8 +460,6 @@ export const SEGMENTED_VERBS: ReadonlySet<string> = new Set([
   VERB_APPLY_LAYOUT_OP,
   VERB_UNDO,
   VERB_REDO,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
@@ -523,10 +485,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
-  VERB_APPLY_UPDATE,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,

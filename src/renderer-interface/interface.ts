@@ -13,8 +13,7 @@ import type {
   SessionId,
 } from "../daemon/foundations/session-id";
 import type { Failure } from "../daemon/foundations/verb-error";
-import type { ClickArrival } from "../doctor/sightings";
-import type { DoctorAsk } from "../doctor/gather";
+import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -27,9 +26,7 @@ import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Change } from "../config/config-changes";
 import type { TmuxHint } from "../tmux-hint";
 import type { SlashLine } from "../claude-input/slash-line";
-import type { SessionPane } from "../claude-input/typing";
 import type { RepoAnswer } from "../config/loader/repo-gate";
-import type { Answered } from "../daemon/foundations/sighting-roles";
 import type { RenderOrigin } from "../config-hint";
 import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
@@ -240,7 +237,7 @@ export type Event =
 
 // [LAW:one-source-of-truth] Who watches one session's frames, as the host
 // derives it from its own sources: each lane's subscribers and whether any of
-// them draws the bar now (a tmux status line showing the session's pane), and
+// them draws the bar now, and
 // whether the session's pane is on a screen.
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
@@ -274,8 +271,7 @@ export type EffectOutcome =
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
   // renderer read it, so nothing made over that reading can land; or an act
-  // the world it acts in would not take (a pane not at its prompt, an update
-  // already running).
+  // the world it acts in would not take (a pane not at its prompt).
   | { readonly kind: "refused"; readonly reason: string }
   // The daemon's close began before it acted, or cut it off: no failure of
   // its own, so no bar holds it.
@@ -302,9 +298,7 @@ export interface Present {
 // not at all, and each is settled with that one outcome.
 // [LAW:single-enforcer] A config layer is named by its origin and its role in
 // that origin's chain, never by a path: which file that is is discovery's to
-// say, so a renderer cannot name a file the origin's chain does not hold. A
-// `claude-settings` file is one the session's doctor reading handed in
-// (`writableSettingsFiles`, src/doctor/gather.ts): the host refuses any other.
+// say, so a renderer cannot name a file the origin's chain does not hold.
 export interface ConfigChange {
   readonly kind: "change";
   readonly id: EffectId;
@@ -313,13 +307,11 @@ export interface ConfigChange {
   readonly changes: readonly Change[];
 }
 
-export type ChangeTarget =
-  | {
-      readonly kind: "layer";
-      readonly origin: RenderOrigin;
-      readonly role: LayerRole;
-    }
-  | { readonly kind: "claude-settings"; readonly file: string };
+export interface ChangeTarget {
+  readonly kind: "layer";
+  readonly origin: RenderOrigin;
+  readonly role: LayerRole;
+}
 
 // A source a run makes stale: its full name, for the run's line, and the
 // storage folder its file is in.
@@ -328,21 +320,7 @@ export interface RunRefresh {
   readonly folder: string;
 }
 
-// A session as a lane's setup needs it, beyond its pane: its config's
-// directory and its Claude Code directory, which the `claude` CLI runs under;
-// its conversation, as Claude Code names it in the statusline JSON, which a
-// restart resumes from and which a session has none of until its first
-// message; and whether Claude Code has answered in it, by the one mark it
-// leaves (`answeredOf`).
-export interface LaneSession {
-  readonly projectDir: string;
-  // Null for the default directory: the hint names one only when set.
-  readonly claudeConfigDir: string | null;
-  readonly transcript: string;
-  readonly answered: Answered;
-}
-
-// [LAW:types-are-the-program] What a click or a lane switch asks done in the
+// [LAW:types-are-the-program] What a click asks done in the
 // world, each named by its operation and carrying exactly what that operation
 // needs: no free-form command, so the safety of a slash line or a run is the
 // type's. An act's session is the bar its failure shows on; a copy or an open
@@ -392,42 +370,6 @@ export type Act = { readonly id: EffectId } & (
       readonly dir: string;
       readonly answer: RepoAnswer;
     }
-  | {
-      // The update notice's act: what it applies is the update watch's to
-      // decide, from its own provenance.
-      readonly kind: "apply-update";
-      readonly session: SessionId;
-    }
-  | {
-      // Claude Code in the pane ended and started again under the attach
-      // launcher, on the same session.
-      readonly kind: "restart-claude";
-      readonly session: SessionId;
-      readonly pane: TmuxHint;
-      readonly at: LaneSession;
-    }
-  | {
-      // A pushed surface turned on or off: the bar pane split under the
-      // session's pane, or closed.
-      readonly kind: "surface";
-      readonly session: SessionId;
-      readonly surface: "pane";
-      readonly on: boolean;
-      readonly pane: TmuxHint;
-    }
-  | {
-      // The band mod installed and loaded into the session's Claude Code.
-      // Off, it draws nothing, so turning it off asks nothing. Only its
-      // `/reload-plugins` is typed into a pane, so it carries the session's
-      // pane or why it has none: outside tmux, the mod still installs, and
-      // the session is told to type that line itself.
-      readonly kind: "surface";
-      readonly session: SessionId;
-      readonly surface: "band";
-      readonly on: true;
-      readonly pane: SessionPane;
-      readonly at: LaneSession;
-    }
 );
 
 // An act as its turn asks it, before the renderer names it.
@@ -442,8 +384,8 @@ export type TurnRecord = readonly Field[];
 
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
-// that reads it; a `shell` or `file` run, named by its digest; or the
-// doctor's run, by what it asks of the machine.
+// that reads it; a `shell` or `file` run, named by its digest; or an
+// environment variable.
 export type Subscription =
   | {
       readonly kind: "plugin";
@@ -453,8 +395,7 @@ export type Subscription =
   | { readonly kind: "run"; readonly run: Run }
   // A variable an `env` source reads, from the session's environment, which
   // the host holds and hands in as that one variable's value.
-  | { readonly kind: "env"; readonly name: string }
-  | { readonly kind: "doctor"; readonly ask: DoctorAsk };
+  | { readonly kind: "env"; readonly name: string };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read, which lanes its settings switch on, and when the
@@ -491,14 +432,11 @@ export interface Answers {
   readonly statusline: string;
 }
 
-// A frame a feed drew, for the session's subscribers: the bar, which a lane
-// drawing it in tmux encodes, and its answers.
+// A frame a feed drew, for the session's subscribers.
 // [LAW:decomposition] Every frame a feed draws is pushed: whether one changed
 // is the host's to judge, per subscriber, against what that one was sent.
 export interface PushedFrame {
   readonly session: SessionId;
-  // Read through `parseFrame`: its Infinity crosses as null.
-  readonly bar: WireFrame;
   readonly answers: Answers;
 }
 

@@ -21,9 +21,7 @@ import type {
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { StoredState } from "../renderer-interface/stored-state.js";
-import { IDLE, type DaemonFacts } from "../facts/world-state.js";
-import { ABSENT } from "../utils/outcome.js";
-import type { Instant } from "../utils/instant.js";
+import type { DaemonFacts } from "../facts/world-state.js";
 import { mainRendererOf, type MainRendererInputs } from "../renderer/main.js";
 import { locations } from "./paths.js";
 import { memoryLimitBytes } from "./limits.js";
@@ -113,11 +111,9 @@ export interface LocalBar {
 
 const NO_ACT = "a command performs no act";
 
-// The daemon's own facts as a command holds them: no update offered, no
-// file-events, launcher, renderer or act fault.
-export function commandDaemonFacts(at: Instant): DaemonFacts {
+// A local command has no daemon diagnostics.
+export function commandDaemonFacts(): DaemonFacts {
   return {
-    update: { newer: { ...ABSENT, at }, act: IDLE, actsError: null },
     fileEvents: [],
     launcher: [],
     rendererEnded: null,
@@ -208,7 +204,6 @@ export function localBar(inputs: LocalBarInputs): LocalBar {
       stored: () => {},
       holding: (session) => collector.holding(session),
       // A command performs no act, so no change writes a settings file.
-      writableSettings: () => [],
       // [LAW:single-enforcer] Every turn's record, whatever input it took,
       // so a wait on a note sees each one.
       recorded: (record) => {

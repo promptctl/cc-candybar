@@ -1,7 +1,6 @@
 // [LAW:no-shared-mutable-globals] The gates a daemon (or a `check`) holds, as
-// one value its root builds and passes down. The keys a daemon writes at run
-// time (the update notice's) are registered on THIS value, so two values share
-// nothing and what a load accepts is visible in the inputs.
+// one value its root builds and passes down. A registration changes only
+// this value, so what a load accepts is visible in its inputs.
 
 import type { DslConfig } from "../../config/dsl-types";
 import { makeConfigKeyspace } from "./config-validators";
@@ -29,9 +28,8 @@ export interface Gates {
 
 // [LAW:one-source-of-truth] `held` is the whole daemon-wide contribution at
 // construction: the one place a daemon's gates are said to hold anything beyond
-// what configs derive. Later registrations (the dismiss key following the
-// identity) go through the keyspaces' own `register`.
-export function createGates(held: HeldKeys): Gates {
+// what configs derive. Later registrations go through the keyspaces.
+export function createGates(held: HeldKeys = { state: [], config: [] }): Gates {
   const state = makeStateKeyspace();
   const config = makeConfigKeyspace();
   for (const { key, allowed } of held.state) state.register(key, allowed);

@@ -7,13 +7,11 @@ import { SESSION_BOOK_FILE } from "./session-book.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { productionMachineEdge } from "../doctor/edge";
 import { systemLauncher } from "../proc/system-launcher";
-import { systemProbe } from "./process-fingerprint";
 import type { Timekeeper } from "../time";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
-import { productionLaneEdge } from "./lane-edge.js";
+import { productionBarPaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
@@ -38,18 +36,8 @@ export function productionAdapters(
     sessionBook: (log) =>
       new SessionFile(SESSION_BOOK_FILE, paths.sessionBook, machine, 500, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths.state), daemonLog.log),
-    doctorEdge: productionMachineEdge,
     claudeInput: productionClaudeInputEdge,
-    probe: systemProbe,
-    laneEdge: (launcher, following, closing, probe, environmentOf) =>
-      productionLaneEdge(
-        launcher,
-        following,
-        closing,
-        machine,
-        probe,
-        environmentOf,
-      ),
+    barPaneEdge: productionBarPaneEdge,
     limits: ({ startedAtMs, exit, launcher, log }) =>
       realLimitsDeps(startedAtMs, exit, {
         launcher,
@@ -61,7 +49,6 @@ export function productionAdapters(
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
-    fetch,
     stat: fs.statSync,
   };
 }

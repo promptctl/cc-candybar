@@ -102,8 +102,7 @@ async function readStartTime(
 // table about one pid: is a process of ours there, and when did it start.
 // Everything that decides from these (the liveness fold below, the lease, the
 // watchdog) takes a probe, so a test names the processes it means instead of
-// starting them. This is not src/proc/process-table.ts, which reads the whole
-// `ps -A` listing for descent; this answers about a pid's identity.
+// starting them.
 export interface ProcessProbe {
   // [LAW:no-silent-failure] ESRCH: the process is gone. EPERM: the pid belongs
   // to another user, and so is no process of ours: every file that names one of
@@ -135,7 +134,7 @@ export type Sameness = "same" | "different" | "incomparable";
 
 // [LAW:single-enforcer] Whether two identities name one process. Every
 // comparison of a recorded process with another (the arbitration, the ownership
-// self-check, the fork-bomb registry, the update act's job) asks it here. The
+// self-check and the fork-bomb registry) asks it here. The
 // token is compared exactly as every release has spelled and compared it, so a
 // record either release writes reads the same to both.
 export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): Sameness {

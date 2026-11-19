@@ -17,24 +17,19 @@ import {
 } from "../src/renderer/verbs";
 import {
   VERB_DISPATCH,
-  VERB_DOCTOR_RUN,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
-  VERB_TMUX_STATUS_CLICK,
   VERB_UNDO,
   effectsUrl,
   encodeSegments,
 } from "../src/click/wire";
 import type { Failure } from "../src/daemon/foundations/verb-error";
-import type { ConfigLoad } from "../src/doctor/ports";
 import { tickAt, type Tick } from "../src/utils/instant";
 import { fieldOf, fieldsOf } from "../src/utils/logfmt";
-import { emptyStores } from "./helpers/doctor-facts";
 import {
   recordRender,
   testVerbContext,
   verbContextWith,
-  withDoctor,
   CLICK_VERBS,
 } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
@@ -48,14 +43,6 @@ import { NO_LAYERS, undoOf } from "./helpers/history-step";
 const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
 const S = sessionIdOf("s");
-const LOAD: ConfigLoad = {
-  layers: [],
-  error: null,
-  warnings: [],
-  repo: null,
-  unused: [],
-  config: EMPTY_DEFAULT,
-};
 
 // A's menu, shown a whole timeout ago: its close is due now.
 const shownLongAgo = (menuIdle: MenuIdle) =>
@@ -72,18 +59,14 @@ async function drain(): Promise<void> {
 function setup(
   over: {
     readonly collector?: Parameters<typeof clickParts>[1];
-    readonly linkAt?: () => unknown;
   } = {},
 ) {
   const sessionState = new SessionState();
   const logged: string[] = [];
   recordRender(sessionState, A);
-  const ctx = withDoctor(
-    verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
-      log: (_level, line) => logged.push(line),
-    }),
-    { stores: emptyStores(), load: LOAD },
-  );
+  const ctx = verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
+    log: (_level, line) => logged.push(line),
+  });
   const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
   const host = clickParts(verbCtx, over.collector);
   const events: string[] = [];
@@ -92,9 +75,6 @@ function setup(
     payloadProviders: {},
     frameFeeds: { latest: () => null },
     log: (_level: string, line: string) => events.push(line),
-    tmuxStatusLines: {
-      linkAt: over.linkAt ?? (() => ({ kind: "link", url: "" })),
-    },
     ...host,
   } as unknown as DaemonParts;
   const stats = new RuntimeStats(systemTimekeeper);
@@ -141,64 +121,6 @@ function setup(
     undoDepth: () => ctx.history.depth(A).undo,
   };
 }
-
-describe("a doctor click", () => {
-  test("runs no probe in its turn: it ends with the run asked of the host, and a write behind it lands at once", () => {
-    const { ctx, theme } = setup();
-    CLICK_VERBS.get(VERB_DOCTOR_RUN)!(encodeURIComponent(A), ctx);
-    expect(ctx.doctorRuns.subscriptions().get(A)).toMatchObject({
-      kind: "doctor",
-    });
-    CLICK_VERBS.get(VERB_SET_STATE)!(encodeSegments([A, "theme", "nord"]), ctx);
-    expect(theme()).toBe("nord");
-  });
-
-  // A click lands whole, when it ends: its doctor judges the config the click
-  // found, and the write is there for the next click.
-  test("a `do` of set-config then doctor judges the config the click found", () => {
-    const fixture = durableConfig();
-    try {
-      const sessionState = new SessionState();
-      fixture.seedOrigin(sessionState, A);
-      const config = parseAndValidate(
-        "<user>",
-        `{ actions: { pal: { persist: 'palette', from: 'themes' } } }`,
-        ALLOWED,
-        DEFAULT_DSL_CONFIG,
-      );
-      const seen: Array<string | null> = [];
-      const ctx = verbContextWith(
-        withDoctor(
-          testVerbContext(
-            sessionState,
-            fixture.historyFor(sessionState),
-            config,
-            fixture.host,
-          ),
-          { stores: emptyStores(), load: LOAD },
-        ),
-        {
-          doctorLoad: () => {
-            seen.push(fixture.text());
-            return LOAD;
-          },
-        },
-      );
-      const url = effectsUrl([
-        {
-          verb: VERB_SET_CONFIG,
-          args: [A, "user", "palette", [...ALLOWED][0]!],
-        },
-        { verb: VERB_DOCTOR_RUN, args: [A] },
-      ]);
-      CLICK_VERBS.get(VERB_DISPATCH)!(url.slice(url.lastIndexOf("/") + 1), ctx);
-      expect(seen).toEqual([null]);
-      expect(fixture.text()).toContain("palette");
-    } finally {
-      fixture.dispose();
-    }
-  });
-});
 
 describe("the mailbox's order", () => {
   test("two clicks sent together land in order, one undo step each", async () => {
@@ -406,28 +328,6 @@ describe("the click path", () => {
     expect(events.map((e) => fieldOf(e, "req"))).toEqual(["1", "2"]);
   });
 
-  test("a status-line link naming a verb re-enters without deadlock", async () => {
-    const url = `cc-candybar://${VERB_UNDO}/${encodeSegments([A])}`;
-    const { send } = setup({ linkAt: () => ({ kind: "link", url }) });
-    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
-    expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-  });
-
-  test("a status-line click that throws is its outcome, and writes its event", async () => {
-    const { send, events } = setup({
-      linkAt: () => {
-        throw new Error("the opener failed");
-      },
-    });
-    const { resp } = await send(VERB_TMUX_STATUS_CLICK, "ignored");
-    expect(resp).toMatchObject({
-      ok: false,
-      error: expect.stringContaining("the opener failed"),
-    });
-    expect(events).toHaveLength(1);
-    expect(fieldOf(events[0]!, "verb")).toBe(VERB_TMUX_STATUS_CLICK);
-  });
-
   test("a click's turn holds its session in the collector while it runs and not while it waits; a refused click holds nothing", async () => {
     // The collector's holds, as the sweep reads them: how many are taken and
     // not yet let go, per session.
@@ -457,10 +357,10 @@ describe("the click path", () => {
     const { send, events } = setup();
     // An escape that is no UTF-8: the one malformed segment a signed link,
     // whose bare `%` is escaped, can still carry.
-    const { resp } = await send(VERB_DOCTOR_RUN, "%C0");
+    const { resp } = await send(VERB_UNDO, "%C0");
     expect(resp).toMatchObject({ ok: false, code: "BAD_REQUEST" });
     expect(events).toEqual([
-      expect.stringMatching(new RegExp(` verb=${VERB_DOCTOR_RUN} `)),
+      expect.stringMatching(new RegExp(` verb=${VERB_UNDO} `)),
     ]);
   });
 });
@@ -498,8 +398,6 @@ test("tsc refuses the host's edges in a VerbHandler", () => {
   const handler: VerbHandler = (_value, ctx: VerbContext) => {
     // @ts-expect-error A handler reaches launches through the turn alone.
     void ctx.launcher;
-    // @ts-expect-error The doctor's probes are the host's to run.
-    void ctx.doctor;
     // @ts-expect-error As the launcher.
     void ctx.claudeInput;
   };

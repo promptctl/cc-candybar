@@ -21,7 +21,7 @@ import { sessionBar } from "./helpers/session-bar";
 // U+E0B1, the thin divider: no join draws it, so any on a row fails.
 const DIVIDER = "\u{E0B1}";
 
-const TABS = ["session", "look", "layout", "config", "tools"] as const;
+const TABS = ["session", "look", "layout", "config"] as const;
 const COLS = 200;
 
 // The open menu's rows under every bundled theme, each tab and the theme's ⚙

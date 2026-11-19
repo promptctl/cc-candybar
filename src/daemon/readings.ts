@@ -9,7 +9,6 @@ import {
   ABSENT,
   failed,
   ok,
-  type Ok,
   type Outcome,
   type Reading,
 } from "../utils/outcome.js";
@@ -48,12 +47,6 @@ import {
   type SourceRuns,
 } from "./source-runs.js";
 import type { JsonValue } from "../var-system/types.js";
-import type { DoctorSource } from "./cache/doctor.js";
-import type {
-  DoctorAsk,
-  DoctorOrigin,
-  DoctorReading,
-} from "../doctor/gather.js";
 import type {
   ViewFacts,
   Subscribed,
@@ -98,9 +91,6 @@ export interface RenderPayloadDeps {
   // session's declaration holds each run its renderer subscribes to there,
   // so one digest is one run however many sessions name it.
   readonly sourceRuns: Pick<SourceRuns, "declare">;
-  // [LAW:single-enforcer] The one reader of the doctor's facts: a session's
-  // declaration holds the run its renderer subscribes to there.
-  readonly doctor: Pick<DoctorSource, "declare">;
   // Claude Code's auto-compact window, read from the user settings file at
   // the path a render names.
   readonly autoCompact: Pick<AutoCompactProvider, "stored">;
@@ -171,7 +161,6 @@ export interface Lanes {
   readonly runs: ReadonlyMap<string, RunReading>;
   // Each variable the session's `env` sources name, from its environment.
   readonly env: ReadonlyMap<string, Current<string>>;
-  readonly doctor: Current<DoctorReading>;
 }
 
 export interface RunReading {
@@ -201,7 +190,6 @@ export type KeyedOwners = Pick<
   | "transcriptLanes"
   | "managedStorage"
   | "sourceRuns"
-  | "doctor"
 > & { readonly usageStore: Pick<SessionUsageStore, "declareToday"> };
 
 // [LAW:types-are-the-program] What a session's declaration hands its stamps:
@@ -225,8 +213,6 @@ export interface DeclaredLanes {
   readonly runs: ReadonlyMap<string, SourceLane>;
   // One lane per variable the renderer's `env` sources name.
   readonly env: ReadonlyMap<string, Lane<string>>;
-  // The doctor run the renderer subscribes to; absent when it asks none.
-  readonly doctor: Lane<DoctorReading>;
 }
 
 // A declaration's lanes, and what threw while it took them.
@@ -239,7 +225,7 @@ export interface Declaration {
 // when its declaration threw whole, or a caller's that declares nothing.
 export function settledLanes(
   outcome: Outcome<never>,
-  { plugins, runs, env, doctor }: Subscribed,
+  { plugins, runs, env }: Subscribed,
 ): DeclaredLanes {
   const lane = settledLane(outcome);
   return {
@@ -257,19 +243,11 @@ export function settledLanes(
       ]),
     ),
     env: new Map(env.map((name) => [name, lane])),
-    doctor: doctorLane(doctor, () => lane),
   };
 }
 
 // [LAW:one-source-of-truth] Where a request says its session runs, as its
 // render resolves its config from (src/daemon/render-checkpoint.ts).
-function originOf({ cwd, hookData }: ViewFacts): DoctorOrigin {
-  return {
-    cwd: cwd ?? hookData.workspace.current_dir,
-    projectDir: hookData.workspace.project_dir,
-  };
-}
-
 // [LAW:one-source-of-truth] The repo a request names.
 function gitAt({
   cwd,
@@ -371,42 +349,9 @@ export function declareLanes(
         ),
       ]),
     ),
-    doctor: doctorLane(sources.doctor, (ask) =>
-      declare("doctor", () =>
-        owners.doctor.declare(holds, {
-          session: facts.hookData.session_id,
-          hints: facts.hints,
-          origin: originOf(facts),
-          ask,
-        }),
-      ),
-    ),
   };
   return { lanes, faults };
 }
-
-// [LAW:dataflow-not-control-flow] A session whose renderer asks no doctor run
-// reads the doctor as absent. [LAW:single-enforcer] Every way a run's lane
-// fails — its read, its declaration, the session's whole declaration — is a
-// reading of that run, so the renderer never takes one run's failure for a
-// later run's.
-function doctorLane(
-  ask: DoctorAsk | null,
-  take: (ask: DoctorAsk) => Lane<DoctorReading>,
-): Lane<DoctorReading> {
-  if (ask === null) return settledLane(ABSENT);
-  const lane = take(ask);
-  return { current: () => ofRun(ask, lane.current()) };
-}
-
-// A doctor lane's answer as a reading of the run it was declared for.
-export const ofRun = <C extends Current<DoctorReading>>(
-  { run }: DoctorAsk,
-  current: C,
-): C | Ok<DoctorReading> =>
-  current.kind === "failed"
-    ? ok({ run, kind: "failed", reason: current.reason })
-    : current;
 
 // [LAW:effects-at-boundaries] No I/O, and no write: every read takes what its
 // owner stored, so the world state stamped over it (src/daemon/collector.ts)
@@ -468,7 +413,6 @@ export function readingsOf(
       ]),
     ),
     env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()])),
-    doctor: lanes.doctor.current(),
   };
   return {
     lanes: laneReadings,

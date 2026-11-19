@@ -357,7 +357,7 @@ describe("the anchor may be placed at most once", () => {
 // ─── The tab strip (brandon-menu-tabs-wnu.qqz) ───────────────────────────────
 
 describe("the menu's second line is five tabs, one open at a time", () => {
-  const TABS = ["session", "look", "layout", "config", "tools"] as const;
+  const TABS = ["session", "look", "layout", "config"] as const;
   const tabSeg = (tab: string) => `${TAB_KEY}.${tab}`;
   const bgOf = (cells: readonly RichText[] | undefined): string | undefined => {
     const style = cells?.[0]?.style;

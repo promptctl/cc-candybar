@@ -1,9 +1,9 @@
 // `cc-candybar follow --lane <lane> --session <id>`: a named session's frames,
 // relayed for whatever draws them faster than Claude Code reruns a statusline
-// — the band mod's per-session child (mod/hooks/register.tsx), a whole Node
+// — the native stream client, so a whole Node
 // process before this. Each message the daemon sends the lane's subscriber is
 // one line on stdout, as it was sent: the daemon encodes each lane's frames
-// (src/daemon/lane-frames.ts), so this relays bytes and decides only what a
+// (src/daemon/frame-feed.ts), so this relays bytes and decides only what a
 // stream's end calls for.
 //
 // It mirrors the Node follower (src/daemon/frame-follow.ts,
@@ -20,10 +20,10 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::{obtain_daemon_kick, read_frame, socket_path, write_frame, PROTOCOL_VERSION};
+use crate::{read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
-const LANE_NAMES: [&str; 4] = ["band", "statusline", "pane", "tmuxStatus"];
+const LANE_NAMES: [&str; 2] = ["statusline", "pane"];
 // [LAW:one-source-of-truth] Mirror src/daemon/frame-follow.ts.
 const RECONNECT_FIRST_MS: u64 = 250;
 const RECONNECT_MAX_MS: u64 = 2000;
@@ -133,34 +133,35 @@ enum StreamEnd {
 
 #[derive(Debug, PartialEq)]
 enum AfterEnd {
-    Reconnect { reason: String, kick: bool },
+    Reconnect(String),
     Off,
     Exit(String),
 }
 
 // Mirrors afterStreamEnd in src/daemon/frame-follow.ts.
 fn after_stream_end(end: &StreamEnd) -> AfterEnd {
-    let reconnect = |reason: String, kick: bool| AfterEnd::Reconnect { reason, kick };
     match end {
-        StreamEnd::Failed(why) => reconnect(format!("stream failed ({why})"), true),
-        StreamEnd::ClosedThere => reconnect("daemon closed the stream".into(), false),
+        StreamEnd::Failed(why) => AfterEnd::Reconnect(format!("stream failed ({why})")),
+        StreamEnd::ClosedThere => AfterEnd::Reconnect("daemon closed the stream".into()),
         StreamEnd::Refused(r, _) => match r.code.as_str() {
             "SWITCHED_OFF" => AfterEnd::Off,
-            "TIMEOUT" => reconnect(
-                format!("the daemon was too busy to open the stream ({})", r.error),
-                false,
-            ),
-            "BAD_REQUEST" => reconnect(
-                format!(
-                    "the daemon does not take subscribe ({}); it restarts on the new build",
-                    r.error
-                ),
-                false,
-            ),
-            "VERSION_MISMATCH" if r.daemon_v.is_some_and(|v| v < u64::from(PROTOCOL_VERSION)) => {
-                reconnect(format!("the daemon is older than this client ({})", r.error), true)
+            "TIMEOUT" => AfterEnd::Reconnect(format!(
+                "the daemon was too busy to open the stream ({})",
+                r.error
+            )),
+            "BAD_REQUEST" => {
+                AfterEnd::Reconnect(format!("the daemon does not take subscribe ({})", r.error))
             }
-            _ => AfterEnd::Exit(format!("the daemon refused the stream: {}: {}", r.code, r.error)),
+            "VERSION_MISMATCH" if r.daemon_v.is_some_and(|v| v < u64::from(PROTOCOL_VERSION)) => {
+                AfterEnd::Reconnect(format!(
+                    "the daemon is older than this client ({})",
+                    r.error
+                ))
+            }
+            _ => AfterEnd::Exit(format!(
+                "the daemon refused the stream: {}: {}",
+                r.code, r.error
+            )),
         },
     }
 }
@@ -177,8 +178,8 @@ enum Said {
 // [LAW:types-are-the-program] Mirrors worthSaying in src/frames-cli.ts: every
 // frame, and any other event that differs from the last thing said. So a state
 // that persists across retries is said once, and every change is said — a
-// refusal after a fault is written again, so the band, which clears what
-// stderr said at the next stdout line, always gets that line.
+// refusal after a fault is written again, so a consumer clearing stderr
+// on the next stdout line sees the changed state.
 fn worth_saying(last: &Said, next: &Said) -> bool {
     match (last, next) {
         (_, Said::Frame) => true,
@@ -215,7 +216,12 @@ fn say(line: &str) {
 
 fn emit(body: &[u8]) {
     let mut out = io::stdout().lock();
-    if out.write_all(body).and_then(|()| out.write_all(b"\n")).and_then(|()| out.flush()).is_err() {
+    if out
+        .write_all(body)
+        .and_then(|()| out.write_all(b"\n"))
+        .and_then(|()| out.flush())
+        .is_err()
+    {
         std::process::exit(0);
     }
 }
@@ -253,7 +259,9 @@ impl Follower {
         loop {
             let body = match read_frame(&mut sock) {
                 Ok(b) => b,
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return StreamEnd::ClosedThere,
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                    return StreamEnd::ClosedThere
+                }
                 Err(e) => return StreamEnd::Failed(e.to_string()),
             };
             let head: Head = match serde_json::from_slice(&body) {
@@ -263,7 +271,11 @@ impl Follower {
             match classify(head) {
                 Message::Refusal(r) => return StreamEnd::Refused(r, body),
                 Message::Frame { ok } => {
-                    let event = if ok { RetryEvent::FrameOk } else { RetryEvent::FrameFailed };
+                    let event = if ok {
+                        RetryEvent::FrameOk
+                    } else {
+                        RetryEvent::FrameFailed
+                    };
                     self.retry_ms = next_retry_ms(self.retry_ms, event);
                     // The bytes read are the line, as the daemon sent them.
                     self.tell(Said::Frame, || emit(&body));
@@ -289,14 +301,11 @@ impl Follower {
                     self.tell(Said::Off, || emit(&body));
                     thread::sleep(Duration::from_millis(SWITCHED_OFF_RETRY_MS));
                 }
-                AfterEnd::Reconnect { reason, kick } => {
+                AfterEnd::Reconnect(reason) => {
                     let wait = self.retry_ms;
                     self.tell(Said::Fault(reason.clone()), || {
                         say(&format!("{reason}; reconnecting in {wait}ms"))
                     });
-                    if kick {
-                        obtain_daemon_kick();
-                    }
                     self.retry_ms = next_retry_ms(wait, RetryEvent::Fault);
                     thread::sleep(Duration::from_millis(wait));
                 }
@@ -407,9 +416,7 @@ mod tests {
             };
             let then = &case["then"];
             match (after_stream_end(&end), then["kind"].as_str().unwrap()) {
-                (AfterEnd::Reconnect { kick, .. }, "reconnect") => {
-                    assert_eq!(kick, then["kick"].as_bool().unwrap(), "{case}")
-                }
+                (AfterEnd::Reconnect(_), "reconnect") => {}
                 (AfterEnd::Off, "off") | (AfterEnd::Exit(_), "exit") => {}
                 (got, _) => panic!("{case}: got {got:?}"),
             }
@@ -445,23 +452,23 @@ mod tests {
     #[test]
     fn a_well_formed_subscription_parses_in_either_spelling() {
         for args in [
-            argv(&["--lane", "band", "--session", "s-1"]),
-            argv(&["--lane=band", "--session=s-1"]),
+            argv(&["--lane", "statusline", "--session", "s-1"]),
+            argv(&["--lane=statusline", "--session=s-1"]),
         ] {
             let parsed = parse_args(&args).unwrap();
-            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("band", "s-1"));
+            assert_eq!((parsed.lane.as_str(), parsed.session.as_str()), ("statusline", "s-1"));
         }
     }
 
     #[test]
     fn a_subscription_this_client_could_not_send_well_formed_is_refused() {
-        let lanes = "--lane needs one of band, statusline, pane, tmuxStatus";
+        let lanes = "--lane needs one of statusline, pane";
         for (args, why) in [
             (argv(&["--session", "s"]), lanes),
             (argv(&["--lane", "everywhere", "--session", "s"]), lanes),
-            (argv(&["--lane", "band"]), "--session needs a session id"),
-            (argv(&["--lane", "band", "--session", ""]), "--session needs a session id"),
-            (argv(&["--lane", "band", "--session", "s", "--format", "band"]), "unknown option \"--format\""),
+            (argv(&["--lane", "statusline"]), "--session needs a session id"),
+            (argv(&["--lane", "statusline", "--session", ""]), "--session needs a session id"),
+            (argv(&["--lane", "statusline", "--session", "s", "--format", "ansi"]), "unknown option \"--format\""),
         ] {
             assert_eq!(parse_args(&args).err().as_deref(), Some(why), "{args:?}");
         }
@@ -469,6 +476,6 @@ mod tests {
 
     #[test]
     fn usage_names_every_lane() {
-        assert!(usage().starts_with(&format!("{USAGE_HEAD} <band|statusline|pane|tmuxStatus> --session <id>")));
+        assert!(usage().starts_with(&format!("{USAGE_HEAD} <statusline|pane> --session <id>")));
     }
 }

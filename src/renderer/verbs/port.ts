@@ -15,7 +15,6 @@ import type { Feeds } from "../feeds.js";
 import type { SessionContext } from "../../renderer-interface/request-context.js";
 import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
-import type { DoctorRuns } from "../doctor.js";
 import {
   changeDone,
   closeIdleMenus,
@@ -68,9 +67,6 @@ export type MainRendererParts = RendererParts & {
   readonly mint: () => EffectId;
   // The acts this renderer's turns asked of the host, until each is settled.
   readonly acts: Pick<ActsOnTheirWay, "done">;
-  // Each session's doctor run: what its output asks read, and what a retire
-  // ends.
-  readonly doctorRuns: Pick<DoctorRuns, "subscriptions" | "retire">;
 };
 
 // [LAW:single-enforcer] The verb table over the one verb context the daemon

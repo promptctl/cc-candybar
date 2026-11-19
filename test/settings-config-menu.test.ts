@@ -426,7 +426,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(out).toContain("◀ ✦ endcaps ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
-    expect(out).toContain("☑ update notice"); // updateNotice
+    expect(out).not.toContain("update notice");
     // Nothing picked, nothing to save.
     expect(out).not.toContain("💾");
     expect(saveUrl()).toBeUndefined();
@@ -920,7 +920,7 @@ describe("the drift marker", () => {
   };
   // The tabs the strip marks, read off what a reader sees.
   const markedTabs = (r: ReturnType<typeof rig>): string[] =>
-    ["session", "look", "layout", "config", "tools"].filter((tab) =>
+    ["session", "look", "layout", "config"].filter((tab) =>
       new RegExp(`${tab} •`).test(textOf(r.render())),
     );
   const open = async (source: string): Promise<ReturnType<typeof rig>> => {
@@ -1718,181 +1718,6 @@ describe("the animation lanes' toggles", () => {
 
 // [LAW:verifiable-goals] candybar-animation-wbxz.a4h: a lane toggle says what
 // its frames are doing, so whether a lane works can be seen from the bar.
-
-// candybar-plugins-vf6g.qzx — the tmux status line is a renderer: a menu in ⚙
-// config with `claude` and `tmux`, offered to a session inside tmux.
-describe("the renderer menu", () => {
-  const RENDERER_APPLY = "candybar.apply.renderer";
-  // The settings menu open on ⚙ config, the session in tmux pane %7 or in no
-  // pane at all.
-  const openConfig = async (
-    pane: string,
-    source = TWO_SEGMENT_ROOT,
-    durable?: DurableConfig,
-  ) => {
-    const r = rig(source, durable);
-    r.tmuxPane = pane;
-    await r.click(writesTo(r.render(), "candybar.menu")[0]!);
-    await showTab(r, "config");
-    return r;
-  };
-  const rendererLine = (rendered: Frame): string | undefined =>
-    textOf(rendered)
-      .split("\n")
-      .find((l) => l.includes("◀ renderer ▶"));
-  const openList = async (r: ReturnType<typeof rig>): Promise<void> => {
-    const url = urlsOf(r.render()).find((u) =>
-      effectsOf(u).some((e) => e.args[2] === RENDERER_APPLY),
-    );
-    if (url === undefined) throw new Error("no link opens the renderer list");
-    await r.click(url);
-  };
-
-  test("inside tmux, ⚙ config holds `◀ renderer ▶`, and its closed list takes no row", async () => {
-    const r = await openConfig("%7");
-    try {
-      expect(rendererLine(r.render())).toBeDefined();
-      expect(textOf(r.render())).not.toContain("Claude Code's status line");
-    } finally {
-      r.dispose();
-    }
-  });
-
-  test("opened, it lays one aligned row per renderer, as the add-segment menu lays its library", async () => {
-    const r = await openConfig("%7");
-    try {
-      await openList(r);
-      const lines = textOf(r.render()).split("\n");
-      expect(lines.some((l) => l.includes("draw the bar in"))).toBe(true);
-      const claude = lines.find((l) =>
-        l.includes("Claude Code's status line"),
-      )!;
-      const tmux = lines.find((l) =>
-        l.includes("the tmux status line, while"),
-      )!;
-      expect(claude).toMatch(/claude\s+Claude Code's status line/u);
-      expect(tmux).toMatch(/tmux\s+the tmux status line/u);
-      expect(claude.indexOf("Claude Code's")).toBe(tmux.indexOf("the tmux"));
-    } finally {
-      r.dispose();
-    }
-  });
-
-  test("its arrow switches the value, as a draft the save cell counts", async () => {
-    const r = await openConfig("%7");
-    try {
-      const arrow = linksOf(r.render()).find(
-        (l) =>
-          l.text === "▶" &&
-          effectsOf(l.url).some(
-            (e) => e.args[1] === "renderer" && e.args[2] === "tmux",
-          ),
-      );
-      expect(arrow).toBeDefined();
-      await r.click(arrow!.url);
-      expect(r.sessionState.get(SID, "renderer")).toBe("tmux");
-      expect(textOf(r.render())).toContain("💾 save 1");
-    } finally {
-      r.dispose();
-    }
-  });
-
-  test("outside tmux there is no renderer menu, and a file's tmux marks nothing", async () => {
-    const source = `{
-  globals: { renderer: "tmux" },
-  segments: { a: { template: 'a' } },
-  root: { h: ['a'] },
-}`;
-    const inside = await openConfig("%7", source);
-    const outside = await openConfig("", source);
-    try {
-      expect(rendererLine(inside.render())).toBeDefined();
-      expect(rendererLine(outside.render())).toBeUndefined();
-      expect(textOf(outside.render())).not.toContain("the tmux status line");
-      // The tab's drift mark counts the renderer only where it is drawn.
-      expect(textOf(inside.render())).toContain("config •");
-      expect(textOf(outside.render())).not.toContain("config •");
-      expect(textOf(outside.render())).not.toContain("⟲");
-    } finally {
-      inside.dispose();
-      outside.dispose();
-    }
-  });
-
-  test("the tmux status line is no longer one of the 🧪 toggles", async () => {
-    const r = await openConfig("%7");
-    try {
-      const url = urlsOf(r.render()).find((u) =>
-        effectsOf(u).some(
-          (e) => e.args[1] === PICKERS_KEY && e.args[2] === "toggles",
-        ),
-      );
-      await r.click(url!);
-      const rendered = textOf(r.render());
-      for (const lane of TOGGLED_LANES)
-        expect(rendered).toContain(`☐ ${LANES[lane].label}`);
-      expect(rendered).not.toMatch(/☐ .*tmux status line/u);
-      expect(settingMenuPath("renderer")).toBe(settingMenuPath("padding"));
-    } finally {
-      r.dispose();
-    }
-  });
-
-  // [LAW:no-silent-failure] The setting is shared by every session the config
-  // renders: a reset-all clicked where the renderer is not drawn leaves it.
-  test("a reset-all outside tmux leaves the shared renderer as the file holds it", async () => {
-    const durable = durableConfig("cc-candybar-renderer-reset-");
-    const r = await openConfig(
-      "",
-      `{
-  globals: { renderer: "tmux", padding: 3 },
-  segments: { a: { template: 'a' } },
-  root: { h: ['a'] },
-}`,
-      durable,
-    );
-    try {
-      const labelled = (text: string): string =>
-        linksOf(r.render()).find((l) => l.text === text)!.url;
-      await r.click(labelled("⟲"));
-      await r.click(labelled("⟲ reset all?"));
-      const globals = durable.parsed().globals as Record<string, unknown>;
-      expect(globals).not.toHaveProperty("padding");
-      expect(globals.renderer).toBe("tmux");
-    } finally {
-      r.dispose();
-      durable.dispose();
-    }
-  });
-
-  // [LAW:single-enforcer] The `•` and the `⟲` count a control by one gate:
-  // where the renderer is drawn, a reset-all is offered for it and resets it.
-  test("inside tmux, a renderer alone off its default offers ⟲, and the reset-all resets it", async () => {
-    const durable = durableConfig("cc-candybar-renderer-reset-in-");
-    const r = await openConfig(
-      "%7",
-      `{
-  globals: { renderer: "tmux" },
-  segments: { a: { template: 'a' } },
-  root: { h: ['a'] },
-}`,
-      durable,
-    );
-    try {
-      const labelled = (text: string): string =>
-        linksOf(r.render()).find((l) => l.text === text)!.url;
-      await r.click(labelled("⟲"));
-      await r.click(labelled("⟲ reset all?"));
-      const globals = durable.parsed().globals as
-        | Record<string, unknown>
-        | undefined;
-      expect(globals?.renderer).toBeUndefined();
-    } finally {
-      r.dispose();
-      durable.dispose();
-    }
-  });
-});
 
 describe("a lane toggle's readout", () => {
   const SPINNER = /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/u;

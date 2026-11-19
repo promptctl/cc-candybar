@@ -3,8 +3,7 @@
 // candybar-animation-wbxz). Each frame is one line on stdout: the JSON of the
 // message the daemon sent for the lane — for the statusline and pane lanes the
 // response a render request is answered with, `{"ok":true,"output":"…"}` or
-// why the bar could not be drawn; for the band lane its rows of styled runs
-// (src/daemon/lane-frames.ts).
+// why the bar could not be drawn.
 //
 // `--lane <lane>` names the animation lane this stream serves
 // (src/config/lanes.ts). While the session's toggle for it is off the daemon
@@ -32,8 +31,6 @@ import type { ClaudeHookData } from "./utils/claude";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
 import { describeFailure } from "./daemon/client-transport";
-import { obtainDaemonKick } from "./daemon/acquire";
-import { planOutcome } from "./outcome-plan";
 import { socketPath } from "./daemon/paths";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
@@ -59,7 +56,7 @@ type Event = Exclude<Said, { kind: "none" }>;
 // differs from the last thing said. So a state that persists across retries —
 // the lane off, the same fault — is said once, and every change is said: a
 // refusal after a fault is written again, so a reader that clears what stderr
-// said at the next stdout line (the band) always gets that line.
+// at the next stdout line always gets that line.
 export function worthSaying(last: Said, next: Event): boolean {
   if (next.kind === "frame" || next.kind !== last.kind) return true;
   return (
@@ -166,8 +163,6 @@ export async function runFrames(
     );
     if (outcome.kind === "ok") return;
     say(describeFailure(outcome));
-    // [LAW:single-enforcer] A render's kick is the render policy's to say.
-    if (planOutcome(outcome).kick) obtainDaemonKick(world);
   };
 
   const subscribe = (id: SessionId): void => {

@@ -1,7 +1,6 @@
 import type { ProfilePaths } from "./paths";
 import { sessionStateFile } from "./session-state-file";
 import { fileHistoryStorage } from "./history-file";
-import { fileStores } from "../doctor/edge";
 import type { DaemonLogger } from "../utils/logger";
 import type { Timekeeper } from "../time";
 import type { ProfileStorage } from "./held-stores";
@@ -18,6 +17,5 @@ export function fileStorage(
   return {
     session: sessionStateFile(paths.sessionState, clock, 500, log),
     history: fileHistoryStorage(paths.settingsHistory, log),
-    doctor: fileStores(paths.documents),
   };
 }

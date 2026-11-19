@@ -40,7 +40,6 @@ import {
   VERB_OPEN_VSCODE,
 } from "../src/click/wire";
 import { VERBS } from "../src/renderer/verbs";
-import { CHECKS } from "../src/doctor/checks";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
@@ -728,53 +727,6 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       base(`{ a: { set: 'k', to: 'v', oops: 1 } }`),
       /Unknown key "oops"/,
     );
-  });
-
-  test("a doctor action's verb is run, fix or mark", () => {
-    expectIssue(
-      base(`{ a: { doctor: 'reset' } }`),
-      /doctor must be "run", "fix", "mark"/,
-    );
-  });
-
-  test("a doctor fix names a declared check", () => {
-    expectIssue(
-      base(`{ a: { doctor: 'fix', check: 'ghost' } }`),
-      `doctor fix must name a check (have: ${CHECKS.map((c) => c.name).join(", ")})`,
-    );
-  });
-
-  test("a doctor mark names a check that takes one, and a mark", () => {
-    expectIssue(
-      base(`{ a: { doctor: 'mark', check: 'nerdFont', mark: 'maybe' } }`),
-      /doctor mark must be "drawn" or "boxes", got "maybe"/,
-    );
-    expectIssue(
-      base(`{ a: { doctor: 'mark', check: 'ghost', mark: 'drawn' } }`),
-      /doctor mark must name a check/,
-    );
-    // A check that takes no mark is not one a mark may name.
-    expectIssue(
-      base(`{ a: { doctor: 'mark', check: 'config', mark: 'drawn' } }`),
-      /doctor mark must name a check \(have: nerdFont\), got "config"/,
-    );
-    expectIssue(
-      base(`{ a: { doctor: 'fix', check: 'nerdFont', mark: 'drawn' } }`),
-      /Unknown key "mark" on a doctor action. Expected only: doctor, check/,
-    );
-  });
-
-  test("an unknown key on a doctor action is rejected", () => {
-    expectIssue(
-      base(`{ a: { doctor: 'run', oops: 1 } }`),
-      /Unknown key "oops" on a doctor action/,
-    );
-  });
-
-  test("a bad doctor verb and an unknown key are both reported in one pass", () => {
-    const source = base(`{ a: { doctor: 'reset', oops: 1 } }`);
-    expectIssue(source, /Unknown key "oops" on a doctor action/);
-    expectIssue(source, /doctor must be "run", "fix", "mark"/);
   });
 
   // A layout node's `when` binds actions as a segment's does, so the one

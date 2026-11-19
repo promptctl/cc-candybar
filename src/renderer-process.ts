@@ -15,7 +15,7 @@ import { inspect } from "node:util";
 import type { World } from "./host.js";
 import { locations } from "./daemon/paths.js";
 import { linkSigner } from "./click/link-signer.js";
-import { daemonGates } from "./daemon/foundations/update-keys.js";
+import { createGates } from "./daemon/foundations/gates.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
@@ -130,7 +130,7 @@ function booted(
       linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
       locations: locations(host),
       home: host.home,
-      gates: daemonGates(),
+      gates: createGates(),
       memoryLimitBytes: boot.memoryLimitBytes,
     },
     reaches,

@@ -11,7 +11,6 @@ import {
   diagnosticsProjection,
   handoffRows,
   HANDOFF_SEVERITY,
-  UPDATE_SEVERITY,
   viewedIndex,
   type DiagnosticMessage,
   type DiagnosticSeverity,
@@ -35,8 +34,8 @@ const shaped = (
   lines: [[diagnosticSpan(text, null)]],
 });
 const offer = shaped(
-  UPDATE_SEVERITY,
-  "Newer release: 1.210.0. You're on 1.209.0.",
+  HANDOFF_SEVERITY,
+  "Drawing in a tmux pane.",
 );
 const question = shaped(APPROVAL_SEVERITY, "run this repository's config?");
 const list = (
@@ -60,7 +59,7 @@ const opened = (shown: ReturnType<typeof list>) => {
 
 describe("a list with nothing wrong in it", () => {
   test.each([
-    ["an update offer", offer],
+    ["a handoff notice", offer],
     ["a repository question", question],
   ])("%s alone is ℹ 1 in the info colours, no ⚠ and no amber", (_, message) => {
     const projected = diagnosticsProjection(list([], [message], []));
@@ -74,7 +73,7 @@ describe("a list with nothing wrong in it", () => {
 
   test("ℹ 9+ stays within four cells", () => {
     const many = Array.from({ length: 10 }, (_, i) =>
-      shaped(UPDATE_SEVERITY, `offer ${i}`),
+      shaped(HANDOFF_SEVERITY, `offer ${i}`),
     );
     const { label } = diagnosticsProjection(list([], many, []));
     expect(label).toBe("ℹ 9+");

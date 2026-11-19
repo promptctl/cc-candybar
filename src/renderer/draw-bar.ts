@@ -1,6 +1,5 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import { inTmux } from "../tmux-hint.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -8,9 +7,7 @@ import {
   eventHoldAt,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { updateNotice } from "../daemon/foundations/update-offer.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
 import {
   refusedHints,
   refusedArgsError,
@@ -51,7 +48,6 @@ import type { FrameRecord } from "../render/frame-memory.js";
 import {
   feedsFact,
   LANE_NAMES,
-  LANES,
   ANSWERING,
   type Drawing,
   type Lane,
@@ -221,12 +217,7 @@ export function viewLanes(
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
-  return hold === null
-    ? null
-    : laneSwitches(
-        hold.view.source.effective(),
-        inTmux(hold.view.facts().hints.tmux),
-      );
+  return hold === null ? null : laneSwitches(hold.view.source.effective());
 }
 
 // What a render of a checked request draws with, resolved once and held for
@@ -262,7 +253,7 @@ function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
     // client too old to say.
     client: hints.client?.kind ?? "unreported",
     // What the sighting recorded of the rate-limit windows — the fact the
-    // doctor's segment-data check reads (RenderSightings).
+    // statusline diagnostics retain (RenderSightings).
     rateLimits: req.rateLimits,
   });
 }
@@ -317,7 +308,7 @@ export function takeContext(
   contextFacts(req, facts);
   noteFacts(facts, { encoding: req.encoding });
   runInAction(() => {
-    parts.worldStates.take(worldState, facts);
+    parts.worldStates.take(worldState);
     parts.worldStates.heard(req);
   });
 }
@@ -505,7 +496,7 @@ export function drawRender(
   const failure = view.source.failure();
   const document = view.source.facts();
   // Which animation lanes this session's settings switch on, as drawn.
-  const lanes = laneSwitches(effective, payload.tmux !== undefined);
+  const lanes = laneSwitches(effective);
   noteFacts(facts, {
     lanes: LANE_NAMES.filter((lane) => lanes[lane]).join(",") || "-",
     // The preset the session's settings resolve to, which the draw uses.
@@ -526,20 +517,6 @@ export function drawRender(
     clickHold.kind === "held" || clickHold.kind === "owed"
       ? clickHold.error
       : null;
-  // [LAW:one-source-of-truth] The daemon-wide update notice, as the world
-  // state carries it, read for THIS session: what it dismissed and whether
-  // its config allows the notice — both values, folded by the notice into
-  // zero or one offer and zero or one failure.
-  const { update } = document.daemon;
-  const updates = updateNotice(
-    update.newer.kind === "ok" ? update.newer.value : null,
-    update.act,
-    {
-      sessionId,
-      dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
-      enabled: effective.updateNotice,
-    },
-  );
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
   const questions = repoQuestions(entry.snapshot.repo, sessionId, linkSigner);
@@ -560,7 +537,6 @@ export function drawRender(
     said("refused-args", refusedArgsError(req.refusedArgs)),
     said("hints", hintsError),
     sourced("load", "load", entry.lastError),
-    sourced("update-act", "update-act", update.actsError),
     ...state.dropped.map(
       (e): MaybeError => ({
         kind: "dropped",
@@ -627,10 +603,8 @@ export function drawRender(
     sessionId,
     drawing.by,
     errors,
-    [...updates.offer, ...questions],
+    questions,
     [
-      // [LAW:no-silent-failure] A failed update act is a warning of its own.
-      ...updates.failure,
       // A standing warning is one per kind whose words change as it does (a
       // pipe event's counts), so its kind alone is what it is about: a viewer
       // open on it stays open. A render warning is about its words.
@@ -728,17 +702,7 @@ export function drawRender(
   const recorded = renderWarnings.moves(sessionId, drawing.by, drawnWarnings);
   const geometry: DiagnosticGeometry = {
     width,
-    // A feed's one frame is shown by every lane switched on, so it pages
-    // within the shortest of their surfaces.
-    rows: viewerRowCap(
-      hints.termRows,
-      drawing.by === "feed"
-        ? LANE_NAMES.flatMap((lane) => {
-            const rows = LANES[lane].rows;
-            return lanes[lane] && rows !== null ? [rows] : [];
-          })
-        : [],
-    ),
+    rows: viewerRowCap(hints.termRows),
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
     colorCompatibility: frame.depth,
@@ -793,22 +757,16 @@ export function drawRender(
         return w.kind;
     }
   };
-  // A failed update act is a warning of its own, so it is tagged here too.
-  const warned =
-    [
-      ...updates.failure.map(() => UPDATE_FAILED),
-      ...[...standing, ...drawnWarnings].map(tagOf),
-    ].join(",") || "-";
+  const warned = [...standing, ...drawnWarnings].map(tagOf).join(",") || "-";
   // [LAW:nothing-unseen] Every fault this frame met, each whole, at the level
   // the bar's list shows it: the errors, the warnings standing before the
-  // draw, a failed update act and the walk's own warnings. Noted whole when
+  // draw and the walk's own warnings. Noted whole when
   // it moved since the renderer's last record of the session, so a reader
   // learns what the frame could not honour without its viewer, and `kept`
   // otherwise, so an unchanged bar costs no message per tick.
   const faults: ReadonlyArray<Fault<FaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
     ...standing.map((w) => faultOf("warning", w.kind, w.message)),
-    ...updates.failure.map((w) => faultOf("warning", UPDATE_FAILED, w.text)),
     ...drawnWarnings.map((w) =>
       faultOf("warning", w.kind, w.message, subjectOf(w)),
     ),
@@ -840,7 +798,6 @@ export function drawRender(
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
     pipeEvent: pipeWarning?.hold ?? "-",
-    upd: String(updates.offer.length),
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -942,13 +899,7 @@ function keepDraw(
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
 // the kind its fault is noted by, and the file a dropped write names.
 interface DrawError extends SourcedText {
-  readonly kind:
-    | "refused-args"
-    | "hints"
-    | "load"
-    | "update-act"
-    | "dropped"
-    | "click";
+  readonly kind: "refused-args" | "hints" | "load" | "dropped" | "click";
   readonly subject?: string;
 }
 
@@ -958,17 +909,13 @@ type MaybeError = Omit<DrawError, "text" | "copy"> & {
   readonly copy: string | null | undefined;
 };
 
-// A failed update act: its warning's tag and its fault's kind.
-const UPDATE_FAILED = "update-failed";
-
 // [LAW:one-source-of-truth] Every kind a fault is noted by, derived from the
 // producers' own unions, so a new kind of warning or error is a fault's kind
 // with no list here to extend.
 type FaultKind =
   | DrawError["kind"]
   | StandingWarning["kind"]
-  | RenderWarning["kind"]
-  | typeof UPDATE_FAILED;
+  | RenderWarning["kind"];
 
 const faultOf = (
   level: Fault["level"],

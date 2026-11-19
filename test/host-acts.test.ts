@@ -127,7 +127,6 @@ function hostOver(
       frames: () => {},
       holding: () => () => {},
       stored: () => {},
-      writableSettings: () => [],
       recorded: () => {},
     },
     world,

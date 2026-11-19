@@ -61,12 +61,6 @@ import {
   disclosureTriggerCall,
   templateLiteral,
 } from "./disclosure.js";
-import { CHECKS, GLYPH_MARKS, type GlyphMark } from "../doctor/checks.js";
-import {
-  doctorReportKeys,
-  VERDICT_OK,
-  VERDICT_UNRUN,
-} from "../doctor/report.js";
 import { EDIT_TOGGLE_ACTION, editModeArtifacts } from "./loader/edit-mode.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { quickActions } from "./quick-actions.js";
@@ -99,7 +93,6 @@ import {
   type SubmenuName,
   type TabName,
 } from "./menu-places.js";
-import { BOOLEAN_TRUE } from "../themes/policy.js";
 import { settingControlDomain } from "./loader/globals.js";
 import { settingControl, type Affordance } from "./setting-control.js";
 import { declareHelp, type HelpArtifacts } from "./help.js";
@@ -227,26 +220,6 @@ const BACK_CELL: SegmentDecl = {
     `{{ else }}{{ fg (${QUIET_TEXT}) "${BACK_GLYPH}" }}{{ end }}`,
 };
 const REDO_ACTION = `${SETTINGS_NS}redo`;
-
-// ─── The doctor (brandon-doctor-b6a) ────────────────────────────────────────
-//
-// The `🧰 tools` tab holds the `🩺 doctor` button and, once it has run, one row
-// per check. The report is SessionState (src/doctor/report.ts) read by `state`
-// variables minted here from the same CHECKS list the fold runs over, so a
-// second check is one more row in that list and no edit here
-// [LAW:one-type-per-behavior]. The body is VERTICAL — one row per check — so a
-// long reason never widens the band it hangs from.
-const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
-const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
-const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
-const doctorMarkAction = (check: string, mark: GlyphMark): string =>
-  `${DOCTOR_SEG}.mark.${check}.${mark}`;
-const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
-// What each mark says, in the words a user looks with.
-const MARK_GLYPH: Readonly<Record<GlyphMark, string>> = {
-  drawn: "[✓ shapes]",
-  boxes: "[✗ boxes]",
-};
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the style
@@ -766,11 +739,6 @@ const PLACE_BODY: Readonly<Record<Place, PlaceBody>> = {
   look: { direction: "horizontal", content: [], after: [] },
   layout: { direction: "horizontal", content: [seg(PRESET_SAVE)], after: [] },
   config: { direction: "horizontal", content: [], after: [] },
-  tools: {
-    direction: "vertical",
-    content: [seg(DOCTOR_SEG), ...CHECKS.map((c) => seg(doctorRowSeg(c.name)))],
-    after: [],
-  },
   // The settings that adapt the theme, then — while the look they make
   // differs from the theme's own default — the cell that saves it as that
   // default.
@@ -889,7 +857,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [DOOR_TOGGLE]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [DIAGNOSTICS_VIEWING]: { set: DIAGNOSTICS_VIEWING, int: true },
       [SETTINGS_ANCHOR]: { do: [DOOR_TOGGLE, ...DOOR_DISARMS] },
-      [DOCTOR_RUN_ACTION]: { doctor: "run" },
       ...TOOLBAR.actions,
       ...COMMANDS.actions,
       ...AUTOCOMPACT.actions,
@@ -943,9 +910,6 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
       [THEME_DEFAULT_SEG]: THEME_DEFAULT_CELL,
       [PRESET_SAVE]: {
         template: `{{ action "${PRESET_SAVE}" "+ preset" }}`,
-      },
-      [DOCTOR_SEG]: {
-        template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
       [EDIT_SEG]: {
         // Entering or leaving edit mode is a click like every other in the
@@ -1016,54 +980,7 @@ function settingsArtifacts(doorGlyph: string): MenuArtifacts {
   }
   Object.assign(artifacts.variables, COMMANDS.variables, RESET_ALL.variables);
   declareSettingControls(artifacts);
-  declareDoctorRows(artifacts);
   return artifacts;
-}
-
-// [LAW:one-source-of-truth] One report row per check, minted from the CHECKS
-// list the doctor folds over, its keys from the SAME `doctorReportKeys` the
-// doctor verbs write through. A row exists exactly when its check has run
-// (`verdict` left its unrun default); it reads `✓ label`, or `✗ label — reason`
-// with a `[fix]` bound to that check's own fix action when the verdict carried
-// one. The `[fix]` is `{ doctor: "fix", check }` — the daemon re-probes the
-// check at click time and refuses loudly if there is nothing left to fix. A
-// verdict that shows glyphs to look at adds them, then a ✓ and a ✗ — each
-// `{ doctor: "mark", check, mark }`, re-probed at click time the same way.
-function declareDoctorRows(artifacts: MenuArtifacts): void {
-  for (const c of CHECKS) {
-    const keys = doctorReportKeys(c.name);
-    const fix = doctorFixAction(c.name);
-    for (const key of Object.values(keys)) {
-      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
-    }
-    artifacts.actions[fix] = { doctor: "fix", check: c.name };
-    // Only a check that takes a mark gets the actions that make one.
-    const marks = c.takesMark ? GLYPH_MARKS : [];
-    for (const mark of marks) {
-      artifacts.actions[doctorMarkAction(c.name, mark)] = {
-        doctor: "mark",
-        check: c.name,
-        mark,
-      };
-    }
-    const markCells = marks
-      .map(
-        (mark) =>
-          ` {{ action "${doctorMarkAction(c.name, mark)}" "${MARK_GLYPH[mark]}" }}`,
-      )
-      .join("");
-    artifacts.segments[doctorRowSeg(c.name)] = {
-      when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
-      template:
-        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}{{ if ne .${keys.reason} "" }} — {{ .${keys.reason} }}{{ end }}` +
-        `{{ else }}✗ ${c.label} — {{ .${keys.reason} }}` +
-        `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
-        (markCells === ""
-          ? ""
-          : `{{ if ne .${keys.sighting} "" }} {{ .${keys.sighting} }}${markCells}{{ end }}`) +
-        `{{ end }}`,
-    };
-  }
 }
 
 // Every control's artifacts: the actions the generator minted for it, the ↺

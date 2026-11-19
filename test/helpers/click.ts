@@ -9,8 +9,6 @@ import { HOST } from "./host";
 import type { Host } from "../../src/host";
 import { TEST_SIGNER } from "./link-signer";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
-import { DoctorRuns } from "../../src/renderer/doctor";
-import type { ConfigLoad, DoctorStores } from "../../src/doctor/ports";
 import { clickOf } from "../../src/click/read";
 import { changeDone, VERBS } from "../../src/renderer/verbs";
 import {
@@ -21,7 +19,6 @@ import {
   performChanges,
   type ApproveRepo,
   type LayerPlaces,
-  type WritableSettings,
 } from "../../src/daemon/effect-interpreter";
 import {
   discover,
@@ -39,7 +36,7 @@ import type {
 import { ActsOnTheirWay } from "../../src/renderer/acts";
 import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
-import type { LaneEdge, LaneHost } from "../../src/daemon/lane-setup";
+import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
 import {
   heardContextOf,
@@ -192,9 +189,6 @@ export function discoveryNow(host: Host): LayerPlaces & {
 // hands its clicks' changes to that host instead.
 class LandingAtOnce extends ConfigWrites {
   private context: VerbContext | null = null;
-  // The settings files a doctor's reading named; none until a test's doctor
-  // host hands its readings in (`landsSettingsOf`).
-  writable: WritableSettings = () => [];
   // What the host does once a landing's changes are on disk and before their
   // `effect-done`s: hand the renderer each moved origin's `config`. A test
   // with a config to re-read hands in its own (`onLanded`).
@@ -233,22 +227,12 @@ class LandingAtOnce extends ConfigWrites {
         ),
         said: () => {},
       },
-      this.writable,
       this.places,
     );
     if (outcome.kind === "ok") this.landed();
     for (const { id } of landing)
       changeDone(this.context!, id, outcome, effects);
   }
-}
-
-// A test's landings write the settings files `writable` names, as the host's
-// write the ones its doctor readings name.
-export function landsSettingsOf(
-  ctx: Pick<VerbContext, "configWrites">,
-  writable: WritableSettings,
-): void {
-  (ctx.configWrites as LandingAtOnce).writable = writable;
 }
 
 // A test's landings re-read its config with `landed`, as the host hands the
@@ -274,54 +258,6 @@ export function verbContextWith(
   over: Partial<VerbContext>,
 ): VerbContext {
   return (base.configWrites as LandingAtOnce).of({ ...base, ...over });
-}
-
-// A store a test with no doctor never reaches.
-const unstored = (what: string) => ({
-  read: () => {
-    throw new Error(`doctor: no ${what} in this test`);
-  },
-  update: () => {
-    throw new Error(`doctor: no ${what} in this test`);
-  },
-  plan: () => {
-    throw new Error(`doctor: no ${what} in this test`);
-  },
-});
-const NO_DOCTOR_STORES: DoctorStores = {
-  marks: unstored("mark book"),
-  clicked: unstored("clicked terminals"),
-  postMortemsRead: unstored("post-mortem record"),
-};
-
-// The renderer's doctor runs over `stores`; a failed reading holds the click
-// error on the session's bar, as the renderer's does.
-const doctorRunsOf = (
-  sessionState: SessionStateRW,
-  stores: DoctorStores,
-  log: VerbContext["log"],
-): DoctorRuns =>
-  new DoctorRuns({
-    sessionState,
-    stores,
-    log,
-    failed: (session, reason) =>
-      holdClickError(sessionState, session, reason, instantOf(new Date())),
-  });
-
-// `ctx` with a doctor: its runs judge `load` against `stores`.
-export function withDoctor(
-  ctx: VerbContext,
-  {
-    stores,
-    load,
-  }: { readonly stores: DoctorStores; readonly load: ConfigLoad },
-): VerbContext {
-  return verbContextWith(ctx, {
-    doctorStores: stores,
-    doctorRuns: doctorRunsOf(ctx.sessionState, stores, ctx.log),
-    doctorLoad: () => load,
-  });
 }
 
 // [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
@@ -358,13 +294,6 @@ export function testVerbContext(
     clickLanded: () => {},
     log: () => {},
     now: () => instantOf(new Date()),
-    // A test that drives a doctor click hands in its own (`withDoctor`);
-    // reaching these is a test bug.
-    doctorStores: NO_DOCTOR_STORES,
-    doctorRuns: doctorRunsOf(sessionState, NO_DOCTOR_STORES, () => {}),
-    doctorLoad: () => {
-      throw new Error("doctor: no config load in this test");
-    },
     // A click from the handler this build would stage.
     arrival: { via: "link", delivery: { kind: "forwarder", urlV: 2 } },
     // The config the session renders with: a test whose click reads it (a
@@ -435,12 +364,11 @@ export function testActs(
       type: missing("claude input type"),
     },
     run: missing("run"),
-    applyUpdate: missing("apply-update"),
-    lanes: {
-      edge: new Proxy({} as LaneEdge, {
+    barPane: {
+      edge: new Proxy({} as BarPaneEdge, {
         get: (_, k) => missing(`lane ${String(k)}`),
       }),
-      host: new Proxy({} as LaneHost, {
+      host: new Proxy({} as BarPaneHost, {
         get: (_, k) => missing(`lane ${String(k)}`),
       }),
     },

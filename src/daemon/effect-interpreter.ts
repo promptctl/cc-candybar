@@ -13,8 +13,7 @@ import {
   applyChanges,
   type Read,
 } from "../config/config-changes.js";
-import { JSON5_DIALECT, JSON_DIALECT } from "../config/json5-edit.js";
-import type { SessionId } from "./foundations/session-id.js";
+import { JSON5_DIALECT } from "../config/json5-edit.js";
 import type {
   Act,
   ChangeTarget,
@@ -64,11 +63,6 @@ export interface TrustBook {
   readonly said: (line: string) => void;
 }
 
-// The Claude Code settings files a session's doctor reading handed in, which
-// a `claude-settings` change may write (`writableSettingsFiles`); none while
-// it holds no reading.
-export type WritableSettings = (session: SessionId) => readonly string[];
-
 // [LAW:single-enforcer] Where a change naming an origin's layer lands, and
 // which repository an answer may be given for: config discovery's, so a
 // renderer names a role and never a path.
@@ -86,8 +80,6 @@ function landsIn(
 ):
   | { readonly kind: "at"; readonly file: string }
   | { readonly kind: "refused"; readonly reason: string } {
-  if (target.kind === "claude-settings")
-    return { kind: "at", file: target.file };
   const file = layers.path(target.origin, target.role);
   if (file === undefined)
     return {
@@ -110,7 +102,6 @@ const originText = (origin: RenderOrigin): string =>
 export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
-  writable: WritableSettings,
   layers: LayerPlaces,
 ): EffectOutcome {
   const rewrites = new Map<string, Rewrite>();
@@ -131,31 +122,21 @@ export function performChanges(
       );
   }
   try {
-    for (const { session, target, changes: list } of changes) {
+    for (const { target, changes: list } of changes) {
       const named = landsIn(target, layers);
       if (named.kind === "refused") return refused(named.reason);
       // Keyed by the file a write lands in, so two paths to one file are one
       // rewrite of it.
       const file = resolvedTarget(named.file);
-      // [LAW:single-enforcer] A renderer names a settings file only among
-      // those the host's own reading handed it.
-      if (
-        target.kind === "claude-settings" &&
-        !writable(session).some((f) => resolvedTarget(f) === file)
-      )
-        return refused(
-          `${file} is not a settings file the session's doctor read`,
-        );
-      if (target.kind === "layer" && target.role === "local") local.add(file);
+      if (target.role === "local") local.add(file);
       // A file an earlier change of the turn named, as that change left it,
       // an absent one included.
       const prior = rewrites.get(file);
       const was = prior === undefined ? readConfigText(file) : prior.was;
-      // Claude Code parses its settings as strict JSON.
       const applied = applyChanges(
         prior === undefined ? was : prior.will,
         list,
-        target.kind === "layer" ? JSON5_DIALECT : JSON_DIALECT,
+        JSON5_DIALECT,
       );
       if (applied.kind === "moved")
         return refused(

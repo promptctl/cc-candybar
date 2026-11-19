@@ -9,7 +9,6 @@ import {
   parseEffects,
   isBarLink,
   parseHandlerUrl,
-  VERB_APPLY_UPDATE,
   VERB_RUN,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
@@ -101,13 +100,11 @@ export function describeLink(link: DrawnLink, sessionId: string): string {
  * driven bar reports an isolated machine: slash types into the tmux pane the
  * session's hint names (a driven bar either reports no pane, so the bar draws
  * no slash control, or names a socket no tmux server listens on, so the daemon
- * refuses the click), and doctor-fix writes the session's own Claude config
- * dir (an empty scratch dir for a driven bar). Their refusals are the bar's own, worth showing.
+ * refuses the click). Its refusals go on the bar.
  */
 export const HOST_VERBS: ReadonlyMap<string, string> = new Map([
   [VERB_COPY, "copies to the clipboard"],
   [VERB_COPY_DIAGNOSTIC, "copies a diagnostic to the clipboard"],
   [VERB_OPEN_VSCODE, "opens a file in VS Code"],
-  [VERB_APPLY_UPDATE, "rebuilds cc-candybar"],
   [VERB_RUN, "runs a program the config declares"],
 ]);

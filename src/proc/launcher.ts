@@ -32,25 +32,6 @@ export const LAUNCH_CATEGORIES = [
   // click, async, each with its own timeout. Not rate-limited, so a second
   // click on a stepper runs a second move rather than being refused.
   "click.run",
-  // The doctor's tmux query — click-driven like the verbs above, and its own
-  // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
-  "doctor.tmux",
-  // The doctor's font question (src/doctor/font-edge.ts): CoreText through
-  // osascript, or fc-list — one spawn per run, on the click like the tmux one.
-  "doctor.font",
-  // Whether the tmux client the bar is drawn through came over a remote login
-  // (src/doctor/edge.ts): one `ps` per run.
-  "doctor.process",
-  // Every cc-candybar daemon this user runs (src/doctor/edge.ts): one `ps`
-  // per run, metered apart from the remote-login one.
-  "doctor.daemons",
-  // A forge CLI's own local word on whether it is installed and logged in
-  // (`gh auth token`), asked on every doctor click — so, like
-  // `doctor.daemons`, no rate limit.
-  "doctor.forge",
-  // The app Launch Services opens `cc-candybar://` with (src/doctor/edge.ts),
-  // asked by a doctor run that no link reached.
-  "doctor.launch-services",
   // Typing a slash command into a session's Claude Code pane
   // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
   // is safe, `type` sends the keys.
@@ -65,9 +46,8 @@ export const LAUNCH_CATEGORIES = [
   "install.open",
   "daemon-spawn",
   // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
-  // (process-fingerprint.ts). Spawned only at daemon start, EADDRINUSE
-  // arbitration, and once per update act a daemon reads (src/daemon/update-act.ts)
-  // — never per render — so it needs no rate limit.
+  // (process-fingerprint.ts). Spawned at daemon start and during socket
+  // arbitration.
   "process-fingerprint",
   // The memory backstop's post-mortem memory attribution (memory-report.ts):
   // `footprint`/`vmmap` on the death path, once per breach, never per render.
@@ -76,10 +56,6 @@ export const LAUNCH_CATEGORIES = [
   // (`footprint --noCategories`, memory-report.ts chargeProbe): one a minute,
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
-  // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
-  // over a published install), launched as a job. One click, one long-running
-  // child; the act's record admits one at a time, so no rate limit.
-  "update.apply",
   // `cc-candybar plugin install`'s clone of a plugin's repo
   // (src/plugin-install.ts): three git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
@@ -91,14 +67,8 @@ export const LAUNCH_CATEGORIES = [
   // session's pane sits, twice a second, and the pane's height when the frame's
   // changes. Never in the daemon.
   "bar-pane.tmux",
-  // What a lane's toggle starts (src/daemon/lane-edge.ts), on the click: the
-  // bar pane's tmux calls and the typing of the restart into a shell; the
-  // `claude plugin` commands that install the band mod; and the process table
-  // a restart under cc-attach reads the session's Claude Code from. Clicks a
-  // person makes, each one a handful of spawns, so no rate limit.
+  // The host lifecycle of a tmux bar pane.
   "lane.tmux",
-  "lane.claude",
-  "lane.process",
   // A renderer's own process (src/daemon/renderer-process.ts): one channel at
   // a time, started as its daemon arms and again after one ends, paced by the
   // supervisor's backoff, so no rate limit.
@@ -107,12 +77,7 @@ export const LAUNCH_CATEGORIES = [
   // more each time a lost one is replaced. Metered for its spawn alone, so
   // every replacement counts in daemon-stats.
   "lifeline",
-  // The tmux status line lane (src/daemon/tmux-status.ts): the daemon's own
-  // writes of a shown bar into its tmux status line, one per frame pushed
-  // while the pane is the one a status line shows, and the reads and writes
-  // that lay the status line out and put it back. Paced by the frames, so no
-  // rate limit.
-  "tmux-status",
+  "tmux-status-migration",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

@@ -1,6 +1,5 @@
 // A daemon's answer to a request: the checkpoint, then a reply per kind.
 
-import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
 import { cacheTallyFacts } from "./readings.js";
@@ -30,15 +29,9 @@ import {
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
-import { clickHandoff } from "./click-handoff";
-import { CLICK_PROGRAM_TIMEOUT_MS } from "./foundations/click-launch";
-import {
-  clickSessionOf,
-  isBarLink,
-  VERB_TMUX_STATUS_CLICK,
-} from "../click/wire";
-import { unprovenLink, type LinkSigner } from "../click/link-signer.js";
-import { openClick, parseClick, type ReadClick } from "./click-reading.js";
+import { clickSessionOf } from "../click/wire";
+import { type LinkSigner } from "../click/link-signer.js";
+import { parseClick, type ReadClick } from "./click-reading.js";
 import {
   badRequest,
   ClickAbandoned,
@@ -47,7 +40,7 @@ import {
 import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import type { ClickArrival } from "../doctor/sightings";
+import type { ClickArrival } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
@@ -274,7 +267,6 @@ export async function replyTo(
     fileEvents,
     runs,
     sourceRuns,
-    tmuxStatusLines,
     watcherRegistry,
     limits,
     renderSightings,
@@ -331,7 +323,6 @@ export async function replyTo(
         mailbox,
         // The frames drawn are the renderer's count, the rest the host's.
         frameFeeds: { ...frameFeeds.getStats(), drawn: framesDrawn },
-        tmuxStatus: tmuxStatusLines.stats(),
         watchersActive: watcherRegistry.size(),
         dirWatchesActive: watcherRegistry.dirWatches(),
         polledPaths: watcherRegistry.polledPaths(),
@@ -403,8 +394,8 @@ export async function replyTo(
       // never one that arrived behind it.
       if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
         parts.sessionBook.heard(checked.req, checked.environment);
-      // A declared session's row follows the pane its newest request reports.
-      parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
+      const tmux = checked.req.hints.tmux;
+      if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
     }
     // The request's event, written on every exit, and its reply.
     const recorded = (rendered: {
@@ -701,9 +692,6 @@ async function ranClick(
   switch (read.kind) {
     case "refused":
       return badRequest(read.problem);
-    case "status-line":
-      noteFacts(facts, { verb: VERB_TMUX_STATUS_CLICK });
-      return statusLineClick(parts, read.value, facts, click);
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
@@ -717,16 +705,6 @@ async function ranClick(
   }
 }
 
-// [LAW:dataflow-not-control-flow] The field a click records the verb it runs
-// under, by how it arrived: a status-line click has already recorded its own
-// verb, so the one its link runs is `linkVerb`. A command's click is its
-// host's own event, never a request.
-type HeardArrival = Exclude<ClickArrival, { via: "command" }>;
-const VERB_FACT: Readonly<Record<HeardArrival["via"], string>> = {
-  link: "verb",
-  "tmux-status": "linkVerb",
-};
-
 // [LAW:single-enforcer] A click that runs a verb is one turn of the renderer,
 // which decides what it means and acts on it (src/renderer/click.ts); the
 // host parses its session at the one session-id checkpoint, holds the session
@@ -739,7 +717,7 @@ async function handleClick(
   parts: DaemonParts,
   verb: string,
   value: string,
-  arrival: HeardArrival,
+  arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
@@ -747,7 +725,7 @@ async function handleClick(
   // anything about it can fail: the verb it runs, then its session as it
   // crossed the one session-id checkpoint. One that failed is never recorded,
   // and a click naming none records `sid=-`.
-  noteFacts(facts, { [VERB_FACT[arrival.via]]: verb });
+  noteFacts(facts, { verb });
   const session = clickSessionOf(verb, value);
   if (session === null) noteFacts(facts, { sid: "-" });
   else if (session.ok) {
@@ -824,54 +802,6 @@ function clickReply(outcome: RequestOutcome): Response {
     case "down":
       return failedWith(outcome.message);
   }
-}
-
-// A click in a tmux status line: the link the daemon's frame marks that range
-// with, run as a click on it in the bar would run — a `cc-candybar://` link
-// through its own verb, any other through the platform's opener. Its verb
-// is told the click came through tmux, not the URL handler.
-async function statusLineClick(
-  parts: DaemonParts,
-  value: string,
-  facts: RequestFacts,
-  click: ClickInFlight,
-): Promise<RequestOutcome> {
-  const { tmuxStatusLines } = parts;
-  const link = tmuxStatusLines.linkAt(value);
-  if (link.kind === "refused") return badRequest(link.reason);
-  noteFacts(facts, { link: unprovenLink(link.url) });
-  if (isBarLink(link.url)) {
-    // [LAW:single-enforcer] Opened as a clicked link is, by the same reading:
-    // a link a config wrote with a malformed escape is refused, as any
-    // click's malformed wire encoding is.
-    // [LAW:no-silent-failure] It is opened as a verb, never read as a click,
-    // so a drawn link naming a status-line click reaches the
-    // renderer as a verb it does not know, and is refused there with it named:
-    // a range never runs another range.
-    const opened = openClick(link.url, parts.linkSigner);
-    if (opened.kind === "refused") return badRequest(opened.problem);
-    return handleClick(
-      parts,
-      opened.verb,
-      opened.value,
-      { via: "tmux-status" },
-      facts,
-      click,
-    );
-  }
-  await clickHandoff(
-    parts.launcher,
-    {
-      bin: process.platform === "darwin" ? "/usr/bin/open" : "xdg-open",
-      args: [link.url],
-      category: "click.open",
-    },
-    `opening ${link.url}`,
-    parts.log,
-    CLICK_PROGRAM_TIMEOUT_MS,
-    parts.tmp,
-  );
-  return { kind: "ok" };
 }
 
 // The answer to a request the checkpoint refused.

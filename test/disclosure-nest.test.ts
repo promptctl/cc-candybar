@@ -130,10 +130,10 @@ test("case 3: a lane's (?) closes with 🧪 toggles", async () => {
   await openDoor(rt);
   await rt.clickWriting(TAB, "config");
   await rt.clickWriting(PICKERS, "toggles");
-  await rt.clickWriting("candybar.help.experimentalBand", "open");
+  await rt.clickWriting("candybar.help.experimentalStatusline", "open");
   await rt.clickWriting(PICKERS, DISCLOSURE_CLOSED);
   await rt.clickWriting(PICKERS, "toggles");
-  expect(rt.held("candybar.help.experimentalBand")).toBe(DISCLOSURE_CLOSED);
+  expect(rt.held("candybar.help.experimentalStatusline")).toBe(DISCLOSURE_CLOSED);
 });
 
 describe("cases 4 and 5: what edit mode opened closes when it is left", () => {

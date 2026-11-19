@@ -50,6 +50,14 @@ beforeAll(() => {
 const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
   [
+    "retired display and update settings still load",
+    `{
+      globals: { updateNotice: false, experimentalBand: true, renderer: "tmux" },
+      editGlobals: { updateNotice: true, experimentalBand: false },
+      presets: { old: { globals: { updateNotice: false, renderer: "claude", experimentalTmuxStatus: true } } },
+    }`,
+  ],
+  [
     "rows-form root (merges by row name)",
     `{ segments: { a: { template: 'a' } }, root: { rows: { extra: { h: ['a'] } } } }`,
   ],
@@ -89,14 +97,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       segments: { t: { template: '{{ .themePick }} {{ action "open" "▸" }}' } },
       variables: { themePick: { kind: 'state', key: 'theme', default: 'dracula' } },
       actions: { open: { set: 'menu', to: '0' }, step: { set: 'hue', min: 0, max: 60, by: 2 } },
-      root: { h: ['t'] },
-    }`,
-  ],
-  [
-    "doctor actions (run, and fix naming its check)",
-    `{
-      segments: { t: { template: '{{ action "run" "🩺" }} {{ action "fix" "[fix]" }}' } },
-      actions: { run: { doctor: 'run' }, fix: { doctor: 'fix', check: 'tmuxTruecolor' } },
       root: { h: ['t'] },
     }`,
   ],
@@ -195,7 +195,7 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     "a new segment without a template",
     `{ segments: { mine: { palette: 'x' } } }`,
   ],
-  ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
+  ["retired doctor action", `{ actions: { d: { doctor: 'bogus' } } }`],
   [
     "doctor run carrying a check",
     `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`,

@@ -1463,7 +1463,7 @@ mod tests {
     fn dispatch_runs_only_native_subcommands_here() {
         assert!(native_subcommand(&argv(&["cc-candybar", "follow", "--help"])).is_some());
         for args in [
-            &["cc-candybar", "frames", "--lane", "band"][..],
+            &["cc-candybar", "frames", "--lane", "statusline"][..],
             &["cc-candybar", "--config", "x.json5"][..],
             &["cc-candybar"][..],
         ] {

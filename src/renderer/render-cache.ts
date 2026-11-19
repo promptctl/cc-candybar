@@ -909,9 +909,7 @@ function loadChain(
 // found at an origin: the snapshot is read, never the disk. It touches no
 // entry — the cache folds the outcome onto a new entry (getOrCreate) or an
 // existing one (reloadInto), so the state it built is never
-// constructed-then-discarded and the no-file default is built once, not
-// twice; `cc-candybar doctor`, which has no cache, reads the outcome and
-// disposes the state it was handed.
+// constructed-then-discarded and the no-file default is built once.
 export function loadOrigin(
   cwd: string,
   snapshot: ConfigSnapshot,
@@ -927,10 +925,8 @@ export function loadOrigin(
 }
 
 // [LAW:single-enforcer] What a config that fails its FIRST load renders: the
-// bundled default, over the plugins discovery found. The render cache seeds
-// an entry with it, and `cc-candybar doctor`, which has no cache, reads the
-// same bar from it. The seed's own advisories go nowhere: the bar already
-// carries the failed load's, and the default earns none by program invariant.
+// bundled default, over the plugins discovery found. The bar already carries
+// the failed load's advisories, and the default earns none by program invariant.
 export function fallbackState(
   cwd: string,
   snapshot: ConfigSnapshot,

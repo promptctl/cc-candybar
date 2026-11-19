@@ -9,7 +9,7 @@ import { parseStdinLine, runFrames } from "../../src/frames-cli";
 import { REFUSED } from "../helpers/session-id-refused";
 import { afterStreamEnd } from "../../src/daemon/frame-follow";
 
-test("a reconnect says why: a daemon from before subscribe restarts on the new build, an absent one is named", () => {
+test("a reconnect says why: a daemon without subscribe support and a missing daemon are distinct", () => {
   expect(
     afterStreamEnd({
       kind: "refused",
@@ -23,15 +23,13 @@ test("a reconnect says why: a daemon from before subscribe restarts on the new b
   ).toEqual({
     kind: "reconnect",
     reason:
-      "the daemon does not take subscribe (BAD_REQUEST said); it restarts on the new build",
-    kick: false,
+      "the daemon does not take subscribe (BAD_REQUEST said)",
   });
   expect(
     afterStreamEnd({ kind: "failed", error: new Error("ENOENT") }),
   ).toEqual({
     kind: "reconnect",
     reason: "stream failed (ENOENT)",
-    kick: true,
   });
 });
 
@@ -51,7 +49,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
         runFrames(argv, "/opt/cc/dist/index.mjs", WORLD),
       ).rejects.toThrow("exit 2");
       expect(String(stderr.mock.calls[0]?.[0])).toMatch(
-        /--lane needs one of band, statusline, pane/,
+        /--lane needs one of statusline, pane/,
       );
     } finally {
       exit.mockRestore();
@@ -63,7 +61,7 @@ test("a missing or unknown --lane is refused with exit 2, naming the lanes", asy
 test("--session is not a flag of frames: a named session's frames are the native client's follow", async () => {
   await expect(
     runFrames(
-      ["node", "cc-candybar", "frames", "--lane", "band", "--session", "s"],
+      ["node", "cc-candybar", "frames", "--lane", "statusline", "--session", "s"],
       "/opt/cc/dist/index.mjs",
       WORLD,
     ),

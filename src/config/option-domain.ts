@@ -157,9 +157,8 @@ registerBuiltinDomain(PLACEMENT_THEMES, placementThemeNames, {
 // never enumerate a value the render would reject. None is colour-valued in
 // the `paletteOf` sense: a variation chooses which of the palette's roles each
 // row wears, a shade which of a role's own shades each cell wears, and neither
-// puts another palette in force. A row that describes its members (the
-// renderers) registers them as a catalogue, so its picker lays them out as
-// the add-segment menu does.
+// puts another palette in force. A row that describes its members registers
+// them as a catalogue, so its picker lays them out as the add-segment menu does.
 for (const { name, members, library, labelOf } of NAMED_DOMAINS) {
   registerBuiltinDomain(name, () => members, { library, labelOf });
 }

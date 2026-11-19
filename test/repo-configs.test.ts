@@ -34,7 +34,7 @@ import { linkSigner } from "../src/click/link-signer";
 import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
@@ -224,7 +224,7 @@ describe("check", () => {
   test("an unanswered project config is reported awaiting, and nothing of it runs", async () => {
     const marker = path.join(project, "ran.marker");
     write(".cc-candybar.json5", shellConfig(marker));
-    const outcome = await checkConfig(world, daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, createGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.layers).toEqual([]);
@@ -238,7 +238,7 @@ describe("check", () => {
     const marker = path.join(project, "ran.marker");
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
-    const outcome = await checkConfig(world, daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, createGates(), undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",
       layers: [{ path: file, role: "project" }],
@@ -249,7 +249,7 @@ describe("check", () => {
   test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
     write(".cc-candybar.json5", "{}");
     write(".git", "gitdir: /nonexistent/x\n");
-    const outcome = await checkConfig(world, daemonGates(), undefined, project);
+    const outcome = await checkConfig(world, createGates(), undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.warnings).toContain(

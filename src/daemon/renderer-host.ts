@@ -52,11 +52,7 @@ import {
   failureOf,
   type Failure,
 } from "./foundations/verb-error.js";
-import {
-  performChanges,
-  type ApproveRepo,
-  type WritableSettings,
-} from "./effect-interpreter.js";
+import { performChanges, type ApproveRepo } from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
@@ -174,9 +170,6 @@ export function rendererHost(
     // holds the session its event names until it settles, so no sweep retires
     // a session under a turn on it.
     readonly holding: (session: SessionId) => () => void;
-    // The settings files each session's doctor reading handed in, which a
-    // `claude-settings` change may write.
-    readonly writableSettings: WritableSettings;
     // [LAW:single-enforcer] Where every turn's record goes as the renderer
     // answered it, whatever input the turn took.
     readonly recorded: (record: TurnRecord) => void;
@@ -290,7 +283,6 @@ export function rendererHost(
                 answers,
                 said: (line) => log("info", line),
               },
-              collector.writableSettings,
               world.configs,
             );
       const named = took(subscriptions, frames, stored);
@@ -307,10 +299,7 @@ export function rendererHost(
               // A landed layer's origin was followed and its chain held the
               // role, or the landing was refused.
               changes.flatMap(({ target }) => {
-                const file =
-                  target.kind === "layer"
-                    ? world.configs.path(target.origin, target.role)
-                    : target.file;
+                const file = world.configs.path(target.origin, target.role);
                 return file === null || file === undefined ? [] : [file];
               }),
               answers.length > 0,

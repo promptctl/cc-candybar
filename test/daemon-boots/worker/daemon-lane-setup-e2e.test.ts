@@ -1,7 +1,4 @@
-import { unprovenLink } from "../../../src/click/link-signer";
-import type { Frame } from "../../../src/render/frame";
-import { textOf } from "../../../src/render/frame";
-import { linkUrls } from "../../helpers/frame";
+import { textOf, type Frame } from "../../../src/render/frame";
 import {
   chmodSync,
   mkdirSync,
@@ -19,18 +16,13 @@ import path from "node:path";
 import {
   effectsUrl,
   VERB_SET_STATE,
-  VERB_TMUX_STATUS_CLICK,
 } from "../../../src/click/wire";
-import { rangeOf } from "../../../src/tmux-status/frames";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import {
   click,
-  clickAnswer,
   render,
-  saidOf,
-  toldOf,
   drawnLink,
 } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
@@ -49,19 +41,16 @@ jest.setTimeout(30_000);
 // Every lane off: each test's own clicks switch them.
 const CONFIG = `{ segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
 
-describe("tmux surfaces follow effective display settings", () => {
+describe("tmux panes follow effective display settings", () => {
   let removeTmpDirs: () => void;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
-  let otherDir: string;
   let daemon: InWorkerDaemon;
 
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-lane-e2e");
     ({ removeTmpDirs } = prepared);
     projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-e2e-"));
-    otherDir = path.join(projectDir, "elsewhere");
-    mkdirSync(otherDir);
     writeFileSync(path.join(projectDir, "lanes.json5"), CONFIG);
     const bin = path.join(projectDir, "bin");
     mkdirSync(bin);
@@ -136,41 +125,6 @@ esac
         ),
       ),
     );
-  const statusLines = (sid: string, what: "holding" | "released"): string[] =>
-    logLines(env).filter((l) =>
-      l.includes(`tmux-status: ${what} sid=${JSON.stringify(sid)}`),
-    );
-  // A request whose render event is logged: everything its arrival started
-  // has been logged before it. Counted by the renders its client kept, not by
-  // every attempt it logged.
-  const renderedAgain = async (
-    sid: string,
-    dir = projectDir,
-  ): Promise<void> => {
-    const before = (await renderLines(env, sid)).length;
-    await renderIn(sid, dir);
-    await renderLines(env, sid, before + 1);
-  };
-
-  test("a preference change takes effect without another render request", async () => {
-    const sid = "lane-click";
-    await renderIn(sid);
-    const events = (await renderLines(env, sid)).length;
-    await switchLanes(sid, true, "tmuxStatus");
-    // The click itself held the status line: no request came after it.
-    await until(
-      () => statusLines(sid, "holding").length > 0,
-      "the status line's hold",
-    );
-    expect(await renderLines(env, sid)).toHaveLength(events);
-    // A request after it, and one from another directory, set nothing up
-    // again and keep the status line held.
-    await renderedAgain(sid);
-    await renderedAgain(sid, otherDir);
-    expect(statusLines(sid, "holding")).toHaveLength(1);
-    expect(statusLines(sid, "released")).toEqual([]);
-  });
-
   test("an enabled tmux pane opens from config on the first render", async () => {
     const sid = "lane-pane-config";
     const file = path.join(projectDir, "pane.json5");
@@ -227,122 +181,6 @@ esac
       await renderIn(sid);
       return existsSync(held);
     }, "the configured pane to open on retry");
-  });
-
-  // [LAW:nothing-unseen] A status-line click's event names its own verb, the
-  // link its range draws, and the verb that link runs, as `linkVerb`.
-  test("a status-line click runs the link its range draws, and its click event names both verbs", async () => {
-    const sid = "lane-status-click";
-    await renderIn(sid);
-    await switchLanes(sid, true, "tmuxStatus");
-    await until(
-      () => statusLines(sid, "holding").length > 0,
-      "the status line's hold",
-    );
-    const link = linkUrls(await renderIn(sid)).find((u) =>
-      u.startsWith("cc-candybar://dispatch/"),
-    );
-    expect(link).toBeDefined();
-    const at = [`/tmp/lane-e2e-${sid}`, "7", rangeOf(link!)]
-      .map(encodeURIComponent)
-      .join("/");
-    const statusClick = `cc-candybar://${VERB_TMUX_STATUS_CLICK}/${at}`;
-    // Refused until the status line has drawn its first frame, which runs
-    // nothing; the first click it answers runs the link. Only a click that
-    // landed is not sent again, a TIMEOUT's included.
-    let refusal = "";
-    await until(
-      async () => {
-        const answer = await clickAnswer(daemon, statusClick);
-        refusal = saidOf(answer);
-        return toldOf(answer) === "ok";
-      },
-      () => `the status-line click's acceptance (refused: ${refusal})`,
-    );
-    const ran = (): string[] =>
-      logLines(env).filter(
-        (l) =>
-          / \[info\] click /.test(l) &&
-          l.includes(` verb=${VERB_TMUX_STATUS_CLICK} `),
-      );
-    await until(() => ran().length > 0, "the status-line click's event");
-    const [event, ...more] = ran();
-    expect(more).toEqual([]);
-    // Logged with its signature off: a mac in a log is a link to send.
-    expect(event).toContain(` link=${JSON.stringify(unprovenLink(link!))} `);
-    expect(event).toContain(` linkVerb=dispatch sid=${sid} `);
-    expect(event).toContain(" outcome=ok");
-  });
-
-  test("a status line switched off is released once, and nothing re-takes it", async () => {
-    const sid = "lane-off";
-    await renderIn(sid);
-    await switchLanes(sid, true, "tmuxStatus");
-    await until(
-      () => statusLines(sid, "holding").length > 0,
-      "the status line's hold",
-    );
-    await switchLanes(sid, false, "tmuxStatus");
-    await until(
-      () => statusLines(sid, "released").length > 0,
-      "the status line's release",
-    );
-    await renderedAgain(sid);
-    expect(statusLines(sid, "holding")).toHaveLength(1);
-    expect(statusLines(sid, "released")).toHaveLength(1);
-  });
-
-  // Taken by another session's request, the pane is released at the next
-  // answer from its server; the click only remembers it.
-  test("a click that leaves the status line's switch alone re-takes no status line released since", async () => {
-    const sid = "lane-taken";
-    await renderIn(sid);
-    await switchLanes(sid, true, "tmuxStatus");
-    await until(
-      () => statusLines(sid, "holding").length > 0,
-      "the status line's hold",
-    );
-    await render(daemon, "lane-taker", projectDir, inTmux(sid), args());
-    await until(
-      () => statusLines(sid, "released").length > 0,
-      "the taken pane's release",
-    );
-    expect(statusLines(sid, "released")).toEqual([
-      expect.stringContaining(`pane taken by sid="lane-taker"`),
-    ]);
-    await switchLanes(sid, true, "band");
-    expect(statusLines(sid, "holding")).toHaveLength(1);
-  });
-
-  // candybar-plugins-vf6g.qzx: the renderer is shared by every session the
-  // config renders, and a session outside tmux has no status line to take.
-  test("a session outside tmux under renderer tmux draws the whole bar in its statusline and leaves the setting as it is", async () => {
-    const sid = "lane-no-tmux";
-    const file = path.join(projectDir, "renderer-tmux.json5");
-    const source = `{ globals: { renderer: "tmux" }, segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
-    writeFileSync(file, source);
-    const drawn = await render(daemon, sid, projectDir, {}, [
-      "cc-candybar",
-      "--config",
-      file,
-    ]);
-    expect(textOf(drawn)).toContain("a lane mark");
-    expect(textOf(drawn)).not.toContain("⟲ claude");
-    await renderLines(env, sid, 1);
-    expect(statusLines(sid, "holding")).toEqual([]);
-    expect(readFileSync(file, "utf8")).toBe(source);
-  });
-
-  // The daemon before a restart drew the bar the toggle is clicked on: this
-  // daemon holds no request of the session yet.
-  test("a preference set before the first request is used once the session renders", async () => {
-    const sid = "lane-owed";
-    await renderIn(sid);
-    await daemon.stop();
-    daemon = startDaemon(env);
-    await switchLanes(sid, true, "tmuxStatus");
-    await renderedAgain(sid);
-    expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 
   // A click that writes no config file reloads no entry, however many

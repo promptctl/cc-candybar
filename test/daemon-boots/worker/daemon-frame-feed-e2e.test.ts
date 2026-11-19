@@ -53,7 +53,8 @@ import {
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { HANDOFF_BUTTON } from "../../../src/renderer/lane-handoff";
 import { linksOf } from "../../../src/click/read";
-import { composeBar, textOf, type Frame } from "../../../src/render/frame";
+import { decodeAnsi, Style } from "@promptctl/rich-js";
+import { composeBar, textOf, type Frame, type Run } from "../../../src/render/frame";
 import { pageOf, viewerLink } from "../../helpers/diagnostics-viewer";
 import { barOf } from "../../helpers/drawn-frame";
 import { untilHeard } from "../../helpers/reload-signal";
@@ -83,33 +84,30 @@ jest.setTimeout(30_000);
 // `moving` wears sparkle, the bundled loop whose bytes change most often from
 // one thirtieth of a second to the next (the others were tuned to move about
 // one just-noticeable step a second). `toggle` is a still bar a click changes.
-// These subscribers take the band lane, whose frames are rows of runs, and a
-// test of the statusline lane, whose frames are the render's own bytes, names it.
+// Both subscribers receive ANSI frames.
 const CONFIGS = {
-  moving: `{ globals: { effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
+  moving: `{ globals: { effect: "sparkle", experimentalStatusline: true }, segments: { a: { template: 'directory ~/code/cc-candybar' }, b: { template: 'branch main' }, c: { template: 'a moving mark' } }, root: { h: ['a', 'b', 'c'] } }`,
   // A glyph that turns every thirtieth of a second, as a lane toggle's spinner
   // does, so every frame the daemon draws while it moves is a new one.
   turning: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames ${1 / 30} "a" ${1 / 30} "b" ${1 / 30} "c" }}' } }, root: { h: ['mark'] } }`,
-  still: `{ globals: { experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
+  still: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'a still mark' } }, root: { h: ['mark'] } }`,
   // A glyph that turns once a second, the bar's only motion, as the effort
   // gauge at max does.
-  beat: `{ globals: { experimentalBand: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
+  beat: `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '{{ frames 1 "tick" 1 "tock" }}' } }, root: { h: ['mark'] } }`,
   off: `{ segments: { mark: { template: 'an unswitched mark' } }, root: { h: ['mark'] } }`,
-  // The band lane alone, which draws the bar elsewhere: its own file, since
+  fileLane: `{ segments: { mark: { template: 'a configured mark' } }, root: { h: ['mark'] } }`,
+  // The pane alone draws the bar elsewhere. It has its own file, since
   // the statusline's reset button rewrites the file it names.
-  handoff: `{ globals: { experimentalBand: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
+  handoff: `{ globals: { experimentalPane: true }, segments: { mark: { template: 'a handed-off mark' } }, root: { h: ['mark'] } }`,
   // The same over a bar in motion.
-  handoffMoving: `{ globals: { effect: "sparkle", experimentalBand: true }, segments: { mark: { template: 'a moving mark' } }, root: { h: ['mark'] } }`,
-  // The band lane switched off, which a test switches on by rewriting the file
-  // as another session's save would.
-  fileLane: `{ segments: { mark: { template: 'a file-switched mark' } }, root: { h: ['mark'] } }`,
+  handoffMoving: `{ globals: { effect: "sparkle", experimentalPane: true }, segments: { mark: { template: 'a moving mark' } }, root: { h: ['mark'] } }`,
   // Moves, and carries a load warning (a duplicate key) the indicator
   // shows on every frame.
-  warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalBand: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
+  warned: `{ globals: { effect: "sparkle", effect: "sparkle", experimentalPane: true, experimentalStatusline: true }, segments: { mark: { template: 'a warned mark' } }, root: { h: ['mark'] } }`,
   // Still, and its palette rule names no theme for two seconds of every four:
   // a render warning that comes and goes while nothing else moves.
-  clock: `{ globals: { experimentalBand: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
-  toggle: `{ globals: { experimentalBand: true, experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
+  clock: `{ globals: { experimentalStatusline: true, palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'a clocked mark' } }, root: { h: ['mark'] } }`,
+  toggle: `{ globals: { experimentalStatusline: true }, variables: { face: { kind: "state", key: "face", default: "shut" } }, actions: { flip: { set: "face", cycle: ["shut", "open"] } }, segments: { door: { template: '{{ action "flip" "door shut" "door open" }}' } }, root: { h: ['door'] } }`,
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -151,7 +149,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       waitFor: typeof until;
       untilHeard: typeof untilHeard;
     }) => Promise<void>,
-    lane: "band" | "statusline" = "band",
+    lane: "pane" | "statusline" = "statusline",
   ): Promise<Pushed[]> {
     const frames: Pushed[] = [];
     const opened = Date.now();
@@ -200,22 +198,31 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   const feedStats = async (): Promise<StatsSnapshot["frameFeeds"]> =>
     (await statsOf(daemon.daemon)).frameFeeds;
 
-  // A band-lane frame's text: its rows of runs (src/daemon/lane-frames.ts).
-  const barText = (resp: Response): unknown =>
-    resp.ok && "band" in resp
-      ? resp.band.map((row) => row.map((run) => run.text).join("")).join("\n")
-      : resp;
+  const decoded = (response: Response) =>
+    response.ok && "output" in response ? decodeAnsi(response.output) : null;
 
-  // What band-lane frames drew, as Frames, read as a render's answer is.
+  const barText = (response: Response): unknown =>
+    decoded(response)?.plain.replace(/\n$/, "") ?? response;
+
+  // The assertions read the visible text and the click spans.
   const bars = (frames: ReadonlyArray<Pushed>): Frame[] =>
     frames.map(({ resp }) => {
-      if (!resp.ok || !("band" in resp))
-        throw new Error(`not a band frame: ${JSON.stringify(resp)}`);
-      return barOf(
-        ...resp.band.map((row) =>
-          row.map(({ text, href }) => ({ text, link: href })),
-        ),
-      );
+      const text = decoded(resp);
+      if (text === null) throw new Error(`expected ANSI: ${JSON.stringify(resp)}`);
+      return barOf(...text.split("\n").flatMap((row, i, rows) => {
+        if (i === rows.length - 1 && row.plain === "") return [];
+        const runs: Run[] = [];
+        let at = 0;
+        for (const span of row.spans) {
+          const link = span.style instanceof Style ? span.style.link : undefined;
+          if (link === undefined || span.start < at) continue;
+          if (span.start > at) runs.push({ text: row.plain.slice(at, span.start) });
+          runs.push({ text: row.plain.slice(span.start, span.end), link });
+          at = span.end;
+        }
+        if (at < row.plain.length) runs.push({ text: row.plain.slice(at) });
+        return [runs];
+      }));
     });
 
   const shows = (frames: ReadonlyArray<Pushed>, text: string): boolean =>
@@ -488,7 +495,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const config = path.join(projectDir, "source-wake.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusDir)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalStatusline: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusDir)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -539,7 +546,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const config = path.join(projectDir, "source-poll.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalBand: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalStatusline: true }, variables: { status: { kind: "file", path: ${JSON.stringify(statusFile)}, parse: { text: true }, cache: { watch_file: ${JSON.stringify(statusFile)} }, default: "?" } }, segments: { mark: { template: 'status {{ .status }}' } }, root: { h: ['mark'] } }`,
     );
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -562,7 +569,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-reload-wake";
     const config = path.join(projectDir, "reload-wake.json5");
     const configOf = (mark: string): string =>
-      `{ globals: { experimentalBand: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
+      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: '${mark}' } }, root: { h: ['mark'] } }`;
     writeFileSync(config, configOf("before the save"));
     await render(sockPath, sid, projectDir, {}, [
       "cc-candybar",
@@ -658,7 +665,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       openFrameStream(
         sockPath,
         "",
-        "band",
+        "statusline",
         (resp) => frames.push(resp),
         resolve,
       ),
@@ -675,7 +682,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   });
 
   // The lane toggles (candybar-animation-wbxz.81o.azo).
-  const subscribeUntilEnd = (sessionId: string, lane: "band" | "pane") => {
+  const subscribeUntilEnd = (sessionId: string, lane: "statusline" | "pane") => {
     const frames: Response[] = [];
     let end: StreamEnd | null = null;
     const ended = new Promise<StreamEnd>((resolve) =>
@@ -701,8 +708,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     const sid = "feed-handoff-moving";
     const body = renderBody(sid, projectDir, {}, args("handoffMoving"));
     await frameRequest(sockPath, body);
-    const band = subscribeUntilEnd(sid, "band");
-    await until(() => band.live().length > 0, "the band's frame");
+    const stream = subscribeUntilEnd(sid, "pane");
+    await until(() => stream.live().length > 0, "the stream's frame");
     const output = await renderRequest(sockPath, body);
     const frame = await frameRequest(sockPath, body);
     expect(textOf(frame)).toContain(HANDOFF_BUTTON);
@@ -716,10 +723,11 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       sockPath,
       linksOf(frame).find((l) => l.text.includes("⟲"))!.url,
     );
-    await band.ended;
+    await stream.ended;
   });
 
-  // The daemon log's render events for this session.
+  // The daemon log's lines for `sid`: its render events, and how each of its
+  // lane setups ended (src/daemon/lane-setup.ts).
   const renderEvents = (sid: string): string[] =>
     renderEventsOf(logLines(env), sid);
   const setState = async (
@@ -733,14 +741,14 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     );
 
   // brandon-menus-sjhy.amf — Brandon: "When we're showing the bar in either
-  // the mod or the tmux pane, we should NOT show the original bar except a
+  // the tmux pane, we should NOT show the original bar except a
   // single line that contains a button to reset those settings".
-  test("while the band draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
+  test("while the pane draws the bar, Claude Code's statusline is one small row whose button brings the bar back", async () => {
     const sid = "feed-handoff";
     // [LAW:nothing-unseen] Each render's event says whether the statusline
     // handed off, and to which lanes.
     const events = (): string[] => renderEvents(sid);
-    // The switch alone draws nothing: with no band following the session, the
+    // The switch alone draws nothing: with no pane following the session, the
     // statusline keeps the bar.
     expect(
       textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
@@ -749,10 +757,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // A request answered TIMEOUT under load is asked again, and each is an
     // event: every one so far kept the bar.
     for (const event of events()) expect(event).toMatch(/ handoff=- /);
-    // The band draws the whole bar.
-    const band = subscribeUntilEnd(sid, "band");
-    await until(() => band.live().length > 0, "the band's frame");
-    expect(barText(band.frames[0]!)).toEqual(
+    // The stream draws the whole bar.
+    const stream = subscribeUntilEnd(sid, "pane");
+    await until(() => stream.live().length > 0, "the stream's frame");
+    expect(barText(stream.frames[0]!)).toEqual(
       expect.stringContaining("a handed-off mark"),
     );
     const handedOff = await render(
@@ -776,7 +784,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await loggedLines(
       env,
       (lines) => renderEventsOf(lines, sid),
-      (found) => / handoff=band /.test(found.at(-1) ?? ""),
+      (found) => / handoff=pane /.test(found.at(-1) ?? ""),
       "the handoff render's event",
     );
     const button = linksOf(handedOff).find((l) => l.text.includes("⟲"));
@@ -784,47 +792,12 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     // The reset took the lane's setting out of the file it was in.
     expect(
       readFileSync(path.join(projectDir, "handoff.json5"), "utf8"),
-    ).not.toContain("experimentalBand");
+    ).not.toContain("experimentalPane");
     expect(
       textOf(await render(sockPath, sid, projectDir, {}, args("handoff"))),
     ).toContain("a handed-off mark");
-    // And the band's stream is refused now its lane is off.
-    expect(await band.ended).toMatchObject({ kind: "refused" });
-  });
-
-  test("both a config reload and a session preference control the same feed", async () => {
-    const sid = "feed-file-lane";
-    const file = path.join(projectDir, "fileLane.json5");
-    await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
-    // The file's watch has no ready signal, so the save is re-applied until a
-    // render, each with hints its last did not report, draws by its switch.
-    let cols = 80;
-    await untilHeard(
-      () =>
-        writeAtomic(
-          file,
-          CONFIGS.fileLane.replace(
-            "{ segments",
-            "{ globals: { experimentalBand: true }, segments",
-          ),
-        ),
-      async () => {
-        await render(
-          sockPath,
-          sid,
-          projectDir,
-          { termCols: ++cols },
-          args("fileLane"),
-        );
-        return renderEvents(sid).some((l) => l.includes(" lanes=band "));
-      },
-      "a render drawn by the file's switch",
-    );
-    await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
-    const band = subscribeUntilEnd(sid, "band");
-    await until(() => band.live().length > 0, "the enabled feed's first frame");
-    await setState(sid, "experimentalBand", "false");
-    expect(await band.ended).toMatchObject({ kind: "refused" });
+    // The pane subscription ends once its preference is off.
+    expect(await stream.ended).toMatchObject({ kind: "refused" });
   });
 
   // The bar is handed off whole: the lane drawing it carries the indicator,
@@ -833,10 +806,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a handed-off statusline carries the bar's indicator, which opens the viewer in the statusline", async () => {
     const sid = "feed-handoff-warned";
     await render(sockPath, sid, projectDir, {}, args("warned"));
-    const band = subscribeUntilEnd(sid, "band");
+    const stream = subscribeUntilEnd(sid, "pane");
     await until(
-      () => band.live().some((f) => String(barText(f)).includes("⚠ 1")),
-      "a band frame carrying the indicator",
+      () => stream.live().some((f) => String(barText(f)).includes("⚠ 1")),
+      "a stream frame carrying the indicator",
     );
     const handedOff = await render(
       sockPath,
@@ -849,7 +822,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       `🧪 ${HANDOFF_BUTTON} ⚠ 1`,
     ]);
     expect(textOf(handedOff)).not.toContain('duplicate key "effect"');
-    const last = String(barText(band.live().at(-1)!));
+    const last = String(barText(stream.live().at(-1)!));
     expect(last).toContain("a warned mark");
     expect(last.match(/⚠/g)).toHaveLength(1);
     expect(last).not.toContain("duplicate key");
@@ -891,7 +864,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       ok: false,
       code: "BAD_REQUEST",
       error: expect.stringMatching(
-        /needs a lane, one of band, statusline, pane/,
+        /needs a lane, one of statusline, pane/,
       ),
     });
   });
@@ -899,13 +872,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
   test("a subscribe for a lane its session leaves off is refused, naming the toggle, and opens no feed", async () => {
     await render(sockPath, "feed-off", projectDir, {}, args("off"));
     const before = await feedStats();
-    const { frames, ended } = subscribeUntilEnd("feed-off", "band");
+    const { frames, ended } = subscribeUntilEnd("feed-off", "statusline");
     expect(await ended).toMatchObject({
       kind: "refused",
       resp: {
         ok: false,
         code: "SWITCHED_OFF",
-        error: expect.stringContaining("globals.experimentalBand"),
+        error: expect.stringContaining("globals.experimentalStatusline"),
       },
     });
     expect(frames).toEqual([]);
@@ -920,8 +893,8 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await render(sockPath, "feed-lane", projectDir, {}, args("off"));
     // The menu's toggle is a session pick, honoured at the next subscribe
     // with no statusline request between.
-    await setState("feed-lane", "experimentalBand", "true");
-    const band = subscribeUntilEnd("feed-lane", "band");
+    await setState("feed-lane", "experimentalStatusline", "true");
+    const stream = subscribeUntilEnd("feed-lane", "statusline");
     // Another lane of the same session is still off.
     const pane = subscribeUntilEnd("feed-lane", "pane");
     expect(await pane.ended).toMatchObject({
@@ -931,13 +904,44 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
         error: expect.stringContaining("experimentalPane"),
       },
     });
-    await until(() => band.live().length > 0, "the switched-on lane's frame");
-    expect(band.frames.map(barText)).toEqual([
+    await until(() => stream.live().length > 0, "the switched-on lane's frame");
+    expect(stream.frames.map(barText)).toEqual([
       expect.stringContaining("an unswitched mark"),
     ]);
     // Switching it off wakes the feed, whose next frame ends the stream.
-    await setState("feed-lane", "experimentalBand", "false");
-    expect(await band.ended).toMatchObject({
+    await setState("feed-lane", "experimentalStatusline", "false");
+    expect(await stream.ended).toMatchObject({
+      kind: "refused",
+      resp: { code: "SWITCHED_OFF" },
+    });
+  });
+
+  test("both a config reload and a session preference control the statusline feed", async () => {
+    const sid = "feed-file-lane";
+    const file = path.join(projectDir, "fileLane.json5");
+    await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
+    // The file's watch has no ready signal. Redraw with distinct terminal
+    // widths until a render sees the configured preference.
+    let cols = 80;
+    await untilHeard(
+      () =>
+        writeAtomic(
+          file,
+          CONFIGS.fileLane.replace(
+            "{ segments",
+            "{ globals: { experimentalStatusline: true }, segments",
+          ),
+        ),
+      async () => {
+        await render(sockPath, sid, projectDir, { termCols: ++cols }, args("fileLane"));
+        return renderEvents(sid).some((line) => line.includes(" lanes=statusline "));
+      },
+      "the statusline feed enabled by the config reload",
+    );
+    const stream = subscribeUntilEnd(sid, "statusline");
+    await until(() => stream.live().length > 0, "the enabled feed's first frame");
+    await setState(sid, "experimentalStatusline", "false");
+    expect(await stream.ended).toMatchObject({
       kind: "refused",
       resp: { code: "SWITCHED_OFF" },
     });
@@ -947,7 +951,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await render(sockPath, "feed-follow", projectDir, {}, args("off"));
     const seen: string[] = [];
     let offs = 0;
-    const follower = followFrames(WORLD, sockPath, "feed-follow", "band", {
+    const follower = followFrames(WORLD, sockPath, "feed-follow", "statusline", {
       frame: (resp) => seen.push(String(barText(resp))),
       off: () => offs++,
       fault: (reason) => seen.push(`fault: ${reason}`),
@@ -956,15 +960,13 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     try {
       await until(() => offs > 0, "the lane switched off", 2000);
       expect(offs).toBe(1);
-      await setState("feed-follow", "experimentalBand", "true");
+      await setState("feed-follow", "experimentalStatusline", "true");
       await until(
         () => seen.length > 0,
         "a frame once the lane is on",
         SWITCHED_OFF_RETRY_MS + 3000,
       );
-      // The first frame resumed is the bar. Later ones may follow at once —
-      // the band's own setup failing here draws its refusal on the bar — so
-      // the contract is the resumption, never a count of frames by a poll.
+      // The first frame resumed is the bar.
       expect(seen[0]).toEqual(expect.stringContaining("an unswitched mark"));
       expect(seen.filter((s) => /^(fault|exit): /.test(s))).toEqual([]);
     } finally {
@@ -1004,7 +1006,7 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
             v: PROTOCOL_VERSION,
             kind: "subscribe",
             sessionId: "feed-hangup",
-            lane: "band",
+            lane: "stream",
           }),
         );
         sock.destroy();

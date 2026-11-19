@@ -105,22 +105,10 @@
           "minimum": 0,
           "maximum": 16
         },
-        "updateNotice": {
-          "type": "boolean"
-        },
         "menuTimeout": {
           "type": "integer",
           "minimum": 15,
           "maximum": 600
-        },
-        "renderer": {
-          "enum": [
-            "claude",
-            "tmux"
-          ]
-        },
-        "experimentalBand": {
-          "type": "boolean"
         },
         "experimentalStatusline": {
           "type": "boolean"
@@ -148,6 +136,29 @@
           "not": {
             "pattern": "^(?:✖|✕)[\\uFE0E\\uFE0F]?$"
           }
+        },
+        "updateNotice": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete in-bar update notice."
+        },
+        "experimentalBand": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete Claude Code band mod."
+        },
+        "experimentalTmuxStatus": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ],
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
         }
       },
       "additionalProperties": false
@@ -1208,72 +1219,6 @@
           {
             "type": "object",
             "properties": {
-              "doctor": {
-                "const": "run"
-              }
-            },
-            "required": [
-              "doctor"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "doctor": {
-                "const": "fix"
-              },
-              "check": {
-                "enum": [
-                  "config",
-                  "install",
-                  "daemon",
-                  "urlHandler",
-                  "links",
-                  "tmuxTruecolor",
-                  "utf8",
-                  "termWidth",
-                  "effectRefresh",
-                  "nerdFont",
-                  "segmentData",
-                  "sessionData"
-                ]
-              }
-            },
-            "required": [
-              "doctor",
-              "check"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "doctor": {
-                "const": "mark"
-              },
-              "check": {
-                "enum": [
-                  "nerdFont"
-                ]
-              },
-              "mark": {
-                "enum": [
-                  "drawn",
-                  "boxes"
-                ]
-              }
-            },
-            "required": [
-              "doctor",
-              "check",
-              "mark"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
               "slash": {
                 "type": "string",
                 "pattern": "^/[^\\s\\x00-\\x1f\\x7f-\\x9f/][^\\x00-\\x1f\\x7f-\\x9f]*$"
@@ -1516,22 +1461,10 @@
                 "minimum": 0,
                 "maximum": 16
               },
-              "updateNotice": {
-                "type": "boolean"
-              },
               "menuTimeout": {
                 "type": "integer",
                 "minimum": 15,
                 "maximum": 600
-              },
-              "renderer": {
-                "enum": [
-                  "claude",
-                  "tmux"
-                ]
-              },
-              "experimentalBand": {
-                "type": "boolean"
               },
               "experimentalStatusline": {
                 "type": "boolean"
@@ -1556,6 +1489,29 @@
               "menuGlyph": {
                 "not": {},
                 "description": "not allowed here — a preset cannot change the settings menu glyph"
+              },
+              "updateNotice": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete in-bar update notice."
+              },
+              "experimentalBand": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete Claude Code band mod."
+              },
+              "experimentalTmuxStatus": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete tmux status renderer."
+              },
+              "renderer": {
+                "enum": [
+                  "claude",
+                  "tmux"
+                ],
+                "deprecated": true,
+                "description": "Obsolete tmux status renderer."
               }
             },
             "additionalProperties": false
@@ -1674,22 +1630,10 @@
           "minimum": 0,
           "maximum": 16
         },
-        "updateNotice": {
-          "type": "boolean"
-        },
         "menuTimeout": {
           "type": "integer",
           "minimum": 15,
           "maximum": 600
-        },
-        "renderer": {
-          "enum": [
-            "claude",
-            "tmux"
-          ]
-        },
-        "experimentalBand": {
-          "type": "boolean"
         },
         "experimentalStatusline": {
           "type": "boolean"
@@ -1714,6 +1658,29 @@
         "menuGlyph": {
           "not": {},
           "description": "not allowed here — the editGlobals fragment cannot change the settings menu glyph"
+        },
+        "updateNotice": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete in-bar update notice."
+        },
+        "experimentalBand": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete Claude Code band mod."
+        },
+        "experimentalTmuxStatus": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
+        },
+        "renderer": {
+          "enum": [
+            "claude",
+            "tmux"
+          ],
+          "deprecated": true,
+          "description": "Obsolete tmux status renderer."
         }
       },
       "additionalProperties": false
@@ -2310,12 +2277,6 @@
               }
             }
           }
-        },
-        "missingData": {
-          "enum": [
-            "fail",
-            "ignore"
-          ]
         },
         "partials": {
           "type": "object",
@@ -2915,12 +2876,6 @@
               }
             }
           }
-        },
-        "missingData": {
-          "enum": [
-            "fail",
-            "ignore"
-          ]
         },
         "partials": {
           "type": "object",

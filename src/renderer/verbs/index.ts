@@ -98,7 +98,6 @@ import {
   batchAdjacentWrites,
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
-  VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
@@ -115,9 +114,6 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   VERB_REPO_CONFIG,
@@ -140,20 +136,9 @@ import type {
   SessionContext,
 } from "../../renderer-interface/request-context";
 import { runDeclaration, type SlashAction } from "../../config/action";
-import {
-  GLYPH_MARKS,
-  checkByName,
-  describeFix,
-  type DoctorFacts,
-  type GlyphMark,
-} from "../../doctor/checks";
+import type { ClickArrival } from "../../renderer-interface/click-arrival";
 import type { RenderOrigin } from "../../config-hint";
-import { withMark } from "../../doctor/mark-book";
-import type { ClickArrival } from "../../doctor/sightings";
-import type { ConfigLoad, DoctorDocuments } from "../../doctor/ports";
 import { tmuxPaneOf } from "../../claude-input/typing";
-import { readSources, readThrough, settingChange } from "../../doctor/gather";
-import type { DoctorRuns } from "../doctor";
 import {
   BadVerbArgs,
   decodeWire,
@@ -188,12 +173,6 @@ export interface DaemonContext {
   // Where the user's config and installed plugins live: a click's write
   // resolves its home under them.
   readonly locations: Locations;
-  // [LAW:single-enforcer] Each session's doctor run (src/renderer/doctor.ts),
-  // and the config load a run judges: the session's cache entry's, reloaded.
-  readonly doctorRuns: DoctorRuns;
-  readonly doctorLoad: (origin: RenderOrigin) => ConfigLoad;
-  // The doctor's stores, which this daemon files (src/doctor/ports.ts).
-  readonly doctorStores: DoctorDocuments;
   // [LAW:one-source-of-truth] The one undo history over every settings change
   // (src/renderer/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
@@ -238,7 +217,7 @@ export interface VerbContext extends DaemonContext {
   readonly context: SessionContext | null;
   // THIS click's turn's effects, which its config changes join.
   readonly effects: Effect[];
-  // THIS click's turn's record, which a doctor report is noted on.
+  // THIS click's turn record.
   readonly record: RequestFacts;
 }
 
@@ -1175,154 +1154,6 @@ const redo: VerbHandler = (value, ctx) => {
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
-// [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
-// click (brandon-build-notice-5d6). The wire carries only the session id (for
-// click.error surfacing); the daemon's update watch decides what to run from
-// its own provenance, so no command or version ever arrives from a URL.
-const applyUpdate: VerbHandler = (value, ctx) =>
-  ask(ctx, { kind: "apply-update", session: requireSessionId(oneArg(value)) });
-
-// ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
-
-// A run of the session's doctor, asked by this click (src/renderer/doctor.ts).
-// [LAW:one-source-of-truth] It judges the load the session's bar is drawn
-// from: the config discovery last handed in, so the verdict is on the bar the
-// user sees, and a watch that cannot hear the files is the bar's own notice.
-// The host reads the machine for it (src/daemon/cache/doctor.ts) once the
-// turn's subscriptions name it, after the turn's changes have landed.
-function startRun(ctx: ClickContext, sid: SessionId): void {
-  const origin = sessionOrigin(ctx, sid);
-  ctx.doctorRuns.start(ctx.sessionState, sid, {
-    at: ctx.now(),
-    load: ctx.doctorLoad(origin),
-    target: origin.target,
-    pick: (key) => ctx.sessionState.get(sid, key),
-    arrival: ctx.arrival,
-  });
-}
-
-// [LAW:single-enforcer] What a fix or a mark judges: the facts of the report
-// the session's run wrote, never a reading made for another config or long
-// enough ago that the terminal may have moved. With no such reading, the
-// click starts a run unless one is on its way, and asks to be clicked again.
-function reportedFacts(
-  ctx: ClickContext,
-  sid: SessionId,
-  verb: string,
-): DoctorFacts {
-  const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
-  if (facts !== null) return facts;
-  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
-  throw new BadVerbArgs(
-    `${verb}: the doctor's report is being read — click again once it is in`,
-  );
-}
-
-// A click while the session's run is on its way starts no other: the launcher
-// refuses a probe within a second of the last of its kind, so a second run
-// behind the first would be refused, and the first is the one the click asks.
-const doctorRun: VerbHandler = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
-  if (!ctx.doctorRuns.awaiting(sid)) startRun(ctx, sid);
-};
-
-// The fix THIS check's verdict carries over the reported facts. A settings fix
-// is a change guarded by what the run read of the one setting it writes
-// (docs/design/host-and-renderer.md §7, A-3): the host lands it only while that
-// setting is as read, so it applies only to the settings it diagnosed, and a
-// setting moved since is refused with the reason on the bar. The run starts
-// again either way, so the row is read again after the change landed or was
-// refused.
-const doctorFix: VerbHandler = (value, ctx) => {
-  const [sessionId = "", checkName = ""] = decodeWire(() =>
-    decodeSegments(value),
-  );
-  const sid = requireSessionId(sessionId);
-  const check = checkByName(checkName);
-  if (check === undefined) {
-    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
-  }
-  const facts = reportedFacts(ctx, sid, "doctor-fix");
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.fix === undefined) {
-    throw new BadVerbArgs(
-      `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
-    );
-  }
-  const { fix } = verdict;
-  // The fix, once it is asked for, ahead of the report it leads to.
-  const asked = (): void =>
-    ctx.log(
-      "info",
-      `doctor-fix: ${check.name} → ${describeFix(fix)} (session=${sid})`,
-    );
-  switch (fix.kind) {
-    case "claude-settings":
-      ctx.configWrites.changeSettings(
-        fix.file.path,
-        settingChange(fix, readSources(facts.claudeSettings)),
-      );
-      asked();
-      startRun(ctx, sid);
-      return;
-    case "post-mortems-read": {
-      const read = ctx.doctorStores.postMortemsRead.update(
-        readThrough(fix.through),
-      );
-      if (read.kind === "failed") {
-        throw new BadVerbArgs(`doctor-fix: ${check.label} — ${read.reason}`);
-      }
-      asked();
-      ctx.doctorRuns.report(
-        ctx.sessionState,
-        sid,
-        { ...facts, daemon: { ...facts.daemon, read } },
-        ctx.record,
-      );
-      return;
-    }
-  }
-};
-
-// Record what the user saw of the glyphs THIS check's verdict shows, under the
-// sighting they are, then write the report again with the mark folded in.
-const doctorMark: VerbHandler = (value, ctx) => {
-  const [sessionId = "", checkName = "", mark = ""] = decodeWire(() =>
-    decodeSegments(value),
-  );
-  const sid = requireSessionId(sessionId);
-  const check = checkByName(checkName);
-  if (check === undefined) {
-    throw new BadVerbArgs(`doctor-mark: unknown check "${checkName}"`);
-  }
-  if (!(GLYPH_MARKS as readonly string[]).includes(mark)) {
-    throw new BadVerbArgs(
-      `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
-    );
-  }
-  const facts = reportedFacts(ctx, sid, "doctor-mark");
-  const verdict = check.probe(facts);
-  if (verdict.ok || verdict.sighting === undefined) {
-    throw new BadVerbArgs(
-      `doctor-mark: ${check.label} — ${verdict.ok ? "nothing to mark" : "shows nothing to look at"}`,
-    );
-  }
-  const made = [check.name, verdict.sighting.id, mark as GlyphMark] as const;
-  // [LAW:single-enforcer] The store refuses to file over a book that does
-  // not read; that refusal is the click's.
-  const marks = ctx.doctorStores.marks.update((book) =>
-    withMark(book, ...made),
-  );
-  if (marks.kind === "failed") {
-    throw new BadVerbArgs(`doctor-mark: ${marks.reason}`);
-  }
-  ctx.log(
-    "info",
-    `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
-  );
-  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks }, ctx.record);
-};
-
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────
 
 // [LAW:parse-dont-validate] A click's line is honoured only as one a `slash`
@@ -1490,10 +1321,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_REDO, redo],
   [VERB_BACK, back],
   [VERB_REWIND, rewind],
-  [VERB_APPLY_UPDATE, applyUpdate],
-  [VERB_DOCTOR_RUN, doctorRun],
-  [VERB_DOCTOR_FIX, doctorFix],
-  [VERB_DOCTOR_MARK, doctorMark],
   [VERB_SLASH, slash],
   [VERB_RUN, run],
   [VERB_REPO_CONFIG, repoConfig],

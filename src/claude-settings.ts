@@ -36,68 +36,9 @@ export function claudeConfigDir(
   return detected ?? path.join(home, ".claude");
 }
 
-// [LAW:one-source-of-truth] THE location of Claude Code's user settings file
-// in a configuration directory. Two writers touch it, both splicing through
-// one editor so neither drops the other's keys — `cc-candybar install` (the
-// statusLine command) and the doctor's claude-settings fixes (`env`; and
-// `statusLine.refreshInterval` when this file is where the statusLine comes
-// from, `readSettingsChain`) — and one more reader, the auto-compact window the bar
-// shows (src/segments/autocompact.ts), which Claude Code's own `/autocompact`
-// writes here. They must all mean the file Claude Code reads, so the path is
-// spelled once and imported by each.
+// [LAW:one-source-of-truth] The settings file read by the bar and edited by install.
 export function claudeSettingsPath(configDir: string): string {
   return path.join(configDir, "settings.json");
-}
-
-// Where an administrator's managed settings live (code.claude.com/docs/en/
-// managed-settings) — fixed system paths, which CLAUDE_CONFIG_DIR does not
-// move.
-export function claudeManagedSettingsDir(platform: NodeJS.Platform): string {
-  switch (platform) {
-    case "darwin":
-      return "/Library/Application Support/ClaudeCode";
-    case "win32":
-      return "C:\\Program Files\\ClaudeCode";
-    default:
-      return "/etc/claude-code";
-  }
-}
-
-// [LAW:one-source-of-truth] The managed settings directory a daemon reads,
-// under the environment it was handed: test setup moves it so no test reads
-// the host's policy.
-export const claudeManagedSettingsDirIn = (
-  env: Readonly<Record<string, string | undefined>>,
-): string =>
-  env.CC_CANDYBAR_CLAUDE_MANAGED_DIR ??
-  claudeManagedSettingsDir(process.platform);
-
-// The project-local settings file: the user's own, beside the project's
-// shared `.claude/settings.json` and over it.
-export const projectLocalSettingsFile = (projectDir: string): string =>
-  path.join(projectDir, ".claude", "settings.local.json");
-
-// The scopes of Claude Code's settings files, highest precedence first.
-// `--settings`, MDM policy and server-managed settings are scopes too, but
-// none is a file this machine can read, so none is one of these.
-export type SettingsScope = "managed" | "project-local" | "project" | "user";
-
-// Where a session's settings chain is read: the managed directory, the
-// session's primary working directory (Claude Code reads both project files
-// there), and its user settings file.
-export interface SettingsChainAt {
-  readonly managedDir: string;
-  readonly projectDir: string;
-  readonly userFile: string;
-}
-
-export interface SettingsSource {
-  readonly scope: SettingsScope;
-  readonly path: string;
-  readonly settings: JsonObject;
-  // The file's `env`, read as Claude Code merges it: an object, `{}` when
-  // the file sets none.
-  readonly env: JsonObject;
 }
 
 // [LAW:types-are-the-program] A settings document as JSON parsed it: JSON

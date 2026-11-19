@@ -230,8 +230,8 @@ async function pollUntilReady(
 // recognizable. The bind() inside the daemon arbitrates any duplicate spawns
 // that slip past the lock.
 //
-// Why synchronous: callers (src/index.ts, src/install/index.ts) call this
-// immediately before process.exit(). An async variant would suspend on the
+// Why synchronous: the statusline entry (src/index.ts) calls this before
+// delivering its output and exiting. An async variant would suspend on the
 // first await and never resume — process.exit would kill the process before
 // child_process.spawn ever runs. The lock+spawn must complete in synchronous
 // turn for the daemon to actually start.

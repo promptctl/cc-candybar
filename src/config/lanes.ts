@@ -1,72 +1,27 @@
-// The animation lanes (epic candybar-animation-wbxz): three programs that draw
-// the bar faster than Claude Code reruns its statusline, each by subscribing to
-// the daemon's pushed frames (src/daemon/frame-feed.ts) — A in the band above
-// the prompt (a Claude Code mod), B in a patched Claude Code's own statusline,
-// C outside Claude Code, in tmux: a pane beside the session, and the tmux
-// status line. Each is switched by a setting of its own, so it can be switched
-// off, or removed, alone.
-//
-// [LAW:one-type-per-behavior] One behavior, three instances: a lane is a
-// subscriber, and what differs between them is a name and its switch — the
-// setting that turns it on and the value that does. The experimental lanes are
-// each a 🧪 toggle; the tmux status line is on while the bar's renderer is
-// tmux.
-// [LAW:one-source-of-truth] THE table. The globals fields, the menu's
-// controls (SETTINGS), the payload's read-back and the daemon's gate all
-// derive from these rows or are keyed by them, so deleting a lane's row makes
-// the compiler name everything left behind.
-
-// Where the bar is drawn: Claude Code's own status line, or the tmux status
-// line of the pane the session runs in. A session outside tmux has no tmux
-// status line, so it draws in Claude Code's whatever the setting says.
-export const RENDERERS = ["claude", "tmux"] as const;
-export type Renderer = (typeof RENDERERS)[number];
+// The two pushed displays. The ordinary statusline also draws on request.
 
 // [LAW:one-source-of-truth] The one spelling of "this session runs in a tmux
 // pane", as a template expression over the client's tmux hint: a slash click
 // has a pane to type into (every bundled slash control gates on it, so none
-// shows a button whose every click the verb would refuse), and the session
-// has a tmux status line to draw in. A user's own slash button gates the same
+// shows a button whose every click the verb would refuse). A user's own slash button gates the same
 // way: `when: '{{ ne .tmux.pane "" }}'`.
 export const IN_TMUX = 'ne .tmux.pane ""';
 
 // `handsOff` is whether a lane draws the bar somewhere other than the
 // statusline: while it is on, the statusline hands off to it
 // (src/renderer/lane-handoff.ts). Lane B draws the statusline itself, so it
-// hands off nowhere. A switch that is `inTmux` is on only for a session its
-// client reports in a tmux pane: the tmux status line belongs to that pane, so
-// a session outside tmux ignores the setting, which other sessions share, and
-// draws in Claude Code's statusline. `rows` is the most rows the lane's
-// surface shows, or null when only the terminal bounds it.
+// hands off nowhere. [LAW:one-source-of-truth] Settings and the protocol
+// derive the available displays from this table.
 export const LANES = {
-  band: {
-    switch: { setting: "experimentalBand", on: true, inTmux: false },
-    label: "🧪 band (A)",
-    handsOff: true,
-    rows: null,
-  },
   statusline: {
-    switch: { setting: "experimentalStatusline", on: true, inTmux: false },
+    switch: { setting: "experimentalStatusline", on: true },
     label: "🧪 statusline (B)",
     handsOff: false,
-    rows: null,
   },
   pane: {
-    switch: { setting: "experimentalPane", on: true, inTmux: false },
+    switch: { setting: "experimentalPane", on: true },
     label: "🧪 tmux pane (C)",
     handsOff: true,
-    rows: null,
-  },
-  tmuxStatus: {
-    switch: {
-      setting: "renderer",
-      on: "tmux" satisfies Renderer,
-      inTmux: true,
-    },
-    label: "tmux status line",
-    handsOff: true,
-    // tmux draws at most five status rows (`status` takes on, off, 2…5).
-    rows: 5,
   },
 } as const;
 

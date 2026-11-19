@@ -14,15 +14,14 @@ import {
   type RepoConfigBook,
 } from "../../config/loader/repo-gate.js";
 import { worktreeLink } from "../../utils/git-root.js";
-import { ok } from "../../utils/outcome.js";
+import { ok, type Asked } from "../../utils/outcome.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
-import type { Asked } from "../../doctor/checks.js";
 import {
   stateFile,
   written,
   type Planned,
   type StateFile,
-} from "../../doctor/state-file.js";
+} from "../state-file.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
 // The book's own folder. The daemon polls the book's path, so a hand edit
@@ -43,7 +42,7 @@ export function repoConfigsPath(dir: string): string {
 // directly in the state directory, where the book used to live, is read
 // only while the folder holds none, and the first answer recorded writes it
 // into the folder with that answer: nothing is moved, so no answer is lost
-// to a move, and every reader — the daemon, `check`, the doctor — reads the
+// to a move, and every reader — the daemon and `check` — reads the
 // same answers.
 export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
   const book = stateFile(

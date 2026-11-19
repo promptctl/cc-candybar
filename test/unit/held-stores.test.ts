@@ -8,7 +8,6 @@ import {
 } from "../../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../../src/daemon/session-state-file";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import { emptyStores } from "../helpers/doctor-facts";
 
 const S1 = sessionIdOf("s1");
 const STEP = { past: [], future: [] };
@@ -17,7 +16,6 @@ function held(storage: Partial<ProfileStorage>): HeldStores {
   const stores = new HeldStores({
     session: ephemeralSessionFile(),
     history: EPHEMERAL_HISTORY_STORAGE,
-    doctor: emptyStores(),
     ...storage,
   });
   stores.load();
@@ -41,48 +39,6 @@ test("a history its file refuses throws, and the step is still held", () => {
   ).toThrow("ENOSPC: no space left on device");
   expect(stores.current().history[S1]).toEqual(STEP);
   expect(stores.current().sessions[S1]).toEqual({ pick: "a" });
-});
-
-test("a document its file refuses throws, and the copy is still held", () => {
-  const doctor = emptyStores();
-  const stores = held({
-    doctor: {
-      ...doctor,
-      clicked: {
-        ...doctor.clicked,
-        update: () => ({ kind: "failed", reason: "EROFS: read-only" }),
-      },
-    },
-  });
-  expect(() => stores.take([{ store: "clicked", value: ["Ghostty"] }])).toThrow(
-    "clicked not filed: EROFS: read-only",
-  );
-  expect(stores.current().doctor.clicked).toEqual({
-    kind: "ok",
-    value: ["Ghostty"],
-  });
-});
-
-test("a document filed over one that did not read is refused, and nothing is written", () => {
-  const doctor = emptyStores();
-  let written = false;
-  const stores = held({
-    doctor: {
-      ...doctor,
-      marks: {
-        ...doctor.marks,
-        read: () => ({ kind: "failed", reason: "not JSON" }),
-        update: () => {
-          written = true;
-          return { kind: "ok", value: {} };
-        },
-      },
-    },
-  });
-  expect(() => stores.take([{ store: "marks", value: {} }])).toThrow(
-    "the renderer filed marks, which did not read; nothing was written",
-  );
-  expect(written).toBe(false);
 });
 
 // [LAW:no-silent-failure] A shutdown that lost state says so.
