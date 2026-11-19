@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "16eb7713b80a9c10567f515cf183025faeca7db4",
+      "timestamp": "2026-11-19T12:54:41.939Z",
+      "commits": [
+        {
+          "sha": "16eb7713b80a9c10567f515cf183025faeca7db4",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T12:53:27Z",
+          "message": "chore(release): set `package.json` to 1.233.2\n\n## [1.233.2](https://github.com/promptctl/cc-candybar/compare/v1.233.1...v1.233.2) (2026-11-19)\n\n### Bug Fixes\n\n* **config:** refuse non-regular files during discovery (ibyq.h8t) ([#869](https://github.com/promptctl/cc-candybar/issues/869)) ([23c326f](https://github.com/promptctl/cc-candybar/commit/23c326f89ca153631c98d23faf4844e8803a63d5))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-867",
       "ref": "refs/pull/867/merge",
       "sha": "5e0cbfd6557396743e30d70db9de696c5b63f892",
@@ -77,21 +92,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:11:10-07:00",
           "message": "feat(daemon): route named renderers through one shared host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "23c326f89ca153631c98d23faf4844e8803a63d5",
-      "timestamp": "2026-11-19T12:45:43.808Z",
-      "commits": [
-        {
-          "sha": "23c326f89ca153631c98d23faf4844e8803a63d5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:44:20-07:00",
-          "message": "fix(config): refuse non-regular files during discovery (ibyq.h8t) (#869)"
         }
       ]
     },
