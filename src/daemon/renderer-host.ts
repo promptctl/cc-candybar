@@ -159,7 +159,10 @@ export interface RendererHost {
   // A fresh renderer's start, recorded on its own line: it heads the
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
-  start(make: () => Made<StartRequest>, about: TurnRecord): Promise<TurnOutcome>;
+  start(
+    make: () => Made<StartRequest>,
+    about: TurnRecord,
+  ): Promise<TurnOutcome>;
   // An inspection or teardown event, answered by its own reply.
   command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
