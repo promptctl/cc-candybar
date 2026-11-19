@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ca59b705bf84552eb3ec9b216786363ccde4b4da",
+      "timestamp": "2026-11-19T18:58:15.900Z",
+      "commits": [
+        {
+          "sha": "ca59b705bf84552eb3ec9b216786363ccde4b4da",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T18:57:09Z",
+          "message": "chore(release): set `package.json` to 1.235.8\n\n## [1.235.8](https://github.com/promptctl/cc-candybar/compare/v1.235.7...v1.235.8) (2026-11-19)\n\n### Bug Fixes\n\n* **client:** show startup and timeout feedback in the statusline ([#900](https://github.com/promptctl/cc-candybar/issues/900)) ([2d21da5](https://github.com/promptctl/cc-candybar/commit/2d21da5a247382b00e6ea729e0e1081bcecc4376))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-886",
       "ref": "refs/pull/886/merge",
       "sha": "e96f3fcd4cb8e677879ecd798e42832a99ec2fda",
@@ -85,21 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:48:47-07:00",
           "message": "fix(install): replace staged executables atomically\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "2d21da5a247382b00e6ea729e0e1081bcecc4376",
-      "timestamp": "2026-11-19T18:49:43.110Z",
-      "commits": [
-        {
-          "sha": "2d21da5a247382b00e6ea729e0e1081bcecc4376",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:48:23-07:00",
-          "message": "fix(client): show startup and timeout feedback in the statusline (#900)"
         }
       ]
     },
