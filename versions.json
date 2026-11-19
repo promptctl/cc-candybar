@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-882",
+      "ref": "refs/pull/882/merge",
+      "sha": "938ade060410f16c53610939de51a5ccef7c1790",
+      "timestamp": "2026-11-19T15:59:18.418Z",
+      "commits": [
+        {
+          "sha": "938ade060410f16c53610939de51a5ccef7c1790",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:58:06Z",
+          "message": "Merge dfe7f6e48801f38936bdef66698d8fe19abfad7a into 7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d\n"
+        },
+        {
+          "sha": "dfe7f6e48801f38936bdef66698d8fe19abfad7a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:13:12-07:00",
+          "message": "fix(daemon): seal renders and pane acts when drain starts\n"
+        },
+        {
+          "sha": "f5acf9ba1423bd8035115131ecda1b97e2cbe51c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:42:39-07:00",
+          "message": "fix(daemon): drain live renderers before closing links\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d",
@@ -13,35 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:56:10-07:00",
           "message": "fix(renderer): keep one presentation record for delivered frames (#878)\n\n* fix(renderer): commit request frame memory on delivery\n\n* fix(renderer): settle pushed frame memory on actual subscriber delivery\n\n* fix(renderer): retain delivered diagnostics and give each message one copy key\n\n* refactor(renderer): own each accepted draw in one presentation record\n\n* test(daemon): verify named feed publication retains its delivery receipt\n\n* test(renderer): confirm frame delivery before comparing diagnostics\n\n* test(renderer): distinguish late receipts with a changing frame clock\n\n* fix(renderer): inspect the newest accepted layout in the active view\n\n* test(plugin): sweep again when a frame receipt holds the session"
-        }
-      ]
-    },
-    {
-      "version": "pr-882",
-      "ref": "refs/pull/882/merge",
-      "sha": "bb51d9a48f4b656850d18928381e96ed3ee6d5e4",
-      "timestamp": "2026-11-19T15:53:29.880Z",
-      "commits": [
-        {
-          "sha": "bb51d9a48f4b656850d18928381e96ed3ee6d5e4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:52:22Z",
-          "message": "Merge 2da7e94cf81c8fbce473611320010c073b1ccf0e into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
-        },
-        {
-          "sha": "2da7e94cf81c8fbce473611320010c073b1ccf0e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:13:12-07:00",
-          "message": "fix(daemon): seal renders and pane acts when drain starts\n"
-        },
-        {
-          "sha": "19b9b1d36e8a4e3c7343814995c79e4aadc8446b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:42:39-07:00",
-          "message": "fix(daemon): drain live renderers before closing links\n"
         }
       ]
     },
