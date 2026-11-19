@@ -524,6 +524,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         : undefined;
     },
     (pane, on) => acts.setBarPane(pane, on),
+    clock,
     log,
   );
   // Who watches each session's frames (candybar-animation-wbxz.jmm.usl),

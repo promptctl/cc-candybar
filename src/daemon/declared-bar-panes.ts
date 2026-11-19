@@ -1,4 +1,5 @@
 import type { LaneSwitches } from "../config/lanes.js";
+import type { Timekeeper } from "../time.js";
 import type { TmuxHint } from "../tmux-hint.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { paneKey } from "./acts.js";
@@ -15,14 +16,29 @@ interface Demand extends ReportedPane {
   readonly on: boolean;
 }
 
+type Application =
+  | { readonly kind: "unchecked" }
+  | { readonly kind: "running" }
+  | { readonly kind: "applied"; readonly on: boolean }
+  | { readonly kind: "retry"; readonly on: boolean; readonly after: number };
+
+interface HeldPane {
+  demand: Demand;
+  listed: boolean;
+  application: Application;
+}
+
+const RETRY_MS = 1000;
+
 // [LAW:effects-at-boundaries] The host reconciles tmux panes from the
 // renderer's effective settings, independent of which input changed them.
 export class DeclaredBarPanes {
-  private desired: ReadonlyMap<string, Demand> = new Map();
+  private readonly held = new Map<string, HeldPane>();
 
   constructor(
     private readonly paneOf: (session: SessionId) => ReportedPane | undefined,
     private readonly setPane: (pane: TmuxHint, on: boolean) => Promise<string>,
+    private readonly clock: Pick<Timekeeper, "monotonic">,
     private readonly log: DaemonLogger,
   ) {}
 
@@ -40,20 +56,63 @@ export class DeclaredBarPanes {
       if (competing === undefined || competing.order < reported.order)
         next.set(key, { ...reported, session, on: switches.pane });
     }
-    const before = this.desired;
-    this.desired = next;
-    for (const [key, demand] of before)
-      if (demand.on && next.get(key)?.on !== true) this.apply(demand, false);
-    for (const [key, demand] of next)
-      if (demand.on && before.get(key)?.on !== true) this.apply(demand, true);
+    for (const [key, demand] of next) {
+      const held = this.held.get(key);
+      if (held === undefined)
+        this.held.set(key, {
+          demand,
+          listed: true,
+          application: { kind: "unchecked" },
+        });
+      else {
+        held.demand = demand;
+        held.listed = true;
+      }
+    }
+    for (const [key, held] of this.held) {
+      if (!next.has(key)) {
+        held.listed = false;
+        held.demand = { ...held.demand, on: false };
+      }
+      this.reconcile(key, held);
+    }
   }
 
-  private apply({ session, pane }: Demand, on: boolean): void {
+  private reconcile(key: string, held: HeldPane): void {
+    const { application, demand } = held;
+    if (application.kind === "running") return;
+    if (application.kind === "applied" && application.on === demand.on) {
+      if (!held.listed) this.held.delete(key);
+      return;
+    }
+    if (
+      application.kind === "retry" &&
+      application.on === demand.on &&
+      this.clock.monotonic() < application.after
+    )
+      return;
+
+    const { session, pane, on } = demand;
     const event = `bar-pane sid=${JSON.stringify(session)} pane=${JSON.stringify(pane.pane)} desired=${on ? "on" : "off"}`;
+    held.application = { kind: "running" };
+    // [LAW:single-enforcer] An effect must settle before this pane's next
+    // one begins. A change of demand while it ran is applied after settlement.
     void this.setPane(pane, on).then(
-      (said) => this.log("info", `${event} — ${said}`),
-      (error: unknown) =>
-        this.log("warn", `${event} — ${failureOf(error).detail}`),
+      (said) => {
+        held.application = { kind: "applied", on };
+        this.log("info", `${event} — ${said}`);
+        this.reconcile(key, held);
+      },
+      (error: unknown) => {
+        held.application = {
+          kind: "retry",
+          on,
+          after: this.clock.monotonic() + RETRY_MS,
+        };
+        this.log("warn", `${event} — ${failureOf(error).detail}`);
+        if (!held.listed && !on) this.held.delete(key);
+        else this.reconcile(key, held);
+      },
     );
   }
 }

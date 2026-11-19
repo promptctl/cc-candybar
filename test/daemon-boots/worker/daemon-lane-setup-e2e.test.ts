@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  existsSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -62,16 +63,36 @@ describe("tmux surfaces follow effective display settings", () => {
     otherDir = path.join(projectDir, "elsewhere");
     mkdirSync(otherDir);
     writeFileSync(path.join(projectDir, "lanes.json5"), CONFIG);
-    // A tmux first on the daemon's PATH whose server shows pane %7, attached
-    // and active, and returns %9 when the host opens a split.
     const bin = path.join(projectDir, "bin");
     mkdirSync(bin);
     writeFileSync(
       path.join(bin, "tmux"),
-      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 1 1 0 1\\n' ;; *split-window*) printf '%%9\\n' ;; *) printf '' ;; esac\n`,
+      `#!/bin/sh
+held="$CANDYBAR_TEST_TMUX_STATE/${"$"}{2##*/}.split"
+case "$*" in
+  *list-panes*'pane_start_command'*)
+    if [ -f "$held" ]; then printf '%%9 cc-candybar bar-pane %%7\n'; fi
+    ;;
+  *list-panes*) printf '%%7 $1 1 1 0 1\n' ;;
+  *split-window*)
+    if [ -f "$held.fail" ]; then
+      rm "$held.fail"
+      printf 'temporary split failure\n' >&2
+      exit 1
+    fi
+    touch "$held"
+    printf '%%9\n'
+    ;;
+  *kill-pane*'-t %9') rm -f "$held" ;;
+esac
+`,
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
-    env = { ...prepared.env, PATH: `${bin}:${prepared.env.PATH ?? ""}` };
+    env = {
+      ...prepared.env,
+      PATH: `${bin}:${prepared.env.PATH ?? ""}`,
+      CANDYBAR_TEST_TMUX_STATE: projectDir,
+    };
     daemon = startDaemon(env);
   });
 
@@ -176,10 +197,36 @@ describe("tmux surfaces follow effective display settings", () => {
     await render(daemon, "lane-pane-next", projectDir, inTmux(sid), args());
     await until(
       () => logLines(env).some((line) =>
-        line.includes(`bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=off`),
+        line.includes(
+          'bar-pane sid="lane-pane-next" pane="%7" desired=off — closed bar pane %9',
+        ),
       ),
       "the next session's disabled bar pane setting",
     );
+  });
+
+  test("a first off declaration closes a split left by a previous host", async () => {
+    const sid = "lane-pane-previous";
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    writeFileSync(held, "");
+    await renderIn(sid);
+    await until(() => !existsSync(held), "the previous host's split to close");
+  });
+
+  test("an enabled pane retries a temporary split failure", async () => {
+    const sid = "lane-pane-retry";
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    writeFileSync(`${held}.fail`, "");
+    await renderIn(sid);
+    await switchLanes(sid, true, "pane");
+    await until(
+      () => logLines(env).some((line) => line.includes("temporary split failure")),
+      "the first split to fail",
+    );
+    await until(async () => {
+      await renderIn(sid);
+      return existsSync(held);
+    }, "the configured pane to open on retry");
   });
 
   // [LAW:nothing-unseen] A status-line click's event names its own verb, the
