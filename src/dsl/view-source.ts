@@ -12,8 +12,13 @@ import { UNREAD_ENV, UNREAD_RUN, type RunFact } from "../facts/world-state.js";
 import type { Fact } from "../facts/fact.js";
 
 // The selections whose config rung may hold a rule, as the resolution left
-// them: a decided name, or the rule the view's slot settles.
-export type Selections = Pick<EffectiveGlobals, "theme" | "style" | "effect">;
+// them: a decided name, or the rule the view's slot settles; and the theme
+// pick the theme was folded from, which the draw reports when it names
+// nothing installed.
+export type Selections = Pick<
+  EffectiveGlobals,
+  "theme" | "themePick" | "style" | "effect"
+>;
 
 // [LAW:locality-or-seam] What the host read for a view, as it last read it:
 // the run a `shell` or `file` source names, by digest, and a variable of the

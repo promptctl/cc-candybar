@@ -128,7 +128,9 @@ export type SlotState =
   | { readonly kind: "per-draw"; readonly rule: CompiledRule };
 
 // The selection each slot reads.
-const SELECTION_OF: Readonly<Record<ExpressionSlot, keyof Selections>> = {
+const SELECTION_OF: Readonly<
+  Record<ExpressionSlot, Exclude<keyof Selections, "themePick">>
+> = {
   palette: "theme",
   style: "style",
   effect: "effect",

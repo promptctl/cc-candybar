@@ -66,6 +66,7 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
+  themePickMisses,
   ruleFloorMessage,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
@@ -1214,10 +1215,12 @@ export interface DrawnFrame {
 // the kind is what a consumer that treats them differently reads, never the
 // prose.
 export type RenderWarning =
-  // A globals RULE the render could not honour, so `slot` wears its floor: its
-  // template threw (brandon-unfiled-3248.2gq), or a palette rule's result named
-  // no installed theme (brandon-themes-dzl). A globals slot has no cell of its
-  // own to show a ⚠ in the way a failing segment does.
+  // A globals slot the render could not honour as chosen: a RULE whose
+  // template threw (brandon-unfiled-3248.2gq) or whose palette result named
+  // no installed theme (brandon-themes-dzl), so the slot wears its floor; or a
+  // session's theme pick naming nothing installed, so the slot wears the
+  // rungs below the pick. A globals slot has no cell of its own to show a ⚠
+  // in the way a failing segment does.
   | {
       readonly kind: "rule";
       readonly slot: ExpressionSlot;
@@ -1436,6 +1439,7 @@ export function drawDsl(
   // answer is a bare name, read through its slot's domain.
   const {
     theme: decidedTheme,
+    themePick,
     style: decidedStyle,
     effect: decidedEffect,
   } = parts.selections();
@@ -1443,6 +1447,11 @@ export function drawDsl(
     decidedTheme.kind === "decided"
       ? decidedTheme
       : decideThemeName(slotted("palette"), "", unreachable);
+  // [LAW:no-silent-failure] A session pick naming nothing installed was
+  // folded past; the theme the bar wears instead is known only here, so the
+  // pick is reported here, in the palette slot's report.
+  for (const message of themePickMisses(themePick, theme.name))
+    warn({ kind: "rule", slot: "palette", message });
   const style =
     decidedStyle.kind === "decided"
       ? decidedStyle

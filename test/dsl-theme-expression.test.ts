@@ -38,7 +38,7 @@ import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
-import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
+import { decideThemeName, resolveThemeSelection, themePickOf, THEME_FLOOR } from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
   EDIT_MODE_ARRANGE,
@@ -48,6 +48,8 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { settingNameOf } from "../src/config/globals-fields";
+import { THEMES } from "@promptctl/rich-js/themes/data";
 
 const SID = sessionIdOf("s-theme-expr");
 // Four visibly different installed themes: the floor, plus three the expression
@@ -92,8 +94,8 @@ interface Painted {
 
 // The bar these tests draw: a rig over `source`, drawn at a context percentage,
 // with the render warnings it raised and each segment's own colour read back.
-function themeBar(source = src(RULE)) {
-  const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID });
+function themeBar(source = src(RULE), sessionState?: SessionState) {
+  const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID, sessionState });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): Painted => {
     const drawn = rig.draw({ payload: { session_id: SID, ctx: { pct } } });
@@ -410,7 +412,7 @@ describe("globals.palette as an expression — loader", () => {
 
 describe("resolveThemeSelection", () => {
   test("a plain name decides, carrying both the name and the palette it denotes", () => {
-    expect(resolveThemeSelection(undefined, null, "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, themePickOf(null), "nord")).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -418,7 +420,7 @@ describe("resolveThemeSelection", () => {
   });
 
   test("a session pick naming no installed theme falls through to the config rung", () => {
-    expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, themePickOf("dark"), "nord")).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -426,15 +428,15 @@ describe("resolveThemeSelection", () => {
   });
 
   test("an expression is undecided only when no higher rung decided", () => {
-    expect(resolveThemeSelection(undefined, null, RULE)).toEqual({
+    expect(resolveThemeSelection(undefined, themePickOf(null), RULE)).toEqual({
       kind: "expression",
       source: RULE,
     });
-    expect(resolveThemeSelection(undefined, "nord", RULE)).toMatchObject({
+    expect(resolveThemeSelection(undefined, themePickOf("nord"), RULE)).toMatchObject({
       kind: "decided",
       name: "nord",
     });
-    expect(resolveThemeSelection("dracula", null, RULE)).toMatchObject({
+    expect(resolveThemeSelection("dracula", themePickOf(null), RULE)).toMatchObject({
       kind: "decided",
       name: "dracula",
     });
@@ -445,16 +447,16 @@ describe("resolveThemeSelection", () => {
     // installs rode straight through to paletteForThemeName's throw. It now falls
     // through like every other field's — and the rung it falls to is the
     // expression, which is still the CONFIG's rung and must not be skipped.
-    expect(resolveThemeSelection(undefined, "no-such-theme", RULE)).toEqual({
+    expect(resolveThemeSelection(undefined, themePickOf("no-such-theme"), RULE)).toEqual({
       kind: "expression",
       source: RULE,
     });
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", "nord"),
+      resolveThemeSelection(undefined, themePickOf("no-such-theme"), "nord"),
     ).toMatchObject({ kind: "decided", name: "nord" });
     // Nothing left below: the floor.
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", undefined),
+      resolveThemeSelection(undefined, themePickOf("no-such-theme"), undefined),
     ).toMatchObject({ kind: "decided", name: THEME_FLOOR });
   });
 });
@@ -660,5 +662,67 @@ describe("a rule inside a preset's globals", () => {
     expect(() =>
       parseAndValidate("<theme-expr-staged>", stagedStyle, ALLOWED),
     ).toThrow(/editGlobals\.style: a rule is not allowed here/);
+  });
+});
+
+// A session's stored theme pick outlives the palette it names: the profile is
+// loaded as it was written, and a retired name, or a theme this build does not
+// ship, still sits in it. The bar wears the rungs below the pick, and says so
+// in the palette slot's report, naming the pick and the theme it wore.
+describe("a stored theme pick naming nothing installed", () => {
+  // A theme no build of this registry ships: one a later build, or a build
+  // carrying it, would install.
+  const UNSHIPPED = "acme-dusk";
+  const fromProfile = (theme: string): SessionState =>
+    new SessionState({ [SID]: { [settingNameOf("palette")]: theme } });
+
+  test("a retired pick draws the config's theme and names the pick, the theme it wore and the replacement", () => {
+    const sessionState = fromProfile("dark");
+    const rt = themeBar(src("nord"), sessionState);
+    try {
+      const drawn = rt.render(0);
+      expect(drawn.bg("plain")).toBe(byName("nord"));
+      expect(textOf(drawn.frame)).toContain("T=nord");
+      expect(rt.warnings.map((w) => [w.kind, w.kind === "rule" && w.slot])).toEqual([["rule", "palette"]]);
+      expect(rt.warnings[0]!.message).toContain('pick "dark"');
+      expect(rt.warnings[0]!.message).toContain('rendered "nord"');
+      expect(rt.warnings[0]!.message).toMatch(/"dark" was retired; write "textual-dark"/);
+      // The pick stays stored, so it is reported on every draw it misses.
+      expect(sessionState.get(SID, settingNameOf("palette"))).toBe("dark");
+      rt.render(0);
+      expect(rt.warnings).toHaveLength(2);
+    } finally {
+      rt.dispose();
+    }
+  });
+
+  test("an unshipped pick under a rule draws the rule's answer and names it", () => {
+    const rt = themeBar(src(RULE), fromProfile(UNSHIPPED));
+    try {
+      const drawn = rt.render(90);
+      expect(drawn.bg("plain")).toBe(byName("dracula"));
+      expect(rt.warnings).toHaveLength(1);
+      expect(rt.warnings[0]!.message).toContain(`pick "${UNSHIPPED}"`);
+      expect(rt.warnings[0]!.message).toContain('rendered "dracula"');
+    } finally {
+      rt.dispose();
+    }
+  });
+
+  test("a pick whose theme is installed again draws it with no warning", () => {
+    const rt = themeBar(src("nord"), fromProfile(UNSHIPPED));
+    const registry = THEMES as unknown as Record<string, unknown>;
+    try {
+      expect(rt.render(0).bg("plain")).toBe(byName("nord"));
+      expect(rt.warnings).toHaveLength(1);
+      // Installed: the registry now ships it, as dracula's palette.
+      registry[UNSHIPPED] = THEMES.dracula;
+      rt.warnings.length = 0;
+      expect(rt.render(0).bg("plain")).toBe(byName("dracula"));
+      expect(rt.warnings).toEqual([]);
+    } finally {
+      delete registry[UNSHIPPED];
+      rt.dispose();
+    }
   });
 });

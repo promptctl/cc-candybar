@@ -32,13 +32,14 @@ const baseCache = new Map<string, Palette>();
 /**
  * The Palette for a theme name. Memoized.
  *
- * [LAW:single-enforcer] The one place a theme name becomes a Palette —
- * the per-render base palette and every placement's pinned `theme` both flow
- * through here. A name that does not resolve is registry/resolver drift, never
- * user error: the loader validates `globals.palette` and the set-state verb
- * validates session theme values against the resolvable set, so by the time a
- * name reaches here it must resolve. [LAW:no-defensive-null-guards] the throw is
- * the loud failure for that broken invariant, not a fallback.
+ * [LAW:single-enforcer] The one place a pre-validated theme name becomes a
+ * Palette — the floor and every placement's pinned `theme` flow through here.
+ * A name that does not resolve is registry/resolver drift, never user error:
+ * the loader validates every place a config writes a theme name, so by the
+ * time a name reaches here it must resolve. A session pick never reaches here:
+ * the profile outlives the palette it names, so it is parsed (`themePickOf`).
+ * [LAW:no-defensive-null-guards] the throw is the loud failure for that broken
+ * invariant, not a fallback.
  */
 export function paletteForThemeName(name: string): Palette {
   const palette = basePaletteFor(name);
@@ -64,11 +65,12 @@ export function placementPalette(theme: string, bar: Palette): Palette {
 // [LAW:single-enforcer] THE name → base Palette construction, and the one memo
 // over it. Answering null rather than throwing is what lets its two callers
 // differ in the only way they must: a PRE-VALIDATED name (a config default the
-// loader checked, a session pick the set-state gate admitted, a placement's `theme`)
-// treats absence as registry drift and throws above; a name a RULE produced
-// (brandon-themes-dzl) treats it as an author mistake, collapses to the floor and
-// reports. Two absence policies, one construction — a second `getThemePalette`
-// call beside this one would be a second place a theme name becomes a palette.
+// loader checked, a placement's `theme`) treats absence as registry drift and
+// throws above; a name a RULE produced (brandon-themes-dzl) or a session's
+// stored pick treats it as a name that no longer resolves, which the render
+// reports beside the theme it wore instead. Two absence policies, one
+// construction — a second `getThemePalette` call beside this one would be a
+// second place a theme name becomes a palette.
 function basePaletteFor(name: string): Palette | null {
   const hit = baseCache.get(name);
   if (hit !== undefined) return hit;
@@ -133,9 +135,10 @@ function namedTheme(name: string): DecidedTheme | null {
   return value === null ? null : { kind: "decided", name, value };
 }
 
-// [LAW:single-enforcer] The membership policy for a theme NAME, wherever the
-// name came from — a config default, a session pick, or an expression's RESULT.
-// An installed theme decides; anything else is the floor, and SAYS SO.
+// [LAW:single-enforcer] The membership policy for a theme NAME a rule produced:
+// an installed theme decides; anything else is the floor, and SAYS SO. A
+// session pick naming nothing installed says so too, through the same report
+// (`themePickMisses`), but it falls to the config's rung, not to the floor.
 //
 // The report is what makes this the theme's version rather than a copy of
 // `decideStyleName`: that floor is the identity adaptation, so collapsing to it in
@@ -171,21 +174,61 @@ export function decideThemeName(
   return themeFloor();
 }
 
+// [LAW:types-are-the-program] What a session's stored theme pick says. A pick
+// naming nothing installed is its own case, never the same value as no pick:
+// the profile outlives the palette a pick names (a retired name, a theme a
+// later or earlier build does not ship), and the pick stays stored, so a build
+// that installs it again draws it. Until then the bar wears the rungs below
+// it and the render says so.
+export type ThemePick =
+  | { readonly kind: "unpicked" }
+  | { readonly kind: "installed"; readonly theme: DecidedTheme }
+  | { readonly kind: "uninstalled"; readonly name: string };
+
+// [LAW:parse-dont-validate] The session's stored string, parsed into the pick
+// the fold reads. The construction is the membership test, as for a rule.
+export function themePickOf(stored: string | null): ThemePick {
+  if (stored === null) return { kind: "unpicked" };
+  const theme = namedTheme(stored);
+  return theme === null
+    ? { kind: "uninstalled", name: stored }
+    : { kind: "installed", theme };
+}
+
+// [LAW:no-silent-failure] The report of a pick naming nothing installed, given
+// the theme the bar wears in its place: the same report a palette rule that
+// named nothing makes, so the ⚠ list shows both alike. None for any other pick.
+export function themePickMisses(
+  pick: ThemePick,
+  wears: string,
+): readonly string[] {
+  return pick.kind === "uninstalled"
+    ? [
+        `this session's theme rendered "${wears}": its pick "${pick.name}" ` +
+          `names no installed theme${retiredThemeNote(pick.name)}; pick a ` +
+          `theme to replace it`,
+      ]
+    : [];
+}
+
 // The theme a render should use, as far as it can be known before the render
-// runs [LAW:one-type-per-behavior] — `resolveSelection` with the theme's own two
-// values. The floor cannot report, because no name failed to resolve: reaching it
-// is the ordinary "nothing was declared" answer.
+// runs [LAW:one-type-per-behavior] — `resolveSelection` with the theme's own
+// values. A pick naming nothing installed is no rung, so the fold moves on to
+// the config's, and the pick's own report names what the bar wore instead. The
+// floor cannot report, because no name failed to resolve: reaching it is the
+// ordinary "nothing was declared" answer.
 export function resolveThemeSelection(
   stagedPalette: string | undefined,
-  sessionTheme: string | null,
+  pick: ThemePick,
   globalsPalette: string | undefined,
 ): ThemeSelection {
   return resolveSelection(
     stagedPalette,
-    sessionTheme,
+    pick,
     globalsPalette,
     themeFloor(),
     namedTheme,
+    (p: ThemePick) => (p.kind === "installed" ? p.theme : null),
   );
 }
 

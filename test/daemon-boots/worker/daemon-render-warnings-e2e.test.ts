@@ -32,6 +32,8 @@ import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { renderLines } from "../../helpers/daemon-log";
 import { fakeWatches } from "../../helpers/fake-watches";
 import { untilHeard } from "../../helpers/reload-signal";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
+import { settingNameOf } from "../../../src/config/globals-fields";
 
 jest.setTimeout(30_000);
 
@@ -331,6 +333,52 @@ describe("a warning a rule over the clock starts and stops", () => {
       );
       // The last four: met, counted, stopped, cleared.
       expect(records.slice(-4)).toEqual(["new", "kept", "new", "kept"]);
+    } finally {
+      await daemon.stop();
+      rmSync(projectDir, { recursive: true, force: true });
+      removeTmpDirs();
+    }
+  });
+});
+
+describe("a session whose stored theme pick names nothing installed", () => {
+  test("draws the config's theme, and the indicator offers the pick and the theme it wore", async () => {
+    const { env, removeTmpDirs } = prepareIsolatedDaemonEnv(
+      "cc-candybar-warn-pick",
+    );
+    const projectDir = mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-render-warnings-e2e-"),
+    );
+    const config = path.join(projectDir, "pick.json5");
+    writeFileSync(
+      config,
+      `{ globals: { palette: 'nord' }, segments: { mark: { template: 'mark {{ .theme.effective }}' } }, root: { h: ['mark'] } }`,
+    );
+    const sid = "stale-pick";
+    // The profile as an earlier daemon left it: a pick of a retired theme.
+    const daemon = startDaemon(env, {
+      profile: () => ({
+        session: {
+          load: () =>
+            new Map([[sessionIdOf(sid), { [settingNameOf("palette")]: "dark" }]]),
+          save: () => {},
+          flush: async () => {},
+        },
+      }),
+    });
+    try {
+      const args = ["cc-candybar", "--config", config];
+      const draw = () => render(daemon, sid, projectDir, {}, args);
+      await draw();
+      const bar = await draw();
+      expect(textOf(bar)).toContain("mark nord");
+      expect(indicatorOf(bar)).toBe("⚠ 1");
+      const pages = await readDiagnostics(daemon, sid, projectDir, bar, {}, args);
+      expect(pages).toHaveLength(1);
+      expect(pages[0]!.text).toContain('its pick "dark"');
+      expect(pages[0]!.text).toContain('rendered "nord"');
+      for (const line of await renderLines(env, sid, 2))
+        expect(fieldOf("warn")(line)).toBe("rule:palette");
     } finally {
       await daemon.stop();
       rmSync(projectDir, { recursive: true, force: true });

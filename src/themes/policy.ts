@@ -58,11 +58,11 @@ export function retiredThemeNote(name: unknown): string {
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
-// when nothing above it decided. Spelled once because three things reach it — a
-// config declaring no `palette`, a session pick naming nothing installed, and an
-// EXPRESSION whose result names nothing (brandon-themes-dzl) — and, unlike the
-// style's floor, it is a SPECIFIC theme rather than an identity, which is why the
-// third of those reports itself (see `decideThemeName`).
+// when nothing above it decided. Spelled once because two things reach it — a
+// config declaring no `palette`, and an EXPRESSION whose result names nothing
+// (brandon-themes-dzl) — and, unlike the style's floor, it is a SPECIFIC theme
+// rather than an identity, which is why the second reports itself (see
+// `decideThemeName`).
 export const THEME_FLOOR = "textual-dark";
 
 // --- The one globals resolution ---
@@ -79,10 +79,12 @@ export const THEME_FLOOR = "textual-dark";
 // null and lands on the config default by the same code path a session that
 // clicked lands on its pick.
 //
-// [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
-// SessionState string and this field's domain: it returns the typed value or
-// null, and null means "no session pick" — indistinguishable, on purpose, from
-// never having clicked. That is what makes a stale entry from a prior config's
+// [LAW:parse-dont-validate] `parseSession` is the boundary between the session's
+// pick and this field's domain: it returns the typed value or null, and null
+// means "no session pick" — indistinguishable, on purpose, from never having
+// clicked. The theme alone tells the two apart, one step earlier, in the pick it
+// hands here (src/themes/palette-resolvers.ts), because a palette it cannot
+// find leaves the bar in a theme nobody chose. That is what makes a stale entry from a prior config's
 // vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
 // default rather than throw or render something the label disagrees with
 // [LAW:no-silent-failure] — the caller publishes what this returns as
@@ -102,12 +104,12 @@ export const THEME_FLOOR = "textual-dark";
 // skips by the same code path a session that never clicked skips its own rung.
 // There is no "is edit mode on" branch anywhere below this line; the mode is
 // carried entirely by whether this argument has a value.
-export function effectiveGlobal<T>(
+export function effectiveGlobal<T, Pick = string>(
   staged: T | null | undefined,
-  sessionPick: string | null,
+  sessionPick: Pick | null,
   configDefault: T | null | undefined,
   floor: T,
-  parseSession: (raw: string) => T | null,
+  parseSession: (raw: Pick) => T | null,
 ): T {
   const picked = sessionPick === null ? null : parseSession(sessionPick);
   return staged ?? picked ?? configDefault ?? floor;
@@ -248,15 +250,21 @@ export function isExpression(
 // is allowed to hold, which is why this is not a second resolver beside the old
 // one.
 //
-// The per-field variability is two arguments: the floor (already decided,
-// because a floor that could fail would be no floor) and `named`, which turns a
-// name from ANY rung into that field's value or reports that it names nothing.
-export function resolveSelection<T>(
+// The per-field variability is three arguments: the floor (already decided,
+// because a floor that could fail would be no floor), `named`, which turns a
+// name from the staged or config rung into that field's value or reports that
+// it names nothing, and `parseSession`, which turns the session's pick into
+// that field's value. A style or an effect reads its stored string as `named`
+// does; a theme reads a pick that tells a stored name naming nothing from no
+// pick at all (src/themes/palette-resolvers.ts), because only that field
+// reports one.
+export function resolveSelection<T, Pick>(
   stagedName: string | undefined,
-  sessionPick: string | null,
+  sessionPick: Pick | null,
   globalsValue: string | undefined,
   floor: Decided<T>,
   named: (raw: string) => Decided<T> | null,
+  parseSession: (pick: Pick) => Decided<T> | null,
 ): Selection<T> {
   // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
   // config-default rung, so `effectiveGlobal`'s `??` chain enforces the
@@ -265,12 +273,12 @@ export function resolveSelection<T>(
   const configRung: Selection<T> | null = isExpression(globalsValue)
     ? { kind: "expression", source: globalsValue }
     : named(globalsValue ?? floor.name);
-  return effectiveGlobal<Selection<T>>(
+  return effectiveGlobal<Selection<T>, Pick>(
     stagedName === undefined ? null : named(stagedName),
     sessionPick,
     configRung,
     floor,
-    named,
+    parseSession,
   );
 }
 
@@ -358,12 +366,15 @@ export function resolveStyleSelection(
   globalsStyle: string | undefined,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): StyleSelection {
+  const named = (raw: string): DecidedStyle | null =>
+    namedStyle(raw, declaredStyles);
   return resolveSelection(
     stagedStyle,
     sessionStyle,
     globalsStyle,
     decideStyleName(STYLE_FLOOR, declaredStyles),
-    (raw) => namedStyle(raw, declaredStyles),
+    named,
+    named,
   );
 }
 
@@ -472,6 +483,7 @@ export function resolveEffectSelection(
     sessionEffect,
     globalsEffect,
     decideEffectName(EFFECT_FLOOR),
+    namedEffect,
     namedEffect,
   );
 }

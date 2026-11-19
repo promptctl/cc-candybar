@@ -23,6 +23,8 @@ import {
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
+  themePickOf,
+  type ThemePick,
   type ThemeSelection,
 } from "../themes/palette-resolvers.js";
 import { themeDefaultsOf, underThemeDefault } from "./theme-defaults.js";
@@ -49,6 +51,10 @@ export type EffectiveGlobals = ValuedGlobals & {
   // the payload carries no `theme` field and the server hands drawDsl no
   // separate base palette.
   readonly theme: ThemeSelection;
+  // The session's own theme pick, which `theme` was folded from: carried
+  // beside it because a pick naming nothing installed is folded past, and
+  // the view, once it knows what the bar wore instead, reports both.
+  readonly themePick: ThemePick;
   // [LAW:types-are-the-program] The style as far as it can be resolved HERE
   // (brandon-looks-pe6). A session pick, a staged fragment and a plain
   // `globals.style` all resolve to a `decided` arm; a `globals.style` holding a
@@ -160,9 +166,10 @@ export function resolveEffectiveGlobals(
   // (src/config/theme-defaults.ts): which theme decides which fragment.
   // [LAW:one-source-of-truth] Every pick is read under the key the settings
   // write it under.
+  const themePick = themePickOf(sessionPick(settingNameOf("palette")));
   const theme = resolveThemeSelection(
     staged.palette,
-    sessionPick(settingNameOf("palette")),
+    themePick,
     declared.palette,
   );
   const globals = underThemeDefault(
@@ -179,6 +186,7 @@ export function resolveEffectiveGlobals(
     preset,
     presetCustomized: presetCustomized(preset),
     theme,
+    themePick,
     style: resolveStyleSelection(
       staged.style,
       sessionPick(settingNameOf("style")),

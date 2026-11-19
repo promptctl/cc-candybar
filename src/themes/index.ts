@@ -48,6 +48,8 @@ export {
   transposedPalette,
   decideThemeName,
   resolveThemeSelection,
+  themePickMisses,
+  themePickOf,
   placementPalette,
 } from "./palette-resolvers.js";
 export type { ThemeSelection, DecidedTheme } from "./palette-resolvers.js";

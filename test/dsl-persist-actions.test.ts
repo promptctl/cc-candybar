@@ -41,7 +41,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
+import { resolveThemeSelection, themePickOf } from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { linkClick } from "./helpers/click";
@@ -1065,7 +1065,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get(S1, "theme"),
+          themePickOf(sessionState.get(S1, "theme")),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "dracula" });
@@ -1073,7 +1073,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get(S2_NO_PICK, "theme"),
+          themePickOf(sessionState.get(S2_NO_PICK, "theme")),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "nord" });
