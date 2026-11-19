@@ -28,6 +28,7 @@ import type { SessionBook } from "../../src/daemon/session-book";
 import { heardContextOf } from "../../src/renderer-interface/request-context";
 import { HOST } from "./host";
 import { stateDir } from "../../src/daemon/paths";
+import { digestOf } from "../../src/utils/plain";
 import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 
 export function clickParts(
@@ -73,15 +74,21 @@ export function clickParts(
         menuIdle.clicked(sessionId, time.tick);
       },
     }),
-    // Its clicks read the config the verb context hands in, so the config of
-    // every origin is held here, and none is let go.
+    // [LAW:one-source-of-truth] The config is already held by the verb fixture.
+    // Admission and the verbs read its same snapshot source.
     renderCache: {
       subscriptions: () => ({ sources: {} }),
       origins: () => [],
       holdView: () => null,
-      holdsConfig: () => true,
+      configDelivery: (origin) => {
+        const snapshot = verbCtx.snapshotFor(origin);
+        return { kind: "received", snapshot, digest: digestOf(snapshot) };
+      },
       prune: () => {},
-    },
+    } satisfies Pick<
+      MainRendererParts["renderCache"],
+      "subscriptions" | "origins" | "holdView" | "configDelivery" | "prune"
+    >,
     // No session renders here: no world state is held, and a session's
     // context is the one the rig's book holds.
     worldStates: {

@@ -147,7 +147,6 @@ export function mainRenderer(
   // session. Its origin and live request are read when it resumes.
   const opening = new Set<SessionId>();
   let parked: readonly ParkedClick[] = [];
-  const configFailures = new Map<string, Failure>();
 
   const parkedContext = (click: ParkedClick): SessionContext => {
     const { session } = click;
@@ -174,9 +173,10 @@ export function mainRenderer(
     return ready;
   };
 
-  const throwConfigFailure = (origin: RenderOrigin): void => {
-    const failure = configFailures.get(originKey(origin));
-    if (failure !== undefined) throw new CrossedFailure(failure);
+  const configForTurn = (origin: RenderOrigin) => {
+    const delivery = parts.renderCache.configDelivery(origin);
+    if (delivery.kind === "failed") throw new CrossedFailure(delivery.failure);
+    return delivery;
   };
 
   const failClicks = (
@@ -266,16 +266,16 @@ export function mainRenderer(
               originKey(previous.durable.origin) !== originKey(origin))
           )
             parts.renderCache.retireSession(session);
-          const failure = configFailures.get(originKey(origin));
-          if (failure !== undefined) {
+          const delivery = parts.renderCache.configDelivery(origin);
+          if (delivery.kind === "failed") {
             opening.delete(session);
             failClicks(
               takeClicks((click) => click.session === session),
-              failure,
+              delivery.failure,
             );
-            throw new CrossedFailure(failure);
+            throw new CrossedFailure(delivery.failure);
           }
-          if (!parts.renderCache.holdsConfig(origin)) {
+          if (delivery.kind === "pending") {
             opening.add(session);
             record.push(["parked", "context"]);
             return;
@@ -291,7 +291,8 @@ export function mainRenderer(
       }
       case "config": {
         const key = originKey(event.origin);
-        const recovering = configFailures.has(key);
+        const recovering =
+          parts.renderCache.configDelivery(event.origin).kind === "failed";
         const sessions = (
           recovering ? parts.worldStates.sessions() : [...opening]
         ).filter(
@@ -305,15 +306,16 @@ export function mainRenderer(
         // [LAW:no-ambient-temporal-coupling] Waiters are detached before
         // configuration. A failed load settles them and a successful load
         // runs their intent directly, so neither can requeue the same click.
-        try {
-          parts.renderCache.configure(event.origin, event.config);
-        } catch (thrown) {
-          const failure = failureOf(thrown);
-          configFailures.set(key, failure);
-          failClicks(ready, failure);
-          throw thrown;
-        }
-        configFailures.delete(key);
+        runInAction(() => {
+          try {
+            parts.renderCache.configure(event.origin, event.config);
+          } catch (thrown) {
+            const failure = failureOf(thrown);
+            parts.renderCache.rejectConfig(event.origin, failure);
+            failClicks(ready, failure);
+            throw new CrossedFailure(failure);
+          }
+        });
         runEach([
           () =>
             runEach(
@@ -334,8 +336,7 @@ export function mainRenderer(
         );
         // The host settles this request's answer in this turn. Config
         // failure is reported here before a present is minted.
-        throwConfigFailure(current.requested);
-        if (!parts.renderCache.holdsConfig(current.requested))
+        if (configForTurn(current.requested).kind === "pending")
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
@@ -397,8 +398,7 @@ export function mainRenderer(
           click.scope === "session" ? (live ?? event.context) : null;
         if (context !== null) {
           const { origin } = context.durable;
-          throwConfigFailure(origin);
-          if (!parts.renderCache.holdsConfig(origin)) {
+          if (configForTurn(origin).kind === "pending") {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
             parked = [
@@ -443,11 +443,23 @@ export function mainRenderer(
     // view closes stops being named, so its switches go.
     const lanes: Record<SessionId, LaneSwitches> = {};
     for (const session of Object.keys(views) as SessionId[]) {
+      const editing = parts.edits.draft(session) !== null;
+      if (editing) {
+        const { requested } = parts.worldStates.requestOf(session);
+        // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
+        // through a failed delivery. Keep its last committed lane switches
+        // until the host can supply the committed config again.
+        if (parts.renderCache.configDelivery(requested).kind === "failed") {
+          const held = subscriptions.lanes[session];
+          if (held !== undefined) lanes[session] = held;
+          continue;
+        }
+      }
       const switches = viewLanes(
         parts,
         session,
         parts.edits.committed,
-        parts.edits.draft(session) !== null,
+        editing,
       );
       if (switches !== null) lanes[session] = switches;
     }
@@ -500,12 +512,10 @@ export function mainRenderer(
       } finally {
         stored = drained();
         subscriptions = subscribed();
-        // [LAW:one-source-of-truth] The snapshots held are exactly the
+        // [LAW:one-source-of-truth] The deliveries held are exactly the
         // origins the output names, as the host follows exactly those.
         const origins = new Set(subscriptions.configs.map(originKey));
         parts.renderCache.prune(origins);
-        for (const key of configFailures.keys())
-          if (!origins.has(key)) configFailures.delete(key);
       }
       return { kind: "answered", value };
     } catch (thrown) {
