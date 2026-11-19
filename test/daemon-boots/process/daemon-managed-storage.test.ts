@@ -19,6 +19,7 @@ import {
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
+import { readProbe, readsOf } from "../../helpers/daemon-read-probe";
 
 // [LAW:no-ambient-temporal-coupling] Hold the next named child before the
 // actual renderer takes its boot. The host's restart delay cannot race the
@@ -62,7 +63,13 @@ async function rendererBootGate(entry: string, bundle: string, socket: string) {
   };
 }
 
-test("two renderers keep one managed watch across a restart and last release", async () => {
+test.each(["valid", "invalid"] as const)(
+  "two renderers keep one managed watch across a restart with %s config input",
+  sharedStorageAcrossRestart,
+  30_000,
+);
+
+async function sharedStorageAcrossRestart(configAtRestart: "valid" | "invalid") {
   const isolated = prepareIsolatedDaemonEnv("ccb-managed");
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-managed-plugin-")),
@@ -74,8 +81,13 @@ test("two renderers keep one managed watch across a restart and last release", a
   const folder = path.join(root, "p", "session");
   const primary = "managed-main";
   const worktree = "managed-worktree";
+  const ioLog = path.join(root, "reads.jsonl");
+  const probe = path.join(root, "reads.cjs");
   const env = {
     ...isolated.env,
+    NODE_OPTIONS: [isolated.env.NODE_OPTIONS, `--require=${probe}`]
+      .filter(Boolean)
+      .join(" "),
     HOME: root,
     CLAUDE_CONFIG_DIR: path.join(root, "claude"),
     XDG_DATA_HOME: path.join(root, "data"),
@@ -86,7 +98,8 @@ test("two renderers keep one managed watch across a restart and last release", a
     lines.filter((line) =>
       line.includes(`] dir watch ${state} path=${valueOf(folder)} `),
     );
-  const sourceFile = (session: string) => path.join(folder, `${session}.json`);
+  const sourceFile = (session: string) =>
+    path.join(folder, `${session}.json`);
   const reads = (lines: readonly string[], session: string) =>
     lines.filter((line) =>
       line.includes(
@@ -129,11 +142,18 @@ test("two renderers keep one managed watch across a restart and last release", a
     fs.writeFileSync(
       definition,
       `{
-      sources: { status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } } },
-      segments: { marker: { template: "{{ .plugins.p.status.marker }}" } }
-    }`,
+    sources: { status: { scope: "session", refresh: { watch: true }, read: { file: { json: true } } } },
+    segments: { marker: { template: "{{ .plugins.p.status.marker }}" } }
+  }`,
     );
     for (const session of [primary, worktree]) configure(session, true);
+    readProbe(probe, ioLog, {
+      [definition]: ["payload"],
+      [config(primary)]: ["payload"],
+      [config(worktree)]: ["payload"],
+      [sourceFile(primary)]: ["readFile"],
+      [sourceFile(worktree)]: ["readFile"],
+    });
     fs.copyFileSync(bundle, namedBundle);
     gate = await rendererBootGate(
       entry,
@@ -208,7 +228,29 @@ test("two renderers keep one managed watch across a restart and last release", a
       "both feeds reading managed sources",
       8_000,
     );
+    if (configAtRestart === "invalid") {
+      const since = log().length;
+      fs.writeFileSync(config(worktree), "{ invalid:");
+      await until(
+        () =>
+          log()
+            .slice(since)
+            .some(
+              (line) =>
+                line.includes("config loaded ") &&
+                fieldOf(line, "state") === "failed" &&
+                fieldOf(line, "files").includes(config(worktree)),
+            ),
+        "the live worktree to report its invalid config",
+      );
+      write(worktree, "last good before restart");
+      await until(
+        () => namedFeed("last good before restart"),
+        "the retained plugin to draw after the load error",
+      );
+    }
     const before = log();
+    const beforeIO = readsOf(ioLog).length;
     expect(watches(before, "opened")).toHaveLength(1);
     expect(watches(before, "closed")).toHaveLength(0);
     const started = /renderer worktree\[1\] started pid=(\d+)/.exec(
@@ -247,7 +289,9 @@ test("two renderers keep one managed watch across a restart and last release", a
     expect(reads(beforeBoot, worktree)).toHaveLength(1);
     expect(reads(beforeBoot, primary)).toHaveLength(1);
     expect(
-      beforeBoot.some((line) => line.includes("renderer worktree[2] started")),
+      beforeBoot.some((line) =>
+        line.includes("renderer worktree[2] started"),
+      ),
     ).toBe(false);
     gate.release();
     await until(
@@ -256,6 +300,20 @@ test("two renderers keep one managed watch across a restart and last release", a
       8_000,
     );
     const recovered = log();
+    // Both renderer processes inherit the same probe. Every physical read
+    // since the crash belongs to the host and to a changed session file.
+    const recoveryReads = readsOf(ioLog).slice(beforeIO);
+    const hostPid = daemon.child.pid;
+    expect(recoveryReads).toEqual(
+      expect.arrayContaining(
+        [primary, worktree].map((session) => ({
+          file: sourceFile(session),
+          pid: hostPid,
+          operation: "readFile",
+        })),
+      ),
+    );
+    expect(recoveryReads).toHaveLength(2);
     expect(watches(recovered, "opened")).toHaveLength(1);
     expect(watches(recovered, "closed")).toHaveLength(0);
 
@@ -271,6 +329,7 @@ test("two renderers keep one managed watch across a restart and last release", a
     );
     const remaining = log();
     expect(watches(remaining, "closed")).toHaveLength(0);
+    const beforeWrite = readsOf(ioLog).length;
     write(primary, "remaining consumer");
     await until(
       () =>
@@ -281,10 +340,18 @@ test("two renderers keep one managed watch across a restart and last release", a
     );
     expect(reads(log().slice(remaining.length), primary)).toHaveLength(1);
 
+    expect(readsOf(ioLog).slice(beforeWrite)).toEqual([
+      {
+        file: sourceFile(primary),
+        pid: daemon.child.pid,
+        operation: "readFile",
+      },
+    ]);
     configure(primary, false);
     await until(
       () =>
-        mainFeed(`removed ${primary}`) && watches(log(), "closed").length >= 1,
+        mainFeed(`removed ${primary}`) &&
+        watches(log(), "closed").length >= 1,
       "the last consumer to release its one managed watch",
       8_000,
     );
@@ -292,7 +359,9 @@ test("two renderers keep one managed watch across a restart and last release", a
     expect(watches(final, "opened")).toHaveLength(1);
     expect(watches(final, "closed")).toHaveLength(1);
     // The only mutation since the crash is the intentional removal above.
-    expect(declares(remaining.slice(before.length), worktree)).toHaveLength(1);
+    expect(declares(remaining.slice(before.length), worktree)).toHaveLength(
+      1,
+    );
     expect(
       reads(final.slice(before.length, remaining.length), worktree),
     ).toHaveLength(1);
@@ -303,4 +372,4 @@ test("two renderers keep one managed watch across a restart and last release", a
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
   }
-}, 30_000);
+}
