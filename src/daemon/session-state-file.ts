@@ -4,27 +4,25 @@ import { quietLogger, type DaemonLogger } from "../utils/logger";
 import { asError, publishByRenameAsync } from "../utils/atomic-write";
 import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
-
-// [LAW:parse-dont-validate] What a load makes of one session's value: the
-// value it holds, or what is wrong with it, read after "its value".
-export type ParsedEntry<V> =
-  | { readonly ok: true; readonly value: V }
-  | { readonly ok: false; readonly problem: string };
+import type { Asked } from "../utils/outcome";
+import { isPlainObject } from "../config/loader/validate-core";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
 // log lines say, each session's value as the file keeps it, and as a load
-// parses it back.
+// parses it back, or why not, read after "its value".
 export interface SessionFileKind<V> {
   readonly name: string;
   readonly record: (value: V) => unknown;
-  readonly parse: (value: unknown) => ParsedEntry<V>;
+  readonly parse: (value: unknown) => Asked<V>;
 }
 
 // [LAW:locality-or-seam] Where one per-session file's sessions are kept: its
 // file, or nowhere. Its owner holds them, and persistence is the storage's.
 export interface SessionFileStorage<V> {
   load(): ReadonlyMap<SessionId, V>;
-  // An ordered copy the storage keeps: the order is the file's.
+  // The sessions as they stand, oldest first. The storage keeps its own copy
+  // until the write behind lands, so the owner may go on changing its map;
+  // the file keeps their order.
   save(snapshot: ReadonlyMap<SessionId, V>): void;
   flush(): Promise<void>;
 }
@@ -45,21 +43,17 @@ export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
   parse: (kv) => {
-    if (!isRecord(kv)) return { ok: false, problem: "is not an object" };
+    if (!isPlainObject(kv))
+      return { kind: "failed", reason: "is not an object" };
     const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
     return bad === undefined
-      ? { ok: true, value: kv as SessionPicks }
+      ? { kind: "ok", value: kv as SessionPicks }
       : {
-          ok: false,
-          problem: `has a ${JSON.stringify(bad)} that is not a string`,
+          kind: "failed",
+          reason: `has a ${JSON.stringify(bad)} that is not a string`,
         };
   },
 };
-
-export const isRecord = (
-  value: unknown,
-): value is Readonly<Record<string, unknown>> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 
 // [LAW:single-enforcer] The load of every per-session file, keyed by session
 // id: each key crosses the session-id checkpoint and each value the kind's
@@ -93,7 +87,7 @@ export function loadSessionFile<V>(
     logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
     return loaded;
   }
-  if (!isRecord(parsed)) {
+  if (!isPlainObject(parsed)) {
     logger("warn", `${kind.name} load: unexpected shape, starting empty`);
     return loaded;
   }
@@ -111,12 +105,12 @@ export function loadSessionFile<V>(
   });
   for (const [id, value] of keyed) {
     const entry = kind.parse(value);
-    if (entry.ok) loaded.set(id, entry.value);
+    if (entry.kind === "ok") loaded.set(id, entry.value);
     else {
       dropped += 1;
       logger(
         "warn",
-        `${kind.name} load: dropped session ${JSON.stringify(id)}: its value ${entry.problem}`,
+        `${kind.name} load: dropped session ${JSON.stringify(id)}: its value ${entry.reason}`,
       );
     }
   }
@@ -167,7 +161,11 @@ export class SessionFile<V> implements SessionFileStorage<V> {
   }
 
   save(snapshot: ReadonlyMap<SessionId, V>): void {
-    this.pending = snapshot;
+    // [LAW:no-ambient-temporal-coupling] A copy of its own: the landing
+    // clears what is pending only if it is the copy that write began with,
+    // and an owner's map that moved while the write was on its way is a new
+    // copy, so it stays pending.
+    this.pending = new Map(snapshot);
     this.schedule();
   }
 
@@ -205,8 +203,8 @@ export class SessionFile<V> implements SessionFileStorage<V> {
     return this.waiting;
   }
 
-  // [LAW:effects-at-boundaries] The file is the one place the sessions are a
-  // record.
+  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
+  // order the owner holds them.
   private body(snapshot: ReadonlyMap<SessionId, V>): string {
     return JSON.stringify(
       Object.fromEntries(

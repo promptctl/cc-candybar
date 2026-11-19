@@ -6,12 +6,9 @@ import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { writeAtomic } from "../utils/atomic-write.js";
 import { layerRoleOf } from "../config/layer-role";
-import {
-  isRecord,
-  loadSessionFile,
-  type ParsedEntry,
-  type SessionFileKind,
-} from "./session-state-file";
+import { loadSessionFile, type SessionFileKind } from "./session-state-file";
+import type { Asked } from "../utils/outcome";
+import { isPlainObject } from "../config/loader/validate-core";
 import {
   type Change,
   type Step,
@@ -59,8 +56,8 @@ function isSavepoint(v: unknown): v is Savepoint {
 
 // [LAW:parse-dont-validate] A session's history as its file spelled it, or
 // the field that is not what a history holds.
-function parseSessionHistory(v: unknown): ParsedEntry<SessionHistory> {
-  if (!isRecord(v)) return { ok: false, problem: "is not an object" };
+function parseSessionHistory(v: unknown): Asked<SessionHistory> {
+  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
   const problem = !isSteps(v.past)
     ? "has a 'past' that is not a list of steps"
     : !isSteps(v.future)
@@ -69,8 +66,8 @@ function parseSessionHistory(v: unknown): ParsedEntry<SessionHistory> {
         ? "has a 'savepoint' that is not a savepoint"
         : null;
   return problem === null
-    ? { ok: true, value: v as unknown as SessionHistory }
-    : { ok: false, problem };
+    ? { kind: "ok", value: v as unknown as SessionHistory }
+    : { kind: "failed", reason: problem };
 }
 
 // [LAW:types-are-the-program] A session change is a change to a SETTING key —
@@ -116,18 +113,18 @@ const quoted = (keys: Iterable<string>): string =>
   [...keys].map((k) => `"${k}"`).join(", ");
 
 // [LAW:parse-dont-validate] The history file's sessions: each history parsed
-// and stripped of its retired keys. One left holding nothing is dropped by
-// name, so it takes no place in the bound.
+// and stripped of its retired keys. One left holding nothing is dropped, its
+// retired keys named in why, so it takes no place in the bound.
 const HISTORY_FILE: Pick<SessionFileKind<Stripped>, "name" | "parse"> = {
   name: "settings-history",
   parse: (value) => {
     const parsed = parseSessionHistory(value);
-    if (!parsed.ok) return parsed;
+    if (parsed.kind === "failed") return parsed;
     const stripped = withoutRetiredKeys(parsed.value);
-    if (!holdsNothing(stripped.history)) return { ok: true, value: stripped };
+    if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
     return {
-      ok: false,
-      problem:
+      kind: "failed",
+      reason:
         stripped.retired.size > 0
           ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting`
           : "holds nothing to undo, redo or cancel",
@@ -151,15 +148,14 @@ export function fileHistoryStorage(
   return {
     load: () => {
       const loaded = loadSessionFile(HISTORY_FILE, file, logger);
-      const retired = new Set(
-        [...loaded.values()].flatMap(({ retired }) => [...retired]),
-      );
-      if (retired.size > 0) {
-        logger(
-          "warn",
-          `settings-history load: dropped the changes to ${quoted(retired)}, no longer a setting`,
-        );
-      }
+      // [LAW:no-silent-failure] Each kept session names the changes it lost,
+      // as a dropped one does in why it was dropped.
+      for (const [id, { retired }] of loaded)
+        if (retired.size > 0)
+          logger(
+            "warn",
+            `settings-history load: session ${JSON.stringify(id)} dropped the changes to ${quoted(retired)}, no longer a setting`,
+          );
       return new Map(
         [...loaded].map(([id, { history }]) => [id, history] as const),
       );
@@ -167,8 +163,8 @@ export function fileHistoryStorage(
     save: (state) => {
       try {
         fs.mkdirSync(path.dirname(file), { recursive: true });
-        // [LAW:effects-at-boundaries] The file is the one place the
-        // sessions are a record.
+        // [LAW:effects-at-boundaries] The file's record of the histories, in
+        // the order the owner holds them, written before this returns.
         writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 0o600);
       } catch (e) {
         const message = `settings-history write failed — the change landed and undoes until the daemon restarts, not after: ${(e as Error).message}`;

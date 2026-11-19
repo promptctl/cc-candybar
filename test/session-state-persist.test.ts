@@ -182,6 +182,37 @@ describe("the session state's file", () => {
     expect(logged.filter((l) => l.includes("saved"))).toHaveLength(2);
   });
 
+  // [LAW:no-ambient-temporal-coupling] The host goes on moving its own map
+  // while a write is on its way, so a pick made then is pending still when
+  // that write lands, and the close writes it.
+  it("a pick made while a write is on its way is not lost", async () => {
+    const rename = fs.promises.rename;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = jest
+      .spyOn(fs.promises, "rename")
+      .mockImplementationOnce(async (from, to) => {
+        await held;
+        return rename(from, to);
+      });
+    try {
+      const daemon = daemonOver(storage());
+      daemon.turn((s) => s.set(S1, "theme", "nord"));
+      await settled(() => spy.mock.calls.length === 1);
+      daemon.turn((s) => s.set(S2, "theme", "dracula"));
+      release();
+      await daemon.stores.close();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(onDisk()).toEqual({
+      s1: { theme: "nord" },
+      s2: { theme: "dracula" },
+    });
+  });
+
   // A flush the disk refuses drops nothing: it rejects with the reason, the
   // snapshot stays pending, and the next flush lands it.
   it("a flush the disk refuses rejects and leaves its snapshot for the next flush", async () => {

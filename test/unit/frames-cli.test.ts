@@ -96,8 +96,8 @@ describe("a stdin line's session_id", () => {
     const hook = { session_id: "1f6e0c2a-0d0e-4a52-9d1b-2b0b0f0e0a11" };
     expect(parseStdinLine(JSON.stringify(hook))).toEqual({
       ok: true,
-      hook,
       session: hook.session_id,
+      json: hook,
     });
   });
 });

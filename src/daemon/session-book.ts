@@ -41,7 +41,7 @@ export const SESSION_BOOK_FILE: SessionFileKind<DurableContext> = {
   parse: (value) => {
     const origin = originOfRecord(value);
     if (origin === null)
-      return { ok: false, problem: "is not the origin of a render" };
+      return { kind: "failed", reason: "is not the origin of a render" };
     const { claudeConfigDir } = value as { claudeConfigDir?: unknown };
     if (
       !isAbsolute(origin.projectDir) ||
@@ -50,9 +50,9 @@ export const SESSION_BOOK_FILE: SessionFileKind<DurableContext> = {
       (claudeConfigDir !== undefined &&
         (typeof claudeConfigDir !== "string" || !isAbsolute(claudeConfigDir)))
     )
-      return { ok: false, problem: "holds a path that is not absolute" };
+      return { kind: "failed", reason: "holds a path that is not absolute" };
     return {
-      ok: true,
+      kind: "ok",
       value: {
         origin,
         ...(claudeConfigDir !== undefined && { claudeConfigDir }),
@@ -96,7 +96,7 @@ export class SessionBook {
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
     this.phase = "open";
-    this.storage.save(new Map(this.book));
+    this.storage.save(this.book);
   }
 
   // The session's newest request: what it says the session is, saved when
@@ -110,7 +110,7 @@ export class SessionBook {
     this.book.set(session, durable);
     this.bound();
     if (held !== undefined && sameDurable(held, durable)) return;
-    if (this.phase === "open") this.storage.save(new Map(this.book));
+    if (this.phase === "open") this.storage.save(this.book);
   }
 
   // [LAW:one-source-of-truth] The session as a click finds it: live from the

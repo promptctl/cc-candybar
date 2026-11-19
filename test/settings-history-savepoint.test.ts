@@ -283,6 +283,16 @@ describe("the savepoint under the history's bounds", () => {
     expect(logs.join("\n")).toMatch(/cancel is no longer available/);
   });
 
+  test("a lone step over the byte bound leaves no history behind, and the host is told it is gone", () => {
+    const history = new SettingsHistory(new SessionState(), () => {});
+    const big = history.begin(files);
+    big.sessionState.set(SID, "theme", "x".repeat(9 * 1024 * 1024));
+    big.commit();
+    expect(history.drain()).toEqual([
+      { store: "settings-history", key: SID, value: null },
+    ]);
+  });
+
   test("a forgotten file that empties a step below the savepoint moves it down with the stack", () => {
     const { history, sessionState, pick, toggle, theme } = rig();
     fs.writeFileSync(other, "o0");
@@ -426,7 +436,7 @@ describe("the savepoint survives a restart", () => {
     });
     expect(logs).toEqual([
       "settings-history loaded sessions=2 dropped=0",
-      'settings-history load: dropped the changes to "look", "progression", no longer a setting',
+      `settings-history load: session "${SID}" dropped the changes to "look", "progression", no longer a setting`,
     ]);
   });
 

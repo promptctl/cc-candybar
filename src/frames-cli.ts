@@ -69,14 +69,15 @@ export function worthSaying(last: Said, next: Event): boolean {
   );
 }
 
-// [LAW:parse-dont-validate] One stdin line: Claude Code's statusline JSON and
-// the session it names, past the session-id checkpoint the daemon's doors
-// use, or what is wrong with it.
+// [LAW:parse-dont-validate] One stdin line: the session it names, past the
+// session-id checkpoint the daemon's doors use, and the line's JSON as read,
+// or what is wrong with it. Nothing else of the line is checked here: the
+// daemon's checkpoint parses the hook data it is forwarded.
 export type StdinLine =
   | {
       readonly ok: true;
-      readonly hook: ClaudeHookData;
       readonly session: SessionId;
+      readonly json: unknown;
     }
   | { readonly ok: false; readonly problem: string };
 
@@ -94,7 +95,7 @@ export function parseStdinLine(line: string): StdinLine {
     (raw as { session_id?: unknown } | null)?.session_id,
   );
   return session.ok
-    ? { ok: true, hook: raw as ClaudeHookData, session: session.id }
+    ? { ok: true, session: session.id, json: raw }
     : { ok: false, problem: `stdin line's session_id ${session.problem}` };
 }
 
@@ -196,7 +197,10 @@ export async function runFrames(
       say(parsed.problem);
       continue;
     }
-    const { hook, session } = parsed;
+    const { session } = parsed;
+    // [LAW:parse-dont-validate] exception: forwarded as read; the daemon's
+    // render checkpoint is where the hook data is parsed.
+    const hook = parsed.json as ClaudeHookData;
     lastHook = hook;
     await forward(hook);
     if (session !== sessionId) {

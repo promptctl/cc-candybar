@@ -99,7 +99,7 @@ describe("the book's file", () => {
       claudeConfigDir: "/u/.claude-x",
     },
   ])("%j reads back as it was kept", (value) => {
-    expect(roundTrip(value)).toEqual({ ok: true, value });
+    expect(roundTrip(value)).toEqual({ kind: "ok", value });
   });
 
   test("a newer build's source beside a file leaves the file, its source unknown", () => {
@@ -111,7 +111,7 @@ describe("the book's file", () => {
         source: "workspace",
       }),
     ).toEqual({
-      ok: true,
+      kind: "ok",
       value: {
         origin: {
           projectDir: "/p",
@@ -149,8 +149,8 @@ describe("the book's file", () => {
       { projectDir: "/p", cwd: "/p", configFile: null, claudeConfigDir: "c" },
       "holds a path that is not absolute",
     ],
-  ])("%s is refused", (_name, value, problem) => {
-    expect(SESSION_BOOK_FILE.parse(value)).toEqual({ ok: false, problem });
+  ])("%s is refused", (_name, value, reason) => {
+    expect(SESSION_BOOK_FILE.parse(value)).toEqual({ kind: "failed", reason });
   });
 
   test("what a client reports now is never kept", () => {
