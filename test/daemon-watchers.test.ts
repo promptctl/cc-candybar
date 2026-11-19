@@ -27,6 +27,7 @@ import { Holds } from "../src/utils/holds";
 import { until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { laneOutcome } from "../src/utils/reading";
+import { readPolledEntry } from "../src/daemon/foundations/polled-entry";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -69,6 +70,36 @@ describe("WatcherRegistry", () => {
       );
       return seen;
     };
+
+    test("each slot compares the one sweep with the revision its holder read", () => {
+      const file = path.join(dir, "config");
+      const targets = { dirs: [], polled: [file] };
+      fs.writeFileSync(file, "previous");
+      const old = readPolledEntry(file);
+      fs.writeFileSync(file, "current revision");
+      const current = readPolledEntry(file);
+      const stale: Invalidation[] = [];
+      const fresh: Invalidation[] = [];
+      reg.acquire(
+        "current",
+        targets,
+        (inv) => fresh.push(inv),
+        new Map([[file, current]]),
+      );
+      reg.acquire(
+        "old",
+        targets,
+        (inv) => stale.push(inv),
+        new Map([[file, old]]),
+      );
+      expect(stale).toEqual([]);
+      swept();
+      expect(stale).toEqual([{ kind: "changed", paths: [file] }]);
+      expect(fresh).toEqual([]);
+      swept();
+      expect(stale).toHaveLength(1);
+      expect(fresh).toEqual([]);
+    });
 
     // The daemon makes the file between two sweeps and a holder reads it and
     // follows: the sweep after must not take it for the state it last saw.
@@ -1308,7 +1339,7 @@ describe("watchFault", () => {
 
   const held = (deaf: readonly Deafness[]) => ({
     key: "k",
-    handle: { release: () => {}, deaf, ridesStream: true },
+    handle: { release: () => {}, observed: () => {}, deaf, ridesStream: true },
   });
 
   test("a watch that hears every place its paths can change has no fault", () => {

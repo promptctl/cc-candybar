@@ -358,7 +358,7 @@ export function withTranscriptLanes<O extends FixtureOwners>(
     transcriptLanes: new TranscriptLanes({
       owners: laned,
       watchers: {
-        acquire: () => ({ release: () => {}, deaf: [], ridesStream: false }),
+        acquire: () => ({ release: () => {}, observed: () => {}, deaf: [], ridesStream: false }),
       },
       clock,
       logger: owners.log,

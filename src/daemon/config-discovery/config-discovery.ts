@@ -22,6 +22,7 @@ import {
 import { diskFiles, textFrom, type DiscoveryFiles } from "./discovery-files.js";
 import { ConfigText } from "./config-text.js";
 import type { withRegularTextFile } from "../../utils/regular-text.js";
+import type { FileObservations } from "../foundations/polled-entry.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { repoConfigsPath } from "./repo-configs.js";
 import { digestOf } from "../../utils/plain.js";
@@ -49,6 +50,11 @@ interface ObservedOrigin {
 
 interface Followed extends ObservedOrigin {
   readonly renderers: Set<RendererName>;
+}
+
+interface DiscoveryBatch {
+  readonly facts: SharedFacts;
+  readonly observed: FileObservations;
 }
 
 // The config facts available to one renderer and the demands it can replace.
@@ -141,7 +147,7 @@ export class ConfigDiscovery {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = this.shared();
+      const shared = this.batch();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -241,7 +247,7 @@ export class ConfigDiscovery {
     why: string,
   ): readonly Followed[] {
     if (keys.length === 0) return [];
-    const shared = this.shared();
+    const shared = this.batch();
     const moved: Followed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
@@ -270,14 +276,20 @@ export class ConfigDiscovery {
     return moved;
   }
 
-  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
-  // one physical-text owner reuses bytes once the descriptor proves its revision.
-  private shared(): SharedFacts {
-    return readShared(this.deps, {
+  // [LAW:single-enforcer] The observation supplied to a poll watch comes
+  // from the same descriptor as the snapshot's text.
+  private batch(): DiscoveryBatch {
+    const observed = new Map<string, string>();
+    const facts = readShared(this.deps, {
       ...diskFiles,
-      text: textFrom((file) => this.texts.read(file)),
+      text: textFrom((path) => {
+        const read = this.texts.read(path);
+        observed.set(path, read.entry);
+        return read.text;
+      }),
       ...this.deps.files?.(),
     });
+    return { facts, observed };
   }
 
   // What discovery finds at `origin` now, with its watch following the
@@ -285,7 +297,7 @@ export class ConfigDiscovery {
   // snapshot.
   private discovered(
     origin: RenderOrigin,
-    shared: SharedFacts,
+    shared: DiscoveryBatch,
     held: HeldWatch | null,
   ): ObservedOrigin {
     const found = discover(
@@ -293,7 +305,7 @@ export class ConfigDiscovery {
         ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd,
       },
-      shared,
+      shared.facts,
     );
     const key = originKey(origin);
     const paths = watchTargetsFor(found);
@@ -308,9 +320,14 @@ export class ConfigDiscovery {
     // whole chain, so a higher-precedence file appearing supersedes a lower
     // one; which path changed does not filter it, as the origin already
     // scopes the watch set.
-    const { watch, move } = this.watches.follow(held, spec, () => {
-      this.invalidated.add(key);
-    });
+    const { watch, move } = this.watches.follow(
+      held,
+      spec,
+      () => {
+        this.invalidated.add(key);
+      },
+      shared.observed,
+    );
     if (move === "rebound") this.bound(origin, paths);
     const snapshot: ConfigSnapshot = {
       ...found.snapshot,
