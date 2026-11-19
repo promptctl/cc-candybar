@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ef77b4b6f458a5db5b45685b221e90cda134e782",
+      "timestamp": "2026-11-19T17:05:10.632Z",
+      "commits": [
+        {
+          "sha": "ef77b4b6f458a5db5b45685b221e90cda134e782",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T17:04:02Z",
+          "message": "chore(release): set `package.json` to 1.235.3\n\n## [1.235.3](https://github.com/promptctl/cc-candybar/compare/v1.235.2...v1.235.3) (2026-11-19)\n\n### Bug Fixes\n\n* **actions:** centralize template value binding ([#877](https://github.com/promptctl/cc-candybar/issues/877)) ([d5df8f6](https://github.com/promptctl/cc-candybar/commit/d5df8f6d8a5a3e24c1189a1486241b29febe8053))\n* **config:** share one project decision across renderers and worktrees ([#887](https://github.com/promptctl/cc-candybar/issues/887)) ([d02a314](https://github.com/promptctl/cc-candybar/commit/d02a3142e7089783533bf3bcfb9a1f0025c1b8b7))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-888",
       "ref": "refs/pull/888/merge",
       "sha": "bb5acf840b05a6df400fd6430526bff30374ee77",
@@ -64,21 +79,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T09:49:37-07:00",
           "message": "refactor(config): derive project layers and plugins from one decision\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "d02a3142e7089783533bf3bcfb9a1f0025c1b8b7",
-      "timestamp": "2026-11-19T16:58:41.996Z",
-      "commits": [
-        {
-          "sha": "d02a3142e7089783533bf3bcfb9a1f0025c1b8b7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:57:28-07:00",
-          "message": "fix(config): share one project decision across renderers and worktrees (#887)\n\n* fix(config): share one project decision across renderers and worktrees\n\n* test(config): cover newly added local settings and plugins with one approval\n\n* fix(config): poll missing targets without rescanning dangling plugin links\n\n* fix(config): retire superseded project decisions with the write\n\n* fix(config): preserve retired decision records outside the search path"
         }
       ]
     },
