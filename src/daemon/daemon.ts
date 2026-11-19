@@ -89,6 +89,9 @@ import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
+import { diskFiles } from "./config-discovery/discovery-files.js";
+import { checkoutObservations } from "./checkout-observations.js";
+import type { CheckoutFiles } from "../utils/git-root.js";
 
 // How this daemon's node runs the bundle it was loaded from.
 export interface RunningBundle {
@@ -144,6 +147,7 @@ export interface DaemonAdapters {
   readonly rendererEntryOf?: (reported: string) => string;
   // How the binary watch reads the bundle's mtime.
   readonly stat: BundleStat;
+  readonly checkoutFiles: CheckoutFiles;
 }
 
 // What a daemon takes from the process that runs it: where its files are, what
@@ -552,10 +556,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       release: (id) => managedStorage.release(id),
     },
   };
+  const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths.state,
     watchers: watcherRegistry,
+    files: () => ({ ...diskFiles, ...checkouts.discovery() }),
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
   });
@@ -803,6 +809,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     launcher,
     log,
     clock,
+    checkoutLocation: checkouts.location,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
     sessionBook,

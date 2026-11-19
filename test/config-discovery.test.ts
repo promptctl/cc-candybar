@@ -97,7 +97,7 @@ function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
     locations: locations(HOST),
     stateDir: stateDir(HOST),
     watchers,
-    files,
+    files: () => files,
     log: (_level, line) => logged.push(line),
     moved: (renderer, origins) => {
       for (const origin of origins) {

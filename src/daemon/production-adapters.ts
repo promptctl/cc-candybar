@@ -17,6 +17,7 @@ import { realLimitsDeps } from "./limits";
 import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
 import { profilePaths, type DaemonPaths } from "./paths";
+import { checkoutFiles } from "../utils/git-root.js";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
@@ -55,5 +56,6 @@ export function productionAdapters(
       return entry;
     },
     stat: fs.statSync,
+    checkoutFiles,
   };
 }

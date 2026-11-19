@@ -60,7 +60,7 @@ export interface RendererConfigs {
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly watchers: Pick<WatcherRegistry, "batch">;
-  readonly files?: DiscoveryFiles;
+  readonly files?: () => DiscoveryFiles;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
@@ -136,7 +136,7 @@ export class ConfigDiscovery {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = readShared(this.deps, this.deps.files);
+      const shared = readShared(this.deps, this.deps.files?.());
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -235,7 +235,7 @@ export class ConfigDiscovery {
     why: string,
   ): readonly Followed[] {
     if (keys.length === 0) return [];
-    const shared = readShared(this.deps, this.deps.files);
+    const shared = readShared(this.deps, this.deps.files?.());
     const moved: Followed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
