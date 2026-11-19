@@ -1,4 +1,4 @@
-// [LAW:no-shared-mutable-globals] The gates a daemon (or a `check`) holds, as
+// [LAW:no-shared-mutable-globals] The gates a daemon holds, as
 // one value its root builds and passes down. A registration changes only
 // this value, so what a load accepts is visible in its inputs.
 

@@ -477,10 +477,7 @@ export class SourceRuns {
 // them: each run is declared in `holds`, inside the caller's one
 // `Holds.declare`, so a run dropped from the set is released by that
 // declaration's diff and a run two holders share is one entry held twice. The
-// host's collector and `check`'s holder both take their lanes here. `take`
-// is how the caller meets one run's declaration throwing: the collector's
-// turns it into that run's failed lane while every other run declares, and
-// `check`'s lets it fail the check.
+// collector marks each declaration that throws as a failed lane and declares the rest.
 export function declareRuns(
   sourceRuns: Pick<SourceRuns, "declare">,
   holds: Holds,

@@ -197,7 +197,7 @@ function publishing<T>(ref: ActiveSegmentRef, run: () => T): T {
  * which is either a wiring bug or an author using the function somewhere it
  * cannot mean anything (a variable template, a node `when`). Both need to be
  * seen, and in cc-candybar a thrown template error surfaces as a visible ⚠
- * cell that `cc-candybar check` fails on. [LAW:no-silent-failure]
+ * cell. [LAW:no-silent-failure]
  */
 export function requireActiveSegment(
   ref: ActiveSegmentRef,

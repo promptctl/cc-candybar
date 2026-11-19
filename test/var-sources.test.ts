@@ -573,7 +573,7 @@ function makeTmpDir(): { dir: string; cleanup: () => void } {
 
 // A test waits on what it asserts. `ran` waits on the registry's own state
 // for "every run it started has finished" — `settled()`, the state
-// `cc-candybar check` awaits — and fails naming any run still out; a fixed
+// the collector awaits — and fails naming any run still out; a fixed
 // sleep read "" instead of "hello world" whenever a full-suite spawn outlasted
 // its guess (brandon-unfiled-3248.e8p). A run a trigger starts (a key or
 // depends_on reaction) is tracked the moment the trigger lands, so `ran` covers
@@ -2678,7 +2678,7 @@ describe("SourceRegistry — template: basic", () => {
   });
 
   // The read IS the failure, which is what carries it to the segment that reads
-  // it (⚠ naming the variable) and to `cc-candybar check` (exit 1) with no
+  // it (⚠ naming the variable) with no
   // co-operation from either — the same contract a non-ok document has.
   it("a template that throws with no default reads as the failure, naming variable and reason", () => {
     const store = new VariableStore(systemTimekeeper);

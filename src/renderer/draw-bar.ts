@@ -1,6 +1,5 @@
 // One render of a session, a request's or a frame's, and what it records.
 
-import type { DrawInspection } from "../renderer-interface/interface.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
 import {
@@ -416,7 +415,6 @@ export function drawRender(
   // What each lane following the session was sent of late, as the bar's rate
   // cell shows it.
   feeds: LaneFeeds,
-  inspect?: true,
 ): {
   drawn: DrawnBar;
   evaluated: number;
@@ -430,7 +428,6 @@ export function drawRender(
   copies: ReadonlyMap<string, string>;
   // Which animation lanes the session's settings switch on, as drawn.
   lanes: LaneSwitches;
-  inspection: DrawInspection | undefined;
   // What the draw made, which the turn that drew it keeps (`keepDraw`).
   kept: DrawMemory;
 } {
@@ -791,16 +788,6 @@ export function drawRender(
     eventsShown,
     copies,
     lanes,
-    inspection:
-      inspect === true
-        ? {
-            preset: effective.preset,
-            faults,
-            unreadSources: sources.pending.flatMap(({ name, why }) =>
-              why === "unread" ? [name] : [],
-            ),
-          }
-        : undefined,
     kept: {
       session: sessionId,
       by: drawing.by,
@@ -981,7 +968,6 @@ export interface RequestAnswer {
   // What this request's client is shown: the statusline's frame to Claude
   // Code's statusline, the bar to a client drawing it itself.
   readonly frame: Frame;
-  readonly inspection: DrawInspection | undefined;
   // What to record once that frame reached its client (`deliver`).
   readonly delivery: Delivery;
 }
@@ -991,7 +977,6 @@ export function answerRequest(
   req: CheckedRenderRequest,
   presentation: TerminalSize & Pick<ClientHints, "client">,
   facts: RequestFacts,
-  inspect?: true,
 ): RequestAnswer {
   const { time, feeds } = parts;
   const sessionId = req.hookData.session_id;
@@ -1002,14 +987,12 @@ export function answerRequest(
     facts,
     presentation,
   );
-  const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } =
-    drawRender(
-      parts,
-      setup,
-      ANSWERING,
-      feeds.feedsOf(sessionId, time.tick),
-      inspect,
-    );
+  const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
+    parts,
+    setup,
+    ANSWERING,
+    feeds.feedsOf(sessionId, time.tick),
+  );
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
@@ -1026,7 +1009,6 @@ export function answerRequest(
   });
   return {
     frame,
-    inspection,
     delivery: {
       session: sessionId,
       by: ANSWERING.by,

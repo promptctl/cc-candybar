@@ -183,7 +183,7 @@ const OWNED_IMPORTS = {
   },
   linkSignerFromKeyFile: {
     group: ["**/link-key", "**/link-key.js"],
-    owners: ["src/daemon/production-adapters.ts", "src/check.ts"],
+    owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its link signer (production-adapters.ts).",
   },
   // Where files are, read from the environment by a process's entry point and
@@ -199,7 +199,7 @@ const OWNED_IMPORTS = {
   },
   stateDir: {
     group: PATHS,
-    owners: ["src/check.ts", "src/doctor/cli.ts"],
+    owners: [],
     message: "A daemon is handed its paths: take the value you are given.",
   },
   ...Object.fromEntries(

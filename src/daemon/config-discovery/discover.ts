@@ -281,7 +281,7 @@ function pluginRefs(text: string): readonly string[] {
 }
 
 // The snapshot of a chain over a session's plugins: what a caller that names
-// its chain outright (`check`'s layers, a writer's held texts) loads.
+// its chain outright (a writer's held texts) loads.
 export function snapshotOf(
   session: SessionPlugins,
   chain: readonly Layer[],

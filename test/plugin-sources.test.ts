@@ -59,7 +59,7 @@ import { segmentErrorsOf } from "./helpers/draw-payload";
 import { VariableStore } from "../src/var-system/store";
 import { resolvePath, SourceRegistry } from "../src/var-system/sources";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
-import { checkConfig, type CheckOutcome } from "../src/check";
+import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../src/utils/outcome";
 import type { Run } from "../src/facts/source-identity";
@@ -79,7 +79,6 @@ import {
   loadDiscovered,
   type ConfigHost,
 } from "./helpers/config-host";
-import { createGates } from "../src/daemon/foundations/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 import type { WorldStates } from "../src/renderer/world-states";
@@ -387,12 +386,12 @@ function writeUntilShown(
 }
 
 describe("a source's declaration", () => {
-  function clean(o: CheckOutcome): string {
+  function clean(o: ConfigDraw): string {
     if (o.kind !== "clean")
       throw new Error(`expected clean, got ${JSON.stringify(o)}`);
     return textOf(o.rendered);
   }
-  function fatal(o: CheckOutcome): string {
+  function fatal(o: ConfigDraw): string {
     if (o.kind !== "fatal")
       throw new Error(`expected fatal, got ${JSON.stringify(o)}`);
     return [o.message, ...o.warnings].join("\n");
@@ -480,9 +479,8 @@ describe("a source's declaration", () => {
     "%s drops the plugin, naming the field and what is built",
     async (_what, source, field) => {
       const message = fatal(
-        await checkConfig(
+        await renderConfig(
           world,
-          createGates(),
           listing(`{ status: ${source} }`),
           dir,
         ),
@@ -567,9 +565,8 @@ describe("a source's declaration", () => {
 
   test("a source's name is one identifier", async () => {
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         listing(`{ "a.b": ${SOURCE} }`),
         dir,
       ),
@@ -579,9 +576,8 @@ describe("a source's declaration", () => {
 
   test("a source and a variable of the same name is a load error naming both", async () => {
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         listing(
           `{ status: ${SOURCE} }`,
           `variables: { status: { kind: "literal", value: 1 } }`,
@@ -598,9 +594,8 @@ describe("a source's declaration", () => {
   // reading it would be two names for it.
   test("two sources reading the same session file drop the plugin, naming both and the file", async () => {
     const message = fatal(
-      await checkConfig(
+      await renderConfig(
         world,
-        createGates(),
         listing(`{ status: ${SOURCE}, other: ${SOURCE} }`),
         dir,
       ),
@@ -623,7 +618,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5", "./q/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine", "plugins.p.s", "plugins.q.s"] } }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "q/plugin.json5")} was not loaded`,
     );
@@ -644,7 +639,7 @@ describe("a source's declaration", () => {
       "config.json5",
       `{ plugins: ["./p/plugin.json5"], segments: { mine: { template: "mine" } }, root: { h: ["mine"] } }`,
     );
-    const message = fatal(await checkConfig(world, createGates(), p, dir));
+    const message = fatal(await renderConfig(world, p, dir));
     expect(message).toContain(
       `plugin ${path.join(dir, "p/plugin.json5")} was not loaded`,
     );
@@ -683,13 +678,12 @@ describe("a source's declaration", () => {
   });
 });
 
-// `check` runs no plugin program and has no session: every declared source
+// The fixture runs no plugin program: every declared source
 // reads absent, as a session's does before its program first writes.
-describe("`cc-candybar check` on a source", () => {
+describe("rendering a source before the plugin writes", () => {
   test("a hasKey-gated segment exits clean, the segment hidden", async () => {
-    const outcome = await checkConfig(
+    const outcome = await renderConfig(
       world,
-      createGates(),
       config(["mine", "plugins.p.gated"]),
       dir,
     );
@@ -700,9 +694,8 @@ describe("`cc-candybar check` on a source", () => {
   });
 
   test("the same read unguarded exits fatal, naming the missing field", async () => {
-    const outcome = await checkConfig(
+    const outcome = await renderConfig(
       world,
-      createGates(),
       config(["mine", "plugins.p.bare"]),
       dir,
     );

@@ -64,7 +64,7 @@ export type Locator = ViewFacts & { readonly environment: SessionEnvironment };
 
 // [LAW:types-are-the-program] Each owner as far as a session's reads call it:
 // a declaration takes its entry, a read takes what it stored. So a world built
-// of fixtures (`cc-candybar check`, a test) types as the daemon's does, with
+// of sample readings types as the daemon's does, with
 // no owner it does not need.
 export interface RenderPayloadDeps {
   // [LAW:one-source-of-truth] The user's home directory: the one derivation

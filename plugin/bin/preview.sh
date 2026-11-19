@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# Render the wizard's template config against a fixture session so the user can
-# see a real bar before committing to a theme, endcaps shape, or preset.
-#
-# The config rendered here IS the template the wizard writes — templates/config.json
-# with its three placeholders filled by the same substitution the wizard performs —
-# so the preview cannot drift from what the wizard installs.
-# (test/plugin-templates.test.ts drives every name below through `cc-candybar check`.)
+# Draw the wizard's template choices or its written config in a fixture session
+# using the ordinary statusline client and daemon.
 
 set -euo pipefail
 
@@ -24,18 +19,14 @@ THEME="${THEMES[0]}"
 ENDCAPS="${ENDCAPS_SHAPES[0]}"
 PRESET="${PRESETS[0]}"
 COMPARE=""
-
-WORK="$(mktemp -d)"
-readonly WORK
-readonly REPO="${WORK}/my-project"
-readonly TRANSCRIPT="${WORK}/preview.jsonl"
+CONFIG_FILE=""
+HAS_CHOICES=false
 CLIENT=()
 
 # shellcheck disable=SC2329
 cleanup() {
     rm -rf "${WORK}"
 }
-trap cleanup EXIT
 
 # The statusline client: this checkout's shim (developing against a checkout),
 # an installed cc-candybar on PATH, else the published package via npx.
@@ -85,23 +76,52 @@ probe_daemon() {
     { "${CLIENT[@]}" daemon-stats --json >/dev/null; } 2>&1
 }
 
-# The first request on a cold daemon spawns it in the background and prints an
-# empty line; a preview must not be that line. Kick once, then wait until the
-# daemon answers or the deadline passes. The bound is wall-clock, not a probe
-# count: a probe through npx costs seconds, a native one milliseconds.
-ensure_daemon() {
-    local probe deadline=$((SECONDS + 15))
-    if probe="$(probe_daemon)"; then
-        return 0
-    fi
-    render_request >/dev/null
-    until probe="$(probe_daemon)"; do
-        if ((SECONDS >= deadline)); then
-            printf 'preview: the cc-candybar daemon did not start within 15s: %s\n' "${probe}" >&2
-            exit 1
+# [LAW:no-ambient-temporal-coupling] A cold statusline request can start the
+# daemon and return blank. Wait for readiness only after a blank response.
+# The first usable answer is the preview, whether the daemon was warm or cold.
+render_config() {
+    local file="$1" frame probe deadline=$((SECONDS + 15))
+    while ((SECONDS < deadline)); do
+        frame="$(render_request --config-only="${file}")"
+        if [[ -n "${frame}" ]]; then
+            printf '%s\n\n' "${frame}"
+            return 0
         fi
+        until probe="$(probe_daemon)"; do
+            if ((SECONDS >= deadline)); then
+                printf 'preview: the cc-candybar daemon did not start within 15s: %s\n' "${probe}" >&2
+                return 1
+            fi
+            sleep 0.1
+        done
         sleep 0.1
     done
+    printf 'preview: the cc-candybar daemon returned no frame within 15s\n' >&2
+    return 1
+}
+
+usage() {
+    printf 'Usage: preview.sh [--config-only=PATH | [--theme=NAME] [--endcaps=NAME] [--preset=NAME] [--compare-themes|--compare-endcaps|--compare-presets]]\n' >&2
+}
+
+invalid() {
+    printf 'preview: %s\n' "$1" >&2
+    usage
+    exit 2
+}
+
+# [LAW:parse-dont-validate] Wizard choices admit exact members of the lists
+# that the comparison prints. A missing, partial or unlisted name fails before
+# it reaches a template filename, the substitution or the statusline client.
+require_choice() {
+    local flag="$1" value="$2" choice
+    shift 2
+    for choice in "$@"; do
+        if [[ "${value}" == "${choice}" ]]; then
+            return 0
+        fi
+    done
+    invalid "unknown ${flag} choice: ${value}"
 }
 
 # The wizard's substitution, exactly: the template with its three placeholders
@@ -112,29 +132,28 @@ fill_template() {
     sed -e "s/replace:THEME/${theme}/" \
         -e "s/replace:ENDCAPS/${endcaps}/" \
         -e "s/replace:PRESET/${preset}/" \
-        "${TEMPLATE}" >"${out}"
+        "${TEMPLATE}" >"${out}" || return
     printf '%s' "${out}"
 }
 
 render() {
-    render_request --config="$(fill_template "$@")"
-    printf '\n'
+    local config
+    config="$(fill_template "$@")"
+    render_config "${config}"
 }
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --theme=*) THEME="${1#*=}" ;;
-            --endcaps=*) ENDCAPS="${1#*=}" ;;
-            --preset=*) PRESET="${1#*=}" ;;
+            --theme=*) THEME="${1#*=}"; HAS_CHOICES=true ;;
+            --endcaps=*) ENDCAPS="${1#*=}"; HAS_CHOICES=true ;;
+            --preset=*) PRESET="${1#*=}"; HAS_CHOICES=true ;;
             --compare-themes) COMPARE="themes" ;;
             --compare-endcaps) COMPARE="endcaps" ;;
             --compare-presets) COMPARE="presets" ;;
-            *)
-                printf 'Unknown option: %s\n' "$1" >&2
-                printf 'Usage: preview.sh [--theme=NAME] [--endcaps=NAME] [--preset=NAME] [--compare-themes|--compare-endcaps|--compare-presets]\n' >&2
-                exit 2
-                ;;
+            --config-only=) invalid "--config-only needs a path" ;;
+            --config-only=*) CONFIG_FILE="${1#*=}" ;;
+            *) invalid "unknown option: $1" ;;
         esac
         shift
     done
@@ -142,20 +161,43 @@ parse_args() {
 
 main() {
     parse_args "$@"
+    # [LAW:types-are-the-program] A written config is its own preview input.
+    # Template choices describe the other input and cannot modify that file.
+    if [[ -n "${CONFIG_FILE}" ]]; then
+        if [[ "${HAS_CHOICES}" == true || -n "${COMPARE}" ]]; then
+            invalid "--config-only cannot be combined with template choices"
+        fi
+        if [[ "${CONFIG_FILE}" != /* ]]; then
+            CONFIG_FILE="${PWD}/${CONFIG_FILE}"
+        fi
+        if [[ ! -f "${CONFIG_FILE}" || ! -r "${CONFIG_FILE}" ]]; then
+            invalid "cannot read config file: ${CONFIG_FILE}"
+        fi
+    else
+        require_choice theme "${THEME}" "${THEMES[@]}"
+        require_choice endcaps "${ENDCAPS}" "${ENDCAPS_SHAPES[@]}"
+        require_choice preset "${PRESET}" "${PRESETS[@]}"
+    fi
+
+    WORK="$(mktemp -d)"
+    readonly WORK
+    readonly REPO="${WORK}/my-project"
+    readonly TRANSCRIPT="${WORK}/preview.jsonl"
+    trap cleanup EXIT
     find_client
     make_fixture
-    ensure_daemon
-    # The flag values are checked once, as the wizard's user would see them
-    # (exit 1 names the error). A compare varies one axis over its array, whose
-    # members test/plugin-templates.test.ts pins to the loader's own domain.
-    "${CLIENT[@]}" check "$(fill_template "${THEME}" "${ENDCAPS}" "${PRESET}")" >/dev/null
+
+    if [[ -n "${CONFIG_FILE}" ]]; then
+        render_config "${CONFIG_FILE}"
+        return
+    fi
 
     local name
     case "${COMPARE}" in
         "") render "${THEME}" "${ENDCAPS}" "${PRESET}" ;;
-        themes) for name in "${THEMES[@]}"; do printf '%s:\n' "${name}"; render "${name}" "${ENDCAPS}" "${PRESET}"; printf '\n'; done ;;
-        endcaps) for name in "${ENDCAPS_SHAPES[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${name}" "${PRESET}"; printf '\n'; done ;;
-        presets) for name in "${PRESETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${ENDCAPS}" "${name}"; printf '\n'; done ;;
+        themes) for name in "${THEMES[@]}"; do printf '%s:\n' "${name}"; render "${name}" "${ENDCAPS}" "${PRESET}"; done ;;
+        endcaps) for name in "${ENDCAPS_SHAPES[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${name}" "${PRESET}"; done ;;
+        presets) for name in "${PRESETS[@]}"; do printf '%s:\n' "${name}"; render "${THEME}" "${ENDCAPS}" "${name}"; done ;;
     esac
 }
 

@@ -8,7 +8,6 @@ import path from "node:path";
 import { hostOf } from "../helpers/host";
 import {
   CONFIG_ENV,
-  cliConfigTarget,
   detectConfigEnv,
 } from "../../src/config-hint";
 
@@ -45,34 +44,3 @@ describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
 // and `doctor` judge a config under. An empty argument — `"$CFG"` with CFG
 // unset — is no argument, as it is to the bar's `--config`, so the variable
 // is the target; a named file outranks the variable.
-describe("cliConfigTarget (the file a CLI run checks)", () => {
-  const ENV = on({ CC_CANDYBAR_CONFIG: "env.json5" });
-
-  test("no argument, or an empty one, falls to $CC_CANDYBAR_CONFIG", () => {
-    const environment = { source: "environment", path: "/work/proj/env.json5" };
-    expect(cliConfigTarget(undefined, ENV, CWD)).toEqual(environment);
-    expect(cliConfigTarget("", ENV, CWD)).toEqual(environment);
-  });
-
-  test("with neither, the run searches", () => {
-    expect(cliConfigTarget("", on({}), CWD)).toEqual({ source: "search" });
-    expect(cliConfigTarget(undefined, on({}), CWD)).toEqual({
-      source: "search",
-    });
-  });
-
-  test("a named file outranks the variable and is resolved against cwd", () => {
-    expect(cliConfigTarget("mine.json5", ENV, CWD)).toEqual({
-      source: "argument",
-      path: "/work/proj/mine.json5",
-    });
-    expect(cliConfigTarget("/etc/bar.json5", ENV, CWD)).toEqual({
-      source: "argument",
-      path: "/etc/bar.json5",
-    });
-  });
-
-  test("the argument wins by source even where the variable names the same file", () => {
-    expect(cliConfigTarget("env.json5", ENV, CWD).source).toBe("argument");
-  });
-});

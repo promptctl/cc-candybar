@@ -11,7 +11,7 @@
 //   4. The fragment cannot select a preset; the loader says so by name.
 //
 // [LAW:single-enforcer] Drives the real seams: resolveEffectiveGlobals (the one
-// resolution the daemon and `cc-candybar check` both call), the real click wire
+// resolution the daemon uses), the real click wire
 // for the session writes, and registerDslConfig + drawDsl for the bytes. No
 // parallel rig and no hand-built joiner — a test that restated the chain would
 // pass while the daemon diverged, which is the whole failure this ticket closes.

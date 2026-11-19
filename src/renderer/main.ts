@@ -343,12 +343,11 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery, inspection } = answerRequest(
+        const { frame, delivery } = answerRequest(
           parts,
           current,
           event.context.hints,
           record,
-          event.inspect,
         );
         const id = parts.mint();
         deliveries.set(id, delivery);
@@ -359,7 +358,6 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
-          ...(inspection === undefined ? {} : { inspection }),
         });
         return;
       }

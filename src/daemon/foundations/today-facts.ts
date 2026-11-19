@@ -27,7 +27,7 @@ export function dayKey(date: Date): string {
 }
 
 // Day sums holding one day: `cost` and `tokens` on the day `at` falls in. What
-// a fixture (`check`, a test) holds in place of a scan.
+// a test fixture holds in place of a scan.
 export function oneDay(
   at: Instant,
   cost: number,

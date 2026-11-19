@@ -5,7 +5,6 @@
 
 import path from "node:path";
 import type {
-  DrawInspection,
   Effect,
   Event,
   Present,
@@ -43,7 +42,6 @@ import {
 export interface StatuslineAnswer {
   readonly outcome: RequestOutcome;
   readonly resp: Response;
-  readonly inspection?: DrawInspection;
   // What the client's sighting records the frame drew as.
   readonly seen: FrameSeen;
   // [LAW:effects-at-boundaries] Told by the connection, once, whether the
@@ -120,7 +118,6 @@ export async function answerStatusline(
   // The monotonic moment the request's wait ends, the host's own reading.
   waitEndsAt: number,
   facts: RequestFacts,
-  inspectDraw?: true,
 ): Promise<StatuslineAnswer> {
   const req = located(arrived, locate);
   const session = req.hookData.session_id;
@@ -211,7 +208,6 @@ export async function answerStatusline(
         kind: "request",
         id,
         context: req,
-        ...(inspectDraw === true ? { inspect: true } : {}),
       }),
     );
   } finally {
@@ -289,9 +285,6 @@ export async function answerStatusline(
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
-    ...(presented.inspection === undefined
-      ? {}
-      : { inspection: presented.inspection }),
     settled: (took) =>
       done(presented, took ? null : "the client did not take the answer"),
   };

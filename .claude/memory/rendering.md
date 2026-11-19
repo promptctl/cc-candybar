@@ -49,7 +49,7 @@ The indicator wears the list's worst level, and the list runs worst first, so it
 
 The viewer's clicks write a message's identity, never a position: a list that shifts under an open viewer would show another message at the same position. The identity is the severity and what the message is about, named by its producer (its source, and the file or repository it concerns), never its text: a load error's issue count changes while it stays the same message. The viewer closes once its message leaves the list. It is bounded by the terminal's rows and by the shortest surface showing it (a feed's one frame reaches every lane, and the tmux status line shows five rows), its header measured as drawn, and pages within a message whose key names every page.
 
-The indicator and viewer depend on the `cc-candybar://` handler, and that is accepted: a broken handler breaks every click on the bar, the doctor probes and reports it, and `cc-candybar check` prints a config's errors and warnings in full without it. A `file://` fallback on the bar would be a second path for the same text.
+The indicator and viewer depend on the `cc-candybar://` handler, and that is accepted: a broken handler breaks every click on the bar.
 
 ## Effects
 

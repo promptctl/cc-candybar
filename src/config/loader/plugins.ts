@@ -13,8 +13,7 @@
 //
 // [LAW:no-silent-failure] A definition that does not load drops ONLY that
 // plugin, and the drop is a typed fact on the result (`dropped`), which the
-// daemon offers as a message beside the settings door and `cc-candybar check`
-// fails on.
+// bar offers as a message beside the settings door.
 
 import path from "node:path";
 import JSON5 from "json5";
@@ -112,7 +111,7 @@ export interface PluginContext {
   readonly home: string;
 }
 
-// The spelling of a drop, shared by the bar's diagnostics and `check`.
+// How the bar identifies a plugin that failed to load.
 export function droppedPluginNotice(d: DroppedPlugin): string {
   return `plugin ${d.path} was not loaded: ${d.reason}`;
 }

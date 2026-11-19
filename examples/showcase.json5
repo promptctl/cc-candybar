@@ -6,8 +6,7 @@
 // isolation, this is what a polished daily-driver looks like: dense but clean
 // by default, depth on click.
 //
-// Try it (real path — this bar is interactive, so it needs a running daemon,
-// not a static `cc-candybar check --render`, which takes no clicks):
+// Try the controls in a live Claude Code session:
 //   cp examples/showcase.json5 ~/.config/cc-candybar/config.json5
 // then click around in any Claude Code session's status line.
 //

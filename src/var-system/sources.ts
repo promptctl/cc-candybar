@@ -372,8 +372,7 @@ export class SourceRegistry {
   runSources(): ReadonlyMap<string, SourceRun> {
     return this.runSourcesNow.get();
   }
-  // The run each source names, by variable name: what a request waits on and
-  // what names `check`'s stragglers.
+  // The runs the request waits on, by variable name.
   namedRuns(): ReadonlyMap<string, Run> {
     return this.namedNow.get();
   }
@@ -879,8 +878,8 @@ export class SourceRegistry {
         // [LAW:no-silent-failure] A derivation that FAILED is not a value. With
         // no authored `default`, the read is the failure — the same contract a
         // non-ok document has (unwrapDocument in template-engine/scope.ts): the
-        // segment reading it renders ⚠ naming this variable and the reason, and
-        // `cc-candybar check` fails on it, instead of a blank that reads exactly
+        // segment reading it renders ⚠ naming this variable and the reason,
+        // instead of a blank that reads exactly
         // like an author who wanted a blank. Before this, a template throwing
         // (`{{ ramp … }}` outside any segment is the one that found it) read as
         // empty and check exited 0 (brandon-var-sources-1p6).

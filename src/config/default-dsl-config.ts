@@ -1183,8 +1183,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   //
   // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
   // 80/120/200 columns against a RICH payload in
-  // test/default-dsl-config.test.ts (over the readings of `check`'s faked
-  // session) — curated by actually rendering each arrangement, not by reading
+  // test/default-dsl-config.test.ts — curated by actually rendering each arrangement, not by reading
   // the segment names off the page.
   // Each bundled theme's default look — data in its own file
   // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme

@@ -11,7 +11,7 @@ import { textOf } from "../src/render/frame";
 import { renderToString } from "@promptctl/rich-js";
 
 import { renderGauge } from "../src/template-engine/gauge";
-import { checkText } from "./helpers/check-config";
+import { checkText } from "./helpers/config-fixture";
 import { drawnChars, same } from "./helpers/seams";
 
 const glyphs = { filled: "█", empty: "░" };
@@ -122,8 +122,7 @@ describe("renderGauge — painted cells", () => {
 // [LAW:behavior-not-structure] The binding, end to end through the real pipeline:
 // `{{ gauge }}` is registered beside `{{ color }}`/`{{ ramp }}` because it needs the
 // same live palette, and its per-cell colour is the author's OWN ramp asked at the
-// cell's position. Driven through `checkConfig` — the same entry `cc-candybar check`
-// runs — so a registration that loads but does not render cannot pass.
+// cell's position. Assert the rendered text and colours together.
 describe("{{ gauge }} in a real config", () => {
 
   test("draws the cells a value earns, and paints them from the author's ramp", async () => {
@@ -136,7 +135,7 @@ describe("{{ gauge }} in a real config", () => {
         root: { h: ["g"] },
       }`,
     );
-    // checkPayload puts contextLeft at 24, so two cells of ten are lit.
+    // samplePayload puts contextLeft at 24, so two cells of ten are lit.
     const visible = textOf(clean.rendered);
     expect(visible).toContain("##--------");
     // Painted per cell from the step cascade: both lit cells sit below the 40 stop,

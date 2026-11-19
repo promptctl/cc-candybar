@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { checkConfig } from "../src/check";
+import { renderConfig } from "./helpers/config-fixture";
 import { configResolutionNotice } from "../src/config/dsl-loader";
 import { resolutionOf } from "./helpers/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
@@ -32,7 +32,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { linkSigner } from "../src/click/link-signer";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
-import { createGates } from "../src/daemon/foundations/gates";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
@@ -222,7 +221,7 @@ describe("check", () => {
   test("an unanswered project config is reported awaiting, and nothing of it runs", async () => {
     const marker = path.join(project, "ran.marker");
     write(".cc-candybar.json5", shellConfig(marker));
-    const outcome = await checkConfig(world, createGates(), undefined, project);
+    const outcome = await renderConfig(world, undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.layers).toEqual([]);
@@ -236,7 +235,7 @@ describe("check", () => {
     const marker = path.join(project, "ran.marker");
     const file = write(".cc-candybar.json5", shellConfig(marker));
     answerRepo(project);
-    const outcome = await checkConfig(world, createGates(), undefined, project);
+    const outcome = await renderConfig(world, undefined, project);
     expect(outcome).toMatchObject({
       kind: "clean",
       layers: [{ path: file, role: "project" }],
@@ -247,7 +246,7 @@ describe("check", () => {
   test("a directory whose worktree claim fails its proof is reported with the reason it answers for itself", async () => {
     write(".cc-candybar.json5", "{}");
     write(".git", "gitdir: /nonexistent/x\n");
-    const outcome = await checkConfig(world, createGates(), undefined, project);
+    const outcome = await renderConfig(world, undefined, project);
     expect(outcome.kind).toBe("clean");
     if (outcome.kind !== "clean") return;
     expect(outcome.warnings).toContain(

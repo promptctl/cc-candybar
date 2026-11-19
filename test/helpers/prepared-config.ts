@@ -1,13 +1,6 @@
-// A chain loaded and drawn in process, for a test or a bench that reads a
-// config's parts (its merged config, the plugins it dropped, its variable
-// store) or times its draws without a renderer: discovered as the daemon
-// discovers a chain named outright, loaded by the daemon's loader, registered,
-// its runs held by a real collector (held-runs.ts), and drawn over `check`'s
-// rich payload (check-payload.ts). What `check` itself verdicts is drawn by
-// the daemon's own renderer (src/check.ts); this rig is the in-process view a
-// case inspects.
-
-import { previewSigner } from "../../src/click/link-signer";
+// A config fixture uses the same loader, compiler, collector and DSL renderer as the statusline.
+import { TEST_SIGNER } from "./link-signer";
+import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { locations } from "../../src/daemon/paths";
 import type { ApprovedRepo } from "../../src/config/loader/repo-gate";
 import {
@@ -19,7 +12,6 @@ import {
 } from "../../src/daemon/config-discovery/discover";
 import {
   loadSnapshot,
-  refuseDrops,
   type ConfigLayer,
   type DroppedPlugin,
 } from "../../src/config/dsl-loader";
@@ -44,7 +36,7 @@ import { timeoutSignal } from "../../src/time";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
-import { checkPayload } from "./check-payload";
+import { samplePayload } from "./sample-payload";
 import { drawPayload } from "./draw-payload";
 import { sessionOfPayload } from "./payload-session";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
@@ -90,6 +82,31 @@ export async function prepareConfig(
     sessionPlugins(locs, installedRoots(locs), repo, cwd),
     chain.map((l) => layerOf(l.role, l.path, readLayer(l.path), locs.home)),
   );
+  const prepared = prepareSnapshot(world, snapshot, cwd, warnings);
+  try {
+    await renderEffective(
+      prepared,
+      resolveEffectiveGlobals(
+        prepared.config,
+        () => null,
+        () => false,
+      ),
+      200,
+      at,
+    );
+    return prepared;
+  } catch (error) {
+    prepared[Symbol.dispose]();
+    throw error;
+  }
+}
+
+export function prepareSnapshot(
+  world: World,
+  snapshot: ConfigSnapshot,
+  cwd: string,
+  warnings: string[],
+): PreparedConfig {
   warnings.push(...snapshot.notices);
   const layers = snapshot.chain
     .filter((l) => l.content.kind === "text")
@@ -97,7 +114,8 @@ export async function prepareConfig(
   const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
     warned: (w) => warnings.push(...w),
   });
-  refuseDrops(loaded.dropped);
+  if (loaded.dropped.length > 0)
+    throw new Error(loaded.dropped.map((file) => file.message).join("\n"));
   const { config } = loaded;
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
@@ -124,10 +142,10 @@ export async function prepareConfig(
   try {
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: previewSigner(),
+      signer: TEST_SIGNER,
     });
     warnings.push(...compiled.loadWarnings);
-    const prepared: PreparedConfig = {
+    return {
       layers,
       droppedPlugins: [
         ...loaded.installed.dropped,
@@ -140,19 +158,6 @@ export async function prepareConfig(
       runs,
       [Symbol.dispose]: dispose,
     };
-    // A source keyed on the payload runs once the payload is bound, so the
-    // first draw's payload is bound before the wait.
-    await renderEffective(
-      prepared,
-      resolveEffectiveGlobals(
-        config,
-        () => null,
-        () => false,
-      ),
-      200,
-      at,
-    );
-    return prepared;
   } catch (e) {
     dispose();
     throw e;
@@ -169,7 +174,7 @@ export async function renderEffective(
   at: Instant,
 ): Promise<{ rendered: Frame; failures: Map<string, string> }> {
   const { config, compiled, store, registry, runs, layers } = prepared;
-  const payload = checkPayload(config, effective, layers.at(-1) ?? null, at);
+  const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);
   // A source keyed on an input the payload moved runs once it is bound, so
   // it is bound before the wait.

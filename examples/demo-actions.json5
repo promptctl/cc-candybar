@@ -25,7 +25,7 @@
 //     • steppers ({set,min,max,by}) and cyclers ({set,cycle}) as bare {{ action }}.
 //
 // Render it once, from its path:
-//   cc-candybar check --render examples/demo-actions.json5
+//   ./plugin/bin/preview.sh --config-only=examples/demo-actions.json5
 //
 // What to try:
 //   Click "▸ theme"  → open the theme picker; click any theme to apply.

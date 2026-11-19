@@ -99,7 +99,7 @@ function absentDocument(store: VariableStore, name: string): boolean {
 // a throw naming the variable: one not scanned yet throws the pending signal,
 // which every place a template is evaluated draws as not answered yet; one
 // whose scan failed throws its reason, which the segment reading it renders as
-// its ⚠ cell (and `cc-candybar check` fails on). A document never reads as an
+// its ⚠ cell. A document never reads as an
 // empty value.
 function unwrapDocument(name: string, doc: Present<JsonValue>): JsonValue {
   switch (doc.kind) {

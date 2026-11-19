@@ -1,10 +1,3 @@
-// [LAW:single-enforcer] Config-tooling CLI entry point for `schema`. It carries
-// no schema LOGIC — it serves the committed artifact (derived from the
-// loader's declarations), so it is a binding, not a reimplementation
-// [LAW:one-source-of-truth]. Config *validation* lives in `cc-candybar check`
-// (src/check.ts) — the full-pipeline verdict command; the old `lint` is its
-// alias.
-
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";

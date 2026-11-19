@@ -1,5 +1,5 @@
 // The rig a render test draws and clicks through: a config composed into a
-// store and a registry, the way `cc-candybar check` and the daemon compose one.
+// store and a registry, through the same registration used by the daemon.
 // Every field has a default, so a test states only what it varies.
 //
 // [LAW:one-source-of-truth] This is the one assembly. A test file keeps its own

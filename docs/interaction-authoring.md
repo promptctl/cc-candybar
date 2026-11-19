@@ -2,9 +2,9 @@
   Interaction authoring reference — written for an AGENT config author.
 
   Snippet contract (enforced by test/doc-snippets.test.ts):
-    ```json5 check:pass   — a COMPLETE config file; must exit 0 under `cc-candybar check`.
-    ```json5 check:fail   — a COMPLETE config file; must exit 1, and the next
-    ```error              — block must quote a substring of check's actual stderr.
+    ```json5 check:pass   — a complete config expected to load and draw in the fixture.
+    ```json5 check:fail   — a complete config expected to report a diagnostic.
+    ```error              — the expected text of that diagnostic.
     ```json5 file:<path>  — a file written verbatim at <path>, relative to every
                             config snippet, before any snippet runs.
   Every ```json5 block in this file MUST carry one of the two annotations.
@@ -14,38 +14,16 @@
 
 # Interaction authoring: actions, menus, groups
 
-You are authoring a cc-candybar config for a bar you **read rather than look
-at**: `cc-candybar check --render` prints what it renders, so the rows, the
-glyphs and the content come back as text you can read, while a wrong colour
-reaches you only as the escape bytes around them. Every other mistake either
-becomes a load error (text you can read) or a wrong pixel (which you cannot).
-This surface is designed so that the mistakes that matter are load errors.
-Your loop:
+From a source checkout, draw the configuration in a sample session through the
+ordinary daemon.
 
-```
-edit config  →  cc-candybar check --render <path>  →  read exit code + stderr + bar  →  repeat
+```bash
+./plugin/bin/preview.sh --config-only=/path/to/config.json5
 ```
 
-Exit contract:
-
-| exit | meaning |
-|------|---------|
-| 0 | config loads and renders — warnings (advisory only) on stderr |
-| 1 | config is invalid — the diagnostic on stderr names the path, line, and fix |
-| 2 | usage error / the named file could not be read |
-
-Run `cc-candybar check` **after every edit**, before reporting done. It runs
-the daemon's exact pipeline (parse → merge on the bundled default → validate →
-register → render against a rich representative payload), so "check exits 0"
-and "the daemon renders it" are one fact. It also fails (exit 1) when a
-segment's template throws at evaluation — the state a user would see as a `⚠`
-error cell in the bar. It renders every preset a session can switch to, the
-bundled ones included, so a fault only one preset reaches fails too, tagged
-`(under preset "<name>")`. `--render` prints the bar a fresh session opens on
-beneath the verdict — the same render that preset's pass was checked on, so a
-row you rearranged is something you read back rather than guess at
-(docs/segment-authoring.md shows one).
-`cc-candybar lint` is an alias; `cc-candybar schema` prints the JSON Schema.
+Read the preview and any `⚠` diagnostics. In Claude Code, try the changed
+preset and use the controls you added. A sample frame shows what drew in
+that session. `cc-candybar schema` prints the JSON Schema for editor tooling.
 
 A user config **merges onto the bundled default** by name (globals per-field;
 variables/segments/actions/styles/helpers/`root.rows` per-name; a whole tree at
@@ -209,8 +187,8 @@ session's own `set` pick still wins over the file's default for that one
 session. (For shade, variation and style, the active theme's own default,
 `themeDefaults`, sits just under the config file's value: see "A theme's own
 default look" below.) A `persist` click is a hand edit as far as the file can tell:
-`git diff` on your config shows it, `cc-candybar check` validates it, and
-nothing in the file records which of the two made it. No config file for any
+`git diff` on your config shows it, and nothing in the file records which of
+the two made it. No config file for any
 software on the planet shows whether the application's settings menu updated
 it or a human found it and hand-edited it, and this one is no different.
 
@@ -1867,7 +1845,7 @@ Four things to know about that slot:
   session pick does. A typo makes the bar plain, never broken.
 - **A template that fails when it runs also wears `none`, and says so** — a
   `fail`, or a field the payload does not carry. The bar still renders, the
-  reason shows above it, and `cc-candybar check` fails on it, naming the slot:
+  diagnostic above it names the slot:
 
 ```json5 check:fail
 {
@@ -1876,7 +1854,7 @@ Four things to know about that slot:
 ```
 
 ```error
-style rule: globals.style rendered "none": the rule failed — not wired yet
+globals.style rendered "none": the rule failed — not wired yet
 ```
 
 - **A malformed template is a load error**, reported against `globals.style` when
@@ -1962,7 +1940,7 @@ One thing differs, and it is worth knowing before you write the expression. A
 style naming nothing goes quietly to `none`, because a bar wearing no style is a
 perfectly sensible bar. A *theme* naming nothing cannot be quiet: there is no
 "no theme", so the bar falls back to the default theme **and says so above the
-bar**, and `cc-candybar check` fails on it:
+bar**:
 
 ```json5 check:fail
 {
@@ -2212,9 +2190,8 @@ recolours nothing outside the row it joins.
 
 ## Mistakes and the errors they produce
 
-Each entry: the wrong config, then the exact text `cc-candybar check` prints.
-These are asserted against the real loader by CI — trust them over any other
-spelling you have seen.
+Each entry shows the wrong config and the diagnostic it produces. The
+fixtures assert these diagnostics against the loader and renderer.
 
 ### A `{{ menu }}` with no trigger text
 
@@ -2544,8 +2521,7 @@ actions.broken do: "both" is itself a do action — list its members here instea
 ### Wrong display count on a cycle action
 
 Three members need three displays (one per member) or exactly one static
-display. This one surfaces at the render stage — in the bar it would be a `⚠`
-error cell you cannot see; `check` fails it for you:
+display. A wrong count produces a `⚠` cell when the action draws:
 
 ```json5 check:fail
 {
@@ -2679,8 +2655,8 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
 
 ## Before you report done
 
-1. `cc-candybar check <path>` exits 0.
-2. stderr shows no warnings you have not read and accepted.
+1. Draw the changed config and inspect the `⚠` diagnostics.
+2. Try the changed preset and controls in a live session.
 3. You declared **no** `menus.*`/`menupages.*`/`groups.*` names, no page cursors, no
    open-state vars — if a menu needed backing state, you let it synthesize.
 4. Anything you could not express with `{{ menu }}`, a group, or a named
@@ -2691,11 +2667,8 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
    bar itself), and you verified it by clicking it and reading the diff:
    `git diff` (or a before/after copy) of the config file the session
    rendered shows exactly one value changed and nothing else touched, and
-   the next render reflects it. `check` validates your config structurally
-   (parse, merge, validate, render) but never simulates clicks, so it
-   cannot catch a `persist` action that targets a valid but unintended
-   Globals field (a typo'd field name IS caught at load time — this is
-   about a real field, just the wrong one). Watch out for the session-pick
+   the next render reflects it. The diff confirms that `persist` targeted
+   the intended field. Watch out for the session-pick
    trap specifically: if you're ALSO testing the matching `set` action in
    the same session, that session's own pick will keep winning over the
    file's default (by design — see "persist / reset" above), which can look

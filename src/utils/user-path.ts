@@ -16,7 +16,7 @@ function expandHome(p: string, home: string): string {
 
 // [LAW:single-enforcer] The one rule for a path a user writes — the
 // `CC_CANDYBAR_CONFIG` a client reports, a statusline command's `--config`,
-// the `check`/`doctor` argument, a plugin list entry or data file:
+// a plugin list entry or data file:
 // `~` expanded, then made absolute against `base`, the directory it was
 // written relative to. For a path named in a session that is the client's
 // cwd, never the detached daemon's (brandon-config-nuq6: a relative override
@@ -28,8 +28,8 @@ export function resolveUserPath(base: string, p: string, home: string): string {
 }
 
 // [LAW:single-enforcer] An explicit config path, whichever spelling carried
-// it — the `CC_CANDYBAR_CONFIG` variable, the `--config` flag, a `check` or
-// `doctor` argument: absent or empty is "no override" (`undefined`), never an
+// it — the `CC_CANDYBAR_CONFIG` variable, the `--config` or
+// `--config-only` flag: absent or empty is "no override" (`undefined`), never an
 // empty path; anything else is the absolute path it names from `base`.
 export function explicitConfigPath(
   base: string,

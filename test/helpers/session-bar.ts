@@ -1,5 +1,5 @@
 // The bundled bar drawn in process under one session's picks: the real loader,
-// `resolveEffectiveGlobals` and `drawDsl`, on check's payload, exactly as a
+// `resolveEffectiveGlobals` and `drawDsl`, on the sample payload, exactly as a
 // click on the bar would leave it.
 //
 // [LAW:one-source-of-truth] The settings-menu tests that drive the bar by its
@@ -12,7 +12,7 @@ import type { RichText } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../../src/config/effective-globals";
 import { perSetting } from "../../src/config/setting-projections";
-import { checkPayload } from "./check-payload";
+import { samplePayload } from "./sample-payload";
 import { renderOptionsOf } from "../../src/renderer/render-payload";
 import type { Frame } from "../../src/render/frame";
 import { SessionState } from "../../src/renderer/session-state";
@@ -44,7 +44,7 @@ export interface SessionBar {
   /** Drop one of the session's picks, so the config's own value holds. */
   unpick(key: string): void;
   /**
-   * The bar at `at`, on check's payload as `shown` reshapes it. A segment
+   * The bar at `at`, on the sample payload as `shown` reshapes it. A segment
    * error throws, because a ⚠ cell is never the bar under test.
    */
   render(at: Instant, shown?: (payload: Payload) => Payload): SessionRender;
@@ -76,7 +76,7 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
         () => false,
       );
       const payload = {
-        ...shown(checkPayload(config, effective, null, at)),
+        ...shown(samplePayload(config, effective, null, at)),
         resettable: perSetting(() => false),
         unsaved: 0,
         history: { undo: 0, redo: 0 },

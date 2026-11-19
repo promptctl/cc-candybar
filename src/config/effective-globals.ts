@@ -125,19 +125,7 @@ export function presetOf(
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
-// chain has one implementation rather than one per caller. It previously stood
-// as two structurally identical struct literals (the daemon's, in draw-bar.ts,
-// and `cc-candybar check`'s), which is two clocks: the check command's job is
-// to render what the daemon would render, and a rung added to one copy is a
-// rung silently missing from the other. The callers differ only in WHERE a
-// session value comes from and whether the file authors the active preset's
-// root, so both arrive as parameters and nothing else forks
-// [LAW:dataflow-not-control-flow].
-//
-// `sessionPick` is the reader for one SessionState key. `check` passes a
-// function returning null for every key — a fresh session that has never
-// clicked — rather than a null store, so "no session" travels as a VALUE
-// through the same chain a real session travels [LAW:no-mode-explosion].
+// chain uses the session’s pick and whether the active preset was customized.
 export function resolveEffectiveGlobals(
   config: DslConfig,
   sessionPick: (key: string) => string | null,

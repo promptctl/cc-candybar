@@ -48,7 +48,7 @@
 //
 // Try it (one static render, no click state needed — this example has no
 // interactive elements):
-//   cc-candybar check --render examples/multi-color-git.json5
+//   ./plugin/bin/preview.sh --config-only=examples/multi-color-git.json5
 // or point a real config at it:
 //   cp examples/multi-color-git.json5 ~/.config/cc-candybar/config.json5
 //

@@ -41,7 +41,7 @@ import {
   SEAM_MIN_DELTA_E,
 } from "@promptctl/rich-js";
 
-import { checkPayload } from "../test/helpers/check-payload";
+import { samplePayload } from "../test/helpers/sample-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { validateConfig } from "../test/helpers/parse-and-validate";
 import { unauthored } from "../src/config/dsl-loader";
@@ -174,7 +174,7 @@ function render(
               : null,
     () => false,
   );
-  const hot = checkPayload(CONFIG, e, null, AT) as unknown as Record<
+  const hot = samplePayload(CONFIG, e, null, AT) as unknown as Record<
     string,
     Record<string, unknown>
   >;

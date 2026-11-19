@@ -150,15 +150,6 @@ Subcommands:
                            menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           → merge → validate → register → render, under
-                           every preset) with no daemon. With no path, checks
-                           the same layers the daemon would load from here.
-                           Use --config-only PATH to check in isolation. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
   schema                   Print the JSON Schema for the config file shape
                            (.cc-candybar.json5). Point an editor's $schema at it
                            for autocomplete + structural validation.

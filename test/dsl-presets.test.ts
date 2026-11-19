@@ -6,12 +6,12 @@
 // never name an arrangement the bar is not in) rather than throwing or silently
 // rendering something else; (4) `presets` is a per-config option domain in BOTH
 // the rendered options and the derived wire gate — one source, no drift;
-// (5) `cc-candybar check` catches a preset staging a segment nobody declared.
+// (5) the loader catches a preset staging a segment nobody declared.
 //
 // [LAW:single-enforcer] Drives the real spine — parse/merge/validate for the
 // loader, registerDslConfig + drawDsl for rendering, the real dispatch for
 // the click (gated by the config the session renders), the real
-// checkConfig for the verdict, and the same effectivePresetName/presetGlobals
+// renderConfig for the verdict, and the same effectivePresetName/presetGlobals
 // the daemon calls. No parallel rig.
 
 import { textOf } from "../src/render/frame";
@@ -33,8 +33,7 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { rootNode } from "../src/config/root";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { PRESET_FLOOR, presetGlobals, presetRoot } from "../src/config/presets";
-import { checkConfig } from "../src/check";
-import { createGates } from "../src/daemon/foundations/gates";
+import { renderConfig } from "./helpers/config-fixture";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-presets");
@@ -43,7 +42,7 @@ const ALLOWED = new Set([THEME]);
 
 // ─── Loader validation ────────────────────────────────────────────────────────
 
-// The loader's real error text — the same strings `cc-candybar check` prints.
+// The loader's real error text — including the misplaced segment.
 describe("presets block — loader validation", () => {
   // Structural issues surface at parse; cross-reference issues (a name that
   // must resolve against the MERGED config) only at validate — so both gates
@@ -415,9 +414,9 @@ describe("preset selection — the arrangement the bar renders", () => {
   });
 });
 
-// ─── cc-candybar check ────────────────────────────────────────────────────────
+// ─── Loading preset layouts ────────────────────────────────────────────────────────
 
-describe("cc-candybar check — presets", () => {
+describe("loading a preset", () => {
   const withConfigFile = async <T,>(
     body: string,
     fn: (p: string) => Promise<T>,
@@ -435,7 +434,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset naming a nonexistent segment is FATAL, and the message locates it", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory', 'no-such-segment'] } } } }`,
-      (p) => checkConfig(WORLD, createGates(), p),
+      (p) => renderConfig(WORLD, p),
     );
     expect(outcome.kind).toBe("fatal");
     if (outcome.kind !== "fatal") throw new Error("unreachable");
@@ -448,7 +447,7 @@ describe("cc-candybar check — presets", () => {
   test("a preset staging only real segments is clean", async () => {
     const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory'] } } } }`,
-      (p) => checkConfig(WORLD, createGates(), p),
+      (p) => renderConfig(WORLD, p),
     );
     expect(outcome.kind).toBe("clean");
   });

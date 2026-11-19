@@ -84,7 +84,7 @@ const AT = instantOf(new Date("2026-10-30T12:00:00Z"));
 
 // The cells of the bundled frame whose background the bundled config authors,
 // by placement, with the line in src/config/default-dsl-config.ts that authors
-// it. On check's payload each wears its alert's colour.
+// it. On the sample payload each wears its alert's colour.
 const AUTHORED: Readonly<Record<string, string>> = {
   host: `bg: "warning"`,
   context: `bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 (tint) }}'`,

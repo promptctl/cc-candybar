@@ -4,7 +4,7 @@
 // bytes and the payload a template reads. The bar must not move when the
 // payload is composed from the facts document; the payload's snapshot is where
 // the accepted differences of that change show as a diff, and nothing else may.
-// `check`'s payload is pinned the same way, per preset.
+// The sample session exercises the payload for each preset.
 //
 // [LAW:behavior-not-structure] Asserts what a viewer sees and what a template
 // reads, over owners that answer fixed values; no composition function is named.
@@ -12,7 +12,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkPayload } from "./helpers/check-payload";
+import { samplePayload } from "./helpers/sample-payload";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { UNFOLLOWED_FEEDS } from "../src/config/lanes";
@@ -83,7 +83,7 @@ describe("a session's view, drawn from fixed owners at a fixed instant", () => {
   );
 });
 
-describe("`check`'s representative payload", () => {
+describe("a sample session payload", () => {
   const config = parseAndValidate(
     "<user>",
     "{}",
@@ -97,7 +97,7 @@ describe("`check`'s representative payload", () => {
       (key) => (key === "preset" ? preset : null),
       () => false,
     );
-    const { today, speed, ...payload } = checkPayload(config, effective, null, AT);
+    const { today, speed, ...payload } = samplePayload(config, effective, null, AT);
     expect({ payload, today, speed }).toMatchSnapshot();
   });
 });

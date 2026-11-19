@@ -497,8 +497,7 @@ export interface Registration {
 }
 
 // [LAW:single-enforcer] The one composition of a config into a registry, which
-// `cc-candybar check` (registerDslConfig) and the daemon (buildRenderState)
-// both take: the compile `compile` hands back for the config's key — a render
+// uses the compile `compile` hands back for the config's key — a render
 // cache's shared one, or one of its own — then the variables of `scopes`
 // declared into the registry: both for a one-shot render, the directory's
 // alone for a render cache entry, whose sessions each declare a view.
@@ -1299,9 +1298,7 @@ export type RenderSelection = DrawSelection & Selections;
 // bound, which is also the draw's projections (DRAW_PROJECTIONS read their
 // paths in it). [LAW:one-source-of-truth] The one composition of what a fixed
 // view reads: a source keyed on an input starts its run inside this bind, and
-// a caller that waits for that run before it draws (`cc-candybar check`)
-// draws the very object the key read. `session` is the one the view draws
-// for: `cc-candybar check` names the one session it fakes.
+// a caller that waits on that run draws the payload its key read.
 export function bindPayload(
   compiled: CompiledConfig,
   store: VariableStore,

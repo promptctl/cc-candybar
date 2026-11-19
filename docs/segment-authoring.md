@@ -2,16 +2,15 @@
   Segment authoring reference — written for an AGENT config author.
 
   Snippet contract (enforced by test/doc-snippets.test.ts):
-    ```json5 check:pass   — a COMPLETE config file; must exit 0 under `cc-candybar check`.
-    ```json5 check:fail   — a COMPLETE config file; must exit 1, and the next
-    ```error              — block must quote a substring of check's actual stderr.
+    ```json5 check:pass   — a complete config expected to load and draw in the fixture.
+    ```json5 check:fail   — a complete config expected to report a diagnostic.
+    ```error              — the expected text of that diagnostic.
     ```sh stub:<name>     — an executable named <name>, written verbatim onto PATH
                             before any snippet runs; a `shell` snippet may run it.
     ```json5 file:<path>  — a file written verbatim at <path>, relative to every
     ```json file:<path>     config snippet, before any snippet runs.
-    ```render             — the bar the check:pass config ABOVE it renders, as
-                            `cc-candybar check --render` prints it minus the
-                            colour escapes; asserted byte for byte.
+    ```render             — fixture frame for the check:pass config above it,
+                            asserted without colour escapes.
   Every ```json5 block in this file MUST carry one of the two annotations.
   Do not edit a snippet or a quoted error without running the test — the quoted
   strings are asserted against the real loader, not transcribed.
@@ -29,27 +28,18 @@ colour. The script never chooses a colour and the template never branches on
 thresholds: the colour decision lives in the theme system, so it follows a
 theme click and a style pick exactly as the built-in segments do.
 
-Your eyes are `cc-candybar check` — its exit code and stderr for whether the
-config is sound, and `--render` for what it puts on screen:
+From a source checkout, preview the named config in a sample session.
 
+```bash
+./plugin/bin/preview.sh --config-only=/path/to/config.json5
 ```
-edit config  →  cc-candybar check --render <path>  →  read exit code + stderr + bar  →  repeat
-```
 
-| exit | meaning |
-|------|---------|
-| 0 | config loads and renders — warnings (advisory only) on stderr |
-| 1 | config is invalid, or a segment's template throws at evaluation (the daemon would render a `⚠` cell) — stderr names the path and the fix |
-| 2 | usage error / the named file could not be read |
+The ordinary daemon draws the preview and may run sources that the config
+requests. Inspect the frame and its `⚠` diagnostics. Try the changed segment in
+Claude Code with the session's real environment and data, including source
+updates and the presets that place it.
 
-`check` runs the daemon's exact pipeline (parse → merge on the bundled
-default → validate → register → render against a representative payload). It
-**runs your `shell` and `file` sources** and waits for their first runs, and
-then, before each preset's pass, for the re-reads that preset's payload starts
-(a `key` over `.preset.effective`), all under one 5 s budget; a source still
-running at the deadline is reported as a warning naming the source, and the pass draws the variable as pending (its loading cell),
-never as its `default`: a default stands in for a failure, not a wait. A user config merges onto the
-bundled default by name, so declare only what differs: the variables and
+A user config merges onto the bundled default by name. Declare only what differs, including the variables and
 segments below, plus the row that places the segment. A row you name under
 `root.rows` replaces the bundled row of that name wholesale — the bundled
 `status` row is `model · context · cacheTimer · block · weekly` — so list
@@ -120,12 +110,8 @@ what that failure renders as depends on the `default` you declare (Step 2).
 }
 ```
 
-That config is complete, so `check` can already show you it. `--render` prints
-the bar beneath the verdict — the same render the exit code was reached on,
-with the colours it will really have (stripped here, since a document cannot
-hold escape bytes). Nothing is installed and the running daemon is not
-touched; the payload is `check`'s own fixture, which is why the numbers below
-are the same on every machine:
+The fixture for this example supplies the numbers below. The rendered rows
+are shown without ANSI colour escapes.
 
 ```render
  🍫   polled  ⇄ tester@tester-box  ~/c/cc-candybar/src  ⎇ main +2/-1 SU? ▸ 
@@ -134,8 +120,7 @@ are the same on every machine:
 
 The bundled `identity` row is above and this config's `status` row below it,
 with the budget segment last; the `` between cells and the `` that opens each row are the powerline joiner,
-and `check` renders the settings door (`🍫`) into the first row exactly as the
-daemon does — so what you read there is the whole bar, chrome included.
+and the settings door (`🍫`) appears in the first row.
 
 The complete shape of a `shell` variable:
 
@@ -145,7 +130,7 @@ The complete shape of a `shell` variable:
 | `command` | the command line, run by `/bin/sh -c`. A run is ended after 10 s and fails as `timed out after 10 s`; a cell is a glance, and a program that takes longer belongs in a file another process writes, one started outside the command: the run's whole process group ends with it, so a helper the command backgrounds is ended too |
 | `env` | optional — the names of variables the command reads beyond the base set above, such as `["AWS_PROFILE", "KUBECONFIG"]`. Each is read from the session's environment; one the session has not set stays unset. |
 | `parse` | absent or `{ text: true }` → the trimmed text, line breaks folded to spaces; `{ regex: "…" }` → capture group 1 of the text; `{ json: true }` → the text parsed once as a document. Exactly one key. |
-| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why, and `cc-candybar check` fails on it), `{ watch_file: "/abs/path" }` (re-run when that file changes, checked about once a second, or a symlink on the way to it is re-pointed; a folder is watched for every child, by the OS, which on macOS streams every write in its whole tree, so name a small folder, never a home or repository root; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning on a folder), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`, and `cc-candybar check` fails on it), `{ never: true }` (run once) |
+| `cache` | **required** — exactly one of `{ ttl: "60s" }` (re-run on a timer; units `ms`/`s`/`m`/`h`; a shell `ttl` below 500 ms is refused: the command never runs, the variable draws its `default`, the bar's `⚠` says why), `{ watch_file: "/abs/path" }` (re-run when that file changes, checked about once a second, or a symlink on the way to it is re-pointed; a folder is watched for every child, by the OS, which on macOS streams every write in its whole tree, so name a small folder, never a home or repository root; a watch the OS refuses, or a link chain that loops, is reported like a key that throws, below, and while the OS delivers no file events at all the bar's `⚠` counts the same warning on a folder), `{ depends_on: ["otherVar"] }` (run once the declared variables have values, and again when one changes), `{ key: "{{ .otherVar }}" }` (run once the key template has a value, and again when it changes; a key over a document still waiting for its first scan waits with it; while the key throws, the variable keeps its last value — its `default` if it never ran — the bar's `⚠` indicator counts a warning that it `cannot refresh`), `{ never: true }` (run once) |
 | `default` | what the variable reads until the first run completes and whenever a run fails. Under `text`/`regex` it is a string; under `json` it is a JSON value — normally the document shape, every field your templates read, with placeholder values — and it stands in only when there was nothing to read (the command failed, the file is missing): text that was read and is not JSON is the `⚠`, default or not |
 
 A run's identity is what it needs: the command (or the path and read mode),
@@ -202,7 +187,7 @@ The `default` is not optional in practice. A `json` source with no `default`
 draws `…` in every segment reading it until its first run lands — not answered
 yet, which is no fault — and one whose run fails or prints nothing — the script
 is missing, exits non-zero — has no document to read, and every segment
-reading it renders a `⚠` cell that `check` fails on.
+reading it renders a `⚠` cell.
 Output that is not JSON is that `⚠` even with a `default`: a broken writer
 is not an empty one. A `text`/`regex` source with no `default`
 reads as the empty string instead, silently. Give every source a `default`,
@@ -506,8 +491,7 @@ cascade is a different cascade than the one you wrote.
 Every position anyone might tune is a **declared variable** riding in the
 position slot; the only literal positions are the fixed ends of the value's
 domain (`0`, and `100` for a percentage). The knob is then one number to
-edit, and `check` refuses a descending pair loudly instead of sorting the
-stops into a ramp you did not write. The calm stop is `(tint)`: the
+edit. The ramp reports a descending pair as a `⚠` diagnostic. The calm stop is `(tint)`: the
 decoration the segment would wear with no `bg:` at all. A calm cell states
 nothing, so it wears what every cell that states nothing wears. A fixed role
 such as `panel` there paints two calm neighbours as one slab. The
@@ -1000,12 +984,8 @@ plugin's folder:
   blank one, reads as absent: `hasKey .self "<source>"` is
   false, so a segment gated on it hides. That gate is the only safe read
   before the first write. An unguarded read is the missing-field error —
-  the segment draws `⚠` and `check` fails — and a file that is not JSON
-  draws `⚠` with the reason and the path.
-- **`check` reads every source as absent.** It runs no plugin program and has
-  no session, so it draws what a session draws before the first write: the
-  gated segment above is hidden under `check`, and the unguarded read below
-  fails it.
+  the segment draws `⚠`. A file that is not JSON draws `⚠` with the reason and
+  the path. A fresh sample session may have no plugin data yet.
 - **One file, one source.** A plugin's session file is one document, so a
   plugin declares one source for it and reads its fields. Two sources
   reading the same file drop the plugin, naming both.
@@ -1065,11 +1045,10 @@ template reading its data, a source or a variable, calling its helper or
 binding its action shows `⚠` naming the drop — a segment of it you placed or
 retuned stands in as that cell — a `run` of yours that refreshes one of its
 sources still runs, with nothing of it to refresh, the bar's diagnostics
-indicator offers a message naming the definition and the reason, and `check`
-fails. An INSTALLED plugin
+indicator offers a message naming the definition and the reason. An INSTALLED plugin
 that does not load is your config's problem only where it reaches it (a
 placement, a retune, a helper call, an action binding or a `refreshes`): one
-nothing reaches is neither among the bar's messages nor in `check`. A
+nothing reaches stays out of the bar's messages. A
 listed definition is a folder's `plugin.json5`, the folder naming the plugin.
 A definition is watched like your config file, so fixing or installing it
 reloads the bar:
@@ -1133,7 +1112,7 @@ placed. The roots are watched, so installing or removing a folder reloads
 the bar.
 
 A placement of a plugin that is not present in the session draws nothing
-and is no error: no `⚠`, and `check` passes. So your own config can place
+without a `⚠`. Your own config can place
 `repo.lit.ticket` for every repository that ships `lit`, and in any other
 directory the cell is simply not there; the same goes for a `plugins.` cell
 whose plugin is not installed. A placement under a plugin that IS present
@@ -1194,10 +1173,9 @@ own copy of it, yours comes back.
 
 ## Mistakes and the errors they produce
 
-Each entry: the wrong config, then the text `cc-candybar check` prints. The
-first seven are load errors — the config never renders. The rest are render
-errors: the config loads, a template throws, and `check` exits 1 naming the
-segment the daemon would draw as `⚠`.
+Each entry shows a wrong config and its diagnostic. The first seven are load
+errors. The rest illustrate what the daemon reports when a template fails at
+render time.
 
 ### The retired top-level `regex:`
 
@@ -1458,9 +1436,9 @@ segment "budget": variable "budget": JSON parse failed
 
 Whenever the default is what reads — before the first run, after a failed
 one — a template reaching a field the default lacks throws. Here the command
-does not exist, so the default renders under `check`; with a working
-script this passes `check` and fails at daemon start instead. A typo in a
-field name (`.budget.spentPercent`) prints the same text:
+does not exist, so the source uses its default. A working script may supply
+the field once its first result arrives. A typo in a field name
+(`.budget.spentPercent`) produces the same diagnostic:
 
 ```json5 check:fail
 {
@@ -1617,8 +1595,7 @@ misspelled palette name fails with `color reference "eror" did not resolve`.
 In a variable template there is no segment to take a palette from, and `ramp`
 is registered per-segment against the palette of the one currently rendering —
 so the function is not there to call. The variable reads as that failure: the
-segment renders a ⚠ error cell and `check` exits 1, naming the variable rather
-than the `bg:` that never received a colour. A `default` on the variable is how
+segment renders a `⚠` cell that names the variable. A `default` on the variable is how
 you say such a failure is tolerable; without one it is loud. Put the `ramp` in
 the segment's `bg:` and read the document field there:
 
@@ -1737,9 +1714,8 @@ setting "theme" is one every placement already has
 
 ## Before you report done
 
-1. `cc-candybar check <path>` exits 0, and stderr shows no warning you have
-   not read — a `source still running after 5000 ms` warning means the bar
-   rendered your `default`, or `…` where you declared none, not your data.
+1. Draw the changed config and inspect the `⚠` diagnostics. In a live
+   session, observe what the segment draws before and after its sources settle.
 2. You ran the real script by hand: one JSON object on stdout, exit 0,
    numbers unquoted, and the daemon can find it by the `command` you wrote.
 3. The `default` carries every field any template reads, with placeholder

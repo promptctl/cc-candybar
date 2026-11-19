@@ -19,7 +19,7 @@ You are running an interactive setup wizard to configure the cc-candybar statusl
 - One question per step. Wait for the user's answer before moving on. Do not skip or combine steps.
 - Track the user's choices as three variables: `theme`, `endcaps`, `preset`. Every later command and the final config are built from exactly those three.
 - Do NOT use the Agent tool or Explore subagents. Everything you need is in this document.
-- Do NOT read source code from the cc-candybar package. Run only the subcommands this document names (`install`, `check`) and the plugin's preview script against it.
+- Use the plugin's preview script and the package's `install` command for this wizard.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs need a click to expand. Relay versions, option names, file paths, and command results in your text so the user sees them without expanding.
 - Two things this wizard never does, however natural they feel in the moment: it never edits `~/.claude/settings.json` by hand (Step 9's installer writes that entry), and it never carries its own list of theme names (Step 3's preview output is the list).
 
@@ -217,15 +217,15 @@ stamp=$(date -u +%Y%m%dT%H%M%SZ)
 
 3. Write the result to `~/.config/cc-candybar/config.json5` with the Write tool (create the directory if needed). Do NOT read or merge with any existing config; the file is replaced whole.
 
-## Step 8: Verify
+## Step 8: Preview the written config
 
-Check that the written config loads:
+Run the command and let the terminal display the result. Tell the user to expand the bash output if needed.
 
 ```bash
-npx -y @promptctl/cc-candybar@latest check ~/.config/cc-candybar/config.json5
+"${CLAUDE_PLUGIN_ROOT}/bin/preview.sh" --config-only="${HOME}/.config/cc-candybar/config.json5"
 ```
 
-Exit 0 and a `✓` line mean the config loads. A `✗` block names the problem: show it to the user verbatim and stop. Do not continue to the installer, the preview or the success message, and do not claim the setup worked.
+This draws the file you wrote through the ordinary daemon using a sample session. Show any diagnostic the command or the bar reports. If the command fails or the bar reports a config problem, stop before the installer. Report a successful draw as a preview of the sample session.
 
 ## Step 9: Install the runtime
 
@@ -245,20 +245,7 @@ Exit 0 has two outcomes, told apart by the output:
     - "Replace it with cc-candybar" -> Run `npx -y @promptctl/cc-candybar@latest install --force`, relay its output, and continue to Step 10.
     - "Keep my existing statusLine" -> Continue to Step 10; the success message says the bar is not wired up.
 
-## Step 10: Preview
-
-> [!IMPORTANT]
-> You cannot render ANSI escape codes or nerd font glyphs in your text output.
-> You MUST run the preview command below and let the terminal display the result.
-> After running, tell the user to expand the bash output if they cannot see the preview.
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --endcaps=${endcaps} --preset=${preset}
-```
-
-Tell the user: "Your statusline is in the bash output above. Expand it if needed."
-
-## Step 11: Success message
+## Step 10: Success message
 
 Display the message below. The `~/.claude/settings.json` line under **Files written** belongs there only if Step 9 printed `Updated `. If the user kept their existing statusLine, drop that line and make item 1 of **What now**: "Your existing statusLine was left in place, so the bar will not appear until `statusLine.command` in `~/.claude/settings.json` points at cc-candybar. Rerun `/candybar` and choose Replace to have the installer do it."
 

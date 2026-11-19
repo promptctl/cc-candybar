@@ -2,8 +2,8 @@
 // session's view reads, given a constant. A test draws by this as a turn
 // draws: what the frame leaves is kept — its record by the store it was drawn
 // over, the motion in the selection's effects when it hands some — so the
-// next call draws on from it. The daemon and check bind a view of their own
-// and call `drawDsl`.
+// next call draws on from it. The daemon binds a view of their own
+// and calls `drawDsl`.
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import {
   bindPayload,

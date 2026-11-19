@@ -20,7 +20,6 @@ import { daemonStatsPlan } from "./daemon/client-stats";
 import { debugCommandPlan } from "./daemon/client-debug";
 import { DEBUG_WHATS } from "./daemon/foundations/debug-types";
 import { schemaPlan } from "./config-cli";
-import { checkCommandPlan } from "./check";
 import { runPlugin } from "./plugin-install";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./outcome-plan";
@@ -65,7 +64,7 @@ function showHelpText(): void {
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
-// a handler. A one-shot handler (stats, the debug projections, check,
+// a handler. A one-shot handler (stats, the debug projections,
 // schema, the render relay) folds its outcome into a plan and delivers it
 // through the one exit (src/cli-plan.ts), in one shape:
 // `exitWith(await <command>Plan(args))`. install and plugin print as they go
@@ -74,10 +73,7 @@ function showHelpText(): void {
 // daemon, the stream and the pane own their own lifecycles. The
 // stdin-driven render takes flags only (`--config`), so a positional argv[2]
 // naming no handler is a mistake, refused rather than read as a render.
-// `lint` is an alias of `check` — one config verdict, one pipeline, one
-// exit-code contract (0/1/2) — and the debug projections join by DEBUG_WHATS,
-// the subcommand name being the DebugWhat. The native client's own subcommands
-// (rust-client/src/main.rs NATIVE_SUBCOMMANDS) never reach here, and
+// The native client handles its own subcommands before dispatching here.
 // scripts/check-protocol.mjs holds the two sets apart.
 type Subcommand = (args: readonly string[]) => Promise<void>;
 const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
@@ -107,12 +103,6 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   // The stream owns its own lifecycle.
   frames: async () => {
     await runFrames(process.argv, RUNNING_BUNDLE, world);
-  },
-  check: async (args) => {
-    await exitWith(await checkCommandPlan(args, world));
-  },
-  lint: async (args) => {
-    await exitWith(await checkCommandPlan(args, world));
   },
   plugin: async (args) => {
     process.exit(runPlugin(args, world));
@@ -241,7 +231,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     // [LAW:no-silent-failure] Named for what was running: a subcommand whose
-    // delivery failed (a full disk under `check`) is reported as that
+    // delivery failed (for example, while writing a schema) is reported as that
     // subcommand, not as a statusline render. The report goes through the
     // same delivery, so it is waited for like any plan; a stream that refuses
     // this too rejects out of main, and Node's unhandled-rejection report is

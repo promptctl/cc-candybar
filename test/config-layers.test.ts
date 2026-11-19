@@ -9,7 +9,7 @@ import type { Host, World } from "../src/host";
 import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, type CheckOutcome } from "../src/check";
+import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
 import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
@@ -35,7 +35,6 @@ import { applyLayoutOp } from "../src/renderer/config-file-store";
 import { walkNodes } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { textOf, type Frame } from "../src/render/frame";
-import { createGates } from "../src/daemon/foundations/gates";
 import { EDITS_IN_PLACE, layerNow } from "./helpers/history-step";
 
 let dir: string;
@@ -68,7 +67,7 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function clean(o: CheckOutcome): Extract<CheckOutcome, { kind: "clean" }> {
+function clean(o: ConfigDraw): Extract<ConfigDraw, { kind: "clean" }> {
   if (o.kind !== "clean") throw new Error(JSON.stringify(o));
   return o;
 }
@@ -86,7 +85,7 @@ test("a project file that places one segment renders over the user's whole confi
     `{ segments: { proj: { template: "PROJSEG" } }, root: { h: ["mine", "proj"] } }`,
   );
   const outcome = clean(
-    await checkConfig(world, createGates(), undefined, project),
+    await renderConfig(world, undefined, project),
   );
   expect(outcome.layers).toEqual([
     { path: userFile, role: "user" },
@@ -111,7 +110,7 @@ test("a project file that places one segment renders over the user's whole confi
 
 test("a layer that does not load fails naming its own file", async () => {
   fs.writeFileSync(projectFile, `{ root: { h: ["nowhere"] } }`);
-  const outcome = await checkConfig(world, createGates(), undefined, project);
+  const outcome = await renderConfig(world, undefined, project);
   expect(outcome.kind).toBe("fatal");
   if (outcome.kind === "fatal") expect(outcome.message).toContain(projectFile);
 });
@@ -369,7 +368,7 @@ describe("a project layer inserting into the user's row", () => {
     warnings.filter((w) => missedTrees(w).includes(`preset "${preset}"`));
   const presetTree = async (preset: string) => {
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     const prepared = await prepareConfig(
       world,
@@ -395,7 +394,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(presetWarnings(outcome.warnings, "mine2")).toEqual([]);
     expect(
@@ -407,7 +406,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "burnrate" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(presetWarnings(outcome.warnings, "verbose")).toEqual([]);
     const verbose = await presetTree("verbose");
@@ -421,7 +420,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", before: "directory" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(presetWarnings(outcome.warnings, "compact")).toEqual([]);
     const compact = await presetTree("compact");
@@ -435,7 +434,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const bundled = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     ).warnings;
     expect(bundled.filter((w) => missedTrees(w).includes("preset "))).toEqual(
       [],
@@ -446,7 +445,7 @@ describe("a project layer inserting into the user's row", () => {
       ` }, presets: { compact: { root: { h: ["other"] } }`,
     );
     const missed = presetWarnings(
-      clean(await checkConfig(world, createGates(), undefined, project))
+      clean(await renderConfig(world, undefined, project))
         .warnings,
       "compact",
     );
@@ -460,7 +459,7 @@ describe("a project layer inserting into the user's row", () => {
     const before = fs.readFileSync(userFile, "utf8");
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     const [u, t, o] = order(
       outcome.rendered,
@@ -480,7 +479,7 @@ describe("a project layer inserting into the user's row", () => {
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     answerRepo(project, "declined");
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered)).toContain("USERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
@@ -491,7 +490,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered)).toContain("USERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
@@ -509,7 +508,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
@@ -521,7 +520,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered)).toContain("OTHERSEG");
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
@@ -536,7 +535,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ h: ["mine", "other"] }`);
     writeProject(`[{ seg: "theirs", before: "other" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     const [u, t, o] = order(
       outcome.rendered,
@@ -556,7 +555,7 @@ describe("a project layer inserting into the user's row", () => {
       `theirs: { template: "THEIRSEG" }, second: { template: "SECONDSEG" }`,
     );
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     const [t, s, u] = order(
       outcome.rendered,
@@ -573,7 +572,7 @@ describe("a project layer inserting into the user's row", () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", before: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     const prepared = await prepareConfig(
       world,
@@ -675,7 +674,7 @@ describe("a project layer inserting into the user's row", () => {
   test("a cell anchored on the bar's chrome is refused at its anchor and never drawn", async () => {
     userRow(`{ rows: { status: { h: ["mine", "other"] } } }`);
     writeProject(`[{ seg: "theirs", after: "candybar.menu" }]`);
-    const outcome = await checkConfig(world, createGates(), undefined, project);
+    const outcome = await renderConfig(world, undefined, project);
     expect(outcome.kind).toBe("fatal");
     if (outcome.kind === "fatal") {
       expect(outcome.message).toContain(projectFile);
@@ -743,7 +742,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
     const warned = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     ).warnings.filter((w) => w.includes("insert.0"));
     expect(warned).toHaveLength(1);
     expect(missedTrees(warned[0]!)).toBe(
@@ -770,7 +769,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(2);
     expect(outcome.warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
@@ -783,7 +782,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", id: "t2", after: "mine" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(textOf(outcome.rendered).split("THEIRSEG")).toHaveLength(3);
   });
@@ -795,7 +794,7 @@ describe("a project layer inserting into the user's row", () => {
     );
     writeProject(`[{ seg: "theirs", after: "nope" }]`);
     const outcome = clean(
-      await checkConfig(world, createGates(), undefined, project),
+      await renderConfig(world, undefined, project),
     );
     expect(warnedFor(outcome.warnings, "insert.0")).toEqual([]);
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");

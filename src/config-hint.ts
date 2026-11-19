@@ -84,25 +84,6 @@ export function requestedConfigTarget(
   return { source: "search" };
 }
 
-// The config a CLI run (`check`, `doctor`) judges, for the bar a session
-// started in this shell renders: the file named on the command line — a
-// statusline command's own `--config` — else the override the client would
-// report. An empty argument is no argument, as `--config "$CFG"` with CFG
-// unset is to the bar, because the argument and the variable cross the one
-// `explicitConfigPath` reading.
-export function cliConfigTarget(
-  arg: string | undefined,
-  host: HostPaths,
-  cwd: string,
-  flag: ConfigFlag = "config",
-): RequestedTarget {
-  return requestedConfigTarget(
-    explicitConfigPath(cwd, arg, host.home),
-    detectConfigEnv(host, cwd),
-    flag,
-  );
-}
-
 // [LAW:types-are-the-program] What config resolution takes: where a session
 // runs and what names its config. Recorded for a session, this is what a
 // durable click resolves, so the file it lands in is the one the next reload
@@ -130,7 +111,7 @@ export interface RequestedOrigin extends RenderOrigin {
 }
 
 // [LAW:one-source-of-truth] How a chain of config files reads to a person,
-// lowest precedence first, for `check` and the doctor alike. An empty chain
+// lowest precedence first. An empty chain
 // says nothing loaded, not that nothing was found: a repository's config that
 // awaits its approval is left out of the chain.
 export function chainName(

@@ -85,8 +85,7 @@ import type { LayerRole } from "../config/layer-role.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
 // selection is the resolution itself — RenderSelection is a Pick of it).
-// [LAW:one-source-of-truth] The daemon and `cc-candybar check` both
-// project THROUGH this, so a field added to EffectiveGlobals reaches every
+// [LAW:one-source-of-truth] Shared options let a field added to EffectiveGlobals reach every
 // renderer at once and no caller can leave one out — a hand copy of this
 // projection had already dropped `separator` (brandon-menu-ia-zyf).
 export function renderOptionsOf(
@@ -115,9 +114,7 @@ export type ValuedInputs = {
 
 // The `.effective` inputs a render reads back — the resolved globals, as the
 // payload fields a settings label or a carousel reads.
-// [LAW:one-source-of-truth] The daemon's payload, `cc-candybar check`'s fixture
-// both spread THIS, so a caller cannot render a label
-// blank by forgetting a field the daemon's payload carries.
+// [LAW:one-source-of-truth] All labels read the same projection of the effective globals.
 export type EffectiveInputs = ValuedInputs & Pick<RenderPayload, "preset">;
 
 export function effectiveInputs(effective: EffectiveGlobals): EffectiveInputs {
@@ -735,8 +732,7 @@ const unstamped = <T>(fact: Fact<T>): Reading<T> => {
 // as pending — which the draw takes as its own outcome (the placement's
 // loading cell). Performs no I/O, refreshes nothing and reads no instant, so
 // the session's view keeps it as one computed over its turn
-// (src/renderer/session-source.ts), and `check` composes its fixture document
-// through it.
+// (src/renderer/session-source.ts).
 export function composePayload(
   facts: WorldState,
   inputs: ComposeInputs,
@@ -1011,9 +1007,7 @@ export function sourceFieldsOf(summary: ReturnType<typeof sourceSummaryOf>): {
 
 // [LAW:one-source-of-truth] The one projection of a view's sources into its
 // payload: each at `.<scope>.<plugin>.<source>`, its variable's own name, as
-// `read` answers it — the daemon reads the storage owner's lanes, `check`
-// reads every source absent (what a session reads before its program first
-// writes). No second spelling of the path exists.
+// `read` answers it from the storage owner's lanes.
 export function projectSources<P>(
   names: Iterable<string>,
   read: (name: string) => Outcome<JsonValue> | P,
