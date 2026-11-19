@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-896",
+      "ref": "refs/pull/896/merge",
+      "sha": "5228c83eabd47f63c50c0c5720d232a6072ee166",
+      "timestamp": "2026-11-19T18:07:34.906Z",
+      "commits": [
+        {
+          "sha": "5228c83eabd47f63c50c0c5720d232a6072ee166",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:05:50-07:00",
+          "message": "Merge cae3dc82d2a4f0601fbb20fee0df3f39f7797927 into e78e6ea53d92f3294c4769635d9d974fb47550ca\n"
+        },
+        {
+          "sha": "cae3dc82d2a4f0601fbb20fee0df3f39f7797927",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:05:04-07:00",
+          "message": "fix(config): recognize equivalent saved project directories\n"
+        }
+      ]
+    },
+    {
       "version": "pr-892",
       "ref": "refs/pull/892/merge",
       "sha": "88925f47cf0df9e1f89de664e4d4c634dfafab78",
