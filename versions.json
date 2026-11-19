@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-869",
+      "ref": "refs/pull/869/merge",
+      "sha": "8b713dbd53e87f2435516f15da4ac15c4e522f45",
+      "timestamp": "2026-11-19T12:39:40.334Z",
+      "commits": [
+        {
+          "sha": "8b713dbd53e87f2435516f15da4ac15c4e522f45",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:38:38-07:00",
+          "message": "Merge 630dab8a7c88b9acf93baacefcf9abcfda973c8f into 21b8abaab0b95c9b35518fcd7a840b2d54aa052b\n"
+        },
+        {
+          "sha": "630dab8a7c88b9acf93baacefcf9abcfda973c8f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:38:13-07:00",
+          "message": "fix(config): refuse non-regular files during discovery (ibyq.h8t)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-864",
       "ref": "refs/pull/864/merge",
       "sha": "243ed2cfd98f232e3949e7c4b8504f364c8db3e3",
