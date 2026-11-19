@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-874",
+      "ref": "refs/pull/874/merge",
+      "sha": "6eccdbafc42c593c3903a93b3b60da0b04297df0",
+      "timestamp": "2026-11-19T13:44:56.304Z",
+      "commits": [
+        {
+          "sha": "6eccdbafc42c593c3903a93b3b60da0b04297df0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:43:21Z",
+          "message": "Merge b30480ed142623a8708ddd93fd5c88c262a8ed71 into 415c57dbe8f21640a4165b7c3e984bbff858ad50\n"
+        },
+        {
+          "sha": "b30480ed142623a8708ddd93fd5c88c262a8ed71",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:38:42-07:00",
+          "message": "fix(launch): type the overlay against repository-naming variables and derive the forge part from the table\n\nEach forge entry carries its CLI and the variable it reads as its\nrepository, and the withheld list derives its forge part from the\ntable, so a new forge cannot leave its variable out. An overlay naming\none of those variables no longer type-checks. The memory note says the\ndaemon's own environment still carries them.\n"
+        },
+        {
+          "sha": "6286e037334950e434a12a1a040300762b54a3f1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:23:24-07:00",
+          "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-868",
       "ref": "refs/pull/868/merge",
       "sha": "119f9ce1040d2da7ffdeaca1f2ee40a755d80b26",
@@ -35,28 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:36:18-07:00",
           "message": "refactor(cli): retire standalone config check and lint alias (#867)\n\n* refactor(cli): retire the standalone config check (ibyq.9lr)\n\n* fix(preview): retain real config diagnostics and isolate sample sessions\n\n* docs: clarify the retained preview and render invariants"
-        }
-      ]
-    },
-    {
-      "version": "pr-874",
-      "ref": "refs/pull/874/merge",
-      "sha": "3482bc4ac8781c8f32b89e8f8a6a2cc082386c66",
-      "timestamp": "2026-11-19T13:33:40.638Z",
-      "commits": [
-        {
-          "sha": "3482bc4ac8781c8f32b89e8f8a6a2cc082386c66",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:32:28-07:00",
-          "message": "Merge 37a81094e668279ffed5af95ff1f8ada849a00ad into 6125487488e90cbd9bd119f83430408afd97f01f\n"
-        },
-        {
-          "sha": "37a81094e668279ffed5af95ff1f8ada849a00ad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:23:24-07:00",
-          "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
         }
       ]
     },
