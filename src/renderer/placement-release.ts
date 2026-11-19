@@ -18,22 +18,35 @@ import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
 
+// The keys of `sessionId` held for placements `placements` does not hold,
+// cleared through `store`. [LAW:single-enforcer] Both moments hand in a
+// closing view (src/renderer/closing-view.ts), so a clear that closes a
+// disclosure folds what is open inside it, as every session write does.
 export function releaseUnplaced(
   store: SessionStateRW,
   sessionId: SessionId,
   placements: Placements,
-  log: DaemonLogger,
-): void {
+): readonly string[] {
   const released = store.entries(sessionId).flatMap(([key, value]) => {
     const owner = placementHolding(key, value);
     return owner === null || placements.has(owner) ? [] : [key];
   });
-  if (released.length === 0) return;
+  if (released.length === 0) return released;
   runInAction(() => {
     for (const key of released) store.clear(sessionId, key);
   });
-  // [LAW:nothing-unseen] What a session let go, and of what: the state a
-  // later placement of the same id no longer inherits.
+  return released;
+}
+
+// [LAW:nothing-unseen] What a session let go, said once it has landed: the
+// state a later placement of the same id no longer inherits. A release of
+// nothing says nothing, so a tick with nothing to let go logs nothing.
+export function logReleased(
+  log: DaemonLogger,
+  sessionId: SessionId,
+  released: readonly string[],
+): void {
+  if (released.length === 0) return;
   log(
     "info",
     `placement-release: released=${JSON.stringify(released)} (session=${sessionId})`,

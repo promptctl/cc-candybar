@@ -163,7 +163,7 @@ describe("a click's config writes", () => {
     });
     expect(applied).toBe(false);
     if (landed === undefined || landed === "owed") throw new Error("unlanded");
-    landed.consequence([]);
+    landed.consequence([], true);
     expect(applied).toBe(true);
     expect(() => w.begin("next", () => LAYERS)).not.toThrow();
   });

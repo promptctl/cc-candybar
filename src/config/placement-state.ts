@@ -82,8 +82,9 @@ function draftOwner(key: string): PlacementOwner | null {
   );
 }
 
-// The configure key holds `<preset>:<id>` while a placement is configured,
-// and the id holds no `:`.
+// The configure key holds `<preset>:<id>` while a placement is configured
+// (configureMember). The preset is escaped to letters and digits, so the
+// first `:` is the one that ends it, whatever the id holds.
 function configuringOwner(value: string): PlacementOwner | null {
   if (value === DISCLOSURE_CLOSED) return null;
   const at = value.indexOf(":");

@@ -27,7 +27,7 @@ import {
 } from "../../config/layer-role";
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import type { Placements } from "../../config/placement-state";
-import { releaseUnplaced } from "../placement-release";
+import { logReleased, releaseUnplaced } from "../placement-release";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
 import { stateKeySeed, configKeySeed } from "./key-seeds";
@@ -605,7 +605,7 @@ function changeLanded(
       failed.push(failureOf(e).message);
     }
   };
-  if (outcome.kind === "ok") step(() => consequence(effects));
+  if (outcome.kind === "ok") step(() => consequence(effects, true));
   else if (outcome.kind === "closing") return;
   else failed.push(outcome.reason);
   if (failed.length === 0) return;
@@ -1338,6 +1338,22 @@ function foldEffects(
   }
 }
 
+// [LAW:types-are-the-program] The session a click is of, and its context
+// when that session is the one the click came from: a session that has not
+// rendered has no origin, so it writes its own state and no config.
+interface Clicker {
+  readonly sid: SessionId;
+  readonly context: SessionContext | null;
+}
+
+const clickerOf = (
+  sid: SessionId,
+  context: SessionContext | null,
+): Clicker => ({
+  sid,
+  context: contextFor(context, sid),
+});
+
 // [LAW:single-enforcer] One click is one undoable step, so the step boundary
 // is the click boundary: every entry of the table the daemon looks up against
 // runs inside a journal it opens and commits. `dispatch` folds its effects
@@ -1357,14 +1373,14 @@ function foldEffects(
 // and a handler awaits nothing, so no other journal opens beside it.
 function journaled<C extends DaemonContext>(
   verb: string,
-  sid: SessionId | null,
-  context: SessionContext | null,
+  clicker: Clicker | null,
   ctx: C,
   effects: Effect[],
   handler: (ctx: Journaled<C>) => void,
 ): void {
-  const origin = sid === null ? null : originOf(context, sid);
-  const releasing = sid === null || origin === null ? null : { sid, origin };
+  const sid = clicker?.sid ?? null;
+  const context = clicker?.context ?? null;
+  const origin = context?.durable.origin ?? null;
   ctx.configWrites.begin(verb, () => {
     if (origin === null)
       throw new BadVerbArgs(
@@ -1403,20 +1419,22 @@ function journaled<C extends DaemonContext>(
     failures.push(e);
   }
   // Each commit runs whatever the other did: both record what landed.
-  const consequence = (): void => {
+  const consequence = (_: Effect[], landed: boolean): void => {
     const failed: unknown[] = [];
     // [LAW:single-enforcer] The clicking session's release
     // (src/renderer/placement-release.ts) is part of its click: judged
     // against the config the click's landing left, and written through its
     // journal before the commit, so undoing the click brings back what it
-    // let go.
-    if (releasing !== null) {
+    // let go. Only a click whose changes landed moved a placement: any other
+    // wrote through the gate of the config it was clicked on, which refuses
+    // every key of a placement that config does not place.
+    let released: readonly string[] = [];
+    if (landed && sid !== null && origin !== null) {
       try {
-        releaseUnplaced(
+        released = releaseUnplaced(
           closing(journal.sessionState),
-          releasing.sid,
-          ctx.placementsFor(releasing.origin),
-          ctx.log,
+          sid,
+          ctx.placementsFor(origin),
         );
       } catch (e) {
         failed.push(e);
@@ -1429,6 +1447,8 @@ function journaled<C extends DaemonContext>(
         failed.push(e);
       }
     }
+    if (failed.length === 0 && sid !== null)
+      logReleased(ctx.log, sid, released);
     throwAll(failed);
   };
   try {
@@ -1446,7 +1466,8 @@ function click(verb: string): (value: string, ctx: VerbContext) => void {
     const session = clickSessionOf(verb, value);
     const sid = session?.ok ? session.id : null;
     const steps = stepsOf(verb, value);
-    journaled(verb, sid, ctx.context, ctx, ctx.effects, (c) => {
+    const clicker = sid === null ? null : clickerOf(sid, ctx.context);
+    journaled(verb, clicker, ctx, ctx.effects, (c) => {
       try {
         foldEffects(steps, sid, c);
       } finally {
@@ -1489,7 +1510,7 @@ export function closeIdleMenus(
   ctx: DaemonContext,
   effects: Effect[],
 ): void {
-  journaled("menu-idle", sid, context, ctx, effects, (c) => {
+  journaled("menu-idle", clickerOf(sid, context), ctx, effects, (c) => {
     const roots = openRoots(nestOf(c, context, sid), (key) =>
       c.navigating.get(sid, key),
     );

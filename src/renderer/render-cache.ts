@@ -465,15 +465,21 @@ export interface CacheEntry {
 
 // [LAW:one-source-of-truth] What a session drawn from the entry judges its
 // placement state against: the placements of the config it renders, while
-// that config is the one its files hold. Under a load error the bar draws the
-// last config that loaded, or the bundled default, and neither is what the
-// files say, so nothing is judged gone.
+// that config is all its files say. A failed load draws the last config that
+// loaded, or the bundled default; one that dropped an entry (an undeclared
+// segment, a plugin whose checkout is missing) or warned draws less than its
+// files hold. Either way the bar shows its ⚠, and nothing is judged gone until
+// a load is clean.
 export function placementsJudged(
-  entry: Pick<CacheEntry, "lastError" | "state">,
+  entry: Pick<CacheEntry, "lastError" | "lastWarnings"> & {
+    readonly state: Pick<DslRenderState, "placements" | "dropped">;
+  },
 ): Placements {
-  return entry.lastError === null
-    ? entry.state.placements
-    : EVERY_PLACEMENT_STANDS;
+  const clean =
+    entry.lastError === null &&
+    entry.lastWarnings.length === 0 &&
+    entry.state.dropped.length === 0;
+  return clean ? entry.state.placements : EVERY_PLACEMENT_STANDS;
 }
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
@@ -1020,13 +1026,10 @@ export interface SessionView<
   // held here so it goes with the view.
   readonly frames: Map<Drawing["by"], FrameRecord<RenderedLine>>;
   lastRenderCellsBySegment: ReadonlyMap<string, readonly RichText[]>;
-  // What the session's last release was judged against: the placements, and
-  // the session state's revision once it was done. A render that finds both
-  // as they were has nothing new to judge.
-  released: {
-    readonly placements: Placements;
-    readonly revision: number;
-  } | null;
+  // The placements the session's state was last judged against. A render
+  // that finds them as they were has nothing new to judge: every write since
+  // was a click, and a click judges its own (src/renderer/verbs/index.ts).
+  released: Placements | null;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.

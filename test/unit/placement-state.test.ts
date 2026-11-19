@@ -20,6 +20,8 @@ import { DISCLOSURE_CLOSED } from "../../src/config/disclosure";
 import { sharedMenuStateKey } from "../../src/config/menu-keys";
 import { MENU_NS, MENU_PAGE_NS } from "../../src/config/reserved-names";
 import { parseAndValidate } from "../helpers/parse-and-validate";
+import { placementsJudged } from "../../src/renderer/render-cache";
+import { DroppedFileError } from "../../src/config/loader/diagnostics";
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 
 // Names that need escaping: a preset with punctuation, an id with a `.`.
@@ -89,6 +91,29 @@ describe("the placement a session key holds state for", () => {
       `${MENU_PAGE_NS}${MENU_NS}pick.apply`,
     ])
       expect(owner(key)).toBeNull();
+  });
+
+  test("a load that failed, warned or dropped an entry judges every placement standing", () => {
+    const gone = owner(EDIT_CONFIGURE_KEY, configureMember("default", "gone"))!;
+    const load = (over: object) =>
+      placementsJudged({
+        lastError: null,
+        lastWarnings: [],
+        state: { placements, dropped: [] },
+        ...over,
+      });
+    expect(load({}).has(gone)).toBe(false);
+    for (const unclean of [
+      { lastError: "parse error" },
+      { lastWarnings: ["a plugin's folder is missing"] },
+      {
+        state: {
+          placements,
+          dropped: [new DroppedFileError("/c.json5", [])],
+        },
+      },
+    ])
+      expect(load(unclean).has(gone)).toBe(true);
   });
 
   test("a placement a later config drops is no longer placed, in any of its keys", () => {

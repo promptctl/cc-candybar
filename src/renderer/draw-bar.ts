@@ -24,7 +24,9 @@ import {
   type SessionHold,
   type SessionView,
 } from "./render-cache";
-import { releaseUnplaced } from "./placement-release.js";
+import { logReleased, releaseUnplaced } from "./placement-release.js";
+import { closingView } from "./closing-view.js";
+import { disclosureNest } from "../config/disclosure-nest.js";
 import { roleOf } from "../daemon/foundations/sighting-roles";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
@@ -448,24 +450,30 @@ function setUpDraw(
 // config it draws no longer places (src/renderer/placement-release.ts), so a
 // placement that takes a removed one's id opens with nothing of it.
 // [LAW:carrying-cost] The placements are judged once per load, and a render
-// whose session state and placements are the ones its view last judged has
-// nothing new to judge: one comparison per tick.
+// whose placements are the ones its view last judged has nothing new to
+// judge: one comparison per tick.
 function releaseBeforeDraw(
   parts: RendererParts,
   sessionId: SessionId,
   entry: CacheEntry,
   view: SessionView<SessionSource, CheckedRenderRequest>,
 ): void {
-  const { sessionState } = parts;
   const placements = placementsJudged(entry);
-  const judged = view.released;
-  if (
-    judged?.placements === placements &&
-    judged.revision === sessionState.revision(sessionId)
-  )
-    return;
-  releaseUnplaced(sessionState, sessionId, placements, parts.log);
-  view.released = { placements, revision: sessionState.revision(sessionId) };
+  if (view.released === placements) return;
+  const log = (line: string): void => parts.log("info", line);
+  // [LAW:single-enforcer] Written as every session write is, through the
+  // closing view over the config the session draws.
+  const store = closingView(
+    parts.sessionState,
+    () => disclosureNest(entry.state.config),
+    log,
+  );
+  logReleased(
+    parts.log,
+    sessionId,
+    releaseUnplaced(store, sessionId, placements),
+  );
+  view.released = placements;
 }
 
 // [LAW:one-source-of-truth] The one draw of a render, a request's or a

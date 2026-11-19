@@ -39,7 +39,15 @@ import {
 import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { presetRootKey } from "../../../src/config/loader/persist-target";
 import { SETTINGS } from "../../../src/config/setting-projections";
-import { click, drawnLink, findUrl, render, renderUntil } from "../../helpers/daemon-e2e";
+import {
+  click,
+  clickAnswer,
+  drawnLink,
+  findUrl,
+  render,
+  renderUntil,
+  toldOf,
+} from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -399,6 +407,37 @@ describe("a session lets go of a placement's state when its config no longer pla
       expect(textOf(frame)).toContain("AAA-");
     });
   });
+
+  // Why a click that loaded nothing judges nothing: the config it lands on
+  // gates every write, so no link drawn before a removal still writes a key
+  // the removed placement held.
+  test("a link from a frame drawn before the removal is refused, writing nothing the id placed again inherits", async () => {
+    await withDaemon(SRC(true), async (c) => {
+      await render(c.daemon, S1, c.project);
+      await setState(c, S1, [
+        [EDIT_MODE_KEY, EDIT_MODE_ARRANGE],
+        [EDIT_LIVE_KEY, DISCLOSURE_OPEN],
+      ]);
+      fs.writeFileSync(c.userFile, SRC(false));
+      await renderUntil(c.daemon, S1, c.project, (f) => !drawsA(f), "a gone");
+      for (const [key, value] of [
+        [EDIT_CONFIGURE_KEY, A.member],
+        [A.gap, A.gapOpen],
+        [A.draft, "false"],
+      ] as const) {
+        const answer = await clickAnswer(
+          c.daemon,
+          drawnLink(
+            c.daemon,
+            effectsUrl([{ verb: VERB_SET_STATE, args: [S1, key, value] }]),
+          ),
+        );
+        expect([key, toldOf(answer)]).toEqual([key, "BAD_REQUEST"]);
+      }
+      await reAddedReleased(c, S1);
+      expect(releasesOf(c, S1)).toEqual([]);
+    });
+  });
 });
 
 describe("a placement that still stands keeps its state", () => {
@@ -419,6 +458,50 @@ describe("a placement that still stands keeps its state", () => {
       expect(textOf(frame)).toContain("AAA-");
       expect(holding(frame)).toEqual(HOLDING);
       expect(releasesOf(c, S1, from)).toEqual([]);
+    });
+  });
+
+  test("a load that drops a placement naming an undeclared segment releases nothing, and the fix finds it intact", async () => {
+    await withDaemon(SRC(true), async (c) => {
+      await render(c.daemon, S1, c.project);
+      await hold(c, S1);
+      // `a` still placed, its declaration misspelt: the load draws the bar
+      // without it and says why.
+      fs.writeFileSync(c.userFile, SRC(true).replace("    a: {", "    aa: {"));
+      await renderUntil(c.daemon, S1, c.project, (f) => !drawsA(f), "a dropped");
+      await render(c.daemon, S1, c.project);
+      fs.writeFileSync(c.userFile, SRC(true));
+      const frame = await renderUntil(c.daemon, S1, c.project, drawsA, "a fixed");
+      expect(textOf(frame)).toContain("AAA-");
+      expect(holding(frame)).toEqual(HOLDING);
+      expect(releasesOf(c, S1)).toEqual([]);
+    });
+  });
+
+  test("a plugin whose folder is missing for one load: its placement's state is intact when it returns", async () => {
+    const seg = "plugins.deploy.status";
+    const P = heldFor(seg, "c");
+    const src = `{ plugins: ['./deploy/plugin.json5'], root: { h: ['${seg}', 'b'] }, segments: { b: { template: 'BBB' } } }\n`;
+    await withDaemon(src, async (c) => {
+      const folder = path.join(path.dirname(c.userFile), "deploy");
+      const away = `${folder}.away`;
+      fs.mkdirSync(folder);
+      fs.writeFileSync(
+        path.join(folder, "plugin.json5"),
+        `{ segments: { status: { template: 'DEP{{ if .settings.c }}+{{ else }}-{{ end }}', settings: { c: { label: 'c', domain: 'bool', default: true } } } } }\n`,
+      );
+      const drawsDep = (f: Frame): boolean => textOf(f).includes("DEP");
+      await renderUntil(c.daemon, S1, c.project, drawsDep, "the plugin's cell");
+      await hold(c, S1, P);
+      expect(holding(await render(c.daemon, S1, c.project), P)).toEqual(HOLDING);
+      fs.renameSync(folder, away);
+      await renderUntil(c.daemon, S1, c.project, (f) => !drawsDep(f), "the plugin gone");
+      await render(c.daemon, S1, c.project);
+      fs.renameSync(away, folder);
+      const frame = await renderUntil(c.daemon, S1, c.project, drawsDep, "the plugin back");
+      expect(textOf(frame)).toContain("DEP-");
+      expect(holding(frame, P)).toEqual(HOLDING);
+      expect(releasesOf(c, S1)).toEqual([]);
     });
   });
 

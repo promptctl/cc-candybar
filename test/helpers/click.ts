@@ -60,6 +60,7 @@ import { locations, stateDir } from "../../src/daemon/paths";
 import { systemTimekeeper } from "../../src/time";
 import { NO_CONFIGS } from "./renderers";
 import { placementsOf } from "../../src/config/placement-state";
+import { placementsJudged } from "../../src/renderer/render-cache";
 
 // [LAW:one-source-of-truth] A rig's host book: each session's context, kept
 // beside the rig's session state, which a click reads its own session's from
@@ -307,11 +308,15 @@ export function testVerbContext(
       }
       return config;
     },
-    // What the session's placement state is judged against: the placements
-    // of whichever config this context's `configFor` reads, a spread
-    // override's included.
+    // What the session's placement state is judged against, judged as the
+    // daemon judges it: whichever config this context's `configFor` reads, a
+    // spread override's included, as a load that came out clean.
     placementsFor(origin) {
-      return placementsOf(this.configFor(origin));
+      return placementsJudged({
+        lastError: null,
+        lastWarnings: [],
+        state: { placements: placementsOf(this.configFor(origin)), dropped: [] },
+      });
     },
     // A test that drives a run click hands in its own run owner and the
     // storage keys of its config's sources.

@@ -30,8 +30,10 @@ import type {
 } from "../renderer-interface/interface.js";
 
 // What a click's consequence is applied in: the turn its changes landed in,
-// whose effects what it asks joins.
-export type Consequence = (effects: Effect[]) => void;
+// whose effects what it asks joins, and whether it is that turn, after a
+// landing the host has reloaded every moved config for, or the click's own,
+// over the config it was clicked on.
+export type Consequence = (effects: Effect[], landed: boolean) => void;
 
 // A click whose changes are on their way: the session it clicked, the files
 // they change, and its consequence.
@@ -189,7 +191,8 @@ export class ConfigWrites {
       this.open.clear();
     }
     const files = written.map(({ path }) => path);
-    if (files.length === 0 && answers.length === 0) return consequence(effects);
+    if (files.length === 0 && answers.length === 0)
+      return consequence(effects, false);
     // [LAW:no-silent-failure] A write is a session's: one with none is the
     // click's bug.
     if (session === null)
