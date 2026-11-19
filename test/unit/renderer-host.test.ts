@@ -676,7 +676,20 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
       event: async ({ event }) => {
         if (event.kind === "due") return {
           ...answered(),
-          frames: [{ session, answers: { resp: "frame", statusline: "frame" } }],
+          frames: [{
+            session,
+            frame: {
+              kind: "drawn",
+              bar: {
+                depth: "none",
+                rows: [{ kind: "bar", runs: [{ text: "frame" }] }],
+                nextChange: null,
+                motion: "still",
+                pending: [],
+              },
+              handoff: null,
+            },
+          }],
         };
         if (event.kind === "retire") await heldTurn;
         if (event.kind === "viewers") {
