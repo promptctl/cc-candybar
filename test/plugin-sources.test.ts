@@ -43,7 +43,8 @@ import { collected } from "./helpers/collected";
 import {
   projectSources,
   renderOptionsOf,
-  sourcesFactOf,
+  sourceFieldsOf,
+  sourceSummaryOf,
 } from "../src/renderer/render-payload";
 import {
   sessionSource,
@@ -985,6 +986,8 @@ describe("the session subscribes to every source the config declares", () => {
 
   // [LAW:nothing-unseen] The render event's fields.
   test("the render event counts the declared sources and names the pending and failed ones", () => {
+    const sourcesFactOf = (...args: Parameters<typeof sourceSummaryOf>) =>
+      sourceFieldsOf(sourceSummaryOf(...args));
     expect(sourcesFactOf([], new Map(), { sources: {}, runs: {} })).toEqual({
       sources: "0",
       sourcesPending: "-",

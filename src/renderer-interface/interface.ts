@@ -15,6 +15,7 @@ import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
+import type { Fault } from "./noted-faults";
 import type { Readings, Tick } from "../utils/instant";
 import type { Field } from "../utils/logfmt";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
@@ -181,6 +182,7 @@ export type Event =
       readonly kind: "request";
       readonly id: RequestId;
       readonly context: CheckedRenderRequest;
+      readonly inspect?: true;
     }
   | {
       // A session's world state moved since the one the renderer holds: read
@@ -270,6 +272,13 @@ export type EffectOutcome =
   // outcome says why, so no bar holds it a second time.
   | { readonly kind: "skipped"; readonly reason: string };
 
+// The facts a command inspects on the frame that answered its request.
+export interface DrawInspection {
+  readonly preset: string;
+  readonly faults: readonly Fault[];
+  readonly unreadSources: readonly string[];
+}
+
 // [LAW:one-type-per-behavior] Every frame reaches its surface by `present`;
 // the statusline's arm carries the request it answers.
 export interface Present {
@@ -280,6 +289,7 @@ export interface Present {
   readonly request: RequestId;
   // Read through `parseFrame`: its Infinity crosses as null.
   readonly frame: WireFrame;
+  readonly inspection?: DrawInspection;
 }
 
 // [LAW:one-type-per-behavior] Every config write is a `change`: the changes

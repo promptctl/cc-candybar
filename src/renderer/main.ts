@@ -340,11 +340,12 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery } = answerRequest(
+        const { frame, delivery, inspection } = answerRequest(
           parts,
           current,
           event.context.hints.client ?? null,
           record,
+          event.inspect,
         );
         const id = parts.mint();
         deliveries.set(id, delivery);
@@ -355,6 +356,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          ...(inspection === undefined ? {} : { inspection }),
         });
         return;
       }
@@ -384,11 +386,11 @@ export function mainRenderer(
         return;
       }
       case "click": {
-        const { session } = event;
-        const live = session?.ok
-          ? parts.worldStates.contextOf(session.id)
+        const { click } = event;
+        const live = click.scope === "session"
+          ? parts.worldStates.contextOf(click.session)
           : null;
-        const context = session?.ok ? (live ?? event.context) : null;
+        const context = click.scope === "session" ? (live ?? event.context) : null;
         if (context !== null) {
           const { origin } = context.durable;
           throwConfigFailure(origin);

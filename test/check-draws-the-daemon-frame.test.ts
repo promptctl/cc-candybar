@@ -33,7 +33,7 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("check's bar is the frame the renderer presented for the fresh session, one present per preset", async () => {
+test("check uses the presented frame and inspection even when turn records carry no diagnostics", async () => {
   const p = path.join(dir, "presets.json5");
   fs.writeFileSync(
     p,
@@ -53,7 +53,10 @@ test("check's bar is the frame the renderer presented for the fresh session, one
         presents.push(
           ...output.effects.flatMap((e) => (e.kind === "present" ? [e] : [])),
         );
-        return output;
+        return {
+          ...output,
+          record: output.record.filter(([key]) => !["faults", "preset", "sourcesPending"].includes(key)),
+        };
       },
       adapter: (input) => renderer.answer(input),
     });
@@ -67,4 +70,5 @@ test("check's bar is the frame the renderer presented for the fresh session, one
   expect(new Set(presents.map((pr) => pr.session)).size).toBe(passes.length);
   const [fresh] = presents;
   expect(outcome.rendered).toEqual(parseFrame(fresh!.frame));
+  expect(fresh!.inspection).toMatchObject({ preset: "a" });
 });
