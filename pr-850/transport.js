@@ -51194,7 +51194,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.11";
+var PACKAGE_VERSION = "1.232.12";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -94043,11 +94043,11 @@ init_globals();
 var import_node_path43 = __toESM(require_path_browserify(), 1);
 var diskFiles = {
   presence,
-  directory(dir) {
+  realpath(file) {
     try {
-      return fs_default.realpathSync.native(dir);
+      return fs_default.realpathSync.native(file);
     } catch (e) {
-      return { path: dir, error: e.message };
+      return { path: file, error: e.message };
     }
   },
   folders: listFolders,
@@ -94066,7 +94066,9 @@ var diskFiles = {
   checkout: checkoutOf
 };
 function readNamedText(files, directory, name) {
-  const physical = import_node_path43.default.join(directory, import_node_path43.default.basename(name));
+  const entry = import_node_path43.default.join(directory, import_node_path43.default.basename(name));
+  const resolved = files.realpath(entry);
+  const physical = typeof resolved === "string" ? resolved : entry;
   const read2 = files.text(physical);
   return read2.kind === "unreadable" ? { ...read2, error: read2.error.replace(`'${physical}'`, () => `'${name}'`) } : read2;
 }
@@ -94083,7 +94085,7 @@ function oncePerPath(read2) {
 function discoveryFiles(files = diskFiles) {
   return {
     presence: oncePerPath(files.presence),
-    directory: oncePerPath(files.directory),
+    realpath: oncePerPath(files.realpath),
     folders: oncePerPath(files.folders),
     text: oncePerPath(files.text),
     worktree: oncePerPath(files.worktree),
@@ -94103,7 +94105,7 @@ function observeConfigLocations(locations2, files) {
         unchecked.push(observed);
         continue;
       }
-      const dir = files.directory(import_node_path44.default.dirname(candidate.file));
+      const dir = files.realpath(import_node_path44.default.dirname(candidate.file));
       if (typeof dir !== "string") {
         unchecked.push({ path: candidate.file, error: dir.error });
         continue;
@@ -94171,7 +94173,7 @@ function repoProject(projectDir, files = discoveryFiles()) {
   const present = files.presence(projectDir);
   if (present !== "present")
     return { project: null, unchecked: present === "absent" ? null : present };
-  const dir = files.directory(projectDir);
+  const dir = files.realpath(projectDir);
   if (typeof dir !== "string") return { project: null, unchecked: dir };
   const listed = files.folders(import_node_path44.default.join(projectDir, REPO_PLUGIN_DIR));
   return {
@@ -94241,7 +94243,7 @@ function readDefinition(file, scope, files = diskFiles) {
       path: file,
       definition: { kind: "unreadable", error: badPath }
     };
-  const dir = files.directory(import_node_path45.default.dirname(file));
+  const dir = files.realpath(import_node_path45.default.dirname(file));
   if (typeof dir !== "string")
     return {
       scope,
