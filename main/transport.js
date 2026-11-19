@@ -78107,14 +78107,6 @@ function writeAtomic(at, text4, mode) {
     mode ?? (kept === void 0 ? void 0 : kept & 511)
   );
 }
-function readConfigText(file) {
-  try {
-    return fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT") return null;
-    throw e;
-  }
-}
 function resolvedTarget(at) {
   return linkChain(at).at(-1);
 }
@@ -84427,6 +84419,16 @@ function withRegularTextFile(path31, use) {
 function readRegularTextSync(path31) {
   return withRegularTextFile(path31, (file) => file.text());
 }
+function readTextIfPresent(path31, read2 = readRegularTextSync) {
+  try {
+    return read2(path31);
+  } catch (error) {
+    const native2 = types.isNativeError(error);
+    if (native2 && "code" in error && error.code === "ENOENT") return null;
+    const detail = native2 ? error.message : String(error);
+    throw new Error(`${path31}: ${detail}`, { cause: error });
+  }
+}
 
 // src/utils/git-root.ts
 function holdsGit(dir) {
@@ -88819,8 +88821,8 @@ var refused = (reason) => ({
   kind: "refused",
   reason: `${reason} \u2014 nothing was written`
 });
-function landsIn(target, layers) {
-  const file = layers.path(target.origin, target.role);
+function landsIn(target, files) {
+  const file = files.path(target.origin, target.role);
   if (file === void 0)
     return {
       kind: "refused",
@@ -88834,12 +88836,12 @@ function landsIn(target, layers) {
   return { kind: "at", file };
 }
 var originText = (origin) => `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
-function performChanges(changes, book, layers) {
+function performChanges(changes, book, files) {
   const rewrites = /* @__PURE__ */ new Map();
   const local = /* @__PURE__ */ new Set();
   let answered = [];
   for (const { origin, dir } of book?.answers ?? []) {
-    const asked = layers.repoDir(origin);
+    const asked = files.repoDir(origin);
     if (asked === void 0)
       return refused(
         `the answer for ${dir} names an origin config discovery does not follow (${originText(origin)})`
@@ -88851,12 +88853,12 @@ function performChanges(changes, book, layers) {
   }
   try {
     for (const { target, changes: list2 } of changes) {
-      const named2 = landsIn(target, layers);
+      const named2 = landsIn(target, files);
       if (named2.kind === "refused") return refused(named2.reason);
       const file = resolvedTarget(named2.file);
       if (target.role === "local") local.add(file);
       const prior = rewrites.get(file);
-      const was = prior === void 0 ? readConfigText(file) : prior.was;
+      const was = prior === void 0 ? files.readText(file) : prior.was;
       const applied3 = applyChanges(
         prior === void 0 ? was : prior.will,
         list2,
@@ -88870,7 +88872,7 @@ function performChanges(changes, book, layers) {
     }
     for (const { file, was, will } of [...rewrites.values()]) {
       if (was !== null || will === null || !local.has(file)) continue;
-      const excluded = excludeRewrite(file, rewrites);
+      const excluded = excludeRewrite(file, rewrites, files.readText);
       if (excluded.kind === "failed")
         return {
           kind: "failed",
@@ -88890,7 +88892,7 @@ function performChanges(changes, book, layers) {
       answered = planned.value.said;
       if (text4 !== null) {
         const at = resolvedTarget(file);
-        rewrites.set(at, { file: at, was: readConfigText(at), will: text4 });
+        rewrites.set(at, { file: at, was: files.readText(at), will: text4 });
       }
     }
   } catch (e) {
@@ -88908,14 +88910,14 @@ function performChanges(changes, book, layers) {
     return { kind: "failed", reason: putBack(written3, e) };
   }
 }
-function excludeRewrite(file, rewrites) {
+function excludeRewrite(file, rewrites, readText) {
   const root = gitRootOf(import_node_path29.default.dirname(file));
   if (root === void 0) return ABSENT2;
   const at = sharedExcludeOf(root);
   if (at.kind !== "ok") return at.kind === "absent" ? ABSENT2 : at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
-  const was = prior === void 0 ? readConfigText(exclude) : prior.was;
+  const was = prior === void 0 ? readText(exclude) : prior.was;
   const text4 = prior === void 0 ? was ?? "" : prior.will ?? "";
   const entry = `/${import_node_path29.default.relative(root, file).split(import_node_path29.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text4.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
@@ -90193,6 +90195,9 @@ var ConfigDiscovery = class {
         const snapshot = held(origin);
         return snapshot === void 0 ? void 0 : snapshot.repo?.dir ?? null;
       },
+      // [LAW:one-source-of-truth] Writes reobserve the destination using the
+      // same descriptor cache as discovery. The held snapshots only name it.
+      readText: (file) => readTextIfPresent(file, (at) => this.texts.read(at).text),
       landed: (files, answered) => this.landed(renderer, files, answered)
     };
   }

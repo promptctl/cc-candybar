@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-885",
-      "ref": "refs/pull/885/merge",
-      "sha": "944e209c929bfd978f8f5fe4a383ce8d964cf5f1",
-      "timestamp": "2026-11-19T16:12:35.651Z",
-      "commits": [
-        {
-          "sha": "944e209c929bfd978f8f5fe4a383ce8d964cf5f1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:11:19Z",
-          "message": "Merge 841a6db45e1e4526929b19cd1a0690b74e427bcd into 67617a157063c21dd274bfef57d3c5f64d5d4c47\n"
-        },
-        {
-          "sha": "841a6db45e1e4526929b19cd1a0690b74e427bcd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:24:34-07:00",
-          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "67617a157063c21dd274bfef57d3c5f64d5d4c47",
-      "timestamp": "2026-11-19T16:11:49.447Z",
+      "sha": "bcc3f89dc35c1a9482586ed4a130a627b6c7962e",
+      "timestamp": "2026-11-19T16:18:08.158Z",
       "commits": [
         {
-          "sha": "67617a157063c21dd274bfef57d3c5f64d5d4c47",
+          "sha": "bcc3f89dc35c1a9482586ed4a130a627b6c7962e",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:10:39-07:00",
-          "message": "fix(daemon): drain live renderers before closing links (#882)\n\n* fix(daemon): drain live renderers before closing links\n\n* fix(daemon): seal renders and pane acts when drain starts"
+          "timestamp": "2026-11-19T09:17:06-07:00",
+          "message": "refactor(config): share file observations with config writes (#885)\n\nrefactor(config): share the host text reader with config writes (ibyq.auw)"
         }
       ]
     },
