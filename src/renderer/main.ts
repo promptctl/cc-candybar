@@ -126,16 +126,6 @@ type StoreDrains = Readonly<
   Record<StoreWrite["store"], () => readonly StoreWrite[]>
 >;
 
-function attempted<T>(run: () => T): Ended<T> {
-  try {
-    return { kind: "answered", value: run() };
-  } catch (thrown) {
-    // [LAW:single-enforcer] Classify the failure where it was thrown. The
-    // answer carries data over the private wire.
-    return { kind: "threw", failure: failureOf(thrown) };
-  }
-}
-
 export function mainRenderer(
   parts: MainRendererParts,
   // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
@@ -540,7 +530,11 @@ export function mainRenderer(
     };
   });
   let observed: ReturnType<typeof declaration.read> | undefined;
+  // [LAW:no-ambient-temporal-coupling] An offered delivery still needs
+  // pruning if collection throws and the next turn retains the same origins.
+  let pruneOwed = false;
   const declare = (configOffered: boolean): void => {
+    pruneOwed ||= configOffered;
     let next = declaration.read();
     if (next !== observed && next.unprepared.length > 0) {
       // [LAW:effects-at-boundaries] An edit can outlive eviction of its
@@ -550,38 +544,52 @@ export function mainRenderer(
         parts.renderCache.getOrCreate(origin);
       next = declaration.read();
     }
-    if (configOffered || subscriptions.configs !== next.plan.configs)
+    if (pruneOwed || subscriptions.configs !== next.plan.configs) {
       parts.renderCache.prune(new Set(next.plan.configs.map(originKey)));
+      pruneOwed = false;
+    }
     observed = next;
     subscriptions = next.plan;
   };
+
+  // [LAW:one-source-of-truth] The exhaustive drain record supplies both
+  // the store order and the name of each drain's diagnostic.
+  const storeOrder = Object.keys(drains) as Array<keyof StoreDrains>;
 
   // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
   // each successful store drain belongs to this answer even if another
   // finalizer throws. Standing declarations advance only after collection.
   const ending = <T>(input: RendererInput, run: () => T) => {
-    let outcome = attempted(run);
+    let outcome: Ended<T>;
+    try {
+      outcome = { kind: "answered", value: run() };
+    } catch (thrown) {
+      outcome = { kind: "threw", failure: failureOf(thrown) };
+    }
     const stored: StoreWrite[] = [];
+    // [LAW:no-silent-failure] The first classified failure owns the outcome.
+    // Each remaining finalizer still runs and contributes its own failure.
     const collect = (stage: TurnFinalizer, read: () => void): void => {
-      const taken = attempted(read);
-      if (taken.kind === "answered") return;
-      if (outcome.kind === "answered") outcome = taken;
-      else {
-        const after = { stage, failure: taken.failure };
-        outcome = {
-          ...outcome,
-          secondary:
-            outcome.secondary === undefined
-              ? [after]
-              : [...outcome.secondary, after],
-        };
+      try {
+        read();
+      } catch (thrown) {
+        const failure = failureOf(thrown);
+        if (outcome.kind === "answered") outcome = { kind: "threw", failure };
+        else {
+          const after = { stage, failure };
+          outcome = {
+            ...outcome,
+            secondary:
+              outcome.secondary === undefined
+                ? [after]
+                : [...outcome.secondary, after],
+          };
+        }
       }
     };
 
-    collect("session-state", () => stored.push(...drains["session-state"]()));
-    collect("settings-history", () =>
-      stored.push(...drains["settings-history"]()),
-    );
+    for (const store of storeOrder)
+      collect(store, () => stored.push(...drains[store]()));
     collect("subscriptions", () =>
       declare(input.kind === "event" && input.event.kind === "config"),
     );
@@ -597,6 +605,8 @@ export function mainRenderer(
         feeds.next(),
       ]);
     });
+    // [LAW:no-ambient-temporal-coupling] The declaration's lifetime ends in
+    // the close-views push even if an earlier finalizer failed.
     if (input.kind === "adapter" && input.push.kind === "close-views")
       collect("release-subscriptions", () =>
         runInAction(() => declaration.release()),

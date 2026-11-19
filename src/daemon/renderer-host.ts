@@ -90,13 +90,17 @@ type TakenTurn = TurnOutcome & {
   readonly configFailure?: Failure;
 };
 
-// [LAW:nothing-unseen] The primary failure still determines the outcome.
-// Secondary renderer failures are fields on its turn or push diagnostic.
-const finalizationFields = (secondary: TurnFailure["secondary"]): TurnRecord =>
-  secondary?.map<TurnRecord[number]>(({ stage, failure }) => [
-    `finalize.${stage}`,
-    `${failure.kind}: ${failure.detail}`,
-  ]) ?? [];
+// [LAW:nothing-unseen] Give every secondary renderer failure its own field
+// in the diagnostic for the input that encountered it.
+const finalizationFields = (
+  outcome: { readonly kind: "answered" } | TurnFailure,
+): Array<TurnRecord[number]> | undefined =>
+  outcome.kind === "threw"
+    ? outcome.secondary?.map(({ stage, failure }) => [
+        `finalize.${stage}`,
+        `${failure.kind}: ${failure.detail}`,
+      ])
+    : undefined;
 
 // What a caller makes as its input's slot comes up: the event, or why there
 // is none to send, which is the turn's failure. The host stamps it with the
@@ -310,12 +314,13 @@ export function rendererHost(
       if (configs.has(key)) configs.set(key, "received");
     }
     const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
+    const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
       record:
-        answer.kind === "threw" && answer.secondary !== undefined
-          ? [...answer.record, ...finalizationFields(answer.secondary)]
-          : answer.record,
+        finalization === undefined
+          ? answer.record
+          : [...answer.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
@@ -751,11 +756,7 @@ export function rendererHost(
       case "threw":
         // [LAW:single-enforcer] No renderer was live to take it: the
         // supervisor says that once, with the count it refused.
-        if (
-          delivered.failure.kind === "down" &&
-          delivered.secondary === undefined
-        )
-          return;
+        if (delivered.failure.kind === "down") return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
           LEVEL[delivered.failure.kind],
@@ -893,26 +894,28 @@ export function rendererHost(
           }
         return answered;
       } catch (thrown) {
-        return {
+        const unavailable: TurnFailure & { readonly turnMs: null } = {
           kind: "threw",
           failure: failureOf(thrown),
           turnMs: null,
-        } as const;
+        };
+        return unavailable;
       }
     });
     // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw") {
-      const took = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const fields = finalizationFields(output) ?? [];
+      if (output.turnMs !== null)
+        fields.unshift(["took", `${output.turnMs}ms`]);
+      fields.push(["error", output.failure.detail]);
       const detail = eventLine(
-        `renderer ${name} push ${push.kind} threw${took}`,
-        finalizationFields(
-          "secondary" in output ? output.secondary : undefined,
-        ),
+        `renderer ${name} push ${push.kind} threw`,
+        fields,
       );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `${detail}: ${output.failure.detail}`,
+        detail,
       });
     }
     if (output.reply.kind !== push.kind)

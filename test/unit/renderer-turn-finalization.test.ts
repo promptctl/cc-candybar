@@ -1,7 +1,13 @@
 import { observable, runInAction } from "mobx";
+import type { ConfigSnapshot } from "../../src/config/config-snapshot";
+import type { RenderOrigin } from "../../src/config-hint";
+import { createGates } from "../../src/daemon/foundations/gates";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import { BadVerbArgs } from "../../src/daemon/foundations/verb-error";
+import {
+  BadVerbArgs,
+  failureOf,
+} from "../../src/daemon/foundations/verb-error";
 import { rendererHost } from "../../src/daemon/renderer-host";
 import {
   timed,
@@ -13,7 +19,7 @@ import {
   serveRenderer,
 } from "../../src/renderer-interface/wire";
 import { mainRenderer } from "../../src/renderer/main";
-import { MenuIdle } from "../../src/renderer/menu-idle";
+import { RenderCache, SOURCES_NOTHING } from "../../src/renderer/render-cache";
 import { SessionState } from "../../src/renderer/session-state";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import { WorldStates } from "../../src/renderer/world-states";
@@ -34,23 +40,41 @@ function rig(
     readonly state?: () => void;
     readonly history?: () => void;
     readonly subscriptions?: () => void;
+    readonly prune?: () => void;
     readonly push?: () => void;
   } = {},
 ) {
   const clock = heldClock(new Date(0));
   const state = new SessionState();
   const history = new SettingsHistory(state, () => {});
-  const parts = rendererParts({
-    cache: {
-      presentations: { menuIdle: new MenuIdle() },
-      subscriptions: () => {
-        fault.subscriptions?.();
-        return { sources: SOURCES };
+  const adapter = inertHost();
+  const cache = new (class extends RenderCache {
+    override subscriptions() {
+      fault.subscriptions?.();
+      return { sources: SOURCES };
+    }
+    override prune(keep: ReadonlySet<string>) {
+      fault.prune?.();
+      super.prune(keep);
+    }
+  })(
+    {
+      clock,
+      locations: {
+        home: "/home",
+        configHome: "/config",
+        dataHome: "/data",
+        dataDirs: [],
       },
-      origins: () => [],
-      holdView: () => null,
-      prune: () => {},
+      sessionState: state,
+      storage: adapter.storage,
+      gates: createGates(),
+      source: SOURCES_NOTHING,
     },
+    { budgetBytes: () => 1024 * 1024 * 1024 },
+  );
+  const parts = rendererParts({
+    cache,
     sessionState: state,
     worldStates: new WorldStates(),
   });
@@ -75,7 +99,7 @@ function rig(
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
-    host: inertHost(),
+    host: adapter,
     fault: (message) => {
       throw new Error(message);
     },
@@ -119,6 +143,7 @@ function rig(
     journal.commit();
   };
   return {
+    cache,
     clock,
     due,
     host,
@@ -233,12 +258,41 @@ test("the first failure in collection still lands history, holds subscriptions, 
 });
 
 test("a failed push still lands current writes and carries the second failure to its caller", async () => {
+  const primary = new BadVerbArgs(
+    "invalid push\ntook=999ms finalize.settings-history=spoofed",
+  );
   const fixture = rig({
     push: () => {
-      throw new BadVerbArgs("invalid push");
+      throw primary;
     },
     history: () => {
       throw new Error("push history drain failed");
+    },
+  });
+  fixture.setTheme("nord");
+  const failure = await fixture.host.ask({ kind: "close-journal" }).then(() => {
+    throw new Error("expected this push to fail");
+  }, failureOf);
+  expect(failure).toMatchObject({
+    kind: "bad-request",
+    message: expect.stringContaining("invalid push"),
+  });
+  const fields = fieldsOf(failure.detail);
+  expect(fields.get("took")).toBe("0ms");
+  expect(fields.get("error")).toBe(failureOf(primary).detail);
+  expect(fields.get("finalize.settings-history")).toContain(
+    "push history drain failed",
+  );
+  expect(fixture.stored).toEqual([
+    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+  ]);
+});
+
+test("a successful push reports its first finalizer failure and lands its successful drain", async () => {
+  let blocked = true;
+  const fixture = rig({
+    history: () => {
+      if (blocked) throw new Error("push history drain failed");
     },
   });
   fixture.setTheme("nord");
@@ -246,14 +300,55 @@ test("a failed push still lands current writes and carries the second failure to
     fixture.host.ask({ kind: "close-journal" }),
   ).rejects.toMatchObject({
     failure: {
-      kind: "bad-request",
-      message: expect.stringContaining("invalid push"),
-      detail: expect.stringMatching(
-        /finalize\.settings-history=.*push history drain failed/,
-      ),
+      kind: "threw",
+      message: expect.stringContaining("push history drain failed"),
     },
+  });
+  blocked = false;
+  expect(await fixture.host.ask({ kind: "close-journal" })).toEqual({
+    kind: "close-journal",
   });
   expect(fixture.stored).toEqual([
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+    [],
   ]);
+});
+
+test("a failed prune of an offered config is retried even when the declared origins stay the same", async () => {
+  let blocked = false;
+  const fixture = rig({
+    prune: () => {
+      if (blocked) throw new Error("config prune failed");
+    },
+  });
+  const origin: RenderOrigin = {
+    cwd: "/unused",
+    projectDir: "/unused",
+    target: { source: "search" },
+  };
+  const config: ConfigSnapshot = {
+    chain: [],
+    repo: null,
+    plugins: [],
+    strays: [],
+    checkout: { root: origin.projectDir, git: false },
+    notices: [],
+    watch: null,
+  };
+  expect(await fixture.due()).toMatchObject({ kind: "answered" });
+  blocked = true;
+  expect(
+    await fixture.host.deliver(
+      () => ({ kind: "event", event: { kind: "config", origin, config } }),
+      [],
+    ),
+  ).toMatchObject({
+    kind: "threw",
+    failure: { message: "config prune failed" },
+  });
+  expect(fixture.cache.holdsConfig(origin)).toBe(true);
+  blocked = false;
+  expect(await fixture.due()).toMatchObject({ kind: "answered" });
+  expect(fixture.cache.holdsConfig(origin)).toBe(false);
+  expect(fixture.subscriptions.map(({ configs }) => configs)).toEqual([[]]);
 });
