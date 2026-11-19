@@ -15,7 +15,16 @@
 // of the switch.
 
 import { formatPermanentGlyph } from "./render/error-glyph";
+import { ANSI_RESET } from "./render/diagnostic-style";
 import type { ClientOutcome } from "./daemon/client";
+
+const BOLD = "\x1b[1m";
+const WAITING_FOR_DAEMON = "Candybar · waiting for daemon…";
+const RENDER_TIMED_OUT = "Candybar timed out";
+// The shell expands its own paths. No environment text reaches the terminal,
+// and the diagnostic works while the daemon's request queue is blocked.
+const DEFAULT_LOG_COMMAND = "tail -n 40 ~/.local/state/cc-candybar/daemon.log";
+const XDG_LOG_COMMAND = 'tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log"';
 
 export interface OutcomePlan {
   output: string;
@@ -25,13 +34,16 @@ export interface OutcomePlan {
   debug: string | null;
 }
 
-export function planOutcome(outcome: ClientOutcome): OutcomePlan {
+export function planOutcome(
+  outcome: ClientOutcome,
+  xdgStateHome: string | undefined,
+): OutcomePlan {
   switch (outcome.kind) {
     case "ok":
       return { output: outcome.value, kick: false, debug: null };
     case "transient":
       return {
-        output: "\n",
+        output: `${BOLD}${WAITING_FOR_DAEMON}${ANSI_RESET}\n`,
         kick: true,
         debug: `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) — kicking daemon`,
       };
@@ -40,12 +52,14 @@ export function planOutcome(outcome: ClientOutcome): OutcomePlan {
     // there is nothing to respawn: a kick would spawn a candidate that
     // loses the bind to the live daemon, once per render under load. The
     // Rust client's Busy variant does not kick either.
-    case "busy":
+    case "busy": {
+      const command = xdgStateHome ? XDG_LOG_COMMAND : DEFAULT_LOG_COMMAND;
       return {
-        output: "\n",
+        output: `${BOLD}${RENDER_TIMED_OUT}${ANSI_RESET} · ${command}\n`,
         kick: false,
         debug: `daemon busy (${outcome.message}) — not kicking`,
       };
+    }
     case "permanent":
       return {
         output: formatPermanentGlyph(outcome),

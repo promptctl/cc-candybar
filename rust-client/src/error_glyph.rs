@@ -1,12 +1,10 @@
-// One-line styled diagnostic glyph emitted on permanent daemon failures.
+// Styled statusline diagnostics for unsuccessful daemon requests.
 //
-// [LAW:single-enforcer] One formatter per runtime. main.rs's RenderOutcome
-// handling calls format_permanent_glyph; nothing else builds this string.
+// [LAW:single-enforcer] Each diagnostic has one formatter per runtime.
+// main.rs selects the diagnostic from RenderOutcome.
 //
-// [LAW:one-type-per-behavior] Mirrors src/render/error-glyph.ts byte-for-byte
-// for the same logical cause — both runtimes show the same diagnostic so the
-// user's experience does not depend on which client is on the hot path. The
-// unit tests below pin this against the one case table the Node side asserts.
+// [LAW:one-type-per-behavior] Permanent glyphs mirror src/render/error-glyph.ts
+// byte-for-byte. The tests in both runtimes use the same case table.
 //
 // [LAW:one-source-of-truth] The style constants are a literal mirror of the
 // canonical TS leaf (src/render/diagnostic-style.ts) — Rust cannot import a
@@ -14,11 +12,35 @@
 // fails prepublishOnly on drift.
 
 use crate::PermanentCause;
+use std::ffi::OsStr;
 
 const FG: &str = "\x1b[38;2;255;255;255m";
 const BG: &str = "\x1b[48;2;200;40;40m";
 const RESET: &str = "\x1b[0m";
 const PREFIX: &str = "⚠ cc-candybar: ";
+
+// [LAW:one-source-of-truth] Mirrored by the Node statusline and check-protocol.
+const BOLD: &str = "\x1b[1m";
+const WAITING_FOR_DAEMON: &str = "Candybar · waiting for daemon…";
+const RENDER_TIMED_OUT: &str = "Candybar timed out";
+const DEFAULT_LOG_COMMAND: &str = "tail -n 40 ~/.local/state/cc-candybar/daemon.log";
+const XDG_LOG_COMMAND: &str = r#"tail -n 40 "$XDG_STATE_HOME/cc-candybar/daemon.log""#;
+
+pub fn format_waiting_glyph() -> String {
+    format!("{BOLD}{WAITING_FOR_DAEMON}{RESET}\n")
+}
+
+pub fn format_timeout_glyph(saved_frame: Option<&str>, xdg_state_home: Option<&OsStr>) -> String {
+    // [LAW:effects-at-boundaries] Keep the log command runnable without the
+    // daemon. The shell expands the user's path when they run it.
+    let command = match xdg_state_home {
+        Some(value) if !value.is_empty() => XDG_LOG_COMMAND,
+        _ => DEFAULT_LOG_COMMAND,
+    };
+    let frame = saved_frame.unwrap_or_default().trim_end_matches('\n');
+    let separator = if frame.is_empty() { "" } else { "\n" };
+    format!("{frame}{separator}{BOLD}{RENDER_TIMED_OUT}{RESET} · {command}\n")
+}
 
 // Long messages from the daemon (parse errors, internal exception strings)
 // can be arbitrarily long. The glyph must fit on a single statusline row, so

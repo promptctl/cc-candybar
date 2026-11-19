@@ -15,7 +15,7 @@
 //
 // Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
 //
-// On any daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
+// On transient daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
 // gated by an existence-as-lock spawn.lock file (open with O_CREAT | O_EXCL,
 // release by unlink — same primitive the Node runtime uses so the two
 // interoperate). The actual one-daemon invariant is enforced by atomic
@@ -66,8 +66,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Parse stdin once up-front. We need session_id for the per-session
-    // last-render cache (daemon-miss fallback shows stale data, not blank).
+    // Parse stdin once for the request and the session's last-render cache.
     let parsed = match parse_stdin() {
         Ok(p) => p,
         Err(BadInput::Msg(msg)) => {
@@ -75,57 +74,33 @@ fn main() {
             std::process::exit(1);
         }
     };
+    let session_id = parsed.session_id.as_deref();
 
-    // [LAW:types-are-the-program] The render outcome carries its own
-    // recovery semantics. Four branches:
-    //   Ok        — print and persist for stale-fallback.
-    //   Transient — kick a fresh daemon, emit stale frame or "\n".
-    //   Busy      — a daemon holds the socket: it answered TIMEOUT, or this
-    //               client's clock ran out. Emit the stale frame or "\n" and
-    //               do NOT kick (a candidate would lose the bind to the live
-    //               daemon, once per render).
-    //   Permanent — daemon refused our request; respawning will not help.
-    //               Emit a diagnostic and do NOT kick. Mirrors the Node
-    //               caller in src/index.ts. Kicking on every failure was
-    //               the load-bearing half of the 452-corpse spiral (kz8.5).
-    match render(&argv, &parsed.hook_data) {
+    // [LAW:types-are-the-program] Only Transient warrants a kick, and only
+    // Ok may write the good-frame cache. Busy must report the timeout even
+    // when a cached frame is available. A kick would race the live listener.
+    let output = match render(&argv, &parsed.hook_data) {
         RenderOutcome::Ok(output) => {
             let _ = io::stdout().write_all(output.as_bytes());
-            // Persist for the next daemon-miss. Best-effort: if disk is
-            // full or perms are wrong, the user just gets a blink later
-            // instead of a stale frame — same as today's behavior.
-            if let Some(sid) = parsed.session_id.as_deref() {
+            if let Some(sid) = session_id {
                 let _ = write_last_render(sid, &output);
             }
             std::process::exit(0);
         }
         RenderOutcome::Transient(_cause) => {
             obtain_daemon_kick();
-            emit_stale_or_blank(parsed.session_id.as_deref());
-            std::process::exit(0);
+            session_id
+                .and_then(read_last_render)
+                .unwrap_or_else(error_glyph::format_waiting_glyph)
         }
         RenderOutcome::Busy => {
-            emit_stale_or_blank(parsed.session_id.as_deref());
-            std::process::exit(0);
+            let frame = session_id.and_then(read_last_render);
+            let xdg_state_home = env::var_os("XDG_STATE_HOME");
+            error_glyph::format_timeout_glyph(frame.as_deref(), xdg_state_home.as_deref())
         }
-        RenderOutcome::Permanent(cause) => {
-            // [LAW:single-enforcer] Glyph formatting lives in error_glyph.rs
-            // for both runtimes — main.rs never builds this string inline.
-            // No obtain_daemon_kick() — kicking on permanent causes is what
-            // loops on VERSION_MISMATCH (the 452-corpse spiral).
-            let glyph = error_glyph::format_permanent_glyph(&cause);
-            let _ = io::stdout().write_all(glyph.as_bytes());
-            std::process::exit(0);
-        }
-    }
-}
-
-// The daemon-miss output: the session's last good frame, or a blank line when
-// there is none yet.
-fn emit_stale_or_blank(session_id: Option<&str>) {
-    let stale = session_id.and_then(|sid| read_last_render(sid));
-    let bytes = stale.as_deref().map(str::as_bytes).unwrap_or(b"\n");
-    let _ = io::stdout().write_all(bytes);
+        RenderOutcome::Permanent(cause) => error_glyph::format_permanent_glyph(&cause),
+    };
+    let _ = io::stdout().write_all(output.as_bytes());
 }
 
 struct ParsedInput {
@@ -808,13 +783,11 @@ fn state_dir() -> PathBuf {
 //
 // On every successful render we drop the output bytes at
 // $XDG_CACHE_HOME/cc-candybar/last-render/<sid> (default ~/.cache/cc-candybar/...).
-// On a daemon-miss, we read it back and emit it instead of a blank "\n".
-// A stale frame for ~1s during a daemon restart is dramatically better UX
-// than the statusline blanking.
+// On a transient miss, keep showing the previous frame while the listener
+// starts. On a timeout, show it above the timeout diagnostic.
 //
-// Per XDG Base Directory spec, regenerable caches live under
-// $XDG_CACHE_HOME, separate from the daemon's runtime state (socket,
-// pidfile, log) which stays at ~/.claude/powerline/.
+// Per XDG Base Directory spec, regenerable caches live under $XDG_CACHE_HOME,
+// separate from state such as the daemon log and spawn limiter files.
 //
 // Atomicity: write to a sibling tmp file then rename. A torn cache file
 // would render as garbled ANSI for one frame; rename is cheap insurance.
