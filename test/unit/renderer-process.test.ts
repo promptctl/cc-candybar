@@ -22,7 +22,11 @@ import type {
   Failed,
   LaunchResult,
 } from "../../src/proc/launcher";
-import type { HostLine, RendererLine } from "../../src/renderer-interface/wire";
+import {
+  RENDERER_WIRE_VERSION,
+  type HostLine,
+  type RendererLine,
+} from "../../src/renderer-interface/wire";
 import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
   AdapterInput,
@@ -51,6 +55,12 @@ interface Child {
   say(line: RendererLine): void;
   exit(result: LaunchResult): void;
 }
+
+const startedLine = (pid: number): RendererLine => ({
+  kind: "started",
+  pid,
+  wireVersion: RENDERER_WIRE_VERSION,
+});
 
 const EXITED: LaunchResult = { ok: true, stdout: "", stderr: "", exitCode: 0 };
 const CRASHED: Failed = {
@@ -129,7 +139,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     heapCapMb: 512,
     name: MAIN_RENDERER,
     boot: () => ({
-      digest: "d1",
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
@@ -174,7 +183,7 @@ const PINNED: Timed<AdapterOutput> = {
 };
 
 describe("a renderer process's start", () => {
-  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the host's digest", () => {
+  test("it runs the host's node with the renderer's own heap cap and no inspector, in the state directory, and boots with the wire version", () => {
     const { link, children } = rig();
     link.arm();
     const [child] = children;
@@ -192,8 +201,8 @@ describe("a renderer process's start", () => {
     expect(child!.written).toEqual([
       {
         kind: "boot",
+        wireVersion: RENDERER_WIRE_VERSION,
         boot: {
-          digest: "d1",
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
@@ -207,6 +216,45 @@ describe("a renderer process's start", () => {
     ]);
   });
 
+  test.each([
+    ["a legacy acknowledgment", {}, "no version"],
+    [
+      "another version",
+      { wireVersion: RENDERER_WIRE_VERSION + 1 },
+      `version ${RENDERER_WIRE_VERSION + 1}`,
+    ],
+    [
+      "a string version",
+      { wireVersion: String(RENDERER_WIRE_VERSION) },
+      `version "${RENDERER_WIRE_VERSION}"`,
+    ],
+  ])(
+    "%s fails the boot before sending any input or ping",
+    async (_name, fields, sent) => {
+      const { link, children, logs, ends, clock } = rig();
+      link.arm();
+      const child = children[0]!;
+      const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
+        "renderer wire version mismatch",
+      );
+      child.opts.heard.stdout(
+        `${JSON.stringify({ kind: "started", pid: 9001, ...fields })}\n`,
+      );
+      // A later acknowledgment cannot rescue the rejected process during teardown.
+      child.say(startedLine(9001));
+      await refused;
+      expect(child.opts.signal?.aborted).toBe(true);
+      expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
+      const mismatch = `renderer wire version mismatch (renderer sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`;
+      expect(logs).toContainEqual(expect.stringContaining(mismatch));
+      expect(ends[0]?.text).toContain(mismatch);
+      clock.advance(BACKOFF_FIRST_MS - 1);
+      expect(children).toHaveLength(1);
+      clock.advance(1);
+      expect(children).toHaveLength(2);
+    },
+  );
+
   test("an input during the boot waits, and goes after the complete start's own", async () => {
     const order: string[] = [];
     const { link, children, inputs } = rig(async () => {
@@ -217,7 +265,7 @@ describe("a renderer process's start", () => {
     const answered = link.renderer.answer(pin);
     await settled();
     expect(inputs(child)).toEqual([]);
-    child.say({ kind: "started", pid: 9001 });
+    child.say(startedLine(9001));
     await settled();
     expect(order).toEqual(["start"]);
     const [sent] = inputs(child);
@@ -236,7 +284,7 @@ describe("a renderer process's start", () => {
     });
     r.link.arm();
     void r.link.renderer.answer(unpin);
-    r.children[0]!.say({ kind: "started", pid: 9001 });
+    r.children[0]!.say(startedLine(9001));
     await settled();
     expect(r.inputs(r.children[0]!).map((l) => l.input)).toEqual([pin, unpin]);
   });
@@ -299,7 +347,7 @@ describe("a renderer process's end", () => {
   test("it is said once, inputs while down fail as down and are counted, and the next start says how many", async () => {
     const { link, children, clock, ends, logs } = rig();
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     await settled();
     children[0]!.exit(CRASHED);
     await settled();
@@ -314,7 +362,7 @@ describe("a renderer process's end", () => {
     expect(children).toHaveLength(1);
     clock.advance(1);
     expect(children).toHaveLength(2);
-    children[1]!.say({ kind: "started", pid: 9002 });
+    children[1]!.say(startedLine(9002));
     await settled();
     expect(logs).toContain(
       "renderer main[2] started pid=9002 refused-while-down=2",
@@ -351,7 +399,7 @@ describe("a renderer process's end", () => {
   test("a renderer that lived past young restarts at once", async () => {
     const { link, children, clock } = rig();
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     clock.advance(YOUNG_MS);
     await settled();
     children[0]!.exit(CRASHED);
@@ -363,7 +411,7 @@ describe("a renderer process's end", () => {
   test("a live renderer whose ping goes unanswered past the allowance is ended", async () => {
     const { link, children, clock, ends } = rig();
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     await settled();
     clock.advance(PING_PERIOD_MS);
     const ping = children[0]!.written.find((l) => l.kind === "ping");
@@ -395,7 +443,7 @@ describe("ids a renderer mints", () => {
     );
     link.arm();
     const first = children[0]!;
-    first.say({ kind: "started", pid: 9001 });
+    first.say(startedLine(9001));
     first.say({ kind: "notice", reach: "storage.hold", args: [1, ["/f"]] });
     first.say({
       kind: "notice",
@@ -408,7 +456,7 @@ describe("ids a renderer mints", () => {
     await settled();
     clock.advance(BACKOFF_FIRST_MS);
     const second = children[1]!;
-    second.say({ kind: "started", pid: 9002 });
+    second.say(startedLine(9002));
     second.say({ kind: "notice", reach: "storage.hold", args: [1, ["/g"]] });
     await settled();
     // The first renderer's hold stands until the second has started; the
@@ -429,7 +477,7 @@ describe("ids a renderer mints", () => {
       () => new Promise<void>((resolve) => starts.push(resolve)),
     );
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     children[0]!.say({
       kind: "notice",
       reach: "storage.hold",
@@ -440,14 +488,14 @@ describe("ids a renderer mints", () => {
     children[0]!.exit(CRASHED);
     await settled();
     clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say({ kind: "started", pid: 9002 });
+    children[1]!.say(startedLine(9002));
     await settled();
     children[1]!.exit(CRASHED);
     starts[1]!();
     await settled();
     expect(held).toEqual([["hold", 1]]);
     clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say({ kind: "started", pid: 9003 });
+    children[2]!.say(startedLine(9003));
     starts[2]!();
     await settled();
     expect(held).toEqual([
@@ -462,7 +510,7 @@ describe("ids a renderer mints", () => {
       if (++attempt === 2) throw new Error("start refused");
     });
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     children[0]!.say({
       kind: "notice",
       reach: "storage.hold",
@@ -472,7 +520,7 @@ describe("ids a renderer mints", () => {
     children[0]!.exit(CRASHED);
     await settled();
     clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say({ kind: "started", pid: 9002 });
+    children[1]!.say(startedLine(9002));
     await settled();
     expect(held).toEqual([["hold", 1]]);
     expect(logs).toContainEqual(expect.stringContaining("start refused"));
@@ -480,9 +528,12 @@ describe("ids a renderer mints", () => {
     children[1]!.exit(CRASHED);
     await settled();
     clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say({ kind: "started", pid: 9003 });
+    children[2]!.say(startedLine(9003));
     await settled();
-    expect(held).toEqual([["hold", 1], ["release", 1]]);
+    expect(held).toEqual([
+      ["hold", 1],
+      ["release", 1],
+    ]);
   });
 
   test("a renderer that never took over releases what it held as it ends", async () => {
@@ -505,7 +556,7 @@ describe("ids a renderer mints", () => {
   test("a start with nothing to await releases no holds before its renderer has booted", async () => {
     const { link, children, clock, held } = rig();
     link.arm();
-    children[0]!.say({ kind: "started", pid: 9001 });
+    children[0]!.say(startedLine(9001));
     children[0]!.say({
       kind: "notice",
       reach: "storage.hold",
@@ -517,7 +568,7 @@ describe("ids a renderer mints", () => {
     clock.advance(BACKOFF_FIRST_MS);
     await settled();
     expect(held).toEqual([["hold", 1]]);
-    children[1]!.say({ kind: "started", pid: 9002 });
+    children[1]!.say(startedLine(9002));
     await settled();
     expect(held).toEqual([
       ["hold", 1],
@@ -529,7 +580,7 @@ describe("ids a renderer mints", () => {
     const { link, children, inputs } = rig();
     link.arm();
     const child = children[0]!;
-    child.say({ kind: "started", pid: 9001 });
+    child.say(startedLine(9001));
     await settled();
     const effect = {
       kind: "present",
@@ -583,7 +634,7 @@ describe("ids a renderer mints", () => {
     const { link, children, inputs, clock } = rig();
     link.arm();
     const first = children[0]!;
-    first.say({ kind: "started", pid: 9001 });
+    first.say(startedLine(9001));
     await settled();
     const output = link.renderer.answer({
       kind: "event",
@@ -613,7 +664,7 @@ describe("ids a renderer mints", () => {
     await settled();
     clock.advance(BACKOFF_FIRST_MS);
     const second = children[1]!;
-    second.say({ kind: "started", pid: 9002 });
+    second.say(startedLine(9002));
     await settled();
     const heard = inputs(second).length;
     await expect(
@@ -653,7 +704,7 @@ describe("a renderer process's close", () => {
     const { link, children, clock } = rig();
     link.arm();
     const child = children[0]!;
-    child.say({ kind: "started", pid: 9001 });
+    child.say(startedLine(9001));
     await settled();
     const closed = link.close();
     expect(child.stdinEnded).toBe(true);
@@ -670,7 +721,7 @@ describe("a renderer process's close", () => {
     const { link, children, clock, logs, ends } = rig();
     link.arm();
     const child = children[0]!;
-    child.say({ kind: "started", pid: 9001 });
+    child.say(startedLine(9001));
     clock.advance(YOUNG_MS);
     await settled();
     link.beginClose();
@@ -696,7 +747,7 @@ describe("a renderer process's close", () => {
   test("an end in the close is a warning unless the close had ended it and it exited", async () => {
     const early = rig();
     early.link.arm();
-    early.children[0]!.say({ kind: "started", pid: 9001 });
+    early.children[0]!.say(startedLine(9001));
     await settled();
     early.link.beginClose();
     early.children[0]!.exit(EXITED);
@@ -709,7 +760,7 @@ describe("a renderer process's close", () => {
 
     const asked = rig();
     asked.link.arm();
-    asked.children[0]!.say({ kind: "started", pid: 9001 });
+    asked.children[0]!.say(startedLine(9001));
     await settled();
     const closed = asked.link.close();
     asked.children[0]!.exit(EXITED);
@@ -751,7 +802,7 @@ describe("a renderer process's close", () => {
     const { link, children, clock, logs } = rig();
     link.arm();
     const child = children[0]!;
-    child.say({ kind: "started", pid: 9001 });
+    child.say(startedLine(9001));
     await settled();
     // Its boot's ping is answered, so only a ping sent in the close can judge
     // it.

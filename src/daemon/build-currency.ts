@@ -11,10 +11,9 @@ export function sourceCheckoutOf(bundlePath: string): string | null {
 
 // [LAW:one-source-of-truth] The digest this bundle was stamped with, `null`
 // when it carries none (untranspiled under Jest, or built by something other
-// than tsdown.config.ts). The one read of `__SOURCE_DIGEST__`: a daemon's boot
-// hands it over as the running bundle's identity, and the stats snapshot
-// reports that so a client can tell one build of a version from another — a
-// source checkout rebuilds without bumping the version.
+// than tsdown.config.ts). The one read of `__SOURCE_DIGEST__`: the daemon
+// reports its running bundle in stats so a client can tell builds of the
+// same version apart. A source checkout rebuilds without bumping the version.
 export function bakedDigest(): string | null {
   return typeof __SOURCE_DIGEST__ === "undefined" ? null : __SOURCE_DIGEST__;
 }
