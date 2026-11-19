@@ -2,74 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-910",
-      "ref": "refs/pull/910/merge",
-      "sha": "c54d72e144e0927eee6a6832afce700eebbb6d75",
-      "timestamp": "2026-11-19T22:46:47.702Z",
-      "commits": [
-        {
-          "sha": "c54d72e144e0927eee6a6832afce700eebbb6d75",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T22:45:37Z",
-          "message": "Merge 259f2fadec2e3a3582731fef3b819683caf91fb1 into 1772bff36a50b978f6c15660a166714a2b6ce717\n"
-        },
-        {
-          "sha": "259f2fadec2e3a3582731fef3b819683caf91fb1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:45:25-07:00",
-          "message": "test(daemon): prove the connection deadline is cancelled at shutdown\n"
-        },
-        {
-          "sha": "eb0dbc214f12cb4fa07c9cf89a431d28743c4967",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:32:42-07:00",
-          "message": "fix(host): settle displayed events only when an occurrence changes\n"
-        },
-        {
-          "sha": "464feebef6f9f223795016d2bdb9cb0801ff2fe8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:29:36-07:00",
-          "message": "fix(host): settle displayed events and remove renderer callbacks\n"
-        },
-        {
-          "sha": "d7f550fbf35225f3e700a139fe659e679286b13d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:29:35-07:00",
-          "message": "Merge remote-tracking branch 'origin/main' into codex/diagnostics-in-answers\n"
-        },
-        {
-          "sha": "00d7e1f2b6e82925144d8a3f1f19b6cfc7586133",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:12:49-07:00",
-          "message": "fix(renderer): preserve answers across diagnostic boundary faults\n"
-        },
-        {
-          "sha": "9a103d065ed52f0b36e3565fa961cb721b06fcb6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:54:49-07:00",
-          "message": "refactor(renderer): return diagnostics with the owning answer\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
-      "timestamp": "2026-11-19T22:29:01.070Z",
+      "sha": "5958f3e3ec33bdf9e73072353c8948838a4d6b57",
+      "timestamp": "2026-11-19T22:55:14.948Z",
       "commits": [
         {
-          "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
+          "sha": "5958f3e3ec33bdf9e73072353c8948838a4d6b57",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:27:50-07:00",
-          "message": "refactor(renderer): keep transcript readers outside the renderer import graph (#911)"
+          "timestamp": "2026-11-19T15:54:01-07:00",
+          "message": "refactor(renderer): return diagnostics and let the host confirm delivered frames (#910)\n\n* refactor(renderer): return diagnostics with the owning answer\n\n* fix(renderer): preserve answers across diagnostic boundary faults\n\n* fix(host): settle displayed events and remove renderer callbacks\n\n* fix(host): settle displayed events only when an occurrence changes\n\n* test(daemon): prove the connection deadline is cancelled at shutdown"
         }
       ]
     },

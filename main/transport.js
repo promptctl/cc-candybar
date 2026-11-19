@@ -28375,7 +28375,10 @@ function joinedEvent(last2, text4, at) {
   };
 }
 function answeredBy(last2, shown) {
-  return !last2.answered && last2.at === shown.at && last2.text === shown.text && last2.revision === shown.revision;
+  return !last2.answered && sameOccurrence(last2, shown);
+}
+function sameOccurrence(a, b) {
+  return a.at === b.at && a.text === b.text && a.revision === b.revision;
 }
 
 // src/proc/launcher.ts
@@ -70197,6 +70200,9 @@ function debug(message, ...args) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
 }
+function writeLogLines(log, lines2) {
+  for (const { level, line } of lines2) log(level, line);
+}
 var quietLogger = (_level, message) => debug(message);
 
 // src/utils/logfmt.ts
@@ -72326,12 +72332,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate } = drawRender(
-        parts,
-        setup,
-        { by: "feed", fps },
-        feeds
-      );
+      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate, eventsShown } = drawRender(parts, setup, { by: "feed", fps }, feeds);
       const bar = drawn.body;
       const statusline = statuslineOf(
         setup,
@@ -72342,11 +72343,16 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare
       const handoff = statusline === bar ? null : statusline;
       const receipt = prepare({
         candidate,
-        clickShown: null,
-        eventsShown: []
+        clickShown: null
       });
       return {
-        frame: { kind: "drawn", receipt, bar, handoff },
+        frame: {
+          kind: "drawn",
+          receipt,
+          bar,
+          handoff,
+          displayedEvents: eventsShown
+        },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -72521,8 +72527,8 @@ function drawRender(parts, setup, drawing2, feeds) {
     daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
     daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
   ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [...launchEvents, ...held].map(
-    (warning) => warning.event
+  const eventsShown = [...launchEvents, ...held].flatMap(
+    ({ kind, event }) => event.answered ? [] : [{ kind, event }]
   );
   const standing2 = [
     ...daemon2.fileEvents,
@@ -72704,7 +72710,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     evaluated: evaluated2,
     cellBreaks,
     clickShown,
-    eventsShown,
+    eventsShown: eventsShown.length > 0 ? eventsShown : void 0,
     lanes,
     candidate: {
       session: sessionId2,
@@ -72755,10 +72761,10 @@ function answerRequest(parts, req, presentation, facts) {
     });
     return {
       frame: frame2,
+      displayedEvents: eventsShown,
       delivery: {
         candidate,
-        clickShown,
-        eventsShown
+        clickShown
       }
     };
   } catch (_) {
@@ -72768,12 +72774,11 @@ function answerRequest(parts, req, presentation, facts) {
   }
 }
 function deliver(parts, id2, delivery) {
-  const { candidate, clickShown, eventsShown } = delivery;
+  const { candidate, clickShown } = delivery;
   const accepted = parts.renderCache.acceptFrame(id2, candidate);
   if (accepted === null) return null;
   if (clickShown !== null)
     answeredClickError(parts.sessionState, candidate.session, clickShown);
-  for (const event of eventsShown) parts.eventAnswered(event);
   return accepted;
 }
 function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, elsewhere) {
@@ -72897,6 +72902,33 @@ var TurnTime = class {
   };
 };
 
+// src/renderer/turn-log.ts
+init_globals();
+var TurnLog = class {
+  active = false;
+  lines;
+  add = (level, line) => {
+    if (!this.active)
+      throw new Error("a renderer diagnostic was recorded outside a turn");
+    const diagnostic = { level, line };
+    if (this.lines === void 0) this.lines = [diagnostic];
+    else this.lines.push(diagnostic);
+  };
+  // [LAW:no-ambient-temporal-coupling] Construction and each turn own their
+  // lines through their finalizers. None can enter a successor.
+  during(answer2) {
+    if (this.active) throw new Error("renderer diagnostics already in scope");
+    this.active = true;
+    try {
+      const result = answer2();
+      return this.lines === void 0 ? result : { ...result, diagnostics: this.lines };
+    } finally {
+      this.active = false;
+      this.lines = void 0;
+    }
+  }
+};
+
 // src/renderer/feeds.ts
 init_globals();
 
@@ -72942,12 +72974,40 @@ function timed(renderer, monotonic) {
   const time = async (answer2) => {
     const from = monotonic();
     const output = await answer2();
-    return { ...output, turnMs: Math.round(monotonic() - from) };
+    try {
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    } catch (thrown2) {
+      const missed = {
+        level: "warn",
+        line: `renderer turn timing failed: ${failureOf(thrown2).detail}`
+      };
+      const diagnostics = output.diagnostics === void 0 ? [missed] : [...output.diagnostics, missed];
+      return { ...output, turnMs: null, diagnostics };
+    }
   };
   return rendererOf({
     event: (input) => time(() => renderer.answer(input)),
     adapter: (input) => time(() => renderer.answer(input))
   });
+}
+function sessionOfEvent(event) {
+  switch (event.kind) {
+    case "context":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.click.scope === "session" ? event.click.session : null;
+    case "retire":
+    case "effect-done":
+      return event.session;
+    case "start":
+    case "config":
+    case "viewers":
+    case "due":
+      return null;
+  }
 }
 function followingOf(viewers) {
   const following = /* @__PURE__ */ new Set();
@@ -76449,7 +76509,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 
 // src/renderer/main.ts
 function mainRenderer(parts, pushed, drains) {
-  const { time, feeds, menuIdle } = parts;
+  const { time, turnLog, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
   const prepare = (delivery) => {
     const id2 = parts.mint();
@@ -76631,7 +76691,7 @@ function mainRenderer(parts, pushed, drains) {
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
-        const { frame: frame2, delivery } = answerRequest(
+        const { frame: frame2, delivery, displayedEvents } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -76643,7 +76703,8 @@ function mainRenderer(parts, pushed, drains) {
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
-          frame: frame2
+          frame: frame2,
+          displayedEvents
         });
         return;
       }
@@ -76847,10 +76908,11 @@ function mainRenderer(parts, pushed, drains) {
       );
     return { outcome, subscriptions, wake, stored };
   };
+  const during = (input, answer2) => turnLog.during(() => time.during(input, answer2));
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
-    adapter: async (input) => time.during(input, () => {
+    adapter: async (input) => during(input, () => {
       const { outcome, ...declaration2 } = ending(
         input,
         () => pushed(input.push, {
@@ -76864,7 +76926,7 @@ function mainRenderer(parts, pushed, drains) {
         ...declaration2
       };
     }),
-    event: async (input) => time.during(input, () => {
+    event: async (input) => during(input, () => {
       const record2 = [];
       const effects = [];
       const frames = [];
@@ -76893,18 +76955,28 @@ function closeIdleMenus2(parts, effects, busy) {
       );
     } catch (thrown2) {
       const failure2 = failureOf(thrown2);
-      parts.log(
+      parts.turnLog.add(
         failure2.kind === "closing" ? "info" : "error",
         `menu-idle: close failed (session=${session}): ${failure2.detail}`
       );
     }
   }
 }
-function mainRendererOf(inputs, host) {
+function mainRendererOf(inputs) {
+  const turnLog = new TurnLog();
+  return turnLog.during(() => {
+    try {
+      return { kind: "built", renderer: build2(inputs, turnLog) };
+    } catch (thrown2) {
+      return { kind: "refused", failure: failureOf(thrown2) };
+    }
+  });
+}
+function build2(inputs, turnLog) {
   const gates = createGates();
   const time = new TurnTime();
   const now2 = () => time.at;
-  const { log } = host;
+  const log = turnLog.add;
   const sessionState = new SessionState(inputs.stored.sessions);
   for (const sid of Object.keys(inputs.stored.sessions))
     sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
@@ -76994,7 +77066,6 @@ function mainRendererOf(inputs, host) {
     periods: FEED_PERIODS
   });
   const parts = {
-    ...host,
     time,
     sessionState: edits.view,
     renderCache,
@@ -77059,6 +77130,7 @@ function mainRendererOf(inputs, host) {
   return mainRenderer(
     {
       ...parts,
+      turnLog,
       menuIdle,
       feeds,
       verbs: verbsOver(verbCtx),
@@ -77095,12 +77167,23 @@ function debugOf(cache2, what) {
 }
 
 // src/in-process-renderer.ts
-function inProcessRenderer(build2 = mainRendererOf) {
+function inProcessRenderer(decorate = (renderer) => renderer) {
   return ({ name, boot }) => ({
-    start: ({ reaches, clock }) => localLink(name, () => build2(boot(), reaches), clock)
+    start: ({ clock, log }) => localLink(
+      name,
+      () => {
+        const result = mainRendererOf(boot());
+        if (result.diagnostics !== void 0)
+          writeLogLines(log, result.diagnostics);
+        if (result.kind === "refused")
+          throw new CrossedFailure(result.failure);
+        return decorate(result.renderer);
+      },
+      clock
+    )
   });
 }
-function localLink(name, build2, clock) {
+function localLink(name, build3, clock) {
   let built = null;
   const live = () => {
     if (built === null)
@@ -77124,7 +77207,7 @@ function localLink(name, build2, clock) {
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's
     // clock, which the renderer's process is.
     serve: () => {
-      built ??= timed(build2(), () => clock.monotonic());
+      built ??= timed(build3(), () => clock.monotonic());
     },
     arm: () => {
     },
@@ -77558,6 +77641,9 @@ function pipeEvent(state, kind, category) {
   state.pipeEvent = {
     text: `${PIPE_EVENT_LEAD}${said2.join("; ")}`,
     at: state.scope.now(),
+    // [LAW:types-are-the-program] An old write must not answer a later event
+    // with the same count, category and instant.
+    revision: (last2?.revision ?? 0) + 1,
     answered: false,
     counts
   };
@@ -77568,8 +77654,9 @@ function pipeEvent(state, kind, category) {
 }
 function answeredPipeEvent(state, event) {
   const last2 = state.pipeEvent;
-  if (last2 === null || !answeredBy(last2, event)) return;
+  if (last2 === null || !answeredBy(last2, event)) return false;
   state.pipeEvent = { ...last2, answered: true };
+  return true;
 }
 function standing(state) {
   const event = state.pipeEvent;
@@ -77578,7 +77665,12 @@ function standing(state) {
     ...event === null ? [] : [
       {
         kind: "launch-pipes",
-        event: { text: event.text, at: event.at, answered: event.answered }
+        event: {
+          text: event.text,
+          at: event.at,
+          revision: event.revision,
+          answered: event.answered
+        }
       }
     ]
   ];
@@ -87840,9 +87932,17 @@ var Collector = class {
 init_globals();
 var MAX_REQUESTS = 256;
 var failedFeed = (refusal) => {
-  const encoded = JSON.stringify(refusal);
+  const encoded = { json: JSON.stringify(refusal) };
   return { resp: encoded, statusline: encoded };
 };
+function covers(prior, offered) {
+  if (prior.json !== offered.json) return false;
+  return offered.displayedEvents === void 0 || offered.displayedEvents.every(
+    ({ kind, event }) => prior.displayedEvents?.some(
+      (seen) => seen.kind === kind && sameOccurrence(seen.event, event)
+    ) ?? false
+  );
+}
 function settleWrite(write, delivered) {
   const done = write.done;
   write.done = void 0;
@@ -87850,8 +87950,12 @@ function settleWrite(write, delivered) {
 }
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar, source)));
-  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff, source)));
+  const encode = (body) => ({
+    json: JSON.stringify(RENDER_ANSWERS.ansi(publish(body, source))),
+    displayedEvents: frame2.displayedEvents
+  });
+  const resp = encode(frame2.bar);
+  const statusline = frame2.handoff === null ? resp : encode(frame2.handoff);
   return { resp, statusline };
 }
 var FrameFeeds = class {
@@ -88057,7 +88161,7 @@ var FrameFeeds = class {
       } catch (error) {
         const refused2 = renderFailed(error);
         encoded = failedFeed(refused2);
-        if (watched.last?.resp !== encoded.resp)
+        if (watched.last?.resp.json !== encoded.resp.json)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
@@ -88163,30 +88267,32 @@ var FrameFeeds = class {
       done?.(false);
       return;
     }
-    const json2 = answerOf2(encoded, sub2.lane);
+    const answer2 = answerOf2(encoded, sub2.lane);
     let latest;
     for (const write2 of follower.writes) latest = write2;
-    if (latest?.json === json2) {
+    if (latest !== void 0 && covers(latest.answer, answer2)) {
       const superseded = latest.done;
       latest.done = done;
       superseded?.(false);
       return;
     }
-    if (latest === void 0 && follower.confirmed === json2) {
+    if (latest === void 0 && follower.confirmed !== null && covers(follower.confirmed, answer2)) {
       done?.(true);
       return;
     }
-    const write = { json: json2, done };
+    const write = { answer: answer2, done };
     follower.writes.add(write);
     this.pushed++;
     watched.pushed++;
     const finished = (delivered) => {
+      if (delivered && answer2.displayedEvents !== void 0)
+        this.deps.acknowledgeDisplayed(answer2.displayedEvents);
       if (!follower.writes.delete(write)) return;
-      if (delivered) follower.confirmed = json2;
+      if (delivered) follower.confirmed = answer2;
       settleWrite(write, delivered);
     };
     try {
-      sub2.frame(json2, finished);
+      sub2.frame(answer2.json, finished);
     } catch (error) {
       this.deps.log(
         "error",
@@ -89540,6 +89646,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     );
   };
   const unanswered = (failure2, queuedMs) => ({
+    received: false,
     turn: {
       kind: "threw",
       failure: failure2,
@@ -89555,7 +89662,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   const inSlot = async (input, queuedMs, captures = []) => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
-    const session = sessionOf(input.event);
+    const session = sessionOfEvent(input.event);
     let release3 = () => {
     };
     let output;
@@ -89575,7 +89682,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
     }
-    const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
+    const {
+      subscriptions,
+      wake: wake2,
+      frames,
+      stored,
+      diagnostics,
+      turnMs,
+      ...answer3
+    } = output;
+    recordDiagnostics(diagnostics);
     const finalization = finalizationFields(answer3);
     const turn = {
       ...answer3,
@@ -89583,7 +89699,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       settlePresentation: receipt,
       queuedMs,
       turnMs,
-      hopMs: elapsedMs(clock, sentAt) - turnMs
+      hopMs: turnMs === null ? null : recordTaken(
+        "renderer round-trip timing",
+        () => elapsedMs(clock, sentAt) - turnMs
+      )
     };
     if (input.event.kind === "start")
       endedStart(
@@ -89597,6 +89716,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       receipt
     );
     return {
+      received: true,
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled3.finally(
         () => void recordTaken("session release", release3)
@@ -89728,6 +89848,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return null;
     }
   };
+  const recordDiagnostics = (diagnostics) => {
+    if (diagnostics === void 0) return;
+    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
+  };
   const took = (subscriptions, nextWake, frames, stored, requested, receipt) => {
     const adoptDemand = startFailure === null;
     if (adoptDemand)
@@ -89830,7 +89954,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         settled: Promise.resolve([{ kind: "failed", reason: made.message }])
       };
     const input = stamped(made);
-    const { turn, settled: settled3 } = await inSlot(input, 0);
+    const { received, turn, settled: settled3 } = await inSlot(input, 0);
     record2(input.event, [["why", why]], turn);
     const threw2 = turn.kind === "threw" ? [
       {
@@ -89839,7 +89963,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       }
     ] : [];
     const outcomes = settled3.then((outcomes2) => [...threw2, ...outcomes2]);
-    return turn.kind === "threw" && turn.turnMs === null ? { kind: "unreceived", failure: turn.failure, settled: outcomes } : {
+    return turn.kind === "threw" && !received ? { kind: "unreceived", failure: turn.failure, settled: outcomes } : {
       kind: "received",
       failure: turn.kind === "threw" ? turn.failure : null,
       settled: outcomes
@@ -89855,6 +89979,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
   });
   const receiptFor = (issuer) => (effect, reason) => {
+    if (reason === null && effect.displayedEvents !== void 0)
+      world.acknowledgeDisplayed(effect.displayedEvents);
     if (issuer !== generation) return;
     const retired2 = "the renderer that drew the frame has ended";
     unawaited(
@@ -89886,7 +90012,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return { settled: settled3.then(() => outcome) };
   };
   const record2 = (event, about, delivered) => {
-    const session = event === null ? null : sessionOf(event);
+    const session = event === null ? null : sessionOfEvent(event);
     const head = [
       ["renderer", name],
       ["input", event?.kind ?? "-"],
@@ -89987,11 +90113,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       holds2(`push:${push.kind}`);
       try {
         if (startFailure !== null) throw new CrossedFailure(startFailure);
-        const { subscriptions, wake: wake2, stored, ...answered } = await renderer.answer({
+        const { subscriptions, wake: wake2, stored, diagnostics, ...answered } = await renderer.answer({
           kind: "adapter",
           push,
           ...readingsAt(clock)
         });
+        recordDiagnostics(diagnostics);
         const followed = took(
           subscriptions,
           wake2,
@@ -90100,30 +90227,6 @@ var stampedOf = (clock) => (made) => ({
   event: made.event,
   ...readingsAt(clock)
 });
-function sessionOf(event) {
-  switch (event.kind) {
-    // A start is every session's: it holds none of them alone.
-    case "start":
-      return null;
-    case "context":
-    case "request":
-      return event.context.hookData.session_id;
-    // An origin's config is every session's there.
-    case "config":
-      return null;
-    case "world-state":
-      return event.worldState.session;
-    case "click":
-      return event.click.scope === "session" ? event.click.session : null;
-    case "retire":
-    case "effect-done":
-      return event.session;
-    // Every watched session's, or the renderer's own.
-    case "viewers":
-    case "due":
-      return null;
-  }
-}
 
 // src/daemon/held-stores.ts
 init_globals();
@@ -91132,6 +91235,29 @@ function createDaemon(inputs) {
       if (phase.kind !== "building") restateFaults();
     }
   });
+  const acknowledgeDisplayed = (shown) => {
+    let changed = false;
+    for (const { kind, event } of shown) {
+      switch (kind) {
+        case "launch-pipes":
+          if (launcher.answeredPipeEvent(event)) changed = true;
+          break;
+        case "renderer-ended":
+          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
+            rendererEnded = { ...rendererEnded, answered: true };
+            changed = true;
+          }
+          break;
+        case "act-failed":
+          if (actFailed !== null && answeredBy(actFailed, event)) {
+            actFailed = { ...actFailed, answered: true };
+            changed = true;
+          }
+          break;
+      }
+    }
+    if (changed) restateFaults();
+  };
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -91236,6 +91362,7 @@ function createDaemon(inputs) {
   );
   const frameFeeds = new FrameFeeds({
     publishFrame,
+    acknowledgeDisplayed,
     requestChanged: (session, previous2) => declaredBarPanes.reported(session, previous2?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
@@ -91306,19 +91433,6 @@ function createDaemon(inputs) {
     },
     log
   });
-  const reaches = {
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice.
-    log,
-    eventAnswered: (event) => {
-      launcher.answeredPipeEvent(event);
-      if (rendererEnded !== null && answeredBy(rendererEnded, event))
-        rendererEnded = { ...rendererEnded, answered: true };
-      if (actFailed !== null && answeredBy(actFailed, event))
-        actFailed = { ...actFailed, answered: true };
-      restateFaults();
-    }
-  };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
@@ -91373,7 +91487,6 @@ function createDaemon(inputs) {
     prepared
   }) => {
     const link = prepared.start({
-      reaches,
       log,
       clock,
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
@@ -91401,7 +91514,10 @@ function createDaemon(inputs) {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        rendererEnded = event;
+        rendererEnded = {
+          ...event,
+          revision: (rendererEnded?.revision ?? 0) + 1
+        };
         restateFaults();
       }
     });
@@ -91443,6 +91559,7 @@ function createDaemon(inputs) {
         stateDir: paths2.state,
         configs: configDiscovery.forRenderer(name),
         closing: cancelling,
+        acknowledgeDisplayed,
         unheard: (text4) => {
           actFailed = joinedEvent(actFailed, text4, instant());
           restateFaults();
