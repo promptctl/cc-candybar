@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-878",
+      "ref": "refs/pull/878/merge",
+      "sha": "cb30788dcb560ff11e66f0796738faedce16c956",
+      "timestamp": "2026-11-19T14:35:59.452Z",
+      "commits": [
+        {
+          "sha": "cb30788dcb560ff11e66f0796738faedce16c956",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:35:02Z",
+          "message": "Merge 521e5798f13f1534d634d82159c21cd5086d745c into 37d262840eafee4764958df49f0086054dabe007\n"
+        },
+        {
+          "sha": "521e5798f13f1534d634d82159c21cd5086d745c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:34:55-07:00",
+          "message": "fix(renderer): settle pushed frame memory on actual subscriber delivery\n"
+        },
+        {
+          "sha": "dd9707cdc23b8f42a22bb491499f17df073b2814",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:00:18-07:00",
+          "message": "fix(renderer): commit request frame memory on delivery\n"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "b91b11c02521752798cf2606da2677decb809e0d",
@@ -171,28 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:01:48-07:00",
           "message": "fix(click): report desktop launch failures (ibyq.3pb)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-878",
-      "ref": "refs/pull/878/merge",
-      "sha": "8df31cf53e3589b16843bb49c47b3ffcbe417509",
-      "timestamp": "2026-11-19T14:02:04.578Z",
-      "commits": [
-        {
-          "sha": "8df31cf53e3589b16843bb49c47b3ffcbe417509",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:00:54-07:00",
-          "message": "Merge c67863c6d3ea89372950638c577ca1c4ddfcc851 into 6b98f5c610697d392140c302f633044ebe7a2aac\n"
-        },
-        {
-          "sha": "c67863c6d3ea89372950638c577ca1c4ddfcc851",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:00:18-07:00",
-          "message": "fix(renderer): commit request frame memory on delivery\n"
         }
       ]
     },
