@@ -52,7 +52,10 @@ import {
 import type { ConfigTarget } from "../../src/config-hint";
 import { clickSessionOf } from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
-import type { SessionStateRW } from "../../src/renderer-interface/session-state";
+import type {
+  SessionStateDrop,
+  SessionStateRW,
+} from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import { SettingsHistory } from "../../src/renderer/settings-history";
 import type { DslConfig } from "../../src/config/dsl-types";
@@ -269,7 +272,7 @@ export function verbContextWith(
 // isolated from the real state dir must never write the daemon's history file
 // (test/helpers/durable-config.ts hands in one under its own temp root).
 export function testVerbContext(
-  sessionState: SessionStateRW,
+  sessionState: SessionStateRW & SessionStateDrop,
   history: SettingsHistory = new SettingsHistory(sessionState, () => {}),
   config?: DslConfig,
   host: Host = HOST,

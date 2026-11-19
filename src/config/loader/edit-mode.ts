@@ -23,6 +23,7 @@
 // body, so every bar carries edit mode and edit chrome runs unconditionally.
 
 import { escapedIdent } from "../ident.js";
+import { menuPageKey, sharedMenuStateKey } from "../menu-keys.js";
 import { SYNTAX_ENGINE } from "./syntax-engine.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type {
@@ -58,6 +59,24 @@ export const EDIT_TOGGLE_ACTION = "edit.toggle";
 // Closes whichever placement's settings hang open.
 export const EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 export const EDIT_MODE_ARRANGE = "arrange";
+
+// [LAW:one-source-of-truth] Where edit chrome keeps a session's open menus:
+// which placement is configured, and every menu chrome mints (a gap's `✚`
+// library, a configured placement's lists) with its page cursor. Each chrome
+// menu's host name sits under `edit.`, so its state key collapses under this
+// one menu prefix, and the loader refuses any authored menu whose key would
+// land there. Edit mode is never persisted, so a key here means nothing
+// outside the transaction that shows it: the transaction drops them all as it
+// opens and as it closes.
+const EDIT_CHROME_MENU_NS = sharedMenuStateKey(EDIT_NS);
+export const EDIT_CHROME_NAMESPACES: readonly string[] = [
+  EDIT_CONFIGURE_KEY,
+  EDIT_CHROME_MENU_NS,
+  menuPageKey(EDIT_CHROME_MENU_NS),
+];
+export function isEditChromeKey(key: string): boolean {
+  return EDIT_CHROME_NAMESPACES.some((ns) => key.startsWith(ns));
+}
 
 // The namespace every placement's unsaved setting value lives under, as a
 // session key and as a variable. No scalar is declared at `edit.draft`, so

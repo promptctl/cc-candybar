@@ -79,4 +79,30 @@ describe("SessionState MobX integration", () => {
     expect(state.get(S1, "theme")).toBe("ocean");
     expect(state.get(S1, "missing")).toBeNull();
   });
+
+  test("clearWhere drops every admitted key as one change, and an emptied session with them", () => {
+    const state = new SessionState();
+    state.setBatch(S1, [
+      { key: "menus.a", value: "open" },
+      { key: "menus.b", value: "open" },
+      { key: "theme", value: "ocean" },
+    ]);
+    state.drain();
+    const seen: string[] = [];
+    const dispose = autorun(() => {
+      seen.push(`${state.get(S1, "menus.a")}/${state.get(S1, "menus.b")}`);
+    });
+    expect(state.clearWhere(S1, (k) => k.startsWith("menus."))).toEqual([
+      "menus.a",
+      "menus.b",
+    ]);
+    expect(seen).toEqual(["open/open", "null/null"]);
+    expect(state.get(S1, "theme")).toBe("ocean");
+    expect(state.clearWhere(S1, (k) => k === "theme")).toEqual(["theme"]);
+    expect(state.drain()).toEqual([
+      { store: "session-state", key: S1, value: null },
+    ]);
+    expect(state.clearWhere(S1, () => true)).toEqual([]);
+    dispose();
+  });
 });

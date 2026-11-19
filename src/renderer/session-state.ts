@@ -17,6 +17,7 @@
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type {
+  SessionStateDrop,
   SessionStateReader,
   SessionStateRW,
 } from "../renderer-interface/session-state";
@@ -82,7 +83,9 @@ interface Session {
 // is ever evicted — eviction *is* "drop dead sessions".
 const DEFAULT_MAX_SESSIONS = 256;
 
-export class SessionState implements SessionStateReader, SessionStateRW {
+export class SessionState
+  implements SessionStateReader, SessionStateRW, SessionStateDrop
+{
   // [LAW:types-are-the-program] Insertion order is recency order, the order
   // of writes: the store cannot hold more than maxSessions, so the bound is
   // structural, not dependent on an external prune caller. A read moves
@@ -187,9 +190,28 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   clear(sessionId: SessionId, key: string): void {
     const session = this.sessions.get(sessionId);
-    if (session === undefined || !session.values.has(key)) return;
+    if (session?.values.has(key)) this.remove(sessionId, session, [key]);
+  }
+
+  clearWhere(
+    sessionId: SessionId,
+    admits: (key: string) => boolean,
+  ): readonly string[] {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) return [];
+    const cleared = [...session.values.keys()].filter(admits);
+    if (cleared.length > 0) this.remove(sessionId, session, cleared);
+    return cleared;
+  }
+
+  // [LAW:single-enforcer] Every removal lands here, as one change.
+  private remove(
+    sessionId: SessionId,
+    session: Session,
+    keys: readonly string[],
+  ): void {
     runInAction(() => {
-      session.values.delete(key);
+      for (const key of keys) session.values.delete(key);
       // An emptied session is a non-state — drop it so it neither occupies a
       // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
       if (session.values.size === 0) this.dropped(sessionId);

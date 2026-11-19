@@ -66,6 +66,7 @@ import {
   reservedNamespaceOf,
 } from "./reserved-namespace.js";
 import { MENU_NS, MENU_PAGE_NS } from "../reserved-names.js";
+import { isEditChromeKey } from "./edit-mode.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -470,6 +471,18 @@ export function synthesizePlacementMenus(
         const member = menuMember(apply);
         const stateKey = menuStateKey(id, apply, options.key);
         const pageKey = menuPageKey(stateKey);
+        // [LAW:no-silent-failure] Edit chrome's menus collapse under one
+        // prefix, and edit mode drops every key there as it opens and
+        // closes. An authored menu whose placement collapses into it would
+        // lose its open state to every edit, so it is refused here, where
+        // the authored menus are the only ones this pass sees.
+        if (isEditChromeKey(stateKey)) {
+          issue(
+            node.name,
+            `its {{ menu }} state key "${stateKey}" lands in the namespace edit mode keeps its own menus in — placement "${id}" is collapsed to an identifier starting "edit_". Rename the placement`,
+          );
+          continue;
+        }
         const owner =
           options.key !== undefined
             ? `key ${options.key}`

@@ -331,6 +331,35 @@ export function placementDraftKey(
   return `${PLACEMENT_DRAFT_NS}${presetIdent}.${id}.${setting}`;
 }
 
+// The names configuring one placement mints: the action that enters it, and
+// the accordion its pickers' lists share. The key is a shared `{{ menu }}`
+// key's spelling, `ident`-normalized under `menus.`, so it is a template path
+// no other variable owns.
+function configureNames(
+  preset: string,
+  id: string,
+): { readonly enter: string; readonly listKey: string } {
+  const enter = `${EDIT_NS}${escapedIdent(preset)}.configure.${escapedIdent(id)}`;
+  return { enter, listKey: sharedMenuStateKey(enter) };
+}
+
+// [LAW:one-source-of-truth] The session keys edit chrome keeps for one
+// placement, named by the derivations that mint them: the open state of the
+// `✚` gap on each side of it and of its configure lists, each with its page
+// cursor. A layout step that ends the placement drops these, so a placement
+// that later takes its id opens with every menu closed.
+export function placementChromeKeys(
+  preset: string,
+  id: string,
+): readonly string[] {
+  const menus = [
+    insertGap(preset, id, "before").stateKey,
+    insertGap(preset, id, "after").stateKey,
+    configureNames(preset, id).listKey,
+  ];
+  return menus.flatMap((key) => [key, menuPageKey(key)]);
+}
+
 // What configure mode adds to one placement: the `🔧` that
 // enters it, the controls it hangs below the placement while it is on, and the
 // draft variables those controls write and the placement reads `.settings`
@@ -356,14 +385,12 @@ function configureParts(
   const prefix = `${EDIT_NS}${ctx.presetIdent}`;
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
-  const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
+  const { enter, listKey } = configureNames(ctx.preset, id);
+  // Entering configure folds the list, so each visit starts with every list
+  // closed.
   // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
-  const listKey = sharedMenuStateKey(enter);
+  // (disclosure-nest.ts), but only a write that passes the nest does; the
+  // fold on entry holds whatever last wrote the configure key.
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
   ctx.artifacts.actions[enter] = {

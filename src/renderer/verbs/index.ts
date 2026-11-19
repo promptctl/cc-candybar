@@ -87,6 +87,7 @@ import {
   EDIT_CONFIGURE_KEY,
   PLACEMENT_DRAFT_NS,
 } from "../../config/loader/edit-mode";
+import { placementChromeKeys } from "../../config/edit-chrome";
 import {
   durableLanding,
   placementDrafts,
@@ -1057,7 +1058,11 @@ const resetConfig: VerbHandler = (value, ctx) => {
 function endedPlacements(
   before: DslConfig,
   after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
+): ReadonlyArray<{
+  readonly preset: string;
+  readonly member: string;
+  readonly node: SegmentNode;
+}> {
   const placed = (config: DslConfig, preset: string) =>
     [...walkNodes(presetRoot(config, preset).node)].filter(
       (n): n is SegmentNode => n.kind === "segment",
@@ -1070,6 +1075,7 @@ function endedPlacements(
   return presetNames(before.presets).flatMap((preset) =>
     placed(before, preset)
       .map((node) => ({
+        preset,
         member: configureMember(preset, placementId(node)),
         node,
       }))
@@ -1077,15 +1083,17 @@ function endedPlacements(
   );
 }
 
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
+// What an ended placement leaves in the session: its unsaved values, its
+// edit chrome's open menus and their pages, and the configure key while it
+// names that placement — a later placement that takes its id is a new
+// instance, and must inherit none of them.
 function endedSessionKeys(
   ended: ReturnType<typeof endedPlacements>,
   configuring: string | null,
 ): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
+  return ended.flatMap(({ preset, member, node }) => [
     ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
+    ...placementChromeKeys(preset, placementId(node)),
     ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
   ]);
 }

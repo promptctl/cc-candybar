@@ -31,6 +31,16 @@ export interface SessionStateRW extends SessionStateReader {
   clear(sessionId: SessionId, key: string): void;
 }
 
+// [LAW:single-enforcer] The owner of a namespace whose keys end together
+// drops them as one write: every key of the session `admits`, cleared in one
+// reactive transaction, and the keys it cleared.
+export interface SessionStateDrop {
+  clearWhere(
+    sessionId: SessionId,
+    admits: (key: string) => boolean,
+  ): readonly string[];
+}
+
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
 // on-disk representation and the save currency between store and storage.
 export type SessionSnapshot = Record<string, Record<string, string>>;

@@ -17,12 +17,16 @@ import {
 import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
+  isEditChromeKey,
 } from "../config/loader/edit-mode.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import { isSettingKey } from "../renderer-interface/history-storage.js";
-import type { SessionStateRW } from "../renderer-interface/session-state.js";
+import type {
+  SessionStateDrop,
+  SessionStateRW,
+} from "../renderer-interface/session-state.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import {
   SettingsHistory,
@@ -245,7 +249,7 @@ export class EditTransactions {
   });
 
   constructor(
-    readonly committed: SessionStateRW,
+    readonly committed: SessionStateRW & SessionStateDrop,
     private readonly log: DaemonLogger,
   ) {}
 
@@ -289,15 +293,34 @@ export class EditTransactions {
     return this.draft(sid)?.depth() ?? committed.depth(sid);
   }
 
+  // [LAW:single-enforcer] The one place a transaction opens and the one
+  // place it closes. Edit chrome's state means nothing outside the
+  // transaction that shows it, so both drop it whole: opening, whatever a
+  // restart left behind; closing, however the edit ends, including the keys
+  // of placements the draft no longer holds and every page cursor.
   open(sid: SessionId, origin: RenderOrigin, snapshot: ConfigSnapshot): void {
-    this.update(
-      sid,
-      new EditDraft(sid, origin, snapshot, this.committed, this.log),
-    );
+    runInAction(() => {
+      this.dropChrome(sid, "open");
+      this.update(
+        sid,
+        new EditDraft(sid, origin, snapshot, this.committed, this.log),
+      );
+    });
   }
 
   close(sid: SessionId): void {
-    this.update(sid, null);
+    runInAction(() => {
+      this.dropChrome(sid, "close");
+      this.update(sid, null);
+    });
+  }
+
+  private dropChrome(sid: SessionId, at: "open" | "close"): void {
+    const dropped = this.committed.clearWhere(sid, isEditChromeKey);
+    this.log(
+      "info",
+      `edit: ${at} dropped=${JSON.stringify(dropped)} (session=${sid})`,
+    );
   }
 
   changed(sid: SessionId): void {
@@ -316,8 +339,12 @@ export class EditTransactions {
     return true;
   }
 
+  // A retired session's edit ends with it, through the same close.
   retire(sid: SessionId): void {
-    runInAction(() => this.entries.delete(sid));
+    runInAction(() => {
+      this.close(sid);
+      this.entries.delete(sid);
+    });
   }
 
   private update(sid: SessionId, draft: EditDraft | null): void {
