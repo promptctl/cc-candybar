@@ -1,3 +1,9 @@
+## [1.234.4](https://github.com/promptctl/cc-candybar/compare/v1.234.3...v1.234.4) (2026-11-19)
+
+### Bug Fixes
+
+* **watchers:** follow the revision config discovery read ([#876](https://github.com/promptctl/cc-candybar/issues/876)) ([ba64a50](https://github.com/promptctl/cc-candybar/commit/ba64a50c816d01574c923bb0ef96182d56914d25))
+
 ## [1.234.3](https://github.com/promptctl/cc-candybar/compare/v1.234.2...v1.234.3) (2026-11-19)
 
 ### Performance Improvements
