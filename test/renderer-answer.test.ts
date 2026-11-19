@@ -246,12 +246,15 @@ const configure = async (
 ) => configsNamed(t, await contextTurn(t, context));
 
 // The request as the host delivers one: after the session's config.
-const request = async (t: { r: Renderer; rig: SessionRig }) => {
+const request = async (
+  t: { r: Renderer; rig: SessionRig },
+  readings = READ,
+) => {
   const context = checked();
   await configure(t, context);
   return t.r.answer({
     kind: "event",
-    ...READ,
+    ...readings,
     event: {
       kind: "request",
       id: REQUEST,
@@ -495,6 +498,17 @@ describe("a statusline request", () => {
     expect(t.recorded).toHaveLength(1);
   });
 
+  test("a late confirmed statusline frame can establish the record after a newer write failed", async () => {
+    const t = renderer();
+    const older = presentOf(answered(await request(t)).effects);
+    const newer = presentOf(answered(await request(t)).effects);
+    answered(await done(t.r, newer, false));
+    expect(presentation(t.rig, "request")).toBeUndefined();
+    answered(await done(t.r, older, true));
+    expect(presentation(t.rig, "request")).toBeDefined();
+    expect(t.recorded).toHaveLength(1);
+  });
+
   test("records nothing for a present its client never took, and hears of each present once", async () => {
     const { r, recorded, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
@@ -628,12 +642,21 @@ describe("a feed's frame", () => {
 
   test("an older feed receipt keeps its layout without rewinding the newer request's motion", async () => {
     const t = renderer();
-    await configure(t, checked());
+    const initial = presentOf(answered(await request(t)).effects);
+    answered(await done(t.r, initial, true));
     answered(await followFeed(t.r));
-    const feed = await dueFrame(t.r);
-    const requestFrame = presentOf(answered(await request(t)).effects);
+    const feed = await dueFrame(t.r, 1);
+    const requestFrame = presentOf(
+      answered(
+        await request(t, {
+          at: (READ.at + 3) as Instant,
+          tick: (READ.tick + 3) as Tick,
+        }),
+      ).effects,
+    );
     answered(await done(t.r, requestFrame, true));
     const motion = t.rig.cache.presentations.effects(SESSION).lastFrame();
+    expect(motion.t).toBe(3);
     const requestLayout = presentation(t.rig, "request");
 
     answered(await done(t.r, { session: SESSION, id: feed.receipt }, true));
