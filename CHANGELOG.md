@@ -1,3 +1,9 @@
+## [1.232.15](https://github.com/promptctl/cc-candybar/compare/v1.232.14...v1.232.15) (2026-11-19)
+
+### Bug Fixes
+
+* **test:** a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo) ([#838](https://github.com/promptctl/cc-candybar/issues/838)) ([67f9c32](https://github.com/promptctl/cc-candybar/commit/67f9c326810383c223b62ad696c55bb3e1087dc2))
+
 ## [1.232.14](https://github.com/promptctl/cc-candybar/compare/v1.232.13...v1.232.14) (2026-11-19)
 
 ### Bug Fixes
