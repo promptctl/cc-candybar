@@ -1,3 +1,4 @@
+import { configQuery } from "../../src/config/loader/chain-places.js";
 import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // Test helpers for the click wire. A rendered click URL is `dispatch/does=…&e=…`
 // (an ordered effect list after the verb's `/`); these decode it to its behavioral
@@ -157,8 +158,7 @@ export function discoveryNow(host: Host): LayerPlaces & {
   const snapshotOf = (origin: RenderOrigin): ConfigSnapshot =>
     discover(
       {
-        projectDir: origin.projectDir,
-        configFile: origin.target.path,
+        ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd,
       },
       readShared({ locations: locations(host), stateDir: stateDir(host) }),

@@ -16,7 +16,7 @@ import { checkConfig } from "../src/check";
 import { configResolutionNotice } from "../src/config/dsl-loader";
 import { resolutionOf } from "./helpers/config-search";
 import type { RepoAnswers } from "../src/config/loader/repo-gate";
-import { chainPlaces } from "../src/config/loader/chain-places";
+import { chainPlaces, configLocations } from "../src/config/loader/chain-places";
 import {
   configLoadedLine,
   type LoadCause,
@@ -110,7 +110,7 @@ describe("the gate over a project's config file", () => {
     expect(resolved.repos.declined).toEqual([project]);
   });
 
-  test("the user's own file and an explicit path never ask", () => {
+  test("an explicit base is trusted, and other project layers still need approval", () => {
     const user = path.join(root, "xdg", "cc-candybar", "config.json5");
     fs.mkdirSync(path.dirname(user), { recursive: true });
     fs.writeFileSync(user, "{}");
@@ -125,14 +125,14 @@ describe("the gate over a project's config file", () => {
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, role: "user" },
     ]);
-    expect(explicit.repos.awaiting).toEqual([]);
+    expect(explicit.repos.awaiting).toEqual([project]);
   });
 
   test("the chain a click writes leaves out what the bar's leaves out", () => {
     write(".cc-candybar.json5", "{}");
-    const query = { projectDir: project };
+    const query = { kind: "chain", projectDir: project } as const;
     expect(
-      chainPlaces(resolutionOf(locations(host), book({}), query), query),
+      chainPlaces(resolutionOf(locations(host), book({}), query), configLocations(locations(host), query)),
     ).toEqual([{ path: expect.any(String), role: "user" }]);
   });
 

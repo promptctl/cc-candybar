@@ -7,7 +7,6 @@
 // renderer whose latest output names that origin holds the same snapshot
 // and watch, until the last renderer lets it go.
 
-import path from "node:path";
 import { originKey, type RenderOrigin } from "../../config-hint.js";
 import type {
   ConfigSnapshot,
@@ -21,7 +20,7 @@ import {
   type SharedFacts,
 } from "./discover.js";
 import type { DiscoveryFiles } from "./discovery-files.js";
-import { REPO_PLUGIN_DIR } from "./plugin-folders.js";
+import { configQuery } from "../../config/loader/chain-places.js";
 import { repoConfigsPath } from "./repo-configs.js";
 import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
@@ -275,14 +274,13 @@ export class ConfigDiscovery {
   ): ObservedOrigin {
     const found = discover(
       {
-        projectDir: origin.projectDir,
-        configFile: origin.target.path,
+        ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd,
       },
       shared,
     );
     const key = originKey(origin);
-    const paths = watchTargetsFor(origin, found);
+    const paths = watchTargetsFor(found);
     // [LAW:one-source-of-truth] The key names the origin, the target set and
     // the folders it binds, so the registry's `follow` rebinds exactly when
     // either moved.
@@ -335,14 +333,9 @@ export class ConfigDiscovery {
 // existing root is watched for every child: a folder made in it is a plugin
 // installed. The project's plugin folder is consulted whatever its answer: a
 // plugin dropped there is a question to ask.
-function watchTargetsFor(origin: RenderOrigin, found: Discovered): PathsWatch {
+function watchTargetsFor(found: Discovered): PathsWatch {
   const { snapshot, targets } = found;
-  const roots = [
-    ...new Set([
-      ...targets.roots,
-      path.join(origin.projectDir, REPO_PLUGIN_DIR),
-    ]),
-  ];
+  const { roots } = targets;
   return watchTargetsOf({
     named: [
       ...targets.candidates,

@@ -1,8 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { configFlag, hookData, render, runRealClient } from "../../helpers/daemon-e2e";
+import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
+import { sendDaemonRequest } from "../../helpers/daemon-wire";
+import { answerRepo } from "../../helpers/repo-approval";
+import { configFlag, hookData, render, renderBody, runRealClient } from "../../helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -93,5 +96,61 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
     const bar = client.stdout;
     expect(bar).toContain("OVERRIDE-WINS");
     expect(bar).not.toContain("Unexpected arguments");
+  });
+
+  test("layered and isolated clients can use the same base against one daemon", async () => {
+    const repo = mkdtempSync(path.join(projectDir, "modes-"));
+    const pluginDir = path.join(repo, ".cc-candybar", "plugins", "marker");
+    mkdirSync(pluginDir, { recursive: true });
+    writeFileSync(
+      path.join(pluginDir, "plugin.json5"),
+      "{ segments: { row: { template: 'REPO-PLUGIN' } } }",
+    );
+    writeFileSync(
+      path.join(repo, ".cc-candybar.json5"),
+      "{ root: { h: ['a', 'repo.marker.row'] } }",
+    );
+    writeFileSync(
+      path.join(repo, ".cc-candybar.local.json5"),
+      "{ segments: { a: { template: 'LOCAL-OVERRIDE' } } }",
+    );
+    answerRepo(repo, "approved", env);
+    for (const [flag, expected, excluded] of [
+      ["--config", ["LOCAL-OVERRIDE", "REPO-PLUGIN"], ["OVERRIDE-WINS"]],
+      ["--config-only", ["OVERRIDE-WINS"], ["LOCAL-OVERRIDE", "REPO-PLUGIN"]],
+    ] as const) {
+      const sid = "cfg-mode-" + flag;
+      const args = [flag, override];
+      await render(sockPath, sid, repo, {}, ["cc-candybar", ...args]);
+      const client = runRealClient(args, {
+        cwd: repo,
+        env,
+        input: JSON.stringify(hookData(sid, repo)),
+      });
+      expect(client.status).toBe(0);
+      for (const text of expected) expect(client.stdout).toContain(text);
+      for (const text of excluded) expect(client.stdout).not.toContain(text);
+      expect(client.stdout).not.toContain("Unknown flags");
+    }
+  });
+
+  test.each([
+    { args: ["--config-only"], problem: "--config-only needs a path" },
+    { args: ["--config-only", ""], problem: "--config-only needs a path" },
+    {
+      args: ["--config", "--config-only", "override.json5"],
+      problem: "--config names no file before --config-only",
+    },
+  ])("invalid isolation request $args is refused instead of using the base hint", async ({ args, problem }) => {
+    const body = renderBody("cfg-invalid-only", projectDir, { configEnv: override }, [
+      "cc-candybar",
+      ...args,
+    ]);
+    const response = await sendDaemonRequest(sockPath, {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      ...body,
+    });
+    expect(response).toMatchObject({ ok: false, error: expect.stringContaining(problem) });
   });
 });

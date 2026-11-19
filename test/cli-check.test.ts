@@ -1053,7 +1053,7 @@ describe("checkCommandPlan — the argv edge", () => {
     expect(r.stdout).toBe("");
     expect(r.stderr).toContain("--rendre");
     expect(r.stderr).toContain(
-      "Usage: cc-candybar check [--render] [config-file]",
+      "Usage: cc-candybar check [--render] [config-file | --config-only config-file]",
     );
   });
 

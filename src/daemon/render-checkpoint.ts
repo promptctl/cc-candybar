@@ -3,7 +3,12 @@
 import { parseArgs } from "node:util";
 import { isAbsolute } from "node:path";
 import { explicitConfigPath } from "../utils/user-path";
-import { requestedConfigTarget } from "../config-hint";
+import {
+  CONFIG_FLAGS,
+  isConfigFlag,
+  requestedConfigTarget,
+  type RequestedTarget,
+} from "../config-hint";
 import {
   parseClientHints,
   RENDER_ENCODINGS,
@@ -24,48 +29,53 @@ import {
   type SessionEnvironment,
 } from "./foundations/session-env.js";
 
-// [LAW:single-enforcer][LAW:no-silent-failure] Parse render-path args with
-// the standard util at the trust boundary. `--config <path>` is the sole
-// valid render flag; every other flag, a `--config` with no path after it,
-// and a positional word are refused arguments the caller shows as the bar's
-// error and on the render event.
-// The `--config` value crosses `explicitConfigPath` against the CLIENT's cwd
-// (the request's, brandon-config-nuq6), the rule the client applies to its
-// `configEnv` hint: empty is no override, `~` is expanded once, here.
-//
-// `tokens: true, strict: false, allowPositionals: true` together let the
-// parser emit a token entry for every flag (known or unknown) without
-// throwing on unknown ones, and without mis-classifying their values as
-// positionals. Not strict, `--config` takes whatever follows it as its
-// value, so only the last token can be a bare `--config`, and being last it
-// is the one that wins.
+// [LAW:single-enforcer][LAW:no-silent-failure] Both config flags name paths
+// relative to the client. The last config flag decides the path and scope.
+// Tokens also carry every refused flag or positional for the bar's error.
 function parseRenderArgs(
   args: string[],
   cwd: string,
   home: string,
-): {
-  configFile: string | undefined;
-  refusedArgs: readonly RefusedArg[];
-} {
+  configEnv: string | undefined,
+):
+  | { target: RequestedTarget; refusedArgs: readonly RefusedArg[] }
+  | { problem: string } {
   const { tokens } = parseArgs({
     args: args.slice(1), // skip binary path
-    options: { config: { type: "string" } },
+    options: CONFIG_FLAGS,
     strict: false,
     tokens: true,
     allowPositionals: true,
   });
-  // [LAW:one-source-of-truth] The last `--config` decides both the path and
+  // A value-taking option in loose parseArgs can consume another option.
+  // Refuse that ambiguity for the config flags, before discovering anything.
+  for (const token of tokens ?? []) {
+    if (
+      token.kind === "option" &&
+      isConfigFlag(token.name) &&
+      token.inlineValue === false &&
+      token.value?.startsWith("--") &&
+      isConfigFlag(token.value.slice(2).split("=", 1)[0] ?? "")
+    )
+      return {
+        problem: token.rawName + " names no file before " + token.value,
+      };
+  }
+  // [LAW:one-source-of-truth] The last config option decides both the path and
   // whether it is refused, so the two cannot disagree.
   const config = (tokens ?? [])
     .filter(
       (t): t is Extract<typeof t, { kind: "option" }> =>
-        t.kind === "option" && t.name === "config",
+        t.kind === "option" && isConfigFlag(t.name),
     )
     .at(-1);
+  const path = explicitConfigPath(cwd, config?.value, home);
+  if (config?.name === "config-only" && path === undefined)
+    return { problem: "--config-only needs a path" };
   const refused = (tokens ?? []).flatMap((t): RefusedArg[] => {
     switch (t.kind) {
       case "option":
-        return t.name !== "config"
+        return !isConfigFlag(t.name)
           ? [{ arg: t.rawName, why: "unknown" }]
           : t === config && t.value === undefined
             ? [{ arg: t.rawName, why: "no-value" }]
@@ -78,7 +88,11 @@ function parseRenderArgs(
     }
   });
   return {
-    configFile: explicitConfigPath(cwd, config?.value, home),
+    target: requestedConfigTarget(
+      path,
+      configEnv,
+      config?.name === "config-only" ? "config-only" : "config",
+    ),
     // In argv order, each refusal once.
     refusedArgs: refused.filter(
       (r, i) =>
@@ -193,6 +207,14 @@ export function checkRenderRequest(
     env.kind === "refused"
   )
     return { ok: false, problems: wireProblems };
+  const hints = parseClientHints(req);
+  // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
+  // process.cwd(), so config resolution depends only on request data — the
+  // daemon's own working directory must not influence output.
+  const parsedArgs = parseRenderArgs(req.args, req.cwd, home, hints.configEnv);
+  if ("problem" in parsedArgs)
+    return { ok: false, problems: [parsedArgs.problem] };
+  const { target, refusedArgs } = parsedArgs;
   // [LAW:nothing-unseen] Said once per daemon, at its first sight: every
   // request carries the field, and a line each rotated the log in minutes.
   // The stats snapshot lists them all, and only a request the checkpoint
@@ -205,11 +227,6 @@ export function checkRenderRequest(
       );
     }
   }
-  const hints = parseClientHints(req);
-  // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
-  // process.cwd(), so config resolution depends only on request data — the
-  // daemon's own working directory must not influence output.
-  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
   const { env: _env, ...rest } = req;
   return {
     ok: true,
@@ -234,7 +251,7 @@ export function checkRenderRequest(
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
-        target: requestedConfigTarget(configFile, hints.configEnv),
+        target,
       },
       refusedArgs,
     } as CheckedRenderRequest,

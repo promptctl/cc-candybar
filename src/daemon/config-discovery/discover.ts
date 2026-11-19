@@ -33,7 +33,11 @@ import {
   readNamedText,
   type DiscoveryFiles,
 } from "./discovery-files.js";
-import { pluginRoots, type PluginRoot } from "./plugin-folders.js";
+import {
+  REPO_PLUGIN_DIR,
+  pluginRoots,
+  type PluginRoot,
+} from "./plugin-folders.js";
 import {
   DEFINITION_FILE,
   pluginDefinitionProblem,
@@ -66,7 +70,7 @@ export interface RootListing {
 // batch of origins discovered together reads each of them once.
 export interface SharedFacts {
   readonly locs: Locations;
-  readonly answers: RepoAnswers;
+  readonly answers: () => RepoAnswers;
   readonly installed: readonly RootListing[];
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
@@ -83,9 +87,10 @@ export function readShared(
 ): SharedFacts {
   const files = discoveryFiles(source);
   const included = new Map<string, readonly string[]>();
+  let answers: RepoAnswers | undefined;
   return {
     locs: world.locations,
-    answers: repoConfigs(world.stateDir).read(),
+    answers: () => (answers ??= repoConfigs(world.stateDir).read()),
     installed: installedRoots(world.locations, files),
     files,
     // The same bytes can name different physical files relative to their
@@ -294,9 +299,7 @@ export function snapshotOf(
 
 // Where an origin's config is discovered: its project, the explicit file it
 // names, and the working directory its checkout is found from.
-export interface DiscoverQuery extends ConfigQuery {
-  readonly cwd: string;
-}
+export type DiscoverQuery = ConfigQuery & { readonly cwd: string };
 
 // [LAW:single-enforcer] What the render cache watches beside what the load
 // names: every candidate location of the chain, there or not, and the plugin
@@ -330,7 +333,7 @@ export function discover(
 ): Discovered {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations } = search;
+  const { resolution, question, locations, candidates } = search;
   const { repos } = resolution;
   const session = sessionPlugins(
     locs,
@@ -339,7 +342,7 @@ export function discover(
     query.cwd,
     files,
   );
-  const places = chainPlaces(resolution, query).map((place) =>
+  const places = chainPlaces(resolution, locations).map((place) =>
     contentAt(search, place, files),
   );
   const chain = places.map((at) =>
@@ -356,10 +359,16 @@ export function discover(
   return {
     snapshot: { ...snapshotOf(session, chain), repo: question, notices },
     targets: {
-      candidates: locations.flatMap(({ candidates }) =>
-        candidates.map(({ file }) => file),
-      ),
-      roots: pluginRoots(locs, repos.plugins).map((r) => r.dir),
+      candidates,
+      roots: [
+        ...new Set([
+          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          // A chain must hear a new repository plugin even before approval.
+          ...(query.kind === "chain" && query.projectDir !== undefined
+            ? [path.join(query.projectDir, REPO_PLUGIN_DIR)]
+            : []),
+        ]),
+      ],
     },
     repos,
   };
@@ -378,8 +387,9 @@ function contentAt(
     path,
     content,
   });
-  if (resolution.kind === "missing") return at(place.path, { kind: "absent" });
-  if (resolution.kind === "unreadable")
+  if (place.role === "user" && resolution.kind === "missing")
+    return at(place.path, { kind: "absent" });
+  if (place.role === "user" && resolution.kind === "unreadable")
     return at(place.path, { kind: "unreadable", error: resolution.error });
   const location = locations.find(({ role }) => role === place.role);
   if (location?.kind === "found" && location.winner.file === place.path)

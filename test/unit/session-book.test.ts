@@ -94,6 +94,13 @@ describe("the book's file", () => {
       origin: {
         projectDir: "/p",
         cwd: "/p",
+        target: { source: "argument-only", path: "/x.json5" },
+      },
+    },
+    {
+      origin: {
+        projectDir: "/p",
+        cwd: "/p",
         target: { source: "environment", path: "/x.json5" },
       },
       claudeConfigDir: "/u/.claude-x",

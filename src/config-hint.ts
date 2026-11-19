@@ -38,13 +38,25 @@ export function detectConfigEnv(
   return explicitConfigPath(cwd, env[CONFIG_ENV], home);
 }
 
+export const CONFIG_FLAGS = {
+  config: { type: "string" },
+  "config-only": { type: "string" },
+} as const;
+
+export type ConfigFlag = keyof typeof CONFIG_FLAGS;
+export const isConfigFlag = (name: string): name is ConfigFlag =>
+  Object.hasOwn(CONFIG_FLAGS, name);
+
 // [LAW:types-are-the-program] The config a request names, and what named it:
 // the file a command's arguments name, else the file its environment names,
 // else the search. A search has no path, so no reader can hold a source that
 // disagrees with one.
 export type RequestedTarget =
   | { readonly source: "search"; readonly path?: undefined }
-  | { readonly source: "argument" | "environment"; readonly path: string };
+  | {
+      readonly source: "argument" | "argument-only" | "environment";
+      readonly path: string;
+    };
 
 // What a session's config turned out to be: a request's target, or a recorded
 // path whose source this build cannot read.
@@ -59,8 +71,13 @@ export type ConfigTarget =
 export function requestedConfigTarget(
   argument: string | undefined,
   environment: string | undefined,
+  flag: ConfigFlag = "config",
 ): RequestedTarget {
-  if (argument !== undefined) return { source: "argument", path: argument };
+  if (argument !== undefined)
+    return {
+      source: flag === "config-only" ? "argument-only" : "argument",
+      path: argument,
+    };
   if (environment !== undefined) {
     return { source: "environment", path: environment };
   }
@@ -77,10 +94,12 @@ export function cliConfigTarget(
   arg: string | undefined,
   host: HostPaths,
   cwd: string,
+  flag: ConfigFlag = "config",
 ): RequestedTarget {
   return requestedConfigTarget(
     explicitConfigPath(cwd, arg, host.home),
     detectConfigEnv(host, cwd),
+    flag,
   );
 }
 
@@ -98,8 +117,9 @@ export interface RenderOrigin {
 // render cache's entry and the host's discovery are keyed by it, so a
 // snapshot discovered for an origin is the one its entry loads. A search has
 // no path, so it spells as the empty name, distinct from any real path.
-export function originKey(origin: RenderOrigin): string {
-  return `${origin.projectDir}\0${origin.cwd}\0${origin.target.path ?? ""}`;
+export function originKey({ projectDir, cwd, target }: RenderOrigin): string {
+  const scope = target.source === "argument-only" ? "\0only" : "";
+  return `${projectDir}\0${cwd}\0${target.path ?? ""}${scope}`;
 }
 
 // The origin a request names: what a session records. A record read back may

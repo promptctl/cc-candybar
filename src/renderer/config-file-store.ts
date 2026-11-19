@@ -449,15 +449,15 @@ export interface WriteLayer extends Layer {
 export function writeLayerOf(
   snapshot: ConfigSnapshot,
   role: LayerRole,
-  configFile: string | null,
+  isolatedFile: string | null,
   home: string,
 ): WriteLayer {
   const layer = snapshot.chain.find((l) => l.role === role);
   if (layer === undefined)
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${
-        configFile !== null
-          ? `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write`
+        isolatedFile !== null
+          ? `${isolatedFile} is the session's only config layer (--config-only), so there is no ${role} layer to write`
           : `the ${role} layer is the project's, and this session has no approved project`
       }`,
     );

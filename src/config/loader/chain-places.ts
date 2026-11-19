@@ -10,6 +10,7 @@
 // looks at the disk is the host's discovery.
 
 import path from "node:path";
+import type { ConfigTarget } from "../../config-hint.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { RepoGate } from "./repo-gate.js";
 import type { PluginScope } from "./plugin-scope.js";
@@ -36,48 +37,48 @@ export interface ConfigLocation {
   readonly candidates: readonly ConfigCandidate[];
 }
 
-// What a session's config search starts from: its project, and the explicit
-// file its render origin names, which replaces the chain.
-export interface ConfigQuery {
-  readonly projectDir?: string;
-  readonly configFile?: string;
-}
+// [LAW:types-are-the-program] Only layered discovery carries a project.
+export type ConfigQuery =
+  | {
+      readonly kind: "chain";
+      readonly projectDir?: string;
+      readonly path?: string;
+    }
+  | { readonly kind: "file"; readonly path: string };
+
+export const configQuery = (
+  projectDir: string | undefined,
+  target: ConfigTarget,
+): ConfigQuery =>
+  target.source === "argument-only"
+    ? { kind: "file", path: target.path }
+    : { kind: "chain", projectDir, path: target.path };
 
 // Highest precedence first. The chain's bases are separate locations even
 // when they share a directory. The extensions break ties within each base.
 export function configLocations(
   locs: Locations,
-  { projectDir, configFile }: ConfigQuery,
+  query: ConfigQuery,
   extensions: readonly [string, ...string[]] = CONFIG_EXTENSIONS,
 ): readonly ConfigLocation[] {
-  if (configFile !== undefined)
-    return [
-      {
-        role: "user",
-        candidates: [{ file: configFile, extension: null }],
-      },
-    ];
-  const project = projectDir
-    ? [
-        {
-          role: "local" as const,
-          base: path.join(projectDir, PROJECT_BASES.local),
-        },
-        {
-          role: "project" as const,
-          base: path.join(projectDir, PROJECT_BASES.project),
-        },
-      ]
-    : [];
-  return [...project, { role: "user" as const, base: xdgConfigBase(locs) }].map(
-    ({ role, base }) => ({
-      role,
-      candidates: extensions.map((extension) => ({
-        file: `${base}.${extension}`,
-        extension,
-      })),
-    }),
-  );
+  const named: ConfigLocation | undefined =
+    query.path === undefined
+      ? undefined
+      : { role: "user", candidates: [{ file: query.path, extension: null }] };
+  const at = (role: LayerRole, base: string): ConfigLocation => ({
+    role,
+    candidates: extensions
+      .map((extension) => ({ file: base + "." + extension, extension }))
+      .filter(({ file }) => file !== query.path),
+  });
+  const project =
+    query.kind === "chain" && query.projectDir !== undefined
+      ? [
+          at("local", path.join(query.projectDir, PROJECT_BASES.local)),
+          at("project", path.join(query.projectDir, PROJECT_BASES.project)),
+        ]
+      : [];
+  return [...project, named ?? at("user", xdgConfigBase(locs))];
 }
 
 /**
@@ -86,13 +87,8 @@ export function configLocations(
  * cache uses this to watch every candidate location so the creation of any
  * file in the resolution chain triggers hot-reload.
  *
- * `configFile` is the highest-precedence entry — the explicit path
- * a session's render origin names (`--config` > `configEnv` hint,
- * absolute). When present, it is the
- * sole candidate and the rest of the precedence chain is bypassed. This
- * module reads no environment of its own: the daemon is detached and
- * one-per-user, so its env answers for whichever shell spawned it, not for
- * the session being rendered ([LAW:no-ambient-temporal-coupling]).
+ * A named file supplies the user layer. An isolated query has just that
+ * candidate. Both queries use the same enumerator for discovery and watches.
  *
  * [LAW:single-enforcer] One enumerator; `searchConfig` layers the
  * files that exist, watchers listen on all of them, no second list.
@@ -156,10 +152,9 @@ export function homeLayer(path: string): ConfigLayer {
  *     layered over the ones before it through the same merge the bundled
  *     default takes (brandon-plugins-ktag.8th) — so a project file declares
  *     only what differs from the user's config, never a replacement of it.
- *     An explicit `configFile` is a chain of exactly that file. An empty
- *     chain is the bundled default, which is what the user asked for.
+ *     A named user file replaces the XDG layer. An empty chain uses the bundled default.
  *   • `missing` — an explicit file was named (`configFile`) and it is
- *     absent. The bundled default renders so a long-running bar
+ *     absent. The bundled base and any approved overlays render so a long-running bar
  *     stays live and the watcher recovers when the file appears — but it is
  *     not what the user asked for, and the render says so.
  *   • `unreadable` — an explicit file was named and stat could not see it
@@ -181,77 +176,37 @@ export function homeLayer(path: string): ConfigLayer {
 export type ConfigResolution = {
   readonly repos: RepoGate;
   readonly unchecked: readonly Unchecked[];
+  readonly layers: readonly ConfigLayer[];
+  readonly home: string;
 } & (
-  | {
-      readonly kind: "chain";
-      readonly layers: readonly ConfigLayer[];
-      readonly home: string;
-    }
-  | { readonly kind: "missing"; readonly path: string; readonly home: string }
+  | { readonly kind: "chain" }
+  | { readonly kind: "missing"; readonly path: string }
   | {
       readonly kind: "unreadable";
       readonly path: string;
-      readonly home: string;
       readonly error: string;
     }
 );
 
-// The user's own XDG file, at either extension: the one chain layer no
-// repository can supply.
-function isUserFile(locs: Locations, candidate: string): boolean {
-  return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`,
-  );
+export function userConfigDefault(locs: Locations): string {
+  return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
 
-// The user's file: the XDG layer when the chain holds one, else the file a
-// first-ever write creates there — CONFIG_EXTENSIONS' head, the documented
-// format, the one that wins a same-location tie.
-export function userHome(
-  locs: Locations,
-  layers: readonly ConfigLayer[],
-): string {
-  return (
-    layers.find((l) => isUserFile(locs, l.path))?.path ??
-    `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`
-  );
-}
-
-// [LAW:dataflow-not-control-flow] The file a role names in the session's
-// chain, or null where the chain has no place for it: a project's layers are
-// an approved project's, and an explicit config file is the chain's one
-// layer. The file is the layer the chain holds for the role, or, where it
-// holds none, the file a first write there creates.
-function placeOf(
-  resolved: ConfigResolution,
-  layers: readonly ConfigLayer[],
-  { projectDir, configFile }: ConfigQuery,
-  role: LayerRole,
-): string | null {
-  if (role === "user") return resolved.home;
-  if (
-    configFile !== undefined ||
-    projectDir === undefined ||
-    resolved.repos.plugins === null
-  )
-    return null;
-  return (
-    layers.find((l) => l.role === role)?.path ??
-    `${path.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`
-  );
-}
-
-// [LAW:one-source-of-truth] Each role the session's chain can write, lowest
-// first, at the file a write there lands in: the placement every write
-// resolves, so discovery's chain holds exactly the layers a click can write.
+// [LAW:one-source-of-truth] Each writable role uses its discovered file or
+// its first candidate, where a first write creates it. Non-user roles need
+// an approved project. Exact paths assigned to the user cannot be re-used
+// as a second role.
 export function chainPlaces(
   resolved: ConfigResolution,
-  query: ConfigQuery,
+  locations: readonly ConfigLocation[],
 ): readonly ConfigLayer[] {
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
   return LAYER_ROLES.flatMap((role): ConfigLayer[] => {
-    const place = placeOf(resolved, layers, query, role);
-    return place === null ? [] : [{ path: place, role }];
+    if (role === "user") return [{ path: resolved.home, role }];
+    if (resolved.repos.plugins === null) return [];
+    const place =
+      resolved.layers.find((layer) => layer.role === role)?.path ??
+      locations.find((location) => location.role === role)?.candidates[0]?.file;
+    return place === undefined ? [] : [{ path: place, role }];
   });
 }
 
@@ -286,7 +241,7 @@ function noticeLines(resolution: ConfigResolution): readonly string[] {
       return [];
     case "missing":
       return [
-        `Config file not found: ${resolution.path} — rendering the bundled default until it appears`,
+        `Config file not found: ${resolution.path} — using the bundled base until it appears`,
       ];
     // The file's layer fails the load, which names it.
     case "unreadable":

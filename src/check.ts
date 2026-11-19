@@ -20,6 +20,7 @@
 // passes" and "the daemon renders" cannot diverge. The verdict reads the
 // inspection that accompanies each pass's frame.
 
+import { configQuery } from "./config/loader/chain-places.js";
 import { previewSigner } from "./click/link-signer.js";
 import { locations, stateDir } from "./daemon/paths.js";
 import { repoGateLines } from "./config/loader/repo-gate.js";
@@ -28,7 +29,13 @@ import type { ConfigSnapshot } from "./config/config-snapshot.js";
 import type { CliPlan } from "./cli-plan.js";
 import process from "node:process";
 import { loadSnapshot, type ConfigLayer } from "./config/dsl-loader.js";
-import { chainName, cliConfigTarget } from "./config-hint.js";
+import {
+  chainName,
+  cliConfigTarget,
+  requestedConfigTarget,
+  type ConfigFlag,
+  type RequestedTarget,
+} from "./config-hint.js";
 import { explicitConfigPath } from "./utils/user-path.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import type { World } from "./host";
@@ -136,7 +143,7 @@ export async function checkConfig(
   // The gates the daemon holds (`createGates`), so what `check` refuses is
   // what the daemon's load refuses.
   gates: Gates,
-  target: string | undefined,
+  target: string | RequestedTarget | undefined,
   cwd: string = process.cwd(),
   // [LAW:no-ambient-temporal-coupling] The settle budget is an input of the
   // verdict, so a caller that means to see the deadline reached names a
@@ -148,9 +155,15 @@ export async function checkConfig(
 ): Promise<CheckOutcome> {
   // [LAW:single-enforcer] The daemon's discovery, under the same answers: a
   // repository the bar would not run, `check` names and runs nothing of.
-  const configPath = explicitConfigPath(cwd, target, world.host.home);
+  const selected =
+    typeof target === "object"
+      ? target
+      : requestedConfigTarget(
+          explicitConfigPath(cwd, target, world.host.home),
+          undefined,
+        );
   const { snapshot, repos } = discover(
-    { projectDir: cwd, configFile: configPath, cwd },
+    { ...configQuery(cwd, selected), cwd },
     readShared({
       locations: locations(world.host),
       stateDir: stateDir(world.host),
@@ -165,7 +178,7 @@ export async function checkConfig(
   const unread = snapshot.chain.find(
     (l) =>
       l.content.kind === "unreadable" ||
-      (l.content.kind === "absent" && l.path === configPath),
+      (l.content.kind === "absent" && l.path === selected.path),
   );
   if (unread !== undefined)
     return {
@@ -181,7 +194,13 @@ export async function checkConfig(
     .map((l): ConfigLayer => ({ path: l.path, role: l.role }));
   const verdict = await drawnVerdict(world, gates, snapshot, {
     cwd,
-    args: target === undefined ? [] : ["--config", target],
+    args:
+      selected.path === undefined
+        ? []
+        : [
+            selected.source === "argument-only" ? "--config-only" : "--config",
+            selected.path,
+          ],
     settleMs,
     build,
   });
@@ -591,7 +610,7 @@ export function checkPlan(o: CheckOutcome, render = false): CliPlan {
 }
 
 const RENDER_FLAG = "--render";
-const USAGE = `Usage: cc-candybar check [${RENDER_FLAG}] [config-file]\n`;
+const USAGE = `Usage: cc-candybar check [${RENDER_FLAG}] [config-file | --config-only config-file]\n`;
 
 // [LAW:parse-dont-validate] argv crosses one checkpoint and becomes a request
 // the rest of the command reads by field; nothing inland re-reads `args`.
@@ -602,6 +621,7 @@ type CheckArgs =
   | {
       readonly kind: "run";
       readonly target: string | undefined;
+      readonly flag: ConfigFlag;
       readonly render: boolean;
     }
   | { readonly kind: "usage"; readonly message: string };
@@ -612,7 +632,10 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
   // [LAW:no-silent-failure] An unrecognised option is named, never taken for a
   // path — read as one it would be reported as an unreadable file, a
   // diagnostic about the wrong thing entirely.
-  const unknown = options.filter((o) => o !== RENDER_FLAG);
+  const only = options.includes("--config-only");
+  const unknown = options.filter(
+    (o) => o !== RENDER_FLAG && o !== "--config-only",
+  );
   if (unknown.length > 0) {
     return {
       kind: "usage",
@@ -629,9 +652,16 @@ function parseCheckArgs(args: readonly string[]): CheckArgs {
       message: `check: expected at most one path\n${USAGE}`,
     };
   }
+  if (only && !paths[0]) {
+    return {
+      kind: "usage",
+      message: "check: --config-only needs a path\n" + USAGE,
+    };
+  }
   return {
     kind: "run",
     target: paths[0],
+    flag: only ? "config-only" : "config",
     render: options.includes(RENDER_FLAG),
   };
 }
@@ -654,7 +684,7 @@ export async function checkCommandPlan(
         await checkConfig(
           world,
           createGates(),
-          cliConfigTarget(parsed.target, world.host, cwd).path,
+          cliConfigTarget(parsed.target, world.host, cwd, parsed.flag),
           cwd,
         ),
         parsed.render,

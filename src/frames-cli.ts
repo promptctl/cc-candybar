@@ -23,6 +23,7 @@
 // backstop) is reconnected, spawning it when none answers, and handed the
 // last statusline JSON again so it has data to draw from.
 
+import { CONFIG_FLAGS, isConfigFlag } from "./config-hint.js";
 import process from "node:process";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
@@ -105,18 +106,18 @@ export async function runFrames(
   const { values, tokens } = parseArgs({
     args: argv.slice(3),
     options: {
-      config: { type: "string" },
+      ...CONFIG_FLAGS,
       lane: { type: "string" },
     },
     strict: true,
     tokens: true,
   });
   // The render args a statusline client sends: the binary, then the flags
-  // the daemon reads (--config), as the statusline command spells them.
+  // the daemon reads, as the statusline command spells them.
   const renderArgs = [
     argv[1]!,
     ...tokens.flatMap((t) =>
-      t.kind === "option" && t.name === "config" ? [t.rawName, t.value!] : [],
+      t.kind === "option" && isConfigFlag(t.name) ? [t.rawName, t.value!] : [],
     ),
   ];
   const cwd = process.cwd();

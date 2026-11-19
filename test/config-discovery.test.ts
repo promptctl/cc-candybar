@@ -14,7 +14,7 @@ import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
-import { originKey, type RenderOrigin } from "../src/config-hint";
+import { originKey, requestedConfigTarget, type RenderOrigin } from "../src/config-hint";
 import { discover, readShared } from "../src/daemon/config-discovery/discover";
 import {
   diskFiles,
@@ -213,6 +213,43 @@ test("an answer to the trust book moves every origin with a repository to ask ab
     "the answers watch's move of the asking origin",
   );
   expect(discovery.snapshotOf(origin)?.repo?.standing).toBe(answer);
+});
+
+test("only an isolated config skips the project's plugin discovery and watch", () => {
+  const projectDir = project("project-with-plugin");
+  const { file } = named("explicit");
+  const cwd = project("session-cwd");
+  const repositoryPlugins = path.join(projectDir, ".cc-candybar", "plugins");
+  const folder = path.join(repositoryPlugins, "example");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, "plugin.json5"), "{}");
+
+  const visited: string[] = [];
+  const { discovery, logged } = discoveryRig({
+    ...diskFiles,
+    folders(dir) {
+      visited.push(dir);
+      return diskFiles.folders(dir);
+    },
+  });
+  const layered = originOf(projectDir, cwd, file);
+  const isolated = {
+    ...layered,
+    target: requestedConfigTarget(file, undefined, "config-only"),
+  };
+  discovery.follow([isolated]);
+  expect(discovery.snapshotOf(isolated)?.repo).toBeNull();
+  expect(visited).not.toContain(repositoryPlugins);
+  expect(logged.some((line) => line.includes(repositoryPlugins))).toBe(false);
+
+  discovery.follow([isolated, layered]);
+  expect(visited).toContain(repositoryPlugins);
+  expect(discovery.snapshotOf(isolated)?.repo).toBeNull();
+  expect(discovery.snapshotOf(layered)?.repo).toMatchObject({
+    dir: projectDir,
+    standing: "awaiting",
+  });
+  expect(logged.some((line) => line.includes(repositoryPlugins))).toBe(true);
 });
 
 test("once closed, it follows nothing and lets every watch go", () => {
@@ -429,7 +466,7 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
   const world = { locations: locations(HOST), stateDir: stateDir(HOST) };
   const shared = readShared(world, files);
   for (const cwd of [dir, nested]) {
-    const { snapshot } = discover({ projectDir: dir, cwd }, shared);
+    const { snapshot } = discover({ kind: "chain", projectDir: dir, cwd }, shared);
     const layer = snapshot.chain.find(({ path: file }) => file === config);
     expect(layer?.listed[listed]?.definition).toMatchObject({
       kind: "text",
@@ -442,7 +479,7 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
   }
   for (const configFile of configLinks) {
     for (const cwd of [dir, nested]) {
-      const { snapshot } = discover({ configFile, cwd }, shared);
+      const { snapshot } = discover({ kind: "file", path: configFile, cwd }, shared);
       expect(snapshot.chain).toEqual([
         expect.objectContaining({
           path: configFile,
@@ -462,7 +499,7 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
   // A later batch sees changed bytes without needing to discard an old cache.
   fs.writeFileSync(config, "{}");
   const { snapshot } = discover(
-    { projectDir: dir, cwd: dir },
+    { kind: "chain", projectDir: dir, cwd: dir },
     readShared(world, files),
   );
   expect(
@@ -485,7 +522,7 @@ test("an unchecked extension remains the unreadable layer at its actual path", (
         ? { path: file, error: "EACCES" }
         : diskFiles.presence(file),
   };
-  const { snapshot } = discover({ cwd: root }, readShared(world, files));
+  const { snapshot } = discover({ kind: "chain", cwd: root }, readShared(world, files));
   expect(snapshot.chain).toEqual([
     {
       role: "user",

@@ -56,8 +56,8 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   // The client's own path, then the flags the statusline command gave it —
   // the native binary's, the Node script's, never the node interpreter's.
-  // Anything after the path that is not `--config <file>` is refused as the
-  // bar's error (parseRenderArgs, render-checkpoint.ts).
+  // The config flags following it are parsed by the host, which reports
+  // refused arguments in the bar (parseRenderArgs, render-checkpoint.ts).
   args: string[];
   cwd: string;
   // When the client hangs up, in epoch milliseconds: the daemon's wait for
@@ -146,7 +146,7 @@ export interface ReaderRenderRequest extends RenderRequest {
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
 //     the absolute path the client resolved the variable to against its own
-//     cwd (detectConfigEnv, src/config-hint.ts); it ranks beneath `--config`,
+//     cwd (detectConfigEnv, src/config-hint.ts); it ranks beneath the config flags,
 //     and is never read from the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
 //   • `claudeConfigDir` absent — the client's Claude Code runs with no

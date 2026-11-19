@@ -2,7 +2,7 @@ import type { ConfigTarget, RenderOrigin } from "../../config-hint";
 
 // [LAW:parse-dont-validate] What a record's two fields say together. The path
 // is what a session reads and keeps its meaning across builds, so no path is a
-// search whichever build wrote it. The source only labels the path: one this
+// search whichever build wrote it. The source also carries explicit isolation. A source this
 // build cannot read, because a newer build has a source of its own, leaves the
 // path standing with its source unknown. A refusal here would fail every
 // durable click over a label.
@@ -11,7 +11,9 @@ function recordedTarget(
   configFile: string | null,
 ): ConfigTarget {
   if (configFile === null) return { source: "search" };
-  return source === "argument" || source === "environment"
+  return source === "argument" ||
+    source === "argument-only" ||
+    source === "environment"
     ? { source, path: configFile }
     : { source: "unknown", path: configFile };
 }

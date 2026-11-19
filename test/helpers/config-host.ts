@@ -1,3 +1,4 @@
+import { configQuery } from "../../src/config/loader/chain-places.js";
 // The host's half of a config, for a test that drives a render cache with no
 // renderer around it: a real config discovery over the test's own watcher
 // registry, which hands the cache each origin's snapshot as the renderer's
@@ -6,6 +7,7 @@
 
 import {
   originKey,
+  requestedConfigTarget,
   type ConfigTarget,
   type RenderOrigin,
 } from "../../src/config-hint";
@@ -111,7 +113,7 @@ export function loadDiscovered(
   { stateDir, ...deps }: StateDeps & { readonly stateDir: string },
 ): LoadOutcome & { readonly snapshot: ConfigSnapshot } {
   const { snapshot } = discover(
-    { projectDir, configFile, cwd },
+    { ...configQuery(projectDir, requestedConfigTarget(configFile, undefined)), cwd },
     readShared({ locations: deps.locations, stateDir }),
   );
   return { ...loadOrigin(cwd, snapshot, deps), snapshot };

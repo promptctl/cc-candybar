@@ -40,20 +40,24 @@ Restart Claude Code. The statusline appears with the bundled default layout — 
 
 ## Customization
 
-Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations:
+Config layers load in this order, with each layer overriding the ones before it.
 
-1. `$CC_CANDYBAR_CONFIG` in the statusline command's environment (`~` is expanded, and a relative path is relative to the directory Claude Code runs the statusline in). It is read by the client on every render and carried to the daemon, so it can differ per session. A path that names no file renders the bundled default under a `Config file not found` warning, and one the daemon cannot stat (behind an unsearchable directory, say) under `Config file could not be read` with the error — either way the bar stays live and loads the file once it can.
-2. `<project>/.cc-candybar.local.json5` (then `.json`): your own settings for this project, which version control never sees
-3. `<project>/.cc-candybar.json5` (then `.json` at the same location)
-4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
+1. The bundled defaults.
+2. Your user config at `$XDG_CONFIG_HOME/cc-candybar/config.json5` (defaults to `~/.config/cc-candybar/config.json5`).
+3. `<project>/.cc-candybar.json5`.
+4. `<project>/.cc-candybar.local.json5`, for personal project settings.
 
-Without `$CC_CANDYBAR_CONFIG`, every file found is a layer: your user file merges over the bundled default, the project's over that, and the project's local file on top. So a project file declares only what that project adds or changes — a segment placed in a row, a plugin listed — and keeps the rest of your own config. `$CC_CANDYBAR_CONFIG` names the one file the session loads, and the others are not read. A change made from the bar (a theme picked and saved, a segment added in edit mode) is written to the layer its action names: your user file, the project's file to share it with everyone who clones the project, or the project's local file to keep it to yourself there, which the bar adds to the repository's `info/exclude` so git never sees it. The bundled save offers each layer the session can write; when a layer above sets the same value, the click is refused and names that file.
+`--config PATH` selects a different user config. Approved project and local settings and repository plugins still load. `CC_CANDYBAR_CONFIG` supplies the user path when neither config flag is set. Relative paths are resolved from the statusline client's working directory, and `~` expands to the client's home. If the named file is missing, the bar shows a warning and watches for the file to appear.
+
+`--config-only PATH` loads the named file over the bundled defaults. It skips project config, auto-discovered repository plugins, and project trust prompts. Installed plugins and definitions explicitly listed in the named file remain available.
+
+The bar writes to the layer you pick when saving. You can save to your user file, the shared project file, or the local project file. Candybar adds the local file to the repository's `info/exclude`. If a higher layer sets the same value, the bar names that file when it refuses the write.
 
 A project's file, its local file, and a repository's own plugins (`.cc-candybar/plugins/`), come from somebody's repository, and a config can run commands. So the first time a session works in a directory holding one, the bar asks — `a cc-candybar config for <dir> — run it? [approve] [decline]` — and until you answer, it draws your own config and runs nothing from that directory. The answer is kept per directory of the repository and covers that directory in every linked worktree `git worktree add` made from its checkout, so a new worktree never asks again. (A checkout whose `.git` is kept elsewhere, such as a submodule, answers apart from its worktrees.) It is kept in `$XDG_STATE_HOME/cc-candybar/repo-configs/repo-configs.json` (default `~/.local/state/cc-candybar/`) and holds across later edits of the files, as Claude Code's answer for a project's MCP servers does. Remove a directory's entry there to be asked again. `cc-candybar check` names a directory still awaiting an answer and runs nothing from it.
 
 JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
-The file **merges onto the bundled default**, so it declares only what differs. `globals` merge per field; the named sections (`variables`, `segments`, `actions`, `helpers`, …) merge by name, your entry winning; `root` merges per named row (`identity` and `status` in the bundled default; a whole tree at `root` replaces every row). The bundled default is `src/config/default-dsl-config.ts`, and fuller starting points live under `examples/`. Run `cc-candybar check <path>` to load a file exactly as the daemon will: exit 0 means it renders, exit 1 prints the error with the path and line to fix. Add `--render` and it prints the bar it rendered, so you can read a config's result without installing it.
+The file **merges onto the bundled default**, so it declares only what differs. `globals` merge per field; the named sections (`variables`, `segments`, `actions`, `helpers`, …) merge by name, your entry winning; `root` merges per named row (`identity` and `status` in the bundled default; a whole tree at `root` replaces every row). The bundled default is `src/config/default-dsl-config.ts`, and fuller starting points live under `examples/`. Run `cc-candybar check <path>` to load a file exactly as the daemon will: exit 0 means it renders, exit 1 prints the error with the path and line to fix. Use `cc-candybar check --config-only <path>` to check just that file. Add `--render` to print the bar it rendered, so you can read a config's result without installing it.
 
 <!-- The check:pass fence below is loaded by test/doc-snippets.test.ts through
      `cc-candybar check` — edit it and run that test, so the README example
