@@ -5,7 +5,10 @@ import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../helpers/daemon-wire";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 import { daemonPool } from "../../helpers/daemon-pool";
-import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
+import {
+  HAND_RUN_SOURCE,
+  spawnTestDaemon,
+} from "../../helpers/spawn-test-daemon";
 
 // [LAW:behavior-not-structure] The claim under test is an ORDERING of the real
 // binary's boot: a malformed memory budget is refused through daemon.log before
@@ -13,10 +16,11 @@ import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
 // daemon-limits.test.ts; this drives the daemon and reads what it left behind.
 test("a malformed budget is refused through daemon.log before any resource is committed", async () => {
   const iso = prepareIsolatedDaemonEnv("ccb-boot");
-  const { child, killTree, release } = await spawnTestDaemon({
-    ...iso.env,
-    [RSS_LIMIT_ENV]: "512MB",
-  });
+  const { child, stop } = await spawnTestDaemon(
+    { ...iso.env, [RSS_LIMIT_ENV]: "512MB" },
+    daemonPool,
+    HAND_RUN_SOURCE,
+  );
   try {
     const exit = await waitForExit(child);
     expect(exit.code).toBe(1);
@@ -27,8 +31,7 @@ test("a malformed budget is refused through daemon.log before any resource is co
     expect(log).not.toMatch(/daemon up/);
     expect(fs.existsSync(iso.sockPath)).toBe(false);
   } finally {
-    killTree();
-    release();
+    await stop();
     iso.removeTmpDirs();
   }
 });
@@ -39,7 +42,7 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
   const iso = prepareIsolatedDaemonEnv("ccb-boot-parent");
   const parent = path.dirname(iso.sockPath);
   fs.chmodSync(parent, 0o755);
-  const { child, killTree, release } = await spawnTestDaemon(iso.env);
+  const { child, stop } = await spawnTestDaemon(iso.env);
   try {
     const exit = await waitForExit(child);
     expect(exit.code).toBe(1);
@@ -49,8 +52,7 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {
-    killTree();
-    release();
+    await stop();
     iso.removeTmpDirs();
   }
 });
@@ -62,7 +64,7 @@ test("an unsafe socket parent is refused through daemon.log", async () => {
 test("a lease that cannot be written is refused through daemon.log", async () => {
   const iso = prepareIsolatedDaemonEnv("ccb-boot-lease");
   fs.mkdirSync(`${iso.sockPath}.lease`);
-  const { child, killTree, release } = await spawnTestDaemon(iso.env);
+  const { child, stop } = await spawnTestDaemon(iso.env);
   try {
     const exit = await waitForExit(child);
     expect(exit.code).toBe(1);
@@ -72,8 +74,7 @@ test("a lease that cannot be written is refused through daemon.log", async () =>
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {
-    killTree();
-    release();
+    await stop();
     iso.removeTmpDirs();
   }
 });
@@ -81,21 +82,13 @@ test("a lease that cannot be written is refused through daemon.log", async () =>
 // [LAW:no-silent-failure] A daemon that cannot read its own start time could
 // write no lease or registry entry that tells it from a process reusing its
 // pid, so the boot is refused with the reason. An empty PATH leaves it no
-// `ps`; node runs tsx's entry directly, since the `.bin` shim needs a shell's
-// tools on PATH.
+// `ps`.
 test("a daemon that cannot read its own start time is refused through daemon.log", async () => {
   const iso = prepareIsolatedDaemonEnv("ccb-boot-start");
-  const { child, killTree, release } = await spawnTestDaemon(
-    { ...iso.env, PATH: path.join(iso.stateDir, "no-bin") },
-    daemonPool,
-    {
-      bin: process.execPath,
-      args: [
-        path.join(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
-        path.join(process.cwd(), "src", "index.ts"),
-      ],
-    },
-  );
+  const { child, stop } = await spawnTestDaemon({
+    ...iso.env,
+    PATH: path.join(iso.stateDir, "no-bin"),
+  });
   try {
     const exit = await waitForExit(child);
     expect(exit.code).toBe(1);
@@ -105,8 +98,7 @@ test("a daemon that cannot read its own start time is refused through daemon.log
     );
     expect(log).not.toMatch(/daemon up/);
   } finally {
-    killTree();
-    release();
+    await stop();
     iso.removeTmpDirs();
   }
 });

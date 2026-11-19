@@ -41,7 +41,7 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
       XDG_CONFIG_HOME: configHome,
     };
 
-    const { child: daemon, killTree, release } = await spawnTestDaemon(env);
+    const { stop } = await spawnTestDaemon(env);
     try {
       await until(() => isConnectable(sockPath), "the daemon's socket", 8000);
       // [LAW:no-ambient-temporal-coupling] Kernel connectability begins when
@@ -56,15 +56,7 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
         8000,
       );
     } finally {
-      killTree();
-      await new Promise<void>((resolve) => {
-        if (daemon.exitCode !== null || daemon.signalCode !== null) {
-          resolve();
-          return;
-        }
-        daemon.once("exit", () => resolve());
-      });
-      release();
+      await stop();
       for (const d of [stateRoot, cacheHome, configHome]) {
         try {
           fs.rmSync(d, { recursive: true, force: true });

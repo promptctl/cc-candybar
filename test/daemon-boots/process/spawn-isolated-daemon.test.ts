@@ -5,24 +5,30 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { RSS_LIMIT_ENV } from "../../../src/daemon/limits";
 import { waitForExit } from "../../helpers/daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
+  type IsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
+
+// An isolated env whose socket parent is open to its group and world, which the
+// daemon refuses before it binds anything
+// (test/daemon-boots/process/daemon-boot-refusal.test.ts pins that refusal on
+// the daemon's side).
+function refusedEnv(): IsolatedDaemonEnv {
+  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
+  fs.chmodSync(iso.stateDir, 0o755);
+  return iso;
+}
 
 // [LAW:behavior-not-structure] The claim is about the helper driving the real
 // binary: a daemon that refuses to boot is reported as a refusal carrying its own
 // reason, through the arm that only an observed exit can reach.
 test("a daemon that refuses to boot is reported as a refusal, not as a timeout", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
-  // A malformed memory budget: the daemon's earliest refusal, before any
-  // resource is committed and therefore before any bind
-  // (test/daemon-boots/process/daemon-boot-refusal.test.ts pins that ordering on the daemon's side).
-  const env = { ...iso.env, [RSS_LIMIT_ENV]: "512MB" };
+  const iso = refusedEnv();
   try {
-    await expect(spawnDaemonWithEnv(env)).rejects.toThrow(
+    await expect(spawnDaemonWithEnv(iso.env)).rejects.toThrow(
       /the process exited \(code 1\)/,
     );
   } finally {
@@ -31,19 +37,18 @@ test("a daemon that refuses to boot is reported as a refusal, not as a timeout",
 });
 
 test("the refusal report names the phase and quotes the daemon's reason", async () => {
-  const iso = prepareIsolatedDaemonEnv("ccb-rdy");
-  const env = { ...iso.env, [RSS_LIMIT_ENV]: "512MB" };
+  const iso = refusedEnv();
   try {
-    const failure = await spawnDaemonWithEnv(env).then(
-      (d) => {
-        d.killTree();
+    const failure = await spawnDaemonWithEnv(iso.env).then(
+      async (d) => {
+        await d.stop();
         return new Error("spawnDaemonWithEnv resolved for a refusing daemon");
       },
       (e: Error) => e,
     );
     expect(failure.message).toContain("never got as far as binding");
     expect(failure.message).toMatch(
-      /refusing to boot: Error: CC_CANDYBAR_RSS_LIMIT_MB must be a positive integer/,
+      /refusing to boot: Error: directory has unsafe permissions/,
     );
     // The budget-expiry arm is the one an exit excludes: seeing it here would
     // mean the helper waited the whole budget out to learn what the process had
@@ -75,8 +80,8 @@ test("a spawn against a live incumbent is accepted: the wire carries no identity
       fs.readFileSync(path.join(iso.stateDir, "daemon.log"), "utf8"),
     ).toMatch(/EADDRINUSE: .+ exiting/);
   } finally {
-    loser.killTree();
-    incumbent.killTree();
+    await loser.stop();
+    await incumbent.stop();
     iso.removeTmpDirs();
   }
 });

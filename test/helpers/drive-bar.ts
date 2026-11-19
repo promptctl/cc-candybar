@@ -114,7 +114,12 @@ const spawnedBarDaemon: StartBarDaemon = async (env) => {
     [PARENT_PID_ENV]: String(process.pid),
     NODE_OPTIONS: withStamp(process.env.NODE_OPTIONS),
   });
-  return { target: env.CC_CANDYBAR_SOCKET!, stop: () => daemon.killTree() };
+  return {
+    target: env.CC_CANDYBAR_SOCKET!,
+    stop: async () => {
+      await daemon.stop();
+    },
+  };
 };
 
 export { hookData };

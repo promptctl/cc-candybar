@@ -28,10 +28,8 @@ import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
   sendDaemonRequest,
-  waitForExit,
   type DaemonTarget,
 } from "./daemon-wire";
-import type { RunningDaemon } from "./spawn-isolated-daemon";
 import { detectClaudeConfigDir } from "../../src/claude-settings";
 import { logLines } from "../../src/daemon/log";
 import {
@@ -468,23 +466,4 @@ export function urlWriting(
     throw new Error(`no rendered affordance writes ${key}=${value}`);
   }
   return url;
-}
-
-// Stop the daemon and wait for it to be gone.
-//
-// The default is SIGKILL, which is right for teardown — a test that is done
-// does not care how the daemon dies, and SIGKILL cannot hang. It is the WRONG
-// signal for a test that restarts the daemon and expects durable state to come
-// back: SIGKILL bypasses server.ts's `shutdown()` funnel, and with it the
-// session state close that lands writes still inside the session file's
-// 500ms debounce. Pass "SIGTERM" to exercise the graceful path a real restart
-// takes (a signal, the RSS backstop, or the parent watchdog — all three go
-// through that one funnel).
-export async function killAndWait(
-  daemon: RunningDaemon,
-  signal: NodeJS.Signals = "SIGKILL",
-): Promise<void> {
-  const exited = waitForExit(daemon.child);
-  daemon.killTree(signal);
-  await exited;
 }

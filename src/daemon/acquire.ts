@@ -688,7 +688,13 @@ function canConnect(
 // [LAW:one-source-of-truth] node's argv for a daemon running `script`: what
 // the client spawns, and what the load gate spawns to measure the same thing.
 export function daemonArgs(script: string, env: NodeJS.ProcessEnv): string[] {
-  return [`--max-old-space-size=${heapCapMb(env)}`, script, "daemon"];
+  return [`--max-old-space-size=${heapCapMb(env)}`, ...daemonCommand(script)];
+}
+
+// [LAW:one-source-of-truth] The command that runs the daemon at `script`, after
+// node's own options: what the client spawns, and what a test runs by hand.
+export function daemonCommand(script: string): string[] {
+  return [script, "daemon"];
 }
 
 // [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows

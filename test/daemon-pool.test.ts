@@ -135,8 +135,8 @@ describe("daemon pool", () => {
 
 // [LAW:verifiable-goals] The ceiling holds at the spawn: a process the pool has
 // no slot for never starts. What that needs is a process and a slot, not a
-// daemon, so each spawn runs a stand-in that leaves a marker and sleeps. It is
-// `/bin/sh -c`, which takes the `daemon` the helper appends as `$0`.
+// daemon, so each spawn runs a `/bin/sh -c` stand-in that leaves a marker and
+// sleeps.
 // Pinned to an isolated size-2 pool, so it never contends with the suite's spawns.
 describe("the pool holds a spawn to its ceiling", () => {
   test("a 3rd spawn starts nothing until a slot frees, on a pool sized 2", async () => {
@@ -145,10 +145,10 @@ describe("the pool holds a spawn to its ceiling", () => {
     const marker = (n: number): string => path.join(markers, `started-${n}`);
     const spawned: TestDaemonProcess[] = [];
     const standIn = async (n: number): Promise<TestDaemonProcess> => {
-      const proc = await spawnTestDaemon(process.env, pool, {
+      const proc = await spawnTestDaemon(process.env, pool, () => ({
         bin: "/bin/sh",
         args: ["-c", `: > ${JSON.stringify(marker(n))}; exec sleep 60`],
-      });
+      }));
       spawned.push(proc);
       return proc;
     };
@@ -168,21 +168,76 @@ describe("the pool holds a spawn to its ceiling", () => {
         () => !started(3)(),
         "the 3rd stand-in staying unstarted",
         800,
-      ).finally(() => {
-        first.killTree();
-        first.release();
-      });
+      ).finally(() => first.stop());
       await until(started(3), "the 3rd stand-in starting once a slot freed");
     } finally {
       // Settled, not awaited: a third that fails is named by the wait above, and
-      // the kills below run either way.
+      // the stops below run either way.
       await Promise.allSettled([third]);
-      for (const proc of spawned) {
-        proc.killTree();
-        proc.release();
-      }
+      for (const proc of spawned) await proc.stop();
     }
   });
+
+  // [LAW:single-enforcer] A process that is alive counts against the ceiling,
+  // stopped or not: its exit is what frees its slot, and a signal that leaves it
+  // alive does not.
+  test("a spawn holds its slot across signals that leave it alive, and frees it on exit", async () => {
+    const pool = createDaemonPool(tmpPoolDir(), 1);
+    const proc = await spawnTestDaemon(process.env, pool, () => ({
+      bin: "/bin/sh",
+      args: ["-c", "exec sleep 60"],
+    }));
+    const full = { timeoutMs: 200, retryIntervalMs: 50 };
+    try {
+      proc.signalDaemon("SIGSTOP");
+      proc.signalDaemon("SIGCONT");
+      await expect(pool.acquire(full)).rejects.toThrow(/no free slot/);
+      await proc.stop();
+      (await pool.acquire(full)).release();
+    } finally {
+      await proc.stop();
+    }
+  });
+
+  // [LAW:no-ambient-temporal-coupling] Once its exit is seen, the pid a
+  // spawn had is free for the kernel to reuse, so a teardown's signal after
+  // that must go nowhere.
+  test("a signal after the exit is seen reaches no process", async () => {
+    const proc = await spawnTestDaemon(
+      process.env,
+      createDaemonPool(tmpPoolDir(), 1),
+      () => ({ bin: "/bin/sh", args: ["-c", "exec sleep 60"] }),
+    );
+    await proc.stop();
+    const kill = jest.spyOn(process, "kill");
+    try {
+      proc.signalDaemon("SIGKILL");
+      await proc.stop("SIGTERM");
+      expect(kill).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  // [LAW:no-silent-failure] A process that outlives the signal it was stopped
+  // with is killed, and the stop fails naming that signal. The stand-in
+  // ignores SIGTERM, and sleep inherits the ignore across its exec.
+  test("a stop whose signal does not take kills the process and says which signal", async () => {
+    const ready = path.join(tmpPoolDir(), "ignoring");
+    const proc = await spawnTestDaemon(
+      process.env,
+      createDaemonPool(tmpPoolDir(), 1),
+      () => ({
+        bin: "/bin/sh",
+        args: ["-c", `trap '' TERM; : > ${JSON.stringify(ready)}; exec sleep 60`],
+      }),
+    );
+    await until(() => fs.existsSync(ready), "the stand-in ignoring SIGTERM");
+    await expect(proc.stop("SIGTERM")).rejects.toThrow(
+      /still running \d+ ms after SIGTERM, so it was killed with SIGKILL/,
+    );
+    expect(proc.child.signalCode).toBe("SIGKILL");
+  }, 15_000);
 });
 
 describe("a spawned process's stderr", () => {
@@ -192,7 +247,10 @@ describe("a spawned process's stderr", () => {
     const proc = await spawnTestDaemon(
       process.env,
       createDaemonPool(tmpPoolDir(), 1),
-      { bin: "/bin/sh", args: ["-c", "(sleep 0.2; echo why >&2) & exit 1"] },
+      () => ({
+        bin: "/bin/sh",
+        args: ["-c", "(sleep 0.2; echo why >&2) & exit 1"],
+      }),
     );
     await expect(proc.stderrTail).resolves.toContain("why");
   });

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { configFlag, hookData, killAndWait, render, runRealClient } from "../../helpers/daemon-e2e";
+import { configFlag, hookData, render, runRealClient } from "../../helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -38,7 +38,7 @@ describe("brandon-config-5g8: a real client's config reaches a running daemon", 
   });
 
   afterAll(async () => {
-    if (daemon) await killAndWait(daemon);
+    if (daemon) await daemon.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   });

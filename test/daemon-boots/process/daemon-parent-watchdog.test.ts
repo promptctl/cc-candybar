@@ -5,7 +5,10 @@ import path from "node:path";
 
 import { PARENT_PID_ENV } from "../../../src/daemon/parent-watchdog";
 import { processProbe } from "../../helpers/host";
-import { spawnTestDaemon } from "../../helpers/spawn-test-daemon";
+import {
+  spawnTestDaemon,
+  type TestDaemonProcess,
+} from "../../helpers/spawn-test-daemon";
 import { until } from "../../helpers/until";
 
 // [LAW:verifiable-goals] End-to-end proof of the acceptance criterion in
@@ -16,8 +19,7 @@ import { until } from "../../helpers/until";
 describe("daemon dies with its spawner (integration)", () => {
   const spawned: ChildProcess[] = [];
   const tmpDirs: string[] = [];
-  const releases: Array<() => void> = [];
-  const killTrees: Array<() => void> = [];
+  const daemons: TestDaemonProcess[] = [];
 
   const track = (c: ChildProcess): ChildProcess => {
     spawned.push(c);
@@ -29,25 +31,19 @@ describe("daemon dies with its spawner (integration)", () => {
     return d;
   };
 
-  afterEach(() => {
-    // killTree first — it signals the daemon's WHOLE process group (the
-    // `tsx` wrapper AND the worker process it forks, which does the real
-    // daemon work and would otherwise survive as an orphan if only the
-    // wrapper were signalled). Safe to call even after a graceful exit.
-    for (const killTree of killTrees) killTree();
-    killTrees.length = 0;
+  afterEach(async () => {
+    // The daemon first: a test that failed before its watchdog fired leaves it
+    // running, and it must be gone before the directories it writes under are
+    // removed. Safe after the daemon's own exit, which a stop then only waits
+    // on and does not signal.
+    for (const daemon of daemons.splice(0)) await daemon.stop();
+    // [LAW:no-silent-failure] A process that is already gone is the one
+    // refusal expected here, and kill answers it by returning false; it
+    // throws or emits 'error' for any other refusal, which the test hears.
     for (const c of spawned) {
-      if (c.exitCode === null && c.signalCode === null) {
-        try {
-          c.kill("SIGKILL");
-        } catch {
-          // already gone
-        }
-      }
+      if (c.exitCode === null && c.signalCode === null) c.kill("SIGKILL");
     }
     spawned.length = 0;
-    for (const release of releases) release();
-    releases.length = 0;
     for (const d of tmpDirs) {
       try {
         fs.rmSync(d, { recursive: true, force: true });
@@ -72,7 +68,7 @@ describe("daemon dies with its spawner (integration)", () => {
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     const sockPath = path.join(stateDir, "socket");
 
-    const { child: daemonChild, killTree, release } = await spawnTestDaemon({
+    const spawnedDaemon = await spawnTestDaemon({
       ...process.env,
       CC_CANDYBAR_SOCKET: sockPath,
       XDG_STATE_HOME: stateRoot,
@@ -82,9 +78,8 @@ describe("daemon dies with its spawner (integration)", () => {
       // killing the anchor (and only the anchor) exercises the watchdog.
       [PARENT_PID_ENV]: String(anchorProc.pid),
     });
-    releases.push(release);
-    killTrees.push(killTree);
-    const daemon = track(daemonChild);
+    daemons.push(spawnedDaemon);
+    const daemon = spawnedDaemon.child;
 
     // The socket file appears inside bind(), which runs strictly AFTER the
     // watchdog is armed — so its existence guarantees the watchdog is live.
