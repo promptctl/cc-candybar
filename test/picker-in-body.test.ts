@@ -122,12 +122,15 @@ describe("{{ picker }} over a catalogue", () => {
     const config = parseAndValidate(
       "<user>",
       `{
-        variables: { r: { kind: 'state', key: 'r', default: 'claude' } },
+        variables: { r: { kind: 'state', key: 'r', default: 'sample' } },
         actions: {
-          pickR: { set: 'r', from: 'renderers' },
+          pickR: { set: 'r', from: 'edit.addable' },
           pageR: { set: 'r.page', int: true },
         },
-        segments: { s: { template: '{{ picker "pickR" "pageR" false true }}' } },
+        segments: {
+          s: { template: '{{ picker "pickR" "pageR" false true }}' },
+          sample: { group: 'location', description: 'A location sample', template: 'here' },
+        },
         root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
       }`,
       new Set(listResolvablePaletteNames()),
@@ -148,7 +151,7 @@ describe("{{ picker }} over a catalogue", () => {
       instantOf(new Date()),
       OPTS,
     ).frame;
-    expect(textOf(out)).toContain("Claude Code's status line");
+    expect(textOf(out)).toContain("A location sample");
     // The ✕'s own run.
     const close = out.rows
       .flatMap(({ runs }) => runs)
