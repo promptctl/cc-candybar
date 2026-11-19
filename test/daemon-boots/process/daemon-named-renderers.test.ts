@@ -27,7 +27,10 @@ import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { readDiagnostics } from "../../helpers/diagnostics-viewer";
-import { repoConfigs } from "../../../src/daemon/config-discovery/repo-configs";
+import {
+  repoConfigs,
+  repoConfigsPath,
+} from "../../../src/daemon/config-discovery/repo-configs";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -573,6 +576,14 @@ test("one project approval from an earlier frame covers both renderers, a config
     const edited = ["PROJECT-EDITED", "NEW-LOCAL", "NEW-PLUGIN"];
     await bothSee(edited);
     await daemon.stop();
+    const answerFile = repoConfigsPath(isolated.stateDir);
+    expect(JSON.parse(fs.readFileSync(answerFile, "utf8"))).toEqual({
+      [project]: "approved",
+    });
+    fs.writeFileSync(
+      answerFile,
+      JSON.stringify({ [project + path.sep]: "approved" }),
+    );
     daemon = await spawnDaemonWithEnv(isolated.env);
     await bothSee(edited, true);
     const after = await readDiagnostics(
