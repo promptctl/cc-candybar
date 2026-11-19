@@ -18,6 +18,8 @@ import {
   renderFailed,
   RENDER_ANSWERS,
 } from "./foundations/render-answers";
+import type { FrameSource } from "../click/link-signer.js";
+import type { RendererName } from "./foundations/renderer-name.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
@@ -88,13 +90,17 @@ const failedFeed = (refusal: Refusal): EncodedFeed => {
 
 // [LAW:single-enforcer] Encode the host's structured frame once for all of
 // its subscribers. With no separate handoff there is only one presentation.
-function encodeFeed(frame: FeedFrame, publish: PublishFrame): EncodedFeed {
+function encodeFeed(
+  frame: FeedFrame,
+  publish: PublishFrame,
+  source: FrameSource,
+): EncodedFeed {
   if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.bar)));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.bar, source)));
   const statusline =
     frame.handoff === null
       ? resp
-      : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.handoff)));
+      : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.handoff, source)));
   return { resp, statusline };
 }
 
@@ -277,13 +283,16 @@ export class FrameFeeds<Req> {
 
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
-  took(frames: readonly PushedFrame[]): void {
+  took(renderer: RendererName, frames: readonly PushedFrame[]): void {
     for (const { session, frame } of frames) {
       const watched = this.watched.get(session);
       // Unwatched since the renderer drew it.
       if (watched === undefined) continue;
       try {
-        watched.last = encodeFeed(frame, this.deps.publishFrame);
+        watched.last = encodeFeed(frame, this.deps.publishFrame, {
+          renderer,
+          session,
+        });
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.

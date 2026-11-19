@@ -6,7 +6,6 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { decodeAnsi, Style } from "@promptctl/rich-js";
 
 import { textOf } from "../../../src/render/frame";
 import { effectsOf, linksOf } from "../../../src/click/read";
@@ -16,25 +15,24 @@ import {
   VERB_REPO_CONFIG,
   VERB_RUN,
 } from "../../../src/click/wire";
-import {
-  openFrameStream,
-  type StreamEnd,
-} from "../../../src/daemon/client-frames";
-import type { Response } from "../../../src/daemon/foundations/protocol";
 import { RENDERER_WIRE_VERSION } from "../../../src/renderer-interface/wire";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
+import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import { DISCLOSURE_GLYPH_CLOSE } from "../../../src/config/disclosure";
 import {
   click,
   drawnLink,
   findUrl,
   hookData,
+  observePane,
   render,
   renderBody,
   renderRequest,
   renderUntil,
   refusedClick,
   runRealClient,
+  urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
 import {
   spawnIsolatedDaemon,
@@ -118,43 +116,6 @@ function rendererStarts(handle: IsolatedDaemonHandle): number[] {
   return [...log.matchAll(/renderer main\[\d+\] started pid=(\d+)/g)].map((m) =>
     Number(m[1]),
   );
-}
-
-const urlsOfAnsi = (output: string): string[] =>
-  decodeAnsi(output).spans.flatMap(({ style }) =>
-    style instanceof Style && style.link !== undefined ? [style.link] : [],
-  );
-
-function observePane(sockPath: string, session: string) {
-  const frames: Response[] = [];
-  let ended: StreamEnd | null = null;
-  const stream = openFrameStream(
-    sockPath,
-    session,
-    "pane",
-    (frame) => frames.push(frame),
-    (end) => {
-      ended = end;
-    },
-  );
-  const waitFor = async (
-    matches: (text: string) => boolean,
-    wanted: string,
-  ): Promise<string> => {
-    const output = () =>
-      frames
-        .flatMap((frame) =>
-          frame.ok && "output" in frame ? [frame.output] : [],
-        )
-        .find((ansi) => matches(decodeAnsi(ansi).plain));
-    const seen = () =>
-      `${wanted} (last pane message: ${JSON.stringify(ended ?? frames.at(-1))})`;
-    await until(() => output() !== undefined || ended !== null, seen);
-    const match = output();
-    if (match === undefined) throw new Error(seen());
-    return match;
-  };
-  return { waitFor, close: stream.close };
 }
 
 describe("the daemon's renderer process", () => {
@@ -247,7 +208,10 @@ describe("the daemon's renderer process", () => {
     if (requestLink === undefined)
       throw new Error("request has no disclosure close");
     expect(textOf(request)).toContain("DISCLOSURE-BODY");
-    expect(requestLink).toBe(drawnLink(handle.sockPath, requestLink));
+    expect(requestLink).toBe(drawnLink(handle.sockPath, requestLink, {
+      renderer: MAIN_RENDERER,
+      session: sessionIdOf(session),
+    }));
     const authoredLink = linksOf(request).find(
       ({ text }) => text === "authored",
     )?.url;

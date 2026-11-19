@@ -247,9 +247,15 @@ test("a click in either session uses its environment for desktop tools and both 
       stats: { requests: { environmentMisses: 3 } },
     });
     await click(daemon, linkTo(first, "DESKTOP"));
-    expect(
-      launches.map((launch) => [launch.category, launch.environment]),
-    ).toEqual([["click.pbcopy", undefined]]);
+    expect(launches).toHaveLength(1);
+    expect(launches[0]).toMatchObject({
+      category: "click.pbcopy",
+      cwd: path.join(project, "click-a"),
+      environment: {
+        SESSION_MARKER: "changed",
+        CLAUDE_CODE_SESSION_ID: "click-a",
+      },
+    });
   } finally {
     await daemon.stop();
     removeTmpDirs();

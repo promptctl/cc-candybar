@@ -272,7 +272,11 @@ export async function answerStatusline(
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {
-    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
+    // [LAW:one-source-of-truth] The mailbox that presented this frame is
+    // the authority on its publisher, independent of later session moves.
+    resp = RENDER_ANSWERS[req.encoding](
+      publish(presented.frame, { renderer: host.name, session }),
+    );
   } catch (e) {
     const failure = failureOf(e);
     done(presented, `encoding its frame threw: ${failure.message}`);

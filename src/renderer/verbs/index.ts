@@ -1412,7 +1412,7 @@ export function runClick(click: AdmittedClick, ctx: VerbContext): void {
     foldEffects(
       click.steps,
       ctx.log,
-      (step) => globalAct(step, ctx, null),
+      (step) => globalAct(step, ctx, click.session ?? null),
       () => {},
     );
     return;

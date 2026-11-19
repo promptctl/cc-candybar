@@ -9,9 +9,12 @@ import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
 
-import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
+import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../../../src/time";
+import { exits } from "../../../src/proc/spawner-fake";
+import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
+import { TEST_ENV } from "../../helpers/session-environment";
 import { logLines } from "../../../src/daemon/log";
 import { logPath } from "../../../src/daemon/paths";
 import {
@@ -28,6 +31,7 @@ import {
 import { textOf, type Frame } from "../../../src/render/frame";
 import {
   click,
+  findUrl,
   frameRequest,
   render,
   renderBody,
@@ -182,6 +186,66 @@ describe("a daemon in this worker", () => {
     );
     expect(textOf(out)).toContain("[wide]");
     expect(asked).toBeGreaterThan(1);
+  });
+
+  test("a named copy uses its drawing session and an earlier desktop link keeps fallback", async () => {
+    const session = "desktop-worktree";
+    const bundle = path.join(projectDir, "worktree.mjs");
+    writeFileSync(bundle, "// in-process fixture bundle");
+    writeFileSync(userConfig, `{
+      actions: { readout: { copy: "drawn clipboard contents" } },
+      segments: { readout: { template: '{{ action "readout" "copy" }}' } },
+      root: { h: ["readout"] },
+    }`);
+    let fake: FakeLauncher | undefined;
+    daemon = startDaemon(env, {
+      host: hostOf({ ...env, CANDYBAR_DESKTOP_PROOF: "daemon" }),
+      launcher: (own) => {
+        const fixture = fakeLauncher(systemTimekeeper, own);
+        fixture.spawner.program((bin) => bin === "/usr/bin/pbcopy", exits());
+        fixture.spawner.program((bin) => bin === "/usr/bin/open", exits());
+        fake = fixture;
+        return fixture.launcher;
+      },
+    });
+    const frame = await frameRequest(daemon, {
+      ...renderBody(session, projectDir, {}, ["cc-candybar", "--config", userConfig]),
+      env: {
+        ...TEST_ENV,
+        CC_CANDYBAR_NAME: "worktree",
+        CANDYBAR_DESKTOP_PROOF: "session",
+      },
+      client: { kind: "node", bundle, source: null },
+    });
+    const copy = findUrl(linkUrls(frame), (effects) =>
+      effects.some(({ verb }) => verb === VERB_COPY),
+    );
+    if (copy === undefined) throw new Error("the named renderer drew no copy action");
+
+    const otherCwd = path.join(projectDir, "primary");
+    mkdirSync(otherCwd);
+    await frameRequest(daemon, {
+      ...renderBody("desktop-primary", otherCwd, {}, ["cc-candybar", "--config", userConfig]),
+      env: { ...TEST_ENV, CANDYBAR_DESKTOP_PROOF: "other-session" },
+    });
+    await click(daemon, copy);
+
+    const legacy = drawnLink(daemon, effectsUrl([
+      { verb: VERB_OPEN_VSCODE, args: ["legacy-target"] },
+    ]));
+    await click(daemon, legacy);
+
+    const desktop = fake?.started().filter(
+      ({ bin }) => bin === "/usr/bin/pbcopy" || bin === "/usr/bin/open",
+    );
+    expect(desktop?.map(({ bin, options }) => ({
+      bin,
+      cwd: options.cwd,
+      marker: options.env?.CANDYBAR_DESKTOP_PROOF,
+    }))).toEqual([
+      { bin: "/usr/bin/pbcopy", cwd: projectDir, marker: "session" },
+      { bin: "/usr/bin/open", cwd: undefined, marker: "daemon" },
+    ]);
   });
 
   test("a start over the same env sees what the stopped daemon left", async () => {

@@ -23,6 +23,7 @@ import type {
   PushedFrame,
   Viewers,
 } from "../../src/renderer-interface/interface";
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 
 const S = sessionIdOf("s");
@@ -242,8 +243,8 @@ describe("a subscriber", () => {
     const line = subscriber("statusline");
     r.feeds.subscribe(S, pane.sub);
     r.feeds.subscribe(S, line.sub);
-    r.feeds.took([frame(S, "r1", "s1")]);
-    r.feeds.took([frame(S, "r2", "s1")]);
+    r.feeds.took(MAIN_RENDERER, [frame(S, "r1", "s1")]);
+    r.feeds.took(MAIN_RENDERER, [frame(S, "r2", "s1")]);
     expect(pane.sent).toEqual([ansiAnswer("r1"), ansiAnswer("r2")]);
     expect(line.sent).toEqual([ansiAnswer("s1")]);
     expect(r.feeds.getStats()).toMatchObject({
@@ -260,8 +261,8 @@ describe("a subscriber", () => {
     feeds.subscribe(S, pane.sub);
     feeds.subscribe(S, statusline.sub);
     const bar = body("answer");
-    feeds.took([{ session: S, frame: { kind: "drawn", bar, handoff: null } }]);
-    feeds.took([
+    feeds.took(MAIN_RENDERER, [{ session: S, frame: { kind: "drawn", bar, handoff: null } }]);
+    feeds.took(MAIN_RENDERER, [
       {
         session: S,
         frame: {
@@ -285,7 +286,7 @@ describe("a subscriber", () => {
       session: S,
       frame: { kind: "failed", message: "draw broke" },
     };
-    feeds.took([failure, failure]);
+    feeds.took(MAIN_RENDERER, [failure, failure]);
     expect(pane.sent).toHaveLength(1);
     expect(statusline.sent).toEqual(pane.sent);
     expect(JSON.parse(pane.sent[0]!)).toMatchObject({
@@ -298,7 +299,7 @@ describe("a subscriber", () => {
   test("joining later is handed the bar as it stands, at once", () => {
     const r = rig();
     r.feeds.subscribe(S, subscriber("pane").sub);
-    r.feeds.took([frame(S, "r1", "s1")]);
+    r.feeds.took(MAIN_RENDERER, [frame(S, "r1", "s1")]);
     const late = subscriber("pane");
     r.feeds.subscribe(S, late.sub);
     expect(late.sent).toEqual([ansiAnswer("r1")]);
@@ -309,7 +310,7 @@ describe("a subscriber", () => {
     const { sub, sent } = subscriber("pane");
     const leave = r.feeds.subscribe(S, sub);
     leave();
-    r.feeds.took([frame(S)]);
+    r.feeds.took(MAIN_RENDERER, [frame(S)]);
     expect(sent).toEqual([]);
     expect(r.feeds.isWatched(S)).toBe(false);
   });
@@ -319,7 +320,7 @@ describe("a subscriber", () => {
     const leaveS = r.feeds.subscribe(S, subscriber("pane").sub);
     const leaveT = r.feeds.subscribe(T, subscriber("pane").sub);
     expect(r.watching).toEqual({ started: 1, stopped: 0 });
-    r.feeds.took([frame(S)]);
+    r.feeds.took(MAIN_RENDERER, [frame(S)]);
     leaveS();
     expect(r.watching.stopped).toBe(0);
     leaveT();
@@ -357,7 +358,7 @@ describe("a subscription's lane", () => {
     expect(pane.refusals).toHaveLength(1);
     expect(line.refusals).toHaveLength(0);
     // The other lane streams on.
-    r.feeds.took([frame(S)]);
+    r.feeds.took(MAIN_RENDERER, [frame(S)]);
     expect(pane.sent).toEqual([]);
     expect(line.sent).toEqual([ansiAnswer("s")]);
   });

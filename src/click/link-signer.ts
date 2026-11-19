@@ -12,6 +12,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Asked } from "../utils/outcome.js";
 import { isBarLink } from "./wire.js";
+import {
+  rendererNameOf,
+  type RendererName,
+} from "../daemon/foundations/renderer-name.js";
+import {
+  parseSessionId,
+  type SessionId,
+} from "../daemon/foundations/session-id.js";
 
 // HMAC-SHA256 takes a key of any length; the key file holds this many random
 // bytes.
@@ -31,6 +39,18 @@ export interface SignedFields {
 // A SHA-256 mac in lowercase hex.
 const MAC_SPELLING = /^[0-9a-f]{64}$/;
 
+// [LAW:types-are-the-program] Only the host knows which renderer published
+// a frame. Its source travels in the proof instead of a frame registry.
+export interface FrameSource {
+  readonly renderer: RendererName;
+  readonly session: SessionId;
+}
+
+export interface OpenedLink {
+  readonly href: string;
+  readonly source?: FrameSource;
+}
+
 export interface LinkSigner {
   // The mac a link carries for `fields`.
   readonly sign: (fields: SignedFields) => string;
@@ -38,11 +58,11 @@ export interface LinkSigner {
   readonly verify: (fields: SignedFields, mac: string) => boolean;
   // A bar link as a terminal sends it back: in its transit form, its mac
   // after a `#`.
-  readonly signLink: (link: string) => string;
+  readonly signLink: (link: string, source?: FrameSource) => string;
   // [LAW:parse-dont-validate] The link a signed one carries, or why it is
   // refused: no mac, a mac that does not match, or a key this signer cannot
   // have. Never throws, so a refusal is the click's to say.
-  readonly openLink: (signed: string) => Asked<string>;
+  readonly openLink: (signed: string) => Asked<OpenedLink>;
 }
 
 // A link's mac: HMAC-SHA256 truncated to 128 bits, which NIST SP 800-107
@@ -51,6 +71,7 @@ export interface LinkSigner {
 const LINK_MAC_BYTES = 16;
 const LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 const LINK_MAC_MARK = "#";
+const SOURCE_VERSION = "v1";
 
 // [LAW:one-source-of-truth] A link spelled as it travels: every character
 // outside RFC 3986's unreserved and sub-delims, `:@/?`, escaped, and `%` kept
@@ -68,8 +89,8 @@ export function transitForm(link: string): string {
     );
 }
 
-// A signed link with its mac taken off, for a reading of what was clicked: a
-// log line, a debug dump. A mac in a log is a link anyone reading it can send.
+// A signed link with its proof fragment removed, for a log or debug dump.
+// A proof in a log is a link anyone reading it can send.
 // A link of another scheme carries no mac, so its own `#fragment` stays.
 export function unprovenLink(signed: string): string {
   const mark = isBarLink(signed) ? signed.lastIndexOf(LINK_MAC_MARK) : -1;
@@ -89,12 +110,22 @@ function linkMac(key: Buffer, link: string): string {
     .replace(/=+$/, "");
 }
 
-function signLinkWith(key: Buffer, link: string): string {
+// [LAW:single-enforcer] A legacy proof covers the normalized destination.
+// The new proof covers that destination and the issuing frame's identity.
+// The raw fragment delimiter in the proof input is outside the legacy
+// signing domain: transitForm escapes any fragment an authored href names.
+function signLinkWith(key: Buffer, link: string, source?: FrameSource): string {
   const sent = transitForm(link);
-  return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  if (source === undefined)
+    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  const session = encodeURIComponent(JSON.stringify(source.session));
+  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
+  return `${issued}/${linkMac(key, issued)}`;
 }
 
-function openLinkWith(key: Buffer, signed: string): Asked<string> {
+// [LAW:parse-dont-validate] Only an authenticated address can yield a
+// typed source. Names use the same parsers as renderer and session ingress.
+function openLinkWith(key: Buffer, signed: string): Asked<OpenedLink> {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
   if (mark === -1)
     return {
@@ -102,20 +133,48 @@ function openLinkWith(key: Buffer, signed: string): Asked<string> {
       reason:
         "the link carries no signature: the bar did not draw it, or drew it before its links were signed",
     };
-  const link = signed.slice(0, mark);
-  const mac = signed.slice(mark + LINK_MAC_MARK.length);
+  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
+  const mac = signed.slice(proofAt + 1);
   // Compared as spelled, in constant time, once its spelling says it has the
   // length of one.
   const proven =
     LINK_MAC_SPELLING.test(mac) &&
-    timingSafeEqual(Buffer.from(mac), Buffer.from(linkMac(key, link)));
-  return proven
-    ? { kind: "ok", value: link }
-    : {
-        kind: "failed",
-        reason:
-          "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it",
-      };
+    timingSafeEqual(
+      Buffer.from(mac),
+      Buffer.from(linkMac(key, signed.slice(0, proofAt))),
+    );
+  if (!proven)
+    return {
+      kind: "failed",
+      reason:
+        "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it",
+    };
+  const href = signed.slice(0, mark);
+  if (proofAt === mark) return { kind: "ok", value: { href } };
+  const fields = signed.slice(mark + 1, proofAt).split("/");
+  const [version, name, encoded] = fields;
+  if (
+    fields.length !== 3 ||
+    version !== SOURCE_VERSION ||
+    name === undefined ||
+    encoded === undefined
+  )
+    return { kind: "failed", reason: "the link has an unknown frame source" };
+  try {
+    const renderer = rendererNameOf(name);
+    const session = parseSessionId(JSON.parse(decodeURIComponent(encoded)));
+    return session.ok
+      ? {
+          kind: "ok",
+          value: { href, source: { renderer, session: session.id } },
+        }
+      : { kind: "failed", reason: `the link's session ${session.problem}` };
+  } catch (error) {
+    return {
+      kind: "failed",
+      reason: `the link's frame source is malformed: ${String(error)}`,
+    };
+  }
 }
 
 // [LAW:types-are-the-program] The fields are joined as one JSON array, so no
@@ -151,12 +210,16 @@ export function linkSigner(key: Buffer): LinkSigner {
       if (!MAC_SPELLING.test(mac)) return false;
       return timingSafeEqual(Buffer.from(mac, "hex"), digest(key, fields));
     },
-    signLink: (link) => {
-      let done = signed.get(link);
+    signLink: (link, source) => {
+      const cacheKey =
+        source === undefined
+          ? `legacy:${link}`
+          : `frame:${source.renderer}\0${source.session}\0${link}`;
+      let done = signed.get(cacheKey);
       if (done === undefined) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link);
-        signed.set(link, done);
+        done = signLinkWith(key, link, source);
+        signed.set(cacheKey, done);
       }
       return done;
     },
@@ -187,7 +250,7 @@ export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
   return {
     sign: (fields) => held().sign(fields),
     verify: (fields, mac) => held().verify(fields, mac),
-    signLink: (link) => held().signLink(link),
+    signLink: (link, source) => held().signLink(link, source),
     openLink: (signed) => {
       const asked = loaded();
       return asked.kind === "ok" ? asked.value.openLink(signed) : asked;

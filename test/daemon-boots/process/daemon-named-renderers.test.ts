@@ -9,13 +9,25 @@ import { textOf } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { frameRequest, hookData, renderBody } from "../../helpers/daemon-e2e";
+import {
+  click,
+  findUrl,
+  frameRequest,
+  hookData,
+  observePane,
+  renderBody,
+  renderRequest,
+  urlsOfAnsi,
+} from "../../helpers/daemon-e2e";
+import { VERB_RUN, VERB_SET_STATE } from "../../../src/click/wire";
+import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
 import { TEST_ENV } from "../../helpers/session-environment";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
+  spawnIsolatedDaemon,
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
 
@@ -456,5 +468,128 @@ test("two named renderer processes draw separately and share config, transcript 
     await daemon?.stop();
     isolated.removeTmpDirs();
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the named renderer receives its pane control and earlier statusline run", async () => {
+  const daemon = await spawnIsolatedDaemon("ccb-named-clicks");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-click-source-"));
+  try {
+    const config = path.join(dir, "config.json5");
+    const alternate = path.join(dir, "worktree.mjs");
+    const record = path.join(dir, "run.json");
+    worktreeBundle(alternate);
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        globals: { experimentalPane: true },
+        variables: {
+          shown: { kind: "input", path: "model.id", type: "string" },
+        },
+        actions: {
+          remember: {
+            run: [
+              process.execPath,
+              "-e",
+              'require("node:fs").writeFileSync(process.argv[1], JSON.stringify([process.argv[2], process.env.DRAWN]))',
+              record,
+              "{{ .shown }}",
+            ],
+            env: { DRAWN: "{{ .shown }}" },
+          },
+        },
+        segments: { body: { template: '{{ action "remember" .shown }}' } },
+        root: {
+          h: [
+            {
+              kind: "group",
+              name: "details",
+              label: "details",
+              open: true,
+              children: ["body"],
+            },
+          ],
+        },
+      }),
+    );
+
+    const args = ["cc-candybar", "--config", config];
+    const primarySession = "primary-click";
+    const worktreeSession = "named-click";
+    const draw = (session: string, value: string, named: boolean) =>
+      renderRequest(daemon.sockPath, {
+        ...renderBody(session, dir, {}, args),
+        hookData: {
+          ...hookData(session, dir),
+          model: { id: value, display_name: value },
+        },
+        ...(named && {
+          env: { ...TEST_ENV, CC_CANDYBAR_NAME: "worktree" },
+          client: { kind: "node", bundle: alternate, source: null },
+        }),
+      });
+    const runLink = (output: string) =>
+      findUrl(urlsOfAnsi(output), (effects) =>
+        effects.some(({ verb }) => verb === VERB_RUN),
+      );
+    expect(
+      runLink(await draw(primarySession, "primary value", false)),
+    ).toBeDefined();
+    const oldLink = runLink(await draw(worktreeSession, "first value", true));
+    if (oldLink === undefined)
+      throw new Error("the named statusline drew no run");
+
+    const pane = observePane(daemon.sockPath, worktreeSession);
+    try {
+      const before = await pane.waitFor(
+        (text) => text.includes("first value"),
+        "the named pane's first frame",
+      );
+      expect(runLink(before)).toBe(oldLink);
+      const close = findUrl(urlsOfAnsi(before), (effects) =>
+        effects.some(
+          ({ verb, args }) =>
+            verb === VERB_SET_STATE &&
+            args[0] === worktreeSession &&
+            args[2] === DISCLOSURE_CLOSED,
+        ),
+      );
+      if (close === undefined) throw new Error("the named pane drew no close");
+
+      await draw(worktreeSession, "second value", true);
+      await pane.waitFor(
+        (text) => text.includes("second value"),
+        "the named pane's new input",
+      );
+      await click(daemon.sockPath, close);
+      await pane.waitFor(
+        (text) => !text.includes("second value") && text.includes("details"),
+        "the named pane after closing",
+      );
+      expect(
+        runLink(await draw(primarySession, "primary value", false)),
+      ).toBeDefined();
+    } finally {
+      pane.close();
+    }
+
+    // A new frame can move the session to another renderer. The original
+    // address still goes to its issuing renderer and keeps its captured data.
+    await draw(worktreeSession, "moved value", false);
+    await click(daemon.sockPath, oldLink);
+    const expected = JSON.stringify(["first value", "first value"]);
+    await until(
+      () =>
+        fs.existsSync(record) && fs.readFileSync(record, "utf8") === expected,
+      "the earlier worktree run's captured data",
+    );
+    const log = fs.readFileSync(
+      path.join(daemon.stateDir, "daemon.log"),
+      "utf8",
+    );
+    expect(log).toMatch(/click .*sid=named-click.*renderer=worktree/);
+  } finally {
+    await daemon.cleanup();
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
