@@ -578,37 +578,53 @@ export function encodeFrame(value: unknown): Buffer {
 
 // A frame of JSON already serialized: a pushed frame is serialized once for
 // every subscriber.
+// [LAW:single-enforcer] The frame cap is the encoder's as it is the reader's:
+// a body every reader would refuse is never framed, whoever sends it, as the
+// native client's write_frame refuses one (rust-client/src/main.rs).
 export function encodeJsonFrame(json: string): Buffer {
   const body = Buffer.from(json, "utf8");
+  if (body.length > MAX_FRAME_BYTES)
+    throw new ProtocolError(
+      `a frame of ${body.length} bytes is past the ${MAX_FRAME_BYTES}-byte cap`,
+    );
   const header = Buffer.alloc(FRAME_HEADER_BYTES);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);
 }
 
-// Streaming frame reader. Calls `onFrame` for each complete frame. Caller
-// owns lifecycle — call `feed` with each chunk; reader keeps a buffer.
+// [LAW:single-enforcer] The one frame reader, and where a stream of frames
+// ends: a frame whose handler asks for no more, the handler's own throw, or
+// the first malformed frame, after which the stream is out of step for good.
+// Whichever it is, nothing more is read or buffered, so a sender writing on
+// past an over-cap header allocates nothing and is refused once. A malformed
+// frame reaches `onError` as a ProtocolError, and a handler's throw as itself,
+// so a consumer's failure is never read as its peer's malformed frame.
 export function makeFrameReader(
-  onFrame: (frame: unknown) => void,
+  onFrame: (frame: unknown) => "more" | "done",
   onError: (err: Error) => void,
-) {
-  let buf = Buffer.alloc(0);
+): (chunk: Buffer) => void {
+  let buf: Buffer | null = Buffer.alloc(0);
+  const fail = (err: Error): void => {
+    buf = null;
+    onError(err);
+  };
   return function feed(chunk: Buffer): void {
+    if (buf === null) return;
     buf = Buffer.concat([buf, chunk]);
-    while (buf.length >= FRAME_HEADER_BYTES) {
+    while (buf !== null && buf.length >= FRAME_HEADER_BYTES) {
       const len = buf.readUInt32BE(0);
       // Hard cap to defend against a runaway sender allocating gigabytes.
       // [LAW:types-are-the-program] ProtocolError carries the discriminator
       // structurally — interpretException routes on `instanceof`, not on a
       // brittle string match against the message body.
-      if (len > MAX_FRAME_BYTES) {
-        onError(new ProtocolError(`frame too large: ${len}`));
-        return;
-      }
+      if (len > MAX_FRAME_BYTES)
+        return fail(new ProtocolError(`frame too large: ${len}`));
       if (buf.length < FRAME_HEADER_BYTES + len) return;
       const body = buf.subarray(FRAME_HEADER_BYTES, FRAME_HEADER_BYTES + len);
       buf = buf.subarray(FRAME_HEADER_BYTES + len);
+      let frame: unknown;
       try {
-        onFrame(JSON.parse(body.toString("utf8")));
+        frame = JSON.parse(body.toString("utf8"));
       } catch (e) {
         // JSON.parse throws SyntaxError; wrap as ProtocolError so the
         // recovery class is structurally typed (not message-matched).
@@ -619,11 +635,33 @@ export function makeFrameReader(
         if (e instanceof Error) {
           wrapped.cause = e;
         }
-        onError(wrapped);
-        return;
+        return fail(wrapped);
       }
+      let next: "more" | "done";
+      try {
+        next = onFrame(frame);
+      } catch (e) {
+        return fail(e instanceof Error ? e : new Error(String(e)));
+      }
+      if (next === "done") buf = null;
     }
   };
+}
+
+// [LAW:parse-dont-validate] A frame is a response only as an object that says
+// `ok`. Anything else (null, an array, an empty object) is a malformed frame:
+// the permanent class the native client gives it too, never a kick.
+export function parseResponse(frame: unknown): Response {
+  if (
+    typeof frame === "object" &&
+    frame !== null &&
+    !Array.isArray(frame) &&
+    typeof (frame as { ok?: unknown }).ok === "boolean"
+  )
+    return frame as Response;
+  throw new ProtocolError(
+    `a frame that is not a response: ${JSON.stringify(frame)}`,
+  );
 }
 
 // Send one frame and await one response, giving up at `deadline` (epoch
@@ -637,6 +675,9 @@ export function sendOne(
   clock: Pick<Timekeeper, "now" | "after">,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
+    // Encoded before anything is armed: a request past the cap rejects with
+    // no timer or listener left behind.
+    const out = encodeFrame(req);
     let settled = false;
     const finish = (fn: () => void) => {
       if (settled) return;
@@ -647,9 +688,7 @@ export function sendOne(
       sock.off("data", reader);
       sock.off("error", onError);
       sock.off("close", onClose);
-      try {
-        fn();
-      } catch {}
+      fn();
     };
     const clearTimer = clock.after(deadline - clock.now(), () => {
       finish(() => {
@@ -659,7 +698,13 @@ export function sendOne(
     });
 
     const reader = makeFrameReader(
-      (frame) => finish(() => resolve(frame as Response)),
+      (frame) => {
+        // Parsed before it settles: a frame that is no response throws into
+        // the reader's error arm below, and rejects as malformed.
+        const resp = parseResponse(frame);
+        finish(() => resolve(resp));
+        return "done";
+      },
       (err) => finish(() => reject(err)),
     );
     const onError = (err: Error): void => finish(() => reject(err));
@@ -669,7 +714,7 @@ export function sendOne(
     sock.on("error", onError);
     sock.on("close", onClose);
 
-    sock.write(encodeFrame(req));
+    sock.write(out);
   });
 }
 

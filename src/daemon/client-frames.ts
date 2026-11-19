@@ -8,6 +8,7 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
+  parseResponse,
   type Response,
   type SubscribeRequest,
 } from "./foundations/protocol";
@@ -69,9 +70,17 @@ export function openFrameStream(
     "data",
     makeFrameReader(
       (frame) => {
-        const resp = frame as Response;
+        // [LAW:parse-dont-validate] A frame that is no response throws its
+        // ProtocolError into the failure below, as a malformed frame does.
+        const resp = parseResponse(frame);
         if (isRefusal(resp)) finish({ kind: "refused", resp });
+        // [LAW:no-silent-failure] A consumer that cannot take a frame ends
+        // the stream it reads: the reader hands its throw to the failure
+        // below as its own, never as a malformed frame's.
         else onFrame(resp);
+        // [LAW:single-enforcer] An ended stream reads no more, so nothing
+        // reaches `onFrame` after `onEnd`.
+        return end === null ? "more" : "done";
       },
       (error) => finish({ kind: "failed", error }),
     ),

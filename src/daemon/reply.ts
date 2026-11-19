@@ -4,7 +4,11 @@ import process from "node:process";
 import { inspect } from "node:util";
 import type { DaemonParts } from "./daemon-parts.js";
 import { cacheTallyFacts } from "./readings.js";
-import { failedWith, renderFailure } from "./foundations/render-answers.js";
+import {
+  failedWith,
+  framedResponse,
+  renderFailure,
+} from "./foundations/render-answers.js";
 import {
   answerStatusline,
   NOTHING_TO_SETTLE,
@@ -74,7 +78,13 @@ interface ClickInFlight {
 // [LAW:effects-at-boundaries] handleRequest computes the description; the
 // socket boundary performs it.
 export interface Reply {
+  // [LAW:single-enforcer] The response as its client is sent it, framed once
+  // where the reply is made (`replyOf`): one too big to send is RENDER_FAILED
+  // here, with why it was `unsent`, so whoever records the request records
+  // what its client got.
   readonly resp: Response;
+  readonly frame: Buffer;
+  readonly unsent: Error | null;
   readonly exitAfterFlush: number | null;
   // [LAW:effects-at-boundaries] Told by the reply's sender, once, whether the
   // client took the response — only the connection knows: a render's answer
@@ -100,11 +110,36 @@ export type HandledRequest =
       land: () => Promise<void>;
     };
 
-const stay = (resp: Response): Reply => ({
-  resp,
-  exitAfterFlush: null,
-  settled: NOTHING_TO_SETTLE,
-});
+// The one way a reply is made.
+export function replyOf(
+  resp: Response,
+  exitAfterFlush: number | null = null,
+  settled: (delivered: boolean) => void = NOTHING_TO_SETTLE,
+): Reply {
+  const { sent, frame, unsent } = framedResponse(resp);
+  return { resp: sent, frame, unsent, exitAfterFlush, settled };
+}
+
+const stay = (resp: Response): Reply => replyOf(resp);
+
+// [LAW:single-enforcer] A render's reply and the outcome its event and the
+// stats record, from the one framing, so the record is the answer its client
+// is sent: a render too big to send is a failure in the daemon's own record
+// as it is to its client.
+export function renderRecord(rendered: {
+  readonly outcome: RequestOutcome;
+  readonly resp: Response;
+  readonly settled: (delivered: boolean) => void;
+}): { readonly reply: Reply; readonly outcome: RequestOutcome } {
+  const reply = replyOf(rendered.resp, null, rendered.settled);
+  return {
+    reply,
+    outcome:
+      reply.unsent === null
+        ? rendered.outcome
+        : renderFailure(failureOf(reply.unsent)),
+  };
+}
 const replied = (reply: Reply): HandledRequest => ({ kind: "reply", ...reply });
 
 // [LAW:types-are-the-program] Every request kind answered with a reply: all
@@ -195,20 +230,20 @@ export async function handleRequest(
         `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
       );
     }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION,
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      settled: NOTHING_TO_SETTLE,
-    };
+    return replied(
+      replyOf(
+        {
+          ok: false,
+          error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+          code: "VERSION_MISMATCH",
+          daemonV: PROTOCOL_VERSION,
+        },
+        // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+        // Exit is sequenced on the response flush, so the client always sees
+        // the VERSION_MISMATCH diagnostic — never a dead socket.
+        req.v > PROTOCOL_VERSION ? 0 : null,
+      ),
+    );
   }
 
   if (req.kind === "subscribe") return subscription(req);
@@ -247,11 +282,7 @@ export async function replyTo(
     sourceDigest,
   } = parts;
   if (req.kind === "shutdown") {
-    return {
-      resp: { ok: true, output: "" },
-      exitAfterFlush: 0,
-      settled: NOTHING_TO_SETTLE,
-    };
+    return replyOf({ ok: true, output: "" }, 0);
   }
 
   if (req.kind === "pane-session") {
@@ -381,7 +412,8 @@ export async function replyTo(
       resp: Response;
       settled: (delivered: boolean) => void;
     }): Reply => {
-      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      const { reply, outcome } = renderRecord(rendered);
+      if (outcome.kind !== "ok") stats.requestsErrored++;
       // Whether the client was already told TIMEOUT while this render ran on,
       // and how long the request was queued, from the connection's accept,
       // before it began: the daemon's own delay and the client's sending of its
@@ -395,18 +427,9 @@ export async function replyTo(
       });
       const took = elapsedMs(clock, t0);
       stats.recordTook(took);
-      const { level, line } = requestEvent(
-        "render",
-        facts,
-        rendered.outcome,
-        took,
-      );
+      const { level, line } = requestEvent("render", facts, outcome, took);
       parts.log(level, line);
-      return {
-        resp: rendered.resp,
-        exitAfterFlush: null,
-        settled: rendered.settled,
-      };
+      return reply;
     };
     if (!checked.ok) return recorded(refusedRender(checked.problems));
     const answered = await answerStatusline(
@@ -450,8 +473,9 @@ export async function replyTo(
     // [LAW:single-enforcer] The answer's present is owed its one effect-done
     // on every exit: a reply that never reaches the connection settles here.
     try {
-      sighted(checked.req, answered.seen);
-      return recorded(answered);
+      const reply = recorded(answered);
+      sighted(checked.req, reply.unsent === null ? answered.seen : "failed");
+      return reply;
     } catch (e) {
       answered.settled(false);
       throw e;

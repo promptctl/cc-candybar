@@ -240,29 +240,34 @@ export function interpretResponse<T>(
 //   - Connect/IO failures — transient. A respawn has a real chance of
 //     recovering (daemon dead, socket vanished).
 //   - Timeouts — busy: a live listener that ran out of time.
-//   - Protocol violations from sendOne's reject path — permanent. The
-//     daemon is alive but produced garbage (oversized frame, JSON parse
-//     failure). Respawning would hit the same response identically; this
-//     is the same recovery class as a wire-level VERSION_MISMATCH, so we
-//     route through PermanentCause::MalformedResponse and the user sees
-//     a glyph naming the failure rather than a blank line plus a kick.
+//   - Protocol violations from sendOne's reject path — permanent. A frame
+//     that will not cross the wire: the daemon's answer oversized or not
+//     JSON, or our own request past the frame cap, which the encoder
+//     refuses before it is sent and whose message says so. Retrying would
+//     hit the same frame identically; this is the same recovery class as a
+//     wire-level VERSION_MISMATCH, so we route through
+//     PermanentCause::MalformedResponse and the user sees a glyph naming the
+//     failure rather than a blank line plus a kick.
 //
 // [LAW:types-are-the-program] The protocol-violation discriminator is
 // carried structurally by `ProtocolError` (exported from protocol.ts) —
 // not by substring-matching the error message, which would silently drift
-// if Node's JSON.parse wording changes across versions/locales. The
-// `e instanceof SyntaxError` fallback covers a residual case where a
-// JSON.parse happened to escape `makeFrameReader`'s wrapping (defense in
-// depth, not the primary path).
+// if Node's JSON.parse wording changes across versions/locales. The frame
+// reader wraps every JSON.parse failure in one, so no SyntaxError reaches
+// here.
 //
 // [LAW:one-type-per-behavior] Mirrors rust-client's classify_io_error —
 // InvalidData/InvalidInput map to Permanent(MalformedResponse), everything
 // else stays transient. The two runtimes agree on the recovery class for
-// every observable wire failure.
+// every observable wire failure, an oversized request included (its
+// write_frame refuses one as InvalidData).
 export function interpretException(e: unknown): FailureOutcome {
-  if (e instanceof ProtocolError || e instanceof SyntaxError) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { kind: "permanent", cause: "malformed_response", message };
+  if (e instanceof ProtocolError) {
+    return {
+      kind: "permanent",
+      cause: "malformed_response",
+      message: e.message,
+    };
   }
   const message = e instanceof Error ? e.message : String(e);
   // A dead daemon never times out: a missing socket file is ENOENT and an

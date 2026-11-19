@@ -12,7 +12,8 @@
 
 import type { BandOff } from "../../mod/types";
 import { bandFrame } from "../band/frames";
-import type { Frame } from "../render/frame";
+import { renderFailedFrame, type Frame } from "../render/frame";
+import { framed, type Framed } from "./foundations/render-answers";
 import { tmuxStatusFrame } from "../tmux-status/frames";
 import type { Lane } from "../config/lanes";
 import type { Response } from "./foundations/protocol";
@@ -28,6 +29,21 @@ export const LANE_FRAMES: Readonly<Record<Lane, LaneFrame>> = {
   tmuxStatus: (bar) =>
     JSON.stringify({ ok: true, tmuxStatus: tmuxStatusFrame(bar) }),
 };
+
+// A pushed frame as its lane's subscriber receives it, framed. One its lane
+// cannot send is the render failure naming why, as the renderer draws a
+// render that failed (src/renderer/draw-bar.ts): the failure's bar, and its
+// RENDER_FAILED answer, so each lane says it in its own shape.
+export const laneFramed = (
+  lane: Lane,
+  bar: Frame,
+  json: string,
+): Framed<readonly [Frame, string]> =>
+  framed(
+    [bar, json] as const,
+    ([drawn, answer]) => LANE_FRAMES[lane](drawn, answer),
+    (failed) => [renderFailedFrame(failed.error), JSON.stringify(failed)],
+  );
 
 // [LAW:types-are-the-program] The band's lane-off line is the daemon's own
 // SWITCHED_OFF refusal, relayed as it was sent: a refusal arm `BandOff` does

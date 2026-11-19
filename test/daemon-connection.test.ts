@@ -16,16 +16,26 @@ import { NOTHING_TO_SETTLE } from "../src/daemon/statusline-answer";
 import type { Subscriber } from "../src/daemon/frame-feed";
 import {
   FRAME_HEADER_BYTES,
+  MAX_FRAME_BYTES,
   PROTOCOL_VERSION,
   encodeFrame,
+  encodeJsonFrame,
   sendOne,
   type Request,
   type Response,
 } from "../src/daemon/foundations/protocol";
-import type { HandledRequest, Reply } from "../src/daemon/reply";
+import {
+  replyOf,
+  type HandledRequest,
+  type Reply,
+} from "../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../src/daemon/foundations/request-deadline";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { barOf } from "./helpers/drawn-frame";
+import { LANE_FRAMES } from "../src/daemon/lane-frames";
+import { LANE_NAMES } from "../src/config/lanes";
+import { renderFailed } from "../src/daemon/foundations/render-answers";
+import { renderFailedFrame, type Frame } from "../src/render/frame";
 import { RuntimeStats } from "../src/daemon/stats";
 import { memoryConnection } from "./helpers/memory-connection";
 import { openedOn, type Opened } from "./helpers/opened-connection";
@@ -47,12 +57,15 @@ const SUBSCRIBED: HandledRequest = {
 };
 const ANSWER: Response = { ok: true, output: "the answer" };
 
-const replyWith = (over: Partial<Reply> = {}): HandledRequest => ({
+const replyWith = (
+  over: Partial<Pick<Reply, "resp" | "exitAfterFlush" | "settled">> = {},
+): HandledRequest => ({
   kind: "reply",
-  resp: ANSWER,
-  exitAfterFlush: null,
-  settled: NOTHING_TO_SETTLE,
-  ...over,
+  ...replyOf(
+    over.resp ?? ANSWER,
+    over.exitAfterFlush ?? null,
+    over.settled ?? NOTHING_TO_SETTLE,
+  ),
 });
 
 // A url frame's answer: its verdict, and when its click lands.
@@ -258,6 +271,86 @@ describe("a connection over a stream", () => {
     expect(daemon.stats.inFlight).toBe(0);
   });
 
+  // A busy daemon reads the frame only after the backstop has answered: the
+  // click still runs, refused at its turn, and TIMEOUT stays the socket's one
+  // answer, so a writer that reads a verdict is written nothing more.
+  test("a url frame read after the backstop answered is told nothing more, with no client gone", async () => {
+    let land = () => {};
+    const landed = new Promise<void>((done) => (land = done));
+    const request = held();
+    const log = jest.fn();
+    const daemon = standIn({ handle: request.handle, log });
+    const { client, received } = open(daemon);
+    // Open on its side after the TIMEOUT, as a writer still waiting for its
+    // verdict is, so a second write would be a write after end.
+    client.allowHalfOpen = true;
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
+    jest.advanceTimersByTime(REQUEST_TIMEOUT_MS);
+    await settled();
+    request.answer(urlAnswer(landed, true));
+    await settled();
+    land();
+    await settled();
+    client.destroy();
+    await settled();
+    expect({
+      received,
+      timedOut: request.timedOut(),
+      clientLeft: request.clientLeft(),
+      warnings: log.mock.calls.filter(([level]) => level !== "info"),
+      inFlight: daemon.stats.inFlight,
+      timeouts: daemon.stats.requestsTimedOut,
+    }).toEqual({
+      received: [expect.objectContaining({ code: "TIMEOUT" })],
+      timedOut: true,
+      clientLeft: false,
+      warnings: [],
+      inFlight: 0,
+      timeouts: 1,
+    });
+  });
+
+  // [LAW:single-enforcer] A verdict is the socket's one answer: a click that
+  // throws as it starts to land writes nothing further to the ended socket.
+  test("a url frame whose click throws after its verdict was written is told nothing more", async () => {
+    const log = jest.fn();
+    const daemon = standIn({
+      handle: async () => ({
+        ...urlAnswer(Promise.resolve(), true),
+        land: () => {
+          throw new Error("the click broke as it began");
+        },
+      }),
+      log,
+    });
+    const { client, received } = open(daemon);
+    client.allowHalfOpen = true;
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
+    await settled();
+    client.destroy();
+    await settled();
+    expect({
+      received,
+      warnings: log.mock.calls.filter(([level]) => level === "warn"),
+    }).toEqual({
+      received: [expect.objectContaining({ code: "BAD_REQUEST" })],
+      warnings: [],
+    });
+  });
+
+  // [LAW:one-source-of-truth] A waiting client has left once its hang-up is
+  // heard, and only then.
+  test("a request's client is said to have left once it hangs up", async () => {
+    const request = held();
+    const { client, send } = open(standIn({ handle: request.handle }));
+    send(STATS);
+    await settled();
+    expect(request.clientLeft()).toBe(false);
+    client.destroy();
+    await settled();
+    expect(request.clientLeft()).toBe(true);
+  });
+
   // The app is told at once whether its link opened, and the click it carries
   // runs on under the deadline: a slow click that lands is never told failed.
   test("a url frame whose writer reads the verdict is told it at once, and stays in flight until its click lands", async () => {
@@ -377,28 +470,152 @@ describe("a connection over a stream", () => {
     expect(received).toEqual([expect.objectContaining({ code: "TIMEOUT" })]);
   });
 
-  test("a late reply and its exit leave a subscription streaming", async () => {
+  // [LAW:verifiable-goals] A connection reads one frame: whatever follows it,
+  // in the same chunk or after the answer, is never handled.
+  test("two frames in one chunk are handled once, and answered once", async () => {
+    const handle = jest.fn(async () => replyWith());
+    const { client, received, ended } = open(standIn({ handle }));
+    client.write(Buffer.concat([encodeFrame(STATS), encodeFrame(STATS)]));
+    await settled();
+    expect({ handled: handle.mock.calls.length, received, ended: ended() }).toEqual({
+      handled: 1,
+      received: [ANSWER],
+      ended: true,
+    });
+  });
+
+  test("a frame written while its answer is pending is not handled", async () => {
     const request = held();
-    const { client, send, received, ended } = open(
-      standIn({
-        handle: async (inbound, timedOut, accepted) =>
-          inbound.kind === "request" && inbound.req.kind === "subscribe"
-            ? SUBSCRIBED
-            : request.handle(inbound, timedOut, accepted, () => false),
-      }),
-    );
+    const handle = jest.fn(request.handle);
+    const { send, received } = open(standIn({ handle }));
     send(STATS);
+    await settled();
     send(SUBSCRIBE);
     await settled();
-    expect(subscriptions).toHaveLength(1);
-
-    request.answer(replyWith({ exitAfterFlush: 0 }));
+    request.answer(replyWith());
     await settled();
+    expect({ handled: handle.mock.calls.length, received }).toEqual({
+      handled: 1,
+      received: [ANSWER],
+    });
+    expect(subscriptions).toHaveLength(0);
+  });
 
-    expect(exit).not.toHaveBeenCalled();
-    expect(received).toEqual([]);
-    expect(ended()).toBe(false);
+  test("a frame that does not parse, then a valid one, is answered BAD_REQUEST once and the valid one never handled", async () => {
+    const handle = jest.fn(async () => replyWith());
+    const { client, received } = open(standIn({ handle }));
+    // Open on its side after the answer, so the valid frame reaches the
+    // daemon's reader.
+    client.allowHalfOpen = true;
+    const header = Buffer.alloc(FRAME_HEADER_BYTES);
+    header.writeUInt32BE(3);
+    client.write(Buffer.concat([header, Buffer.from("not")]));
+    await settled();
+    client.write(encodeFrame(STATS));
+    await settled();
+    expect({ handled: handle.mock.calls.length, received }).toEqual({
+      handled: 0,
+      received: [expect.objectContaining({ ok: false, code: "BAD_REQUEST" })],
+    });
+  });
+
+  test("a frame stated past the cap, written on, is one parse failure and one BAD_REQUEST", async () => {
+    const log = jest.fn();
+    const { client, received } = open(standIn({ log }));
+    const header = Buffer.alloc(FRAME_HEADER_BYTES);
+    header.writeUInt32BE(0xffffffff);
+    client.write(header);
+    for (let i = 0; i < 10; i++) client.write(Buffer.alloc(1024, 1));
+    await settled();
+    expect({
+      received,
+      failures: log.mock.calls.filter(([, line]) =>
+        String(line).startsWith("frame parse failed"),
+      ).length,
+    }).toEqual({
+      received: [expect.objectContaining({ ok: false, code: "BAD_REQUEST" })],
+      failures: 1,
+    });
+  });
+
+  // [LAW:no-silent-failure] An answer no reader would take is answered
+  // RENDER_FAILED, which ends the stream, and the exit it carried still runs.
+  test("a reply past the frame cap is answered RENDER_FAILED, ends the stream, and runs its exit", async () => {
+    const settledDelivered = jest.fn();
+    const daemon = standIn({
+      handle: async () =>
+        replyWith({
+          resp: { ok: true, output: "x".repeat(MAX_FRAME_BYTES + 1) },
+          exitAfterFlush: 0,
+          settled: settledDelivered,
+        }),
+    });
+    const { client, send, received, ended } = open(daemon);
+    send(STATS);
+    await settled();
+    expect({
+      received,
+      ended: ended(),
+      exits: exit.mock.calls,
+      delivered: settledDelivered.mock.calls,
+    }).toEqual({
+      received: [
+        expect.objectContaining({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: expect.stringContaining("byte cap"),
+        }),
+      ],
+      ended: true,
+      exits: [[0]],
+      delivered: [[false]],
+    });
     client.destroy();
+    await settled();
+    expect(daemon.stats.inFlight).toBe(0);
+  });
+
+  test("a handler that throws before it returns is answered RENDER_FAILED", async () => {
+    const daemon = standIn({
+      handle: () => {
+        throw new Error("thrown at once");
+      },
+    });
+    const { send, received, ended } = open(daemon);
+    send(STATS);
+    await settled();
+    expect({ received, ended: ended(), inFlight: daemon.stats.inFlight }).toEqual({
+      received: [
+        expect.objectContaining({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: "thrown at once",
+        }),
+      ],
+      ended: true,
+      inFlight: 0,
+    });
+  });
+
+  test("a url frame whose handler fails is told the failure and leaves flight", async () => {
+    const daemon = standIn({
+      handle: async () => {
+        throw new Error("the click broke");
+      },
+    });
+    const { client, received } = open(daemon);
+    client.write(encodeFrame({ kind: "url", urlV: 2, url: "cc-candybar://x" }));
+    await settled();
+    expect({ received, inFlight: daemon.stats.inFlight }).toEqual({
+      received: [
+        expect.objectContaining({
+          ok: false,
+          code: "RENDER_FAILED",
+          error: "the click broke",
+        }),
+      ],
+      inFlight: 0,
+    });
   });
 
   test("a frame that does not parse is answered BAD_REQUEST", async () => {
@@ -489,6 +706,103 @@ describe("a connection over a stream", () => {
       expect(ended()).toBe(true);
     });
 
+    test("one its feed refuses as it subscribes is told the refusal, ends, and leaves flight", async () => {
+      const refusal: Extract<Response, { ok: false }> = {
+        ok: false,
+        error: "the lane is off",
+        code: "SWITCHED_OFF",
+      };
+      const daemon = subscribing({
+        subscribe: (_sessionId, subscriber) => {
+          subscriber.refused(refusal);
+          return unsubscribe;
+        },
+      });
+      const { client, send, received, ended } = open(daemon);
+      send(SUBSCRIBE);
+      await settled();
+      expect({ received, ended: ended() }).toEqual({
+        received: [refusal],
+        ended: true,
+      });
+      client.destroy();
+      await settled();
+      expect(daemon.stats.inFlight).toBe(0);
+    });
+
+    // [LAW:no-silent-failure] On a stream a render failure is a frame, which
+    // a follower draws in its lane's shape (the band's mod reads anything
+    // else as a daemon of another build): ending the stream on it would read
+    // as a restart, and the follower would resubscribe into the same failure.
+    test.each(LANE_NAMES)(
+      "a frame past the cap on the %s lane is pushed as that lane draws a render that failed, and the stream goes on",
+      async (lane) => {
+        const { send, received, ended } = open(
+          subscribing({
+            handle: async () => ({ ...SUBSCRIBED, lane }),
+          }),
+        );
+        send({ ...SUBSCRIBE, lane });
+        await settled();
+        const huge = "x".repeat(MAX_FRAME_BYTES);
+        const bar = barOf([{ text: huge }]);
+        const json = JSON.stringify({ ok: true, output: huge });
+        subscriptions[0]!.frame(bar, json);
+        subscriptions[0]!.frame(barOf(), JSON.stringify(ANSWER));
+        await settled();
+        // The renderer's own render failure (src/renderer/draw-bar.ts): its
+        // bar, and its RENDER_FAILED answer, naming why.
+        let failed!: ReturnType<typeof renderFailed>;
+        try {
+          encodeJsonFrame(LANE_FRAMES[lane](bar, json));
+        } catch (e) {
+          failed = renderFailed(e);
+        }
+        const drawn = (frame: Frame, answer: Response): unknown =>
+          JSON.parse(LANE_FRAMES[lane](frame, JSON.stringify(answer)));
+        expect(failed.error).toContain("byte cap");
+        expect({ received, ended: ended() }).toEqual({
+          received: [
+            drawn(renderFailedFrame(failed.error), failed),
+            drawn(barOf(), ANSWER),
+          ],
+          ended: false,
+        });
+        expect(unsubscribe).not.toHaveBeenCalled();
+      },
+    );
+
+    // [LAW:single-enforcer] A refusal is the socket's one answer: a throw
+    // after it writes nothing further to the ended socket.
+    test("a subscribe that throws after its feed refused it writes nothing more", async () => {
+      const refusal: Extract<Response, { ok: false }> = {
+        ok: false,
+        error: "the lane is off",
+        code: "SWITCHED_OFF",
+      };
+      const log = jest.fn();
+      const daemon = subscribing({
+        log,
+        subscribe: (_sessionId, subscriber) => {
+          subscriber.refused(refusal);
+          throw new Error("the feed broke after");
+        },
+      });
+      const { client, send, received } = open(daemon);
+      // Open on its side after the refusal, so a second write would be a
+      // write after end.
+      client.allowHalfOpen = true;
+      send(SUBSCRIBE);
+      await settled();
+      client.destroy();
+      await settled();
+      expect({
+        received,
+        warnings: log.mock.calls.filter(([level]) => level === "warn"),
+        inFlight: daemon.stats.inFlight,
+      }).toEqual({ received: [refusal], warnings: [], inFlight: 0 });
+    });
+
     test.each([
       ["hangs up", (client: Opened["client"]) => client.destroy()],
       ["half-closes", (client: Opened["client"]) => client.end()],
@@ -533,20 +847,34 @@ describe("a connection over a stream", () => {
       expect(subscriptions).toEqual([]);
     });
 
-    test("one that throws is answered RENDER_FAILED, never an open stream nothing feeds", async () => {
-      const { send, received, ended } = open(
-        subscribing({
-          subscribe: () => {
-            throw new Error("the feed refused");
-          },
-        }),
-      );
+    test("one that throws is answered RENDER_FAILED, never an open stream nothing feeds, and leaves nothing on the socket", async () => {
+      const daemon = subscribing({
+        subscribe: () => {
+          throw new Error("the feed refused");
+        },
+      });
+      const { daemonEnd, client } = memoryConnection();
+      handleConnection(daemon, daemonEnd);
+      const { send, received, ended } = openedOn(client);
       send(SUBSCRIBE);
       await settled();
-      expect(received).toMatchObject([
-        { code: "RENDER_FAILED", error: "the feed refused" },
-      ]);
-      expect(ended()).toBe(true);
+      expect({
+        received,
+        ended: ended(),
+        drains: daemonEnd.listenerCount("drain"),
+      }).toEqual({
+        received: [
+          expect.objectContaining({
+            code: "RENDER_FAILED",
+            error: "the feed refused",
+          }),
+        ],
+        ended: true,
+        drains: 0,
+      });
+      client.destroy();
+      await settled();
+      expect(daemon.stats.inFlight).toBe(0);
     });
 
     test("a subscriber slower than the frames gets the newest, never a backlog", async () => {

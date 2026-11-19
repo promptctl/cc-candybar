@@ -24,7 +24,10 @@ export const openedOn = (client: Opened["client"]): Opened => {
   client.on(
     "data",
     makeFrameReader(
-      (frame) => received.push(frame as Response),
+      (frame) => {
+        received.push(frame as Response);
+        return "more";
+      },
       (err) => {
         throw err;
       },

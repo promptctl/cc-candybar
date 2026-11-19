@@ -211,7 +211,10 @@ describe("a daemon in this worker", () => {
     subscriber.on(
       "data",
       makeFrameReader(
-        (frame) => frames.push(frame as Response),
+        (frame) => {
+          frames.push(frame as Response);
+          return "more";
+        },
         (err) => {
           throw err;
         },
