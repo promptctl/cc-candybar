@@ -1,3 +1,9 @@
+## [1.235.9](https://github.com/promptctl/cc-candybar/compare/v1.235.8...v1.235.9) (2026-11-19)
+
+### Bug Fixes
+
+* **launch:** withhold repository-local variables from inherited child environments ([#874](https://github.com/promptctl/cc-candybar/issues/874)) ([c81ae90](https://github.com/promptctl/cc-candybar/commit/c81ae9059d7ae162e1e829259980391659766628))
+
 ## [1.235.8](https://github.com/promptctl/cc-candybar/compare/v1.235.7...v1.235.8) (2026-11-19)
 
 ### Bug Fixes
