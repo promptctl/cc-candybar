@@ -4,15 +4,22 @@
     {
       "version": "pr-902",
       "ref": "refs/pull/902/merge",
-      "sha": "50f67cfd9d49a59dd704841b881430839a437fc7",
-      "timestamp": "2026-11-19T19:20:56.062Z",
+      "sha": "542bd15df5bcd0a140c19f08d1d2a3ff4607a3af",
+      "timestamp": "2026-11-19T19:24:12.265Z",
       "commits": [
         {
-          "sha": "50f67cfd9d49a59dd704841b881430839a437fc7",
+          "sha": "542bd15df5bcd0a140c19f08d1d2a3ff4607a3af",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:19:49Z",
-          "message": "Merge 1116737e6cdc0065399ccf255b4ac46449ca3b1b into 31ff034e6eb41672a38be8ed9f148b237eb9a6a4\n"
+          "timestamp": "2026-11-19T19:23:01Z",
+          "message": "Merge 3fcbf71162b7adca705d799fc3a860b79b5cac2a into 31ff034e6eb41672a38be8ed9f148b237eb9a6a4\n"
+        },
+        {
+          "sha": "3fcbf71162b7adca705d799fc3a860b79b5cac2a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:56-07:00",
+          "message": "test(frames): assert handoffs on delivered renders\n"
         },
         {
           "sha": "1116737e6cdc0065399ccf255b4ac46449ca3b1b",
