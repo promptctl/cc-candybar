@@ -15,7 +15,7 @@ import path from "node:path";
 import { renderConfig } from "./helpers/config-fixture";
 import { configResolutionNotice } from "../src/config/dsl-loader";
 import { resolutionOf } from "./helpers/config-search";
-import type { RepoAnswers } from "../src/config/loader/repo-gate";
+import { repoUnreadNotice, type RepoAnswers } from "../src/config/loader/repo-gate";
 import { chainPlaces, configLocations } from "../src/config/loader/chain-places";
 import {
   configLoadedLine,
@@ -82,14 +82,7 @@ describe("the gate over a project's config file", () => {
       projectDir: project,
     });
     expect(layersOf(book({}))).toEqual([]);
-    expect(resolved.repos).toEqual({
-      plugins: null,
-      approved: [],
-      awaiting: [project],
-      declined: [],
-      unproven: [],
-      unread: null,
-    });
+    expect(resolved.project.question).toEqual({ dir: project, standing: "awaiting", unproven: null });
     expect(layersOf(book({ [project]: "approved" }))).toEqual([file]);
   });
 
@@ -101,8 +94,7 @@ describe("the gate over a project's config file", () => {
       { projectDir: project },
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
-    expect(resolved.repos.awaiting).toEqual([]);
-    expect(resolved.repos.declined).toEqual([project]);
+    expect(resolved.project.question).toMatchObject({ dir: project, standing: "declined" });
   });
 
   test("an explicit base is trusted, and other project layers still need approval", () => {
@@ -120,7 +112,7 @@ describe("the gate over a project's config file", () => {
     expect(explicit.kind === "chain" && explicit.layers).toEqual([
       { path: named, role: "user" },
     ]);
-    expect(explicit.repos.awaiting).toEqual([project]);
+    expect(explicit.project.question).toMatchObject({ dir: project, standing: "awaiting" });
   });
 
   test("the chain a click writes leaves out what the bar's leaves out", () => {
@@ -140,9 +132,8 @@ describe("the gate over a project's config file", () => {
     );
     expect(resolved.kind === "chain" && resolved.layers).toEqual([]);
     // A question it asked could not be recorded: the notice is the answer.
-    expect(resolved.repos.awaiting).toEqual([]);
-    expect(resolved.repos.declined).toEqual([]);
-    expect(resolved.repos.unread).toBe("repo-configs.json is not JSON");
+    expect(resolved.project.question?.standing).toBe("unread");
+    expect(repoUnreadNotice(resolved.project)).toContain("repo-configs.json is not JSON");
     // The bar's search notice stays about the search.
     expect(configResolutionNotice(resolved)).toBeNull();
   });
@@ -192,9 +183,8 @@ describe("the gate over a project's plugins", () => {
       recursive: true,
     });
     expect(
-      resolutionOf(locations(host), book({}), { projectDir: project }).repos
-        .awaiting,
-    ).toEqual([]);
+      resolutionOf(locations(host), book({}), { projectDir: project }).project.question,
+    ).toBeNull();
   });
 });
 
@@ -452,18 +442,18 @@ describe("a repository's worktrees answer as the repository", () => {
     const resolved = resolveAt(book({ [project]: "approved" }), wt);
     expect(resolved).toMatchObject({
       layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
-      repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
+      project: { approved: wt, question: { dir: project, standing: "approved" } },
     });
   });
 
   test("a worktree's own answer stands while its repository has none", () => {
     expect(resolveAt(book({ [wt]: "approved" }), wt)).toMatchObject({
       layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
-      repos: { plugins: wt, approved: [wt], awaiting: [] },
+      project: { approved: wt, question: { dir: wt, standing: "approved" } },
     });
     expect(resolveAt(book({ [wt]: "declined" }), wt)).toMatchObject({
       layers: [],
-      repos: { plugins: null, awaiting: [], declined: [wt] },
+      project: { approved: null, question: { dir: wt, standing: "declined" } },
     });
   });
 
@@ -471,12 +461,12 @@ describe("a repository's worktrees answer as the repository", () => {
     const resolved = resolveAt(book({ [project]: "declined" }), wt);
     expect(resolved).toMatchObject({
       layers: [],
-      repos: { plugins: null, awaiting: [], declined: [project] },
+      project: { approved: null, question: { dir: project, standing: "declined" } },
     });
   });
 
   test("an unanswered repository's worktree asks for the repository, and its answer covers both", () => {
-    expect(resolveAt(book({}), wt).repos.awaiting).toEqual([project]);
+    expect(resolveAt(book({}), wt).project.question).toMatchObject({ dir: project, standing: "awaiting" });
     const state = repoConfigs(path.join(root, "state"));
     expect(recordAnswer(state, project, "approved").kind).toBe("ok");
     const answers = state.read() as RepoAnswers;
@@ -484,18 +474,18 @@ describe("a repository's worktrees answer as the repository", () => {
       path.join(wt, ".cc-candybar.json5"),
     ]);
     fs.writeFileSync(path.join(project, ".cc-candybar.json5"), "{}");
-    expect(resolveAt(answers, project).repos.awaiting).toEqual([]);
+    expect(resolveAt(answers, project).project.question?.standing).toBe("approved");
   });
 
   test("the project decision covers its worktrees even when an older worktree entry disagrees", () => {
     const legacy = { [project]: "approved", [wt]: "declined" } as const;
     expect(resolveAt(book(legacy), wt)).toMatchObject({
       layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
-      repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
+      project: { approved: wt, question: { dir: project, standing: "approved" } },
     });
     expect(resolveAt(book({ [project]: "declined", [wt]: "approved" }), wt)).toMatchObject({
       layers: [],
-      repos: { plugins: null, approved: [], awaiting: [], declined: [project] },
+      project: { approved: null, question: { dir: project, standing: "declined" } },
     });
 
     const state = repoConfigs(path.join(root, "state"));
@@ -532,11 +522,9 @@ describe("a repository's worktrees answer as the repository", () => {
     const resolved = resolveAt(book({ [project]: "approved" }), evil);
     expect(resolved).toMatchObject({
       layers: [],
-      repos: {
-        awaiting: [evil],
-        unproven: [
-          { dir: evil, reason: `${path.join(evil, ".git")} is not a file` },
-        ],
+      project: {
+        approved: null,
+        question: { dir: evil, standing: "awaiting", unproven: `${path.join(evil, ".git")} is not a file` },
       },
     });
 
@@ -545,9 +533,9 @@ describe("a repository's worktrees answer as the repository", () => {
     fs.renameSync(wt, moved);
     const state = repoConfigs(path.join(root, "state"));
     writeStatePlan(state.plan(() => ({ [moved]: "approved" })));
-    expect(resolveAt(state.read() as RepoAnswers, moved).repos).toMatchObject({
-      approved: [moved],
-      unproven: [{ dir: moved }],
+    expect(resolveAt(state.read() as RepoAnswers, moved).project).toMatchObject({
+      approved: moved,
+      question: { dir: moved, standing: "approved", unproven: expect.any(String) },
     });
     expect(recordAnswer(state, project, "approved")).toEqual({
       kind: "ok",

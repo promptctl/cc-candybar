@@ -3,6 +3,7 @@
 // opens no file of its own.
 
 import { locs as testLocs } from "./host";
+import { diskFiles } from "../../src/daemon/config-discovery/discovery-files";
 import {
   loadConfigSource,
   loadSnapshot,
@@ -69,7 +70,7 @@ export function loadChain(
   const content = (path: string): Layer["content"] =>
     texts === undefined ? readLayer(path) : { kind: "text", text: texts(path) };
   const snapshot = snapshotOf(
-    sessionPlugins(locs, installedRoots(locs), null, cwd ?? locs.home),
+    sessionPlugins(installedRoots(locs), diskFiles.checkout(cwd ?? locs.home)),
     chain.map((l) => layerOf(l.role, l.path, content(l.path), locs.home)),
   );
   return loadSnapshot(snapshot, locs.home, dflt, trace);

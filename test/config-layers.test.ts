@@ -10,7 +10,7 @@ import { locations } from "../src/daemon/paths";
 import os from "node:os";
 import path from "node:path";
 import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
-import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
+import { prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import { SessionState } from "../src/renderer/session-state";
@@ -95,7 +95,6 @@ test("a project file that places one segment renders over the user's whole confi
   const prepared = await prepareConfig(
     world,
     outcome.layers,
-    NO_REPO,
     project,
     [],
     instantOf(new Date()),
@@ -372,7 +371,6 @@ describe("a project layer inserting into the user's row", () => {
     const prepared = await prepareConfig(
       world,
       outcome.layers,
-      NO_REPO,
       project,
       [],
       instantOf(new Date()),
@@ -576,7 +574,6 @@ describe("a project layer inserting into the user's row", () => {
     const prepared = await prepareConfig(
       world,
       outcome.layers,
-      NO_REPO,
       project,
       [],
       instantOf(new Date()),

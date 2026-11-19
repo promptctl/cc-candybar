@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { renderConfig, type ConfigDraw } from "./helpers/config-fixture";
-import { NO_REPO, prepareConfig } from "./helpers/prepared-config";
+import { prepareConfig } from "./helpers/prepared-config";
 import { homeLayer } from "../src/config/dsl-loader";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
 import { until } from "./helpers/until";
@@ -23,16 +23,13 @@ import {
   SOURCES_NOTHING,
 } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { pluginRoots } from "../src/daemon/config-discovery/plugin-folders";
+import { installedPluginDirs } from "../src/daemon/config-discovery/plugin-folders";
 import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
-import { repoConfigs } from "../src/daemon/config-discovery/repo-configs";
-import { gateRepos } from "../src/config/loader/repo-gate";
-import { repoProject } from "../src/daemon/config-discovery/config-search";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
@@ -146,7 +143,6 @@ describe("a listed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [homeLayer(config())],
-      NO_REPO,
       dir,
       warnings,
       instantOf(new Date()),
@@ -169,7 +165,6 @@ describe("a listed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -343,7 +338,6 @@ test("the user's config still renders beside a dropped plugin", async () => {
   const prepared = await prepareConfig(
     world,
     [homeLayer(p)],
-    NO_REPO,
     dir,
     warnings,
     instantOf(new Date()),
@@ -382,7 +376,6 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       warnings,
       instantOf(new Date()),
@@ -429,7 +422,6 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -453,7 +445,6 @@ describe("a placed segment of a dropped plugin stands in as a cell, not a broken
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -490,7 +481,6 @@ test("the user's file retunes a plugin segment by field", async () => {
   const prepared = await prepareConfig(
     world,
     [homeLayer(p)],
-    NO_REPO,
     dir,
     [],
     instantOf(new Date()),
@@ -512,7 +502,6 @@ test("a data file written after load, and replaced by rename, is read", async ()
   const prepared = await prepareConfig(
     world,
     [homeLayer(p)],
-    NO_REPO,
     dir,
     [],
     instantOf(new Date()),
@@ -556,7 +545,6 @@ test("a plugin whose names another layer already declares is dropped; the first 
   const prepared = await prepareConfig(
     world,
     [homeLayer(p)],
-    NO_REPO,
     dir,
     [],
     instantOf(new Date()),
@@ -810,27 +798,21 @@ describe("an installed plugin", () => {
   const placing = (seg: string) =>
     write("config.json5", `{ root: { h: ["${seg}"] } }`);
 
-  async function segmentsIn(projectDir: string): Promise<string[]> {
-    const prepared = await prepareConfig(
-      world,
-      [],
-      {
-        repo: gateRepos(
-          repoConfigs(stateDir(host)).read(),
-          [],
-          repoProject(projectDir).project,
-        ).plugins,
-      },
-      projectDir,
-      [],
-      instantOf(new Date()),
-    );
+  function segmentsIn(projectDir: string): string[] {
+    const loaded = loadDiscovered(projectDir, projectDir, undefined, {
+      clock: systemTimekeeper,
+      stateDir: stateDir(host),
+      locations: locations(host),
+      gates: bareGates(),
+      sessionState: new SessionState(),
+    });
     try {
-      return Object.keys(prepared.config.segments).filter((n) =>
+      if (loaded.state === null) throw new Error(loaded.error);
+      return Object.keys(loaded.state.config.segments).filter((n) =>
         /^(plugins|repo)\./.test(n),
       );
     } finally {
-      prepared[Symbol.dispose]();
+      loaded.state?.registry.dispose();
     }
   }
 
@@ -856,7 +838,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -873,10 +854,10 @@ describe("an installed plugin", () => {
   test("a repo-shipped plugin is there only in sessions rooted in that repo", async () => {
     repoInstall("a", "deploy", DEFINITION);
     fs.mkdirSync(path.join(dir, "b"));
-    expect(await segmentsIn(path.join(dir, "a"))).toEqual([
+    expect(segmentsIn(path.join(dir, "a"))).toEqual([
       "repo.deploy.status",
     ]);
-    expect(await segmentsIn(path.join(dir, "b"))).toEqual([]);
+    expect(segmentsIn(path.join(dir, "b"))).toEqual([]);
   });
 
   const CHECKOUT_DEFINITION = `{ data: { checkout: ".lit/state.json" }, segments: { ticket: { template: '#{{ .plugins.lit.data.id }}' } } }`;
@@ -1114,7 +1095,7 @@ describe("an installed plugin", () => {
         ),
       ).rendered,
     ).toContain("user");
-    expect(await segmentsIn(dir)).toEqual(["plugins.deploy.status"]);
+    expect(segmentsIn(dir)).toEqual(["plugins.deploy.status"]);
   });
 
   test("a repo's plugin of an installed one's name loads beside it, under repo.", async () => {
@@ -1129,7 +1110,7 @@ describe("an installed plugin", () => {
       `{ data: "./d.json", segments: { status: { template: "mine-repo" } } }`,
     );
     const repo = path.join(dir, "repo");
-    expect(await segmentsIn(repo)).toEqual([
+    expect(segmentsIn(repo)).toEqual([
       "plugins.deploy.status",
       "repo.deploy.status",
     ]);
@@ -1283,7 +1264,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [user, project].map(homeLayer),
-      NO_REPO,
       dir,
       warnings,
       instantOf(new Date()),
@@ -1314,7 +1294,7 @@ describe("an installed plugin", () => {
     );
     const warnings: string[] = [];
     using prepared = await prepareConfig(
-      world, [user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()),
+      world, [user, project].map(homeLayer), dir, warnings, instantOf(new Date()),
     );
     expect(prepared.droppedPlacements).toEqual([
       expect.stringMatching(/user\.json5[\s\S]*"gti" does not match any declared segment/),
@@ -1341,7 +1321,6 @@ describe("an installed plugin", () => {
       prepareConfig(
         world,
         [user, project].map(homeLayer),
-        NO_REPO,
         dir,
         warnings,
         instantOf(new Date()),
@@ -1380,7 +1359,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -1421,7 +1399,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -1510,7 +1487,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      NO_REPO,
       dir,
       warnings,
       instantOf(new Date()),
@@ -1555,7 +1531,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [],
-      NO_REPO,
       path.join(dir, "repo"),
       warnings,
       instantOf(new Date()),
@@ -1690,7 +1665,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [homeLayer(p)],
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -1722,7 +1696,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [user, project].map(homeLayer),
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -1774,7 +1747,6 @@ describe("an installed plugin", () => {
     const prepared = await prepareConfig(
       world,
       [user, project].map(homeLayer),
-      NO_REPO,
       dir,
       [],
       instantOf(new Date()),
@@ -1852,30 +1824,13 @@ describe("plugin roots", () => {
       XDG_DATA_HOME: "/home/u/.local/share",
       XDG_DATA_DIRS: "/usr/share:/home/u/.local/share:/opt/share",
     });
-    expect(pluginRoots(locations(host), null)).toEqual([
-      { dir: "/opt/share/cc-candybar/plugins", scope: "plugins" },
-      { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
-      { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
+    expect(installedPluginDirs(locations(host))).toEqual([
+      "/opt/share/cc-candybar/plugins",
+      "/usr/share/cc-candybar/plugins",
+      "/home/u/.local/share/cc-candybar/plugins",
     ]);
   });
 
-  test("an approved repo's root comes last, scoped repo", () => {
-    const host = hostOf({
-      ...HOST.env,
-      XDG_DATA_HOME: "/home/u/.local/share",
-      XDG_DATA_DIRS: "/usr/share",
-    });
-    expect(
-      pluginRoots(
-        locations(host),
-        "/w/repo" as Parameters<typeof pluginRoots>[1],
-      ),
-    ).toEqual([
-      { dir: "/usr/share/cc-candybar/plugins", scope: "plugins" },
-      { dir: "/home/u/.local/share/cc-candybar/plugins", scope: "plugins" },
-      { dir: "/w/repo/.cc-candybar/plugins", scope: "repo" },
-    ]);
-  });
 });
 
 test("a listed definition that is not a folder's plugin.json5 is refused, naming the fix", async () => {
@@ -1902,7 +1857,6 @@ test("a placement under a refused loose definition's folder stands in naming the
   const prepared = await prepareConfig(
     world,
     [homeLayer(p)],
-    NO_REPO,
     dir,
     [],
     instantOf(new Date()),

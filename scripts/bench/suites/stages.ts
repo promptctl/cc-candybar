@@ -14,7 +14,6 @@ import { processWorld } from "../../../src/host.js";
 import path from "node:path";
 
 import {
-  NO_REPO,
   prepareConfig,
   renderEffective,
   type PreparedConfig,
@@ -26,6 +25,7 @@ import {
   sessionPlugins,
   snapshotOf,
 } from "../../../src/daemon/config-discovery/discover.js";
+import { diskFiles } from "../../../src/daemon/config-discovery/discovery-files.js";
 import { resolveEffectiveGlobals } from "../../../src/config/effective-globals.js";
 import { presetNames } from "../../../src/config/presets.js";
 import { ansiOf } from "../../../src/render/frame.js";
@@ -61,7 +61,6 @@ async function prepared(
   const config = await prepareConfig(
     processWorld(),
     layers.map(homeLayer),
-    NO_REPO,
     cwd,
     warnings,
     instantOf(new Date()),
@@ -166,7 +165,7 @@ export const STAGES: readonly Benchmark[] = [
           const locs = locations(processWorld().host);
           loadSnapshot(
             snapshotOf(
-              sessionPlugins(locs, installedRoots(locs), null, cwd),
+              sessionPlugins(installedRoots(locs), diskFiles.checkout(cwd)),
               [],
             ),
             locs.home,

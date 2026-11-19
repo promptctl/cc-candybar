@@ -26,15 +26,13 @@ export type RepoAnswers = Asked<RepoConfigBook>;
 declare const approved: unique symbol;
 
 // [LAW:parse-dont-validate] A project directory the user approved, spelled as
-// the session spells it: the only value whose `.cc-candybar/plugins/` the
-// loader lists. `gateRepos` is its one constructor, so no caller can hand the
-// loader a project it did not gate.
+// the session spells it. Only its plugin definitions may be opened.
 export type ApprovedRepo = string & { readonly [approved]: true };
 
 // [LAW:types-are-the-program] `unread` is not `awaiting`: a book that could
 // not be read takes no answer either, so the bar asks nothing it could not
 // record, and the unread notice speaks for every repository.
-export type RepoStanding = RepoAnswer | "awaiting" | "unread";
+type RepoStanding = RepoQuestion["standing"];
 
 // A directory a session reaches: its real path, and whether it sits in a
 // linked worktree.
@@ -70,98 +68,44 @@ function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
     ? { standing: "awaiting", under: key }
     : { standing: legacy, under: d.dir };
 }
-// A directory claiming to be a linked worktree that the repository does not
-// vouch for, and why: it answers under its own path.
-export interface UnprovenRepo {
-  readonly dir: string;
-  readonly reason: string;
-}
-
-// What a session's repositories contribute, as their answers decide it.
-export interface RepoGate {
-  // The project whose `.cc-candybar/plugins/` loads: approved, or none.
-  readonly plugins: ApprovedRepo | null;
-  // [LAW:single-enforcer] The reached directories whose config loads: what
-  // the layer filter reads, so nothing else reads the answers.
-  readonly approved: readonly string[];
-  // Repositories holding a config nobody has answered for: the bar asks.
-  readonly awaiting: readonly string[];
-  // Repositories whose config the user declined: nothing runs, nothing asks.
-  readonly declined: readonly string[];
-  // Directories whose worktree claim failed its proof: each asks for itself.
-  readonly unproven: readonly UnprovenRepo[];
-  // Why the answers could not be read, or null.
+// [LAW:one-source-of-truth] A query reaches one project. Its approved path
+// admits all of that project's read and write roles. Its question is shown
+// only when the project actually supplies a config or a plugin.
+export interface ProjectAccess {
+  readonly approved: ApprovedRepo | null;
+  readonly question: RepoQuestion | null;
   readonly unread: string | null;
 }
 
-// A session's project: its real directory, the path the session spells it
-// as, and whether its plugin folder ships a plugin.
+export const NO_PROJECT_ACCESS: ProjectAccess = {
+  approved: null,
+  question: null,
+  unread: null,
+};
+
 export interface RepoProject extends RepoDir {
   readonly path: string;
-  readonly ships: boolean;
+  readonly contributes: boolean;
 }
 
-// The gate over the real directories a session reaches that hold a config
-// (each once, however many of its files are found), and its project. The
-// project asks only when its plugin folder ships plugins, but once approved
-// its folder is listed whatever it holds, so one that cannot be listed is
-// said.
-export function gateRepos(
+export function projectAccess(
   answers: RepoAnswers,
-  dirs: readonly RepoDir[],
   project: RepoProject | null,
-): RepoGate {
-  const reached = reachedDirs(dirs, project);
-  // [LAW:one-source-of-truth] Each reached directory is ruled once, and
-  // every list below is a view of those rulings.
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing = (s: RepoStanding) => ruled.filter((r) => r.standing === s);
-  const repos = (s: RepoStanding): string[] => [
-    ...new Set(standing(s).map((r) => r.under)),
-  ];
+): ProjectAccess {
+  const unread = answers.kind === "failed" ? answers.reason : null;
+  if (project === null) return { ...NO_PROJECT_ACCESS, unread };
+  const { standing, under } = ruling(answers, project);
   return {
-    plugins:
-      project !== null && ruling(answers, project).standing === "approved"
-        ? (project.path as ApprovedRepo)
-        : null,
-    approved: standing("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap((d) =>
-      d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : [],
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null,
-  };
-}
-
-// The real directories a session reaches that ask, each once.
-function reachedDirs(
-  dirs: readonly RepoDir[],
-  project: RepoProject | null,
-): readonly RepoDir[] {
-  return [
-    ...new Map(
-      [...dirs, ...(project?.ships ? [project] : [])].map((d) => [d.dir, d]),
-    ).values(),
-  ];
-}
-
-// [LAW:one-source-of-truth] The repository question a session's directories
-// ask, ruled exactly as the gate rules them. A session's config directories
-// are its project's, so it reaches one directory at most; null when it
-// reaches none.
-export function repoQuestion(
-  answers: RepoAnswers,
-  dirs: readonly RepoDir[],
-  project: RepoProject | null,
-): RepoQuestion | null {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === undefined) return null;
-  const { standing, under } = ruling(answers, reached);
-  return {
-    dir: under,
-    standing,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null,
+    approved: standing === "approved" ? (project.path as ApprovedRepo) : null,
+    question: project.contributes
+      ? {
+          dir: under,
+          standing,
+          unproven:
+            project.link.kind === "unproven" ? project.link.reason : null,
+        }
+      : null,
+    unread,
   };
 }
 
@@ -198,7 +142,7 @@ export function parseRepoConfigBook(doc: unknown): RepoAnswers {
 
 // [LAW:no-silent-failure] A book that cannot be read is said wherever the
 // gate is presented on the bar.
-export function repoUnreadNotice(gate: RepoGate): string | null {
+export function repoUnreadNotice(gate: ProjectAccess): string | null {
   return gate.unread === null
     ? null
     : `Repository config answers could not be read: ${gate.unread} — no repository's config runs until they can be`;

@@ -25,7 +25,6 @@ import { withoutDoorClose } from "./helpers/door-close";
 import { listThemePalettes } from "@promptctl/rich-js";
 import { drawnChars, same, seams } from "./helpers/seams";
 import {
-  NO_REPO,
   prepareConfig,
   renderEffective,
 } from "./helpers/prepared-config";
@@ -63,7 +62,6 @@ async function closedBars(): Promise<{
   const prepared = await prepareConfig(
     WORLD,
     [],
-    NO_REPO,
     process.cwd(),
     [],
     at,

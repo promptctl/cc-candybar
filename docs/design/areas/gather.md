@@ -62,7 +62,7 @@ Carrying values in place of running them drew byte-identically with nothing run 
 - `validateNoCycles` sees one config. Two renderers can form a loop neither loader sees, so Gather needs a per-id run floor.
 - `shellReader` has no timeout today. One slow command holds its identity for every renderer sharing it.
 
-**Repo gate.** The gate stays in the one resolve, in the renderer's load. Gather rechecks by re-running `gateRepos` over the layers a `declare` names, and re-validates absolute paths, regex captures and the shell floor with the loader's own specs. This is a consistency guard, not security: a same-UID process can already run anything through `--config`, and the gate defends against a cloned repository's contents.
+**Project approval.** The host owns repository decisions, config discovery and the files a click may write. It publishes approved config layers, plugin definitions and any approval question in the shared config snapshot. Each renderer loads that snapshot. The current contract is documented in [Host and renderer](../host-and-renderer.md).
 
 ### `env`
 
