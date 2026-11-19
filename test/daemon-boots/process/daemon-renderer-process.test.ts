@@ -48,7 +48,12 @@ const COMPATIBLE_BOOT = {
   boot: {
     digest: "another-worktree-build",
     stored: EMPTY_STORED_STATE,
-    host: { home: "/home", tmp: os.tmpdir(), env: {} },
+    locations: {
+      home: "/home",
+      configHome: "/home/.config",
+      dataHome: "/home/.local/share",
+      dataDirs: [],
+    },
     memoryLimitBytes: 1,
   },
 };

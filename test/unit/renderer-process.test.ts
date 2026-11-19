@@ -136,8 +136,12 @@ function rig(start: () => Promise<void> = async () => {}) {
     heapCapMb: 512,
     name: MAIN_RENDERER,
     boot: () => ({
-      host: { env: {}, home: "/home", tmp: "/tmp" },
-      bundle: "/app/index.mjs",
+      locations: {
+        home: "/home",
+        configHome: "/config",
+        dataHome: "/data",
+        dataDirs: [],
+      },
       memoryLimitBytes: 1,
       stored: EMPTY_STORED_STATE,
     }),
@@ -198,8 +202,12 @@ describe("a renderer process's start", () => {
         kind: "boot",
         wireVersion: RENDERER_WIRE_VERSION,
         boot: {
-          host: { env: {}, home: "/home", tmp: "/tmp" },
-          bundle: "/app/index.mjs",
+          locations: {
+            home: "/home",
+            configHome: "/config",
+            dataHome: "/data",
+            dataDirs: [],
+          },
           memoryLimitBytes: 1,
           stored: EMPTY_STORED_STATE,
         },

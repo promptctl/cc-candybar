@@ -55,7 +55,6 @@ const rendererOf = (): Renderer =>
         dataHome: "/nowhere/data",
         dataDirs: [],
       },
-      home: "/nowhere/home",
       gates: bareGates(),
       memoryLimitBytes: 1024 * 1024 * 1024,
     },

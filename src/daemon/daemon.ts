@@ -69,6 +69,7 @@ import {
 } from "./foundations/renderer-name.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type {
+  RendererBoot,
   RequestId,
   Subscriptions,
   Viewers,
@@ -76,7 +77,6 @@ import type {
 import type { RendererLink, RendererPort } from "./renderer-process.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import {
-  plainEnvironment,
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
@@ -613,25 +613,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     entry: string,
   ) {
     const stores = new HeldStores(inputs.profile(name, log));
+    const boot = (): RendererBoot => ({
+      stored: stores.current(),
+      locations: locs,
+      memoryLimitBytes,
+    });
     const prepared = inputs.renderer({
       name,
       entry,
-      build: (hostReaches) =>
-        mainRendererOf(
-          {
-            stored: stores.current(),
-            locations: locs,
-            home: host.home,
-            gates,
-            memoryLimitBytes,
-          },
-          hostReaches,
-        ),
-      boot: () => ({
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes,
-      }),
+      build: (hostReaches) => mainRendererOf({ ...boot(), gates }, hostReaches),
+      boot,
       node: bundle.node,
     });
     return { name, reported, entry, stores, prepared };

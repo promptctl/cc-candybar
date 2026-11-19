@@ -23,6 +23,8 @@ import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
 import type { ServedDaemon } from "../../../src/daemon/daemon";
+import { inProcessPort } from "../../../src/daemon/renderer-process";
+import type { RendererBoot } from "../../../src/renderer-interface/interface";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { processProbe } from "../../helpers/host";
 import {
@@ -183,6 +185,54 @@ describe("the daemon is a value", () => {
     reply(daemon, clickBody(url));
 
   const writeConfig = (text: string): void => writeFileSync(config, text);
+
+  test("the daemon boots a renderer with resolved locations and no environment map", async () => {
+    const host = hostOf({
+      HOME: root,
+      XDG_CONFIG_HOME: path.join(root, "chosen-config"),
+      XDG_DATA_HOME: path.join(root, "chosen-data"),
+      XDG_DATA_DIRS: [
+        path.join(root, "site-one"),
+        path.join(root, "site-two"),
+      ].join(":"),
+      XDG_STATE_HOME: path.join(root, "state"),
+      CANDYBAR_FIXTURE_PRIVATE: "boot-marker",
+    });
+    const boots: RendererBoot[] = [];
+    const built = prepareDaemon({
+      host,
+      paths: daemonPaths(host),
+      renderer: (prepared) => {
+        boots.push(prepared.boot());
+        return inProcessPort(prepared);
+      },
+    });
+    try {
+      expect(boots.map((boot) => Object.keys(boot).sort())).toEqual([
+        ["locations", "memoryLimitBytes", "stored"],
+      ]);
+      expect(boots).toMatchObject([
+        {
+          locations: {
+            home: host.home,
+            configHome: path.join(root, "chosen-config"),
+            dataHome: path.join(root, "chosen-data"),
+            dataDirs: [
+              path.join(root, "site-one"),
+              path.join(root, "site-two"),
+            ],
+          },
+        },
+      ]);
+      expect(JSON.stringify(boots)).not.toContain("boot-marker");
+    } finally {
+      await (
+        await built.daemon.close()
+      ).settled;
+      await built.daemonLog.drained();
+      built.daemonLog.dispose();
+    }
+  });
 
   beforeAll(() => {
     resources.enable();

@@ -23,6 +23,7 @@ import {
   type EffectId,
   type EventInput,
   type Renderer,
+  type RendererBoot,
   type Timed,
   type TimedRenderer,
   timed,
@@ -39,7 +40,6 @@ import {
   rendererWireVersionProblem,
   RENDERER_WIRE_VERSION,
   type HostLine,
-  type RendererBoot,
   type RendererLine,
   type RendererOverLines,
 } from "../renderer-interface/wire.js";

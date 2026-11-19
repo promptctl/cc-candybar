@@ -4,20 +4,22 @@
 // writes nothing of its own: its log lines are notices into the host's one
 // log, and what it stores leaves as its turns' stored writes.
 //
-// [LAW:one-way-deps] exception: the renderer process's composition root, the
-// counterpart of the daemon's (src/daemon/server.ts): it reads where the
-// user's config and plugins live from the host's `Host`.
+// This process supplies its own clock, memory readings and pipes. The host
+// sends the same resolved boot data it uses to build an in-process renderer.
 
 import { once } from "node:events";
 import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
-import { locations } from "./daemon/paths.js";
 import { createGates } from "./daemon/foundations/gates.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
-import { timed, type TimedRenderer } from "./renderer-interface/interface.js";
+import {
+  timed,
+  type RendererBoot,
+  type TimedRenderer,
+} from "./renderer-interface/interface.js";
 import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import {
   hostOverLines,
@@ -26,7 +28,6 @@ import {
   RENDERER_WIRE_VERSION,
   serveRenderer,
   type HostLine,
-  type RendererBoot,
   type RendererLine,
 } from "./renderer-interface/wire.js";
 
@@ -118,19 +119,9 @@ function booted(
   boot: RendererBoot,
   reaches: AdapterToHost,
 ): TimedRenderer {
-  const { host } = boot;
   const { clock } = world;
   // [LAW:single-enforcer] Each turn timed in this process, around its
   // answer: the host tells the hop from the turn.
-  const renderer = mainRendererOf(
-    {
-      stored: boot.stored,
-      locations: locations(host),
-      home: host.home,
-      gates: createGates(),
-      memoryLimitBytes: boot.memoryLimitBytes,
-    },
-    reaches,
-  );
+  const renderer = mainRendererOf({ ...boot, gates: createGates() }, reaches);
   return timed(renderer, () => clock.monotonic());
 }

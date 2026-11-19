@@ -11,14 +11,13 @@
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
-import type { Host } from "../host-facts.js";
 import type { AdapterToHost } from "./adapter.js";
-import type { StoredState } from "./stored-state.js";
 import type { Crosses } from "./crosses.js";
 import {
   rendererOf,
   type AdapterInput,
   type AdapterOutput,
+  type RendererBoot,
   type RendererInput,
   type RendererOutput,
   type EventInput,
@@ -29,7 +28,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 6;
+export const RENDERER_WIRE_VERSION = 7;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -42,22 +41,6 @@ export function rendererWireVersionProblem(
   const received =
     version === undefined ? "no version" : `version ${JSON.stringify(version)}`;
   return `renderer wire version mismatch (${peer} sent ${received}, expected version ${RENDERER_WIRE_VERSION})`;
-}
-
-// What a renderer process builds itself from: the host's view of its machine
-// (its environment, home and temporary directory, from which the renderer
-// finds the user's config and plugins as the host does), the one memory limit
-// its cache's budget is a share of, and its profile's stored state as the host
-// holds it as the renderer spawns.
-export interface RendererBoot {
-  readonly stored: StoredState;
-  // [LAW:one-source-of-truth] The host's own `Host`, its environment's unset
-  // variables left out as JSON leaves them, which a process environment
-  // reads the same as absent.
-  readonly host: Omit<Host, "env"> & {
-    readonly env: Readonly<Record<string, string>>;
-  };
-  readonly memoryLimitBytes: number;
 }
 
 // A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
