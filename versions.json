@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "5702b0a6f481af905b25fe6469d345b86a5c5bb3",
+      "timestamp": "2026-11-19T10:26:00.917Z",
+      "commits": [
+        {
+          "sha": "5702b0a6f481af905b25fe6469d345b86a5c5bb3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:25:01-07:00",
+          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb) (#839)\n\n* fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n\n* fix(settings): satisfy pane reconciliation lint\n\n* fix(tmux): reconcile existing panes and retry interrupted splits\n\n* test(daemon): exercise retained feed and shutdown behavior"
+        }
+      ]
+    },
+    {
       "version": "pr-844",
       "ref": "refs/pull/844/merge",
       "sha": "8db80c1f77faa0e41e8ba1577555698ba26f2de5",
@@ -132,49 +147,6 @@
       ]
     },
     {
-      "version": "pr-839",
-      "ref": "refs/pull/839/merge",
-      "sha": "9411bc82f12d4cfac06df913e0fb2ff27b3e804a",
-      "timestamp": "2026-11-19T10:17:53.088Z",
-      "commits": [
-        {
-          "sha": "9411bc82f12d4cfac06df913e0fb2ff27b3e804a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:16:55Z",
-          "message": "Merge cd192ef74858f1550a4298afc7ec2439d4706dfa into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "cd192ef74858f1550a4298afc7ec2439d4706dfa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:16:03-07:00",
-          "message": "test(daemon): exercise retained feed and shutdown behavior\n"
-        },
-        {
-          "sha": "52addcd9a9b7d293a011ccd3e43af030d2959dc7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:06:15-07:00",
-          "message": "fix(tmux): reconcile existing panes and retry interrupted splits\n"
-        },
-        {
-          "sha": "aa550653c5d117966068f6435a1ae5009eb63ee3",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:56:16-07:00",
-          "message": "fix(settings): satisfy pane reconciliation lint\n"
-        },
-        {
-          "sha": "8c24c50c9f37091b51572669d2dd6a853e46981d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:52:27-07:00",
-          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-846",
       "ref": "refs/pull/846/merge",
       "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
@@ -244,21 +216,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:57-07:00",
           "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\ngit finds its repository from GIT_DIR, GIT_WORK_TREE and the other names\n`git rev-parse --local-env-vars` prints, ahead of its working directory,\nand gh honours GH_REPO. A daemon, doctor, check or plugin install started\nfrom a git hook, a `rebase --exec` or a vcsh shell read every session's\nbranch, status and PR from that shell's repository.\n\nA launch scope now names what its children do not inherit. The child\nenvironment is the inherited environment, read at each launch, less those\nnames, under each launch's overlay: one place for every launch form. The\nprocess's own environment is untouched, since it is also what the process\nreports as the session's.\n\nThe daemon, doctor, check and plugin install ask git once, as they start,\nand withhold its names and GH_REPO; the relay and every other process ask\nnothing. A git that cannot answer (or an old one that echoes the flag) is a\nfault carrying git's words: the daemon logs it, still starts and draws, and\nstands a warning on every bar through its launcher's facts; the doctor\nfails a new \"repository reads\" row; plugin install exits 1 with the reason.\nPlugin install's own overlay that unset the same names is gone. The Pages\nsite's simulated git answers the ask.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "9c3c4d50b83f048857e251023c9e60ea74e0a83d",
-      "timestamp": "2026-11-19T10:10:04.306Z",
-      "commits": [
-        {
-          "sha": "9c3c4d50b83f048857e251023c9e60ea74e0a83d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:59-07:00",
-          "message": "refactor(plugin): share file reads and coalesce storage refreshes (ibyq.pvx) (#841)\n\n* refactor(plugin): share host file reads and coalesce storage refreshes (pvx)\n\n* fix(plugin): recognize filesystem errors across Node realms"
         }
       ]
     }
