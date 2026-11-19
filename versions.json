@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-900",
+      "ref": "refs/pull/900/merge",
+      "sha": "3e7c5a8f9bbb0e879d3602b43f0d75e6fed7b716",
+      "timestamp": "2026-11-19T18:39:37.775Z",
+      "commits": [
+        {
+          "sha": "3e7c5a8f9bbb0e879d3602b43f0d75e6fed7b716",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:38:32-07:00",
+          "message": "Merge d69297a85bb1c8a1b86579b5026ae9143640d359 into 03ed3028670db49aa13cedc4dad7687564282cfc\n"
+        },
+        {
+          "sha": "d69297a85bb1c8a1b86579b5026ae9143640d359",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:36:07-07:00",
+          "message": "fix(client): show startup and timeout feedback in the statusline\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "03ed3028670db49aa13cedc4dad7687564282cfc",
