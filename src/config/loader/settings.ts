@@ -9,6 +9,7 @@
 import {
   inSettingDomain,
   IMPLIED_SETTINGS,
+  isImpliedSetting,
   THEME_SETTING,
   describeSettingDomain,
   type ImpliedSetting,
@@ -211,10 +212,6 @@ const IMPLIED_HINTS: Readonly<Record<ImpliedSetting, string>> = {
   effect: `a placement follows the bar's effect, or sets its own with settings: { effect: "<effect>" }`,
 };
 
-function isImplied(name: string): name is ImpliedSetting {
-  return (IMPLIED_SETTINGS as readonly string[]).includes(name);
-}
-
 // A segment's `settings` block: name → declaration.
 export function settingsDeclSpec(): FieldSpec<
   Readonly<Record<string, SettingDecl>>
@@ -252,7 +249,7 @@ export function settingsDeclSpec(): FieldSpec<
         }
         // [LAW:one-source-of-truth] Every placement already has the implied
         // settings (settingsOf); a declaration of its own would be a second one.
-        if (isImplied(name)) {
+        if (isImpliedSetting(name)) {
           issue(
             ctx,
             `${at}.${name}`,

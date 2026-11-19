@@ -89,8 +89,12 @@ declares exactly one value source:
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
-default: "…" }`. (The one exception: never declare state for a `{{ menu }}` —
-its state is synthesized, see below.) A `persist` action reads its current
+default: "…" }`. (Two exceptions: never declare state for a `{{ menu }}` —
+its state is synthesized, see below — and a setting's key (`theme`, `style`,
+`padding`, …) reads back through `<setting>.effective`; a `state` variable
+over it is a load error.) The variable reads its key through the values your
+`set` actions write to it: a stored value outside them, left by an older
+config, draws the `default` and shows a ⚠ naming what it stores. A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,
@@ -604,11 +608,6 @@ control for "just this terminal" beside one for "everywhere":
     // Every session, durably.
     wrapEverywhere: { persist: "autoWrap", cycle: ["true", "false"] },
   },
-  variables: {
-    // The `set: "padding"` stepper seeds an unset key from THIS declaration's
-    // integer default, so the first ◀/▶ click steps from 1 rather than from 0.
-    sessionPadding: { kind: "state", key: "padding", default: "1" },
-  },
   segments: {
     layoutControls: {
       template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}  {{ action "wrapEverywhere" "pin wrap: on" "pin wrap: off" }}',
@@ -659,15 +658,12 @@ one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass
 {
-  variables: {
-    activePreset: { kind: 'state', key: 'preset', default: 'default' },
-  },
   actions: {
     applyPreset: { set: 'preset', from: 'presets' },
   },
   segments: {
     presetControl: {
-      template: '▦ {{ .activePreset }} {{ menu "applyPreset" "▸" "▾" }}',
+      template: '▦ {{ .preset.effective }} {{ menu "applyPreset" "▸" "▾" }}',
     },
   },
   presets: {

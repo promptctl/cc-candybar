@@ -29,15 +29,13 @@ import type {
   ThemeDefaultField,
 } from "./globals-fields.js";
 import {
-  effectiveGlobal,
   FOLLOW_BAR,
   isPlacementThemeName,
   parseSessionBoolean,
   parseSessionInt,
   PLACEMENT_EFFECTS,
-  readStored,
-  type Folded,
 } from "../themes/policy.js";
+import { effectiveGlobal, readStored, type Folded } from "./fold.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -561,6 +559,7 @@ export type Globals = GlobalsOf<GlobalFieldRows>;
 // var-system. There is no "extension" path that bypasses this list.
 export type VariableDecl =
   | AuthoredVariableDecl
+  | DraftStateVar
   | DroppedVarDecl
   | SourceVarDecl;
 
@@ -573,7 +572,7 @@ export type AuthoredVariableDecl =
   | ShellVarDecl
   | TemplateVarDecl
   | TimeVarDecl
-  | StateVarDecl;
+  | AuthoredStateVar;
 
 // [LAW:no-silent-failure] A plugin's data variable when the plugin did not
 // load: a DOCUMENT whose one outcome is the drop, so every template reading
@@ -712,20 +711,31 @@ export interface TimeVarDecl {
 // [LAW:no-mode-explosion] The session is the view's own, as the hook door
 // checked it: no per-decl knob, no variable, and so no config, names which
 // session's state a `state` variable reads.
-export interface StateVarDecl {
+// [LAW:types-are-the-program] A `state` variable reads its key through one
+// fold: a variable a file authors over its `default`, or a placement setting's
+// draft slot (configure mode) over the value the placement saves, read through
+// the setting's own domain (`placementPick`). Never both, so a slot has no
+// `default` to disagree with what it saves.
+export type StateVarDecl = AuthoredStateVar | DraftStateVar;
+
+interface StateVarBase {
   readonly kind: "state";
   readonly key: string;
-  readonly default?: string;
   // The disclosures this key's own disclosure sits inside without hanging in
   // their body — edit chrome is gated on edit mode by `when`, not hung under
   // it — so closing one returns this key to its default, as closing a body
   // returns what hangs in it (src/config/disclosure-nest.ts). Synthesis-only,
   // like `SegmentNode.opens`: the loader's variable schema does not list it.
   readonly within?: readonly DisclosureRef[];
-  // A placement setting's draft slot (configure mode): the key read through
-  // the setting's own domain, over the value the placement saves, in place of
-  // a `default` (`placementPick`). Synthesis-only, like `within`.
-  readonly setting?: {
+}
+
+export interface AuthoredStateVar extends StateVarBase {
+  readonly default?: string;
+}
+
+// Synthesis-only, like `within`.
+export interface DraftStateVar extends StateVarBase {
+  readonly setting: {
     readonly decl: SettingDecl;
     readonly saved: SettingValue;
   };
@@ -902,6 +912,10 @@ export const THEME_SETTING = "theme";
 export const EFFECT_SETTING = "effect";
 export const IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING] as const;
 export type ImpliedSetting = (typeof IMPLIED_SETTINGS)[number];
+
+export function isImpliedSetting(name: string): name is ImpliedSetting {
+  return (IMPLIED_SETTINGS as readonly string[]).includes(name);
+}
 
 // [LAW:single-enforcer] THE settings a segment's placements have: what its
 // definition declares, plus the IMPLIED_SETTINGS every placement has — `theme`

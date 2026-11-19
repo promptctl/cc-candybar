@@ -805,10 +805,4 @@ describe("paletteForThemeName", () => {
     const b = paletteForThemeName("gruvbox").get("primary")!;
     expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
-
-  test("a name that is no installed theme throws loudly, never a fallback", () => {
-    expect(() => paletteForThemeName("not-a-real-theme")).toThrow(
-      /is not an installed theme/,
-    );
-  });
 });

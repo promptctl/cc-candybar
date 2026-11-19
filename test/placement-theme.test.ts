@@ -22,7 +22,12 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { bindRender } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
-import { FOLLOW_BAR, listResolvablePaletteNames } from "../src/themes/policy";
+import {
+  FOLLOW_BAR,
+  isInstalledTheme,
+  listResolvablePaletteNames,
+} from "../src/themes/policy";
+import type { ThemeName } from "@promptctl/rich-js";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { runUrl } from "./helpers/frame";
@@ -65,7 +70,7 @@ afterEach(() => {
   durable.dispose();
 });
 
-const decided = (name: string) => ({
+const decided = (name: ThemeName) => ({
   kind: "decided" as const,
   name,
   value: paletteForThemeName(name),
@@ -84,7 +89,7 @@ function themeBar(src: string) {
   const { config } = rig;
   // The cells of the latest draw, which bgOf reads after it.
   let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
-  const render = (barTheme = BAR_A): Frame => {
+  const render = (barTheme: ThemeName = BAR_A): Frame => {
     const drawn = rig.draw({
       opts: { width: 200 },
       selection: selectionFor(config, { theme: decided(barTheme) }),
@@ -268,7 +273,7 @@ describe("configure mode picks a placement's theme", () => {
     expect(swatchOf(first!).text).toBe("▀▀▀");
     expect(lookOf(first!)).not.toEqual(lookOf(second!));
     expect(
-      linksOf(out).filter((l) => listResolvablePaletteNames().includes(l.text)),
+      linksOf(out).filter((l) => isInstalledTheme(l.text)),
     ).toEqual([]);
 
     const pinnedBefore = rt.bgOf("pinned");

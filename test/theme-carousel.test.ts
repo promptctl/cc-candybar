@@ -418,7 +418,7 @@ function bodyRows(rt: ReturnType<typeof rig>, control: string): RichText[][] {
 // The theme's control is the theme picker (brandon-theme-swatch-8v9r):
 // `🎨 theme ▀▀▀ ⚙`, whose label opens a row of swatches over a two-row demo.
 describe("the settings menu's look controls are pickers whose label opens a list", () => {
-  const THEMES = listResolvablePaletteNames();
+  const THEMES: readonly string[] = listResolvablePaletteNames();
   // The links of the swatch row: every link writing the theme whose text is
   // a swatch, with the theme it writes. Its text is read off its runs, padding
   // included, since an unmarked swatch's spaces stand where the marked one's

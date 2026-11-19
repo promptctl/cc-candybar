@@ -10,37 +10,28 @@
 // computed once per process, not once per RenderCache entry or per render.
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
-import type { ThemeKey, Palette } from "@promptctl/rich-js";
+import type { ThemeKey, ThemeName, Palette } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
 import {
   FOLLOW_BAR,
   resolveSelection,
-  retiredThemeNote,
-  fallbackMessage,
   isInstalledTheme,
+  notInstalledTheme,
   wornName,
   THEME_FLOOR,
   type Decided,
-  type Folded,
+  type PlacementTheme,
   type Selection,
 } from "./policy.js";
+import { fallbackMessage, type Folded } from "../config/fold.js";
 
 /**
- * The Palette for a theme name a domain already holds: a theme setting's
- * value, an option of the `themes` domain. rich-js builds each palette once,
- * on first request, and keeps it.
- *
- * [LAW:no-defensive-null-guards] Every name reaching here passed
- * `isInstalledTheme`, the one membership test, where it was read: one that
- * did not is a value read past its domain, and the throw names it.
+ * The Palette for an installed theme's name: a theme setting's value, an
+ * option of the `themes` domain. rich-js builds each palette once, on first
+ * request, and keeps it. [LAW:parse-dont-validate] A name is read through
+ * `isInstalledTheme` where it enters, so none reaches here unproven.
  */
-export function paletteForThemeName(name: string): Palette {
-  if (!isInstalledTheme(name)) {
-    throw new Error(
-      `Palette "${name}" is not an installed theme: a theme name reached the ` +
-        `palette without being read through its domain`,
-    );
-  }
+export function paletteForThemeName(name: ThemeName): Palette {
   return getThemePalette(name);
 }
 
@@ -50,7 +41,7 @@ export function paletteForThemeName(name: string): Palette {
 // bar's theme and style alike. The render's walk and the placement-theme
 // picker's option cells both read it, so an option paints what picking it
 // would draw.
-export function placementPalette(theme: string, bar: Palette): Palette {
+export function placementPalette(theme: PlacementTheme, bar: Palette): Palette {
   return theme === FOLLOW_BAR ? bar : paletteForThemeName(theme);
 }
 
@@ -101,7 +92,7 @@ export type DecidedTheme = Decided<Palette>;
 // draws cannot disagree.
 function namedTheme(name: string): DecidedTheme | null {
   return isInstalledTheme(name)
-    ? { kind: "decided", name, value: getThemePalette(name) }
+    ? { kind: "decided", name, value: paletteForThemeName(name) }
     : null;
 }
 
@@ -134,11 +125,7 @@ export function decideThemeName(
   const named = namedTheme(name);
   if (named !== null) return named;
   onUnresolvable(
-    fallbackMessage(
-      where,
-      wornName(THEME_FLOOR),
-      `"${name}" names no installed theme${retiredThemeNote(name)}`,
-    ),
+    fallbackMessage(where, wornName(THEME_FLOOR), notInstalledTheme(name)),
   );
   return themeFloor();
 }

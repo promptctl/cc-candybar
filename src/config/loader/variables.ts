@@ -14,13 +14,14 @@ import {
   type InputVarDecl,
   type LiteralVarDecl,
   type ShellVarDecl,
-  type StateVarDecl,
+  type AuthoredStateVar,
   type TemplateVarDecl,
   type TimeVarDecl,
   type AuthoredVariableDecl,
 } from "../dsl-types.js";
 import { isJsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { SESSION_KEY_TO_SETTING, SETTINGS } from "../setting-projections.js";
 import {
   armFacets,
   describeType,
@@ -34,6 +35,7 @@ import {
   optionalStringSpec,
   optionalTypedDefault,
   reject,
+  requireString,
   requireStringSpec,
   optionalEnvNamesSpec,
   optionalEnumSpec,
@@ -324,13 +326,34 @@ const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
 const TIME_VAR_REMOVED = noCachePolicy(
   "a time variable reads the instant its render is drawn at",
 );
-// `within` and `setting` are synthesis-only: no file may author them.
-const STATE_FIELDS: FieldSpecMap<
-  Omit<StateVarDecl, "kind" | "within" | "setting">
-> = {
-  key: requireStringSpec(),
+// `within` is synthesis-only, and so is a draft slot: no file may author them.
+const STATE_FIELDS: FieldSpecMap<Omit<AuthoredStateVar, "kind" | "within">> = {
+  key: stateKeySpec(),
   default: optionalStringSpec(),
 };
+
+// [LAW:single-enforcer] A session key has one declaration. A setting's key is
+// the setting's, which reads back through its `.effective` projection, so a
+// `state` variable over it would be a second, disagreeing read of one pick.
+function stateKeySpec(): FieldSpec<string> {
+  return {
+    ...requireStringSpec(),
+    parse: (ctx, path, field, raw) => {
+      const key = requireString(ctx, path, raw, field);
+      const setting =
+        key === null ? undefined : SESSION_KEY_TO_SETTING.get(key);
+      if (setting === undefined) return key ?? undefined;
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message:
+          `${path}.${field} "${key}" is the "${setting}" setting's key — ` +
+          `read the setting as ${SETTINGS[setting].effectiveVar}`,
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
+      });
+      return undefined;
+    },
+  };
+}
 
 // [LAW:one-source-of-truth] The discriminator's name, spelled once: the schema's
 // `tag` and every arm's baked-in const / legal-key set read this one constant, so

@@ -12,6 +12,7 @@
 import {
   compareStructural,
   computed,
+  createAtom,
   observable,
   observe,
   reaction,
@@ -37,7 +38,7 @@ import {
   type Derived,
   type StoredValue,
 } from "./store.js";
-import type { Folded } from "../themes/policy.js";
+import type { Folded } from "../config/fold.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -153,12 +154,13 @@ export interface TimeOptions {
   readonly varDefault?: string;
 }
 
-// [LAW:one-source-of-truth] state vars read through to SessionState; the
-// reactive contract is owned by SessionState's internal atom. The computed
-// reads the bound view's session and dispatches through SessionStateReader.get.
-export interface StateOptions {
+// A `state` variable's stored spelling its fold passed over, with the key it is
+// stored at and the value the variable shows in its place.
+export interface StaleState {
+  readonly name: string;
   readonly key: string;
-  readonly varDefault?: string;
+  readonly stored: string;
+  readonly shown: string;
 }
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
@@ -467,6 +469,19 @@ export class SourceRegistry {
     private readonly parent: SourceRegistry | null = null,
   ) {
     this.sessionState = sessionState;
+    this.staleNow = this.store.derive(
+      "stale state picks",
+      "computed",
+      (): readonly StaleState[] => {
+        this.statesDeclared.reportObserved();
+        return [...this.states].flatMap(([name, { key, folded, shown }]) => {
+          const { stale } = folded();
+          return stale === null
+            ? []
+            : [{ name, key, stored: stale, shown: shown() }];
+        });
+      },
+    );
     this.cleanups.push(observe(this.subscriptionsNow, () => {}));
     this.cleanups.push(observe(this.envNow, () => {}));
   }
@@ -908,48 +923,63 @@ export class SourceRegistry {
     });
   }
 
-  // state: read-through to SessionState. The computed reads two deps — the
-  // bound view's session (`session()`) and SessionState itself (MobX-tracked
-  // via its internal atom). A click verb that mutates SessionState
-  // invalidates this computed.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
+  // state: read-through to SessionState. Every state variable reads its key
+  // through a fold over its domain (src/config/state-fold.ts), and is that
+  // fold's value spelled — what every template, picker mark and carousel
+  // reads — or the config's empty value where nothing is in force. The
+  // computed reads two deps — the bound view's session (`session()`) and
+  // SessionState itself (MobX-tracked via its internal atom) — so a click verb
+  // that mutates SessionState invalidates it. A fold is a parse of one stored
+  // spelling, so `foldedState` reads it afresh for the draw that reports the
+  // miss rather than keeping a second node per variable.
   //
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
-  declareState(name: string, opts: StateOptions): void {
-    const read = this.stateReader(name);
-    const fallback = opts.varDefault ?? this.stringInitial(undefined);
-    this.store.defineComputed(name, "string", () => read(opts.key) ?? fallback);
-  }
-
-  // A state variable whose key is read against a domain: `fold` reads the
-  // session's value at `key` into the value in force and the spelling it passed
-  // over, kept as ONE derived value of the store. The variable is that value
-  // spelled, which every template, picker mark and carousel reads, and
-  // `foldedState` hands the whole fold to the draw that reports the miss.
-  declareFoldedState<T extends VarValue>(
+  declareState<T extends VarValue>(
     name: string,
     key: string,
-    fold: (raw: string | null) => Folded<T>,
+    fold: (raw: string | null) => Folded<T | null>,
     spell: (value: T) => string,
   ): void {
     const read = this.stateReader(name);
-    const folded = this.store.derive(name, "computed", () => fold(read(key)));
-    this.folds.set(name, folded);
-    this.store.defineComputed(name, "string", () => spell(folded.read().value));
+    const folded = (): Folded<T | null> => fold(read(key));
+    const shown = (): string => {
+      const { value } = folded();
+      return value === null ? this.stringInitial(undefined) : spell(value);
+    };
+    this.states.set(name, { key, folded, shown });
+    runInAction(() => this.statesDeclared.reportChanged());
+    this.store.defineComputed(name, "string", shown);
   }
 
-  // [LAW:no-defensive-null-guards] Asked only of a name `declareFoldedState`
+  // [LAW:no-defensive-null-guards] Asked only of a name `declareState`
   // declared; any other is a caller's drift, named.
-  foldedState(name: string): Folded<VarValue> {
-    const folded = this.folds.get(name);
-    if (folded === undefined) {
-      throw new Error(`"${name}" is no state variable read against a domain`);
+  foldedState(name: string): Folded<VarValue | null> {
+    const state = this.states.get(name);
+    if (state === undefined) {
+      throw new Error(`"${name}" is no state variable`);
     }
-    return folded.read();
+    return state.folded();
   }
 
-  private readonly folds = new Map<string, Derived<Folded<VarValue>>>();
+  // [LAW:no-silent-failure] Every state variable whose fold passed over the
+  // session's stored spelling: kept, so a draw reads it without walking the
+  // variables, and it changes only when a stored value or a declaration does.
+  staleStates(): readonly StaleState[] {
+    return this.staleNow.read();
+  }
+
+  private readonly states = new Map<
+    string,
+    {
+      readonly key: string;
+      readonly folded: () => Folded<VarValue | null>;
+      readonly shown: () => string;
+    }
+  >();
+  private readonly statesDeclared = createAtom("state variables declared");
+
+  private readonly staleNow: Derived<readonly StaleState[]>;
 
   // [LAW:single-enforcer] How every state variable reads the session's stored
   // value at a key: through the view's checked session, the same one the
@@ -959,7 +989,7 @@ export class SourceRegistry {
     const sessionState = this.sessionState;
     if (sessionState === undefined) {
       throw new Error(
-        `declareState("${name}"): SourceRegistry was constructed without a SessionState — ` +
+        `state variable "${name}": SourceRegistry was constructed without a SessionState — ` +
           `state-kind variables require a SessionState (the daemon provides one; tests must supply one)`,
       );
     }

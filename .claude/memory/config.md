@@ -50,7 +50,7 @@ Precedence, lowest to highest: bundled default < file < active preset < session 
 
 Every globals field is one row of the fields table. The schema, the resolved globals, the menu control, the option domain, the payload field and the save format all derive from that row. A new setting is a row, the code that uses its value, and its tests. Controls are generated from the row's domain. A field no control fits is text-only. A field only the file sets has no control and no session pick; colour depth is one of these.
 
-A session pick outside its setting's domain stays stored and draws the fallback under a warning, because the profile outlives the build and config that defined the domain, and restoring the domain must bring the pick back.
+A session pick outside its setting's domain stays stored and draws the fallback under a warning, because the profile outlives the build and config that defined the domain, and restoring the domain must bring the pick back. A `state` variable's domain is the values its key's `set` actions write, so adding an action over a key can turn a stored value stale.
 
 ## Drafts, save, reset
 

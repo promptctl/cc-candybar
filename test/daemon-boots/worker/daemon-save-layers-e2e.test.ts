@@ -22,7 +22,7 @@ import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
 jest.setTimeout(60_000);
 
-const [A, B, C] = listResolvablePaletteNames().filter((t) => t !== "dusk");
+const [A, B, C] = listResolvablePaletteNames();
 
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync(

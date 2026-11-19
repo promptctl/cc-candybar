@@ -16,8 +16,8 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import {
-  describeInstalledThemes,
   isInstalledTheme,
+  notInstalledTheme,
   ENDCAPS_SHAPES,
 } from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
@@ -64,7 +64,7 @@ const validateTheme: KeyValidator = (raw) => {
   if (!isInstalledTheme(raw)) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${describeInstalledThemes()})`,
+      reason: notInstalledTheme(raw),
     };
   }
   return { ok: true, value: raw };
@@ -148,8 +148,9 @@ function dropBaselineAllowLists(
 
 // [LAW:one-source-of-truth] The writable-key surface a config's `set` actions
 // need, DERIVED from the action table — the same declarations the
-// `{{ action }}` fn realizes a click from are the gate the wire enforces.
-function actionContributions(config: DslConfig): KeySpecContribution[] {
+// `{{ action }}` fn realizes a click from are the gate the wire enforces, and
+// the domains a `state` variable reads its key through (state-fold.ts).
+export function actionContributions(config: DslConfig): KeySpecContribution[] {
   const perConfigDomains = configOptionDomains(config);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>

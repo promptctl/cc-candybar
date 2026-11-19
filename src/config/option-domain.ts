@@ -118,12 +118,18 @@ interface DomainEntry {
 
 const _GLOBAL_OPTION_DOMAINS = new Map<string, DomainEntry>();
 
-function registerBuiltinDomain(
+// A domain whose members are a narrower name type paints each by that type.
+function registerBuiltinDomain<T extends string>(
   name: string,
-  resolve: OptionDomainResolver,
-  facets: Pick<DomainEntry, "paletteOf" | "library" | "labelOf"> = {},
+  resolve: () => readonly T[],
+  facets: Pick<DomainEntry, "library" | "labelOf"> & {
+    readonly paletteOf?: (option: T, render: RenderPalettes) => Palette;
+  } = {},
 ): void {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+  // [LAW:types-are-the-program] exception: a domain paints only the members
+  // `resolve` lists, a type the name-keyed registry cannot carry per entry.
+  const entry = { permanent: true, resolve, ...facets } as DomainEntry;
+  _GLOBAL_OPTION_DOMAINS.set(name, entry);
 }
 
 // [LAW:one-source-of-truth] "themes"/"endcaps" become ORDINARY registrations —

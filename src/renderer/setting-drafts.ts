@@ -51,15 +51,13 @@ import {
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
-import {
-  listResolvablePaletteNames,
-  spellSetting,
-  type Folded,
-} from "../themes/policy.js";
+import { listResolvablePaletteNames, spellSetting } from "../themes/policy.js";
+import { type Folded } from "../config/fold.js";
 import { type SettingCounts } from "./render-payload.js";
 import {
   presetOf,
   resolveEffectiveGlobals,
+  settingValue,
   spelledSetting,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
@@ -157,8 +155,8 @@ function differing(
   });
 }
 
-// [LAW:one-source-of-truth] What a setting's control shows, in its
-// SessionState spelling, with the stored spelling the fold passed over: the
+// [LAW:one-source-of-truth] What a setting's control shows, with the stored
+// spelling the fold passed over: the
 // full resolution the bar draws, edit mode's staged value included, so a step
 // steps from the value its control shows. A setting chosen by RULE shows no
 // name (null).
@@ -166,33 +164,26 @@ export function settingShows(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
   name: SettingName,
-): Folded<string | null> {
+): Folded<SettingValue | null> {
   const shown = resolveEffectiveGlobals(config, sessionPick, NOT_CUSTOMIZED);
   return {
-    value: spelledSetting(shown, name),
+    value: settingValue(shown, name),
     stale: shown.stale.find((miss) => miss.setting === name)?.stored ?? null,
   };
 }
 
-// [LAW:no-silent-failure] Every key at which the session stores a pick the
-// fold passes over — a global's (whose name is its key) and a placement
-// slot's, in the preset the session renders. A save releases only the picks
-// the file now draws; a stale pick is none of them, so it stays stored, still
-// reported, until it names something again or a reset clears it.
+// [LAW:no-silent-failure] Every setting whose stored pick the fold passes
+// over. A save releases only the picks the file now draws; a stale pick is
+// none of them, so it stays stored, still reported, until it names something
+// again or a reset clears it. A placement slot's stale pick is no draft (its
+// fold draws the saved value), so no save holds it to release.
 export function stalePickKeys(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
 ): ReadonlySet<string> {
-  const session = sessionGlobals(config, sessionPick);
-  return new Set([
-    ...session.stale.map((miss) => miss.setting),
-    ...slotsOf(config, session.preset)
-      .filter(
-        ({ decl, saved, key }) =>
-          placementPick(decl, saved, sessionPick(key)).stale !== null,
-      )
-      .map(({ key }) => key),
-  ]);
+  return new Set(
+    sessionGlobals(config, sessionPick).stale.map((miss) => miss.setting),
+  );
 }
 
 // Every setting the session renders differently from the config file. The
@@ -284,27 +275,6 @@ export function placementDrafts(
         : [{ preset, id, setting, key, value }];
     },
   );
-}
-
-// What the draft slot at `key` shows, in its SessionState spelling, with the
-// pick its fold passed over — the fold the slot's state variable keeps for the
-// render, asked here by a click, which reads no store. null for a key no slot
-// of any preset holds.
-export function draftSlotShows(
-  config: DslConfig,
-  sessionPick: (key: string) => string | null,
-  key: string,
-): Folded<string> | null {
-  const slot = presetNames(config.presets)
-    .flatMap((preset) => slotsOf(config, preset))
-    .find((s) => s.key === key);
-  if (slot === undefined) return null;
-  const { value, stale } = placementPick(
-    slot.decl,
-    slot.saved,
-    sessionPick(key),
-  );
-  return { value: spellSetting(value), stale };
 }
 
 // [LAW:single-enforcer] What unsaved picks about to land would break between

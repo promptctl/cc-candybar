@@ -28,17 +28,16 @@ import {
   type SettingDecl,
   type SettingValue,
   type SourceDefault,
-  EFFECT_SETTING,
+  type ImpliedSetting,
+  isImpliedSetting,
   parseArm,
-  placementPick,
   savedSetting,
   settingsOf,
   stateVarDecls,
-  THEME_SETTING,
 } from "../config/dsl-types.js";
-import type {
-  EffectiveGlobals,
-  FoldedName,
+import {
+  wornSetting,
+  type EffectiveGlobals,
 } from "../config/effective-globals.js";
 import type { ValuedField } from "../config/globals-fields.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
@@ -76,7 +75,6 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
-  fallbackMessage,
   wornName,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
@@ -90,9 +88,14 @@ import {
   retiredThemeNote,
   spellSetting,
   stalePick,
-  type Folded,
   type StalePick,
 } from "../themes/policy.js";
+import { fallbackMessage, type Folded } from "../config/fold.js";
+import {
+  stateDomains,
+  stateFold,
+  type StateDomains,
+} from "../config/state-fold.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   bindClock,
@@ -318,6 +321,7 @@ function declareOne(
   decl: VariableDecl,
   cwd: string,
   derivation: Derivation,
+  domains: StateDomains,
 ): void {
   switch (decl.kind) {
     case "literal":
@@ -386,25 +390,14 @@ function declareOne(
       });
       break;
 
-    // A placement setting's draft slot reads its key through the setting's own
-    // fold, kept in the store, so everything reading the slot reads its fold.
-    case "state": {
-      const { setting } = decl;
-      if (setting === undefined) {
-        registry.declareState(name, {
-          key: decl.key,
-          ...(decl.default !== undefined && { varDefault: decl.default }),
-        });
-        break;
-      }
-      registry.declareFoldedState(
+    case "state":
+      registry.declareState(
         name,
         decl.key,
-        (raw) => placementPick(setting.decl, setting.saved, raw),
+        stateFold(decl, domains),
         spellSetting,
       );
       break;
-    }
   }
 }
 
@@ -586,21 +579,21 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   // config named the variable after the key. For an ordinary key that is the
   // `state` variable over it.
   //
-  // A settings key the daemon resolves per render (theme, style, preset, …)
-  // reads back through its `.effective` projection FIRST, ahead of any `state`
-  // variable over the same key: the current value of a setting is the one the
-  // bar is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
+  // A setting's key (theme, style, preset, …) reads back through its
+  // `.effective` projection: the current value of a setting is the one the bar
+  // is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
   // centres on the theme the bar wears even when the session never picked one
   // — the same read-back the settings menu's controls get, so a bar control
-  // and the menu cannot disagree (brandon-theme-picker-bgw.exj).
+  // and the menu cannot disagree (brandon-theme-picker-bgw.exj). No `state`
+  // variable reads a setting's key: the loader refuses one.
   const stateKeyToVar = new Map<string, string>();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in variables) stateKeyToVar.set(key, name);
   }
   // Segment-local state vars read the same SessionState keys under their
-  // namespaced `segName.varName` (the form the store + scope use); a global
-  // wins on key collision (yielded first) — the value is the same key
-  // regardless, so either reads correctly.
+  // namespaced `segName.varName` (the form the store + scope use). A key two
+  // variables read reads back through the first declared — a global before a
+  // segment's — the one a click steps it from (`keyFold`).
   for (const [name, decl] of stateVarDecls(config)) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
@@ -631,6 +624,7 @@ export function declareDslVariables(
 ): readonly string[] {
   const scopeOf = variableScopes(config);
   const projections = projectionsOf(config);
+  const domains = stateDomains(config);
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
   // simply lacks the broken variable. Segments that reference it get a
@@ -646,6 +640,7 @@ export function declareDslVariables(
         decl,
         cwd,
         projections.has(name) ? "projection" : "computed",
+        domains,
       );
     } catch (err) {
       loadWarnings.push(
@@ -887,18 +882,17 @@ export function compileDslConfig({
   // shows a session's unsaved pick the moment it lands, the file's value while
   // there is none, and the file's value in place of a stale pick, which the
   // same fold carries for the draw to report.
-  // [LAW:no-silent-failure] The settings a placement's draw reads: its theme
-  // and its effect, which colour and move its cells, and each one its
-  // templates read (`.settings.<name>`) — its segment's, the actions they
-  // bind, and its own `when`. A stale pick nothing reads changes nothing
-  // drawn, so only these are the draw's to report. Each segment's reads are
-  // walked once per compile.
+  // [LAW:no-silent-failure] The settings a placement's draw reads: every
+  // implied setting, which colour and move its cells, and each one its
+  // templates read (`.settings.<name>`) — its segment's, the actions they bind,
+  // its own `when` and the chrome drawn in its cell. A stale pick nothing reads
+  // changes nothing drawn, so only these are the draw's to report. Each
+  // segment's reads are walked once per compile.
   const segmentReads = new Map<SegmentDecl, ValueReads>();
   const settingsRead = (
     seg: SegmentDecl,
     node: SegmentNode,
-    names: readonly string[],
-  ): ReadonlySet<string> => {
+  ): ((name: string) => boolean) => {
     let reads = segmentReads.get(seg);
     if (reads === undefined) {
       reads = valueReads({
@@ -908,21 +902,18 @@ export function compileDslConfig({
       });
       segmentReads.set(seg, reads);
     }
-    const paths = [...SEGMENT_TEMPLATE_FIELDS.map((f) => seg[f]), node.when]
-      .flatMap((text) => (text === undefined ? [] : reads.ofTemplate(text)))
-      .map(({ path }) => path);
-    const readsSetting = (name: string): boolean =>
-      paths.some(
-        (path) =>
-          path === SETTINGS_SCOPE ||
-          path === `${SETTINGS_SCOPE}.${name}` ||
-          path.startsWith(`${SETTINGS_SCOPE}.${name}.`),
-      );
-    return new Set([
-      THEME_SETTING,
-      EFFECT_SETTING,
-      ...names.filter(readsSetting),
-    ]);
+    const texts = SEGMENT_TEMPLATE_FIELDS.map((f) => seg[f]);
+    const read = new Set<string | undefined>(
+      [...texts, node.when, node.lead, node.trail]
+        .flatMap((text) => (text === undefined ? [] : reads.ofTemplate(text)))
+        .flatMap(({ path }) => {
+          const [scope, name] = path.split(".");
+          return scope === SETTINGS_SCOPE ? [name] : [];
+        }),
+    );
+    // A read of the whole scope reads every setting.
+    return (name) =>
+      isImpliedSetting(name) || read.has(undefined) || read.has(name);
   };
   const resolvedSettings = (node: SegmentNode): ResolvedPlacement => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
@@ -933,12 +924,19 @@ export function compileDslConfig({
       name: string,
       decl: SettingDecl,
       draft: DraftSlot | undefined,
-    ): Folded<SettingValue> =>
-      draft === undefined
-        ? { value: savedSetting(node, name, decl), stale: null }
-        : renderBinding(actionRuntime, `setting ${name}`).registry.foldedState(
-            draft.variable,
-          );
+    ): Folded<SettingValue> => {
+      if (draft === undefined) {
+        return { value: savedSetting(node, name, decl), stale: null };
+      }
+      const { value, stale } = renderBinding(
+        actionRuntime,
+        `setting ${name}`,
+      ).registry.foldedState(draft.variable);
+      // [LAW:no-defensive-null-guards] A slot folds over the value its
+      // placement saves, so it always holds one; one that does not is drift.
+      if (value === null) throw new Error(`${draft.variable} holds no value`);
+      return { value, stale };
+    };
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(decls)) {
       Object.defineProperty(out, name, {
@@ -946,7 +944,7 @@ export function compileDslConfig({
         get: () => fold(name, decl, node.drafts?.[name]).value,
       });
     }
-    const read = settingsRead(seg, node, Object.keys(decls));
+    const read = settingsRead(seg, node);
     return {
       // settingsOf always declares `theme` and `effect`, over domains whose
       // values are names (an effect's, the placement effects) — the one cast
@@ -959,7 +957,7 @@ export function compileDslConfig({
       stale: () =>
         Object.entries(decls).flatMap(([name, decl]): PlacementMiss[] => {
           const draft = node.drafts?.[name];
-          if (draft === undefined || !read.has(name)) return [];
+          if (draft === undefined || !read(name)) return [];
           const { value, stale } = fold(name, decl, draft);
           return stale === null
             ? []
@@ -967,9 +965,12 @@ export function compileDslConfig({
                 {
                   key: draft.key,
                   setting: `${draft.id}.${name}`,
-                  name,
                   stored: stale,
-                  value,
+                  note: decl.domain === "theme" ? retiredThemeNote(stale) : "",
+                  wears:
+                    value === FOLLOW_BAR && isImpliedSetting(name)
+                      ? { kind: "bar", setting: name }
+                      : { kind: "own", value },
                 },
               ];
         }),
@@ -1417,10 +1418,6 @@ export function bindPayload(
   return drawn;
 }
 
-// What a stale pick's report adds: a retired theme's name, the one to write.
-const noteOf = (setting: string, stored: string): string =>
-  setting === THEME_SETTING ? retiredThemeNote(stored) : "";
-
 export function drawDsl(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -1551,37 +1548,38 @@ export function drawDsl(
     decidedEffect.kind === "decided"
       ? decidedEffect
       : decideEffectName(slotted("effect"));
-  // What the bar wears for each setting it passed a pick over: a selection's
-  // decided name, a rule's answer included, else the value in its spelling.
-  const decided = { theme, style, effect };
-  const wornFor = (setting: FoldedName): string =>
-    setting === "theme" || setting === "style" || setting === "effect"
-      ? decided[setting].name
-      : spellSetting(selection[setting]);
-  for (const { setting, stored } of selection.stale) {
+  // What the bar wears for each setting it passed a pick over: the selections
+  // as this draw decided them, over the resolved values.
+  const drawn = { ...selection, theme, style, effect };
+  for (const { setting, stored, note } of selection.stale) {
     stale.set(
       setting,
-      stalePick(setting, stored, wornFor(setting), noteOf(setting, stored)),
+      stalePick(setting, stored, wornSetting(drawn, setting), note),
     );
   }
+  // A state variable's stale pick wears what the variable shows in its place.
+  // A draft slot's is its placement's to report (`placementStale`), and only
+  // where the placement's draw reads it.
+  for (const miss of registry.staleStates()) {
+    const decl = config.variables[miss.name];
+    if (decl?.kind === "state" && "setting" in decl) continue;
+    stale.set(miss.key, stalePick(miss.key, miss.stored, miss.shown, ""));
+  }
   // A placement following the bar wears the bar's own theme and effect.
-  const follows = new Map([
-    [THEME_SETTING, theme.name],
-    [EFFECT_SETTING, effect.name],
-  ]);
-  const placementStale = (miss: PlacementMiss): void => {
-    const own = spellSetting(miss.value);
-    const wears =
-      miss.value === FOLLOW_BAR ? (follows.get(miss.name) ?? own) : own;
-    stale.set(
-      miss.key,
-      stalePick(
-        miss.setting,
-        miss.stored,
-        wears,
-        noteOf(miss.name, miss.stored),
-      ),
-    );
+  const follows: Readonly<Record<ImpliedSetting, string>> = {
+    theme: theme.name,
+    effect: effect.name,
+  };
+  const placementStale = ({
+    key,
+    setting,
+    stored,
+    note,
+    wears,
+  }: PlacementMiss): void => {
+    const worn =
+      wears.kind === "bar" ? follows[wears.setting] : spellSetting(wears.value);
+    stale.set(key, stalePick(setting, stored, worn, note));
   };
   // [LAW:one-source-of-truth] The render's BASE palette: a picker over a
   // colour-valued domain paints each option in the palette picking it would put

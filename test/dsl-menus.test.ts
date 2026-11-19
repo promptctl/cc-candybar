@@ -40,6 +40,7 @@ import type { Palette, Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
+import { installedTheme } from "./helpers/installed-theme";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { stateGate } from "./helpers/gates";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -1291,7 +1292,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     for (const cell of cells) {
       expectSwatched(
         optionRuns(body, cell.name),
-        paletteForThemeName(cell.name),
+        paletteForThemeName(installedTheme(cell.name)),
         ground,
         text,
       );
@@ -1424,7 +1425,7 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     for (const cell of cells) {
       expectSwatched(
         optionRuns(line, cell.name),
-        paletteForThemeName(cell.name),
+        paletteForThemeName(installedTheme(cell.name)),
         ground,
         text,
       );

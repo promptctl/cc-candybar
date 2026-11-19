@@ -11,11 +11,7 @@ import {
   type SourceKind,
 } from "../dsl-types.js";
 import { findKeyLine, type ConfigIssue } from "./diagnostics.js";
-import {
-  describeInstalledThemes,
-  isInstalledTheme,
-  retiredThemeNote,
-} from "../../themes/policy.js";
+import { notInstalledTheme, isInstalledTheme } from "../../themes/policy.js";
 
 export interface ValidateCtx {
   readonly source: string;
@@ -125,7 +121,7 @@ export function validatePaletteName(
   if (!isInstalledTheme(v)) {
     ctx.issues.push({
       path: `${path}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${describeInstalledThemes()}`,
+      message: `${path}.palette: ${notInstalledTheme(v)}`,
       line: findKeyLine(ctx.source, [...path.split("."), "palette"]),
     });
     return undefined;

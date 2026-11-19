@@ -95,7 +95,7 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     "actions + variable kinds",
     `{
       segments: { t: { template: '{{ .themePick }} {{ action "open" "▸" }}' } },
-      variables: { themePick: { kind: 'state', key: 'theme', default: 'dracula' } },
+      variables: { themePick: { kind: 'state', key: 'accent', default: 'dracula' } },
       actions: { open: { set: 'menu', to: '0' }, step: { set: 'hue', min: 0, max: 60, by: 2 } },
       root: { h: ['t'] },
     }`,

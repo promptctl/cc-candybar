@@ -263,9 +263,6 @@ describe("styles block — normalization and merge", () => {
 
 describe('from: "styles" — rendered options and the derived gate share the config', () => {
   const SRC = `{
-    variables: {
-      look: { kind: 'state', key: 'style', default: 'none' },
-    },
     actions: { applyStyle: { set: 'style', from: 'styles' } },
     styles: { none: {}, vapor: { hueShift: 40 }, washed: { chromaScale: 0.3 } },
     segments: {
@@ -314,9 +311,6 @@ describe('from: "styles" — rendered options and the derived gate share the con
 describe("style click — live whole-bar recolor over the active theme", () => {
   const SRC = `{
     globals: { palette: '${THEME}' },
-    variables: {
-      look: { kind: 'state', key: 'style', default: 'none' },
-    },
     actions: { applyStyle: { set: 'style', from: 'styles' } },
     styles: { none: {}, inverted: { lightnessScale: -1, lightnessShift: 1 } },
     segments: {

@@ -3009,9 +3009,14 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     return { store, registry, sessionState };
   }
 
+  // A state variable over a key that holds any spelling, over `fallback`.
+  const anySpelling =
+    (fallback: string | null = null) =>
+    (raw: string | null) => ({ value: raw ?? fallback, stale: null });
+
   test("returns default when SessionState has no entry for the key", () => {
     const { store, registry } = makeWithState();
-    registry.declareState("caps", { key: "endcaps" });
+    registry.declareState("caps", "endcaps", anySpelling(), String);
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("caps")).toBe("");
   });
@@ -3019,14 +3024,14 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
   test("returns SessionState value when present", () => {
     const { store, registry, sessionState } = makeWithState();
     sessionState.set(S1, "endcaps", "plain");
-    registry.declareState("caps", { key: "endcaps" });
+    registry.declareState("caps", "endcaps", anySpelling(), String);
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("caps")).toBe("plain");
   });
 
   test("varDefault wins when SessionState key is absent", () => {
     const { store, registry } = makeWithState();
-    registry.declareState("theme", { key: "theme", varDefault: "ocean" });
+    registry.declareState("theme", "theme", anySpelling("ocean"), String);
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("theme")).toBe("ocean");
   });
@@ -3036,7 +3041,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     // SessionState; the next render reads through the same MobX graph and
     // sees the new value without re-reading disk.
     const { store, registry, sessionState } = makeWithState();
-    registry.declareState("theme", { key: "theme" });
+    registry.declareState("theme", "theme", anySpelling(), String);
     feedInputs(registry, { session_id: "s1" });
     expect(store.read("theme")).toBe("");
 
@@ -3051,7 +3056,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     const { store, registry, sessionState } = makeWithState();
     sessionState.set(A_ID, "theme", "ocean");
     sessionState.set(B_ID, "theme", "ember");
-    registry.declareState("theme", { key: "theme" });
+    registry.declareState("theme", "theme", anySpelling(), String);
 
     feedInputs(registry, { session_id: "a" });
     expect(store.read("theme")).toBe("ocean");
@@ -3067,7 +3072,7 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     // verb fires and "nothing happens."
     const store = new VariableStore(systemTimekeeper);
     const registry = registryOver(store);
-    expect(() => registry.declareState("theme", { key: "theme" })).toThrow(
+    expect(() => registry.declareState("theme", "theme", anySpelling(), String)).toThrow(
       /state-kind variables require a SessionState/,
     );
   });

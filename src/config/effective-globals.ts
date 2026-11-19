@@ -5,12 +5,13 @@
 import { LANES, perLane, type LaneSwitches } from "./lanes.js";
 import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
-import type { DslConfig, Globals } from "./dsl-types.js";
+import type { DslConfig, Globals, SettingValue } from "./dsl-types.js";
 import {
   perValuedField,
   settingNameOf,
   valuedRow,
   type SessionField,
+  type SettingName,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
@@ -19,13 +20,17 @@ import {
   type StyleSelection,
   resolveEffectSelection,
   type EffectSelection,
+  retiredThemeNote,
+  spellSetting,
+  type Decided,
+  type Selection,
+} from "../themes/policy.js";
+import {
   effectiveGlobal,
   readStored,
-  spellSetting,
   type Folded,
-  type Selection,
   type StaleMiss,
-} from "../themes/policy.js";
+} from "./fold.js";
 import {
   resolveThemeSelection,
   type ThemeSelection,
@@ -91,8 +96,9 @@ export type EffectiveGlobals = ValuedGlobals & {
   readonly stale: ReadonlyArray<StaleMiss<FoldedName>>;
 };
 
-// The name each fold of the resolution publishes its value under.
-export type FoldedName = ValuedField | "preset" | "theme" | "style" | "effect";
+// The name each fold of the resolution publishes its value under: a valued
+// field's own, a selection's setting.
+export type FoldedName = ValuedField | SettingName;
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
 // effective configuration, however that configuration was authored.
@@ -139,16 +145,40 @@ export function presetOf(
   );
 }
 
+// A resolved value as a setting holds it. A selection chosen by RULE has no
+// name until a render evaluates it, so it is `null`.
+export function settingValue(
+  e: { readonly [K in FoldedName]: EffectiveGlobals[K] },
+  name: FoldedName,
+): SettingValue | null {
+  const value: SettingValue | Selection<unknown> = e[name];
+  if (typeof value !== "object") return value;
+  return value.kind === "decided" ? value.name : null;
+}
+
 // [LAW:one-source-of-truth] A resolved value in the spelling its SessionState
-// key uses — the spelling a pick writes (`spellSetting`). A selection chosen
-// by RULE has no name until a render evaluates it, so it is `null`.
+// key uses — the spelling a pick writes (`spellSetting`).
 export function spelledSetting(
   e: { readonly [K in FoldedName]: EffectiveGlobals[K] },
   name: FoldedName,
 ): string | null {
-  const value: string | number | boolean | Selection<unknown> = e[name];
-  if (typeof value !== "object") return spellSetting(value);
-  return value.kind === "decided" ? value.name : null;
+  const value = settingValue(e, name);
+  return value === null ? null : spellSetting(value);
+}
+
+// What the bar wears for a setting once the draw has decided every selection,
+// a rule's answer included: a decided selection's name, else the value in its
+// spelling.
+export function wornSetting(
+  e: {
+    readonly [K in FoldedName]:
+      | Exclude<EffectiveGlobals[K], Selection<unknown>>
+      | Decided<unknown>;
+  },
+  name: FoldedName,
+): string {
+  const value = e[name];
+  return typeof value === "object" ? value.name : spellSetting(value);
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -161,7 +191,7 @@ export function resolveEffectiveGlobals(
 ): EffectiveGlobals {
   const { stale, take } = foldTaker();
   // The preset resolves FIRST: every field below reads the globals it picks.
-  const preset = take("preset", presetOf(config, sessionPick));
+  const preset = take(settingNameOf("preset"), presetOf(config, sessionPick));
   const declared = presetGlobals(config, preset);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, no branch.
@@ -170,12 +200,13 @@ export function resolveEffectiveGlobals(
   // The theme resolves before the look: the look's config default is the
   // THEME's default under the declared globals (src/config/theme-defaults.ts).
   const theme = take(
-    "theme",
+    settingNameOf("palette"),
     resolveThemeSelection(
       staged.palette,
       sessionPick(settingNameOf("palette")),
       declared.palette,
     ),
+    retiredThemeNote,
   );
   const globals = underThemeDefault(
     declared,
@@ -199,8 +230,8 @@ export function resolveEffectiveGlobals(
     preset,
     presetCustomized: presetCustomized(preset),
     theme,
-    style: take("style", style),
-    effect: take("effect", effect),
+    style: take(settingNameOf("style"), style),
+    effect: take(settingNameOf("effect"), effect),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so
     // its chain is `staged ?? config` — the same `??`, minus the rungs.
     separator: staged.default_separator ?? globals.default_separator,
@@ -208,17 +239,24 @@ export function resolveEffectiveGlobals(
   };
 }
 
-// [LAW:no-silent-failure] Takes each fold's value with what it passed over:
-// a fold published untaken is a `Folded` where a value is due, a type error.
+// [LAW:no-silent-failure] Takes each fold's value with what it passed over, so
+// every miss the resolution reads past is collected where its value is
+// published. `note` is what the setting's domain adds about a stored spelling.
 function foldTaker(): {
   readonly stale: Array<StaleMiss<FoldedName>>;
-  readonly take: <T>(setting: FoldedName, folded: Folded<T>) => T;
+  readonly take: <T>(
+    setting: FoldedName,
+    folded: Folded<T>,
+    note?: (stored: string) => string,
+  ) => T;
 } {
   const stale: Array<StaleMiss<FoldedName>> = [];
   return {
     stale,
-    take: (setting, folded) => {
-      if (folded.stale !== null) stale.push({ setting, stored: folded.stale });
+    take: (setting, folded, note = () => "") => {
+      if (folded.stale !== null) {
+        stale.push({ setting, stored: folded.stale, note: note(folded.stale) });
+      }
       return folded.value;
     },
   };

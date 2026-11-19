@@ -48,8 +48,11 @@ function validateAgainstDefault(source: string) {
 }
 
 // Convenience builder for vertical stacks of horizontal rows.
-type Row = { segments: readonly string[]; when?: string };
-const vert = (...rows: (Row | readonly string[])[]): LayoutNode => ({
+interface Row {
+  segments: readonly string[];
+  when?: string;
+}
+const vert = (...rows: Array<Row | readonly string[]>): LayoutNode => ({
   kind: "container",
   direction: "vertical",
   children: rows.map((row): LayoutNode => {
@@ -713,7 +716,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       },
     );
     expectIssue(
-      `{ variables: { t: { kind: "state", key: "theme", fallback: "x" } } }`,
+      `{ variables: { t: { kind: "state", key: "mode", fallback: "x" } } }`,
       {
         path: "variables.t.fallback",
         message:
@@ -721,6 +724,18 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       },
     );
   });
+
+  // A setting's key has one declaration, the setting's: a state variable over
+  // it would be a second read of the same pick.
+  test.each(["theme", "padding", "preset"])(
+    "a state variable over the %s setting's key is refused, naming the setting",
+    (key) => {
+      expectIssue(`{ variables: { mine: { kind: "state", key: "${key}" } } }`, {
+        path: "variables.mine.key",
+        message: `"${key}" is the "${key}" setting's key — read the setting as ${key}.effective`,
+      });
+    },
+  );
 
   test("the message names the arm the author wrote, not the union", () => {
     // A `path` on a shell source is an author reaching for the file arm; the fix
@@ -753,7 +768,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
       `{ kind: "time", layout: "15:04" }`,
-      `{ kind: "state", key: "theme" }`,
+      `{ kind: "state", key: "mode" }`,
     ]) {
       expect(
         parseAndValidate(FILE, `{ variables: { x: ${decl} } }`).variables.x,
@@ -1217,14 +1232,14 @@ describe("loadDslConfig — palette switch", () => {
   test("unknown globals palette fails loudly at load", () => {
     expectIssue(`{ globals: { palette: "nope" } }`, {
       path: "globals.palette",
-      message: 'Unknown palette "nope"',
+      message: '"nope" is not an installed theme',
     });
   });
 
   test("unknown per-segment palette fails loudly at load", () => {
     expectIssue(`{ segments: { x: { template: "t", palette: "nope" } } }`, {
       path: "segments.x.palette",
-      message: 'Unknown palette "nope"',
+      message: '"nope" is not an installed theme',
     });
   });
 

@@ -58,12 +58,13 @@ import {
 import {
   EXPRESSION_SLOTS,
   isExpression,
-  describeInstalledThemes,
+  notInstalledTheme,
   isInstalledTheme,
   isStyleEraEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
+import { ownValue } from "../../utils/plain.js";
 import { endcapsNameMessage } from "./styles.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
@@ -259,7 +260,7 @@ export function validateCrossReferences(
   // changed, so it is reported where it draws and kept [LAW:no-silent-failure].
   if (
     cfg.globals.preset !== undefined &&
-    !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)
+    ownValue(cfg.presets, cfg.globals.preset) === undefined
   ) {
     ctx.issues.push({
       path: "globals.preset",
@@ -1457,7 +1458,7 @@ export function validateDeclarations(
     if (target.scope === "theme-default" && !isInstalledTheme(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${describeInstalledThemes()})`,
+        message: `actions.${name}: "${key}" names a theme: ${notInstalledTheme(target.theme)}`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;

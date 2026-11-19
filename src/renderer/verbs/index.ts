@@ -79,6 +79,7 @@ import {
   type DslConfig,
   type Globals,
   type SegmentNode,
+  type SettingValue,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
 import {
@@ -378,9 +379,8 @@ const setState: VerbHandler = (rest, ctx) => {
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 
-// [LAW:single-enforcer] One integer-shape boundary, mirroring the range
-// validator's canonical `^-?\d+$`: the `by` delta and the value a step steps
-// from are integers or they are not values (stepFrom).
+// [LAW:single-enforcer] The wire's integer shape, mirroring the range
+// validator's canonical `^-?\d+$`: a `by` delta is an integer or no value.
 const STEP_INT_RE = /^-?\d+$/;
 
 // [LAW:no-ambient-temporal-coupling] A step that would pass a bound STOPS on it,
@@ -440,12 +440,7 @@ const stepState: VerbHandler = (args, ctx) => {
   // [LAW:one-source-of-truth] Stepped from what the bar shows for the key: its
   // stored value read through its own fold, so a stale pick steps from the
   // value the bar wears in its place, and is reported, never stepped from.
-  const shown = stateKeyShows(
-    config,
-    (k) => ctx.sessionState.get(sid, k),
-    key,
-    params,
-  );
+  const shown = stateKeyShows(config, (k) => ctx.sessionState.get(sid, k), key);
   if (shown.stale !== null) {
     ctx.log(
       "warn",
@@ -493,23 +488,23 @@ function clampTo(params: RangeParams, n: number): number {
 }
 
 // [LAW:no-defensive-null-guards] "unset" is a real state: a key steps from the
-// value it shows (`shown`, resolved from the session's picks and its config). A
-// key that shows nothing steps from `min`; one that shows a non-integer is a
-// stepper over a value that is no number, refused loudly rather than stepped
-// from a guess.
+// value it shows (`shown`, its fold in the session's picks and its config),
+// parsed once where it was read. A key that shows nothing steps from `min`;
+// one that shows no number is a stepper over a value that is no number,
+// refused loudly rather than stepped from a guess.
 function stepFrom(
   verb: string,
   key: string,
   params: RangeParams,
-  shown: string | null,
+  shown: SettingValue | null,
 ): number {
   if (shown === null) return params.min;
-  if (!STEP_INT_RE.test(shown)) {
+  if (typeof shown !== "number") {
     throw new BadVerbArgs(
       `${verb}: "${key}" shows ${JSON.stringify(shown)}, not an integer to step`,
     );
   }
-  return clampTo(params, parseInt(shown, 10));
+  return clampTo(params, shown);
 }
 
 // ─── The durable store: which file, and the history over it ─────────────────

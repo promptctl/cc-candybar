@@ -16,22 +16,23 @@ import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-
 // Minimal config — one input (session.id), one state-kind var bound to
-// SessionState's "theme" key, one segment that prints the state value.
+// SessionState's "mood" key, which one action writes, and one segment that
+// prints the state value.
 const CONFIG_SRC = `{
   globals: {},
   variables: {
-    themePick: { kind: 'state', key: 'theme', default: '(unset)' },
+    moodPick: { kind: 'state', key: 'mood', default: '(unset)' },
   },
+  actions: { mood: { set: 'mood', from: ['nord', 'dracula'] } },
   segments: {
-    themeSeg: {
-      template: ' theme={{ .themePick }} ',
+    moodSeg: {
+      template: ' mood={{ .moodPick }} ',
       bg: 'surface',
       fg: 'foreground',
     },
   },
-  root: 'themeSeg',
+  root: 'moodSeg',
 }`;
 
 describe("DSL state cascade (vhi.1 acceptance)", () => {
@@ -51,14 +52,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
   test("initial render shows default when SessionState has no entry", () => {
     const { render } = cascadeBar();
-    expect(render()).toContain("theme=(unset)");
+    expect(render()).toContain("mood=(unset)");
   });
 
   test("direct SessionState.set is visible on next render", () => {
     const { sessionState, render } = cascadeBar();
-    expect(render()).toContain("theme=(unset)");
-    sessionState.set(SESSION_ID, "theme", "ocean");
-    expect(render()).toContain("theme=ocean");
+    expect(render()).toContain("mood=(unset)");
+    sessionState.set(SESSION_ID, "mood", "nord");
+    expect(render()).toContain("mood=nord");
   });
 
   test("set-state theme write changes the rendered COLORS on next render (k5a.4)", async () => {
@@ -98,15 +99,15 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // The actual ticket verification: dispatch the verb through the same
     // registry the daemon uses; assert the next render reflects the change.
     const { ctx, render } = cascadeBar();
-    expect(render()).toContain("theme=(unset)");
+    expect(render()).toContain("mood=(unset)");
 
     // set-state value shape: "<sessionId>/<key>/<value>" — key must be
     // one the session's config gates and value must satisfy its validator.
-    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
-    expect(render()).toContain("theme=nord");
+    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/mood/nord`, ctx);
+    expect(render()).toContain("mood=nord");
 
-    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
-    expect(render()).toContain("theme=dracula");
+    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/mood/dracula`, ctx);
+    expect(render()).toContain("mood=dracula");
   });
 
   test("cascade triggers a reactive observer, not just a fresh render-time read", async () => {
@@ -118,7 +119,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     //       re-derives through the dep graph (the intended contract); or
     //   (b) the computed's keepAlive cache was bypassed for some other
     //       reason (e.g. an unobserved-computed re-derive on access).
-    // Wrapping store.read("themePick") in an `autorun` forces (a) to be the
+    // Wrapping store.read("moodPick") in an `autorun` forces (a) to be the
     // only path that can produce a second observation: autoruns fire only
     // when a tracked dep invalidates. If SessionState.set ever stops
     // calling atom.reportChanged(), this test stalls at one observation.
@@ -127,7 +128,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
     const observed: string[] = [];
     const dispose = autorun(() => {
-      observed.push(String(store.read("themePick")));
+      observed.push(String(store.read("moodPick")));
     });
     // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
     // the type-level guarantee that the autorun cannot outlive this test
@@ -138,7 +139,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     try {
       expect(observed).toEqual(["(unset)"]);
 
-      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/mood/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -163,21 +164,25 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        caps: { kind: 'state', key: 'endcaps', default: '' },
+        moodPick: { kind: 'state', key: 'mood', default: '(unset)' },
+        caps: { kind: 'state', key: 'shape', default: '' },
+      },
+      actions: {
+        mood: { set: 'mood', from: ['nord', 'dracula'] },
+        shape: { set: 'shape', from: ['plain', 'capsule'] },
       },
       segments: {
-        themeSeg: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+        moodSeg: { template: '{{ .moodPick }}', bg: 'surface', fg: 'foreground' },
         capsSeg: { template: '{{ .caps }}', bg: 'surface', fg: 'foreground' },
       },
-      root: { h: ['themeSeg', 'capsSeg'] },
+      root: { h: ['moodSeg', 'capsSeg'] },
     }`);
     feedInputs(registry, HOOK_DATA);
 
-    const themeObs: string[] = [];
+    const moodObs: string[] = [];
     const capsObs: string[] = [];
-    const disposeTheme = autorun(() => {
-      themeObs.push(String(store.read("themePick")));
+    const disposeMood = autorun(() => {
+      moodObs.push(String(store.read("moodPick")));
     });
     const disposeCaps = autorun(() => {
       capsObs.push(String(store.read("caps")));
@@ -186,13 +191,13 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // guarantee that both autoruns are disposed even when the
     // assertions throw — see the same note on the test above.
     try {
-      expect(themeObs).toEqual(["(unset)"]);
+      expect(moodObs).toEqual(["(unset)"]);
       expect(capsObs).toEqual([""]);
 
-      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/mood/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
-      expect(themeObs).toEqual(["(unset)", "nord"]);
+      expect(moodObs).toEqual(["(unset)", "nord"]);
       // Unrelated key: the atom invalidated the `caps` computed too
       // (coarse-grained reactivity), but it re-derived to the same fallback
       // "" — MobX's value comparer suppresses propagation to this observer.
@@ -200,11 +205,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
       // Sanity: a mutation to the OTHER state key fires the caps
       // observer (cascade is not over-suppressed).
-      sessionState.set(SESSION_ID, "endcaps", "capsule");
+      sessionState.set(SESSION_ID, "shape", "capsule");
       expect(capsObs).toEqual(["", "capsule"]);
-      expect(themeObs).toEqual(["(unset)", "nord"]);
+      expect(moodObs).toEqual(["(unset)", "nord"]);
     } finally {
-      disposeTheme();
+      disposeMood();
       disposeCaps();
     }
   });
@@ -216,7 +221,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
     expect(() =>
       CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
-    ).toThrow(/unknown theme/);
+    ).toThrow(/is not an installed theme/);
   });
 
   test('set-state rejects the "custom" theme sentinel (not a renderable theme)', async () => {
@@ -228,7 +233,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
     expect(() =>
       CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
-    ).toThrow(/unknown theme/);
+    ).toThrow(/is not an installed theme/);
   });
 
   test("set-state rejects an unknown key with the registered-key list", async () => {
@@ -334,15 +339,19 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        caps: { kind: 'state', key: 'endcaps', default: '' },
+        moodPick: { kind: 'state', key: 'mood', default: '(unset)' },
+        caps: { kind: 'state', key: 'shape', default: '' },
+      },
+      actions: {
+        mood: { set: 'mood', from: ['nord', 'dracula'] },
+        shape: { set: 'shape', from: ['plain', 'capsule'] },
       },
       segments: {
-        s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+        s: { template: '{{ .moodPick }}', bg: 'surface', fg: 'foreground' },
       },
       root: 's',
     }`);
-    sessionState.set(SESSION_ID, "endcaps", "plain");
+    sessionState.set(SESSION_ID, "shape", "plain");
     feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
@@ -350,7 +359,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const snapshots: Array<{ theme: string; caps: string }> = [];
     const dispose = autorun(() => {
       snapshots.push({
-        theme: String(store.read("themePick")),
+        theme: String(store.read("moodPick")),
         caps: String(store.read("caps")),
       });
     });
@@ -358,7 +367,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(snapshots).toEqual([{ theme: "(unset)", caps: "plain" }]);
 
       await CLICK_VERBS.get("set-state")!(
-        `${SESSION_ID}/theme/nord/endcaps/capsule`,
+        `${SESSION_ID}/mood/nord/shape/capsule`,
         ctx,
       );
 
@@ -445,10 +454,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { config, render } = cascadeBar(`{
       globals: {},
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: 'calm' },
+        moodPick: { kind: 'state', key: 'mood', default: 'calm' },
       },
       segments: {
-        s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
+        s: { template: '{{ .moodPick }}', bg: 'surface', fg: 'foreground' },
       },
       root: 's',
     }`);

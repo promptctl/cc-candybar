@@ -262,24 +262,6 @@ describe("the stepper and the render agree on an out-of-range stored integer", (
     expect(staleOf(after.warnings)).toEqual([]);
   });
 
-  test("a plain state key's stored value out of range steps from its default", async () => {
-    const rig = rigOver(
-      `{
-        variables: { count: { kind: "state", key: "count", default: "2" } },
-        actions: { bump: { set: "count", min: 0, max: 9, by: 1 } },
-        segments: { c: { template: '{{ action "bump" "+" }}' } },
-        root: { h: ["c"] },
-      }`,
-      { count: "abc" },
-    );
-    const ups = linkUrls(drawOf(rig).frame).filter((u) =>
-      effectsOf(u).some((e) => e.args[1] === "count"),
-    );
-    expect(ups).toHaveLength(1);
-    await rig.click(ups[0]!);
-    expect(rig.sessionState.get(SID, "count")).toBe("3");
-  });
-
   test("in edit mode + steps from the staged value the bar wears", async () => {
     const rig = rigOver(source({ extra: "editGlobals: { padding: 7 }," }), {
       padding: "99",
@@ -294,6 +276,55 @@ describe("the stepper and the render agree on an out-of-range stored integer", (
     expect(ups).toHaveLength(1);
     await rig.click(ups[0]!);
     expect(rig.sessionState.get(SID, "padding")).toBe("8");
+  });
+});
+
+// A plain `state` variable reads its key through the domain its `set`
+// actions write: the bar, its warning and the stepper agree on the value.
+describe("a state variable's stored value outside its domain", () => {
+  const VOLUME = `{
+    variables: { volume: { kind: "state", key: "volume", default: "2" } },
+    actions: { bump: { set: "volume", min: 0, max: 10, by: 1 } },
+    segments: { v: { template: 'vol={{ .volume }} {{ action "bump" "+" }}' } },
+    root: { h: ["v"] },
+  }`;
+
+  test.each(["42", "abc", "007"])(
+    "%s draws the default under a warning, and + steps from it",
+    async (stored) => {
+      const rig = rigOver(VOLUME, { volume: stored });
+      const before = drawOf(rig);
+      expect(textOf(before.frame)).toContain("vol=2");
+      expect(staleOf(before.warnings)).toEqual([
+        staleWarning("volume", stored, "2"),
+      ]);
+      const ups = linkUrls(before.frame).filter((u) =>
+        effectsOf(u).some((e) => e.args[1] === "volume"),
+      );
+      expect(ups).toHaveLength(1);
+      await rig.click(ups[0]!);
+      expect(rig.sessionState.get(SID, "volume")).toBe("3");
+      const after = drawOf(rig);
+      expect(textOf(after.frame)).toContain("vol=3");
+      expect(staleOf(after.warnings)).toEqual([]);
+    },
+  );
+
+  test("a word no action writes draws the default under a warning", () => {
+    const rig = rigOver(
+      `{
+        variables: { mode: { kind: "state", key: "mode", default: "calm" } },
+        actions: { flip: { set: "mode", cycle: ["calm", "busy"] } },
+        segments: { m: { template: 'mode={{ .mode }} {{ action "flip" "~" }}' } },
+        root: { h: ["m"] },
+      }`,
+      { mode: "frantic" },
+    );
+    const drawn = drawOf(rig);
+    expect(textOf(drawn.frame)).toContain("mode=calm");
+    expect(staleOf(drawn.warnings)).toEqual([
+      staleWarning("mode", "frantic", "calm"),
+    ]);
   });
 });
 

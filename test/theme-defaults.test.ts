@@ -94,7 +94,7 @@ describe("themeDefaults at load", () => {
     [
       "a reset of a theme default for a theme nothing installs",
       `{ actions: { r: { reset: 'themeDefaults.no-such-theme.shade' } } }`,
-      'actions.r: "themeDefaults.no-such-theme.shade" names theme "no-such-theme" which is not installed',
+      'actions.r: "themeDefaults.no-such-theme.shade" names a theme: "no-such-theme" is not an installed theme',
     ],
     [
       "a reset of a theme default field that is not part of a look",

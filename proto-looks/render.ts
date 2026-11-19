@@ -12,6 +12,7 @@ import { SETTINGS_NS } from "../src/config/reserved-names";
 import { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES, type ShadeName } from "../src/themes/decor";
 import type { Frame } from "../src/render/frame";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
+import { isInstalledTheme } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { sessionBar, type Payload, type SessionRender } from "../test/helpers/session-bar";
 import { THEMES } from "./axes.mjs";
@@ -76,6 +77,7 @@ const renders: Record<string, Views> = {};
 const today: Record<string, Views> = {};
 const poles: Record<string, { background: string; foreground: string }> = {};
 for (const theme of THEMES) {
+  if (!isInstalledTheme(theme)) throw new Error(`${theme} is no installed theme`);
   const palette = paletteForThemeName(theme);
   const hex = (role: string): string => {
     const colour = palette.get(role);

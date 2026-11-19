@@ -43,9 +43,9 @@ describe("a view's session", () => {
       source: CONFIG,
       sessionId: OWN,
     });
-    rig.sessionState.set(OTHER, "pick", "other's");
-    rig.sessionState.set(OWN, "pick", "own");
-    expect(textOf(rig.draw().frame)).toContain("pick=own");
+    rig.sessionState.set(OTHER, "pick", "a");
+    rig.sessionState.set(OWN, "pick", "b");
+    expect(textOf(rig.draw().frame)).toContain("pick=b");
   });
 
   test("a write to the view's own session moves its next draw", () => {
@@ -54,8 +54,8 @@ describe("a view's session", () => {
       sessionId: OWN,
     });
     expect(textOf(rig.draw().frame)).toContain("pick=(unset)");
-    rig.sessionState.set(OWN, "pick", "own");
-    expect(textOf(rig.draw().frame)).toContain("pick=own");
+    rig.sessionState.set(OWN, "pick", "b");
+    expect(textOf(rig.draw().frame)).toContain("pick=b");
   });
 
   test("a click names the view's own session", () => {

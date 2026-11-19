@@ -43,10 +43,6 @@ const BASE_THEME = "textual-dark";
 // so a padding change is visible as the rendered line's width.
 const src = (padding: number): string => `{
   globals: { palette: '${BASE_THEME}', padding: ${padding}, autoWrap: true },
-  variables: {
-    sessionPadding: { kind: 'state', key: 'padding', default: '' },
-    sessionWrap: { kind: 'state', key: 'autoWrap', default: '' },
-  },
   actions: {
     padUp: { set: 'padding', min: ${PADDING_RANGE.min}, max: ${PADDING_RANGE.max}, by: 1 },
     toggleWrap: { set: 'autoWrap', cycle: ['true', 'false'] },

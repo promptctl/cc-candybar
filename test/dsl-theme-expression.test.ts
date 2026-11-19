@@ -360,7 +360,7 @@ describe("globals.palette as an expression — loader", () => {
   test("a rule is exempt from the palette-name check; a plain unknown name is not", () => {
     expect(() => load(src(RULE))).not.toThrow();
     expect(() => load(src("no-such-theme"))).toThrow(ConfigError);
-    expect(() => load(src("no-such-theme"))).toThrow(/Unknown palette/);
+    expect(() => load(src("no-such-theme"))).toThrow(/is not an installed theme/);
   });
 
   test("a retired theme name is refused with the theme that replaced it", () => {
@@ -382,7 +382,7 @@ describe("globals.palette as an expression — loader", () => {
       "plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },",
       `plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground', palette: '${RULE}' },`,
     );
-    expect(() => load(withPin)).toThrow(/Unknown palette/);
+    expect(() => load(withPin)).toThrow(/is not an installed theme/);
   });
 
   test("a malformed rule fails at LOAD, naming its own slot", () => {

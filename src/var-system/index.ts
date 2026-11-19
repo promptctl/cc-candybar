@@ -30,7 +30,7 @@ export {
   type ReadMode,
   type TemplateOptions,
   type TimeOptions,
-  type StateOptions,
+  type StaleState,
   type LastError,
   type Published,
   type InputSource,

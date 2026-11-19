@@ -14,6 +14,7 @@ import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/f
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
 import { globalsFor, selectionFor } from "./helpers/selection";
 import {
+  bundledConfig,
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
   EFFORT_BUBBLE_CONTRAST,
@@ -77,6 +78,21 @@ const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 describe("DEFAULT_DSL_CONFIG", () => {
+  // The bundled config inherits no segment, so one without a template is no
+  // delta of anything — whatever its name, a theme's included.
+  test("a bundled segment without a template is refused", () => {
+    const theme = RAW_DEFAULT_DSL_CONFIG.globals.palette;
+    expect(() =>
+      bundledConfig({
+        ...RAW_DEFAULT_DSL_CONFIG,
+        segments: {
+          ...RAW_DEFAULT_DSL_CONFIG.segments,
+          [theme]: { palette: theme },
+        } as typeof RAW_DEFAULT_DSL_CONFIG.segments,
+      }),
+    ).toThrow(new RegExp(`segments\\.${theme}\\.template`));
+  });
+
   test("loader round-trips the bundled default", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     expect(Object.keys(parsed.variables).length).toBeGreaterThan(0);

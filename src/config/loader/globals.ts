@@ -12,10 +12,9 @@ import {
   type GlobalField,
 } from "../globals-fields.js";
 import {
-  describeInstalledThemes,
+  notInstalledTheme,
   isExpression,
   isInstalledTheme,
-  retiredThemeNote,
 } from "../../themes/policy.js";
 import {
   describeType,
@@ -314,7 +313,7 @@ export function validateThemeDefaults(
     if (!isInstalledTheme(theme)) {
       ctx.issues.push({
         path,
-        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected one of: ${describeInstalledThemes()}`,
+        message: `${path}: ${notInstalledTheme(theme)}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme]),
       });
       continue;

@@ -41,7 +41,6 @@ function config(actions: string, template: string): string {
     variables: {
       panel: { kind: 'state', key: 'panel', default: 'open' },
       focus: { kind: 'state', key: 'focus', default: 'off' },
-      themePick: { kind: 'state', key: 'theme', default: 'nord' },
     },
     actions: { ${actions} },
     segments: { bar: { template: '${template}', fg: 'foreground' } },
@@ -58,7 +57,16 @@ function runtime(src: string) {
   recordRender(sessionState, S1);
   return {
     sessionState,
-    render: () => drawPayload(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame,
+    render: () =>
+      drawPayload(
+        cfg,
+        compiled,
+        store,
+        registry,
+        PAYLOAD,
+        instantOf(new Date()),
+        OPTS,
+      ).frame,
     click: async (url: string) =>
       await clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };
@@ -72,7 +80,10 @@ const FOCUS_AND_CLOSE = `
 describe("do: several declared actions, one click", () => {
   test("the head is the face; every member's write lands, through the derived gate", async () => {
     const rt = runtime(
-      config(FOCUS_AND_CLOSE, '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}'),
+      config(
+        FOCUS_AND_CLOSE,
+        '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}',
+      ),
     );
     const out = rt.render();
     // The head is a two-member cycle, so the `do` shows its per-member display.
@@ -122,11 +133,7 @@ describe("do: several declared actions, one click", () => {
 describe("do: load errors", () => {
   const loadError = (actions: string): string => {
     try {
-      parseAndValidate(
-        "<user>",
-        config(actions, "x"),
-        DEFAULT_DSL_CONFIG,
-      );
+      parseAndValidate("<user>", config(actions, "x"), DEFAULT_DSL_CONFIG);
     } catch (e) {
       if (e instanceof ConfigError) return e.message;
       throw e;
@@ -135,12 +142,36 @@ describe("do: load errors", () => {
   };
 
   test.each([
-    ["one member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a'] },`, "do must list at least two action names"],
-    ["an unknown member", `a: { set: 'panel', to: 'closed' }, d: { do: ['a', 'nope'] },`, 'actions.d do: references unknown action "nope"'],
-    ["a nested do", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`, '"ab" is itself a do action'],
-    ["a member listed twice", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`, '"a" is listed twice'],
-    ["a template-bound follower", `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`, '"t" takes its value from the template'],
-    ["a sibling key", `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`, 'Unknown key "to" on a do action'],
+    [
+      "one member",
+      `a: { set: 'panel', to: 'closed' }, d: { do: ['a'] },`,
+      "do must list at least two action names",
+    ],
+    [
+      "an unknown member",
+      `a: { set: 'panel', to: 'closed' }, d: { do: ['a', 'nope'] },`,
+      'actions.d do: references unknown action "nope"',
+    ],
+    [
+      "a nested do",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, ab: { do: ['a', 'b'] }, d: { do: ['ab', 'a'] },`,
+      '"ab" is itself a do action',
+    ],
+    [
+      "a member listed twice",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b', 'a'] },`,
+      '"a" is listed twice',
+    ],
+    [
+      "a template-bound follower",
+      `a: { set: 'panel', to: 'closed' }, t: { set: 'theme', from: 'themes' }, d: { do: ['a', 't'] },`,
+      '"t" takes its value from the template',
+    ],
+    [
+      "a sibling key",
+      `a: { set: 'panel', to: 'closed' }, b: { set: 'focus', to: 'on' }, d: { do: ['a', 'b'], to: 'x' },`,
+      'Unknown key "to" on a do action',
+    ],
   ])("%s", (_label, actions, message) => {
     expect(loadError(actions)).toContain(message);
   });

@@ -32,6 +32,13 @@ import {
   type ShadeName,
   type VariationName,
 } from "./decor.js";
+import { ownValue } from "../utils/plain.js";
+import {
+  effectiveGlobal,
+  fallbackMessage,
+  readStored,
+  type Folded,
+} from "../config/fold.js";
 
 export { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES };
 
@@ -63,84 +70,7 @@ export function retiredThemeNote(name: unknown): string {
 // rung naming an installed theme, and an EXPRESSION whose result names nothing
 // (brandon-themes-dzl) — and, unlike the style's floor, it is a SPECIFIC theme
 // rather than an identity.
-export const THEME_FLOOR = "textual-dark";
-
-// --- The one globals resolution ---
-
-// [LAW:types-are-the-program][LAW:one-type-per-behavior] What a session holds
-// for one setting, read against that setting's domain — one shape for every
-// setting: nothing stored, a value of the domain, or a stored spelling the
-// domain does not hold, carried as written. The third is a pick made under a
-// build or config whose domain held it, which is not "no pick": a fold passing
-// over it can say what it passed over.
-export type Stored<T> =
-  | { readonly kind: "unset" }
-  | { readonly kind: "held"; readonly value: T }
-  | { readonly kind: "stale"; readonly stored: string };
-
-// [LAW:parse-dont-validate] A stored spelling read through `member`, the
-// setting's own parse of one spelling into its domain.
-export function readStored<T>(
-  raw: string | null,
-  member: (raw: string) => T | null,
-): Stored<T> {
-  if (raw === null) return { kind: "unset" };
-  const value = member(raw);
-  return value === null
-    ? { kind: "stale", stored: raw }
-    : { kind: "held", value };
-}
-
-// What a fold decided: the value in force, and the stored spelling it passed
-// over where the session's rung would have been in force — null when it passed
-// over none.
-export interface Folded<T> {
-  readonly value: T;
-  readonly stale: string | null;
-}
-
-// [LAW:one-type-per-behavior] THE resolution every setting a click can pick
-// shares: the staged fragment over the session's own value, over the config
-// default, over a floor. Written once because the settings differ only in DATA
-// — which floor, and the parse that reads the session's spelling (`Stored`) —
-// so the precedence cannot land on one setting and miss another.
-//
-// [LAW:dataflow-not-control-flow] The `??` chain IS the precedence; there is no
-// "does this session have one" branch, and no "is edit mode on" branch: an
-// absent rung is `undefined`, skipped by the same path every rung takes.
-//
-// [LAW:no-silent-failure] A stale pick falls through to the next rung, so the
-// bar still draws, and the fold says what it passed over. That is reported only
-// where the session's rung would have been in force: a staged value outranks
-// it, and hides it. The stored spelling stays where it is, so a domain restored
-// brings the pick back.
-//
-// [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
-// chain documented in src/config/presets.ts — a fragment some transient MODE of
-// the bar puts on top while it is on (today: edit mode's `editGlobals`). It
-// outranks even the session pick because it is decided LATER: a user picks a
-// style, then afterwards enters edit mode.
-export function effectiveGlobal<T>(
-  staged: T | null | undefined,
-  session: Stored<T>,
-  configDefault: T | null | undefined,
-  floor: T,
-): Folded<T> {
-  const picked = session.kind === "held" ? session.value : null;
-  return {
-    value: staged ?? picked ?? configDefault ?? floor,
-    stale: staged == null && session.kind === "stale" ? session.stored : null,
-  };
-}
-
-// [LAW:types-are-the-program] A pick a fold passed over, as data: the setting
-// it was stored for and the spelling stored. Nothing here says what the bar
-// wears in its place, since a rule's answer is known only to the draw, which
-// composes the report (`stalePick`).
-export interface StaleMiss<S extends string = string> {
-  readonly setting: S;
-  readonly stored: string;
-}
+export const THEME_FLOOR: ThemeName = "textual-dark";
 
 // [LAW:one-source-of-truth] A stale pick as the bar reports it: the setting it
 // was stored for, the spelling stored, and the sentence saying what the bar
@@ -174,18 +104,6 @@ export function stalePick(
   };
 }
 
-// [LAW:one-source-of-truth] The one spelling of "this could not be honoured,
-// so the bar wears something else": where it was written, what the bar wears
-// instead, and why — a stale pick, a rule that threw, a rule's result naming
-// no installed theme.
-export function fallbackMessage(
-  where: string,
-  wears: string,
-  why: string,
-): string {
-  return `${where} rendered ${wears}: ${why}`;
-}
-
 // A name as `fallbackMessage` shows what the bar wears.
 export const wornName = (name: string): string => `"${name}"`;
 
@@ -207,8 +125,8 @@ export function spellSetting(value: string | number | boolean): string {
 // template `themes` list all read this one list.
 // The list and its membership test are read once: the registry is fixed for
 // the life of the process.
-const INSTALLED_LIST: readonly string[] = listThemePalettes();
-export function listResolvablePaletteNames(): readonly string[] {
+const INSTALLED_LIST: readonly ThemeName[] = listThemePalettes();
+export function listResolvablePaletteNames(): readonly ThemeName[] {
   return INSTALLED_LIST;
 }
 
@@ -224,6 +142,13 @@ export function describeInstalledThemes(): string {
   return [...INSTALLED_LIST].sort().join(", ");
 }
 
+// [LAW:one-source-of-truth] THE refusal of a name no installed theme answers
+// to, wherever it was written: the name, a retired theme's successor, and the
+// installed list.
+export function notInstalledTheme(name: string): string {
+  return `"${name}" is not an installed theme${retiredThemeNote(name)} (have: ${describeInstalledThemes()})`;
+}
+
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold
 // (brandon-settings-menu-6c5): the bar's own theme, or any installed one.
 // "Follow the bar" is a MEMBER of the domain, not the absence of a value, so
@@ -231,15 +156,21 @@ export function describeInstalledThemes(): string {
 // one. No installed theme is named `bar` (pinned in
 // test/placement-theme.test.ts), so the two can never be confused.
 export const FOLLOW_BAR = "bar";
+export type PlacementTheme = typeof FOLLOW_BAR | ThemeName;
 
-export function placementThemeNames(): readonly string[] {
-  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
+// [LAW:one-source-of-truth] One list, which the picker offers and whose
+// membership the fold reads a stored name through.
+const PLACEMENT_THEME_LIST: readonly PlacementTheme[] = [
+  FOLLOW_BAR,
+  ...INSTALLED_LIST,
+];
+export function placementThemeNames(): readonly PlacementTheme[] {
+  return PLACEMENT_THEME_LIST;
 }
 
-// Membership in `placementThemeNames`, which the render asks of every
-// placement's `theme` each render.
-export function isPlacementThemeName(name: string): boolean {
-  return name === FOLLOW_BAR || isInstalledTheme(name);
+const PLACEMENT_THEMES: ReadonlySet<string> = new Set(PLACEMENT_THEME_LIST);
+export function isPlacementThemeName(name: string): name is PlacementTheme {
+  return PLACEMENT_THEMES.has(name);
 }
 
 // --- Per-config member selection ---
@@ -266,7 +197,7 @@ export function effectiveMemberName(
   declared: Readonly<Record<string, unknown>>,
 ): Folded<string> {
   const member = (raw: string): string | null =>
-    Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+    ownValue(declared, raw) === undefined ? null : raw;
   return effectiveGlobal(
     stagedName === undefined ? null : member(stagedName),
     readStored(sessionPick, member),
@@ -399,17 +330,14 @@ export type DecidedStyle = Decided<ThemeKey>;
 
 // One rung's contribution: the style this name selects, or null when it names no
 // declared style — which is not a pick at all, so the fold moves on.
-// [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
-// `hasOwnProperty` first and then looking the key up would be the same question
-// twice, and the second answer could only ever restate the first.
+// [LAW:polishing-by-subtraction] The own-value lookup IS the membership test,
+// so an inherited name (`constructor`) is no declared style.
 function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
-  // An own property: an inherited name (`constructor`) is no declared style.
-  return Object.hasOwn(declaredStyles, name)
-    ? { kind: "decided", name, value: declaredStyles[name]! }
-    : null;
+  const value = ownValue(declaredStyles, name);
+  return value === undefined ? null : { kind: "decided", name, value };
 }
 
 // [LAW:single-enforcer] The membership policy for a style NAME, wherever the name

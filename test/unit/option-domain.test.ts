@@ -24,6 +24,7 @@ import {
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../../src/themes/policy";
+import { installedTheme } from "../helpers/installed-theme";
 
 describe("option-domain registry", () => {
   test("themes/styles are built-in registrations, not special-cased branches", () => {
@@ -167,14 +168,16 @@ describe("a colour-valued domain resolves its own painter", () => {
     for (const name of members) {
       // Identity, not just equality: paletteForThemeName memoizes per resolved
       // name, so the painter must BE that memo rather than a second construction.
-      expect(paletteOf!(name, RENDER)).toBe(paletteForThemeName(name));
+      expect(paletteOf!(name, RENDER)).toBe(
+        paletteForThemeName(installedTheme(name)),
+      );
     }
   });
 
   test("`themes` ignores the base it is handed — a theme is not an adaptation of anything", () => {
     const { members, paletteOf } = resolveOptionDomain("themes", new Map());
     const [first, second] = members as [string, string];
-    const other = paletteForThemeName(second);
+    const other = paletteForThemeName(installedTheme(second));
     expect(paletteOf!(first, RENDER)).toBe(
       paletteOf!(first, { basePalette: other, palette: other }),
     );

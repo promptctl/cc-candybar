@@ -58,12 +58,12 @@ import {
   decideStyleName,
   drawnDepth,
   isColorCompatibility,
-  fallbackMessage,
   wornName,
   SLOT_FLOORS,
   type ColorCompatibility,
   type ExpressionSlot,
 } from "../themes/policy.js";
+import { fallbackMessage } from "../config/fold.js";
 import { decideThemeName } from "../themes/palette-resolvers.js";
 import type { ThemeKey } from "@promptctl/rich-js";
 import { drawProjectionAt, slotAt } from "../config/payload-inputs.js";

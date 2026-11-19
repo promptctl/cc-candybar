@@ -8,7 +8,6 @@ export {
   STYLE_FLOOR,
   EXPRESSION_SLOTS,
   SLOT_FLOORS,
-  fallbackMessage,
   wornName,
   isExpression,
   resolveSelection,

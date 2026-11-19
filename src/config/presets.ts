@@ -58,7 +58,8 @@ import {
   rootNode,
   type Unplaced,
 } from "./root.js";
-import { effectiveMemberName, type Folded } from "../themes/policy.js";
+import { effectiveMemberName } from "../themes/policy.js";
+import { type Folded } from "./fold.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity

@@ -106,7 +106,7 @@ describe("no declared name sits under another", () => {
     let thrown: unknown;
     try {
       overDefault(
-        `{ variables: { theme: { kind: "state", key: "theme", default: "nord" } } }`,
+        `{ variables: { theme: { kind: "literal", value: "nord" } } }`,
       );
     } catch (e) {
       thrown = e;

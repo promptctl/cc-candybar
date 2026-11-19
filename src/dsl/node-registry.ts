@@ -31,6 +31,7 @@ import type {
   Direction,
   Placement,
   SegmentDecl,
+  ImpliedSetting,
   SegmentNode,
   SettingValue,
 } from "../config/dsl-types.js";
@@ -45,8 +46,9 @@ import { groundOf } from "../template-engine/colors.js";
 import {
   FOLLOW_BAR,
   type PlacementEffect,
-  type StaleMiss,
+  type PlacementTheme,
 } from "../themes/policy.js";
+import { type StaleMiss } from "../config/fold.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -215,7 +217,7 @@ export interface NodeCompileCtx {
 // always there (settingsOf), each a member of the domain it resolves against:
 // `theme` a theme's name or `bar`, `effect` an effect's name or `bar`.
 export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
-  readonly theme: string;
+  readonly theme: PlacementTheme;
   readonly effect: PlacementEffect;
 };
 
@@ -227,13 +229,16 @@ export interface ResolvedPlacement {
 // [LAW:types-are-the-program] A placement setting's stale pick, as data: the
 // setting as a reader names it (`<placement>.<name>`) and the spelling stored,
 // the slot's key — its identity, which a name label holding the placement's
-// `theme` slot shares — the setting's name, and the value the placement draws
-// in its place. The draw says what that value wears (`bar` is the bar's own).
+// `theme` slot shares — and what the placement draws in its place: its own
+// value, or the bar's own selection for an implied setting that follows it.
 export interface PlacementMiss extends StaleMiss {
   readonly key: string;
-  readonly name: string;
-  readonly value: SettingValue;
+  readonly wears: PlacementWears;
 }
+
+export type PlacementWears =
+  | { readonly kind: "own"; readonly value: SettingValue }
+  | { readonly kind: "bar"; readonly setting: ImpliedSetting };
 
 // [LAW:types-are-the-program] A node's own `when` as the driver evaluated it,
 // a failure carrying the one way to say so: only a gate that failed can be

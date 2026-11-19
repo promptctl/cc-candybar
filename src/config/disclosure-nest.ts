@@ -79,7 +79,9 @@ export function buildDisclosureNest(config: DslConfig): DisclosureNest {
   const declaredWithin = new Map<string, readonly Disclosure[]>();
   for (const decl of Object.values(config.variables)) {
     if (decl.kind !== "state") continue;
-    if (decl.default !== undefined) defaults.set(decl.key, decl.default);
+    if ("default" in decl && decl.default !== undefined) {
+      defaults.set(decl.key, decl.default);
+    }
     if (decl.within !== undefined) declaredWithin.set(decl.key, decl.within);
   }
   // [LAW:one-source-of-truth] A disclosure sits inside every body enclosing

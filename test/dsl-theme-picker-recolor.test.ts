@@ -38,9 +38,6 @@ const PICKED_THEME = "textual-light";
 // basePalette, so they follow the session pick.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
-  variables: {
-    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
-  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
   },

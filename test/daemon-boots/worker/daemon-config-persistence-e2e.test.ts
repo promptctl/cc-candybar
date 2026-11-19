@@ -41,7 +41,7 @@ const showsTheme = (out: Frame, theme: string): boolean =>
   textOf(out).includes(`${theme} ▀▀▀`);
 // Opening the theme picker: the write its label's click makes.
 const OPEN_THEME_PICKER = ["menus.candybar_pickers", "candybar.apply.theme"];
-import { listResolvablePaletteNames } from "../../../src/themes/policy";
+import { isInstalledTheme } from "../../../src/themes/policy";
 import { click, findUrl, render, renderUntil, drawnLink } from "../../helpers/daemon-e2e";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import {
@@ -147,7 +147,7 @@ describe("candybar-config-engine-71o.5: a daemon's click → persist → restart
       ].filter(
         (name) =>
           name !== "tokyo-night" && // the bundled default's globals.palette
-          listResolvablePaletteNames().includes(name),
+          isInstalledTheme(name),
       );
       if (sessionTheme === undefined || targetTheme === undefined) {
         throw new Error(
