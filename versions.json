@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-905",
+      "ref": "refs/pull/905/merge",
+      "sha": "c1049984b5820d50ba2c16becd78df35777313bf",
+      "timestamp": "2026-11-19T20:07:11.515Z",
+      "commits": [
+        {
+          "sha": "c1049984b5820d50ba2c16becd78df35777313bf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:06:08Z",
+          "message": "Merge a7d419420653639d5b982dc5c9783ed7f95d6fe7 into 7b97b3062fa1b643825a0aae621edcce5c8a63af\n"
+        },
+        {
+          "sha": "a7d419420653639d5b982dc5c9783ed7f95d6fe7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:04:02-07:00",
+          "message": "test(daemon): prove pane subscriber disconnect cleanup (ibyq.xrv)\n"
+        },
+        {
+          "sha": "193c33d333861d41989a14aeeca18c5124adde84",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:46:44-07:00",
+          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
+        },
+        {
+          "sha": "3b5fcfd915595a95c2fdd5bb148d611f5812dae4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:57-07:00",
+          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-896",
       "ref": "refs/pull/896/merge",
       "sha": "0768980699d4a060aa59ecf52acfa2860ebaf69c",
@@ -93,35 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-905",
-      "ref": "refs/pull/905/merge",
-      "sha": "db099f9c4166edb0ff9e46ee1a82a4ba08157e54",
-      "timestamp": "2026-11-19T19:49:08.353Z",
-      "commits": [
-        {
-          "sha": "db099f9c4166edb0ff9e46ee1a82a4ba08157e54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:48:08Z",
-          "message": "Merge 62d907c1895010624b76388e6afa046c95a50bf0 into 7fb2d364cac124b3f07de1e027e1959943c9a23d\n"
-        },
-        {
-          "sha": "62d907c1895010624b76388e6afa046c95a50bf0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:46:44-07:00",
-          "message": "test(renderer): bind sample payloads in fixtures (ibyq.xrv)\n"
-        },
-        {
-          "sha": "37603d2010270c2ef0d2a34d6dd2e3e160086078",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:22:57-07:00",
-          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
         }
       ]
     },
