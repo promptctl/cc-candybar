@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-864",
+      "ref": "refs/pull/864/merge",
+      "sha": "4d9df9121f0c7d020699f17d7ee48f38a345a7be",
+      "timestamp": "2026-11-19T12:15:28.265Z",
+      "commits": [
+        {
+          "sha": "4d9df9121f0c7d020699f17d7ee48f38a345a7be",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:14:22-07:00",
+          "message": "Merge 3a247bd55dbcd68df6fd672d99346f752821a4ac into c7085504a53576be27550693c5b9d96a1afd8f94\n"
+        },
+        {
+          "sha": "3a247bd55dbcd68df6fd672d99346f752821a4ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:11:10-07:00",
+          "message": "feat(daemon): route named renderers through one shared host\n"
+        }
+      ]
+    },
+    {
       "version": "pr-862",
       "ref": "refs/pull/862/merge",
       "sha": "bb2d8da0f73648d6bfde00557882ea0dc2e679f3",
