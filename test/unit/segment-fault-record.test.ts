@@ -177,6 +177,17 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
     answered(
       await handIn(r, { kind: "request", id: ++id as RequestId, context }),
     );
+  const settle = async (output: RendererOutput, delivered: boolean) =>
+    answered(
+      await handIn(r, {
+        kind: "effect-done",
+        session,
+        of: presentOf(output.effects).id,
+        outcome: delivered
+          ? { kind: "ok" }
+          : { kind: "failed", reason: "client disconnected" },
+      }),
+    );
 
   const first = await request();
   expect(textOf(presentOf(first.effects).frame)).toContain(`⚠ broken:`);
@@ -189,6 +200,12 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   expect(noted(first, "warn")).toContain("segment:broken");
   // A config naming no preset draws the floor, and the record says which.
   expect(noted(first, "preset")).toBe(PRESET_FLOOR);
+  await settle(first, false);
+
+  const delivered = await request();
+  expect(noted(delivered, "faults")).toBe(noted(first, "faults"));
+  expect(indicatorOf(presentOf(delivered.effects).frame)).toBeUndefined();
+  await settle(delivered, true);
 
   // Nothing moved: the record says so, and the bar's list, which follows
   // the frames, now counts the warning.
@@ -196,6 +213,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   expect(noted(second, "faults")).toBe("kept");
   const indicator = indicatorOf(presentOf(second.effects).frame);
   expect(indicator?.text).toBe("⚠ 1");
+  await settle(second, true);
 
   // The indicator's click opens the viewer, which shows the whole message.
   const { verb, value } = clickOf(indicator!.url);
@@ -204,7 +222,11 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
       kind: "click",
       click: admitClick(verb, value, TEST_SIGNER).click,
       arrival: { via: "link", delivery: { kind: "cli" } },
-      context: { session, durable: { origin: context.requested }, live: context },
+      context: {
+        session,
+        durable: { origin: context.requested },
+        live: context,
+      },
     }),
   );
   const viewed = textOf(presentOf((await request()).effects).frame);

@@ -1,9 +1,9 @@
 // What a surface's last drawn frame of a view showed
 // (brandon-unfiled-3248.8ro6): each placement's drawing — or that it drew
 // nothing — the name each globals rule settled on, and the transitions in
-// flight. A frame is otherwise a pure reading of the view's values; the draw
-// is handed this record and returns its successor, the turn that drew it keeps
-// that on the view, and nothing reads it but the surface's next draw.
+// flight. A frame is otherwise a pure reading of the view's values. The draw
+// receives its surface's last accepted record and returns a candidate for the
+// renderer to keep when the host confirms delivery.
 //
 // [LAW:one-source-of-truth] It is THE record of what a placement last drew. A
 // placement whose value is not answered yet draws its loading cell from it,

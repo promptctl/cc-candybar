@@ -1183,7 +1183,7 @@ export interface DrawnFrame {
   // could not honour (`RenderWarning`). The render goes on — a throw would
   // take the whole statusline away — but nothing else on the bar says why it
   // looks as it does, so its caller records them (the renderer, for the bar's
-  // diagnostics: src/renderer/render-warnings.ts) or fails on them (check).
+  // diagnostics after presentation).
   readonly warnings: readonly RenderWarning[];
   // Each rendered segment's cells (post-layout, pre-serialization), by
   // placement id, for the `debug segments` projection: kept as cells so the
