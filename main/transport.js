@@ -77964,9 +77964,8 @@ function localLink(name, build2, clock) {
     },
     arm: () => {
     },
-    // Nothing restarts in process.
-    beginClose: () => {
-    },
+    // Only a renderer already built by serve can take the close's steps.
+    beginClose: () => built === null ? "closed" : "closing",
     close: async () => {
     },
     process: () => null
@@ -86209,7 +86208,8 @@ async function runTeardown(steps2, log) {
   const failed3 = [];
   for (const [name, run2] of steps2) {
     try {
-      await run2();
+      const waiting = run2();
+      if (waiting !== void 0) await waiting;
     } catch (e) {
       log("warn", `${name} failed: ${inspect(e)}`);
       failed3.push(name);
@@ -90467,6 +90467,7 @@ function createDaemon(inputs) {
   const currentPhase = () => phase;
   const serving = () => phase.kind === "serving" || phase.kind === "armed";
   const cancelling = () => phase.kind === "closing" || phase.kind === "closed";
+  const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
   const log = (level, msg) => inputs.daemonLog.log(
     level,
@@ -90600,7 +90601,9 @@ function createDaemon(inputs) {
         socket: paths2.socket
       }
     },
-    closing: cancelling,
+    // [LAW:single-enforcer] The pane queue reads the same phase as ingress
+    // before any new operation reaches tmux.
+    closing: () => !serving(),
     log
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -90899,7 +90902,7 @@ function createDaemon(inputs) {
   };
   const parts = {
     accountHome: inputs.accountHome,
-    closing: cancelWork.signal,
+    closing: cancelRenders.signal,
     home: host.home,
     launcher,
     log,
@@ -91008,36 +91011,40 @@ function createDaemon(inputs) {
   }
   function close() {
     if ("done" in phase) return phase.done;
-    const wasServing = serving();
     const done = Promise.resolve().then(
-      () => tearDown(wasServing, done)
+      () => tearDown(done)
     );
     phase = { kind: "draining", done };
+    cancelRenders.abort(new DaemonClosing("render"));
     return done;
   }
-  async function tearDown(wasServing, done) {
-    const rendererSteps = (kind) => wasServing ? [...renderers.values()].map(({ renderer }) => [
+  async function tearDown(done) {
+    const attached = [...renderers.values()];
+    const draining = [];
+    await runTeardown(
+      [
+        ...attached.map(
+          ({ renderer }) => [
+            `${renderer.name} wakes close`,
+            () => renderer.closeWake()
+          ]
+        ),
+        ...attached.map(
+          ({ renderer, link }) => [
+            `${renderer.name} close begins`,
+            () => {
+              if (link.beginClose() === "closing") draining.push(renderer);
+            }
+          ]
+        )
+      ],
+      log
+    );
+    const rendererSteps = (kind) => draining.map((renderer) => [
       `${renderer.name} ${kind}`,
       () => renderer.ask({ kind })
-    ]) : [];
+    ]);
     const teardown = [
-      // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
-      // ends is not started again, so no step below waits on a fresh boot.
-      // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
-      // from here, so no turn the renderer holds for later runs into the
-      // close's.
-      [
-        "renderer wakes close",
-        () => {
-          for (const { renderer } of renderers.values()) renderer.closeWake();
-        }
-      ],
-      [
-        "renderer close begins",
-        () => {
-          for (const { link } of renderers.values()) link.beginClose();
-        }
-      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
@@ -91069,14 +91076,14 @@ function createDaemon(inputs) {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, stores }) => [
           `${renderer.name} stores close`,
           () => stores.close()
         ]
       ),
       ["sessionBook close", () => sessionBook.close()],
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, link }) => [
           `${renderer.name} renderer close`,
           () => link.close()
