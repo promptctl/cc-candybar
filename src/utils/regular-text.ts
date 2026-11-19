@@ -17,10 +17,10 @@ export interface RegularTextFile {
 // [LAW:single-enforcer] Opening a pipe without a writer must never stop the
 // host loop. Check the opened descriptor and read that same file, even if its
 // name is replaced before the read.
-export function withRegularTextFile(
+export function withRegularTextFile<T>(
   path: string,
-  use: (file: RegularTextFile) => string,
-): string {
+  use: (file: RegularTextFile) => T,
+): T {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = () => fstatSync(fd, { bigint: true });

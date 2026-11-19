@@ -6,6 +6,7 @@
 import { walkLinks } from "../../utils/atomic-write";
 import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import { canonicalDirectory } from "../../utils/watch-target";
+import type { FileObservations } from "./polled-entry.js";
 
 // An absolute directory the OS watches: every child, or the whole tree (git's
 // refs: a branch name's slashes are directories).
@@ -156,6 +157,8 @@ export interface Deafness {
 // (`ridesStream`, of the targets it was acquired with).
 export interface WatcherHandle {
   release(): void;
+  // Revisions the holder actually consumed, applied at the next poll.
+  observed(files: FileObservations): void;
   readonly deaf: readonly Deafness[];
   readonly ridesStream: boolean;
 }

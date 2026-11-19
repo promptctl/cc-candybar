@@ -3,13 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../../utils/logger";
 import { valueOf } from "../../utils/logfmt";
-import {
-  bindsFolder,
-  boundKey,
-  boundOf,
-  identityKey,
-} from "../../utils/folder-identity";
+import { bindsFolder, boundKey, boundOf } from "../../utils/folder-identity";
 import type { Timekeeper } from "../../time";
+import {
+  readPolledEntry,
+  type FileObservations,
+} from "../foundations/polled-entry.js";
 import {
   ridesStream,
   type Invalidation,
@@ -53,8 +52,8 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // its target matters, not for as long as one value derived from it.
 //
 // Nor is holding one free, so a polled path opens none: one sweep lstats every
-// polled path each period, and an acquire or follow lstats its own once each,
-// whatever happens in the tree around them.
+// polled path each period. An acquire or follow uses the holder's entry when
+// it has one, or lstats the path once, whatever happens in the tree around them.
 
 // [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
 // single source consumers derive from (e.g. the load harness's git-churn
@@ -101,14 +100,8 @@ interface Listener {
 }
 
 // [LAW:single-enforcer] One record per polled path, shared by every slot that
-// names it: what the last sweep of the path found, and who hears it change.
-// [LAW:one-source-of-truth] A new record takes the disk at its first acquire;
-// after that only the sweep reads an entry into it, and an acquire or follow
-// only marks it unseen, because a holder may read before it follows and an
-// entry taken at the follow would hide a change between the two. What this
-// cannot see is a change a holder read that was undone before its acquire or
-// follow, or one between a read and the first acquire of its path: that needs
-// the entry the holder read, which only the holder has.
+// names it: what the last sweep found and who hears it change. A holder's
+// own observation takes precedence for the first sweep that follows its read.
 interface PolledPath {
   readonly path: string;
   entry: string | typeof UNSEEN;
@@ -117,6 +110,7 @@ interface PolledPath {
 
 interface Holder {
   readonly onInvalidate: (invalidation: Invalidation) => void;
+  readonly observed: Map<string, string>;
 }
 
 interface InvalidationWindow {
@@ -197,6 +191,7 @@ const heldBy = (
 
 // An entry no read gives: a path holding it differs at the next sweep.
 const UNSEEN: unique symbol = Symbol("unseen");
+const NO_OBSERVATIONS: FileObservations = new Map();
 
 const dirId = (target: DirTarget): string =>
   `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
@@ -239,30 +234,6 @@ function dirsBelow(
     });
 }
 
-// [LAW:one-source-of-truth] What a read of a polled path compares: what is at
-// the path now, or the error reading it gave. Any difference is a change, as
-// a directory watch reports a child made, removed, replaced, written or
-// chmod'ed (the ctime moves on each). A directory's size and times are its
-// children's, which a polled path never stood for, so a directory is its
-// identity and mode alone. [LAW:one-source-of-truth] The identity is the
-// folder identity's own key, birth time with it, since ext4 hands a replaced
-// path its old inode number.
-// [LAW:no-silent-failure] A read the disk refuses is not deafness: the path
-// fires as it starts failing and as it stops, and the holder's own read of it
-// fails loudly in between. A missing parent and a folder replaced on the way
-// arrive the same way, so a polled path is never deaf and never judged.
-function entryAt(at: string): string {
-  try {
-    const s = fs.lstatSync(at, { bigint: true });
-    const identity = `${s.mode}:${identityKey({ dev: s.dev, ino: s.ino, birthtimeNs: s.birthtimeNs })}`;
-    return s.isDirectory()
-      ? identity
-      : `${identity}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-  } catch (e) {
-    return `error:${(e as NodeJS.ErrnoException).code}`;
-  }
-}
-
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly dirs = new Map<string, DirWatch>();
@@ -300,13 +271,17 @@ export class WatcherRegistry {
   // Keys acquired in this window belong to it until their last release.
   batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
     const window: InvalidationWindow = { pending: null, completed };
-    const acquire: WatcherRegistry["acquire"] = (key, targets, onInvalidate) =>
-      this.acquired(key, targets, onInvalidate, window);
+    const acquire: WatcherRegistry["acquire"] = (
+      key,
+      targets,
+      onInvalidate,
+      observed,
+    ) => this.acquired(key, targets, onInvalidate, observed, window);
     return {
       acquire,
-      follow: (held, spec, onInvalidate) =>
-        this.followed(held, spec, (key, targets) =>
-          acquire(key, targets, onInvalidate),
+      follow: (held, spec, onInvalidate, observed = NO_OBSERVATIONS) =>
+        this.followed(held, spec, observed, (key, targets) =>
+          acquire(key, targets, onInvalidate, observed),
         ),
     };
   }
@@ -321,14 +296,16 @@ export class WatcherRegistry {
     key: string,
     targets: WatchTargets,
     onInvalidate: (invalidation: Invalidation) => void,
+    observed?: FileObservations,
   ): WatcherHandle {
-    return this.acquired(key, targets, onInvalidate);
+    return this.acquired(key, targets, onInvalidate, observed);
   }
 
   private acquired(
     key: string,
     targets: WatchTargets,
     onInvalidate: (invalidation: Invalidation) => void,
+    observed = NO_OBSERVATIONS,
     window?: InvalidationWindow,
   ): WatcherHandle {
     if (this.closed) {
@@ -337,6 +314,7 @@ export class WatcherRegistry {
       // don't crash mid-shutdown.
       return {
         release: () => {},
+        observed: () => {},
         deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
           (path) => ({
             kind: "refused",
@@ -370,12 +348,16 @@ export class WatcherRegistry {
     this.sighted(
       shared?.polled ??
         targets.polled.flatMap((at) => this.polled.get(at) ?? []),
+      observed,
     );
     const slot =
-      shared ?? this.opened(key, targets, window ?? { pending: null });
-    const holder: Holder = { onInvalidate };
+      shared ??
+      this.opened(key, targets, window ?? { pending: null }, observed);
+    const holder: Holder = { onInvalidate, observed: new Map() };
     slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
+    const handle = this.makeHandle(slot, holder);
+    handle.observed(observed);
+    return handle;
   }
 
   // The held watch following `spec` (`followWatch`).
@@ -383,22 +365,26 @@ export class WatcherRegistry {
     held: HeldWatch | null,
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
+    observed = NO_OBSERVATIONS,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    return this.followed(held, spec, (key, targets) =>
-      this.acquire(key, targets, onInvalidate),
+    return this.followed(held, spec, observed, (key, targets) =>
+      this.acquire(key, targets, onInvalidate, observed),
     );
   }
 
   private followed(
     held: HeldWatch | null,
     spec: WatchSpec,
+    observed: FileObservations,
     acquire: Parameters<typeof followWatch>[2],
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
     const followed = followWatch(held, spec, acquire);
     // A rebound acquired, which sighted. A kept watch whose slot is gone (the
     // registry closed, or the holder released it) polls nothing to sight.
-    if (followed.move === "kept")
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    if (followed.move === "kept") {
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? [], observed);
+      followed.watch.handle.observed(observed);
+    }
     return followed;
   }
 
@@ -409,12 +395,19 @@ export class WatcherRegistry {
   // heard. Only the sweep fires, so the work a path drives stays once a
   // period; a change undone before the holder acquired or followed is one no
   // poll sees.
-  // [LAW:escape-local-minima] exception: seeing a change undone before the
-  // holder looks needs the entry the holder read, which polled consumers do
-  // not yet hand over.
-  private sighted(records: readonly PolledPath[]): void {
+  // [LAW:escape-local-minima] exception: a child that does its own reads
+  // cannot supply descriptor evidence to its parent. Its hold still compares
+  // against the registry's best available observation.
+  private sighted(
+    records: readonly PolledPath[],
+    observed: FileObservations,
+  ): void {
     for (const record of records)
-      if (record.entry !== UNSEEN && entryAt(record.path) !== record.entry)
+      if (
+        !observed.has(record.path) &&
+        record.entry !== UNSEEN &&
+        readPolledEntry(record.path) !== record.entry
+      )
         record.entry = UNSEEN;
   }
 
@@ -422,6 +415,7 @@ export class WatcherRegistry {
     key: string,
     targets: WatchTargets,
     window: InvalidationWindow,
+    observed: FileObservations,
   ): WatcherSlot {
     const slot: WatcherSlot = {
       key,
@@ -433,7 +427,7 @@ export class WatcherRegistry {
     };
     this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
-      const record = this.polledAt(at);
+      const record = this.polledAt(at, observed.get(at));
       record.slots.add(slot);
       slot.polled.push(record);
     }
@@ -745,6 +739,14 @@ export class WatcherRegistry {
       },
       // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
       ridesStream: slot.listeners.size > 0,
+      observed: (files) => {
+        if (!slot.holders.has(holder)) return;
+        holder.observed.clear();
+        for (const { path } of slot.polled) {
+          const seen = files.get(path);
+          if (seen !== undefined) holder.observed.set(path, seen);
+        }
+      },
       release: () => {
         if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
         if (this.slots.get(slot.key) !== slot) return;
@@ -788,14 +790,12 @@ export class WatcherRegistry {
     if (this.counters) this.counters.watchersClosed++;
   }
 
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, which the acquire sights.
-  private polledAt(at: string): PolledPath {
+  private polledAt(at: string, observed: string | undefined): PolledPath {
     const held = this.polled.get(at);
     if (held !== undefined) return held;
     const record: PolledPath = {
       path: at,
-      entry: entryAt(at),
+      entry: observed ?? readPolledEntry(at),
       slots: new Set(),
     };
     this.polled.set(at, record);
@@ -828,11 +828,19 @@ export class WatcherRegistry {
   // path, through the slot's debounce, as a directory watch reports a child.
   private readPolled(): void {
     for (const record of this.polled.values()) {
-      const now = entryAt(record.path);
-      if (now === record.entry) continue;
+      const now = readPolledEntry(record.path);
+      const previous = record.entry;
       record.entry = now;
-      for (const slot of record.slots)
-        this.fire(slot, { kind: "changed", paths: new Set([record.path]) });
+      for (const slot of record.slots) {
+        let changed = false;
+        for (const holder of slot.holders) {
+          const seen = holder.observed.get(record.path) ?? previous;
+          holder.observed.delete(record.path);
+          changed ||= now !== seen;
+        }
+        if (changed)
+          this.fire(slot, { kind: "changed", paths: new Set([record.path]) });
+      }
     }
   }
 

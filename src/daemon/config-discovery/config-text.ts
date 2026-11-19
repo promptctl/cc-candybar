@@ -1,17 +1,16 @@
-import type { BigIntStats } from "node:fs";
 import { identityKey } from "../../utils/folder-identity.js";
 import { withRegularTextFile } from "../../utils/regular-text.js";
+import { polledEntryOf } from "../foundations/polled-entry.js";
 
 const MAX_ENTRIES = 256;
 const MAX_BYTES = 4 * 1024 * 1024;
 
-function revision(stat: BigIntStats): string {
-  return `${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+interface ObservedText {
+  readonly entry: string;
+  readonly text: string;
 }
 
-interface Entry {
-  readonly revision: string;
-  readonly text: string;
+interface Entry extends ObservedText {
   readonly bytes: number;
 }
 
@@ -24,16 +23,16 @@ export class ConfigText {
 
   constructor(private readonly open = withRegularTextFile) {}
 
-  read(file: string): string {
+  read(file: string): ObservedText {
     return this.open(file, (opened) => {
       const key = identityKey(opened.observed);
-      const version = revision(opened.observed);
+      const entry = polledEntryOf(opened.observed);
       const held = this.held.get(key);
       if (held !== undefined) {
         this.held.delete(key);
-        if (held.revision === version) {
+        if (held.entry === entry) {
           this.held.set(key, held);
-          return held.text;
+          return held;
         }
         this.bytes -= held.bytes;
       }
@@ -43,8 +42,8 @@ export class ConfigText {
       const bytes = text.length * 2;
       // [LAW:no-ambient-temporal-coupling] A read that straddles a write
       // answers its caller without supplying bytes for a later observation.
-      if (bytes <= MAX_BYTES && revision(opened.stat()) === version) {
-        this.held.set(key, { revision: version, text, bytes });
+      if (bytes <= MAX_BYTES && polledEntryOf(opened.stat()) === entry) {
+        this.held.set(key, { entry, text, bytes });
         this.bytes += bytes;
         for (const [oldest, entry] of this.held) {
           if (this.held.size <= MAX_ENTRIES && this.bytes <= MAX_BYTES) break;
@@ -52,7 +51,7 @@ export class ConfigText {
           this.bytes -= entry.bytes;
         }
       }
-      return text;
+      return { entry, text };
     });
   }
 

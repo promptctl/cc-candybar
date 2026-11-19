@@ -724,9 +724,60 @@ test("text exceeding the retention budget still reads but does not occupy the ca
   fs.writeFileSync(file, text);
   const reads: string[] = [];
   const cached = new ConfigText(countingText(reads));
-  expect(cached.read(file)).toBe(text);
-  expect(cached.read(file)).toBe(text);
+  expect(cached.read(file).text).toBe(text);
+  expect(cached.read(file).text).toBe(text);
   expect(reads).toEqual([file, file]);
+});
+
+// [LAW:verifiable-goals] Delete between the real descriptor read and first
+// follow. A stat at follow sees only absence; the snapshot saw text.
+test("a deleted layer heard through its descriptor revision retires on the first poll", async () => {
+  const { file, origin: input } = named(
+    "removed-after-read",
+    "{ globals: { padding: 9 } }",
+  );
+  const origin = {
+    ...input,
+    target: requestedConfigTarget(file, undefined, "config-only"),
+  };
+  const clock = heldClock(new Date());
+  const watchers = new WatcherRegistry({ clock, logger: () => {} });
+  const reads: string[] = [];
+  const moved: RenderOrigin[] = [];
+  const observe = countingText(reads);
+  const service = new ConfigDiscovery({
+    locations: {
+      ...locations(HOST),
+      dataHome: project("empty-data"),
+      dataDirs: [],
+    },
+    stateDir: stateDir(HOST),
+    watchers,
+    openText(at, use) {
+      const result = observe(at, use);
+      if (at === file) fs.unlinkSync(file);
+      return result;
+    },
+    log: () => {},
+    moved: (_renderer, origins) => moved.push(...origins),
+  });
+  cleanups.push(
+    () => watchers.closeAll(),
+    () => service.close(),
+  );
+  const renderer = service.forRenderer(MAIN_RENDERER);
+  const content = () => renderer.snapshotOf(origin)?.chain[0]?.content.kind;
+  renderer.follow([origin]);
+  expect(content()).toBe("text");
+  expect(fs.existsSync(file)).toBe(false);
+  expect(moved).toEqual([]);
+
+  await clock.settle(POLL_MS + DEBOUNCE_MS);
+  expect(content()).toBe("absent");
+  expect(moved).toEqual([origin]);
+  expect(reads).toEqual([file]);
+  await clock.settle(POLL_MS + DEBOUNCE_MS);
+  expect(moved).toEqual([origin]);
 });
 
 test("an unchecked extension remains the unreadable layer at its actual path", () => {
