@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-902",
+      "ref": "refs/pull/902/merge",
+      "sha": "82410e0f69298bb7d4c3e2427f6df68b0f07f80a",
+      "timestamp": "2026-11-19T18:50:30.920Z",
+      "commits": [
+        {
+          "sha": "82410e0f69298bb7d4c3e2427f6df68b0f07f80a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T18:49:25Z",
+          "message": "Merge ffbecde3471b9f34444a29e9dc7bddda0c5c0363 into 2d21da5a247382b00e6ea729e0e1081bcecc4376\n"
+        },
+        {
+          "sha": "ffbecde3471b9f34444a29e9dc7bddda0c5c0363",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:44:16-07:00",
+          "message": "fix(daemon): skip abandoned statusline draws\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2d21da5a247382b00e6ea729e0e1081bcecc4376",
@@ -13,28 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:48:23-07:00",
           "message": "fix(client): show startup and timeout feedback in the statusline (#900)"
-        }
-      ]
-    },
-    {
-      "version": "pr-902",
-      "ref": "refs/pull/902/merge",
-      "sha": "33e37f14320d82787cff0a2e52b5912fa1b05f5d",
-      "timestamp": "2026-11-19T18:48:03.978Z",
-      "commits": [
-        {
-          "sha": "33e37f14320d82787cff0a2e52b5912fa1b05f5d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:46:51-07:00",
-          "message": "Merge ff66095e8d5e444c9dceaaf199a69de512a8fa87 into 059ece30eb17a3358d9abdd230f2cd671892624c\n"
-        },
-        {
-          "sha": "ff66095e8d5e444c9dceaaf199a69de512a8fa87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:44:16-07:00",
-          "message": "fix(daemon): skip abandoned statusline draws\n"
         }
       ]
     },
