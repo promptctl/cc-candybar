@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-902",
+      "ref": "refs/pull/902/merge",
+      "sha": "50f67cfd9d49a59dd704841b881430839a437fc7",
+      "timestamp": "2026-11-19T19:20:56.062Z",
+      "commits": [
+        {
+          "sha": "50f67cfd9d49a59dd704841b881430839a437fc7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T19:19:49Z",
+          "message": "Merge 1116737e6cdc0065399ccf255b4ac46449ca3b1b into 31ff034e6eb41672a38be8ed9f148b237eb9a6a4\n"
+        },
+        {
+          "sha": "1116737e6cdc0065399ccf255b4ac46449ca3b1b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:08:07-07:00",
+          "message": "test(daemon): state deadlines in the fixture clock domain\n"
+        },
+        {
+          "sha": "0ef989620104975da5fc6778ca6c6dafd63e8ba4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:53:32-07:00",
+          "message": "test(client): reserve independent directories for concurrent feedback cases\n"
+        },
+        {
+          "sha": "9a5c76fc300b11777a6bb67bf846709cf0a9eb21",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:44:16-07:00",
+          "message": "fix(daemon): skip abandoned statusline draws\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "31ff034e6eb41672a38be8ed9f148b237eb9a6a4",
@@ -13,42 +49,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T19:18:39Z",
           "message": "chore(release): set `package.json` to 1.235.9\n\n## [1.235.9](https://github.com/promptctl/cc-candybar/compare/v1.235.8...v1.235.9) (2026-11-19)\n\n### Bug Fixes\n\n* **launch:** withhold repository-local variables from inherited child environments ([#874](https://github.com/promptctl/cc-candybar/issues/874)) ([c81ae90](https://github.com/promptctl/cc-candybar/commit/c81ae9059d7ae162e1e829259980391659766628))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-902",
-      "ref": "refs/pull/902/merge",
-      "sha": "f117b1ac1f304686c50528e43c215ea8890a4175",
-      "timestamp": "2026-11-19T19:13:50.034Z",
-      "commits": [
-        {
-          "sha": "f117b1ac1f304686c50528e43c215ea8890a4175",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:12:42Z",
-          "message": "Merge 873129c519ef86b5ebe009ca37bb9ac42388ae54 into c81ae9059d7ae162e1e829259980391659766628\n"
-        },
-        {
-          "sha": "873129c519ef86b5ebe009ca37bb9ac42388ae54",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:08:07-07:00",
-          "message": "test(daemon): state deadlines in the fixture clock domain\n"
-        },
-        {
-          "sha": "6082c50fa318fa9dad553f50c29c5cc8a3bf8f67",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:53:32-07:00",
-          "message": "test(client): reserve independent directories for concurrent feedback cases\n"
-        },
-        {
-          "sha": "a14ca4cdbce229808b0c7d76c653979b66a4d851",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:44:16-07:00",
-          "message": "fix(daemon): skip abandoned statusline draws\n"
         }
       ]
     },
