@@ -8,6 +8,7 @@ import { decodeAnsi } from "@promptctl/rich-js";
 // and reaches the exit it was built with. A connection to a stand-in daemon is the
 // other half (test/daemon-connection.test.ts).
 
+import { once } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,8 @@ import {
   type Request,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
+import { handleConnection } from "../../../src/daemon/connection";
+import type { HandledRequest } from "../../../src/daemon/reply";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import type { LinkOwner } from "../../../src/daemon/renderer-process";
@@ -38,6 +41,7 @@ import {
   statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
+import { memoryConnection } from "../../helpers/memory-connection";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import { hearingEvents, holdable } from "../../helpers/renderers";
@@ -335,6 +339,76 @@ describe("a connection to a daemon built in this worker", () => {
     // With nothing counted since, the next hold's end lets it go.
     clock.advance(DAEMON_EVENT_HOLD_S * 1000);
     expect(await reply("task-throw-a")).not.toMatch(/⚠/);
+  });
+
+  test("a valid pane subscribe leaves no follower when its peer departs", async () => {
+    const clock = heldClock(new Date());
+    const running = start(clock);
+    const daemon = running.daemon;
+    const sessionId = "connection-pane-hangup";
+    const request: Request = { ...SUBSCRIBE, sessionId, lane: "pane" };
+    await rendered(running, sessionId);
+    const { daemonEnd, client } = memoryConnection();
+    const read = Promise.withResolvers<HandledRequest>();
+    const release = Promise.withResolvers<void>();
+    const attempted: string[] = [];
+    // Hold the real parser's reply where the connection will act on it, so
+    // the daemon has read the frame but the peer can close before admission.
+    handleConnection(
+      {
+        ...daemon,
+        handle: async (...args) => {
+          const reply = await daemon.handle(...args);
+          read.resolve(reply);
+          await release.promise;
+          return reply;
+        },
+        subscribe: (session, sub) => {
+          attempted.push(sub.lane);
+          return daemon.subscribe(session, sub);
+        },
+      },
+      daemonEnd,
+    );
+    const leaving = openedOn(client);
+    let live: Opened | undefined;
+    try {
+      leaving.send(request);
+      expect(await read.promise).toEqual({
+        kind: "subscribe",
+        sessionId,
+        lane: "pane",
+      });
+      const peerClosed = once(daemonEnd, "close");
+      leaving.client.destroy();
+      await peerClosed;
+      release.resolve();
+      await clock.settle(0);
+      expect(attempted).toEqual([]);
+      expect((await statsOf(daemon)).frameFeeds).toMatchObject({
+        feeds: 0,
+        subscribers: 0,
+      });
+
+      live = openedOn(running.connect());
+      live.send(request);
+      await clock.settle(0);
+      expect(drawn(await answered(live))).toContain("a drawn mark");
+      expect((await statsOf(daemon)).frameFeeds).toMatchObject({
+        feeds: 1,
+        subscribers: 1,
+      });
+      live.client.destroy();
+      await clock.settle(0);
+      expect((await statsOf(daemon)).frameFeeds).toMatchObject({
+        feeds: 0,
+        subscribers: 0,
+      });
+    } finally {
+      release.resolve();
+      leaving.client.destroy();
+      live?.client.destroy();
+    }
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {
