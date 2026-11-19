@@ -10,27 +10,16 @@ import type { Locations } from "../../config/loader/chain-places.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "../../config/loader/repo-gate.js";
 
-/**
- * The plugin roots, lowest precedence first: each `$XDG_DATA_DIRS` entry
- * (package managers — Homebrew's `share/` — the first entry the most
- * important, so it comes last), then `$XDG_DATA_HOME` (the user's), then
- * `<repo>/.cc-candybar/plugins` (a repo's own, for sessions working there,
- * once the user approved it). Each root carries its scope: the repo's is
- * `repo`, every other `plugins`. Within a scope a nearer root's plugin
- * replaces a farther one's of the same name. Read from `Locations`, as the XDG
- * config location is.
- */
-// [LAW:one-source-of-truth] The scope is decided here, where the root is
-// found, and travels with every definition the root holds.
-export interface PluginRoot {
-  readonly dir: string;
+// [LAW:one-source-of-truth] A listing carries its scope from the observed
+// folder names through to their definitions. A failure names the same root.
+export interface RootListing<T> {
+  readonly root: string;
   readonly scope: PluginScope;
+  readonly listed: FolderEntries<T> | Unchecked;
 }
 
-export function pluginRoots(
-  locs: Locations,
-  repo: ApprovedRepo | null,
-): readonly PluginRoot[] {
+// Package-manager directories, lowest precedence first, then the user's.
+export function installedPluginDirs(locs: Locations): readonly string[] {
   const installed = [
     ...[...locs.dataDirs]
       .reverse()
@@ -39,14 +28,7 @@ export function pluginRoots(
   ];
   // A root listed twice keeps its NEAREST position: `$XDG_DATA_HOME` named in
   // `$XDG_DATA_DIRS` too still outranks every package manager's root.
-  return [
-    ...installed
-      .filter((r, i) => installed.lastIndexOf(r) === i)
-      .map((dir) => ({ dir, scope: "plugins" as const })),
-    ...(repo === null
-      ? []
-      : [{ dir: path.join(repo, REPO_PLUGIN_DIR), scope: "repo" as const }]),
-  ];
+  return installed.filter((r, i) => installed.lastIndexOf(r) === i);
 }
 
 // The user's plugin root, `$XDG_DATA_HOME/cc-candybar/plugins`: where
@@ -60,14 +42,32 @@ export function userPluginRoot(locs: Locations): string {
 // `cc-candybar plugin install` installs from.
 export const REPO_PLUGIN_DIR = path.join(".cc-candybar", "plugins");
 
+export const repoPluginDir = (project: string): string =>
+  path.join(project, REPO_PLUGIN_DIR);
+
+interface FolderEntries<T> {
+  readonly folders: readonly T[];
+  readonly files: readonly string[];
+}
+
+// [LAW:parse-dont-validate] Only an approved project can publish names for
+// the definition reader. A failed listing publishes only its diagnostic.
+export function listedRepoRoot(
+  approved: ApprovedRepo | null,
+  entries: ReturnType<typeof listFolders> | null,
+): RootListing<string> | null {
+  if (entries === null) return null;
+  if ("error" in entries)
+    return { root: entries.path, scope: "repo", listed: entries };
+  return approved === null
+    ? null
+    : { root: repoPluginDir(approved), scope: "repo", listed: entries };
+}
+
 // A root's entries: the folders in it, each a plugin's, and the loose files,
 // each a drop naming where it belongs. A root that is not there holds
 // nothing; one that cannot be listed is the `Unchecked` it is, never absence.
-export function listFolders(
-  root: string,
-):
-  | { readonly folders: readonly string[]; readonly files: readonly string[] }
-  | Unchecked {
+export function listFolders(root: string): FolderEntries<string> | Unchecked {
   try {
     // A dot-entry (`.git`, `.DS_Store`, an editor's) is never an install.
     const entries = fs

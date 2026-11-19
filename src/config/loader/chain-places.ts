@@ -12,7 +12,7 @@
 import path from "node:path";
 import type { ConfigTarget } from "../../config-hint.js";
 import type { Unchecked } from "../../utils/presence.js";
-import type { RepoGate } from "./repo-gate.js";
+import type { ProjectAccess } from "./repo-gate.js";
 import type { PluginScope } from "./plugin-scope.js";
 import { LAYER_ROLES, type LayerRole } from "../layer-role.js";
 
@@ -135,6 +135,10 @@ export interface ConfigLayer {
   readonly role: LayerRole;
 }
 
+// [LAW:single-enforcer] Discovery and write destinations admit the same roles.
+export const admitsLayer = (project: ProjectAccess, role: LayerRole): boolean =>
+  role === "user" || project.approved !== null;
+
 // Whose plugins a layer lists: the user's installed ones, or its repository's.
 export const scopeOf = (role: LayerRole): PluginScope =>
   role === "user" ? "plugins" : "repo";
@@ -163,9 +167,7 @@ export function homeLayer(path: string): ConfigLayer {
  * the user role writes. Every arm carries `unchecked`: locations stat could not
  * see past; the search never stops on a guess, and the notice names each.
  *
- * Every arm carries `repos`: what the session's repositories contribute,
- * as their answers decide it. A project or local layer whose directory is not
- * approved is not in the chain.
+ * The project decision admits the same layers for rendering and writing.
  *
  * [LAW:types-are-the-program] `string | null` collapsed `default` and
  * `missing` into one null, which is how an explicit path to a nonexistent
@@ -174,7 +176,7 @@ export function homeLayer(path: string): ConfigLayer {
  * both name it without re-deriving it from the inputs.
  */
 export type ConfigResolution = {
-  readonly repos: RepoGate;
+  readonly project: ProjectAccess;
   readonly unchecked: readonly Unchecked[];
   readonly layers: readonly ConfigLayer[];
   readonly home: string;
@@ -201,8 +203,8 @@ export function chainPlaces(
   locations: readonly ConfigLocation[],
 ): readonly ConfigLayer[] {
   return LAYER_ROLES.flatMap((role): ConfigLayer[] => {
+    if (!admitsLayer(resolved.project, role)) return [];
     if (role === "user") return [{ path: resolved.home, role }];
-    if (resolved.repos.plugins === null) return [];
     const place =
       resolved.layers.find((layer) => layer.role === role)?.path ??
       locations.find((location) => location.role === role)?.candidates[0]?.file;

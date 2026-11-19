@@ -301,6 +301,71 @@ test("a layered renderer follows the older repository book until the first answe
   expect(moved).toEqual([originKey(origin), originKey(origin), originKey(origin)]);
 });
 
+test.each([
+  { standing: "awaiting", answer: null, admitted: false },
+  { standing: "approved", answer: "approved", admitted: true },
+  { standing: "declined", answer: "declined", admitted: false },
+] as const)(
+  "an unreadable project plugin directory reports once and recovers under its $standing decision",
+  ({ standing, answer, admitted }) => {
+    const state = project("access-state");
+    const dir = project("plugin-project");
+    const pluginRoot = path.join(dir, ".cc-candybar", "plugins");
+    fs.mkdirSync(path.dirname(pluginRoot));
+    fs.writeFileSync(pluginRoot, "pending installation");
+    const { file } = named("user-base");
+    const origin = originOf(dir, dir, file);
+    const only = {
+      ...origin,
+      target: requestedConfigTarget(file, undefined, "config-only"),
+    };
+    const store = repoConfigs(state);
+    if (answer !== null) writeStatePlan(store.plan(() => ({ [dir]: answer })));
+    const before = store.read();
+    const clock = heldClock(new Date());
+    const reads: string[] = [];
+    const { discovery, service } = discoveryRig({
+      ...diskFiles,
+      text(file) {
+        reads.push(file);
+        return diskFiles.text(file);
+      },
+    }, clock, state);
+    discovery.follow([origin, only]);
+    const worktree = service.forRenderer(rendererNameOf("next"));
+    worktree.follow([origin]);
+    const snapshot = () => discovery.snapshotOf(origin)!;
+    const errors = () => snapshot().notices.filter((n) => n.includes(pluginRoot));
+    expect(errors()).toEqual([expect.stringContaining("ENOTDIR")]);
+    expect(snapshot().repo).toBeNull();
+    expect(discovery.snapshotOf(only)?.notices.some((n) => n.includes(pluginRoot))).toBe(false);
+
+    const projectFile = path.join(dir, ".cc-candybar.json5");
+    fs.writeFileSync(projectFile, "{}");
+    clock.advance(POLL_MS + DEBOUNCE_MS);
+    expect(errors()).toEqual([expect.stringContaining("ENOTDIR")]);
+    expect(snapshot().repo).toMatchObject({ dir, standing });
+    expect(snapshot().chain.filter((l) => l.role === "project").map((l) => l.content))
+      .toEqual(admitted ? [{ kind: "text", text: "{}" }] : []);
+    expect(reads.includes(projectFile)).toBe(admitted);
+    expect(worktree.snapshotOf(origin)).toEqual(snapshot());
+
+    fs.unlinkSync(pluginRoot);
+    const folder = path.join(pluginRoot, "example");
+    fs.mkdirSync(folder, { recursive: true });
+    const definition = path.join(folder, "plugin.json5");
+    fs.writeFileSync(definition, "{}");
+    clock.advance(POLL_MS + DEBOUNCE_MS);
+    expect(errors()).toEqual([]);
+    expect(snapshot().repo).toMatchObject({ dir, standing });
+    expect(snapshot().plugins.filter((p) => p.scope === "repo").map((p) => p.path))
+      .toEqual(admitted ? [definition] : []);
+    expect(reads.filter((f) => f === definition)).toEqual(admitted ? [definition] : []);
+    expect(worktree.snapshotOf(origin)).toEqual(snapshot());
+    expect(store.read()).toEqual(before);
+  },
+);
+
 test("only an isolated config skips the project's plugin discovery and watch", () => {
   const projectDir = project("project-with-plugin");
   const { file } = named("explicit");

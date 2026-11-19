@@ -54,14 +54,7 @@ const collisionsOf = (locs: Locations, projectDir?: string) =>
     searchConfig(locs, () => observedAnswers(approving()), { kind: "chain", projectDir }).locations,
   );
 
-const NOTHING_GATED = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null,
-};
+const NO_PROJECT_ACCESS = { approved: null, question: null, unread: null };
 
 // Root bypasses directory permissions, so the unsearchable-directory fixtures
 // cannot exist for it.
@@ -182,7 +175,7 @@ describe("the config search", () => {
         layers: [{ path: jsonPath, role: "user" }],
         home: jsonPath,
         unchecked: [],
-        repos: NOTHING_GATED,
+        project: NO_PROJECT_ACCESS,
       });
     } finally {
       cleanup();
@@ -206,7 +199,7 @@ describe("the config search", () => {
         layers: [{ path: json5Path, role: "user" }],
         home: json5Path,
         unchecked: [],
-        repos: NOTHING_GATED,
+        project: NO_PROJECT_ACCESS,
       });
     } finally {
       cleanup();
@@ -241,10 +234,10 @@ describe("the config search", () => {
         ],
         home: xdgJson5,
         unchecked: [],
-        repos: {
-          ...NOTHING_GATED,
-          plugins: repo,
-          approved: [realpathSync(proj)],
+        project: {
+          approved: repo,
+          question: { dir: realpathSync(proj), standing: "approved", unproven: null },
+          unread: null,
         },
       });
       const query = { kind: "chain", projectDir: proj } as const;
@@ -279,7 +272,7 @@ describe("the config search", () => {
         layers: [],
         home,
         unchecked: [],
-        repos: NOTHING_GATED,
+        project: NO_PROJECT_ACCESS,
       });
       expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
@@ -422,7 +415,7 @@ describe("the config search", () => {
           path: named,
           home: named,
           error: expect.stringContaining("EACCES"),
-          repos: NOTHING_GATED,
+          project: NO_PROJECT_ACCESS,
         });
         // The load names the file it could not read; the search adds none.
         expect(configResolutionNotice(resolved)).toBeNull();
@@ -469,7 +462,7 @@ describe("the config search", () => {
             path,
             error: expect.stringContaining("EACCES"),
           })),
-          repos: NOTHING_GATED,
+          project: NO_PROJECT_ACCESS,
         });
         const notice = configResolutionNotice(resolved);
         expect(notice).toContain("Config location could not be checked");
@@ -491,7 +484,7 @@ test.each([
   const file = "/asked.json5";
   const checked: string[] = [];
   const readAnswers = jest.fn(() => observedAnswers(approving()));
-  const { resolution, question } = searchConfig(
+  const { resolution } = searchConfig(
     locs,
     readAnswers,
     { kind: "file", path: file },
@@ -505,7 +498,7 @@ test.each([
   );
   expect(checked).toEqual([file]);
   expect(readAnswers).not.toHaveBeenCalled();
-  expect(question).toBeNull();
+  expect(resolution.project.question).toBeNull();
   expect(resolution).toMatchObject({ kind: outcome, path: file, home: file });
   if (resolution.kind === "unreadable") expect(resolution.error).toBe("ELOOP");
 });

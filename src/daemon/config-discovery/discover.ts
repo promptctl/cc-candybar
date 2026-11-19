@@ -15,7 +15,6 @@ import type {
   Stray,
 } from "../../config/config-snapshot.js";
 import type { Checkout } from "../../utils/git-root.js";
-import type { Unchecked } from "../../utils/presence.js";
 import type { StateObservation } from "../state-file.js";
 import { repoConfigs } from "./repo-configs.js";
 import type { LayerRole } from "../../config/layer-role.js";
@@ -35,9 +34,9 @@ import {
   type DiscoveryFiles,
 } from "./discovery-files.js";
 import {
-  REPO_PLUGIN_DIR,
-  pluginRoots,
-  type PluginRoot,
+  installedPluginDirs,
+  repoPluginDir,
+  type RootListing,
 } from "./plugin-folders.js";
 import {
   DEFINITION_FILE,
@@ -48,23 +47,8 @@ import {
 import type { PluginScope } from "../../config/loader/plugin-scope.js";
 import {
   repoUnreadNotice,
-  type ApprovedRepo,
-  type RepoGate,
   type RepoConfigBook,
 } from "../../config/loader/repo-gate.js";
-
-// One plugin root as discovery listed it: each folder's definition, read, and
-// each loose file, or why the root could not be listed.
-export interface RootListing {
-  readonly root: string;
-  readonly scope: PluginScope;
-  readonly listed:
-    | {
-        readonly folders: readonly PluginFile[];
-        readonly files: readonly string[];
-      }
-    | Unchecked;
-}
 
 // [LAW:one-source-of-truth] What every origin's discovery shares: the user's
 // answers for repositories and the installed plugin roots, read once, so a
@@ -72,7 +56,7 @@ export interface RootListing {
 export interface SharedFacts {
   readonly locs: Locations;
   readonly answers: () => StateObservation<RepoConfigBook>;
-  readonly installed: readonly RootListing[];
+  readonly installed: ReadonlyArray<RootListing<PluginFile>>;
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
 }
@@ -113,17 +97,21 @@ export function readShared(
 export function installedRoots(
   locs: Locations,
   files: DiscoveryFiles = discoveryFiles(),
-): readonly RootListing[] {
-  return pluginRoots(locs, null).map((root) => listRoot(root, files));
+): ReadonlyArray<RootListing<PluginFile>> {
+  return installedPluginDirs(locs).map((root) =>
+    readDefinitions(
+      { root, scope: "plugins", listed: files.folders(root) },
+      files,
+    ),
+  );
 }
 
-function listRoot(
-  { dir, scope }: PluginRoot,
+function readDefinitions(
+  { root, scope, listed }: RootListing<string>,
   files: DiscoveryFiles,
-): RootListing {
-  const listed = files.folders(dir);
+): RootListing<PluginFile> {
   return {
-    root: dir,
+    root,
     scope,
     listed:
       "error" in listed
@@ -131,7 +119,7 @@ function listRoot(
         : {
             folders: listed.folders.map((name) =>
               readDefinition(
-                path.join(dir, name, DEFINITION_FILE),
+                path.join(root, name, DEFINITION_FILE),
                 scope,
                 files,
               ),
@@ -192,19 +180,13 @@ export interface SessionPlugins {
 // repository's `lit` and an installed `lit` both survive. A folder whose name
 // is no plugin's is keyed alike: it still loads, once, and drops naming why.
 export function sessionPlugins(
-  locs: Locations,
-  installed: readonly RootListing[],
-  repo: ApprovedRepo | null,
-  cwd: string,
-  files: DiscoveryFiles = discoveryFiles(),
+  roots: ReadonlyArray<RootListing<PluginFile>>,
+  checkout: Checkout,
 ): SessionPlugins {
-  const repoRoots = pluginRoots(locs, repo)
-    .filter((r) => r.scope === "repo")
-    .map((root) => listRoot(root, files));
   const byNs = new Map<string, PluginFile>();
   const strays: Stray[] = [];
   const notices: string[] = [];
-  for (const { root, scope, listed } of [...installed, ...repoRoots]) {
+  for (const { root, scope, listed } of roots) {
     // [LAW:types-are-the-program] A root that cannot be listed is a fact the
     // bar says, never absence.
     if ("error" in listed) {
@@ -225,12 +207,7 @@ export function sessionPlugins(
     plugins: [...byNs.values()],
     strays,
     notices,
-    // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
-    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
-    // above it, since an ancestor watch per session is the cost; the next
-    // rediscovery reads the new checkout.
-    checkout: files.checkout(cwd),
+    checkout,
   };
 }
 
@@ -314,9 +291,6 @@ export interface ConfigTargets {
 export interface Discovered {
   readonly snapshot: ConfigSnapshot;
   readonly targets: ConfigTargets;
-  // What the origin's repositories contribute, as their answers decide it:
-  // the gate the snapshot's question is ruled from in the same pass.
-  readonly repos: RepoGate;
 }
 
 /**
@@ -335,14 +309,15 @@ export function discover(
 ): Discovered {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations, watchedFiles } = search;
-  const { repos } = resolution;
+  const { resolution, repoRoot, locations, watchedFiles } = search;
+  const { project } = resolution;
   const session = sessionPlugins(
-    locs,
-    shared.installed,
-    repos.plugins,
-    query.cwd,
-    files,
+    repoRoot === null
+      ? shared.installed
+      : [...shared.installed, readDefinitions(repoRoot, files)],
+    // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
+    // on its next pass. Watching every parent would add a watch per ancestor.
+    files.checkout(query.cwd),
   );
   const places = chainPlaces(resolution, locations).map((place) =>
     contentAt(search, place, files),
@@ -355,24 +330,27 @@ export function discover(
   const notices = [
     configCollisionNotice(locations),
     configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
+    repoUnreadNotice(project),
     ...session.notices,
   ].filter((n): n is string => n !== null);
   return {
-    snapshot: { ...snapshotOf(session, chain), repo: question, notices },
+    snapshot: {
+      ...snapshotOf(session, chain),
+      repo: project.question,
+      notices,
+    },
     targets: {
       files: watchedFiles,
       roots: [
         ...new Set([
-          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          ...shared.installed.map((r) => r.root),
           // A chain must hear a new repository plugin even before approval.
           ...(query.kind === "chain" && query.projectDir !== undefined
-            ? [path.join(query.projectDir, REPO_PLUGIN_DIR)]
+            ? [repoPluginDir(query.projectDir)]
             : []),
         ]),
       ],
     },
-    repos,
   };
 }
 

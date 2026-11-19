@@ -3,17 +3,19 @@
 
 import path from "node:path";
 import type { Unchecked } from "../../utils/presence.js";
-import { REPO_PLUGIN_DIR } from "./plugin-folders.js";
-import type { RepoQuestion } from "../../config/config-snapshot.js";
 import {
-  gateRepos,
-  repoQuestion,
+  listedRepoRoot,
+  repoPluginDir,
+  type RootListing,
+} from "./plugin-folders.js";
+import {
+  projectAccess,
+  NO_PROJECT_ACCESS,
   type RepoConfigBook,
-  type RepoGate,
-  type RepoDir,
   type RepoProject,
 } from "../../config/loader/repo-gate.js";
 import {
+  admitsLayer,
   configLocations,
   userConfigDefault,
   type ConfigCandidate,
@@ -84,15 +86,6 @@ export function observeConfigLocations(
   });
 }
 
-const NO_REPOS: RepoGate = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null,
-};
-
 export function searchConfig(
   locs: Locations,
   readAnswers: () => StateObservation<RepoConfigBook>,
@@ -100,7 +93,7 @@ export function searchConfig(
   files = discoveryFiles(),
 ): {
   readonly resolution: ConfigResolution;
-  readonly question: RepoQuestion | null;
+  readonly repoRoot: RootListing<string> | null;
   readonly locations: readonly ObservedLocation[];
   readonly watchedFiles: readonly string[];
 } {
@@ -124,31 +117,19 @@ export function searchConfig(
   const found = locations.flatMap((location) =>
     location.kind === "found" ? [location] : [],
   );
-  const repoDirs = new Map<string, RepoDir>();
-  for (const { role, directory } of found) {
-    if (role === "user" || repoDirs.has(directory)) continue;
-    repoDirs.set(directory, {
-      dir: directory,
-      link: files.worktree(directory),
-    });
-  }
-  const dirs = [...repoDirs.values()];
   const seen = repoProject(
     query.kind === "chain" ? query.projectDir : undefined,
+    found.some(({ role }) => role !== "user"),
     files,
   );
-  // [LAW:one-source-of-truth] An isolated query consults no decisions. A
-  // layered query derives its gate, question and watch paths from one read.
+  // [LAW:one-source-of-truth] Only layered queries observe an answer book.
   const book = query.kind === "file" ? null : readAnswers();
-  const repos =
-    book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
-  const question =
-    book === null ? null : repoQuestion(book.result, dirs, seen.project);
+  const project =
+    book === null
+      ? NO_PROJECT_ACCESS
+      : projectAccess(book.result, seen.project);
   const layers: ConfigLayer[] = found
-    .filter(
-      ({ role, directory }) =>
-        role === "user" || repos.approved.includes(directory),
-    )
+    .filter(({ role }) => admitsLayer(project, role))
     .reverse()
     .map(({ role, winner }) => ({ role, path: winner.file }));
   const user = locations.find(({ role }) => role === "user");
@@ -163,7 +144,7 @@ export function searchConfig(
   const common = {
     layers,
     home,
-    repos,
+    project,
     unchecked:
       seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked],
   };
@@ -175,38 +156,54 @@ export function searchConfig(
       : { ...common, kind: "unreadable", ...problem };
   return {
     resolution,
-    question,
+    repoRoot: listedRepoRoot(project.approved, seen.entries),
     locations,
     watchedFiles: [...candidates, ...(book?.paths ?? [])],
   };
 }
 
-// [LAW:no-silent-failure] The failure to inspect a project is independent of
-// the configuration path the session named.
+// A layered query observes plugin names once, including a listing failure.
+// The question and the definitions the host can read both use that result.
 type ProjectObservation =
-  | { readonly project: RepoProject; readonly unchecked: null }
-  | { readonly project: null; readonly unchecked: Unchecked | null };
+  | {
+      readonly project: RepoProject;
+      readonly unchecked: null;
+      readonly entries: ReturnType<DiscoveryFiles["folders"]>;
+    }
+  | {
+      readonly project: null;
+      readonly unchecked: Unchecked | null;
+      readonly entries: null;
+    };
 
-export function repoProject(
+function repoProject(
   projectDir: string | undefined,
-  files = discoveryFiles(),
+  hasConfig: boolean,
+  files: DiscoveryFiles,
 ): ProjectObservation {
-  if (projectDir === undefined) return { project: null, unchecked: null };
+  if (projectDir === undefined)
+    return { project: null, unchecked: null, entries: null };
   const present = files.presence(projectDir);
   if (present !== "present")
-    return { project: null, unchecked: present === "absent" ? null : present };
+    return {
+      project: null,
+      unchecked: present === "absent" ? null : present,
+      entries: null,
+    };
   const dir = files.realpath(projectDir);
-  if (typeof dir !== "string") return { project: null, unchecked: dir };
-  // The same authored root `sessionPlugins` lists once the gate approves it.
-  const listed = files.folders(path.join(projectDir, REPO_PLUGIN_DIR));
+  if (typeof dir !== "string")
+    return { project: null, unchecked: dir, entries: null };
+  const entries = files.folders(repoPluginDir(projectDir));
   return {
     project: {
       dir,
       link: files.worktree(dir),
       path: projectDir,
-      ships: !("error" in listed) && listed.folders.length > 0,
+      contributes:
+        hasConfig || (!("error" in entries) && entries.folders.length > 0),
     },
     unchecked: null,
+    entries,
   };
 }
 

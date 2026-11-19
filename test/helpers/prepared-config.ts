@@ -2,7 +2,7 @@
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { locations } from "../../src/daemon/paths";
 import { createGates, deriveActionGates } from "../../src/daemon/foundations/gates";
-import type { ApprovedRepo } from "../../src/config/loader/repo-gate";
+import { diskFiles } from "../../src/daemon/config-discovery/discovery-files";
 import {
   installedRoots,
   layerOf,
@@ -44,14 +44,6 @@ import { collectedRuns, type CollectedRuns } from "./held-runs";
 // How long a prepare waits for its sources' first runs.
 const SETTLE_MS = 5000;
 
-// The repository a chain loads with: its approved project.
-export interface RepoSession {
-  readonly repo: ApprovedRepo | null;
-}
-
-// No approved project.
-export const NO_REPO: RepoSession = { repo: null };
-
 export interface PreparedConfig {
   readonly layers: readonly string[];
   // Plugins the config lists that did not load.
@@ -67,20 +59,19 @@ export interface PreparedConfig {
 }
 
 // A chain named outright, discovered as the daemon discovers one — each file
-// read, the plugins of `repo` and the checkout of `cwd` — loaded, registered,
+// read, the installed plugins and the checkout of `cwd` — loaded, registered,
 // bound to a fresh session's payload, and settled on its sources' first runs.
 // Discovery's notices and the load's advisories land in `warnings`.
 export async function prepareConfig(
   world: World,
   chain: readonly ConfigLayer[],
-  { repo }: RepoSession,
   cwd: string,
   warnings: string[],
   at: Instant,
 ): Promise<PreparedConfig> {
   const locs = locations(world.host);
   const snapshot = snapshotOf(
-    sessionPlugins(locs, installedRoots(locs), repo, cwd),
+    sessionPlugins(installedRoots(locs), diskFiles.checkout(cwd)),
     chain.map((l) => layerOf(l.role, l.path, readLayer(l.path), locs.home)),
   );
   const prepared = prepareSnapshot(world, snapshot, cwd, warnings);
