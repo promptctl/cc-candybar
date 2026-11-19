@@ -18,7 +18,7 @@ import {
   renderFailed,
   RENDER_ANSWERS,
 } from "./foundations/render-answers";
-import { parseFrame } from "../render/frame";
+import type { PublishFrame } from "./foundations/frame-publication.js";
 import { answerOf, type Lane, type LaneSwitches } from "../config/lanes";
 import { laneOffReason } from "../config/menu-places";
 import type { SessionId } from "./foundations/session-id";
@@ -41,6 +41,7 @@ export interface Subscriber {
 }
 
 export interface FeedDeps<Req> {
+  readonly publishFrame: PublishFrame;
   // Whether the bar of the session `req` is from is on a screen now: a bar
   // nobody can see is drawn at the still rate however it moves.
   shown(req: Req): boolean;
@@ -87,13 +88,13 @@ const failedFeed = (refusal: Refusal): EncodedFeed => {
 
 // [LAW:single-enforcer] Encode the host's structured frame once for all of
 // its subscribers. With no separate handoff there is only one presentation.
-function encodeFeed(frame: FeedFrame): EncodedFeed {
+function encodeFeed(frame: FeedFrame, publish: PublishFrame): EncodedFeed {
   if (frame.kind === "failed") return failedFeed(failedWith(frame.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(parseFrame(frame.bar)));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.bar)));
   const statusline =
     frame.handoff === null
       ? resp
-      : JSON.stringify(RENDER_ANSWERS.ansi(parseFrame(frame.handoff)));
+      : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame.handoff)));
   return { resp, statusline };
 }
 
@@ -282,7 +283,7 @@ export class FrameFeeds<Req> {
       // Unwatched since the renderer drew it.
       if (watched === undefined) continue;
       try {
-        watched.last = encodeFeed(frame);
+        watched.last = encodeFeed(frame, this.deps.publishFrame);
       } catch (error) {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.

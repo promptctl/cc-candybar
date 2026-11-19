@@ -29,7 +29,7 @@ import {
   type Failure,
 } from "./foundations/verb-error.js";
 import type { Response } from "./foundations/protocol";
-import { parseFrame } from "../render/frame.js";
+import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
@@ -104,6 +104,7 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 
 export async function answerStatusline(
   host: RendererHost,
+  publish: PublishFrame,
   collector: Pick<Collector, "requested" | "holding" | "settled">,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
@@ -264,7 +265,7 @@ export async function answerStatusline(
   const encodeFrom = clock.monotonic();
   let resp: Response;
   try {
-    resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
+    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
   } catch (e) {
     const failure = failureOf(e);
     done(presented, `encoding its frame threw: ${failure.message}`);

@@ -64,6 +64,10 @@ import type {
   RendererVerbs,
 } from "../src/renderer/verbs/port";
 import { answerStatusline } from "../src/daemon/statusline-answer";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
+import { TEST_SIGNER } from "./helpers/link-signer";
+import { linksOf } from "../src/click/read";
+import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { HeldEvent } from "../src/utils/event-hold";
 import {
@@ -506,33 +510,37 @@ describe("a feed's frame", () => {
     expect(parts.effectSessions.getStats().sessions).toBe(1);
   });
 
-  // A frame that fails as it leaves the renderer reached no lane, so the
-  // next frame compares against the last one that did.
-  test("that fails after its draw keeps none of what the draw made", async () => {
+  test("draws clickable addresses without calling the outer signer", async () => {
     const { r, parts, rig } = renderer();
     answered(await request({ r, rig }));
     const view = viewOf(rig)!;
-    const motion = parts.effectSessions.of(SESSION).lastFrame();
-    const failing: RendererParts = {
+    const drawing: RendererParts = {
       ...parts,
       linkSigner: {
         ...parts.linkSigner,
         signLink: () => {
-          throw new Error("the signer is gone");
+          throw new Error("only the host may sign the outer address");
         },
       },
     };
     const frame = renderFrame(
-      failing,
+      drawing,
       SESSION,
       MOVING_FPS,
       READ,
       new Set(),
       UNFOLLOWED_FEEDS,
     );
-    expect(frame?.failure).not.toBeNull();
-    expect(view.frames.get("feed")).toBeUndefined();
-    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
+    expect(frame?.failure).toBeNull();
+    if (frame?.frame.kind !== "drawn") throw new Error("the feed drew no bar");
+    const links = linksOf(frame.frame.bar).filter(({ url }) => isBarLink(url));
+    expect(links.length).toBeGreaterThan(0);
+    for (const { url } of links)
+      expect(TEST_SIGNER.openLink(url)).toMatchObject({
+        kind: "failed",
+        reason: expect.stringContaining("no signature"),
+      });
+    expect(view.frames.get("feed")).toBeDefined();
   });
 
   // A feed that opens again draws its first frame, fading nothing in from
@@ -703,6 +711,7 @@ describe("the session's config, ahead of its request", () => {
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
+      publishingFrames(TEST_SIGNER),
       t.rig.served.collector,
       systemTimekeeper,
       new AbortController().signal,
@@ -863,6 +872,7 @@ describe("two requests of one session at different keys", () => {
     const ask = (pane: string, id: number) =>
       answerStatusline(
         host,
+        publishingFrames(TEST_SIGNER),
         t.rig.served.collector,
         systemTimekeeper,
         new AbortController().signal,

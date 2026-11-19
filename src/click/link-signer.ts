@@ -1,7 +1,7 @@
-// [LAW:single-enforcer] The one signer of the links a renderer draws. Any web
-// page can open a `cc-candybar://` link, so every link the bar draws carries a
-// mac over its whole text, and the host opens each click with it before any
-// renderer sees the click. A `run` link and the repository question's answer
+// [LAW:single-enforcer] The one signer of the bar's links. Any web page can
+// open a `cc-candybar://` link, so the host publishes each bar link with a
+// mac over its whole text and opens each click before any renderer sees it.
+// A `run` link and the repository question's answer
 // carry a mac of their own besides, over what they prove beyond the link: that
 // the action's declaration is unchanged since the draw, and that the question,
 // not a config, drew the answer.
@@ -11,7 +11,6 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { Asked } from "../utils/outcome.js";
-import type { Frame } from "../render/frame.js";
 import { isBarLink } from "./wire.js";
 
 // HMAC-SHA256 takes a key of any length; the key file holds this many random
@@ -203,21 +202,4 @@ export function linkSignerOver(key: () => Asked<Buffer>): LinkSigner {
 let preview: LinkSigner | undefined;
 export function previewSigner(): LinkSigner {
   return (preview ??= linkSigner(randomBytes(LINK_KEY_BYTES)));
-}
-
-// The frames one draw hands out, each bar link signed.
-// [LAW:dataflow-not-control-flow] A link of another scheme is the terminal's
-// to open, and passes as it is.
-export function signingFrames(signer: LinkSigner): (frame: Frame) => Frame {
-  const sign = (link: string): string =>
-    isBarLink(link) ? signer.signLink(link) : link;
-  return (frame) => ({
-    ...frame,
-    rows: frame.rows.map((row) => ({
-      ...row,
-      runs: row.runs.map((run) =>
-        run.link === undefined ? run : { ...run, link: sign(run.link) },
-      ),
-    })),
-  });
 }

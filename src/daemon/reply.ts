@@ -474,6 +474,7 @@ export async function replyTo(
         if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
         answered = await answerStatusline(
           parts.renderer,
+          parts.publishFrame,
           parts.collector,
           clock,
           parts.closing,
