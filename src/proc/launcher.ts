@@ -57,7 +57,7 @@ export const LAUNCH_CATEGORIES = [
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
   // `cc-candybar plugin install`'s clone of a plugin's repo
-  // (src/plugin-install.ts): three git calls per install, in the CLI's own
+  // (src/plugin-install.ts): two git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
@@ -89,7 +89,7 @@ export interface LaunchOpts {
   // The environment the child starts from in place of the launcher's
   // inherited one: a session's, for a program the host runs for a session.
   environment?: Readonly<Record<string, string>>;
-  // Set over the environment the child starts from; null unsets.
+  // Set over the environment the child starts from, as given; null unsets.
   envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
   stdinInput?: string | Buffer;

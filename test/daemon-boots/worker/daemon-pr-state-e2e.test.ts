@@ -5,6 +5,11 @@
 // of the branch's name (REUSED), and `-` when it has none. The forge is a stub
 // `gh` on the daemon's PATH answering by branch name, so the whole chain runs:
 // forge CLI → parser → payload → render event.
+//
+// The daemon is started from a shell whose environment names another
+// repository (a git hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, a GH_REPO),
+// so every case also shows that each session's branch, status and PR are read
+// from its own directory.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -12,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf } from "../../../src/render/frame";
+import { withoutRepositoryScopedEnv } from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -22,8 +28,9 @@ jest.setTimeout(30_000);
 // `gh pr view` for the checked-out branch: a branch named after a gh state
 // has a PR in it whose head is HEAD, `REUSED` a merged PR whose head is some
 // earlier commit (the branch name was used before), `none` has no PR, and
-// anything else is an auth failure.
+// anything else is an auth failure, as is a GH_REPO that reached it.
 const GH = `#!/bin/sh
+[ -n "$GH_REPO" ] && { echo "HTTP 404: GH_REPO reached gh" >&2; exit 1; }
 b=$(git branch --show-current)
 pr() { printf '{"number":7,"state":"%s","url":"https://github.com/x/y/pull/7","headRefOid":"%s"}\\n' "$1" "$2"; }
 case "$b" in
@@ -43,12 +50,14 @@ describe("a daemon render carries the branch's PR in every state", () => {
 
   // A checkout of its own per branch: the daemon's git cache is keyed by repo
   // root and refreshed by a watch on .git/HEAD, so one checkout switching
-  // branches between renders would race that watch.
+  // branches between renders would race that watch. Its git calls name their
+  // environment, since the daemon places its own in this worker.
   function checkout(branch: string): string {
     const repo = path.join(dir, `repo-${branch}`);
     fs.mkdirSync(repo);
+    const env = withoutRepositoryScopedEnv(process.env);
     const git = (...args: string[]) =>
-      execFileSync("git", args, { cwd: repo, stdio: "pipe" });
+      execFileSync("git", args, { cwd: repo, env, stdio: "pipe" });
     git("init", "-q", "-b", branch);
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c");
     git("remote", "add", "origin", "git@github.com:x/y.git");
@@ -66,12 +75,20 @@ describe("a daemon render carries the branch's PR in every state", () => {
     config = path.join(dir, "bar.json5");
     fs.writeFileSync(
       config,
-      `{ segments: { pr: { template: 'pr:{{ .git.prState }} t:{{ .git.tracking }}' } }, root: { h: ['pr'] } }`,
+      `{ segments: { pr: { template: 'b:{{ .git.branch }} u:{{ .git.untracked }} pr:{{ .git.prState }} t:{{ .git.tracking }}' } }, root: { h: ['pr'] } }`,
     );
+
+    // The other repository: its own branch, and files no session has.
+    const elsewhere = checkout("elsewhere");
+    for (const name of ["a", "b", "c"])
+      fs.writeFileSync(path.join(elsewhere, name), "");
 
     env = {
       ...prepared.env,
       PATH: `${bin}:${process.env.PATH}`,
+      GIT_DIR: path.join(elsewhere, ".git"),
+      GIT_WORK_TREE: elsewhere,
+      GH_REPO: "other/elsewhere",
     };
     daemon = startDaemon(env);
   });
@@ -102,6 +119,8 @@ describe("a daemon render carries the branch's PR in every state", () => {
         cwd: repo,
       }),
     );
+    // The session's own branch and status, not the daemon's GIT_DIR's.
+    expect(out).toContain(`b:${branch} u:0 `);
     expect(out).toContain(cell);
     // A remote, but no branch here was ever pushed to it.
     expect(out).toContain("t:none");

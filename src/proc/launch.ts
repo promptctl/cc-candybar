@@ -47,6 +47,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
+import { withoutRepositoryScopedEnv } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -122,18 +123,23 @@ function checkRateLimit(
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 
-// [LAW:one-source-of-truth] The environment a child gets is the launch's own
-// (a session's) or else the owner's inherited one (`LaunchScope.inherited`,
-// handed in by the process main or the daemon's root), under the launch's
-// overlay, resolved here for every spawn
-// site. Passing `undefined` lets node read the host process's environment
+// [LAW:one-source-of-truth] The environment every child gets, the lifeline's
+// included: the launch's own (a session's), or else its owner's, read live at
+// each launch, with REPOSITORY_SCOPED_ENV withheld; then the launch's overlay
+// over that. Passing `undefined` lets node read the host process's environment
 // directly, which is a second clock: under a realm boundary (Jest's sandbox
 // copies `process.env` per test file) the two diverge, and a PATH the test set
 // for a `shell` source never reached the shell it spawned
 // (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
 // null removes that variable: node's spawn skips undefined values.
-function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+function childEnv(
+  scope: LaunchScope,
+  opts: Pick<LaunchOpts, "environment" | "envOverlay">,
+): NodeJS.ProcessEnv {
+  // [LAW:single-enforcer] The one strip; REPOSITORY_SCOPED_ENV says why.
+  const env: NodeJS.ProcessEnv = {
+    ...(opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)),
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
   return env;
@@ -168,9 +174,8 @@ function rateLimitedResult(
 
 // Who a launcher's launches belong to.
 export interface LaunchScope {
-  // The environment this owner's children inherit, under each launch's
-  // `envOverlay`. The owner's root passes the same environment it reads its own
-  // facts from, so a daemon has one.
+  // The owner's own environment, live: the one its root reads its own facts
+  // from, and what its children start from.
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
@@ -417,6 +422,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });

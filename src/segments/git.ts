@@ -1,4 +1,5 @@
 import type { LaunchResult } from "../proc/launcher";
+import type { ForgeName } from "../repository-cli";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import type { Current } from "../utils/reading";
 
@@ -44,18 +45,6 @@ export interface PrFieldTypes {
   prError: string;
   prEarlier: PrState;
 }
-
-// [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
-// type admits no PR field missing here, and the doctor reads this record to say
-// which segment needs the forge (src/doctor/data-needs.ts), so the two cannot
-// drift.
-export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
-  prNumber: true,
-  prState: true,
-  prUrl: true,
-  prError: true,
-  prEarlier: true,
-};
 
 // The branch's PR/MR in any state, as the forge CLI picks it for the branch —
 // gh takes an open one if there is one, else the newest; glab's rule is
@@ -223,9 +212,8 @@ export function classify(
   return failed(launchFailure(label, result), "read");
 }
 
-// [LAW:one-source-of-truth] The one spelling of a launch that did not answer —
-// the bar's `git.prError` and the doctor's forge probe (src/doctor/edge.ts)
-// report one launch in the same words.
+// [LAW:one-source-of-truth] The one spelling of a launch that did not answer:
+// a git read's failure and the bar's `git.prError` alike.
 export function launchFailure(
   label: string,
   result: Extract<LaunchResult, { ok: false }>,
@@ -244,36 +232,10 @@ export function firstLine(s: string): string {
   return s.trim().split("\n", 1)[0] ?? "";
 }
 
-// [LAW:one-type-per-behavior] `gh` and `glab` are two instances of one act:
-// "ask a forge CLI for the branch's PR, fold the typed launch result into an
-// Outcome<PullRequest>." The accept/reject shape table is identical across
-// both — only the no-PR stderr signature and the JSON field names differ — so
-// the classification lives here once and each forge supplies its own
-// (noPrPattern, parse) as data.
-//
-// [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
-//   ok + parse ok (open PR)         → ok            (the value)
-//   ok + parse ok (not open)        → absent        (branch's PR is done)
-//   ok + parse fails                → failed        (forge answered garbage)
-//   non-zero + no-PR stderr         → absent        (genuine "none for branch")
-//   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
-//   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)
-//   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
-//   timeout / signal / rate-limited → failed        (forge couldn't answer)
-export type ForgeName = "github" | "gitlab";
-
-// [LAW:one-source-of-truth] The CLI each forge is asked through — the PR lookup
-// here and the doctor's login probe (src/doctor/edge.ts) name it from this one
-// table.
-export const FORGE_CLI: Readonly<Record<ForgeName, "gh" | "glab">> = {
-  github: "gh",
-  gitlab: "glab",
-};
-
 // [LAW:single-enforcer] "The command is not installed": a spawn the OS refused
 // with ENOENT. Every other spawn failure (EACCES, resource limits) is a CLI
 // that is there but could not launch. The PR lookup reads this as "no forge
-// integration" and the doctor as "not installed" — one rule for both.
+// integration".
 export function isMissingCommand(result: LaunchResult): boolean {
   return (
     !result.ok &&
@@ -407,8 +369,7 @@ export interface GitRemote {
 }
 
 // [LAW:one-source-of-truth] The one read of a repo's remotes, as git arguments
-// and the fold of their result — the PR cache's async read and the doctor's
-// sync one (src/doctor/edge.ts) run the same command and read it the same way.
+// and the fold of their result.
 // Exit 1 is "no remotes" (an empty list); every other failure stays failed.
 export const REMOTES_ARGS: readonly string[] = [
   "config",
@@ -596,6 +557,21 @@ export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
   return url === null ? null : remoteWebUrl(url);
 }
 
+// [LAW:one-type-per-behavior] `gh` and `glab` are two instances of one act:
+// "ask a forge CLI for the branch's PR, fold the typed launch result into an
+// Outcome<PullRequest>." The accept/reject shape table is identical across
+// both — only the no-PR stderr signature and the JSON field names differ — so
+// the classification lives here once and each forge supplies its own
+// (noPrPattern, parse) as data.
+//
+// [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
+//   ok + parse ok (any state)       → ok            (the value: open, merged or closed)
+//   ok + parse fails                → failed        (forge answered garbage)
+//   non-zero + no-PR stderr         → absent        (genuine "none for branch")
+//   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
+//   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)
+//   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
+//   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export function classifyForgePr(
   label: string,
   result: LaunchResult,
@@ -611,14 +587,7 @@ export function classifyForgePr(
   if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr),
-  ]
-    .filter(Boolean)
-    .join(", ");
-  return failed(`${label}: ${detail}`, "read");
+  return failed(launchFailure(label, result), "read");
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

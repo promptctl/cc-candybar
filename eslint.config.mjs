@@ -149,18 +149,6 @@ const OWNED_IMPORTS = {
       "The process has its one clock (src/host.ts): take the one you are given.",
   },
   // The real adapters a daemon is handed.
-  // A profile's stores on disk are among them (src/daemon/file-storage.ts),
-  // which a test's daemon builds as the process does.
-  fileStores: {
-    group: ["**/doctor/edge", "**/doctor/edge.js"],
-    owners: ["src/daemon/production-adapters.ts", "src/daemon/file-storage.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
-  productionMachineEdge: {
-    group: ["**/doctor/edge", "**/doctor/edge.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A daemon is handed its adapters (production-adapters.ts).",
-  },
   productionClaudeInputEdge: {
     group: ["**/claude-input/edge", "**/claude-input/edge.js"],
     owners: ["src/daemon/production-adapters.ts"],
@@ -308,15 +296,8 @@ const ZONE_ROWS = {
   "src/utils/": "shared",
   "src/time.ts": "shared",
   "src/claude-settings.ts": "shared",
+  "src/repository-cli.ts": "shared",
   "src/proc/launcher.ts": "shared",
-  "src/doctor/report.ts": "shared",
-  "src/doctor/sightings.ts": "shared",
-  "src/doctor/terminal.ts": "shared",
-  "src/doctor/busy.ts": "shared",
-  "src/doctor/mark-book.ts": "shared",
-  "src/doctor/clicked-terminals.ts": "shared",
-  "src/doctor/post-mortems-read.ts": "shared",
-  "src/doctor/state-file.ts": "shared",
   "src/claude-resume.ts": "shared",
   "src/claude-command-line.ts": "shared",
   "src/shell-word.ts": "shared",
@@ -332,11 +313,7 @@ const ZONE_ROWS = {
   "src/claude-input/slash-line.ts": "shared",
   "src/claude-input/typing.ts": "shared",
   "src/claude-input/prompt-screen.ts": "shared",
-  "src/doctor/ports.ts": "shared",
-  "src/doctor/checks.ts": "shared",
   "src/help-text.ts": "shared",
-  "src/doctor/data-needs.ts": "shared",
-  "src/doctor/gather.ts": "shared",
   "src/index.ts": "root",
   // The renderer process's composition root, the counterpart of the daemon's.
   "src/renderer-process.ts": "root",
@@ -695,8 +672,6 @@ export default [
       "src/claude-input/**/*.ts",
       "src/segments/**/*.ts",
       "src/var-system/**/*.ts",
-      "src/doctor/edge.ts",
-      "src/doctor/font-edge.ts",
     ],
     ignores: ["src/daemon/server.ts"],
     rules: {
