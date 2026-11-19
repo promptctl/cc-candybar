@@ -1,3 +1,9 @@
+## [1.234.3](https://github.com/promptctl/cc-candybar/compare/v1.234.2...v1.234.3) (2026-11-19)
+
+### Performance Improvements
+
+* **host:** share each session environment across statusline ticks ([#872](https://github.com/promptctl/cc-candybar/issues/872)) ([481101f](https://github.com/promptctl/cc-candybar/commit/481101f839d97ef1ae569bddbf9336ec8cfe52b5))
+
 ## [1.234.2](https://github.com/promptctl/cc-candybar/compare/v1.234.1...v1.234.2) (2026-11-19)
 
 ### Performance Improvements
