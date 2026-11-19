@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-892",
+      "ref": "refs/pull/892/merge",
+      "sha": "a54bf11251390cdba395dab4b0e629a269b66f4e",
+      "timestamp": "2026-11-19T17:44:55.021Z",
+      "commits": [
+        {
+          "sha": "a54bf11251390cdba395dab4b0e629a269b66f4e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:43:45Z",
+          "message": "Merge 37ba3903eaa576f1d6aae2ea0d6ec9e4ed368365 into 1b747e5500b197edd1e1a626e5634c0f35723f44\n"
+        },
+        {
+          "sha": "37ba3903eaa576f1d6aae2ea0d6ec9e4ed368365",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:33:16-07:00",
+          "message": "fix(daemon): preserve Git checkout read errors\n"
+        }
+      ]
+    },
+    {
       "version": "pr-893",
       "ref": "refs/pull/893/merge",
       "sha": "d5d3fde241fa183772bad988eb49c5e4065eb75e",
@@ -128,28 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-892",
-      "ref": "refs/pull/892/merge",
-      "sha": "2421ef87255b7c22cd6f06b7ed995c2ffdf46089",
-      "timestamp": "2026-11-19T17:35:14.856Z",
-      "commits": [
-        {
-          "sha": "2421ef87255b7c22cd6f06b7ed995c2ffdf46089",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:34:05-07:00",
-          "message": "Merge 12376b0421b5694cf977c3c24893e38217770490 into e04e83316aabc769ec7d2a322cf9ecc6ff181f44\n"
-        },
-        {
-          "sha": "12376b0421b5694cf977c3c24893e38217770490",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:33:16-07:00",
-          "message": "fix(daemon): preserve Git checkout read errors\n"
         }
       ]
     },
