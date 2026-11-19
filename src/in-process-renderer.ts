@@ -12,33 +12,53 @@ import {
   type Renderer,
   type TimedRenderer,
 } from "./renderer-interface/interface.js";
-import type { Timekeeper } from "./time.js";
 import { writeLogLines } from "./utils/logger.js";
 
 export function inProcessRenderer(
   decorate: (renderer: Renderer) => Renderer = (renderer) => renderer,
 ): RendererPort {
-  return ({ name, boot }) => ({
-    start: ({ clock, log }) =>
+  return ({ name, boot, recording }) => ({
+    start: ({ clock, log, start }) =>
       localLink(
         name,
         () => {
-          const result = mainRendererOf(boot());
+          const input = boot();
+          const capture = recording?.();
+          const result = mainRendererOf(input);
+          if (capture !== undefined) {
+            if (result.kind === "refused") capture.constructed(input, result);
+            else {
+              const { renderer: _core, ...constructed } = result;
+              capture.constructed(input, constructed);
+            }
+          }
           if (result.diagnostics !== undefined)
             writeLogLines(log, result.diagnostics);
           if (result.kind === "refused")
             throw new CrossedFailure(result.failure);
-          return decorate(result.renderer);
+          const core = timed(decorate(result.renderer), () =>
+            clock.monotonic(),
+          );
+          if (capture === undefined) return core;
+          return {
+            answer: (event) =>
+              capture.active
+                ? capture.turn(event, core.answer)
+                : core.answer(event),
+          };
         },
-        clock,
+        () =>
+          void start().catch((error: unknown) =>
+            log("error", `renderer ${name} restart: ${String(error)}`),
+          ),
       ),
   });
 }
 
 function localLink(
   name: RendererName,
-  build: () => Renderer,
-  clock: Pick<Timekeeper, "monotonic">,
+  build: () => TimedRenderer,
+  restore: () => void,
 ): RendererLink {
   // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
   // before it fails as no renderer's.
@@ -65,9 +85,13 @@ function localLink(
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's
     // clock, which the renderer's process is.
     serve: () => {
-      built ??= timed(build(), () => clock.monotonic());
+      built ??= build();
     },
     arm: () => {},
+    restart: async () => {
+      built = build();
+      restore();
+    },
     // Only a renderer already built by serve can take the close's steps.
     beginClose: () => (built === null ? "closed" : "closing"),
     close: async () => {},

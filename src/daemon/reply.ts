@@ -49,6 +49,7 @@ import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";
 import { DEBUG_WHATS, isDebugWhat } from "./foundations/debug-types";
+import { recordingCommandOf } from "./foundations/recording-command.js";
 import { LANE_NAMES, parseLane, type Lane } from "../config/lanes.js";
 import { instantAt, instantOf } from "../utils/instant.js";
 import { renderDeadlines } from "./foundations/request-deadline.js";
@@ -197,6 +198,7 @@ export function refuseClosingInbound(
 // but a subscribe, the compiler naming one added to the protocol until it is.
 export type ReplyRequest = Exclude<Request, SubscribeRequest>;
 const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
+  recording: true,
   render: true,
   [SESSION_RENDER_KIND]: true,
   "pane-session": true,
@@ -334,6 +336,20 @@ export async function replyTo(
   } = parts;
   if (req.kind === "shutdown") {
     return replyOf({ ok: true, output: "" }, 0);
+  }
+  if (req.kind === "recording") {
+    try {
+      const command = recordingCommandOf(req.command);
+      return stay({ ok: true, output: await parts.recordRenderer(command) });
+    } catch (error) {
+      const failure = failureOf(error);
+      return stay({
+        ok: false,
+        code: failure.kind === "bad-request" ? "BAD_REQUEST" : "RENDER_FAILED",
+        error: failure.message,
+        daemonV: PROTOCOL_VERSION,
+      });
+    }
   }
 
   if (req.kind === "pane-session") {

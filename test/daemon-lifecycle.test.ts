@@ -67,6 +67,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
         ),
         serve: () => {},
         arm: () => {},
+        restart: () => own.start(),
         beginClose: () => "closing",
         close: async () => {},
         process: () => null,

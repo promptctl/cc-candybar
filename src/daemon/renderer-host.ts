@@ -146,6 +146,9 @@ export interface HostWorld {
 
 export interface RendererHost {
   readonly name: RendererName;
+  // [LAW:no-ambient-temporal-coupling] Begin or end a recording between
+  // complete turns. Replacing the worker here cannot interrupt a draw.
+  recordingBoundary<T>(operation: () => Promise<T>): Promise<T>;
   // One turn, recorded by the caller: a request's answer writes both its
   // turns on the request's render event. `make` is called as the input's
   // slot comes up, and answers the input, or why there is none to send,
@@ -1142,6 +1145,11 @@ export function rendererHost(
   });
   return {
     name,
+    recordingBoundary: (operation) =>
+      inMailbox(async (_queued, holds) => {
+        holds("recording");
+        return operation();
+      }),
     answer,
     answerClick,
     deliver,

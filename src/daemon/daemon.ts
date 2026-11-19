@@ -61,6 +61,8 @@ import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
+import { RendererRecordings } from "./renderer-recording.js";
+import type { RecordingFile } from "./recording-file.js";
 import {
   rendererNameOf,
   type RendererName,
@@ -110,6 +112,8 @@ export interface RunningBundle {
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
 // its stats and its closing signal, is a factory over those.
 export interface DaemonAdapters {
+  // Available in the installed host. Each test or embedded host chooses its file edge.
+  readonly openRecording?: (file: string) => Promise<RecordingFile>;
   readonly accountHome: () => string;
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
@@ -252,6 +256,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
+  const recordings =
+    inputs.openRecording && new RendererRecordings(inputs.openRecording, log);
   // [LAW:single-enforcer] The daemon injects its log into both registries so
   // cache + watcher lifecycle events land in daemon.log at the right level.
   // Non-daemon consumers (var-system tests, future library use) take the
@@ -644,6 +650,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       name,
       entry,
       boot,
+      recording: () => recordings?.generation(name),
       node: bundle.node,
     });
     return { name, reported, entry, stores, prepared };
@@ -848,6 +855,18 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   };
 
   const parts: DaemonParts = {
+    recordRenderer: (command) => {
+      if (recordings === undefined)
+        throw new BadVerbArgs("recording is unavailable on this host");
+      return recordings.request(command, (name, operation) => {
+        const runtime = renderers.get(name);
+        return runtime === undefined
+          ? operation()
+          : runtime.renderer.recordingBoundary(() =>
+              operation(() => runtime.link.restart()),
+            );
+      });
+    },
     accountHome: inputs.accountHome,
     closing: cancelRenders.signal,
     home: host.home,
@@ -1056,6 +1075,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         ],
       ),
       ["sessionBook close", () => sessionBook.close()],
+      ["renderer recordings close", () => recordings?.close()],
       ...attached.map(
         ({ renderer, link }): TeardownStep => [
           `${renderer.name} renderer close`,

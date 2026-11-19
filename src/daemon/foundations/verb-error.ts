@@ -63,6 +63,10 @@ const KINDS: ReadonlyArray<
   [RendererDown, "down"],
 ];
 
+export function failureKindOf(raw: unknown): Failure["kind"] | undefined {
+  return raw === "threw" ? raw : KINDS.find(([, kind]) => raw === kind)?.[1];
+}
+
 // A failure classified in another process, thrown here as it was classified
 // there: a class crosses no process, so the failure travels as data and is
 // thrown again as this.

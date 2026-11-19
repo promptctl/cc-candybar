@@ -1,0 +1,119 @@
+import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
+import { RendererRecording, RendererRecordings } from "../../src/daemon/renderer-recording";
+import type { RecordingFile } from "../../src/daemon/recording-file";
+import type { EventInput, RendererBoot, RendererOutput, Timed } from "../../src/renderer-interface/interface";
+import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
+import type { Instant, Tick } from "../../src/utils/instant";
+
+const boot: RendererBoot = {
+  stored: EMPTY_STORED_STATE,
+  locations: { home: "/home/u", configHome: "/config", dataHome: "/data", dataDirs: [] },
+  memoryLimitBytes: 1024,
+};
+const input: EventInput = { kind: "event", at: 0 as Instant, tick: 0 as Tick, event: { kind: "due" } };
+const output: Timed<RendererOutput> = {
+  kind: "answered", subscriptions: { configs: [], configSelections: [], managedFolders: [], sources: {}, lanes: {} },
+  stored: [], frames: [], effects: [], record: [], wake: null, turnMs: 142,
+};
+
+function memoryFile() {
+  const lines: string[] = [];
+  const file = {
+    append: jest.fn(async (line: string) => { lines.push(line); }),
+    publish: jest.fn(async (): Promise<string | null> => null),
+    discard: jest.fn(async () => {}),
+  } satisfies RecordingFile;
+  return { lines, file };
+}
+
+function recording() {
+  const { lines, file } = memoryFile();
+  const log = jest.fn();
+  const capture = new RendererRecording(MAIN_RENDERER, "/captures/session", file, log);
+  expect(capture.claim()).toBe(capture);
+  expect(capture.claim()).toBeUndefined();
+  return { capture, lines, file, log };
+}
+
+test("each generation publishes its construction and completed inputs from send time", async () => {
+  const { capture, lines, file } = recording();
+  capture.constructed(boot, { kind: "built" });
+  const queries: unknown[] = [];
+  const submitted = { ...input, event: { kind: "due" as const, pendingClicks: [] } };
+  const turn = capture.turn(submitted, async () => {
+    // A caller can reuse its object as soon as the worker has it.
+    submitted.tick = 99 as Tick;
+    queries.push(input.event.kind);
+    return output;
+  });
+  expect(await turn).toBe(output);
+  expect(await capture.finish()).toMatch(/Saved 1 renderer turns/);
+  expect(lines.map(line => JSON.parse(line))).toEqual([
+    expect.objectContaining({ kind: "boot", input: boot, result: { kind: "built" } }),
+    { kind: "turn", input: { ...input, event: { kind: "due", pendingClicks: [] } }, output: expect.not.objectContaining({ turnMs: expect.anything() }) },
+    { kind: "end", turns: 1 },
+  ]);
+  expect(file.publish).toHaveBeenCalledTimes(1);
+  expect(queries).toEqual(["due"]);
+});
+
+test("a failed write preserves a real renderer answer and stop reports why nothing was published", async () => {
+  const { capture, file, log } = recording();
+  file.append.mockRejectedValueOnce(new Error("recording disk full"));
+  capture.constructed(boot, { kind: "built" });
+  const result = await capture.turn(input, async () => output);
+  expect(result).toBe(output);
+  await expect(capture.finish()).rejects.toThrow("recording disk full");
+  expect(file.discard).toHaveBeenCalledTimes(1);
+  expect(file.publish).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledWith("warn", expect.stringContaining("outcome=failed"));
+});
+
+test("a refused construction can be replayed, while an interrupted live input cannot be published", async () => {
+  const refused = recording();
+  refused.capture.constructed(boot, { kind: "refused", failure: { kind: "threw", message: "bad profile", detail: "bad profile" } });
+  refused.capture.interrupted();
+  await expect(refused.capture.finish()).resolves.toMatch(/Saved 0 renderer turns/);
+  const interrupted = recording();
+  interrupted.capture.constructed(boot, { kind: "built" });
+  await expect(interrupted.capture.turn(input, async () => { throw new Error("pipe closed"); })).rejects.toThrow("pipe closed");
+  await expect(interrupted.capture.finish()).rejects.toThrow("no semantic answer");
+  expect(interrupted.file.publish).not.toHaveBeenCalled();
+});
+
+test("opening a recording resolves the renderer that bound during the file open and serializes retry and stop", async () => {
+  const { file } = memoryFile();
+  let open!: (dest: RecordingFile) => void;
+  const pending = new Promise<RecordingFile>(resolve => { open = resolve; });
+  const registry = new RendererRecordings(() => pending, () => {});
+  let bound = false;
+  const replace = jest.fn(async () => {
+    registry.generation(MAIN_RENDERER)!.constructed(boot, { kind: "built" });
+  });
+  const boundary = (_name: typeof MAIN_RENDERER, operation: (reset?: () => Promise<void>) => Promise<string>) =>
+    operation(bound ? replace : undefined);
+  const command = { action: "start", renderer: MAIN_RENDERER, file: "/captures/foo" } as const;
+  const start = registry.request(command, boundary);
+  const again = registry.request(command, boundary);
+  bound = true;
+  open(file);
+  await expect(start).resolves.toContain("fresh generation");
+  await expect(again).resolves.toContain("already requested");
+  expect(replace).toHaveBeenCalledTimes(1);
+  await expect(registry.request({ action: "stop", renderer: MAIN_RENDERER }, boundary)).resolves.toContain("Saved 0");
+  expect(file.publish).toHaveBeenCalledTimes(1);
+});
+
+test("shutdown while opening an unbound capture discards its private staging file", async () => {
+  const { file } = memoryFile();
+  let open!: (dest: RecordingFile) => void;
+  const pending = new Promise<RecordingFile>(resolve => { open = resolve; });
+  const registry = new RendererRecordings(() => pending, () => {});
+  const start = registry.request({ action: "start", renderer: MAIN_RENDERER, file: "/captures/foo" }, (_name, op) => op());
+  const closed = registry.close();
+  open(file);
+  await expect(start).rejects.toThrow("daemon is closing");
+  await closed;
+  expect(file.publish).not.toHaveBeenCalled();
+  expect(file.discard).toHaveBeenCalledTimes(1);
+});
