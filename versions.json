@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-880",
+      "ref": "refs/pull/880/merge",
+      "sha": "15caa7ee2390009f7a845e8447d1ba74e64489f9",
+      "timestamp": "2026-11-19T15:12:00.110Z",
+      "commits": [
+        {
+          "sha": "15caa7ee2390009f7a845e8447d1ba74e64489f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:10:43Z",
+          "message": "Merge e9ce898cdebf19fc44fa9effd92787fd59ed01fd into f10951d9400d761190b757a8dd55db47ac30e372\n"
+        },
+        {
+          "sha": "e9ce898cdebf19fc44fa9effd92787fd59ed01fd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:18:56-07:00",
+          "message": "fix(config): share write availability with render diagnostics\n"
+        },
+        {
+          "sha": "891687b98763d49a606bc0668a439bc88c221170",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:01:09-07:00",
+          "message": "refactor(config): resolve write layers before rendering\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f10951d9400d761190b757a8dd55db47ac30e372",
@@ -150,35 +179,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:00:18-07:00",
           "message": "fix(renderer): commit request frame memory on delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-880",
-      "ref": "refs/pull/880/merge",
-      "sha": "7320e2868136ef2c2fa8180fbbefff7525b0d600",
-      "timestamp": "2026-11-19T14:22:00.682Z",
-      "commits": [
-        {
-          "sha": "7320e2868136ef2c2fa8180fbbefff7525b0d600",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:20:59Z",
-          "message": "Merge 2059426bed75fd96e6be97a50809b30e5fa14661 into 3a30e23db763050eca5ec970685f4d4872978e3e\n"
-        },
-        {
-          "sha": "2059426bed75fd96e6be97a50809b30e5fa14661",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:18:56-07:00",
-          "message": "fix(config): share write availability with render diagnostics\n"
-        },
-        {
-          "sha": "9c2505035cdefcabe0e88009ead13509288871fa",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:01:09-07:00",
-          "message": "refactor(config): resolve write layers before rendering\n"
         }
       ]
     },
