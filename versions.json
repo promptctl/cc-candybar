@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-903",
+      "ref": "refs/pull/903/merge",
+      "sha": "28f604c6c4e1d55473bfe859cae66e6aeda1f119",
+      "timestamp": "2026-11-19T19:07:48.938Z",
+      "commits": [
+        {
+          "sha": "28f604c6c4e1d55473bfe859cae66e6aeda1f119",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T19:06:38Z",
+          "message": "Merge 0de0062bdcf37ad688552744debd8ce4c6b5ddf5 into ca59b705bf84552eb3ec9b216786363ccde4b4da\n"
+        },
+        {
+          "sha": "0de0062bdcf37ad688552744debd8ce4c6b5ddf5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:48:47-07:00",
+          "message": "fix(install): replace staged executables atomically\n"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "4478fea677f39512fa432999e7c76e2ebfaa34d3",
@@ -171,28 +193,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-903",
-      "ref": "refs/pull/903/merge",
-      "sha": "8881f5188063234490d27269865deb1407aecc4d",
-      "timestamp": "2026-11-19T18:51:26.665Z",
-      "commits": [
-        {
-          "sha": "8881f5188063234490d27269865deb1407aecc4d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:50:22-07:00",
-          "message": "Merge d6c56b78d98ae56dce11baa86b61ddd756d147ea into 2d21da5a247382b00e6ea729e0e1081bcecc4376\n"
-        },
-        {
-          "sha": "d6c56b78d98ae56dce11baa86b61ddd756d147ea",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:48:47-07:00",
-          "message": "fix(install): replace staged executables atomically\n"
         }
       ]
     },
