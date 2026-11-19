@@ -16,6 +16,8 @@ import {
   rendererOf,
   timed,
   type AdapterInput,
+  type AdapterOutput,
+  type Subscriptions,
   type TimedRenderer,
 } from "../../src/renderer-interface/interface";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
@@ -45,7 +47,8 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
           kind: "replied",
           stored: [],
           reply: { kind: "close-journal" },
-          subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+          subscriptions: { sources: {}, lanes: {}, configs: [] },
+          wake: null,
         };
       },
     }),
@@ -71,6 +74,11 @@ function recordingHost(): { host: AdapterToHost; saw: string[] } {
 function linesOver(
   host: AdapterToHost,
   heap: Parameters<typeof serveRenderer>[0]["heapSnapshot"] = async () => {},
+  options: {
+    readonly subscriptionUpdates?: boolean;
+    readonly renderer?: TimedRenderer;
+    readonly heard?: RendererLine[];
+  } = {},
 ) {
   const crossed = <T>(line: T): T => JSON.parse(JSON.stringify(line)) as T;
   let toRenderer: (line: HostLine) => void = () => {};
@@ -85,8 +93,13 @@ function linesOver(
     queueMicrotask(() => lines.heard(crossed(line))),
   );
   toRenderer = serveRenderer({
-    renderer: talkingRenderer(reaches),
-    send: (line) => queueMicrotask(() => lines.heard(crossed(line))),
+    renderer: options.renderer ?? talkingRenderer(reaches),
+    subscriptionUpdates: options.subscriptionUpdates,
+    send: (line) => {
+      const received = crossed(line);
+      options.heard?.push(received);
+      queueMicrotask(() => lines.heard(received));
+    },
     memory: () => ({ rss: 1, heapTotal: 1 }),
     heapSnapshot: heap,
   });
@@ -101,6 +114,120 @@ const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   push: { kind },
   at: 0 as Instant,
   tick: 0 as Tick,
+});
+
+const empty: Subscriptions = { sources: {}, lanes: {}, configs: [] };
+const opened: Subscriptions = {
+  ...empty,
+  configs: [{ projectDir: "/p", cwd: "/p", target: { source: "search" } }],
+};
+
+function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
+  let step = 0;
+  return timed(
+    rendererOf({
+      event: async () => {
+        throw new Error("no event expected");
+      },
+      adapter: async (): Promise<AdapterOutput> => {
+        const next = subscriptions[step];
+        if (next === undefined) throw new Error("no declaration scripted");
+        return {
+          kind: "replied",
+          reply: { kind: "close-journal" },
+          subscriptions: next,
+          wake: ++step as Tick,
+          stored: [],
+        };
+      },
+    }),
+    () => 0,
+  );
+}
+
+test.each([true, false])(
+  "a renderer pipe takes full replacements and stable wakes (subscription updates: %s)",
+  async (subscriptionUpdates) => {
+    const heard: RendererLine[] = [];
+    const wire = linesOver(inertHost(), undefined, {
+      heard,
+      subscriptionUpdates,
+      renderer: declaring([empty, empty, opened, opened, empty]),
+    });
+    const answers = [];
+    for (let step = 0; step < 5; step++)
+      answers.push(await wire.renderer.answer(push("close-journal")));
+    expect(answers.map(({ subscriptions }) => subscriptions)).toEqual([
+      empty,
+      empty,
+      opened,
+      opened,
+      empty,
+    ]);
+    expect(answers.map(({ wake }) => wake)).toEqual([1, 2, 3, 4, 5]);
+    expect(answers[1]?.subscriptions).toBe(answers[0]?.subscriptions);
+    expect(answers[3]?.subscriptions).toBe(answers[2]?.subscriptions);
+    const outputs = heard.flatMap((line) =>
+      line.kind === "output" ? [line.output] : [],
+    );
+    expect(outputs.map((value) => "subscriptions" in value)).toEqual(
+      subscriptionUpdates
+        ? [true, false, true, false, true]
+        : [true, true, true, true, true],
+    );
+    expect(outputs[0]).toMatchObject(
+      subscriptionUpdates
+        ? { subscriptions: empty, wake: 1 }
+        : { subscriptions: { ...empty, wake: 1 } },
+    );
+    expect(outputs[4]).toMatchObject({ subscriptions: empty });
+  },
+);
+
+test("a replacement process sends the same nonempty declaration on its first answer", async () => {
+  for (let generation = 0; generation < 2; generation++) {
+    const heard: RendererLine[] = [];
+    const { renderer } = linesOver(inertHost(), undefined, {
+      heard,
+      subscriptionUpdates: true,
+      renderer: declaring([opened]),
+    });
+    await expect(renderer.answer(push("close-journal"))).resolves.toMatchObject(
+      {
+        subscriptions: opened,
+      },
+    );
+    expect(heard).toMatchObject([
+      { kind: "output", output: { subscriptions: opened } },
+    ]);
+  }
+});
+
+test("reusing a declaration before the first replacement rejects the turn", async () => {
+  let asked: HostLine | undefined;
+  const wire = rendererOverLines({
+    send: (line) => (asked = line),
+    host: inertHost(),
+    fault: (message) => {
+      throw new Error(message);
+    },
+  });
+  const answer = wire.renderer.answer(push("close-journal"));
+  if (asked?.kind !== "input") throw new Error("expected an input line");
+  wire.heard({
+    kind: "output",
+    n: asked.n,
+    output: {
+      kind: "replied",
+      reply: { kind: "close-journal" },
+      wake: null,
+      turnMs: 0,
+      stored: [],
+    },
+  });
+  await expect(answer).rejects.toThrow(
+    "reused subscriptions before declaring them",
+  );
 });
 
 describe("a renderer's boot line", () => {

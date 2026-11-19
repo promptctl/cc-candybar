@@ -345,6 +345,42 @@ async function dueFrame(r: Renderer, elapsed = 0) {
 }
 
 describe("a statusline request", () => {
+  test("still feed draws do not read all active subscriptions again", async () => {
+    const t = renderer();
+    const mine = checked();
+    const second = sessionIdOf("another-session");
+    const theirs: CheckedRenderRequest = {
+      ...mine,
+      hookData: { ...mine.hookData, session_id: second },
+    };
+    await configure(t, mine);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: mine }),
+    );
+    await configure(t, theirs);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: theirs }),
+    );
+    const subscribed = await followFeed(t.r);
+    expect(Object.keys(subscribed.subscriptions.sources)).toEqual([
+      SESSION,
+      second,
+    ]);
+    const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
+    const origins = jest.spyOn(t.parts.renderCache, "origins");
+    const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    await dueFrame(t.r);
+    await dueFrame(t.r, 1_000);
+    expect(declarations).toHaveBeenCalledTimes(0);
+    expect(origins).toHaveBeenCalledTimes(0);
+    expect(sessions).toHaveBeenCalledTimes(0);
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: second }),
+    );
+    expect(retired.subscriptions).not.toBe(subscribed.subscriptions);
+    expect(Object.keys(retired.subscriptions.sources)).toEqual([SESSION]);
+  });
+
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
     const { effects, record } = answered(await request(renderer()));
     const present = presentOf(effects);
@@ -1732,11 +1768,11 @@ describe("the idle close", () => {
       });
     expect(answered(await due(29)).effects).toEqual([]);
     expect(closed).toEqual([]);
-    const { effects, subscriptions } = answered(await due(30));
+    const { effects, wake } = answered(await due(30));
     expect(effects).toEqual([]);
     expect(closed).toEqual([[SESSION, 30]]);
     // Taken as closed: no close is due until a draw shows a menu again.
-    expect(subscriptions.wake).toBeNull();
+    expect(wake).toBeNull();
     expect(answered(await due(1000)).effects).toEqual([]);
     expect(closed).toHaveLength(1);
   });

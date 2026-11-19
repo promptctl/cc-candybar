@@ -10,6 +10,7 @@
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
 import { isPlainObject } from "../config/loader/validate-core.js";
+import { compareStructural } from "mobx";
 import { storedStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
@@ -22,6 +23,7 @@ import {
   type RendererBoot,
   type RendererInput,
   type RendererOutput,
+  type Subscriptions,
   type EventInput,
   type Timed,
   type TimedRenderer,
@@ -47,7 +49,7 @@ export function rendererWireVersionProblem(
 
 // [LAW:parse-dont-validate] A worktree's private version is checked before
 // its boot shape. Report a mismatched value before announcing readiness.
-export function rendererBootFrom(raw: unknown): RendererBoot {
+export function rendererBootFrom(raw: unknown): WireBoot {
   if (!isPlainObject(raw) || raw.kind !== "boot")
     throw new Error("expected the renderer boot message first");
   const mismatch = rendererWireVersionProblem("host", raw.wireVersion);
@@ -79,8 +81,21 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
     locations: { home, configHome, dataHome, dataDirs },
     memoryLimitBytes,
     stored: storedStateOf(boot.stored),
+    ...(boot.subscriptionUpdates === true ? { subscriptionUpdates: true } : {}),
   };
 }
+
+// Opt-in within v8. An older renderer ignores it, and an older host omits it.
+type WireBoot = RendererBoot & { readonly subscriptionUpdates?: true };
+
+type Answer = Timed<RendererOutput | AdapterOutput>;
+type WireAnswer<T extends Answer = Answer> = T extends Answer
+  ? Omit<T, "subscriptions" | "wake"> &
+      (
+        | { readonly subscriptions: Subscriptions & Pick<T, "wake"> }
+        | (Pick<T, "wake"> & { readonly subscriptions?: Subscriptions })
+      )
+  : never;
 
 // A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
 export type ReachPath = string;
@@ -89,7 +104,7 @@ export type HostLine =
   | {
       readonly kind: "boot";
       readonly wireVersion: RendererWireVersion;
-      readonly boot: RendererBoot;
+      readonly boot: WireBoot;
     }
   | {
       readonly kind: "input";
@@ -113,7 +128,7 @@ export type RendererLine =
   | {
       readonly kind: "output";
       readonly n: number;
-      readonly output: Timed<RendererOutput | AdapterOutput>;
+      readonly output: WireAnswer;
     }
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
@@ -249,6 +264,45 @@ export function rendererOverLines(deps: {
   >();
   // Where each snapshot being streamed writes its chunks, until it settles.
   const chunks = new Map<number, (chunk: string) => void>();
+  // [LAW:single-enforcer] One declaration per pipe. A replacement process
+  // starts with none, even when it needs the same facts as its predecessor.
+  let subscriptions: Subscriptions | undefined;
+  const hold = (next: Subscriptions): Subscriptions => {
+    if (subscriptions === undefined) return (subscriptions = next);
+    const sources = compareStructural(subscriptions.sources, next.sources)
+      ? subscriptions.sources
+      : next.sources;
+    const lanes = compareStructural(subscriptions.lanes, next.lanes)
+      ? subscriptions.lanes
+      : next.lanes;
+    const configs = compareStructural(subscriptions.configs, next.configs)
+      ? subscriptions.configs
+      : next.configs;
+    if (
+      sources !== subscriptions.sources ||
+      lanes !== subscriptions.lanes ||
+      configs !== subscriptions.configs
+    )
+      subscriptions = { sources, lanes, configs };
+    return subscriptions;
+  };
+  const received = (output: WireAnswer): Answer | null => {
+    if ("wake" in output) {
+      const declared =
+        output.subscriptions === undefined
+          ? subscriptions
+          : hold(output.subscriptions);
+      return declared === undefined
+        ? null
+        : { ...output, subscriptions: declared };
+    }
+    const {
+      subscriptions: { wake, ...declared },
+      ...rest
+    } = output;
+    // An older v8 renderer repeats its full declaration on every answer.
+    return { ...rest, wake, subscriptions: hold(declared) };
+  };
   let next = 0;
   let gone: Error | null = null;
   const owe = <T>(
@@ -275,14 +329,20 @@ export function rendererOverLines(deps: {
       send(line(n));
     });
   const answer = (input: RendererInput) =>
-    owe<Timed<RendererOutput | AdapterOutput>>(
+    owe<Answer>(
       input.kind === "event"
         ? `${input.event.kind} input`
         : `${input.push.kind} push`,
       (n) => ({ kind: "input", n, input }),
       (heard, resolve, reject) => {
-        if (heard.kind === "output") resolve(heard.output);
-        else if (heard.kind === "rejected")
+        if (heard.kind === "output") {
+          const output = received(heard.output);
+          if (output === null)
+            reject(
+              new Error("renderer reused subscriptions before declaring them"),
+            );
+          else resolve(output);
+        } else if (heard.kind === "rejected")
           reject(new CrossedFailure(heard.failure));
         else return false;
         return true;
@@ -417,11 +477,29 @@ export function hostOverLines(
 export function serveRenderer(deps: {
   readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
+  readonly subscriptionUpdates?: boolean;
   readonly memory: () => MemorySizes;
   // The process's heap as text, each piece handed to `chunk` in order.
   readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
 }): (line: HostLine) => void {
   const { renderer, send } = deps;
+  let sent: Subscriptions | undefined;
+  const answer = (
+    n: number,
+    { subscriptions, wake, ...rest }: Answer,
+  ): void => {
+    if (deps.subscriptionUpdates) {
+      const updates = subscriptions === sent ? {} : { subscriptions };
+      send({ kind: "output", n, output: { ...rest, wake, ...updates } });
+      sent = subscriptions;
+    } else {
+      send({
+        kind: "output",
+        n,
+        output: { ...rest, subscriptions: { ...subscriptions, wake } },
+      });
+    }
+  };
   return (line) => {
     switch (line.kind) {
       case "input":
@@ -432,7 +510,7 @@ export function serveRenderer(deps: {
             i: RendererInput,
           ) => Promise<Timed<RendererOutput | AdapterOutput>>
         )(line.input).then(
-          (output) => send({ kind: "output", n: line.n, output }),
+          (output) => answer(line.n, output),
           (thrown: unknown) =>
             send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),
         );

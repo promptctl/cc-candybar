@@ -68,8 +68,11 @@ export function runRenderer(world: World): void {
       return;
     }
     let renderer: TimedRenderer;
+    let subscriptionUpdates: boolean;
     try {
-      renderer = booted(world, rendererBootFrom(JSON.parse(text)), host);
+      const boot = rendererBootFrom(JSON.parse(text));
+      subscriptionUpdates = boot.subscriptionUpdates === true;
+      renderer = booted(world, boot, host);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
       leave(1);
@@ -78,6 +81,7 @@ export function runRenderer(world: World): void {
     served = serveRenderer({
       renderer,
       send,
+      subscriptionUpdates,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();
         return { rss, heapTotal };

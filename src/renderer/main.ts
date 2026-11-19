@@ -80,7 +80,7 @@ import {
   EMPTY_RENDER_MAP,
   serializeSegmentCells,
 } from "./debug.js";
-import { earliestOf } from "../utils/instant.js";
+import { earliestOf, type Tick } from "../utils/instant.js";
 import {
   CrossedFailure,
   failureOf,
@@ -97,7 +97,14 @@ import {
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
-import { reaction, runInAction } from "mobx";
+import { Kept } from "../var-system/store.js";
+import {
+  compareStructural,
+  computed,
+  observable,
+  reaction,
+  runInAction,
+} from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 
 // A click waiting for config keeps its action and session identity.
@@ -141,12 +148,17 @@ export function mainRenderer(
     sources: {},
     lanes: {},
     configs: [],
-    wake: null,
   };
+  let wake: Tick | null = null;
   // [LAW:no-ambient-temporal-coupling] Waiting work carries its intent and
   // session. Its origin and live request are read when it resumes.
   const opening = new Set<SessionId>();
-  let parked: readonly ParkedClick[] = [];
+  const parked = observable.box<readonly ParkedClick[]>([], { deep: false });
+  const keepParked = (keep: (click: ParkedClick) => boolean): void => {
+    const prior = parked.get();
+    const next = prior.filter(keep);
+    if (next.length !== prior.length) runInAction(() => parked.set(next));
+  };
 
   const parkedContext = (click: ParkedClick): SessionContext => {
     const { session } = click;
@@ -165,7 +177,7 @@ export function mainRenderer(
     matches: (click: ParkedClick) => boolean,
   ): ParkedClick[] => {
     const ready: ParkedClick[] = [];
-    parked = parked.filter((click) => {
+    keepParked((click) => {
       if (!matches(click)) return true;
       ready.push(click);
       return false;
@@ -214,7 +226,7 @@ export function mainRenderer(
     });
 
   const parkedClickSessions = (): Set<SessionId> =>
-    new Set(parked.map((click) => click.session));
+    new Set(parked.get().map((click) => click.session));
 
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
@@ -362,7 +374,7 @@ export function mainRenderer(
         return;
       case "retire":
         opening.delete(event.session);
-        parked = parked.filter((click) => click.session !== event.session);
+        keepParked((click) => click.session !== event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -401,12 +413,14 @@ export function mainRenderer(
           if (configForTurn(origin).kind === "pending") {
             const { context: _input, ...intent } = event;
             const waiting = { session: context.session, event: intent };
-            parked = [
-              ...parked,
-              live === null
-                ? { ...waiting, kind: "cold", durable: context.durable }
-                : { ...waiting, kind: "live" },
-            ];
+            runInAction(() =>
+              parked.set([
+                ...parked.get(),
+                live === null
+                  ? { ...waiting, kind: "cold", durable: context.durable }
+                  : { ...waiting, kind: "live" },
+              ]),
+            );
             record.push(["parked", "click"]);
             return;
           }
@@ -437,64 +451,95 @@ export function mainRenderer(
     }
   };
 
-  const subscribed = (): Subscriptions => {
-    const views = parts.renderCache.subscriptions().sources;
-    // [LAW:one-source-of-truth] Read off the same open views: a session whose
-    // view closes stops being named, so its switches go.
-    const lanes: Record<SessionId, LaneSwitches> = {};
-    for (const session of Object.keys(views) as SessionId[]) {
-      const editing = parts.edits.draft(session) !== null;
-      if (editing) {
-        const { requested } = parts.worldStates.requestOf(session);
-        // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
-        // through a failed delivery. Keep its last committed lane switches
-        // until the host can supply the committed config again.
-        if (parts.renderCache.configDelivery(requested).kind === "failed") {
-          const held = subscriptions.lanes[session];
-          if (held !== undefined) lanes[session] = held;
-          continue;
+  const sources = computed(() => parts.renderCache.subscriptions().sources, {
+    equals: compareStructural,
+  });
+  const laneDeclaration = computed(
+    () => {
+      // [LAW:one-source-of-truth] Read off the same open views: a session whose
+      // view closes stops being named, so its switches go.
+      const lanes: Record<SessionId, LaneSwitches> = {};
+      const unprepared = new Map<string, RenderOrigin>();
+      for (const session of Object.keys(sources.get()) as SessionId[]) {
+        const editing = parts.edits.draft(session) !== null;
+        let committed = null;
+        if (editing) {
+          const { requested } = parts.worldStates.requestOf(session);
+          // [LAW:no-ambient-temporal-coupling] A draft's preview is alive
+          // through a failed delivery. Keep its last committed lane switches
+          // until the host can supply the committed config again.
+          const delivery = parts.renderCache.configDelivery(requested);
+          const state = parts.renderCache.committedState(requested);
+          if (delivery.kind !== "received" || state === null) {
+            if (delivery.kind === "received")
+              unprepared.set(originKey(requested), requested);
+            const held = subscriptions.lanes[session];
+            if (held !== undefined) lanes[session] = held;
+            continue;
+          }
+          committed = { settings: parts.edits.committed, state };
         }
+        const switches = viewLanes(parts, session, committed);
+        if (switches !== null) lanes[session] = switches;
       }
-      const switches = viewLanes(
-        parts,
-        session,
-        parts.edits.committed,
-        editing,
-      );
-      if (switches !== null) lanes[session] = switches;
-    }
-    // [LAW:one-source-of-truth] The origins whose config the renderer holds:
-    // each live session's, from its context until its retire, each a cache
-    // entry loads from until its eviction, the one whose click's consequence
-    // waits on its landing, and each a parked event waits on, once each.
-    const configs = new Map<string, RenderOrigin>();
-    const landing = parts.verbs.landing();
-    for (const origin of [
-      ...parts.worldStates.sessions().flatMap((session) => {
-        const context = parts.worldStates.contextOf(session);
-        return context === null ? [] : [context.durable.origin];
-      }),
-      ...(landing === null ? [] : [landing]),
-    ])
-      configs.set(originKey(origin), origin);
-    for (const origin of parts.renderCache.origins())
-      configs.set(originKey(origin), origin);
-    for (const click of parked) {
-      const origin = parkedContext(click).durable.origin;
-      configs.set(originKey(origin), origin);
-    }
+      return { lanes, unprepared: [...unprepared.values()] };
+    },
+    { equals: compareStructural },
+  );
+  const configOrigins = computed(
+    (): Subscriptions["configs"] => {
+      // [LAW:one-source-of-truth] The origins whose config the renderer holds:
+      // each live session's, from its context until its retire, each a cache
+      // entry loads from until its eviction, the one whose click's consequence
+      // waits on its landing, and each a parked event waits on, once each.
+      const configs = new Map<string, RenderOrigin>();
+      const landing = parts.verbs.landing();
+      for (const origin of [
+        ...parts.worldStates.sessions().flatMap((session) => {
+          const context = parts.worldStates.contextOf(session);
+          return context === null ? [] : [context.durable.origin];
+        }),
+        ...(landing === null ? [] : [landing]),
+      ])
+        configs.set(originKey(origin), origin);
+      for (const origin of parts.renderCache.origins())
+        configs.set(originKey(origin), origin);
+      for (const click of parked.get()) {
+        const origin = parkedContext(click).durable.origin;
+        configs.set(originKey(origin), origin);
+      }
+      return [...configs]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([, origin]) => origin);
+    },
+    { equals: compareStructural },
+  );
+
+  // [LAW:carrying-cost] Keep this observed until the views close. A draw
+  // that only moves its next wake does not rewalk views or origins.
+  const declaration = new Kept("renderer subscriptions", () => {
+    const { lanes, unprepared } = laneDeclaration.get();
     return {
-      sources: views,
-      lanes,
-      configs: [...configs.values()],
-      // [LAW:one-source-of-truth] The tick the renderer next wants a turn
-      // at: the earliest any owner of a tick holds.
-      wake: earliestOf([
-        time.next(),
-        menuIdle.next(parked.length === 0 ? undefined : parkedClickSessions()),
-        feeds.next(),
-      ]),
+      plan: { sources: sources.get(), lanes, configs: configOrigins.get() },
+      unprepared,
     };
+  });
+  let observed: ReturnType<typeof declaration.read> | undefined;
+  const declare = (configOffered: boolean): void => {
+    let next = declaration.read();
+    if (next !== observed && next.unprepared.length > 0) {
+      // [LAW:effects-at-boundaries] An edit can outlive eviction of its
+      // committed entry. Reload that entry only when dependencies change,
+      // outside the derivation: the load can itself retire other views.
+      for (const origin of next.unprepared)
+        parts.renderCache.getOrCreate(origin);
+      next = declaration.read();
+    }
+    const before = subscriptions.configs;
+    observed = next;
+    subscriptions = next.plan;
+    if (configOffered || before !== subscriptions.configs)
+      parts.renderCache.prune(new Set(subscriptions.configs.map(originKey)));
   };
 
   // What the turn that ended last moved of the stores.
@@ -504,18 +549,23 @@ export function mainRenderer(
   // moved of its stores are read as they stand when it ends, however it
   // ended: a write before a throw is real. Read as part of the turn, so a
   // read that throws fails it, and the subscriptions last returned stand.
-  const ending = <T>(run: () => T): Ended<T> => {
+  const ending = <T>(run: () => T, configOffered = false): Ended<T> => {
     try {
       let value: T;
       try {
         value = run();
       } finally {
         stored = drained();
-        subscriptions = subscribed();
-        // [LAW:one-source-of-truth] The deliveries held are exactly the
-        // origins the output names, as the host follows exactly those.
-        const origins = new Set(subscriptions.configs.map(originKey));
-        parts.renderCache.prune(origins);
+        declare(configOffered);
+        // [LAW:one-source-of-truth] A wake moves independently of what the
+        // renderer needs read. Every answer still carries the latest tick.
+        wake = earliestOf([
+          time.next(),
+          menuIdle.next(
+            parked.get().length === 0 ? undefined : parkedClickSessions(),
+          ),
+          feeds.next(),
+        ]);
       }
       return { kind: "answered", value };
     } catch (thrown) {
@@ -532,16 +582,19 @@ export function mainRenderer(
       time.during(input, () => {
         const ended = ending(() =>
           pushed(input.push, {
-            parked: opening.size + parked.length,
+            parked: opening.size + parked.get().length,
             presents: deliveries.size,
             deferrals: time.deferrals(),
           }),
         );
+        if (input.push.kind === "close-views")
+          runInAction(() => declaration.release());
         return {
           ...(ended.kind === "answered"
             ? { kind: "replied" as const, reply: ended.value }
             : ended),
           subscriptions,
+          wake,
           stored,
         };
       }),
@@ -550,7 +603,10 @@ export function mainRenderer(
         const record: RequestFacts = [];
         const effects: Effect[] = [];
         const frames: PushedFrame[] = [];
-        const ended = ending(() => turn(input.event, record, effects, frames));
+        const ended = ending(
+          () => turn(input.event, record, effects, frames),
+          input.event.kind === "config",
+        );
         return {
           ...(ended.kind === "answered"
             ? { kind: "answered" as const }
@@ -558,6 +614,7 @@ export function mainRenderer(
           effects,
           record,
           subscriptions,
+          wake,
           frames,
           stored,
         };

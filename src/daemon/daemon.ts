@@ -786,6 +786,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     if (route === undefined || order >= route.order) {
       routes.set(session, { name, order });
       if (route !== undefined && route.name !== name) {
+        // Routing changes the aggregate even when neither renderer's
+        // declarations moved. Apply the existing plans under the new owner.
+        aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
           void former.renderer
