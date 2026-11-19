@@ -38,9 +38,12 @@ type State =
   | { readonly kind: "queued" }
   | { readonly kind: "closed" };
 
-// How a `due` turn ended, and how long the renderer's turn took: null when no
-// renderer answered it.
-export type DueEnded = { readonly turnMs: number | null } & (
+// The mailbox's wait and the renderer's own time. It has no mailbox wait
+// measurement if queuing threw, and no turn time if no renderer answered.
+export type DueEnded = {
+  readonly queuedMs: number | null;
+  readonly turnMs: number | null;
+} & (
   | { readonly kind: "answered" }
   | { readonly kind: "threw"; readonly failure: Failure }
 );
@@ -74,6 +77,9 @@ export class RendererWake {
   private readonly took = durationHistogram();
   private dues = 0;
   private failed = 0;
+  // A bound in slots still allows slow slots. Report the longest observed
+  // wait without logging every frame's turn.
+  private queuedMaxMs = 0;
   private readonly opened: Tick;
   private summarizedAt: Tick;
 
@@ -143,7 +149,12 @@ export class RendererWake {
     try {
       ended = await this.deps.due();
     } catch (thrown) {
-      ended = { kind: "threw", failure: failureOf(thrown), turnMs: null };
+      ended = {
+        kind: "threw",
+        failure: failureOf(thrown),
+        queuedMs: null,
+        turnMs: null,
+      };
     }
     this.answered(tick, ended);
   }
@@ -171,6 +182,8 @@ export class RendererWake {
       this.arm();
     }
     // The wake is re-armed before handing its summary to observability.
+    if (ended.queuedMs !== null)
+      this.queuedMaxMs = Math.max(this.queuedMaxMs, ended.queuedMs);
     if (ended.turnMs !== null) {
       this.dues++;
       recordMs(this.took, ended.turnMs);
@@ -186,7 +199,7 @@ export class RendererWake {
     const histogram =
       state === "running" ? "" : ` tookHistogram=${encodedOf(this.took)}`;
     this.deps.log(
-      `wake ${state} for=${Math.round(now - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)}${histogram}`,
+      `wake ${state} for=${Math.round(now - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)} queuedMaxMs=${Math.round(this.queuedMaxMs)}${histogram}`,
     );
     this.summarizedAt = now;
   }

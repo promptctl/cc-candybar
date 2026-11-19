@@ -38,7 +38,6 @@ import {
   DaemonClosing,
   failureOf,
 } from "./foundations/verb-error";
-import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
 import type { ClickArrival } from "../renderer-interface/click-arrival";
@@ -771,7 +770,7 @@ async function handleClick(
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
   // again cannot revert a toggle.
-  const delivered: HostTurn = await parts.renderer.answer(() =>
+  const delivered = await parts.renderer.answerClick(session, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
       : {
