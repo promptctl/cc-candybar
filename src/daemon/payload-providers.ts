@@ -25,7 +25,7 @@ import { ContextProvider } from "./cache/context-provider.js";
 import { MetricsProvider } from "./cache/metrics-provider.js";
 import { ActivityProvider } from "../segments/activity.js";
 import { TmuxService } from "./cache/tmux.js";
-import { HostService } from "../segments/host.js";
+import { HostService } from "./cache/host-identity.js";
 import { AutoCompactProvider } from "./cache/autocompact.js";
 import { CacheExpiryProvider } from "../segments/cache.js";
 import { RefreshFaults } from "./refresh-faults.js";

@@ -5,7 +5,7 @@ import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
 import fs from "node:fs";
 import path from "node:path";
-import { mayImport, withoutExtension, zoneOf } from "./scripts/import-zones.mjs";
+import { mayImport, mayLoadRendererModule, withoutExtension, zoneOf } from "./scripts/import-zones.mjs";
 
 // [LAW:single-enforcer] (kz8.2) src/proc/spawner.ts is the only file allowed to
 // import node:child_process directly. Every other spawn site routes through a
@@ -322,6 +322,7 @@ const importDirection = {
       };
     }
     const fromZone = zoneOf(from);
+    const rendering = fromZone === "renderer" || fromZone === "start" || fromZone === "renderer-process";
     const check = (node, source) => {
       if (source === null) {
         context.report({
@@ -330,7 +331,13 @@ const importDirection = {
         });
         return;
       }
-      if (!source.startsWith(".")) {
+      if (!source.startsWith(".") && !path.isAbsolute(source)) {
+        if (rendering && !typeOnly(node) && !mayLoadRendererModule(source, fromZone === "renderer-process")) {
+          context.report({
+            node,
+            message: `The renderer cannot load ${source} from ${from}. [LAW:one-way-deps]`,
+          });
+        }
         return;
       }
       const to = moduleKey(path.resolve(dir, source));
@@ -344,7 +351,6 @@ const importDirection = {
       // [LAW:effects-at-boundaries] The renderer reads no clock and sets no
       // timer: its time is the readings each input carries, and what it holds
       // for later waits for a `due`. It may name the clock's types.
-      const rendering = fromZone === "renderer" || fromZone === "start";
       if (rendering && to === CLOCK_KEY && !typeOnly(node)) {
         context.report({
           node,

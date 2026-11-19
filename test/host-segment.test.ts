@@ -24,7 +24,7 @@ import {
   HostService,
   shortHostname,
   HOST_PERIOD_MS,
-} from "../src/segments/host";
+} from "../src/daemon/cache/host-identity";
 import { RefreshLedger } from "../src/utils/refresh-ledger";
 import { Holds } from "../src/utils/holds";
 import { type EffectiveGlobals } from "../src/config/effective-globals";

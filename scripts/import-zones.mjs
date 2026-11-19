@@ -64,3 +64,19 @@ export const zoneOf = (file) => {
 };
 
 export const mayImport = (from, to) => ZONE_IMPORTS[from].includes(to);
+import { isBuiltin } from "node:module";
+
+
+// [LAW:effects-at-boundaries] Shared rendering code uses Node for paths, URLs,
+// hashes and value inspection. Only the process entry also owns its pipes,
+// process measurements and heap snapshots. A new native dependency is
+// checked even when it arrives through a package.
+const renderBuiltins = new Set([
+  "crypto", "path", "path/posix", "path/win32", "url", "util", "util/types",
+]);
+const transportBuiltins = new Set(["events", "process", "v8"]);
+export function mayLoadRendererModule(id, atProcessEntry) {
+  if (!isBuiltin(id)) return true;
+  const name = id.replace(/^node:/, "");
+  return renderBuiltins.has(name) || (atProcessEntry && transportBuiltins.has(name));
+}

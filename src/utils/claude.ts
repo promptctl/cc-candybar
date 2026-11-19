@@ -208,7 +208,7 @@ export async function findAgentTranscripts(
 
 // [LAW:types-are-the-program] exception: kept as type-aliases (not
 // interfaces) so they're structurally assignable to `Record<string,
-// unknown>` at the `extractModelId` boundary in segments/pricing.ts.
+// unknown>` at the `extractModelId` boundary in daemon/cache/pricing.ts.
 // Switching to `interface` removes the implicit index signature and
 // breaks typecheck. A proper fix tightens that boundary to take
 // `PrunedRaw` directly and is out of scope for the CI-fix branch.

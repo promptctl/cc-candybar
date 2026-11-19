@@ -45,6 +45,10 @@ const REFUSED = {
   },
   rendererToRestDotted: { file: IN_RENDERER, code: imp("./../daemon/x") },
   rendererToRestTypeOnly: { file: IN_RENDERER, code: typeImp("../daemon/x") },
+  rendererToAbsoluteHostType: { file: IN_RENDERER, code: typeImp(path.join(ROOT, "src/host")) },
+  rendererToHostIdentity: { file: IN_RENDERER, code: imp("../daemon/cache/host-identity") },
+  rendererToOperatingSystem: { file: IN_RENDERER, code: imp("node:os") },
+  rendererToProcess: { file: IN_RENDERER, code: imp("node:process") },
   rendererToRestReexport: {
     file: IN_RENDERER,
     code: `export { x } from "../daemon/x";\n`,
@@ -68,6 +72,7 @@ const REFUSED = {
   processToHost: { file: IN_PROCESS, code: imp("./daemon/pane-visibility") },
   processToHostType: { file: IN_PROCESS, code: typeImp("./host") },
   processToEntry: { file: IN_PROCESS, code: imp("./index") },
+  processToOperatingSystem: { file: IN_PROCESS, code: imp("node:os") },
   rendererToRestTemplate: {
     file: IN_RENDERER,
     code: "export const m = import(`../daemon/x`);\n",
@@ -136,6 +141,8 @@ const ALLOWED = {
     file: IN_PROCESS,
     code: imp("./renderer/draw-bar"),
   },
+  rendererToUrlParser: { file: IN_RENDERER, code: imp("node:url") },
+  processToTransport: { file: IN_PROCESS, code: imp("node:process") },
   entryToRoot: { file: "src/index.ts", code: imp("./renderer-process") },
   foundationsInside: { file: IN_FOUNDATIONS, code: imp("./gates") },
   foundationsToShared: {
