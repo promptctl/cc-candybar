@@ -87,7 +87,8 @@ export type RendererPort = (prepared: {
   // Read for each spawn: a boot carries the link key and the stored state
   // as they are then.
   readonly boot: () => RendererBoot;
-  // The node that runs the host, with its flags.
+  // The executable entry and the Node invocation which loads it.
+  readonly entry: string;
   readonly node: readonly string[];
 }) => { start(own: LinkOwner): RendererLink };
 
@@ -99,10 +100,11 @@ export const inProcessPort: RendererPort = ({ name, build }) => ({
 
 // The renderer in a process of its own, built there from its boot.
 export function processPort(
-  run: Pick<ProcessOwner, "launcher" | "entry" | "cwd" | "heapCapMb">,
+  run: Pick<ProcessOwner, "launcher" | "cwd" | "heapCapMb">,
 ): RendererPort {
-  return ({ name, boot, node }) => ({
-    start: (own) => processRenderer({ ...own, ...run, name, node, boot }),
+  return ({ name, boot, node, entry }) => ({
+    start: (own) =>
+      processRenderer({ ...own, ...run, name, node, entry, boot }),
   });
 }
 
@@ -175,8 +177,7 @@ export interface ProcessOwner extends LinkOwner {
   readonly launcher: Pick<Launcher, "launchChannel">;
   // The node that runs the host, with its flags.
   readonly node: readonly string[];
-  // The entry the host's own process runs, which the node flags load: the
-  // bundle, or the source under a test's loader.
+  // The renderer's bound entry, or the source under a test's loader.
   readonly entry: string;
   // Where the renderer runs: the state directory, never the detached
   // daemon's inherited cwd.

@@ -201,13 +201,13 @@ async function boot(): Promise<void> {
   // Prepare before binding. The socket winner loads prior state in onListening.
   const daemon = createDaemon({
     rendererName: MAIN_RENDERER,
+    rendererEntry: processEntry(),
     ...productionAdapters(paths, daemonLog, world.clock),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.
     renderer: processPort({
       launcher: world.launcher,
-      entry: processEntry(),
       cwd: paths.state,
       heapCapMb: heapCapMb(host.env),
     }),

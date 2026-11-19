@@ -13,6 +13,8 @@ import type { Runs } from "./runs.js";
 import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { RetiredTmuxStatus } from "./retired-tmux-status.js";
+import type { RequestId } from "../renderer-interface/interface.js";
+import type { SessionEnvironment } from "./foundations/session-env.js";
 import type { RendererHost } from "./renderer-host.js";
 import type { PublishFrame } from "./foundations/frame-publication.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
@@ -50,6 +52,11 @@ export interface DaemonParts {
   readonly limits: LimitsHandle;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;
+  readonly rendererFor?: (
+    request: CheckedRenderRequest,
+    environment: SessionEnvironment,
+    order: RequestId,
+  ) => RendererHost;
   // The daemon's close, which ends a request's wait.
   readonly closing: AbortSignal;
   // [LAW:single-enforcer] The host's one reader of every session's world

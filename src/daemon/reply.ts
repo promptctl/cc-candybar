@@ -458,6 +458,9 @@ export async function replyTo(
       try {
         const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        const renderer =
+          parts.rendererFor?.(checked.req, checked.environment, order) ??
+          parts.renderer;
         sighted(checked.req, "drawing");
         // [LAW:one-source-of-truth] A request past the checkpoint is the
         // session's data from now on; a followed session's next frame is drawn
@@ -473,7 +476,7 @@ export async function replyTo(
         const tmux = checked.req.hints.tmux;
         if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
         answered = await answerStatusline(
-          parts.renderer,
+          renderer,
           parts.publishFrame,
           parts.collector,
           clock,
