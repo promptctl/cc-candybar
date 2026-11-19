@@ -86388,7 +86388,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.11";
+var PACKAGE_VERSION = "1.235.12";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -87784,10 +87784,14 @@ var FrameFeeds = class {
     const before = this.watched.has(sessionId2) ? this.shown(sessionId2) : null;
     this.requests.delete(sessionId2);
     this.requests.set(sessionId2, { req, order: order2 });
-    for (const oldest of this.requests.keys()) {
+    for (const [oldest, previous2] of this.requests) {
       if (this.requests.size <= MAX_REQUESTS) break;
-      if (!this.watched.has(oldest)) this.requests.delete(oldest);
+      if (!this.watched.has(oldest)) {
+        this.requests.delete(oldest);
+        this.deps.requestChanged(oldest, previous2.req);
+      }
     }
+    this.deps.requestChanged(sessionId2, held?.req);
     if (before !== null && before !== this.shown(sessionId2)) this.announce();
   }
   // [LAW:single-enforcer] The one gate on the lanes: a subscription whose
@@ -88709,9 +88713,32 @@ var DeclaredBarPanes = class {
   clock;
   log;
   held = /* @__PURE__ */ new Map();
+  lanes = {};
   declare(lanes) {
+    this.lanes = lanes;
+    this.reconcileDemands();
+  }
+  // [LAW:no-ambient-temporal-coupling] A statusline request moves the host's
+  // pane observation, and can retry its effect, under an unchanged policy.
+  // Re-elect demand only when a session changed panes or can take ownership.
+  reported(session, previous2) {
+    if (!Object.hasOwn(this.lanes, session)) return;
+    const reported = this.paneOf(session);
+    if (reported === void 0 && previous2 === null) return;
+    if (reported !== void 0 && previous2 !== null) {
+      const key = paneKey(reported.pane);
+      const held = this.held.get(key);
+      if (paneKey(previous2) === key && held?.demand.session === session) {
+        held.demand = { ...reported, session, on: held.demand.on };
+        this.reconcile(key, held);
+        return;
+      }
+    }
+    this.reconcileDemands();
+  }
+  reconcileDemands() {
     const next2 = /* @__PURE__ */ new Map();
-    for (const [session, switches] of Object.entries(lanes)) {
+    for (const [session, switches] of Object.entries(this.lanes)) {
       const reported = this.paneOf(session);
       if (reported === void 0) continue;
       const key = paneKey(reported.pane);
@@ -90905,6 +90932,7 @@ function createDaemon(inputs) {
   );
   const frameFeeds = new FrameFeeds({
     publishFrame,
+    requestChanged: (session, previous2) => declaredBarPanes.reported(session, previous2?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {

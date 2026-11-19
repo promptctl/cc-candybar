@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-899",
+      "ref": "refs/pull/899/merge",
+      "sha": "0a5e806ed939c78e908216596506869c7e8e57c0",
+      "timestamp": "2026-11-19T20:36:49.590Z",
+      "commits": [
+        {
+          "sha": "0a5e806ed939c78e908216596506869c7e8e57c0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:35:47Z",
+          "message": "Merge 41154e06e3bf0f0ec2f3d46359cfac7ba372c01c into dfaab1cbb5c68bf5b52129fdbd498b688b747382\n"
+        },
+        {
+          "sha": "41154e06e3bf0f0ec2f3d46359cfac7ba372c01c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:35:07-07:00",
+          "message": "fix(host): reconcile tmux panes when a request changes\n"
+        },
+        {
+          "sha": "5bb03271d2a2371361f244ba2ec56bb518168cf6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:59:34-07:00",
+          "message": "fix(renderer): bound held diagnostic text (ibyq.l7z)\n"
+        },
+        {
+          "sha": "141074dda3d381cd6d78b7ca91505ff56d9a39b2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:50:16-07:00",
+          "message": "fix(host): reuse the current frame on viewer replacement (ibyq.l7z)\n"
+        },
+        {
+          "sha": "71327b39399cbe6f01bb9ff4cb954a1e228b250f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:40:36-07:00",
+          "message": "fix(renderer): keep the retry deadline of a throwing feed (ibyq.l7z)\n"
+        },
+        {
+          "sha": "7dc25fad9e45daba3f23cd9173190c15c3b28c9e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:31:16-07:00",
+          "message": "test(renderer): verify two stable ordinary subscription turns\n"
+        },
+        {
+          "sha": "2a294d2350f7165bc8e2bf3443a41580a235cb11",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:22:36-07:00",
+          "message": "perf(renderer): publish subscription revisions once\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "dfaab1cbb5c68bf5b52129fdbd498b688b747382",
@@ -99,56 +156,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T12:22:57-07:00",
           "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-899",
-      "ref": "refs/pull/899/merge",
-      "sha": "a947b881bd7d8e1dbd5a5e26a07e1654778f95bc",
-      "timestamp": "2026-11-19T20:26:37.399Z",
-      "commits": [
-        {
-          "sha": "a947b881bd7d8e1dbd5a5e26a07e1654778f95bc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:25:22-07:00",
-          "message": "Merge 7f2cede8579bf10eeb76e91067eebd6a5bd5767a into f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81\n"
-        },
-        {
-          "sha": "7f2cede8579bf10eeb76e91067eebd6a5bd5767a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:59:34-07:00",
-          "message": "fix(renderer): bound held diagnostic text (ibyq.l7z)\n"
-        },
-        {
-          "sha": "e498bb685df0ddeea9071953f6e9a4fa4be5f897",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:50:16-07:00",
-          "message": "fix(host): reuse the current frame on viewer replacement (ibyq.l7z)\n"
-        },
-        {
-          "sha": "a3bd7054e97b2be340f8bf0b4d7cafcd8718637a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:40:36-07:00",
-          "message": "fix(renderer): keep the retry deadline of a throwing feed (ibyq.l7z)\n"
-        },
-        {
-          "sha": "4c97be9d9b27647cfa6571c5d2212ce1a77c4ba2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:31:16-07:00",
-          "message": "test(renderer): verify two stable ordinary subscription turns\n"
-        },
-        {
-          "sha": "d29aabb2a04c30a35f9c113962935624930fdfa5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:22:36-07:00",
-          "message": "perf(renderer): publish subscription revisions once\n"
         }
       ]
     },
