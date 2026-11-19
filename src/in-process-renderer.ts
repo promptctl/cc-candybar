@@ -56,8 +56,8 @@ function localLink(
       built ??= timed(build(), () => clock.monotonic());
     },
     arm: () => {},
-    // Nothing restarts in process.
-    beginClose: () => {},
+    // Only a renderer already built by serve can take the close's steps.
+    beginClose: () => (built === null ? "closed" : "closing"),
     close: async () => {},
     process: () => null,
   };

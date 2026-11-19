@@ -41,7 +41,11 @@ import {
   type RendererLine,
   type RendererOverLines,
 } from "../renderer-interface/wire.js";
-import { RendererDown, failureOf } from "./foundations/verb-error.js";
+import {
+  DaemonClosing,
+  RendererDown,
+  failureOf,
+} from "./foundations/verb-error.js";
 import type { RendererName } from "./foundations/renderer-name.js";
 
 // What the host holds of its renderer, whichever link it runs over.
@@ -52,9 +56,9 @@ export interface RendererLink {
   serve(): void;
   // Starts the renderer's process: nothing in process.
   arm(): void;
-  // The daemon's close has begun: the live renderer takes the close's steps,
-  // and no renderer starts again.
-  beginClose(): void;
+  // [LAW:types-are-the-program] The transition stops restarts and says
+  // whether this link retains a live renderer for the host's drain.
+  beginClose(): "closing" | "closed";
   // Ends the renderer's process, after the daemon's close has run the
   // renderer's own steps of it.
   close(): Promise<void>;
@@ -195,8 +199,11 @@ type Phase =
   | {
       readonly kind: "starting";
       readonly link: Link;
-      // Inputs that came while it booted, sent once its start is.
-      readonly queued: Array<() => void>;
+      // [LAW:no-ambient-temporal-coupling] The transition out of boot gives
+      // each queued input its link or the reason it never got one.
+      readonly queued: Array<
+        (result: Link | DaemonClosing | RendererDown) => void
+      >;
     }
   | { readonly kind: "live"; readonly link: Link }
   // The daemon's close has begun: the live renderer takes its steps, and its
@@ -250,14 +257,18 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     phase.kind === "closing"
       ? phase.link
       : null;
-  const down = (): RendererDown =>
-    new RendererDown(
-      phase.kind === "down"
-        ? `renderer ${name} is down: ${phase.why}`
-        : phase.kind === "closed"
-          ? `renderer ${name} is closed`
-          : `renderer ${name} has not started`,
-    );
+  const unavailable = (
+    at: Extract<Phase, { kind: "idle" | "down" | "closed" }>,
+  ): DaemonClosing | RendererDown => {
+    switch (at.kind) {
+      case "closed":
+        return new DaemonClosing(`renderer ${name} input`);
+      case "down":
+        return new RendererDown(`renderer ${name} is down: ${at.why}`);
+      case "idle":
+        return new RendererDown(`renderer ${name} has not started`);
+    }
+  };
 
   // The host's reaches as one renderer reaches them: the ids it mints for
   // storage holds become the host's, held by its link.
@@ -343,16 +354,19 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
-    // A failed start does not transfer the previous renderer's holds.
+    // A failed or cancelled start does not transfer the previous renderer's
+    // holds. A close is already recorded as such by the host's turn.
     const start = (async (): Promise<boolean> => {
       try {
         await own.start();
         return true;
       } catch (thrown) {
-        log(
-          "error",
-          `renderer ${name}[${generationOf}] start failed: ${failureOf(thrown).detail}`,
-        );
+        const failure = failureOf(thrown);
+        if (failure.kind !== "closing")
+          log(
+            "error",
+            `renderer ${name}[${generationOf}] start failed: ${failure.detail}`,
+          );
         return false;
       }
     })();
@@ -427,7 +441,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       `renderer ${name}[${link.generation}] started pid=${link.channel.pid ?? "-"} refused-while-down=${refused}`,
     );
     refused = 0;
-    for (const send of queued) send();
+    for (const send of queued) send(link);
     // [LAW:no-ambient-temporal-coupling] What an ended renderer held goes once
     // this one has started and taken its start, and stays if it ends first.
     void start.then((answered) => {
@@ -475,7 +489,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       }),
     };
     // What waited for a start that never came fails as no renderer's.
-    for (const send of queued) send();
+    for (const send of queued) send(unavailable(phase));
     const event: HeldEvent = {
       text: `${why}; it restarts, and unsaved state (open menus, armed confirms) is lost`,
       at: instantAt(clock),
@@ -543,13 +557,12 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       case "live":
         return (phase = { kind: "closing", link: phase.link });
       // A boot holds nothing to flush, and the close's steps would wait on it:
-      // it ends now, beside them, and what waited for it fails as a closed
-      // renderer's.
+      // it ends now, beside them, and what waited for it is cancelled.
       case "starting": {
         const { link, queued } = phase;
         const begun = { kind: "closed", ended: ending(link) } as const;
         phase = begun;
-        for (const send of queued) send();
+        for (const send of queued) send(unavailable(begun));
         return begun;
       }
       case "down":
@@ -563,10 +576,10 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
   };
 
-  // [LAW:single-enforcer] An input no renderer takes: counted, and said with
-  // the count as the next one starts.
-  const refusal = (why: RendererDown): RendererDown => {
-    refused++;
+  // [LAW:single-enforcer] Inputs refused while down are counted and said
+  // with the next start. Closing the daemon cancels the wait.
+  const refusal = (why: DaemonClosing | RendererDown): Error => {
+    if (why instanceof RendererDown) refused++;
     return why;
   };
   // An input goes to the live renderer, waits for the one starting, or fails
@@ -577,15 +590,16 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     if (phase.kind === "starting") {
       const { queued } = phase;
       return new Promise<O>((resolve, reject) =>
-        queued.push(() => {
-          (phase.kind === "live"
-            ? answer(phase.link)
-            : Promise.reject(refusal(down()))
-          ).then(resolve, reject);
+        queued.push((result) => {
+          if (result instanceof Error) {
+            reject(refusal(result));
+          } else {
+            answer(result).then(resolve, reject);
+          }
         }),
       );
     }
-    return Promise.reject(refusal(down()));
+    return Promise.reject(refusal(unavailable(phase)));
   };
 
   // The ids an input names are the renderer's own again; the ids its output
@@ -627,7 +641,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       spawn();
       stopPings = clock.every(PING_PERIOD_MS, pinged, { unref: true });
     },
-    beginClose,
+    beginClose: () => beginClose().kind,
     close: async () => {
       const begun = beginClose();
       const ended = begun.kind === "closing" ? ending(begun.link) : begun.ended;

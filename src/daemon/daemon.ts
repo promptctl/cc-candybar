@@ -240,8 +240,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     phase.kind === "serving" || phase.kind === "armed";
   const cancelling = (): boolean =>
     phase.kind === "closing" || phase.kind === "closed";
-  // [LAW:effects-at-boundaries] Cancellation for launch and wait adapters is
-  // emitted by the phase change at the journal barrier.
+  // [LAW:effects-at-boundaries] Render waits end with admission. Launches
+  // already in flight can finish through the journal barrier.
+  const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
   const log: DaemonLogger = (level, msg) =>
     inputs.daemonLog.log(
@@ -431,7 +432,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         socket: paths.socket,
       },
     },
-    closing: cancelling,
+    // [LAW:single-enforcer] The pane queue reads the same phase as ingress
+    // before any new operation reaches tmux.
+    closing: () => !serving(),
     log,
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -808,7 +811,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
 
   const parts: DaemonParts = {
     accountHome: inputs.accountHome,
-    closing: cancelWork.signal,
+    closing: cancelRenders.signal,
     home: host.home,
     launcher,
     log,
@@ -933,50 +936,50 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
 
   function close(): Promise<DaemonClose> {
     if ("done" in phase) return phase.done;
-    const wasServing = serving();
     // [LAW:no-ambient-temporal-coupling] Publish the shared close before any
     // teardown step can call back into the daemon.
     const done: Promise<DaemonClose> = Promise.resolve().then(() =>
-      tearDown(wasServing, done),
+      tearDown(done),
     );
     phase = { kind: "draining", done };
+    cancelRenders.abort(new DaemonClosing("render"));
     return done;
   }
 
-  async function tearDown(
-    wasServing: boolean,
-    done: Promise<DaemonClose>,
-  ): Promise<DaemonClose> {
-    // The renderer's steps of the teardown, each awaited where it
-    // stands: the renderer takes them in the order they are sent.
+  async function tearDown(done: Promise<DaemonClose>): Promise<DaemonClose> {
+    const attached = [...renderers.values()];
+    const draining: RendererHost[] = [];
+    // [LAW:no-ambient-temporal-coupling] Stop new wakes and starts before
+    // draining. The link's transition decides which renderers can still take
+    // the journal and view pushes. Booting or down links have neither to close.
+    await runTeardown(
+      [
+        ...attached.map(
+          ({ renderer }): TeardownStep => [
+            `${renderer.name} wakes close`,
+            () => renderer.closeWake(),
+          ],
+        ),
+        ...attached.map(
+          ({ renderer, link }): TeardownStep => [
+            `${renderer.name} close begins`,
+            () => {
+              if (link.beginClose() === "closing") draining.push(renderer);
+            },
+          ],
+        ),
+      ],
+      log,
+    );
     const rendererSteps = (
       kind: "close-journal" | "close-views",
     ): TeardownStep[] =>
-      wasServing
-        ? [...renderers.values()].map(({ renderer }) => [
-            `${renderer.name} ${kind}`,
-            () => renderer.ask({ kind }),
-          ])
-        : [];
+      draining.map((renderer) => [
+        `${renderer.name} ${kind}`,
+        () => renderer.ask({ kind }),
+      ]);
     // The stores still flush after a close failed (runTeardown).
     const teardown: readonly TeardownStep[] = [
-      // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
-      // ends is not started again, so no step below waits on a fresh boot.
-      // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
-      // from here, so no turn the renderer holds for later runs into the
-      // close's.
-      [
-        "renderer wakes close",
-        () => {
-          for (const { renderer } of renderers.values()) renderer.closeWake();
-        },
-      ],
-      [
-        "renderer close begins",
-        () => {
-          for (const { link } of renderers.values()) link.beginClose();
-        },
-      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
@@ -1008,14 +1011,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, stores }): TeardownStep => [
           `${renderer.name} stores close`,
           () => stores.close(),
         ],
       ),
       ["sessionBook close", () => sessionBook.close()],
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, link }): TeardownStep => [
           `${renderer.name} renderer close`,
           () => link.close(),

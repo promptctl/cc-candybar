@@ -19,7 +19,10 @@ export async function runTeardown(
   const failed: string[] = [];
   for (const [name, run] of steps) {
     try {
-      await run();
+      // [LAW:no-ambient-temporal-coupling] Synchronous close transitions
+      // seal their owners together, before pending starts can run.
+      const waiting = run();
+      if (waiting !== undefined) await waiting;
     } catch (e) {
       log("warn", `${name} failed: ${inspect(e)}`);
       failed.push(name);
