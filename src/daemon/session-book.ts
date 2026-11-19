@@ -18,6 +18,7 @@ import {
 import type { SessionId } from "./foundations/session-id.js";
 import {
   NOT_HEARD,
+  type RegisteredEnvironment,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
 import { originOfRecord, originRecord } from "./foundations/render-origin.js";
@@ -76,7 +77,13 @@ export class SessionBook {
   // was last heard in, which the bound drops the oldest of.
   private book = new Map<SessionId, DurableContext>();
   // The environment of each session heard since the daemon started.
-  private readonly environments = new Map<SessionId, SessionEnvironment>();
+  private readonly environments = new Map<
+    SessionId,
+    {
+      execution: SessionEnvironment;
+      registration: RegisteredEnvironment | null;
+    }
+  >();
   // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
   // and the close flushes what the open phase saved: before the load, a save
   // would land over the book the daemon before it flushed, unread; after the
@@ -101,9 +108,13 @@ export class SessionBook {
 
   // The session's newest request: what it says the session is, saved when
   // it moved.
-  heard(req: CheckedRenderRequest, environment: SessionEnvironment): void {
+  heard(
+    req: CheckedRenderRequest,
+    environment: SessionEnvironment,
+    registration: RegisteredEnvironment | null = null,
+  ): void {
     const session = req.hookData.session_id;
-    this.environments.set(session, environment);
+    this.environments.set(session, { execution: environment, registration });
     const durable = durableOf(req);
     const held = this.book.get(session);
     this.book.delete(session);
@@ -128,7 +139,12 @@ export class SessionBook {
   // [LAW:one-source-of-truth] The environment a program the host runs for
   // the session starts from: its newest request's, or why the host has none.
   environmentOf(session: SessionId): SessionEnvironment {
-    return this.environments.get(session) ?? NOT_HEARD;
+    return this.environments.get(session)?.execution ?? NOT_HEARD;
+  }
+
+  reportedFor(session: SessionId, key: string): RegisteredEnvironment | null {
+    const held = this.environments.get(session)?.registration;
+    return held?.key === key ? held : null;
   }
 
   close(): Promise<void> {

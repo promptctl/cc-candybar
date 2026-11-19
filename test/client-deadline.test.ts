@@ -1,5 +1,5 @@
 // The Node client states when it will hang up (brandon-unfiled-3248.8ro6,
-// §4c), and hangs up then: one instant, its budget counted from the connect,
+// §4c), and hangs up then: one instant, across negotiation and both connects,
 // is both the `deadline` its render request carries and the one its own timer
 // gives up at. A stub daemon reads what the client sent.
 
@@ -23,7 +23,7 @@ import { systemTimekeeper } from "../src/time";
 // A daemon that hands every request it reads to `seen`, and answers it with
 // `reply` — or, given none, never answers.
 async function withStubDaemon<T>(
-  reply: object | null,
+  reply: object | ((req: Record<string, unknown>) => object) | null,
   run: (host: Host) => Promise<T>,
   seen: (req: Record<string, unknown>) => void,
 ): Promise<T> {
@@ -35,8 +35,10 @@ async function withStubDaemon<T>(
       "data",
       makeFrameReader(
         (frame) => {
-          seen(frame as Record<string, unknown>);
-          if (reply !== null) sock.end(encodeFrame(reply));
+          const req = frame as Record<string, unknown>;
+          seen(req);
+          const answer = typeof reply === "function" ? reply(req) : reply;
+          if (answer !== null) sock.end(encodeFrame(answer));
           return "done";
         },
         (err) => {
@@ -47,7 +49,8 @@ async function withStubDaemon<T>(
   });
   await new Promise<void>((resolve) => server.listen(sockPath, resolve));
   const host = hostOf({
-    ...process.env,
+    SESSION_MARKER: "synthetic-session",
+    SSH_CLIENT: "test-client",
     XDG_STATE_HOME: root,
     CC_CANDYBAR_SOCKET: sockPath,
   });
@@ -67,7 +70,8 @@ async function withStubDaemon<T>(
 // statusline's own are a wire fact, asserted once below.
 const render = (budgets: RoundTripBudgets) => async (host: Host) => {
   const { tryRenderViaDaemon } = await import("../src/daemon/client");
-  return tryRenderViaDaemon({ host, clock: systemTimekeeper }, 
+  return tryRenderViaDaemon(
+    { host, clock: systemTimekeeper },
     {
       session_id: "deadline",
       workspace: { project_dir: "/tmp" },
@@ -88,7 +92,7 @@ describe("the Node client's deadline", () => {
     });
   });
 
-  test("a render request states the client's budget from the connect", async () => {
+  test("a render request states the client's budget from the start of the attempt", async () => {
     const budgets = { connectMs: 5_000, budgetMs: 2_000 };
     let deadline: unknown;
     const before = Date.now();
@@ -100,6 +104,91 @@ describe("the Node client's deadline", () => {
     const after = Date.now();
     expect(deadline).toBeGreaterThanOrEqual(before + budgets.budgetMs);
     expect(deadline).toBeLessThanOrEqual(after + budgets.budgetMs);
+  });
+
+  test.each([
+    { ok: true, need: "environment" },
+    { ok: false, code: "BAD_REQUEST", error: "unknown kind" },
+  ])(
+    "supplies the environment once at the original deadline on %j",
+    async (firstReply) => {
+      const wire: Record<string, unknown>[] = [];
+      await expect(
+        withStubDaemon(
+          (req) =>
+            req.kind === "render-session"
+              ? firstReply
+              : { ok: true, output: "ready" },
+          render({ connectMs: 5000, budgetMs: 2000 }),
+          (req) => wire.push(req),
+        ),
+      ).resolves.toEqual({ kind: "ok", value: "ready" });
+      expect(wire).toHaveLength(2);
+      const [compact, full] = wire;
+      expect(compact).toMatchObject({
+        kind: "render-session",
+        envKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+      });
+      expect(Object.keys(compact!).sort()).toEqual([
+        "args",
+        "cwd",
+        "deadline",
+        "envKey",
+        "hookData",
+        "kind",
+        "v",
+      ]);
+      expect(full).toMatchObject({
+        kind: "render",
+        envKey: compact!.envKey,
+        deadline: compact!.deadline,
+        env: { SESSION_MARKER: "synthetic-session" },
+        ssh: true,
+      });
+    },
+  );
+
+  test.each([
+    [
+      { ok: true, output: "environment" },
+      { kind: "ok", value: "environment" },
+    ],
+    [
+      { ok: false, code: "BAD_REQUEST", error: "bad hook" },
+      { kind: "permanent", cause: "bad_request" },
+    ],
+    [
+      { ok: false, code: "TIMEOUT", error: "late" },
+      { kind: "busy", phase: "deadline" },
+    ],
+  ])(
+    "a completed or ambiguous attempt sends just the compact frame",
+    async (reply, outcome) => {
+      const seen: unknown[] = [];
+      await expect(
+        withStubDaemon(
+          reply,
+          render({ connectMs: 5000, budgetMs: 2000 }),
+          (req) => seen.push(req),
+        ),
+      ).resolves.toMatchObject(outcome);
+      expect(seen).toHaveLength(1);
+    },
+  );
+
+  test("a repeated challenge has no third attempt", async () => {
+    const seen: unknown[] = [];
+    await expect(
+      withStubDaemon(
+        { ok: true, need: "environment" },
+        render({ connectMs: 5000, budgetMs: 2000 }),
+        (req) => seen.push(req),
+      ),
+    ).resolves.toMatchObject({
+      kind: "permanent",
+      cause: "malformed_response",
+    });
+    expect(seen).toHaveLength(2);
   });
 
   test("a client the daemon never answers gives up at the deadline it stated", async () => {

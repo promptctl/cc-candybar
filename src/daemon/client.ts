@@ -20,7 +20,8 @@ import {
   type Response,
 } from "./foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline";
-import { plainEnvironment } from "./foundations/session-env";
+import { environmentKey, plainEnvironment } from "./foundations/session-env";
+import { detectClientHints } from "../client-hints";
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
@@ -60,36 +61,61 @@ export function renderOutcomeOf(resp: Response): ClientOutcome {
 // There is no inline render path; see src/index.ts. The caller is responsible
 // for branching on outcome.kind and deciding whether to kick, display an
 // error glyph, or print the rendered output.
-// [LAW:one-source-of-truth] `hints` carries every fact the daemon cannot
-// observe for itself; it is spread onto the request verbatim so this relay
-// never becomes a second place that decides what the client saw.
 // [LAW:dataflow-not-control-flow] The budgets are a value the caller may state;
 // the statusline states none and gets the wire facts. A test whose subject is
 // the deadline, not the speed of a loaded runner's loop, states wider ones.
-export function tryRenderViaDaemon(
+export async function tryRenderViaDaemon(
   world: ClientWorld,
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
-  hints: ClientHints,
+  observed: Pick<ClientHints, "termCols" | "termRows" | "client">,
   budgets: RoundTripBudgets = RENDER_BUDGETS,
 ): Promise<ClientOutcome> {
   // The environment Claude Code gave this client, which the host runs the
   // session's programs in (src/daemon/foundations/session-env.ts).
+  const expiresAt = world.clock.now() + budgets.budgetMs;
   const env = plainEnvironment(world.host.env);
+  const envKey = environmentKey(env);
+  const fields = { hookData, args, cwd, envKey, ...observed };
+  const needed = Symbol("environment");
+  const first = await requestOutcome<string | typeof needed>(
+    world,
+    (deadline) => ({ kind: "render-session", ...fields, deadline }),
+    budgets,
+    (resp) =>
+      "need" in resp && resp.need === "environment"
+        ? needed
+        : projectOutput(resp),
+    expiresAt,
+  );
+  if (first.kind === "ok") {
+    if (first.value !== needed) return { kind: "ok", value: first.value };
+  } else if (
+    first.kind !== "permanent" ||
+    first.cause !== "bad_request" ||
+    first.message !== "unknown kind"
+  ) {
+    return first;
+  }
+  // A missing snapshot and an older v3 daemon's refusal are both definite
+  // answers before a render. Resending after any other failure could draw twice.
+  const legacyHints = detectClientHints({ env, home: world.host.home }, cwd, {
+    columns: observed.termCols,
+    rows: observed.termRows,
+  });
   return requestOutcome(
     world,
     (deadline) => ({
       kind: "render",
-      hookData,
-      args,
-      cwd,
+      ...fields,
       deadline,
       env,
-      ...hints,
+      ...legacyHints,
     }),
     budgets,
     projectOutput,
+    expiresAt,
   );
 }
 

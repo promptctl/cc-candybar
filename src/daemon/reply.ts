@@ -13,7 +13,10 @@ import {
   NOTHING_TO_SETTLE,
   type StatuslineAnswer,
 } from "./statusline-answer.js";
-import { checkRenderRequest } from "./render-checkpoint.js";
+import {
+  checkRenderRequest,
+  environmentForRender,
+} from "./render-checkpoint.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
@@ -143,7 +146,11 @@ function closingResponse(
   accepted: Acceptance,
 ): Response {
   const kind =
-    rawKind === "render" || rawKind === "click" ? rawKind : "request";
+    rawKind === "render-session"
+      ? "render"
+      : rawKind === "render" || rawKind === "click"
+        ? rawKind
+        : "request";
   const failure = failureOf(new DaemonClosing(kind));
   if (kind === "render" || kind === "click") {
     if (kind === "render") {
@@ -189,6 +196,7 @@ export function refuseClosingInbound(
 export type ReplyRequest = Exclude<Request, SubscribeRequest>;
 const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
   render: true,
+  "render-session": true,
   "pane-session": true,
   shutdown: true,
   stats: true,
@@ -384,7 +392,11 @@ export async function replyTo(
     });
   }
 
-  if (req.kind === "render") {
+  if (req.kind === "render" || req.kind === "render-session") {
+    const env = environmentForRender(req, (session, key) =>
+      parts.sessionBook.reportedFor(session, key),
+    );
+    if (env.kind === "needed") return stay({ ok: true, need: "environment" });
     // [LAW:effects-at-boundaries] The render request's two clock reads: the
     // instant it arrived at, which its client sightings are stamped with, and the
     // monotonic start its wait and duration are measured from, so a clock
@@ -455,7 +467,13 @@ export async function replyTo(
     const draw = async (): Promise<ReturnType<typeof renderRecord>> => {
       let answered: StatuslineAnswer | undefined;
       try {
-        const checked = checkRenderRequest(req, stats, parts.log, parts.home);
+        const checked = checkRenderRequest(
+          req,
+          stats,
+          parts.log,
+          parts.home,
+          env,
+        );
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
         const renderer =
           parts.rendererFor?.(checked.req, checked.environment, order) ??
@@ -471,7 +489,11 @@ export async function replyTo(
         // [LAW:one-source-of-truth] The book keeps what the newest request says,
         // never one that arrived behind it.
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-          parts.sessionBook.heard(checked.req, checked.environment);
+          parts.sessionBook.heard(
+            checked.req,
+            checked.environment,
+            checked.registration,
+          );
         const tmux = checked.req.hints.tmux;
         if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
         answered = await answerStatusline(

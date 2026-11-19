@@ -4,8 +4,13 @@
 
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import { environmentKey } from "../../src/daemon/foundations/session-env";
 
-function check(env: unknown, claudeConfigDir?: string) {
+function check(
+  env: unknown,
+  claudeConfigDir?: string,
+  extra: Record<string, unknown> = {},
+) {
   return checkRenderRequest(
     {
       v: PROTOCOL_VERSION,
@@ -22,6 +27,7 @@ function check(env: unknown, claudeConfigDir?: string) {
       cwd: "/p",
       ...(env !== undefined && { env }),
       ...(claudeConfigDir !== undefined && { claudeConfigDir }),
+      ...extra,
     } as never,
     { firstSightOfUnknownHookField: () => false },
     () => {},
@@ -30,6 +36,71 @@ function check(env: unknown, claudeConfigDir?: string) {
 }
 
 describe("a reported environment", () => {
+  test("agrees with the native wire digest for numeric, escaped and non-ASCII names and values", () => {
+    const pairs = [
+      ["\u{10000}", "astral"],
+      ["10", "ten"],
+      ["2", "two"],
+      ["CTRL", 'a\b\t\n\f\r\u001b"\\'],
+      ["\ue000", "bmp\u2028\u2029"],
+    ];
+    const expected =
+      "827ce63406a6cbdb3bbeb908e75973e13bd6ca1b406448709d48b631279632b5";
+    expect(environmentKey(Object.fromEntries(pairs))).toBe(expected);
+    expect(environmentKey(Object.fromEntries(pairs.reverse()))).toBe(expected);
+  });
+
+  test("a verified snapshot supplies hints from the client's cwd and home and stays outside the renderer", () => {
+    const env = {
+      HOME: "/client/home",
+      SSH_TTY: "/dev/pts/3",
+      CC_CANDYBAR_CONFIG: "~/bar.json5",
+      CLAUDE_CONFIG_DIR: "claude",
+      TOKEN: "private-test-value",
+    };
+    const envKey = environmentKey(env);
+    const checked = check(env, "/forged", {
+      envKey,
+      ssh: false,
+      configEnv: "/forged",
+      termCols: 117,
+      extraField: env,
+    });
+    if (!checked.ok) throw new Error(checked.problems.join("; "));
+    expect(checked.req.hints).toMatchObject({
+      ssh: true,
+      tmux: null,
+      configEnv: "/client/home/bar.json5",
+      claudeConfigDir: "/p/claude",
+      termCols: 117,
+    });
+    expect(checked.req.requested.target.path).toBe("/client/home/bar.json5");
+    expect(JSON.stringify(checked.req)).not.toContain("private-test-value");
+    expect(checked.req).not.toHaveProperty("envKey");
+    const overridden = check(env, undefined, {
+      envKey,
+      args: ["cc-candybar", "--config-only", "~/chosen.json5"],
+    });
+    if (!overridden.ok) throw new Error(overridden.problems.join("; "));
+    expect(overridden.req.requested.target.path).toBe(
+      "/client/home/chosen.json5",
+    );
+  });
+
+  test("a malformed, missing or mismatched full report cannot register an environment", () => {
+    for (const [env, envKey] of [
+      [{}, "X".repeat(64)],
+      [undefined, environmentKey({})],
+      [{ VALUE: "private-test-value" }, environmentKey({})],
+    ]) {
+      const checked = check(env, undefined, { envKey });
+      expect(checked).toMatchObject({
+        ok: false,
+        problems: [expect.stringContaining("envKey")],
+      });
+      expect(JSON.stringify(checked)).not.toContain("private-test-value");
+    }
+  });
   test("is the session's, with its facts over it, and the renderer's context holds none of it", () => {
     const checked = check(
       { PATH: "/usr/bin", TOKEN: "secret", CLAUDE_CONFIG_DIR: "/old" },

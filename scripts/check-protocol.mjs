@@ -139,15 +139,22 @@ const clientHintKeys = memberSet(
 // request literal and after it, then the hints client_hints sets by a call
 // that names no key. Read as one set, so a hint RenderRequest no longer
 // spells, or a key the client stops sending, is drift here either way.
-const rustHintKeys = memberSet(
+const rustObservedKeys = memberSet(
   RS_MAIN,
   /^fn client_hints\([\s\S]+?^\}/m,
   /request\["(\w+)"\]/g,
 );
+const rustLegacyHintKeys = memberSet(
+  RS_MAIN,
+  /^fn legacy_hints\([\s\S]+?^\}/m,
+  /request\["(\w+)"\]/g,
+);
+const rustHintKeys = () =>
+  reads.union(rustObservedKeys(), rustLegacyHintKeys());
 function renderRequestRustKeys() {
   const own = memberSet(
     RS_MAIN,
-    /let mut request = serde_json::json!\(\{[\s\S]+?let body = match serde_json::to_vec\(&request\)/,
+    /^fn render\([\s\S]+?^\}/m,
     /(?:^ +"|request\[")(\w+)"(?::|\])/gm,
   )();
   return reads.union(own, rustHintKeys());

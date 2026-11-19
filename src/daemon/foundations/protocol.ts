@@ -72,6 +72,7 @@ export interface RenderRequest {
   // Required of every sender here, though the checkpoint still meets a
   // client too old to send it.
   env: Record<string, string>;
+  envKey?: string;
   // ─── Client hints ────────────────────────────────────────────────────────
   // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
   // the trust boundary and trusted by the daemon. The daemon is detached and
@@ -104,6 +105,21 @@ export type RenderEncoding = (typeof RENDER_ENCODINGS)[number];
 export interface ReaderRenderRequest extends RenderRequest {
   encoding?: RenderEncoding;
 }
+
+// A short-lived relay can refer to the environment the host already heard for
+// this session. Only facts independent of that snapshot travel on every tick.
+export type SessionRenderRequest = Pick<
+  ReaderRenderRequest,
+  | "v"
+  | "hookData"
+  | "args"
+  | "cwd"
+  | "deadline"
+  | "encoding"
+  | "termCols"
+  | "termRows"
+  | "client"
+> & { kind: "render-session"; envKey: string };
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
@@ -453,6 +469,7 @@ export interface PaneSessionRequest {
 
 export type Request =
   | ReaderRenderRequest
+  | SessionRenderRequest
   | SubscribeRequest
   | PaneSessionRequest
   | ShutdownRequest
@@ -462,6 +479,7 @@ export type Request =
 
 export type Response =
   | { ok: true; output: string }
+  | { ok: true; need: "environment" }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }
   | { ok: true; stats: StatsSnapshot }
