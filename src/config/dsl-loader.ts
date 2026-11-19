@@ -74,6 +74,7 @@ import {
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
+import { resolveActionLayer } from "./action.js";
 import {
   pluginScopeCollisions,
   payloadDeclarationNotices,
@@ -865,8 +866,16 @@ function judgeRenderable(
     authored: (name) => authored.has(name),
   });
   refuseIfIssues();
+  // [LAW:single-enforcer] Authored and synthesized actions share the same
+  // layer checkpoint before any reaches the renderer.
+  const actions = Object.fromEntries(
+    Object.entries(withChrome.actions).map(([name, action]) => [
+      name,
+      resolveActionLayer(action),
+    ]),
+  );
   return {
-    config: withChrome as ValidatedConfig,
+    config: { ...withChrome, actions } as ValidatedConfig,
     dropped,
     placed: merged,
     warnings: notices,

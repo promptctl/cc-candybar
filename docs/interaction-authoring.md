@@ -203,9 +203,10 @@ left alone, and a reset that changes nothing enters no undo history.
 Every action that writes config names the layer it writes with `layer`:
 `"user"` (your XDG `config.json5`), `"project"` (the approved project's
 `.cc-candybar.json5`) or `"local"` (`.cc-candybar.local.json5` beside it, yours
-alone in that project). The chain merges them user < project < local, and a
-write defaults to `"user"`. The file is resolved at the moment of the click by
-the same search the render runs. `--config` and `$CC_CANDYBAR_CONFIG` select
+alone in that project). The chain merges them user < project < local. The
+loader assigns `"user"` when an action omits `layer`. When clicked, the
+writer gets the file by role from the session's held config chain.
+`--config` and `$CC_CANDYBAR_CONFIG` select
 the user layer, with approved project and local layers still available.
 `--config-only` selects the named file alone, writable as `"user"`.
 A project layer in a session with no approved project is refused. When the
@@ -214,7 +215,8 @@ creates is added to the repository's `info/exclude` so git never shows it. A
 click whose change a layer above would hide (that file sets the same value) is
 refused, naming the file, rather than writing a value the bar would not show.
 The payload's `layers.user`, `layers.project` and `layers.local` say which
-layers this session can write. A click from a session that
+layers this session can write. Use these flags to gate layer choices in
+authored menus. A click from a session that
 has not rendered yet has no file to write and fails loudly (`has not rendered
 yet — no config file to write`) rather than guessing.
 

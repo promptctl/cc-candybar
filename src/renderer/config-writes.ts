@@ -20,6 +20,8 @@ import {
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
 import {
   contentOfText,
+  layerAtPath,
+  layerForRole,
   type Layer,
   type LayerContent,
 } from "../config/config-snapshot.js";
@@ -134,7 +136,7 @@ export class ConfigWrites {
   // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
   // the chain does not hold is no layer a click of this session writes.
   private layerAt(file: string): Layer {
-    const layer = this.held().chain.find((l) => l.path === file);
+    const layer = layerAtPath(this.held().chain, file);
     if (layer === undefined)
       throw new BadVerbArgs(
         `${file} is not a config file this session renders from — the click is not taken`,
@@ -154,7 +156,7 @@ export class ConfigWrites {
   // The file of the click's chain at `role`: null when the chain holds no
   // layer of that role.
   pathOf(role: LayerRole): string | null {
-    return this.held().chain.find((l) => l.role === role)?.path ?? null;
+    return layerForRole(this.held().chain, role)?.path ?? null;
   }
 
   // A write of the open click, from the file as the click read it (`read`):

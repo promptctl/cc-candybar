@@ -1,6 +1,12 @@
 import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
 import type { RichText } from "@promptctl/rich-js";
-import { compareShallow, observable, reaction, runInAction } from "mobx";
+import {
+  compareShallow,
+  makeObservable,
+  observable,
+  reaction,
+  runInAction,
+} from "mobx";
 import type {
   DeclaredSources,
   ViewFacts,
@@ -15,8 +21,13 @@ import type {
 } from "../renderer-interface/adapter.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { fileHeldSettings } from "./setting-drafts.js";
-import { writable, type ConfigSnapshot } from "../config/config-snapshot.js";
-import type { Drawing } from "../config/lanes.js";
+import {
+  layerForRole,
+  writable,
+  type ConfigSnapshot,
+} from "../config/config-snapshot.js";
+import type { Drawing, LaneSwitches } from "../config/lanes.js";
+import { laneDefaultsAfterReset } from "./lane-handoff.js";
 import type { FrameRecord } from "../render/frame-memory.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import {
@@ -284,6 +295,7 @@ export interface DslRenderState {
   readonly configPath: string | null;
   // The roles of the chain a click can write — what the save offers.
   readonly writable: readonly LayerRole[];
+  readonly remainingLanes: ReadonlyMap<string, LaneSwitches>;
   // What the file declares that nothing uses (the doctor's config check) —
   // from the same raw parse, for the same reason.
   readonly unused: readonly UnusedDecl[];
@@ -323,7 +335,7 @@ function chainOf(snapshot: ConfigSnapshot, locs: Locations): ConfigChain {
       .filter((l) => l.content.kind === "text")
       .map((l) => ({ path: l.path, role: l.role })),
     // Every chain holds the user layer: it is the one no answer gates.
-    home: chain.find((l) => l.role === "user")!.path,
+    home: layerForRole(chain, "user")!.path,
     writable: chain.filter((l) => writable(l.content)).map((l) => l.role),
     snapshot,
     locs,
@@ -724,6 +736,8 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
   const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
   const homeRaw = layers.find((l) => l.path === chain.home)?.raw ?? {};
+  const projectPath = layerForRole(chain.snapshot.chain, "project")?.path;
+  const projectRaw = layers.find((layer) => layer.path === projectPath)?.raw;
   const inserted = layers.flatMap((l) =>
     (l.raw.insert ?? []).map((cell) => cell.seg),
   );
@@ -809,6 +823,11 @@ function buildRenderState(load: ResolvedLoad, deps: StateDeps): Attempt {
         ? chain.home
         : null,
       writable: chain.writable,
+      remainingLanes: laneDefaultsAfterReset(
+        config,
+        loaded.base,
+        projectRaw ?? {},
+      ),
       // One entry per declaration, however many layers declare it, judged
       // over the trees as placed and every layer's insert entries, so a
       // segment only an insert entry places is used, here or not.
@@ -943,9 +962,8 @@ export function fallbackState(
   const resolved = resolveLoad(cwd, {
     layers: [],
     home: "",
-    // A failed load's writes are refused until its chain loads (the writer
-    // proves the whole chain), so its bar offers the one layer every chain has.
-    writable: ["user"],
+    // The fallback has no loaded chain for its writer to prove.
+    writable: [],
     snapshot: { ...snapshot, chain: [] },
     locs: deps.locations,
   });
@@ -963,6 +981,17 @@ export function fallbackState(
 // The scopes a render cache entry and a session's view declare.
 const DIRECTORY_SCOPE: ReadonlySet<VarScope> = new Set(["directory"]);
 const VIEW_SCOPE: ReadonlySet<VarScope> = new Set(["view"]);
+const NO_WRITABLE_LAYERS: readonly LayerRole[] = [];
+
+// [LAW:types-are-the-program] A view can offer writes or show why its
+// current config blocks them, even while it draws an older preview.
+export type ConfigAccess =
+  | { readonly kind: "available"; readonly roles: readonly LayerRole[] }
+  | { readonly kind: "unavailable"; readonly error: string };
+
+export function writableRoles(access: ConfigAccess): readonly LayerRole[] {
+  return access.kind === "available" ? access.roles : NO_WRITABLE_LAYERS;
+}
 
 // [LAW:one-source-of-truth] A session's view of one entry's state
 // (brandon-unfiled-3248.8ro6, step 2): the session's own values — its inputs,
@@ -990,6 +1019,7 @@ export interface SessionView<
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
+  readonly configAccess: () => ConfigAccess;
   // Standalone views can update the request they hold.
   requested?(facts: F): void;
   // The current request the view draws by.
@@ -1020,6 +1050,7 @@ export interface SourcedView {
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly requested: () => ViewFacts;
+  readonly configAccess: () => ConfigAccess;
 }
 
 export type SourceOf<S extends ViewSource> = (view: SourcedView) => S;
@@ -1045,6 +1076,7 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly source: SourceOf<S>;
   readonly changed: (sessionId: SessionId) => void;
   readonly log: DaemonLogger;
+  readonly configAccess?: () => ConfigAccess;
 }
 
 function standaloneRequest<F>(facts: F) {
@@ -1067,7 +1099,12 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   state: DslRenderState,
   cwd: string,
   facts: F,
-  { source: sourceOf, changed, log }: ViewDeclaring<S>,
+  {
+    source: sourceOf,
+    changed,
+    log,
+    configAccess = () => ({ kind: "available", roles: state.writable }),
+  }: ViewDeclaring<S>,
   currentRequest?: () => F,
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
@@ -1091,6 +1128,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
       state,
       store: registry.variableStore,
       requested: request.read,
+      configAccess,
     });
   } catch (e) {
     registry.dispose();
@@ -1130,6 +1168,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     state,
     store: registry.variableStore,
     registry,
+    configAccess,
     source,
     requested: request.update,
     facts: request.read,
@@ -1181,7 +1220,9 @@ export class RenderCache<
   // it in: the one source every entry loads from. An origin the renderer stops
   // naming is pruned, so an entry made after loads only a snapshot the host
   // still follows.
-  private readonly snapshots = new Map<string, HeldSnapshot>();
+  private readonly snapshots = observable.map<string, HeldSnapshot>(undefined, {
+    deep: false,
+  });
   // [LAW:one-source-of-truth] Whether the cache has closed, and the signal a
   // wait over one of its views ends at: one fact, so a render waiting as the
   // close drops its view ends then, not at its deadline.
@@ -1259,10 +1300,12 @@ export class RenderCache<
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
     const held = { snapshot, digest: digestOf(snapshot) };
-    this.snapshots.set(key, held);
-    const entry = this.entries.get(key);
-    if (entry !== undefined && entry.digest !== held.digest)
-      this.reloadInto(entry, held, { kind: "config" });
+    runInAction(() => {
+      this.snapshots.set(key, held);
+      const entry = this.entries.get(key);
+      if (entry !== undefined && entry.digest !== held.digest)
+        this.reloadInto(entry, held, { kind: "config" });
+    });
   }
 
   // Whether the host handed in `origin`'s config and the renderer still
@@ -1274,8 +1317,10 @@ export class RenderCache<
   // [LAW:one-source-of-truth] The snapshots the renderer still names, by
   // `originKey`: every other one goes, as the host lets its origin go.
   prune(keep: ReadonlySet<string>): void {
-    for (const key of [...this.snapshots.keys()])
-      if (!keep.has(key)) this.snapshots.delete(key);
+    runInAction(() => {
+      for (const key of [...this.snapshots.keys()])
+        if (!keep.has(key)) this.snapshots.delete(key);
+    });
   }
 
   // The compile a served state carries for `key`, else a new one — which the
@@ -1362,6 +1407,9 @@ export class RenderCache<
       lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
+    // [LAW:one-source-of-truth] The current load's failure gates writes even
+    // when the view keeps rendering its previous compiled configuration.
+    makeObservable(entry, { lastError: observable });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
@@ -1580,6 +1628,7 @@ export class RenderCache<
           source: this.deps.source,
           changed: (sid) => this.observers.onViewChanged?.(sid),
           log: this.log,
+          configAccess: () => this.accessTo(entry, state),
         },
         currentRequest === undefined
           ? undefined
@@ -1597,6 +1646,27 @@ export class RenderCache<
       `session view opened sid=${JSON.stringify(sessionId)} by=${by} cwd=${entry.cwd} views=${this.views.size}`,
     );
     return view;
+  }
+
+  // [LAW:one-source-of-truth] A draft holds its original file content for
+  // preview. Only the current host observation says if it can write through.
+  private accessTo(entry: CacheEntry, state: DslRenderState): ConfigAccess {
+    const key = originKey(entry.origin);
+    const error = entry.lastError ?? this.entries.get(key)?.lastError;
+    if (error != null) return { kind: "unavailable", error };
+    const held = this.snapshots.get(key);
+    if (held === undefined)
+      return {
+        kind: "unavailable",
+        error: "No current config is held for this session",
+      };
+    for (const { role, path, content } of held.snapshot.chain)
+      if (content.kind === "unreadable")
+        return {
+          kind: "unavailable",
+          error: `The ${role} config layer at ${path} could not be read: ${content.error}`,
+        };
+    return { kind: "available", roles: state.writable };
   }
 
   private leaseOf(view: SessionView<S, F>): ViewHold {
@@ -1676,9 +1746,9 @@ export class RenderCache<
   close(): void {
     if (this.closed) return;
     this.lifetime.abort(new Error("the render cache closed"));
-    this.snapshots.clear();
     const entries = this.entries.size;
     for (const [key, entry] of this.entries) this.drop(key, entry, "close");
+    runInAction(() => this.snapshots.clear());
     // [LAW:one-source-of-truth] Every state left in `holds` is retired and
     // waits on a render, so `retired` is the count of teardowns deferred.
     this.log(
@@ -1922,7 +1992,9 @@ export class RenderCache<
     entry.digest = digest;
     entry.configLayers = loaded.layers;
     entry.lastWarnings = loaded.warnings;
-    entry.lastError = loaded.error;
+    runInAction(() => {
+      entry.lastError = loaded.error;
+    });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {

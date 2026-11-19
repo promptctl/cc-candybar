@@ -4,6 +4,8 @@
 import { observable, runInAction } from "mobx";
 import {
   contentOfText,
+  layerAtPath,
+  layerForRole,
   type ConfigSnapshot,
   type Layer,
   type LayerContent,
@@ -89,11 +91,8 @@ class EditDraft {
     this.snapshot = {
       ...this.latest,
       chain: this.latest.chain.flatMap((layer) => {
-        const base = this.base.chain.find(
-          (candidate) =>
-            candidate.path === layer.path && candidate.role === layer.role,
-        );
-        if (base === undefined) return [];
+        const base = layerAtPath(this.base.chain, layer.path);
+        if (base?.role !== layer.role) return [];
         const value = this.files.get(layer.path);
         const content =
           value === undefined
@@ -135,7 +134,7 @@ class EditDraft {
   begin(prove: ConfigFiles["prove"]): EditTurn {
     const working = new Map(this.files);
     const layerAt = (file: string): Layer => {
-      const layer = this.base.chain.find((layer) => layer.path === file);
+      const layer = layerAtPath(this.base.chain, file);
       if (layer === undefined)
         throw new BadVerbArgs(`${file} is not a layer of this edit`);
       return layer;
@@ -151,8 +150,7 @@ class EditDraft {
         else working.set(file, after);
       },
       roleOf: (file) => layerAt(file).role,
-      pathOf: (role) =>
-        this.base.chain.find((layer) => layer.role === role)?.path ?? null,
+      pathOf: (role) => layerForRole(this.base.chain, role)?.path ?? null,
       prove,
     };
     const journal = this.history.begin(files);
@@ -176,9 +174,7 @@ class EditDraft {
         const rewritten = new Map<string, string | null>();
         for (const [path, after] of working) {
           const source = layerAt(path);
-          const target = latest.chain.find(
-            (layer) => layer.role === source.role,
-          );
+          const target = layerForRole(latest.chain, source.role);
           if (target?.path !== path)
             throw new BadVerbArgs(
               `save: the ${source.role} layer for this edit moved`,

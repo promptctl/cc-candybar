@@ -119,7 +119,10 @@ describe("themeDefaults at load", () => {
 
   test("a reset may name one theme's default field", () => {
     const config = load(`{ actions: { r: { reset: 'themeDefaults.nord.shade' } } }`);
-    expect(config.actions.r).toEqual({ reset: "themeDefaults.nord.shade" });
+    expect(config.actions.r).toEqual({
+      reset: "themeDefaults.nord.shade",
+      layer: "user",
+    });
   });
 
   test("a style the FILE declares is a name a theme default may use", () => {

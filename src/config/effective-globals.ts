@@ -86,6 +86,15 @@ export type EffectiveGlobals = ValuedGlobals & {
 export const laneSwitches = (effective: EffectiveGlobals): LaneSwitches =>
   perLane((lane) => effective[LANES[lane].switch.setting]);
 
+export function editGlobalsOf(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): Partial<Globals> {
+  return sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE
+    ? config.editGlobals
+    : {};
+}
+
 // [LAW:one-type-per-behavior] THE fold for one valued field: the staged
 // fragment over the session's pick over the config default over the row's
 // floor — every valued field is this with its own row, so the precedence
@@ -142,8 +151,7 @@ export function resolveEffectiveGlobals(
   // whether or not edit mode is on; only the contents of `staged` differ. This
   // is the whole of "no render-walk branch on edit mode": there is no branch
   // here either, so there is none to leak downstream.
-  const staged: Partial<Globals> =
-    sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
+  const staged = editGlobalsOf(config, sessionPick);
   // The theme resolves before the look, because the look's config-default
   // rung is the THEME's default folded under the declared globals
   // (src/config/theme-defaults.ts): which theme decides which fragment.

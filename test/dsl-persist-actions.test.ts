@@ -285,6 +285,7 @@ describe("persist/reset action loader shape", () => {
     );
     expect(config.actions.applyTheme).toEqual({
       persist: "palette",
+      layer: "user",
       from: "themes",
     });
   });
@@ -299,15 +300,21 @@ describe("persist/reset action loader shape", () => {
       }`),
       ALLOWED,
     );
-    expect(config.actions.a).toEqual({ persist: "style", to: "vivid" });
+    expect(config.actions.a).toEqual({
+      persist: "style",
+      layer: "user",
+      to: "vivid",
+    });
     expect(config.actions.b).toEqual({
       persist: "padding",
+      layer: "user",
       min: 0,
       max: 16,
       by: 1,
     });
     expect(config.actions.c).toEqual({
       persist: "autoWrap",
+      layer: "user",
       cycle: ["true", "false"],
     });
   });
@@ -328,7 +335,7 @@ describe("persist/reset action loader shape", () => {
       base(`{ undo: { reset: 'palette' } }`),
       ALLOWED,
     );
-    expect(config.actions.undo).toEqual({ reset: "palette" });
+    expect(config.actions.undo).toEqual({ reset: "palette", layer: "user" });
   });
 
   test("reset rejects sibling keys", () => {

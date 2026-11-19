@@ -52,6 +52,7 @@ import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import type { VerbContext } from "../src/renderer/verbs";
 import { encodeLayoutOp } from "../src/config/layout-ops";
+import { layerFlags } from "../src/config/layer-role";
 import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
@@ -212,6 +213,7 @@ function buildEditRuntime(src: string, sessionId = S1) {
         session_id: sessionId,
         project_dir: "/tmp/proj",
         history: base.edits.depth(sessionId, history),
+        layers: layerFlags(["user"]),
       },
       instantOf(new Date()),
       opts(width),
@@ -245,6 +247,7 @@ describe("insertSegmentFrom loader shape", () => {
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
+      layer: "user",
       insertSegmentFrom: "themes",
       anchor: "git",
       relation: "before",
@@ -261,6 +264,7 @@ describe("insertSegmentFrom loader shape", () => {
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
+      layer: "user",
       insertSegmentFrom: ["gitPr"],
       anchor: "git",
       relation: "after",

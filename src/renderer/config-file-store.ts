@@ -33,6 +33,7 @@ import {
   type LoadedChain,
 } from "../config/dsl-loader.js";
 import {
+  layerForRole,
   writable,
   type ConfigSnapshot,
   type Layer,
@@ -452,7 +453,7 @@ export function writeLayerOf(
   isolatedFile: string | null,
   home: string,
 ): WriteLayer {
-  const layer = snapshot.chain.find((l) => l.role === role);
+  const layer = layerForRole(snapshot.chain, role);
   if (layer === undefined)
     throw new BadVerbArgs(
       `the ${role} layer is not writable: ${
