@@ -58116,7 +58116,7 @@ function mapActionTemplates(a, f) {
   return a;
 }
 function actionBindsTemplateValue(a) {
-  return "from" in a || "int" in a || "insertSegmentFrom" in a;
+  return "from" in a || "int" in a || "insertSegmentFrom" in a || "save" in a && a.layer === "ask";
 }
 
 // src/config/loader/actions.ts
@@ -61652,7 +61652,7 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
     if (!("do" in a)) continue;
     a.do.forEach((member, i2) => {
       const target = Object.prototype.hasOwnProperty.call(cfg.actions, member) ? cfg.actions[member] : void 0;
-      const problem = target === void 0 ? `references unknown action "${member}"` : "do" in target ? `"${member}" is itself a do action \u2014 list its members here instead` : a.do.indexOf(member) !== i2 ? `"${member}" is listed twice \u2014 each member fires once per click` : i2 > 0 && actionBindsTemplateValue(target) ? `"${member}" takes its value from the template (from/int/insertSegmentFrom), so it can only be the first member \u2014 only the first is bound the region's display` : void 0;
+      const problem = target === void 0 ? `references unknown action "${member}"` : "do" in target ? `"${member}" is itself a do action \u2014 list its members here instead` : a.do.indexOf(member) !== i2 ? `"${member}" is listed twice \u2014 each member fires once per click` : i2 > 0 && actionBindsTemplateValue(target) ? `"${member}" takes its value from the template, so it can only be the first member \u2014 only the first receives the template's value` : void 0;
       if (problem !== void 0) {
         ctx.issues.push({
           path: `actions.${name}.do`,
@@ -66281,10 +66281,18 @@ function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
     ...entries.filter(([, a]) => !("do" in a)),
     ...entries.filter(([, a]) => "do" in a)
   ]) {
-    out.set(
+    const compiled = compileAction(
+      parse3,
       name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+      action2,
+      stateKeyToVar,
+      perConfigDomains,
+      out
     );
+    out.set(name, {
+      ...compiled,
+      bindsTemplateValue: compiled.kind === "do" ? compiled.head.bindsTemplateValue : actionBindsTemplateValue(action2)
+    });
   }
   return out;
 }
@@ -66462,38 +66470,6 @@ function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, c
 }
 function presentedAction(c) {
   return c.kind === "do" ? presentedAction(c.head) : c;
-}
-function bindsTemplateValue(c) {
-  const presented = presentedAction(c);
-  switch (presented.kind) {
-    case "set-option":
-    case "set-int":
-    case "persist-option":
-    case "layout-op-option":
-      return true;
-    case "set-literal":
-    case "set-bounded":
-    case "set-cycle":
-    case "copy":
-    case "open":
-    case "persist-literal":
-    case "persist-bounded":
-    case "persist-cycle":
-    case "reset":
-    case "layout-op":
-    case "undo":
-    case "redo":
-    case "back":
-    case "rewind":
-    case "save":
-    case "preset-save":
-    case "preset-delete":
-    case "theme-default-save":
-    case "slash":
-    case "run":
-    case "do":
-      return false;
-  }
 }
 function parseActionTemplate(parse3, src, name) {
   try {
@@ -67431,12 +67407,13 @@ function carouselFuncs(runtime) {
         if (label2.trim() === "") {
           throw new Error(`carousel "${applyName}": label is empty`);
         }
-        if (!runtime.compiled.has(openName)) {
+        const open2 = runtime.compiled.get(openName);
+        if (open2 === void 0) {
           throw new Error(
             `carousel "${applyName}": open must name a declared action, got ${JSON.stringify(openName)}`
           );
         }
-        if (bindsTemplateValue(runtime.compiled.get(openName))) {
+        if (open2.bindsTemplateValue) {
           throw new Error(
             `carousel "${applyName}": open "${openName}" writes a value the template binds, and the label binds none \u2014 name an action that writes a fixed value, a cycle, or a do of them`
           );

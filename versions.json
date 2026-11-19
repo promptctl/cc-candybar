@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-877",
-      "ref": "refs/pull/877/merge",
-      "sha": "203bea54bb31b1b08efd854ef3c4633904f75be7",
-      "timestamp": "2026-11-19T16:26:30.161Z",
-      "commits": [
-        {
-          "sha": "203bea54bb31b1b08efd854ef3c4633904f75be7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:25:29Z",
-          "message": "Merge 1656261ede70ee482d8a839771c798988e33348f into 03baa57993b3a897e0b565221c250228f2873fb9\n"
-        },
-        {
-          "sha": "1656261ede70ee482d8a839771c798988e33348f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:52:22-07:00",
-          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "03baa57993b3a897e0b565221c250228f2873fb9",
-      "timestamp": "2026-11-19T16:24:45.875Z",
+      "sha": "d5df8f6d8a5a3e24c1189a1486241b29febe8053",
+      "timestamp": "2026-11-19T16:34:49.856Z",
       "commits": [
         {
-          "sha": "03baa57993b3a897e0b565221c250228f2873fb9",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T16:23:38Z",
-          "message": "chore(release): set `package.json` to 1.235.2\n\n## [1.235.2](https://github.com/promptctl/cc-candybar/compare/v1.235.1...v1.235.2) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** drain live renderers before closing links ([#882](https://github.com/promptctl/cc-candybar/issues/882)) ([67617a1](https://github.com/promptctl/cc-candybar/commit/67617a157063c21dd274bfef57d3c5f64d5d4c47))\n"
+          "sha": "d5df8f6d8a5a3e24c1189a1486241b29febe8053",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:33:47-07:00",
+          "message": "fix(actions): centralize template value binding (#877)\n\nfix(actions): centralize template value binding (ibyq.a8c)"
         }
       ]
     },
