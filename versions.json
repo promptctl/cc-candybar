@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "f10951d9400d761190b757a8dd55db47ac30e372",
+      "timestamp": "2026-11-19T15:10:13.266Z",
+      "commits": [
+        {
+          "sha": "f10951d9400d761190b757a8dd55db47ac30e372",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:09:01-07:00",
+          "message": "feat(click): route actions to their drawing renderer (#875)\n\nfeat(click): route actions to their drawing renderer (x96a.m85)"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "c8cb0b23a263540475933a48372e51d83f25b9d2",
@@ -66,28 +81,6 @@
       ]
     },
     {
-      "version": "pr-875",
-      "ref": "refs/pull/875/merge",
-      "sha": "c1d0ade88d4f50cd6acdf4b6a47a49e810e8962e",
-      "timestamp": "2026-11-19T15:04:28.902Z",
-      "commits": [
-        {
-          "sha": "c1d0ade88d4f50cd6acdf4b6a47a49e810e8962e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:03:17Z",
-          "message": "Merge 3703d3c8317665d60dab3f7cd1baaed1fb1abdd9 into 4be48fcadb9a7a053dbeb12bdcfa3fc73e0af867\n"
-        },
-        {
-          "sha": "3703d3c8317665d60dab3f7cd1baaed1fb1abdd9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:34:35-07:00",
-          "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
-        }
-      ]
-    },
-    {
       "version": "pr-883",
       "ref": "refs/pull/883/merge",
       "sha": "90379a1e0868f1c24213af8436c2a45cdb080fd7",
@@ -106,21 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:00:46-07:00",
           "message": "refactor(renderer): boot from host-resolved locations\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "4be48fcadb9a7a053dbeb12bdcfa3fc73e0af867",
-      "timestamp": "2026-11-19T15:03:19.897Z",
-      "commits": [
-        {
-          "sha": "4be48fcadb9a7a053dbeb12bdcfa3fc73e0af867",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T15:01:50Z",
-          "message": "chore(release): set `package.json` to 1.234.4\n\n## [1.234.4](https://github.com/promptctl/cc-candybar/compare/v1.234.3...v1.234.4) (2026-11-19)\n\n### Bug Fixes\n\n* **watchers:** follow the revision config discovery read ([#876](https://github.com/promptctl/cc-candybar/issues/876)) ([ba64a50](https://github.com/promptctl/cc-candybar/commit/ba64a50c816d01574c923bb0ef96182d56914d25))\n"
         }
       ]
     },

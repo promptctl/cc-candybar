@@ -30194,11 +30194,25 @@ function emitted(effect, proof) {
 
 // src/click/link-signer.ts
 init_globals();
+
+// src/daemon/foundations/renderer-name.ts
+init_globals();
+var MAIN_RENDERER = "main";
+function rendererNameOf(raw) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+    throw new Error(
+      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
+    );
+  return raw;
+}
+
+// src/click/link-signer.ts
 var LINK_KEY_BYTES = 32;
 var MAC_SPELLING = /^[0-9a-f]{64}$/;
 var LINK_MAC_BYTES = 16;
 var LINK_MAC_SPELLING = /^[A-Za-z0-9_-]{22}$/;
 var LINK_MAC_MARK = "#";
+var SOURCE_VERSION = "v1";
 function transitForm(link) {
   return link.toWellFormed().replace(
     /%(?![0-9A-Fa-f]{2})|[^A-Za-z0-9\-._~!$&'()*+,;=:@/?%]/gu,
@@ -30214,9 +30228,13 @@ function linkMac(key, link) {
     createHmac("sha256", key).update(link).digest().subarray(0, LINK_MAC_BYTES)
   ).toString("base64").replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
-function signLinkWith(key, link) {
+function signLinkWith(key, link, source) {
   const sent = transitForm(link);
-  return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  if (source === void 0)
+    return `${sent}${LINK_MAC_MARK}${linkMac(key, sent)}`;
+  const session = encodeURIComponent(JSON.stringify(source.session));
+  const issued = `${sent}${LINK_MAC_MARK}${SOURCE_VERSION}/${source.renderer}/${session}`;
+  return `${issued}/${linkMac(key, issued)}`;
 }
 function openLinkWith(key, signed) {
   const mark = signed.lastIndexOf(LINK_MAC_MARK);
@@ -30225,13 +30243,36 @@ function openLinkWith(key, signed) {
       kind: "failed",
       reason: "the link carries no signature: the bar did not draw it, or drew it before its links were signed"
     };
-  const link = signed.slice(0, mark);
-  const mac = signed.slice(mark + LINK_MAC_MARK.length);
-  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(import_buffer.Buffer.from(mac), import_buffer.Buffer.from(linkMac(key, link)));
-  return proven ? { kind: "ok", value: link } : {
-    kind: "failed",
-    reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
-  };
+  const proofAt = Math.max(mark, signed.lastIndexOf("/"));
+  const mac = signed.slice(proofAt + 1);
+  const proven = LINK_MAC_SPELLING.test(mac) && timingSafeEqual(
+    import_buffer.Buffer.from(mac),
+    import_buffer.Buffer.from(linkMac(key, signed.slice(0, proofAt)))
+  );
+  if (!proven)
+    return {
+      kind: "failed",
+      reason: "the link's signature does not match what it carries: it was changed after the bar drew it, or another key signed it"
+    };
+  const href = signed.slice(0, mark);
+  if (proofAt === mark) return { kind: "ok", value: { href } };
+  const fields2 = signed.slice(mark + 1, proofAt).split("/");
+  const [version, name, encoded] = fields2;
+  if (fields2.length !== 3 || version !== SOURCE_VERSION || name === void 0 || encoded === void 0)
+    return { kind: "failed", reason: "the link has an unknown frame source" };
+  try {
+    const renderer = rendererNameOf(name);
+    const session = parseSessionId(JSON.parse(decodeURIComponent(encoded)));
+    return session.ok ? {
+      kind: "ok",
+      value: { href, source: { renderer, session: session.id } }
+    } : { kind: "failed", reason: `the link's session ${session.problem}` };
+  } catch (error) {
+    return {
+      kind: "failed",
+      reason: `the link's frame source is malformed: ${String(error)}`
+    };
+  }
 }
 function digest(key, fields2) {
   return createHmac("sha256", key).update(
@@ -30254,12 +30295,13 @@ function linkSigner(key) {
       if (!MAC_SPELLING.test(mac)) return false;
       return timingSafeEqual(import_buffer.Buffer.from(mac, "hex"), digest(key, fields2));
     },
-    signLink: (link) => {
-      let done = signed.get(link);
+    signLink: (link, source) => {
+      const cacheKey = source === void 0 ? `legacy:${link}` : `frame:${source.renderer}\0${source.session}\0${link}`;
+      let done = signed.get(cacheKey);
       if (done === void 0) {
         if (signed.size >= SIGNED_LINKS_HELD) signed.clear();
-        done = signLinkWith(key, link);
-        signed.set(link, done);
+        done = signLinkWith(key, link, source);
+        signed.set(cacheKey, done);
       }
       return done;
     },
@@ -30281,7 +30323,7 @@ function linkSignerOver(key) {
   return {
     sign: (fields2) => held().sign(fields2),
     verify: (fields2, mac) => held().verify(fields2, mac),
-    signLink: (link) => held().signLink(link),
+    signLink: (link, source) => held().signLink(link, source),
     openLink: (signed) => {
       const asked = loaded();
       return asked.kind === "ok" ? asked.value.openLink(signed) : asked;
@@ -30665,19 +30707,6 @@ var Runs = class {
 init_globals();
 init_os();
 var import_node_path5 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/foundations/renderer-name.ts
-init_globals();
-var MAIN_RENDERER = "main";
-function rendererNameOf(raw) {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
-    throw new Error(
-      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
-    );
-  return raw;
-}
-
-// src/daemon/paths.ts
 function xdgEnv(env2, name) {
   const v = env2[name];
   return v && v.length > 0 ? v : void 0;
@@ -49657,7 +49686,9 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
   const encodeFrom = clock.monotonic();
   let resp;
   try {
-    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
+    resp = RENDER_ANSWERS[req.encoding](
+      publish(presented.frame, { renderer: host.name, session })
+    );
   } catch (e) {
     const failure2 = failureOf(e);
     done(presented, `encoding its frame threw: ${failure2.message}`);
@@ -50190,21 +50221,30 @@ function parseClick(url, delivery, links) {
   const opened = links.openLink(url);
   if (opened.kind === "failed")
     return { kind: "refused", problem: opened.reason };
-  const link = parseHandlerUrl(opened.value);
+  const { href, source } = opened.value;
+  const link = parseHandlerUrl(href);
   if (!link.ok) return { kind: "refused", problem: link.problem };
   try {
+    const admitted = admitClick(link.verb, link.value, links);
+    const { click: click2, runEvidence } = admitted;
+    if (source !== void 0 && click2.scope === "session" && click2.session !== source.session)
+      throw new BadVerbArgs(
+        "the link's action and its frame name different sessions"
+      );
     return {
       kind: "link",
-      ...admitClick(link.verb, link.value, links),
-      link: opened.value,
-      delivery
+      click: source !== void 0 && click2.scope === "global" ? { ...click2, session: source.session } : click2,
+      runEvidence,
+      link: href,
+      delivery,
+      ...source === void 0 ? {} : { source }
     };
   } catch (e) {
     if (!(e instanceof BadVerbArgs)) throw e;
     return {
       kind: "refused",
       problem: e.message,
-      signed: { link: opened.value, verb: link.verb }
+      signed: { link: href, verb: link.verb }
     };
   }
 }
@@ -50956,7 +50996,7 @@ async function clickOutcome(parts, req, facts, click2) {
     return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
-    parseClick(url, { kind: "cli" }, parts.linkSigner),
+    routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
     facts,
     click2
   );
@@ -50976,11 +51016,11 @@ function readUrlFrame(frame2, links) {
   return parseClick(url, { kind: "forwarder", urlV }, links);
 }
 function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
-  const read2 = readUrlFrame(frame2, parts.linkSigner);
+  const read2 = routeClick(parts, readUrlFrame(frame2, parts.linkSigner));
   return {
     kind: "url",
     awaitsVerdict: awaitsVerdict(frame2.urlV),
-    verdict: read2.kind === "refused" ? clickReply(badRequest(read2.problem)) : { ok: true, output: "" },
+    verdict: read2.kind === "refused" ? clickReply(read2.failure) : { ok: true, output: "" },
     land: () => clickEvent(
       parts,
       accepted,
@@ -50994,11 +51034,31 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
     })
   };
 }
+function routeClick(parts, read2) {
+  if (read2.kind === "refused")
+    return {
+      kind: "refused",
+      failure: badRequest(read2.problem),
+      signed: read2.signed
+    };
+  const { source } = read2;
+  if (source === void 0) return { ...read2, target: parts.renderer };
+  const target = parts.rendererForClick(source.renderer);
+  return target === void 0 ? {
+    kind: "refused",
+    failure: failureOf(
+      new RendererDown(
+        `renderer ${source.renderer} has no statusline client's bundle`
+      )
+    ),
+    signed: { link: read2.link, verb: read2.click.verb }
+  } : { ...read2, target };
+}
 async function ranClick(parts, read2, facts, click2) {
   switch (read2.kind) {
     case "refused":
       if (read2.signed !== void 0) noteFacts(facts, read2.signed);
-      return badRequest(read2.problem);
+      return read2.failure;
     case "link":
       noteFacts(facts, { link: read2.link });
       return handleClick(
@@ -51010,12 +51070,16 @@ async function ranClick(parts, read2, facts, click2) {
       );
   }
 }
-async function handleClick(parts, { click: admitted, runEvidence }, arrival, facts, click2) {
+async function handleClick(parts, {
+  click: admitted,
+  runEvidence,
+  target
+}, arrival, facts, click2) {
   const { verb } = admitted;
-  const session = admitted.scope === "session" ? admitted.session : null;
-  noteFacts(facts, { verb, sid: session ?? "-" });
+  const session = admitted.session ?? null;
+  noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
   if (session !== null) parts.collector.clicked(session);
-  const delivered = await parts.renderer.answerClick(
+  const delivered = await target.answerClick(
     session,
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
@@ -51024,9 +51088,9 @@ async function handleClick(parts, { click: admitted, runEvidence }, arrival, fac
         kind: "click",
         click: admitted,
         arrival,
-        context: session === null ? null : parts.sessionBook.contextOf(
-          session,
-          parts.frameFeeds.latest(session)
+        context: admitted.scope === "global" ? null : parts.sessionBook.contextOf(
+          admitted.session,
+          parts.frameFeeds.latest(admitted.session)
         )
       }
     }
@@ -67868,10 +67932,10 @@ var failedFeed = (refusal) => {
   const encoded = JSON.stringify(refusal);
   return { resp: encoded, statusline: encoded };
 };
-function encodeFeed(frame2, publish) {
+function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
-  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar)));
-  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff)));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar, source)));
+  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff, source)));
   return { resp, statusline };
 }
 var FrameFeeds = class {
@@ -68030,12 +68094,15 @@ var FrameFeeds = class {
   }
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
-  took(frames) {
+  took(renderer, frames) {
     for (const { session, frame: frame2 } of frames) {
       const watched = this.watched.get(session);
       if (watched === void 0) continue;
       try {
-        watched.last = encodeFeed(frame2, this.deps.publishFrame);
+        watched.last = encodeFeed(frame2, this.deps.publishFrame, {
+          renderer,
+          session
+        });
       } catch (error) {
         const refused2 = renderFailed(error);
         const failed3 = failedFeed(refused2);
@@ -68924,7 +68991,7 @@ function authorizeRun(signer, pending2, captures) {
 // src/daemon/foundations/frame-publication.ts
 init_globals();
 function publishingFrames(signer) {
-  return (wire) => {
+  return (wire, source) => {
     const frame2 = parseFrame(wire);
     return {
       ...frame2,
@@ -68933,9 +69000,10 @@ function publishingFrames(signer) {
         runs: row.runs.map(({ link, ...run2 }) => {
           if (link === void 0) return run2;
           const href = publishedHref(link, signer.sign);
+          const issuer = typeof link !== "string" && link.kind !== "href" ? source : void 0;
           return {
             ...run2,
-            link: isBarLink(href) ? signer.signLink(href) : href
+            link: isBarLink(href) ? signer.signLink(href, issuer) : href
           };
         })
       }))
@@ -86254,7 +86322,7 @@ function runClick(click2, ctx) {
     foldEffects(
       click2.steps,
       ctx.log,
-      (step4) => globalAct(step4, ctx, null),
+      (step4) => globalAct(step4, ctx, click2.session ?? null),
       () => {
       }
     );
@@ -90300,6 +90368,7 @@ function createDaemon(inputs) {
           aggregate();
         },
         frames: (frames) => frameFeeds.took(
+          name,
           frames.filter(({ session }) => nameOf2(session) === name)
         ),
         stored: (writes) => stores.take(writes),
@@ -90419,6 +90488,8 @@ function createDaemon(inputs) {
     limits,
     collector,
     renderer: primary.renderer,
+    // [LAW:single-enforcer] Only a render request binds or starts a bundle.
+    rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor
   };
   fileEvents.subscribe((notice) => {
