@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "99011b4404fa32d0625c7e687de5550d1012e734",
+      "timestamp": "2026-11-19T13:45:11.183Z",
+      "commits": [
+        {
+          "sha": "99011b4404fa32d0625c7e687de5550d1012e734",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T13:43:43Z",
+          "message": "chore(release): set `package.json` to 1.234.1\n\n## [1.234.1](https://github.com/promptctl/cc-candybar/compare/v1.234.0...v1.234.1) (2026-11-19)\n\n### Performance Improvements\n\n* **host:** share physical transcript observations across sessions ([#866](https://github.com/promptctl/cc-candybar/issues/866)) ([6125487](https://github.com/promptctl/cc-candybar/commit/6125487488e90cbd9bd119f83430408afd97f01f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "6eccdbafc42c593c3903a93b3b60da0b04297df0",
@@ -49,21 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:29:09-07:00",
           "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "415c57dbe8f21640a4165b7c3e984bbff858ad50",
-      "timestamp": "2026-11-19T13:37:18.587Z",
-      "commits": [
-        {
-          "sha": "415c57dbe8f21640a4165b7c3e984bbff858ad50",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:36:18-07:00",
-          "message": "refactor(cli): retire standalone config check and lint alias (#867)\n\n* refactor(cli): retire the standalone config check (ibyq.9lr)\n\n* fix(preview): retain real config diagnostics and isolate sample sessions\n\n* docs: clarify the retained preview and render invariants"
         }
       ]
     },
