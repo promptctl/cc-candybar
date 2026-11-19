@@ -532,6 +532,24 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
   try {
     const SID = "doctor-e2e-frames";
     const hints = { claudeConfigDir: claudeDir };
+    // Each run's report is noted on the record of the turn that took its
+    // reading.
+    const doctorLines = (lines: readonly string[]) =>
+      lines.filter((l) => {
+        const fields = fieldsOf(l);
+        return fields.has("doctor") && fields.get("sid") === SID;
+      });
+    // [LAW:no-ambient-temporal-coupling] A run is clicked once the run before
+    // it has reported: a click replaces the run still on its way, which is
+    // then never read, so two clicks a draw apart log one run or two by how
+    // soon the first reading lands, which a loaded runner decides.
+    const reportedRuns = (n: number) =>
+      loggedLines(
+        env,
+        doctorLines,
+        (found) => found.length >= n,
+        `the doctor's run ${n}`,
+      );
     let drawn = 0;
     const draw = () => {
       drawn++;
@@ -555,9 +573,12 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // The config is polled, so the doctor runs once the bar draws the edit.
     writeFileSync(projectConfig, barOf("at rest"));
     await reported(draw, "at rest");
+    await reportedRuns(1);
     await click(daemon, run!);
+    await reportedRuns(2);
     await draw();
     await click(daemon, run!);
+    await reportedRuns(3);
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
@@ -589,13 +610,6 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(menuIdle[0]).toBe("-");
     expect(menuIdle).toContainEqual(expect.stringMatching(/^\d+\.\ds\/120s$/));
     expect(motion).toContain("still");
-    // Each run's report is noted on the record of the turn that took its
-    // reading.
-    const doctorLines = (lines: readonly string[]) =>
-      lines.filter((l) => {
-        const fields = fieldsOf(l);
-        return fields.has("doctor") && fields.get("sid") === SID;
-      });
     expect(
       (
         await loggedLines(
