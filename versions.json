@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "d02a3142e7089783533bf3bcfb9a1f0025c1b8b7",
+      "timestamp": "2026-11-19T16:58:41.996Z",
+      "commits": [
+        {
+          "sha": "d02a3142e7089783533bf3bcfb9a1f0025c1b8b7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:57:28-07:00",
+          "message": "fix(config): share one project decision across renderers and worktrees (#887)\n\n* fix(config): share one project decision across renderers and worktrees\n\n* test(config): cover newly added local settings and plugins with one approval\n\n* fix(config): poll missing targets without rescanning dangling plugin links\n\n* fix(config): retire superseded project decisions with the write\n\n* fix(config): preserve retired decision records outside the search path"
+        }
+      ]
+    },
+    {
       "version": "pr-884",
       "ref": "refs/pull/884/merge",
       "sha": "b54d89295873ff86728df27f6d0983b66bc536ec",
@@ -38,56 +53,6 @@
       ]
     },
     {
-      "version": "pr-887",
-      "ref": "refs/pull/887/merge",
-      "sha": "9a17369cb899e3d9a11e0830201cdca1586a4d58",
-      "timestamp": "2026-11-19T16:49:22.637Z",
-      "commits": [
-        {
-          "sha": "9a17369cb899e3d9a11e0830201cdca1586a4d58",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:48:13Z",
-          "message": "Merge cb495ffa36688931522c1b68ba5943eb1b814da4 into d5df8f6d8a5a3e24c1189a1486241b29febe8053\n"
-        },
-        {
-          "sha": "cb495ffa36688931522c1b68ba5943eb1b814da4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:47:47-07:00",
-          "message": "fix(config): preserve retired decision records outside the search path\n"
-        },
-        {
-          "sha": "8490e8d952b35d642a1051a947eb0c639ad2b099",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:34:28-07:00",
-          "message": "fix(config): retire superseded project decisions with the write\n"
-        },
-        {
-          "sha": "bbb2c6ac4289383af3edf838a2e98fcdaee4cd3e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:21:14-07:00",
-          "message": "fix(config): poll missing targets without rescanning dangling plugin links\n"
-        },
-        {
-          "sha": "6b0966b6a712724c1314f5d42c3bf85a632ae8dc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:12:11-07:00",
-          "message": "test(config): cover newly added local settings and plugins with one approval\n"
-        },
-        {
-          "sha": "2b9f8d0483004e3e0a4030cff4c45c3c330179ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:51:01-07:00",
-          "message": "fix(config): share one project decision across renderers and worktrees\n"
-        }
-      ]
-    },
-    {
       "version": "pr-889",
       "ref": "refs/pull/889/merge",
       "sha": "9ce615eeb7cb8285d0d84c0b506bbf5c13ac71d6",
@@ -106,21 +71,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T09:39:56-07:00",
           "message": "test(daemon): assert source values in delivered pane frames\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "d5df8f6d8a5a3e24c1189a1486241b29febe8053",
-      "timestamp": "2026-11-19T16:34:49.856Z",
-      "commits": [
-        {
-          "sha": "d5df8f6d8a5a3e24c1189a1486241b29febe8053",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:33:47-07:00",
-          "message": "fix(actions): centralize template value binding (#877)\n\nfix(actions): centralize template value binding (ibyq.a8c)"
         }
       ]
     },
