@@ -32,6 +32,8 @@ An open body leads its first row with a single ✕, and later rows lead with a b
 
 Closing a disclosure closes everything open inside it, in the same batch. This happens where all of a verb's session writes pass, so ◁ back restores a closed menu along with what was open in it. Closing the menu also leaves edit mode.
 
+A menu's state key is spelled injectively, and no key is a dot-path prefix of another: a placement's menu and an author's shared key take different leads, because a closing folds every key under the one it closes, and two spellings that meet or nest would share or fold each other's state. A menu edit mode hosts carries edit's namespace, so it lives and dies with the edit.
+
 A group is just another way to write a container with a toggle. Sibling groups that share a key form an accordion, since one key holds one open name. An ancestor and a descendant can't share a key, because one key can't hold both of them open.
 
 ## The settings menu

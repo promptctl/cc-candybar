@@ -197,7 +197,7 @@ describe("a placement is named by its id", () => {
       }`,
       ALLOWED,
     );
-    expect(config.variables["menus.k"]).toBeDefined();
+    expect(config.variables["menus._k"]).toBeDefined();
   });
 
   test("edit mode labels each placement with its id", () => {
@@ -325,23 +325,29 @@ describe("edit mode addresses placements by id", () => {
     children: ids.map(([name, id]) => ({ kind: "segment", name, ...(id && { id }) })),
   });
 
-  test("an insertion keeps the segment's name as its id while it is free, else mints the next", () => {
-    expect(mintPlacement("git", "dir", [tree(["dir"])])).toEqual({ seg: "git" });
-    expect(mintPlacement("git", "git", [tree(["git"])])).toEqual({ seg: "git", id: "git-2" });
-    expect(mintPlacement("git", "git", [tree(["git"], ["git", "git-2"])])).toEqual({
+  // A suffix source that hands out the given suffixes in order.
+  const suffixes = (...xs: string[]) => () => xs.shift()!;
+
+  test("an insertion always mints an explicit id — the segment's name and a fresh suffix — so a placement added after another went away never takes its id", () => {
+    expect(mintPlacement("git", "dir", [tree(["dir"])], suffixes("a1"))).toEqual({
       seg: "git",
-      id: "git-3",
+      id: "git-a1",
     });
   });
 
   test("an insertion's id is free in every tree holding its anchor, since the layer it writes can reach other presets", () => {
     expect(
-      mintPlacement("git", "dir", [tree(["dir"], ["git"]), tree(["dir"], ["git", "git-2"])]),
-    ).toEqual({ seg: "git", id: "git-3" });
+      mintPlacement(
+        "git",
+        "dir",
+        [tree(["dir"], ["git", "git-a1"]), tree(["dir"], ["git", "git-b2"])],
+        suffixes("a1", "b2", "c3"),
+      ),
+    ).toEqual({ seg: "git", id: "git-c3" });
     // A tree without the anchor never receives the insertion.
-    expect(mintPlacement("git", "dir", [tree(["dir"]), tree(["git"])])).toEqual({
-      seg: "git",
-    });
+    expect(
+      mintPlacement("git", "dir", [tree(["dir"]), tree(["git", "git-a1"])], suffixes("a1")),
+    ).toEqual({ seg: "git", id: "git-a1" });
   });
 
   const FILE = `{

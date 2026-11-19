@@ -88,6 +88,7 @@ import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "./helpers/system-clock";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS } from "./helpers/history-step";
+import { EDIT_NS, MENU_NS } from "../src/config/reserved-names";
 
 const S1 = sessionIdOf("s1");
 
@@ -176,8 +177,13 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   let store = new VariableStore(systemTimekeeper);
-  const history = durable.historyFor(sessionState);
-  const base = testVerbContext(sessionState, history, undefined, durable.host);
+  const base = testVerbContext(
+    sessionState,
+    durable.historyFor,
+    undefined,
+    durable.host,
+  );
+  const history = base.history;
   const context = bookedContext(sessionState, sessionId)!;
   const draftText = () =>
     base.edits.revision(context.durable.origin, sessionId)?.snapshot.chain
@@ -864,11 +870,14 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
   test("remove, insert, undo twice and redo twice preview each step without writing the file", async () => {
     const { render, click, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
-    const placed = (target: string) =>
+    // A placement of `seg`: its own name, or the fresh id an insert gave it.
+    const placed = (seg: string) =>
       ownUrls(render()).some((url) =>
         effectsOf(url).some((effect) =>
           effect.verb === "apply-layout-op" &&
-          effect.args[3] === encodeLayoutOp({ op: "remove", target }),
+          new RegExp(`^${encodeLayoutOp({ op: "remove", target: seg })}(-[0-9a-f]{6})?$`).test(
+            String(effect.args[3]),
+          ),
         ),
       );
 
@@ -897,7 +906,7 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     // Open each remaining insertion menu and pick gitPr beside git.
     for (const menuOpenUrl of ownUrls(render()).filter((u) =>
       effectsOf(u).some(
-        (e) => e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
+        (e) => e.verb === "set-state" && String(e.args[1]).startsWith(`${EDIT_NS}${MENU_NS}`),
       ),
     )) {
       await click(menuOpenUrl);

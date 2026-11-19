@@ -72,6 +72,7 @@ import {
   synthesizePlacementMenus,
 } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
+import { refuseMintedKeys } from "./loader/authored-keys.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
 import { resolveActionLayer } from "./action.js";
@@ -1201,6 +1202,8 @@ function validateTopLevel(
     out.helpers = validateHelpers(ctx, raw.helpers);
   if (raw.plugins !== undefined)
     out.plugins = validatePluginRefs(ctx, raw.plugins);
+  // Before any synthesis writes a minted key into these sections.
+  refuseMintedKeys(ctx, out);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
   // parsed: each group collected during the root walk emits its state var +
   // cycle action + toggle segment into the raw sections (so they merge over the

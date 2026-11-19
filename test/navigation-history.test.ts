@@ -23,7 +23,6 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
-import { disclosureNest } from "../src/config/disclosure-nest";
 import { NavigationHistory } from "../src/renderer/navigation-history";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
@@ -71,8 +70,6 @@ function setup() {
     depth: (): number =>
       ctx.navigation.depth(S1, sessionState, {
         gate: ctx.gates.state.gateFor(config),
-        nest: () => disclosureNest(config),
-        edit: null,
       }),
     // The session's config reloads as `next`.
     reload: (next: DslConfig): void => {
@@ -135,7 +132,7 @@ describe("back", () => {
     const store = new SessionState();
     const history = new NavigationHistory();
     const config = configWithTabs("a", "b");
-    const context = { gate: stateGate(config), nest: () => disclosureNest(config), edit: null };
+    const context = { gate: stateGate(config) };
     const choose = store.setBatch.bind(store);
     const visit = history.begin(store, choose);
     visit.choose(S1, [{ key: MENU, value: "open" }], () => context);

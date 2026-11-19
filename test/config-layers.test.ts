@@ -184,7 +184,7 @@ describe("a write to a layer above the user's", () => {
         segment: "model",
         anchor: "mine",
         relation: "after",
-      },
+      }, () => "x1",
     );
     const written = fs.readFileSync(projectFile, "utf8");
     expect(written).toContain("mine");
@@ -612,7 +612,7 @@ describe("a project layer inserting into the user's row", () => {
         applyLayoutOp(EDITS_IN_PLACE, projectLayer(), "presets.default.root", {
           op: "remove",
           target: "theirs",
-        }),
+        }, () => "x1"),
       ).toThrow();
       expect(fs.readFileSync(userFile, "utf8")).toBe(before);
     } finally {
@@ -795,9 +795,8 @@ describe("a project layer inserting into the user's row", () => {
     expect(textOf(outcome.rendered)).not.toContain("THEIRSEG");
   });
 
-  test("a clash only the cell brings refuses the cell, at its entry, and the user's bar draws", () => {
-    // `p-q` and `p_q` are distinct ids whose menus collapse to one state
-    // key: the clash exists only once the repo's cell is placed.
+  test("a cell whose id differs from the user's only in punctuation is placed beside it", () => {
+    // `p-q` and `p_q` are distinct ids, so their menus hold distinct state.
     fs.writeFileSync(
       userFile,
       `{
@@ -814,12 +813,9 @@ describe("a project layer inserting into the user's row", () => {
       `x: { template: "X" }`,
     );
     const { drawn, warnings } = barLoad();
-    expect(drawn("default").filter((n) => n === "m")).toHaveLength(1);
+    expect(drawn("default").filter((n) => n === "m")).toHaveLength(2);
     expect(drawn("default")).toContain("mine");
-    const refused = warnings.filter((w) => w.includes("insert.0"));
-    expect(refused).toHaveLength(1);
-    expect(refused[0]).toContain(projectFile);
-    expect(refused[0]).toContain("normalize to the same state key");
+    expect(warnings.filter((w) => w.includes("insert.0"))).toEqual([]);
   });
 
   test("an error the user's own bar has still refuses it, with or without the repo's cells", () => {

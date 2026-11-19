@@ -192,7 +192,8 @@ export function placementIds(tree: LayoutNode): string[] {
   );
 }
 
-// The id a new placement of `segment` takes beside the ids `taken`: the
+// A free id for a placement of `segment` beside the ids `taken`, which the
+// load's duplicate-id message suggests: the
 // segment's name while it is free, else the first free `<name>-<n>`, n from 2.
 export function freePlacementId(
   segment: string,

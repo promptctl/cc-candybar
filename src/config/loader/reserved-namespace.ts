@@ -8,35 +8,11 @@
 // here now, parameterized by the prefix and a human description of what
 // synthesizes it, so the two body-kinds share one enforcer [LAW:single-enforcer].
 
-import { ident } from "../ident.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import type { RawDslConfig } from "../dsl-types.js";
 import { findKeyLine, keyLocator } from "./diagnostics.js";
 import { scopeOf } from "./plugin-scope.js";
-import { RESERVED_NAMESPACES } from "../reserved-names.js";
 import { PAYLOAD_INPUTS } from "../payload-inputs.js";
-
-// [LAW:one-source-of-truth] The same reservation, asked in `ident()` SPACE — the
-// question an authored name that never becomes a declaration has to answer. A
-// `{{ menu }}` accordion key is such a name: it is a template argument, so
-// `reservedNamespaceCollisions` below (which walks declaration sections) cannot
-// see it, and `menuStateKey` collapses it through `ident()` before it becomes the
-// state key. That collapse is where the reservation leaked: `candybar.pickers`,
-// `candybar-pickers` and `candybar_pickers` all collapse to `candybar_pickers`,
-// so all three derived the state key the settings menu's own picker accordion
-// mints and JOINED it — opening a user menu closed the settings picker, with no
-// error naming the cause (brandon-menus-du8).
-//
-// Comparing in ident() space is what closes the CLASS rather than a spelling
-// [LAW:behavior-not-structure]: `ident()`'s codomain is `[A-Za-z0-9_]*`, so an
-// authored name can only collide with a synthesized `ns + x` when its own
-// collapse starts with `ident(ns)`. Testing the authored spelling for a leading
-// `"candybar."` — the check the reviewer proposed — misses two of those three.
-// Returns the namespace, so the caller's message can name what owns it.
-export function reservedNamespaceOf(name: string): string | undefined {
-  const collapsed = ident(name);
-  return RESERVED_NAMESPACES.find((ns) => collapsed.startsWith(ident(ns)));
-}
 
 // [LAW:no-silent-failure] Reject every user name under the reserved prefix across
 // all three declaration sections (a synthesized disclosure lands in each), before

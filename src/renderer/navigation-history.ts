@@ -3,11 +3,11 @@
 // installs a destination as state and never invokes the action that drew it.
 
 import { observable, runInAction } from "mobx";
-import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode.js";
+import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "../renderer-interface/history-storage";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
-import type { DisclosureNest, StateWrite } from "../config/disclosure-nest";
+import type { StateWrite } from "../config/disclosure-nest";
 import type { SessionStateRW } from "../renderer-interface/session-state";
 import type { Gate } from "../daemon/foundations/validator-registry";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
@@ -18,13 +18,10 @@ import type { SessionId } from "../daemon/foundations/session-id";
 // page cursors use the same representation as built-in menus.
 export interface MenuContext {
   readonly gate: Gate;
-  readonly nest: () => DisclosureNest;
-  readonly edit: symbol | null;
 }
 
 interface MenuView {
   readonly values: ReadonlyMap<string, string>;
-  readonly edit: MenuContext["edit"];
 }
 
 interface Visit {
@@ -57,7 +54,7 @@ const menuKeys = new WeakMap<Gate, readonly string[]>();
 function capture(
   store: SessionStateRW,
   sid: SessionId,
-  { gate, edit }: MenuContext,
+  { gate }: MenuContext,
 ): MenuView {
   let keys = menuKeys.get(gate);
   if (keys === undefined) {
@@ -69,7 +66,7 @@ function capture(
     const value = store.get(sid, key);
     if (value !== null) values.set(key, value);
   }
-  return { values, edit };
+  return { values };
 }
 
 function movedKeys(from: MenuView, to: MenuView): string[] {
@@ -78,25 +75,10 @@ function movedKeys(from: MenuView, to: MenuView): string[] {
   );
 }
 
-// An edit-only member is reachable only in the same open transaction.
-// A member on the same key outside edit mode keeps its ordinary meaning.
-function inView(
-  view: MenuView,
-  context: MenuContext,
-  key: string,
-): string | undefined {
-  const value = view.values.get(key);
-  if (value === undefined || view.edit === context.edit) return value;
-  const nested = context
-    .nest()
-    .inside(EDIT_MODE_REF)
-    .find((at) => at.key === key);
-  return nested === undefined || nested.outside.has(value) ? value : undefined;
-}
-
 // [LAW:single-enforcer] The search supplies both Back and its displayed
 // depth. An overwritten control or an invalid destination skips its visit.
-// Values that belong to a different edit draft leave this projection.
+// A closed edit's own state is no value the session holds, so a step that
+// moved it is never one the session can go back to.
 function previous(
   timeline: Timeline,
   current: MenuView,
@@ -114,8 +96,8 @@ function previous(
     const visit = timeline.visits[cursor]!;
     const keys = movedKeys(visit.from, visit.to);
     const step = keys.flatMap((key) => {
-      const from = inView(visit.from, context, key);
-      const to = inView(visit.to, context, key);
+      const from = visit.from.values.get(key);
+      const to = visit.to.values.get(key);
       return from === to ? [] : [{ key, from, to }];
     });
     if (
@@ -133,7 +115,7 @@ function previous(
       if (from === undefined) values.delete(key);
       else values.set(key, from);
     }
-    destination ??= { values: new Map(values), edit: context.edit };
+    destination ??= { values: new Map(values) };
     depth++;
   }
   return { destination, depth, invalid };

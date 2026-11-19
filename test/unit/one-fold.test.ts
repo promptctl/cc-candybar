@@ -61,9 +61,10 @@ describe("no declared name sits under another", () => {
     expect(nested(built)).toEqual([]);
   });
 
-  test("an accordion key that collapses to a placement id is refused, naming both", () => {
-    expect(() =>
-      overDefault(`{
+  // Menu and accordion keys are spelled prefix-free, so a shared key and a
+  // placement's own menus never nest, whatever the names.
+  test("an accordion key spelled like a placement id loads beside that placement's own menu", () => {
+    const config = overDefault(`{
         actions: {
           applyTheme: { set: "theme", from: "themes" },
           applyStyle: { set: "style", from: "styles" },
@@ -73,22 +74,20 @@ describe("no declared name sits under another", () => {
           other: { template: '{{ menu "applyStyle" "style" (dict "key" "themeMenu") }}' },
         },
         root: { h: ["themeMenu", "other"] },
-      }`),
-    ).toThrow(
-      /"menus\.themeMenu\.applyTheme" is declared under the variable "menus\.themeMenu"/,
-    );
+      }`);
+    expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
+    expect(config.variables["menus._themeMenu"]).toBeDefined();
   });
 
-  test("a user segment named like a settings accordion key, holding a menu, is refused", () => {
-    expect(() =>
-      overDefault(`{
+  test("a user segment named like a settings accordion key, holding a menu, loads", () => {
+    const config = overDefault(`{
         actions: { applyTheme: { set: "theme", from: "themes" } },
         segments: { candybar_gearPickers: { template: '${MENU}' } },
         root: { h: ["candybar_gearPickers"] },
-      }`),
-    ).toThrow(
-      /"menus\.candybar_gearPickers\.applyTheme" is declared under the variable "menus\.candybar_gearPickers"/,
-    );
+      }`);
+    expect(
+      config.variables["menus.candybarZ00005fgearPickers.applyTheme"],
+    ).toBeDefined();
   });
 
   test("a user variable `menus` beside a placed menu is refused", () => {

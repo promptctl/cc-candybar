@@ -33,6 +33,7 @@ import {
   DOOR_GLYPH,
 } from "../../../src/config/disclosure";
 import { effectsOf } from "../../helpers/click";
+import { sharedMenuStateKey } from "../../../src/config/menu-keys";
 
 jest.setTimeout(30_000);
 
@@ -138,7 +139,7 @@ describe("brandon-theme-picker-bgw.etd: a preset pick leaves the picker open", (
         daemon,
         urlWriting(
           await bar(),
-          "menus.candybar_pickers",
+          sharedMenuStateKey("candybar.pickers"),
           "candybar.apply.preset",
         ),
       );

@@ -135,7 +135,11 @@ describe("a link says in words what its click does", () => {
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "edit.menus.x", "closed"] },
-      "close edit.menus.x",
+      "close x",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "edit.configure", "closed"] },
+      "close edit.configure",
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "prFilter", "closed"] },

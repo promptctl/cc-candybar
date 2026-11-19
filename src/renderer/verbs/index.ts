@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { EditFinish, EditTransactions } from "../edit-transaction.js";
 import {
   EDIT_MODE_ARRANGE,
@@ -74,19 +75,12 @@ import type {
   NavigationTurn,
 } from "../navigation-history";
 import {
-  placementId,
   settingSpelling,
-  walkNodes,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
+import { PLACEMENT_DRAFT_NS } from "../../config/loader/edit-mode";
 import {
   durableLanding,
   placementDrafts,
@@ -102,7 +96,6 @@ import {
   SETTINGS,
 } from "../../config/setting-projections";
 import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
@@ -605,8 +598,6 @@ function menuContext(
 ): MenuContext {
   return {
     gate: ctx.gates.state.gateFor(config),
-    nest: () => disclosureNest(config),
-    edit: ctx.edits.draft(sid)?.navigationScope ?? null,
   };
 }
 
@@ -975,47 +966,6 @@ const resetConfig: VerbHandler = (args, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
-  before: DslConfig,
-  after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(preset, placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
-): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
-}
-
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -1033,8 +983,7 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     args: [key = "", opToken = ""],
   } = configArgs("apply-layout-op", args);
   const origin = sessionOrigin(ctx);
-  const before = ctx.configFor(origin);
-  const gate = ctx.gates.config.gateFor(before);
+  const gate = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
@@ -1049,26 +998,15 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const { placed, config } = applyLayoutOpToFile(
-    editStore(ctx, sid),
-    into,
-    key,
-    op,
+  // [LAW:effects-at-boundaries] The click draws the new placement's suffix.
+  const placed = applyLayoutOpToFile(editStore(ctx, sid), into, key, op, () =>
+    randomBytes(3).toString("hex"),
   );
-  // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the config the write's own load proved, and released in the
-  // same click, so its undo brings the placement and its drafts back.
-  // The session state the edit discards — the fact its log line carries.
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
-  for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} (session=${sid})`,
   );
 };
 
@@ -1370,8 +1308,12 @@ function journaled<C extends DaemonContext>(
       failed.push(e);
     }
     try {
-      const writes = journal.writes(sid);
-      const mode = writes?.get(EDIT_MODE_KEY);
+      const mode = journal.writes(sid)?.get(EDIT_MODE_KEY);
+      // The edit opens before the click that opened it lands, so that
+      // click's writes to edit mode's keys are the edit's first.
+      const entering =
+        edit === undefined && mode === EDIT_MODE_ARRANGE && origin !== null;
+      if (entering) ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
       let moved = false;
       if (edit === undefined) journal.commit();
       else if (saved !== null) saved.commit();
@@ -1381,11 +1323,10 @@ function journaled<C extends DaemonContext>(
           edit !== undefined &&
           (saved !== null || (mode !== undefined && mode !== EDIT_MODE_ARRANGE))
         ) {
+          if (saved === null) edit.leave();
           ctx.edits.close(sid);
           ctx.editViewChanged(sid);
-        } else if (edit === undefined && mode === EDIT_MODE_ARRANGE) {
-          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+        } else if (entering) {
           ctx.editViewChanged(sid);
         } else if (moved) {
           ctx.edits.changed(sid);

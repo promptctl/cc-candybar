@@ -14,7 +14,7 @@
 // root. This module owns only the op's shape, its wire codec, and the id an
 // insertion mints.
 
-import { freePlacementId, placementIds, type LayoutNode } from "./dsl-types.js";
+import { placementIds, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
 // ships. Both address position by placement ID, never by index: `target` and
@@ -68,23 +68,30 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
   return null;
 }
 
-// What an insertion writes into the layout: the bare segment name — whose id
-// is that name — while no placement already holds it, else the segment under
-// the first free `<name>-<n>`, n from 2. Ids are unique per tree
-// (cross-ref.ts), so the insertion must never mint one already taken.
-export type NewPlacement =
-  | { readonly seg: string }
-  | { readonly seg: string; readonly id: string };
+// What an insertion writes into the layout: the segment under an explicit id
+// of its own.
+export interface NewPlacement {
+  readonly seg: string;
+  readonly id: string;
+}
 
-// [LAW:single-enforcer] THE id an insertion mints, free in every tree the
-// insertion reaches. The layer it writes (`root.rows.<row>`, a shared
-// fragment) can reach presets other than the one clicked — and the new
+// [LAW:single-enforcer] THE id an insertion mints: the segment's name and a
+// fresh suffix, free in every tree the insertion reaches. Session state (an
+// open menu, a configure panel, a draft, a `✚` beside it) is keyed by
+// placement id in every session sharing the config, so a placement added
+// after another went away, by a click, an undo or a hand edit, must not take
+// that one's id and wear what it left; nothing releases state on removal, so
+// identity is what keeps them apart. The layer it writes (`root.rows.<row>`, a
+// shared fragment) can reach presets other than the one clicked, and the new
 // placement lands beside `anchor`, so the trees it reaches are exactly the
 // trees that hold `anchor`.
+// [LAW:effects-at-boundaries] The suffix is the caller's: a click draws it at
+// random, a test hands its own.
 export function mintPlacement(
   segment: string,
   anchor: string,
   trees: readonly LayoutNode[],
+  suffix: () => string,
 ): NewPlacement {
   const taken = new Set(
     trees
@@ -92,6 +99,7 @@ export function mintPlacement(
       .filter((held) => held.includes(anchor))
       .flat(),
   );
-  const id = freePlacementId(segment, taken);
-  return id === segment ? { seg: segment } : { seg: segment, id };
+  let id = `${segment}-${suffix()}`;
+  while (taken.has(id)) id = `${segment}-${suffix()}`;
+  return { seg: segment, id };
 }
