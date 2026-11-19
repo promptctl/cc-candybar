@@ -18,6 +18,7 @@ import { systemTimekeeper } from "../src/time";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
 import { loadChain } from "./helpers/discovered-load";
+import { contentOfText } from "../src/config/config-snapshot";
 import type { LayerRole } from "../src/config/layer-role";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -233,8 +234,10 @@ describe("a write to a layer above the user's", () => {
     const staged = new Map<string, string>();
     const click = {
       read: (file: string) =>
-        staged.get(file) ??
-        (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null),
+        contentOfText(
+          staged.get(file) ??
+            (fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null),
+        ),
       record: (file: string, _before: string | null, after: string) => {
         staged.set(file, after);
       },
@@ -244,6 +247,29 @@ describe("a write to a layer above the user's", () => {
     expect(() =>
       writeValues(click, projectLayer("user"), [["menuGlyph", "Q"]]),
     ).toThrow(/would change nothing on the bar/);
+  });
+
+  test("a user-layer write refuses an unreadable neighbouring layer before recording it", () => {
+    const layer = projectLayer("user");
+    const before = fs.readFileSync(userFile, "utf8");
+    const record = jest.fn();
+    const target = layer.snapshot.chain.find(({ role }) => role === "project");
+    expect(target).toBeDefined();
+    expect(() =>
+      writeValues(
+        {
+          read: (file) =>
+            file === target?.path
+              ? { kind: "unreadable", error: "EACCES" }
+              : EDITS_IN_PLACE.read(file),
+          record,
+        },
+        layer,
+        [["menuGlyph", "Q"]],
+      ),
+    ).toThrow(/\.cc-candybar\.json5 could not be read \(EACCES\)/);
+    expect(record).not.toHaveBeenCalled();
+    expect(fs.readFileSync(userFile, "utf8")).toBe(before);
   });
 
   test("a write over a layer beneath that does not load is refused, naming why", () => {

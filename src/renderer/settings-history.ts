@@ -47,7 +47,8 @@ import {
   applyChanges,
   diffChanges,
 } from "../config/config-changes.js";
-import type { ConfigWrites } from "./config-writes.js";
+import { requireLayerText, type ConfigWrites } from "./config-writes.js";
+import { contentOfText, type LayerContent } from "../config/config-snapshot.js";
 import type {
   StoredState,
   StoreWrite,
@@ -93,7 +94,7 @@ export type ConfigFiles = Pick<
   readonly prove: (
     file: string,
     text: string | null,
-    read: (file: string) => string | null,
+    read: (file: string) => LayerContent,
   ) => void;
 };
 
@@ -338,13 +339,17 @@ export class SettingsHistory {
     // Each file is proved between the others as the step leaves them: a step
     // that wrote two layers is only ever loaded whole.
     const stepTexts = new Map(files.map(({ file, text }) => [file, text]));
-    const read = (file: string): string | null => {
+    const read = (file: string): LayerContent => {
       const text = stepTexts.get(file);
-      return text === undefined ? click.files.read(file) : text;
+      return text === undefined ? click.files.read(file) : contentOfText(text);
     };
     for (const { file, text } of files) click.files.prove(file, text, read);
     for (const { file, text } of files)
-      click.files.land(file, click.files.read(file), text);
+      click.files.land(
+        file,
+        requireLayerText(file, click.files.read(file)),
+        text,
+      );
     for (const s of stepped)
       if (s.kind === "session")
         if (s.value === null) click.held.clear(sessionId, s.key);
@@ -496,7 +501,7 @@ function stepOf(
       what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`,
     };
   const applied = applyChanges(
-    click.files.read(file),
+    requireLayerText(file, click.files.read(file)),
     diffChanges(change[from], change[to]),
   );
   return applied.kind === "applied"

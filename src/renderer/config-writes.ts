@@ -18,7 +18,11 @@ import {
   DaemonClosing,
 } from "../daemon/foundations/verb-error.js";
 import type { RepoAnswer } from "../config/loader/repo-gate.js";
-import type { Layer } from "../config/config-snapshot.js";
+import {
+  contentOfText,
+  type Layer,
+  type LayerContent,
+} from "../config/config-snapshot.js";
 import type { RenderOrigin } from "../config-hint.js";
 import type { LayerRole } from "../config/layer-role.js";
 import type {
@@ -55,6 +59,24 @@ export type Landed = Landing & { readonly outcome: EffectOutcome };
 export interface ClickLayers {
   readonly origin: RenderOrigin;
   readonly chain: readonly Layer[];
+}
+
+// [LAW:no-silent-failure] Change algebra accepts text or absence. Refuse
+// an unreadable layer before handing it either value.
+export function requireLayerText(
+  file: string,
+  content: LayerContent,
+): string | null {
+  switch (content.kind) {
+    case "absent":
+      return null;
+    case "text":
+      return content.text;
+    case "unreadable":
+      throw new BadVerbArgs(
+        `refused: ${file} could not be read (${content.error})`,
+      );
+  }
 }
 
 // No click is open: nothing reads a layer.
@@ -104,15 +126,13 @@ export class ConfigWrites {
     this.layers = null;
   }
 
-  // [LAW:one-source-of-truth] `file` as the open click left it: its last
-  // write, else the text its origin's snapshot holds, which every click ahead
-  // of it moved. A layer that could not be read is no layer here, as it is
-  // none of the merge.
-  read(file: string): string | null {
+  // [LAW:one-source-of-truth] Use a click's own overlay where it already
+  // wrote, and the origin's held layer otherwise.
+  read(file: string): LayerContent {
     const written = this.open.get(file);
-    if (written !== undefined) return written.after;
-    const { content } = this.layerAt(file);
-    return content.kind === "text" ? content.text : null;
+    return written === undefined
+      ? this.layerAt(file).content
+      : contentOfText(written.after);
   }
 
   // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
