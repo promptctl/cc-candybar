@@ -29224,11 +29224,8 @@ var FORGE_CLI = {
   github: { cli: "gh", repoEnv: "GH_REPO" },
   gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
 };
-var GIT_REPOSITORY_LOCAL_ENV = [
+var GIT_LOCATING_ENV = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_CONFIG",
-  "GIT_CONFIG_PARAMETERS",
-  "GIT_CONFIG_COUNT",
   "GIT_OBJECT_DIRECTORY",
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -29242,16 +29239,9 @@ var GIT_REPOSITORY_LOCAL_ENV = [
   "GIT_COMMON_DIR"
 ];
 var REPOSITORY_SCOPED_ENV = [
-  ...GIT_REPOSITORY_LOCAL_ENV,
+  ...GIT_LOCATING_ENV,
   ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
 ];
-function withoutRepositoryScoped(env2) {
-  return Object.fromEntries(
-    Object.entries(env2).filter(
-      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
-    )
-  );
-}
 
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
@@ -29280,8 +29270,17 @@ function checkRateLimit(lastStartAt, category, now2) {
   if (sinceLastMs >= minIntervalMs) return { allowed: true };
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
+function inheritedEnv(scope) {
+  return Object.fromEntries(
+    Object.entries(scope.inherited).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
+    )
+  );
+}
 function childEnv(scope, opts) {
-  const env2 = { ...opts.environment ?? scope.inherited };
+  const env2 = {
+    ...opts.environment ?? inheritedEnv(scope)
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -29392,7 +29391,7 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: state.scope.inherited,
+      env: inheritedEnv(state.scope),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -30000,12 +29999,6 @@ function launcherWithState(owner, clock, spawner) {
       signal: new AbortController().signal,
       now: () => instantOf(new Date(clock.now())),
       ...owner,
-      // [LAW:single-enforcer] The owner's environment is whichever shell
-      // spawned it, so the variables scoped to that shell's repository (a git
-      // hook's GIT_DIR, a vcsh shell's GIT_WORK_TREE, GH_REPO) are removed
-      // once, here, and no child inherits them: a child's repository is its
-      // working directory's. The owner's own environment is not edited.
-      inherited: withoutRepositoryScoped(owner.inherited),
       clock
     },
     lastStartAt: /* @__PURE__ */ new Map(),
@@ -66264,7 +66257,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.234.1";
+var PACKAGE_VERSION = "1.234.2";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -90025,13 +90018,7 @@ function createDaemon(inputs) {
       ),
       boot: () => ({
         stored: stores.current(),
-        // The renderer is a child of this daemon, so its view of the
-        // environment lacks the repository-scoped variables as its process's
-        // does.
-        host: {
-          ...host,
-          env: plainEnvironment(withoutRepositoryScoped(host.env))
-        },
+        host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes: memoryLimitBytes2
       }),
       node: bundle.node
