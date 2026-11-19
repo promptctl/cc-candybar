@@ -2,77 +2,34 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-835",
-      "ref": "refs/pull/835/merge",
-      "sha": "577b02b364458727ff0e1bf5e438dda6f377b35a",
-      "timestamp": "2026-11-19T09:09:07.140Z",
-      "commits": [
-        {
-          "sha": "577b02b364458727ff0e1bf5e438dda6f377b35a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:07:51Z",
-          "message": "Merge bbbb4b8fc08b42e45157a24bab727501a79c728d into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
-        },
-        {
-          "sha": "bbbb4b8fc08b42e45157a24bab727501a79c728d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:06:51-07:00",
-          "message": "fix(state): a session file copies its snapshot once, inside its storage, and each kind's parse answers as an Asked (px80)\n\n- Each kind's parse returns `Asked<V>`; the local result type is gone.\n- `SessionFile.save` takes its own copy, since the landing's identity check\n  depends on it; the callers' copies are gone, and the history's immediate\n  write needs none. The storage contracts say what each storage does.\n- A lone history the byte bound trims to nothing is removed, not kept.\n- Retired keys are reported once per session, kept or dropped.\n- The JSON object checks use the existing plain-object check.\n- The frames stream's stdin parse claims only the session id and the line\n  as read; the hook data is still forwarded for the daemon to parse.\n- Comments name the record assignment sites and the file's record.\n"
-        },
-        {
-          "sha": "9ab8b355a271fdfe2fe948cc6c1ff51ebd8ad82c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:56:46-07:00",
-          "message": "fix(state): a session file's load catches only its JSON, says what it loaded, and drops what a record cannot hold (px80)\n\n- The per-session load catches only the read and the JSON parse: a throw in\n  a value's parse or the logger stays a throw.\n- Each kind's parse returns a typed refusal naming the field that failed,\n  and the dropped-entry line names it.\n- The history parse is pure: it returns the retired keys with what stays,\n  and a history left holding nothing is dropped by name, so it takes none\n  of the bound's places.\n- The session-id parse refuses `__proto__`, which an assignment into a\n  record takes as its prototype; inherited names like `constructor` are\n  ordinary own keys and pass.\n- Every load logs one line: no file, or the sessions it loaded and dropped.\n- The history file keeps its own immediate writer, cited: its step is on\n  disk before the click answers, and its failure is said on the bar.\n- The boot's record order cites the session-id parse it depends on.\n"
-        },
-        {
-          "sha": "3ef6abedefa953e372624ef47ae2002c1bfb927e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:45:09-07:00",
-          "message": "fix(state): every per-session file loads entry by entry through one loader, and its storage takes the ordered sessions (px80)\n\nThe settings history's file loads through the same session-keyed loader as\nthe session book and session state, so a history of the wrong shape drops\nthat session alone, by name, as a refused key does, and the three files say\na corrupt or unreadable file the same way. Each storage's save takes the\nordered sessions, so the host's sessions become a record only at the file.\n\nThe frames stream's stdin parse takes its session id through the session-id\ncheckpoint. The refusal of an array index states the rule: it is never a\nsession id.\n\nThe order tests save through each store's own file and read it back in a\nfresh store, with number-like ids among UUIDs.\n"
-        },
-        {
-          "sha": "4bb5819ac8d82d0a4ebfc53a31db0b72e722e884",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:34:45-07:00",
-          "message": "fix(state): a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80)\n\nThe session book, session state and settings history keep recency in a Map\nand persist it through a record keyed by session id. A record lists\ncanonical array-index keys (\"7\") first, so an integer-like id jumped to the\noldest end on a round trip and the bound could evict it while newest.\n\nThe session-id parse now refuses exactly the canonical array indices (an\ninteger from 0 to 2^32 - 2 in its canonical spelling), naming the id, at every\ndoor: render, subscribe, click, and each file's load, which drops the entry by\nname. The files keep their keyed form.\n"
-        }
-      ]
-    },
-    {
       "version": "pr-808",
       "ref": "refs/pull/808/merge",
-      "sha": "bce49db124dbd51c05ee04e46cf3eada9116e8d2",
-      "timestamp": "2026-11-19T09:03:26.224Z",
+      "sha": "565297bc5ad531e20862f40bb57808d69d854770",
+      "timestamp": "2026-11-19T09:18:00.597Z",
       "commits": [
         {
-          "sha": "bce49db124dbd51c05ee04e46cf3eada9116e8d2",
+          "sha": "565297bc5ad531e20862f40bb57808d69d854770",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:02:21Z",
-          "message": "Merge 54bfbb1012d1d7fce31946704230e451ddc2c928 into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
+          "timestamp": "2026-11-19T09:16:53Z",
+          "message": "Merge d287ba46902cc183ae5c36df1af09c2f22063cae into 8c7834d2683fae353cbd945678cc9300fdd1c5ce\n"
         },
         {
-          "sha": "54bfbb1012d1d7fce31946704230e451ddc2c928",
+          "sha": "d287ba46902cc183ae5c36df1af09c2f22063cae",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:59:07-07:00",
           "message": "fix(daemon): a failure too big to send is drawn in its lane's shape and recorded as the client got it, and a refusal ends the phase with the socket (df7i)\n"
         },
         {
-          "sha": "bfce199dc3ddec582ed947c9fd2fbe40057a0d2d",
+          "sha": "4230c030567bc4984a44cfe140506a32a8c62816",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T15:27:22-07:00",
           "message": "fix(daemon): every move of a connection is one transition of its phase, and a frame past the cap is pushed as RENDER_FAILED on a stream that goes on (df7i)\n"
         },
         {
-          "sha": "5624e9e00a45f59ee7e6426e0da45dd29ed17022",
+          "sha": "2b8664c907600009261eb1f0209a09e164321c24",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-18T09:05:22-07:00",
