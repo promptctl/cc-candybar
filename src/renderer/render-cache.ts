@@ -464,14 +464,17 @@ export interface CacheEntry {
   readonly state: DslRenderState;
 }
 
-// [LAW:one-source-of-truth] State travels with the revision and approval it
-// was built from. A failed attempt can move the latest snapshot without
-// moving either fact about the selected build. A fallback has no revision.
-interface SelectedState {
-  readonly state: DslRenderState;
-  readonly digest: string | null;
-  readonly repo: RepoQuestion | null;
-}
+// [LAW:types-are-the-program] An authored build carries its revision and
+// approval through a failed reload. A bundled build follows each current
+// observation, with no earlier authored revision or approval to retain.
+type SelectedState =
+  | {
+      readonly kind: "authored";
+      readonly state: DslRenderState;
+      readonly digest: string;
+      readonly repo: RepoQuestion | null;
+    }
+  | { readonly kind: "bundled"; readonly state: DslRenderState };
 
 // [LAW:no-ambient-temporal-coupling] A state's lifetime is a fact the cache
 // owns (brandon-unfiled-3248.6rc): the renders holding it across their
@@ -900,17 +903,16 @@ export function loadOrigin(
   return settle(snapshot, resolved.warnings, attempt);
 }
 
-// [LAW:single-enforcer] What a config that fails its FIRST load renders: the
-// bundled default, over the plugins discovery found. The bar already carries
-// the failed load's advisories, and the default earns none by program invariant.
+// [LAW:single-enforcer] Without an allowed last-good build, render the bundled
+// default with the currently discovered plugins. The bar carries the authored
+// load's diagnostic independently of this fallback.
 function fallbackState(
   cwd: string,
   snapshot: ConfigSnapshot,
   deps: StateDeps,
+  served: DslRenderState | null,
 ): DslRenderState {
-  // The failed load's approved project: the seed draws the plugins it ships,
-  // as the load would have.
-  const built = loadOrigin(cwd, { ...snapshot, chain: [] }, deps);
+  const built = loadOrigin(cwd, { ...snapshot, chain: [] }, deps, served);
   // [LAW:no-silent-failure] The default validates by program invariant
   // (test/default-dsl-config.test.ts); a throw is a daemon bug.
   if (built.kind === "failed")
@@ -1734,7 +1736,7 @@ export class RenderCache<
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
       .map(([, { origin, selected }]) => ({
         origin,
-        digest: selected.digest,
+        digest: selected.kind === "authored" ? selected.digest : null,
       }));
   }
 
@@ -1778,26 +1780,37 @@ export class RenderCache<
   ): { readonly loaded: LoadOutcome; readonly selected: SelectedState } {
     if (this.closed) throw new Error("render cache used after close");
     const retained =
-      previous !== null &&
+      previous?.kind === "authored" &&
       retainsConfig(origin.target, previous.repo, snapshot.repo)
         ? previous
         : null;
+    const bundled = previous?.kind === "bundled" ? previous : null;
     const { cwd } = origin;
     const { repo } = snapshot;
     const loaded = loadOrigin(
       cwd,
       snapshot,
       this.deps,
-      retained?.state ?? null,
+      (retained ?? bundled)?.state ?? null,
     );
     if (loaded.state !== null)
-      return { loaded, selected: { state: loaded.state, digest, repo } };
-    const selected = retained ?? {
-      state: fallbackState(cwd, snapshot, this.deps),
-      digest: null,
-      repo,
+      return {
+        loaded,
+        selected: { kind: "authored", state: loaded.state, digest, repo },
+      };
+    if (retained !== null) return { loaded, selected: retained };
+    // [LAW:carrying-cost] The same load identity keeps the bundled state and
+    // views when an authored edit only changes the diagnostic.
+    const state = fallbackState(
+      cwd,
+      snapshot,
+      this.deps,
+      bundled?.state ?? null,
+    );
+    return {
+      loaded,
+      selected: bundled?.state === state ? bundled : { kind: "bundled", state },
     };
-    return { loaded, selected };
   }
 
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
