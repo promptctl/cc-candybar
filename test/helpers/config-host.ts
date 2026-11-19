@@ -64,7 +64,7 @@ export function configHost(
   world: {
     readonly locations: Locations;
     readonly stateDir: string;
-    readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+    readonly watchers: Pick<WatcherRegistry, "batch">;
     readonly log?: DaemonLogger;
   },
 ): ConfigHost {
@@ -135,7 +135,7 @@ export class DiscoveringCache<
       ...deps
     }: RenderDeps<S, F> & {
       readonly stateDir: string;
-      readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+      readonly watchers: Pick<WatcherRegistry, "batch">;
     },
     opts: ConstructorParameters<typeof RenderCache<S, F>>[1],
   ) {

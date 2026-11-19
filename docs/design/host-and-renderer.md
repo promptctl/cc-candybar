@@ -93,6 +93,7 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 **Config discovery** (host, production for what exists)
 - **Responsibility:** finds what the config at an origin is made of and hands it in as a `ConfigSnapshot`.
 - **Inputs and outputs:** the origins the renderers' subscriptions name; repository trust; file watches over what each discovery read. Out: a `config` event for an origin when it is first named and whenever its snapshot changes.
+- Config watches gather changed origins in the same watcher window. Their discovery shares each physical file read, then sends changed snapshots to the renderers that hold them. A failed origin keeps its previous snapshot so it can be retried while successful observations are still delivered.
 
 **Effect interpreter** (host, prototype)
 - **Responsibility:** carries out the effects a renderer returns and reports each outcome to it.
