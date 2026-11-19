@@ -110,13 +110,12 @@ describe("back", () => {
   });
 
   test("Back preserves a control an independent transition has changed", async () => {
-    const { sessionState, set, back, dispose } = setup();
+    const { sessionState, set, back } = setup();
     await set(MENU, "open");
     sessionState.set(S1, PAGE, "3");
     await back();
     expect(sessionState.get(S1, MENU)).toBeNull();
     expect(sessionState.get(S1, PAGE)).toBe("3");
-    dispose();
   });
 
   test("a value the key's gate no longer admits is never restored", async () => {
@@ -194,7 +193,7 @@ describe("back", () => {
   });
 
   test("Back restores a page cursor without repeating the click's command", async () => {
-    const { sessionState, ctx, set, back, dispose } = setup();
+    const { sessionState, ctx, set, back } = setup();
     await set(MENU, "open", TAB, "a", PAGE, "1");
     await clickUrl(
       effectsUrl([
@@ -210,7 +209,6 @@ describe("back", () => {
     expect(sessionState.get(S1, PAGE)).toBe("1");
     expect(sessionState.get(S1, MENU)).toBe("open");
     expect(sessionState.get(S1, TAB)).toBe("a");
-    dispose();
   });
 
   test("a click that changes only a setting is no step", async () => {
