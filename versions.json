@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-888",
+      "ref": "refs/pull/888/merge",
+      "sha": "4b4e76263b4ca140df0f9a0a1621d4e57ae5a6f4",
+      "timestamp": "2026-11-19T17:16:32.471Z",
+      "commits": [
+        {
+          "sha": "4b4e76263b4ca140df0f9a0a1621d4e57ae5a6f4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:15:34-07:00",
+          "message": "Merge 2c6d7aae86f5b439ddea5e452698e2790009920f into 11ce0f48bd2e5d1ed177c07770dc3fdfd4ad8b52\n"
+        },
+        {
+          "sha": "2c6d7aae86f5b439ddea5e452698e2790009920f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:22:01-07:00",
+          "message": "refactor(renderer): keep one origin and config layer projection\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "11ce0f48bd2e5d1ed177c07770dc3fdfd4ad8b52",
@@ -42,28 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-888",
-      "ref": "refs/pull/888/merge",
-      "sha": "bb5acf840b05a6df400fd6430526bff30374ee77",
-      "timestamp": "2026-11-19T17:00:50.533Z",
-      "commits": [
-        {
-          "sha": "bb5acf840b05a6df400fd6430526bff30374ee77",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:59:39Z",
-          "message": "Merge d746498ca325f26caec46b1ab92606b6fa871b16 into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
-        },
-        {
-          "sha": "d746498ca325f26caec46b1ab92606b6fa871b16",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:22:01-07:00",
-          "message": "refactor(renderer): keep one origin and config layer projection\n"
         }
       ]
     },
