@@ -30,7 +30,6 @@ import {
 } from "./daemon.js";
 import { MAIN_RENDERER } from "./foundations/renderer-name.js";
 import { productionAdapters } from "./production-adapters.js";
-import { createGates } from "./foundations/gates.js";
 import { handleConnection } from "./connection.js";
 import { PROTOCOL_VERSION } from "./foundations/protocol";
 import { heapCapMb, memoryLimitBytes } from "./limits";
@@ -216,7 +215,6 @@ async function boot(): Promise<void> {
     paths,
     memoryLimitBytes: memoryLimit,
     clock: world.clock,
-    gates: createGates(),
     exit: shutdown,
   });
   prepared = daemon;

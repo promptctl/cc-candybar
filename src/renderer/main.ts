@@ -40,12 +40,8 @@ import {
   type DaemonVerbContext,
   type MainRendererParts,
 } from "./verbs/port.js";
-import type {
-  StoredState,
-  StoreWrite,
-} from "../renderer-interface/stored-state.js";
-import type { Locations } from "../config/loader/chain-places.js";
-import type { Gates } from "../daemon/foundations/gates.js";
+import type { StoreWrite } from "../renderer-interface/stored-state.js";
+import { createGates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import {
   heardContextOf,
@@ -102,6 +98,7 @@ import {
   type Event,
   type PushedFrame,
   type Renderer,
+  type RendererBoot,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
@@ -581,29 +578,14 @@ function closeIdleMenus(
   }
 }
 
-// The renderer starts from the profile's stored state and the machine facts
-// its loads resolve under. Each input carries the host's clock readings.
-export interface MainRendererInputs {
-  // [LAW:one-source-of-truth] A renderer is built from its stored state, so
-  // none exists without it: every write it makes leaves as a turn's stored
-  // writes, and the next renderer is built from what the host then holds.
-  readonly stored: StoredState;
-  // Where the user's config and installed plugins live.
-  readonly locations: Locations;
-  readonly home: string;
-  // What this daemon's clicks may write: the gates its root built.
-  readonly gates: Gates;
-  // The memory limit the render cache's budget is a share of.
-  readonly memoryLimitBytes: number;
-}
-
 // [LAW:single-enforcer] The main renderer, built over the host's parts it
 // reaches and the stored state it is handed.
 export function mainRendererOf(
-  inputs: MainRendererInputs,
+  inputs: RendererBoot,
   host: AdapterToHost,
 ): Renderer {
-  const { gates } = inputs;
+  // Configs compiled by this renderer determine which action values it accepts.
+  const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
@@ -659,7 +641,7 @@ export function mainRendererOf(
       source: sessionSource({
         sessionState: edits.view,
         worldStates,
-        home: inputs.home,
+        home: inputs.locations.home,
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
@@ -813,7 +795,7 @@ export function mainRendererOf(
 // `debug config` against the active workload. latestView reads existing views
 // only; it does NOT open one, so debug introspection never stands up a new
 // cache entry tied to the daemon's own process.cwd().
-// [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the cache
+// [LAW:carrying-cost] Lazy per-segment serialization: the cache
 // stores StripCell arrays (cheap, written by drawDsl), and only the `segments`
 // projection needs strings, so a normal render pays no serializer cost.
 function debugOf(

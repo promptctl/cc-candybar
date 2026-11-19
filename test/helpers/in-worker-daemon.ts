@@ -4,6 +4,7 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
+import { inProcessRenderer } from "../../src/in-process-renderer";
 import { HOST } from "./host";
 import fs from "node:fs";
 import net from "node:net";
@@ -36,7 +37,6 @@ import {
 } from "../../src/daemon/foundations/protocol";
 import { systemTimekeeper } from "../../src/time";
 import type { StatsSnapshot } from "../../src/daemon/foundations/stats-snapshot";
-import { createGates } from "../../src/daemon/foundations/gates";
 import type { DaemonLogger } from "../../src/utils/logger";
 import type { DaemonEndpoint } from "./daemon-wire";
 import type { StartBarDaemon } from "./drive-bar";
@@ -103,12 +103,11 @@ export function prepareDaemon(
   try {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      renderer: inProcessRenderer(),
       bundle: bundleAt(path.join(paths.state, "checkout")),
       host: HOST,
       memoryLimitBytes: memoryLimitBytes(process.env),
       clock: systemTimekeeper,
-      // A daemon's gates are its own: none is shared with another built here.
-      gates: createGates(),
       // [LAW:no-silent-failure] Nothing here should end a worker, so a reply that
       // carries an exit is loud. A case about the exit passes its own.
       exit: (code) => {

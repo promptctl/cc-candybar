@@ -6,13 +6,13 @@
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
+import { inProcessRenderer } from "../src/in-process-renderer";
 import { plainEnvironment } from "../src/daemon/foundations/session-env";
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
-import { createGates } from "../src/daemon/foundations/gates";
 import { DaemonLog } from "../src/daemon/log";
 import { daemonPaths } from "../src/daemon/paths";
 import { productionAdapters } from "../src/daemon/production-adapters";
@@ -73,7 +73,7 @@ const paths = daemonPaths(HOST);
 const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
 const pageDaemon = createDaemon({
   ...adapters,
-  gates: createGates(),
+  renderer: inProcessRenderer(),
   paths,
   host: HOST,
   bundle: {

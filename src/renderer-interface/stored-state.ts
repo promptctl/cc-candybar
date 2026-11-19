@@ -3,17 +3,65 @@
 // as the renderer is built, and which changes only by the writes the
 // renderer's turns return.
 
-import type { SessionId } from "../daemon/foundations/session-id";
+import { sessionIdOf, type SessionId } from "../daemon/foundations/session-id";
+import { isPlainObject } from "../config/loader/validate-core";
+import type { Asked } from "../utils/outcome";
 import type { Crosses } from "./crosses";
-import type { HistoryState, SessionHistory } from "./history-storage";
+import {
+  parseSessionHistory,
+  type HistoryState,
+  type SessionHistory,
+} from "./history-storage";
 
 // [LAW:one-source-of-truth] Every store the profile holds, as it stands: each
 // session's picks and its settings history, in recency order, oldest first.
 export interface StoredState {
-  readonly sessions: Readonly<
-    Record<SessionId, Readonly<Record<string, string>>>
-  >;
+  readonly sessions: Readonly<Record<SessionId, SessionPicks>>;
   readonly history: HistoryState;
+}
+
+export type SessionPicks = Readonly<Record<string, string>>;
+
+export function parseSessionPicks(value: unknown): Asked<SessionPicks> {
+  if (!isPlainObject(value))
+    return { kind: "failed", reason: "is not an object" };
+  const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
+  return bad === undefined
+    ? { kind: "ok", value: value as SessionPicks }
+    : {
+        kind: "failed",
+        reason: `has a ${JSON.stringify(bad)} that is not a string`,
+      };
+}
+
+// [LAW:parse-dont-validate] A replacement can run a different build. A boot
+// admits the complete profile or gives the host a reason it could not start.
+export function storedStateOf(raw: unknown): StoredState {
+  if (!isPlainObject(raw))
+    throw new Error("renderer boot has no stored profile");
+  const sessionsOf = <V>(
+    name: keyof StoredState,
+    parse: (value: unknown) => Asked<V>,
+  ): Readonly<Record<SessionId, V>> => {
+    const entries = raw[name];
+    if (!isPlainObject(entries))
+      throw new Error(`renderer boot stored.${name} must be an object`);
+    return Object.fromEntries(
+      Object.entries(entries).map(([key, value]) => {
+        const session = sessionIdOf(key);
+        const result = parse(value);
+        if (result.kind === "failed")
+          throw new Error(
+            `renderer boot stored.${name} entry ${session} ${result.reason}`,
+          );
+        return [session, result.value];
+      }),
+    );
+  };
+  return {
+    sessions: sessionsOf("sessions", parseSessionPicks),
+    history: sessionsOf("history", parseSessionHistory),
+  };
 }
 
 // The profile's stores, empty: a profile nothing was ever stored under.
@@ -30,7 +78,7 @@ export type StoreWrite =
   | {
       readonly store: "session-state";
       readonly key: SessionId;
-      readonly value: Readonly<Record<string, string>> | null;
+      readonly value: SessionPicks | null;
     }
   | {
       readonly store: "settings-history";

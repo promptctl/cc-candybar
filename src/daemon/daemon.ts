@@ -28,7 +28,6 @@ import type { CheckedRenderRequest } from "../renderer-interface/request-context
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
 import type { DaemonLogger } from "../utils/logger";
-import type { Gates } from "./foundations/gates";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
 import { createPayloadProviders } from "./payload-providers";
 import { runTeardown, type TeardownStep } from "../utils/teardown";
@@ -61,7 +60,6 @@ import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
 import { rendererHost, type RendererHost } from "./renderer-host.js";
-import { mainRendererOf } from "../renderer/main.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import {
   rendererNameOf,
@@ -69,6 +67,7 @@ import {
 } from "./foundations/renderer-name.js";
 import type { SessionId } from "./foundations/session-id.js";
 import type {
+  RendererBoot,
   RequestId,
   Subscriptions,
   Viewers,
@@ -76,7 +75,6 @@ import type {
 import type { RendererLink, RendererPort } from "./renderer-process.js";
 import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import {
-  plainEnvironment,
   variableOf,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
@@ -140,9 +138,6 @@ export interface DaemonAdapters {
     readonly launcher: Launcher;
     readonly log: DaemonLogger;
   }) => LimitsDeps;
-  // [LAW:one-type-per-behavior] Where the renderer runs: in this process, or
-  // in a process of its own (src/daemon/renderer-process.ts).
-  readonly renderer: RendererPort;
   // A worktree bundle's executable entry at the host's filesystem boundary.
   readonly rendererEntryOf?: (reported: string) => string;
   // How the binary watch reads the bundle's mtime.
@@ -153,6 +148,8 @@ export interface DaemonAdapters {
 // What a daemon takes from the process that runs it: where its files are, what
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
+  // The composition root selects the renderer transport.
+  readonly renderer: RendererPort;
   readonly bundle: RunningBundle;
   // The renderer it serves, whose profile its stores are.
   readonly rendererName: RendererName;
@@ -172,9 +169,6 @@ export interface DaemonInputs extends DaemonAdapters {
   // [LAW:one-source-of-truth] `after` runs a request's wait and its backstop on
   // the same clock its budget is figured from, so a held clock holds all three.
   readonly clock: Timekeeper;
-  // [LAW:no-shared-mutable-globals] What this daemon's loads accept: its own
-  // gate registry, so two daemons in one process share none.
-  readonly gates: Gates;
   // [LAW:single-enforcer] The process's one death funnel: the binary watch and
   // the memory backstop end the daemon here, never on their own.
   readonly exit: (code: number) => void;
@@ -236,7 +230,7 @@ type DaemonPhase =
     };
 
 export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
-  const { bundle, memoryLimitBytes, clock, exit, paths, gates, host } = inputs;
+  const { bundle, memoryLimitBytes, clock, exit, paths, host } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
@@ -613,25 +607,16 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     entry: string,
   ) {
     const stores = new HeldStores(inputs.profile(name, log));
+    // [LAW:one-source-of-truth] Each start reads the latest held profile.
+    const boot = (): RendererBoot => ({
+      stored: stores.current(),
+      locations: locs,
+      memoryLimitBytes,
+    });
     const prepared = inputs.renderer({
       name,
       entry,
-      build: (hostReaches) =>
-        mainRendererOf(
-          {
-            stored: stores.current(),
-            locations: locs,
-            home: host.home,
-            gates,
-            memoryLimitBytes,
-          },
-          hostReaches,
-        ),
-      boot: () => ({
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes,
-      }),
+      boot,
       node: bundle.node,
     });
     return { name, reported, entry, stores, prepared };

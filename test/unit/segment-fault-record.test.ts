@@ -30,7 +30,6 @@ import { mainRendererOf } from "../../src/renderer/main";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { bareGates } from "../helpers/gates";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
 import { viewFacts } from "../helpers/view-facts";
@@ -55,8 +54,6 @@ const rendererOf = (): Renderer =>
         dataHome: "/nowhere/data",
         dataDirs: [],
       },
-      home: "/nowhere/home",
-      gates: bareGates(),
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
     {

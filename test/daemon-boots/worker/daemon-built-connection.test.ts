@@ -19,10 +19,8 @@ import {
   type Response,
 } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
-import {
-  inProcessPort,
-  type RendererPort,
-} from "../../../src/daemon/renderer-process";
+import { inProcessRenderer } from "../../../src/in-process-renderer";
+import { mainRendererOf } from "../../../src/renderer/main";
 import { textOf } from "../../../src/render/frame";
 import { render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
@@ -179,19 +177,15 @@ describe("a connection to a daemon built in this worker", () => {
       entered = resolve;
     });
     let release = (): void => {};
-    const renderer: RendererPort = (prepared) =>
-      inProcessPort({
-        ...prepared,
-        build: (reaches) => {
-          const held = holdable(prepared.build(reaches));
-          return hearingEvents(held.renderer, ({ event }) => {
-            if (event.kind === "request") {
-              release = held.hold();
-              entered();
-            }
-          });
-        },
+    const renderer = inProcessRenderer((boot, reaches) => {
+      const held = holdable(mainRendererOf(boot, reaches));
+      return hearingEvents(held.renderer, ({ event }) => {
+        if (event.kind === "request") {
+          release = held.hold();
+          entered();
+        }
       });
+    });
     const running = startDaemon(process.env, { clock, renderer });
     started = running;
     const opened = openedOn(running.connect());
