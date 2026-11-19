@@ -466,6 +466,9 @@ export interface CacheEntry {
   // are read off it.
   snapshot: ConfigSnapshot;
   digest: string;
+  // [LAW:one-source-of-truth] The authored input that can rebuild `state`.
+  // A failed attempt moves the diagnostic and snapshot without moving this.
+  selectedDigest: string | null;
   lastError: string | null;
   lastWarnings: readonly string[];
   state: DslRenderState;
@@ -1355,13 +1358,18 @@ export class RenderCache<
       },
       snapshot,
       digest,
+      selectedDigest: loaded.state === null ? null : digest,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd, snapshot, this.deps),
     };
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
-    makeObservable(entry, { lastError: observable, state: observableRef });
+    makeObservable(entry, {
+      selectedDigest: observable,
+      lastError: observable,
+      state: observableRef,
+    });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
@@ -1725,6 +1733,16 @@ export class RenderCache<
     ];
   }
 
+  configSelections() {
+    return [...this.entries]
+      .filter(([key, entry]) => key === originKey(entry.origin))
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([, { origin, selectedDigest }]) => ({
+        origin,
+        digest: selectedDigest,
+      }));
+  }
+
   subscriptions(): Pick<Subscriptions, "sources"> {
     return {
       sources: Object.fromEntries(
@@ -1999,15 +2017,13 @@ export class RenderCache<
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
+      if (loaded.state !== null) entry.selectedDigest = digest;
+      if (loaded.kind === "built") entry.state = loaded.state;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
-      const state = loaded.state;
-      runInAction(() => {
-        entry.state = state;
-      });
-      this.serve(state);
+      this.serve(loaded.state);
     }
     // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
     // The successor's hold precedes its predecessor's release, so a folder

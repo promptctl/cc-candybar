@@ -101,6 +101,7 @@ function hostOver(
   const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
+    ...NO_ACTS.configs,
     follow: (origins) => {
       follows.push(origins);
       followed = origins;

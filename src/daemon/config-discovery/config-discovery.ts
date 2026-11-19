@@ -8,6 +8,7 @@
 // and watch, until the last renderer lets it go.
 
 import { originKey, type RenderOrigin } from "../../config-hint.js";
+import type { ConfigSelection } from "../../renderer-interface/interface.js";
 import type {
   ConfigSnapshot,
   LayerRole,
@@ -43,18 +44,24 @@ import {
   type PathsWatch,
 } from "../foundations/watch-targets.js";
 
-// One origin followed: what discovery found there last, its digest, and the
-// watch over where that can change.
-interface ObservedOrigin {
+interface ObservedConfig {
   readonly origin: RenderOrigin;
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
+}
+
+// One origin followed: what discovery found there last, and the watch over
+// where that can change.
+interface ObservedOrigin extends ObservedConfig {
   readonly watch: HeldWatch;
   readonly filePaths: readonly string[];
 }
 
 interface Followed extends ObservedOrigin {
   readonly renderers: Set<RendererName>;
+  // One selected committed input per renderer; null represents a fallback
+  // entry. Absence is a followed origin with no entry to reconstruct.
+  readonly selected: Map<RendererName, ObservedConfig | null>;
 }
 
 interface DiscoveryBatch {
@@ -66,6 +73,11 @@ interface DiscoveryBatch {
 export interface RendererConfigs {
   follow(origins: readonly RenderOrigin[]): void;
   snapshotOf(origin: RenderOrigin): ConfigSnapshot | null;
+  selected(
+    entries: readonly ConfigSelection[],
+    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+  ): void;
+  retainedOf(origin: RenderOrigin): ConfigSnapshot | "current" | undefined;
   path(origin: RenderOrigin, role: LayerRole): string | null | undefined;
   repoDir(origin: RenderOrigin): string | null | undefined;
   readText(file: string): string | null;
@@ -87,6 +99,9 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
 
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
+  // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
+  // snapshot. A weak key cannot hold an old revision after its last owner.
+  private readonly observations = new WeakMap<ConfigSnapshot, ObservedConfig>();
   private readonly watches: ReturnType<WatcherRegistry["batch"]>;
   private readonly invalidated = new Set<string>();
   private readonly texts: ConfigText;
@@ -116,6 +131,9 @@ export class ConfigDiscovery {
     return {
       follow: (origins) => this.follow(renderer, origins),
       snapshotOf: (origin) => held(origin) ?? null,
+      selected: (entries, delivered) =>
+        this.select(renderer, entries, delivered),
+      retainedOf: (origin) => this.retainedOf(renderer, origin),
       path: (origin, role) => {
         const snapshot = held(origin);
         return snapshot === undefined
@@ -152,14 +170,16 @@ export class ConfigDiscovery {
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
           renderers: new Set([renderer]),
+          selected: new Map(),
         });
     }
     let released = 0;
-    for (const [key, { renderers, watch }] of this.followed) {
+    for (const [key, { renderers, selected, watch }] of this.followed) {
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
+      selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
       watch.handle.release();
@@ -170,6 +190,71 @@ export class ConfigDiscovery {
       "info",
       `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`,
     );
+  }
+
+  // [LAW:single-enforcer] The renderer can keep its earlier selection or
+  // select an input actually delivered to it. Resolve the whole declaration
+  // before replacing its references, including a release with no selection.
+  private select(
+    renderer: RendererName,
+    entries: readonly ConfigSelection[],
+    delivered: (origin: RenderOrigin) => ConfigSnapshot | undefined,
+  ): void {
+    if (this.closed) return;
+    const next = new Map<string, ObservedConfig | null>();
+    for (const { origin, digest } of entries) {
+      const key = originKey(origin);
+      const followed = this.followed.get(key);
+      if (!followed?.renderers.has(renderer))
+        throw new Error(`selected config origin is not followed: ${key}`);
+      if (digest === null) {
+        next.set(key, null);
+        continue;
+      }
+      const previous = followed.selected.get(renderer);
+      const offered = delivered(origin);
+      const observation =
+        previous?.digest === digest
+          ? previous
+          : offered === undefined
+            ? undefined
+            : this.observations.get(offered);
+      if (
+        observation?.digest !== digest ||
+        originKey(observation.origin) !== key
+      )
+        throw new Error(`selected config revision was not delivered: ${key}`);
+      const shared = [...followed.selected.values()].find(
+        (held) => held?.digest === digest,
+      );
+      next.set(key, shared ?? observation);
+    }
+    for (const [key, { selected }] of this.followed) {
+      const observation = next.get(key);
+      if (observation === undefined) selected.delete(renderer);
+      else selected.set(renderer, observation);
+    }
+  }
+
+  private retainedOf(
+    renderer: RendererName,
+    origin: RenderOrigin,
+  ): ConfigSnapshot | "current" | undefined {
+    const followed = this.followed.get(originKey(origin));
+    const old = followed?.selected.get(renderer);
+    if (followed === undefined || old === undefined) return undefined;
+    if (old === null || old.digest === followed.digest) return "current";
+    // [LAW:one-source-of-truth] The current discovery's project decision
+    // still gates a previously approved input. An isolated origin can only
+    // reconstruct an older input with no project authority of its own.
+    const earlier = old.snapshot.repo;
+    const current = followed.snapshot.repo;
+    return earlier?.standing !== "approved" ||
+      (origin.target.source !== "argument-only" &&
+        current?.standing === "approved" &&
+        current.dir === earlier.dir)
+      ? old.snapshot
+      : "current";
   }
 
   // Rediscover origins watching one of the files the turn actually wrote.
@@ -244,9 +329,12 @@ export class ConfigDiscovery {
       // last snapshot for a retry. Its failure cannot suppress a sibling's
       // already-observed change or reverse a successful write.
       try {
+        const found = this.discovered(was.origin, shared, was.watch);
         const now = {
-          ...this.discovered(was.origin, shared, was.watch),
+          ...found,
+          snapshot: found.digest === was.digest ? was.snapshot : found.snapshot,
           renderers: was.renderers,
+          selected: was.selected,
         };
         this.followed.set(key, now);
         if (now.digest !== was.digest) moved.push(now);
@@ -330,10 +418,10 @@ export class ConfigDiscovery {
       ...found.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch }, null),
     };
+    const observed = { origin, snapshot, digest: digestOf(snapshot) };
+    this.observations.set(snapshot, observed);
     return {
-      origin,
-      snapshot,
-      digest: digestOf(snapshot),
+      ...observed,
       watch,
       filePaths: paths.targets.polled,
     };

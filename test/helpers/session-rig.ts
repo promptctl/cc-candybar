@@ -31,6 +31,7 @@ import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
 import { locs } from "./host";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
+import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import {
   absentOwners,
   withTranscriptLanes,
@@ -144,12 +145,14 @@ export function sessionRig(
     source = {},
     log = () => {},
     observers = {},
+    storage = NO_PLUGIN_STORAGE,
   }: {
     readonly daemon?: () => DaemonFacts;
     readonly owners?: Partial<ReturnType<typeof fixedOwners>>;
     readonly source?: Partial<SessionSourceDeps>;
     readonly log?: (level: string, message: string) => void;
     readonly observers?: RenderCacheObservers;
+    readonly storage?: AdapterToHost["storage"];
   } = {},
 ) {
   const providers = withTranscriptLanes({ ...fixedOwners(log), ...owners });
@@ -169,7 +172,7 @@ export function sessionRig(
       locations: locs(),
       sessionState,
       watchers,
-      storage: NO_PLUGIN_STORAGE,
+      storage,
       gates: bareGates(),
       log,
       source: sessionSource({

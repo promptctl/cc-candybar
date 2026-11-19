@@ -64,6 +64,7 @@ import type { RunEvidence } from "../click/wire.js";
 import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
+import type { ConfigSnapshot } from "../config/config-snapshot.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { RendererName } from "./foundations/renderer-name.js";
@@ -169,7 +170,11 @@ interface Slotted {
   readonly settled: Promise<readonly EffectOutcome[]>;
 }
 
-type ConfigDelivery = "scheduled" | "received" | "unreceived";
+type ConfigDelivery =
+  | { readonly kind: "scheduled" | "unreceived" }
+  // The immutable observation actually offered to this worker. Discovery
+  // may publish a newer observation before the worker selects this one.
+  | { readonly kind: "received"; readonly config: ConfigSnapshot };
 
 type ConfigFollowing =
   | { readonly kind: "following"; readonly named: readonly RenderOrigin[] }
@@ -231,6 +236,7 @@ export function rendererHost(
   let configs = new Map<string, ConfigDelivery>();
   let declared: Subscriptions | undefined;
   let origins: Subscriptions["configs"] | undefined;
+  let selected: Subscriptions["configSelections"];
   let followFailure: Failure | null = null;
   // [LAW:no-ambient-temporal-coupling] Only a complete replacement can
   // publish over the predecessor's declaration. Later inputs stay out of a
@@ -241,8 +247,7 @@ export function rendererHost(
   // holds as an ordinary config turn. It still follows preceding origins
   // until the replacement answers with its own complete declaration.
   const prepareStart = (event: Extract<Event, { kind: "start" }>): Event => {
-    const retained = new Map((origins ?? []).map((o) => [originKey(o), o]));
-    const wanted = new Map(retained);
+    const wanted = new Map((origins ?? []).map((o) => [originKey(o), o]));
     for (const { context } of event.sessions)
       wanted.set(originKey(context.requested), context.requested);
     if (wanted.size > 0) world.configs.follow([...wanted.values()]);
@@ -250,7 +255,12 @@ export function rendererHost(
       const config = world.configs.snapshotOf(origin);
       if (config === null)
         throw new Error(`no config snapshot for renderer start origin ${key}`);
-      return { origin, config, retained: retained.has(key) };
+      const retained = world.configs.retainedOf(origin);
+      return {
+        origin,
+        config,
+        ...(retained === undefined ? {} : { retained }),
+      };
     });
     return { ...event, configs };
   };
@@ -320,7 +330,8 @@ export function rendererHost(
     }
     if (input.event.kind === "config") {
       const key = originKey(input.event.origin);
-      if (configs.has(key)) configs.set(key, "received");
+      if (configs.has(key))
+        configs.set(key, { kind: "received", config: input.event.config });
     }
     const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
     const turn: TakenTurn = {
@@ -333,8 +344,8 @@ export function rendererHost(
     if (input.event.kind === "start") {
       startFailure = turn.kind === "threw" ? turn.failure : null;
       if (startFailure === null)
-        for (const { origin } of input.event.configs ?? [])
-          configs.set(originKey(origin), "received");
+        for (const { origin, config } of input.event.configs ?? [])
+          configs.set(originKey(origin), { kind: "received", config });
     }
     const { settled, configFailure } = await landInSlot(
       input.event,
@@ -384,7 +395,10 @@ export function rendererHost(
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
-      if (requestedKey !== null && configs.get(requestedKey) !== "received")
+      if (
+        requestedKey !== null &&
+        configs.get(requestedKey)?.kind !== "received"
+      )
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
@@ -578,7 +592,7 @@ export function rendererHost(
         const before = configs.get(key);
         if (before === undefined) {
           named.push(origin);
-          next.set(key, "scheduled");
+          next.set(key, { kind: "scheduled" });
         } else next.set(key, before);
       }
       // A renderer has already dropped any unlisted config, even when the
@@ -591,9 +605,9 @@ export function rendererHost(
     // A feed tick cannot poll a failed follow or delivery.
     if (requested !== null) {
       const key = originKey(requested);
-      if (configs.get(key) === "unreceived") {
+      if (configs.get(key)?.kind === "unreceived") {
         named.push(requested);
-        configs.set(key, "scheduled");
+        configs.set(key, { kind: "scheduled" });
       }
     }
     try {
@@ -601,6 +615,19 @@ export function rendererHost(
         world.configs.follow(subscriptions.configs);
         followFailure = null;
       }
+      const entries = subscriptions.configSelections;
+      if (
+        selected !== entries &&
+        recordTaken("config selections", () =>
+          world.configs.selected(entries ?? [], (origin) => {
+            const delivered = configs.get(originKey(origin));
+            return delivered?.kind === "received"
+              ? delivered.config
+              : undefined;
+          }),
+        ) !== null
+      )
+        selected = entries;
       return { kind: "following", named };
     } catch (thrown) {
       for (const origin of named) markUnreceived(origin);
@@ -613,7 +640,8 @@ export function rendererHost(
 
   const markUnreceived = (origin: RenderOrigin): void => {
     const key = originKey(origin);
-    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
+    if (configs.get(key)?.kind === "scheduled")
+      configs.set(key, { kind: "unreceived" });
   };
 
   // [LAW:one-source-of-truth] An origin's `config`, made from what discovery
@@ -820,6 +848,7 @@ export function rendererHost(
         if (starting) {
           configs.clear();
           declared = undefined;
+          selected = undefined;
           followFailure = null;
         }
         if (made.kind !== "event") {
