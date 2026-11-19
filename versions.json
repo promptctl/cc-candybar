@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-898",
+      "ref": "refs/pull/898/merge",
+      "sha": "a237bbf9acc168590bff7aff9429ce378e73d537",
+      "timestamp": "2026-11-19T19:52:05.452Z",
+      "commits": [
+        {
+          "sha": "a237bbf9acc168590bff7aff9429ce378e73d537",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T19:50:43Z",
+          "message": "Merge 7d0cd43eccda508e15b5b9f9ca05fb956c5b0708 into 7fb2d364cac124b3f07de1e027e1959943c9a23d\n"
+        },
+        {
+          "sha": "7d0cd43eccda508e15b5b9f9ca05fb956c5b0708",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:49:26-07:00",
+          "message": "test(config): assert the reported outcome of a refused save\n"
+        },
+        {
+          "sha": "f9c1c445b2e6d75190a13ca6035a569286ff25b1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:20:46-07:00",
+          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
+        }
+      ]
+    },
+    {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
       "sha": "db099f9c4166edb0ff9e46ee1a82a4ba08157e54",
@@ -188,28 +217,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:25:47-07:00",
           "message": "fix(settings): fold every pick through one setting table and warn on stale picks\n\nA session pick its setting can no longer hold (an uninstalled or retired theme, an undeclared style or preset, a dropped effect, an out-of-range value, a placement value outside its declaration) now reads through its setting's one parse as stale. The fold draws what lies beneath it and reports which rung decided, and the frame shows one stale warning per stale pick that decided, naming the setting, the spelling held, what the bar wears and what the setting can hold. Every save releases every pick that is not a draft against the config it wrote, and a state variable may no longer read a setting's session key.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-898",
-      "ref": "refs/pull/898/merge",
-      "sha": "ab5a8b6ee62d244ca4bbeabc9a355f1cb9326d04",
-      "timestamp": "2026-11-19T18:23:50.972Z",
-      "commits": [
-        {
-          "sha": "ab5a8b6ee62d244ca4bbeabc9a355f1cb9326d04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:22:39-07:00",
-          "message": "Merge d916b5eecc4595f6c3f3f5f03465e4aacf0159a5 into aac59c95e05357cbdee5cfbd3e1759fb98fc8686\n"
-        },
-        {
-          "sha": "d916b5eecc4595f6c3f3f5f03465e4aacf0159a5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:20:46-07:00",
-          "message": "fix(daemon): reobserve files after incomplete config rollback\n"
         }
       ]
     },

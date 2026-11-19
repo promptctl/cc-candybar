@@ -64953,24 +64953,19 @@ var VariableStore = class {
   getKind(name) {
     return this.requireNode(name).kind;
   }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
+  // [LAW:one-source-of-truth] A dependant sees the same change a node's own
+  // observers see, with pending blocking a first run and failures counting
+  // as changes. A document key uses the store's own structural comparison.
   changeKey(name) {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(["document", documentKey(doc)]);
     }
     try {
-      return ok(String(node.read()));
+      return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }
   // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
@@ -65530,11 +65525,11 @@ var SourceRegistry = class _SourceRegistry {
       reaction(
         () => this.inputs.get().env(envVar),
         (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
+          this.noteOutcome(name, fact, `env var "${envVar}" is not set`);
+          this.store.setBox(
+            name,
+            fact.kind === "pending" ? fact : orElse(fact, fallback)
+          );
         },
         { fireImmediately: true }
       )
@@ -65873,7 +65868,7 @@ var SourceRegistry = class _SourceRegistry {
       case "depends_on": {
         return this.answeredUnder(name, () => {
           const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value)) : pendingOf("unread");
         });
       }
     }
@@ -65901,7 +65896,7 @@ var SourceRegistry = class _SourceRegistry {
     return () => {
       const now2 = answer2.get();
       if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last2)) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
     };
   }
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -65944,14 +65939,15 @@ var SourceRegistry = class _SourceRegistry {
         });
     });
   }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
+  // [LAW:single-enforcer] The one fold from a source reading to the
+  // variable's error record. A pending or successful read ends an old error.
+  noteOutcome(name, outcome, absentReason = "no value") {
+    if (outcome.kind === "ok" || outcome.kind === "pending")
+      this.lastErrors.delete(name);
     else
       this.recordError(
         name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
+        outcome.kind === "failed" ? outcome.reason : absentReason
       );
   }
 };
@@ -71321,10 +71317,6 @@ function launchFailure(label2, result) {
 function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
 function isMissingCommand(result) {
   return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
 }
@@ -71425,12 +71417,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (isMissingCommand(result)) return ABSENT2;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT2;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
+  return failed(launchFailure(label2, result), "read");
 }
 function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -78123,6 +78110,41 @@ function linkTarget(file) {
 }
 var MAX_LINK_HOPS = 40;
 
+// src/repository-cli.ts
+init_globals();
+var FORGE_CLI = {
+  github: { cli: "gh", repoEnv: "GH_REPO" },
+  gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
+};
+var GIT_LOCAL_ENV = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR"
+];
+var REPOSITORY_SCOPED_ENV = [
+  ...GIT_LOCAL_ENV,
+  ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
+];
+function withoutRepositoryScopedEnv(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
+    )
+  );
+}
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -78151,7 +78173,9 @@ function checkRateLimit(lastStartAt, category, now2) {
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 function childEnv(scope, opts) {
-  const env2 = { ...opts.environment ?? scope.inherited };
+  const env2 = {
+    ...opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -78262,6 +78286,7 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -81408,7 +81433,42 @@ function todayReading(lane, usage, sessionId2) {
 // src/daemon/statusline-answer.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var timeoutResponse = (request2, error = `request exceeded ${REQUEST_TIMEOUT_MS}ms`) => ({
+  ok: false,
+  error,
+  code: "TIMEOUT",
+  daemonV: PROTOCOL_VERSION,
+  request: request2
+});
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function renderDeadlines(deadline, acceptedMonoMs, arrival) {
+  const clientEndsAt = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : null;
+  const sourceEnd = Math.min(
+    acceptedMonoMs + REQUEST_TIMEOUT_MS,
+    clientEndsAt ?? acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS
+  );
+  const waitEndsAt = arrival.monoMs + Math.round(sourceEnd - DRAW_RESERVE_MS - arrival.monoMs);
+  return { waitEndsAt, clientEndsAt };
+}
+
+// src/daemon/statusline-answer.ts
 var NOTHING_TO_SETTLE = (_delivered) => {
+};
+var DRAW_ABANDONED = {
+  kind: "abandoned",
+  message: "the statusline reply has no recipient",
+  detail: "the statusline reply has no recipient"
 };
 function failed2(host, failure2, doing = "") {
   return {
@@ -81443,14 +81503,15 @@ var msOf2 = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, recipient, facts) {
   const { req, error: checkoutError } = located(arrived2, locate);
   const session = req.hookData.session_id;
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
+  const abandoned = () => !closing.aborted && recipient.gone();
   const worldState = collector.requested(req, environment);
   const release3 = collector.holding(session);
   let configured;
-  let delivered;
+  let delivered = null;
   try {
     configured = await host.answer(
       unlessClosing({ kind: "context", context: req, worldState })
@@ -81465,46 +81526,53 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.configFailure, "its config turn: ");
     }
-    const waitFrom = clock.monotonic();
-    const budget = waitEndsAt - waitFrom;
-    noteFacts(facts, {
-      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
-    });
-    const ended = await waitWithin(
-      (signal) => collector.settled(session, signal),
-      budget,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the
-      // daemon.
-      (e, how) => log(
-        "error",
-        `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
-      ),
-      clock.after,
-      closing
-    );
-    noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    delivered = await host.answer(
-      unlessClosing({
-        kind: "request",
-        id: id2,
-        context: req
-      })
-    );
+    if (!abandoned()) {
+      const waitFrom = clock.monotonic();
+      const budget = recipient.waitEndsAt - waitFrom;
+      noteFacts(facts, {
+        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
+      });
+      const ended = await waitWithin(
+        (signal) => collector.settled(session, signal),
+        budget,
+        // [LAW:no-silent-failure] A late failure belongs to the session.
+        (e, how) => log(
+          "error",
+          `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
+        ),
+        clock.after,
+        closing
+      );
+      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+      if (!abandoned()) {
+        const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
+        delivered = await host.answer(
+          () => abandoned() ? DRAW_ABANDONED : draw2()
+        );
+      }
+    }
   } finally {
     release3();
   }
-  recorded(facts, delivered);
-  const done = delivered.settlePresentation;
+  if (delivered !== null) recorded(facts, delivered);
+  const drawHop = delivered === null ? 0 : delivered.hopMs;
   noteFacts(facts, {
     configured: msOf2(configured.turnMs),
-    drew: msOf2(delivered.turnMs),
-    mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
-    hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
+    drew: msOf2(delivered?.turnMs ?? null),
+    mailbox: `${configured.queuedMs + (delivered?.queuedMs ?? 0)}ms`,
+    hop: configured.hopMs === null || drawHop === null ? "-" : `${configured.hopMs + drawHop}ms`,
+    renderer: host.name
   });
+  if (delivered === null || delivered.kind === "threw" && delivered.failure === DRAW_ABANDONED)
+    return {
+      outcome: DRAW_ABANDONED,
+      resp: timeoutResponse(id2, DRAW_ABANDONED.message),
+      seen: "failed",
+      settled: NOTHING_TO_SETTLE
+    };
+  const done = delivered.settlePresentation;
   const { effects } = delivered;
   noteFacts(facts, {
-    renderer: host.name,
     effects: effects.map((e) => e.kind === "present" ? `present:${e.surface}` : e.kind).join(",") || "-"
   });
   let answer2 = null;
@@ -81778,23 +81846,6 @@ var RenderSightings = class {
     }));
   }
 };
-
-// src/daemon/foundations/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
 
 // src/daemon/render-checkpoint.ts
 function parseRenderArgs(args, cwd2, home, configEnv) {
@@ -82313,6 +82364,11 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
+        const { waitEndsAt, clientEndsAt } = renderDeadlines(
+          checked.req.deadline,
+          accepted.at,
+          { epochMs: started2.getTime(), monoMs: t0 }
+        );
         answered = await answerStatusline(
           renderer2,
           parts.publishFrame,
@@ -82327,13 +82383,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           // environment.
           parts.sessionBook.environmentOf(checked.req.hookData.session_id),
           order2,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/foundations/request-deadline.ts).
-          t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
-            epochMs: started2.getTime(),
-            monoMs: t0
-          }),
+          {
+            waitEndsAt,
+            // [LAW:no-ambient-temporal-coupling] Loss of the only recipient
+            // comes from the connection's phase or its reply deadline.
+            gone: () => timedOut() || clientLeft() || clientEndsAt !== null && clock.monotonic() >= clientEndsAt
+          },
           facts
         );
         noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
@@ -84674,9 +84729,9 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the ascent reads the
+  // filesystem, never the daemon's environment, which describes whichever
+  // shell spawned the daemon rather than the session being rendered.
   //
   findGitRoot(workingDir) {
     return gitRootOf(workingDir);
@@ -85044,7 +85099,7 @@ var GitService = class {
       return classifyForgePr(
         "gh pr view",
         await this.execForgeAsync(
-          FORGE_CLI.github,
+          FORGE_CLI.github.cli,
           ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5e3 }
         ),
@@ -85056,7 +85111,7 @@ var GitService = class {
       return classifyForgePr(
         "glab mr view",
         await this.execForgeAsync(
-          FORGE_CLI.gitlab,
+          FORGE_CLI.gitlab.cli,
           ["mr", "view", "--output", "json"],
           {
             cwd: workingDir,
@@ -86221,7 +86276,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.6";
+var PACKAGE_VERSION = "1.235.10";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
