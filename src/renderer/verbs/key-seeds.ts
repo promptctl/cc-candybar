@@ -1,4 +1,4 @@
-// What a stepped key shows before any click or write. Seeds read a session's
+// What a stepped key shows, which a step steps from. They read a session's
 // picks and the setting projections, so they sit with the verbs that step keys,
 // above the gates (foundations/), which a seed would otherwise pull upward.
 
@@ -9,14 +9,15 @@ import {
 } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
-import { sessionSettingValue } from "../setting-drafts";
+import { draftSlotValue, sessionSettingValue } from "../setting-drafts";
 
-// [LAW:one-source-of-truth] What a stepped SessionState key shows before any
-// click, in the session whose config and picks these are: a setting's is the
-// value the session's preset resolves it to (sessionSettingValue — the bar and
-// its control show the same); any other key's is its `state` variable's
-// `default`. null when the config declares neither.
-export function stateKeySeed(
+// [LAW:one-source-of-truth] What a stepped SessionState key shows, in the
+// session whose config and picks these are — what a step steps from. A
+// setting's, or a placement setting's draft slot's, is the value its fold
+// resolves the session's pick to (the bar and its control show the same, a
+// stale pick included); any other key's is its stored value, else its `state`
+// variable's `default`. null when the config declares none of them.
+export function stateKeyShows(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
   key: string,
@@ -25,6 +26,14 @@ export function stateKeySeed(
   if (setting !== undefined) {
     return sessionSettingValue(config, sessionPick, setting);
   }
+  return (
+    draftSlotValue(config, sessionPick, key) ??
+    sessionPick(key) ??
+    stateDefault(config, key)
+  );
+}
+
+function stateDefault(config: DslConfig, key: string): string | null {
   for (const [, decl] of stateVarDecls(config)) {
     if (decl.key === key) return decl.default ?? null;
   }

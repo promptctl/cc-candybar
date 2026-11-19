@@ -107,10 +107,11 @@ interface Valued<T> {
   readonly domain: ValueDomain<T>;
   // What renders when no rung above decides.
   readonly floor: T;
-  // [LAW:parse-dont-validate] A SessionState string to this field's value, or
-  // null for one it does not admit — a stale entry falls through to the
-  // config's own value. Built from `domain` by the row constructors below, so
-  // a pick is admitted by exactly the members the loader accepts.
+  // [LAW:parse-dont-validate] A SessionState spelling to this field's value, or
+  // null for one outside its domain — the one parse every reader of the
+  // field's pick reads it through (`readStored`). Built from `domain` by the
+  // row constructors below, so a pick is admitted by exactly the members the
+  // loader accepts.
   readonly parse: (raw: string) => T | null;
   // The domain under the name an author's `from:` may give it (`"shades"`),
   // registered by option-domain.ts. Absent for a domain no author needs by

@@ -696,14 +696,17 @@ export function drawRender(
     frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
   // [LAW:nothing-unseen] Each warning this frame met, those standing before
   // it and its own walk's, in order; `-` for none. A rule's tag names
-  // the slot that fell to its floor (`rule:style`), and a refresh's the
-  // variable that stopped (`refresh:stamp`), so the event says which.
+  // the slot that fell to its floor (`rule:style`), a stale pick's the setting
+  // it was stored for (`stale:theme`), and a refresh's the variable that
+  // stopped (`refresh:stamp`), so the event says which.
   // [LAW:types-are-the-program] Exhaustive over the kinds: a new kind is a
   // compile error here until the event says how to name it.
   const tagOf = (w: StandingWarning | RenderWarning): string => {
     switch (w.kind) {
       case "rule":
         return `rule:${w.slot}`;
+      case "stale":
+        return `stale:${w.setting}`;
       case "refresh":
         return `refresh:${w.variable}`;
       case "segment":
@@ -894,6 +897,8 @@ function subjectOf(w: RenderWarning): string {
   switch (w.kind) {
     case "rule":
       return w.slot;
+    case "stale":
+      return w.setting;
     case "refresh":
       return w.variable;
     case "segment":

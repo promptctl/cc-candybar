@@ -16,6 +16,7 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import {
+  isInstalledTheme,
   listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../../themes/policy";
@@ -52,21 +53,18 @@ export {
   makeRangeValidator,
 } from "./validator-registry";
 
-// [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
-// members resolve to a concrete Palette. It deliberately excludes the "custom"
-// sentinel (which needs inline colors and is not a renderable theme name):
-// accepting "custom" here would persist an unrenderable value into SessionState
-// and break the next render.
-const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
-const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
 const RESOLVABLE_ENDCAPS: ReadonlySet<string> = new Set(ENDCAPS_SHAPES);
 
+// [LAW:single-enforcer] A theme pick is admitted by the installed set's one
+// membership test, the same one a stored theme is read through, so a click
+// cannot store a name the bar would then report as stale. "custom" is no member
+// (it needs inline colors and names no palette).
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
+  if (!isInstalledTheme(raw)) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`,
+      reason: `unknown theme "${raw}" (have: ${listResolvablePaletteNames().join(", ")})`,
     };
   }
   return { ok: true, value: raw };

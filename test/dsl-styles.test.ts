@@ -203,7 +203,7 @@ describe("the renamed keys refuse their old spellings", () => {
   test("a session pick of an endcaps shape under `style` names no style and falls through to the config", () => {
     const { styles } = DEFAULT_DSL_CONFIG;
     expect(
-      resolveStyleSelection(undefined, "capsule", "dim", styles),
+      resolveStyleSelection(undefined, "capsule", "dim", styles).value,
     ).toMatchObject({
       kind: "decided",
       name: "dim",
@@ -451,7 +451,7 @@ describe("globals.style as an expression — a style chosen by data", () => {
               sessionState.get(SID, "style"),
               config.globals.style,
               config.styles,
-            ),
+            ).value,
           },
           (key) => sessionState.get(SID, key),
         ),
@@ -670,7 +670,7 @@ describe("resolveStyleSelection", () => {
   const EXPR = "{{ .a }}";
 
   test("a plain name decides, carrying both the name and its key", () => {
-    expect(resolveStyleSelection(undefined, null, "vivid", STYLES)).toEqual({
+    expect(resolveStyleSelection(undefined, null, "vivid", STYLES).value).toEqual({
       kind: "decided",
       name: "vivid",
       value: STYLES.vivid,
@@ -678,24 +678,24 @@ describe("resolveStyleSelection", () => {
   });
 
   test("an expression is undecided only when no higher rung decided", () => {
-    expect(resolveStyleSelection(undefined, null, EXPR, STYLES)).toEqual({
+    expect(resolveStyleSelection(undefined, null, EXPR, STYLES).value).toEqual({
       kind: "expression",
       source: EXPR,
     });
     // A session pick decides, so the expression is never reached — including a
     // pick of the floor name itself.
-    expect(resolveStyleSelection(undefined, "vivid", EXPR, STYLES)).toEqual({
+    expect(resolveStyleSelection(undefined, "vivid", EXPR, STYLES).value).toEqual({
       kind: "decided",
       name: "vivid",
       value: STYLES.vivid,
     });
-    expect(resolveStyleSelection(undefined, "none", EXPR, STYLES)).toEqual({
+    expect(resolveStyleSelection(undefined, "none", EXPR, STYLES).value).toEqual({
       kind: "decided",
       name: "none",
       value: STYLES.none,
     });
     // A staged fragment is the rightmost rung and decides over both.
-    expect(resolveStyleSelection("vivid", null, EXPR, STYLES)).toEqual({
+    expect(resolveStyleSelection("vivid", null, EXPR, STYLES).value).toEqual({
       kind: "decided",
       name: "vivid",
       value: STYLES.vivid,
@@ -704,13 +704,13 @@ describe("resolveStyleSelection", () => {
 
   test("a stale name at any rung falls through to the next, never to an expression it outranks", () => {
     // A stale session pick is no pick, so the expression below it is reached.
-    expect(resolveStyleSelection(undefined, "vapor", EXPR, STYLES)).toEqual({
+    expect(resolveStyleSelection(undefined, "vapor", EXPR, STYLES).value).toEqual({
       kind: "expression",
       source: EXPR,
     });
     // With no expression, a stale name collapses to the floor as it always did.
     expect(
-      resolveStyleSelection(undefined, "vapor", undefined, STYLES),
+      resolveStyleSelection(undefined, "vapor", undefined, STYLES).value,
     ).toEqual({
       kind: "decided",
       name: "none",

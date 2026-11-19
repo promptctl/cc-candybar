@@ -11,15 +11,24 @@ import {
   VALUED_FIELDS,
   valuedRow,
   type SessionField,
+  type SettingName,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
 import {
+  BOOLEAN_FALSE,
+  BOOLEAN_TRUE,
   resolveStyleSelection,
   type StyleSelection,
   resolveEffectSelection,
   type EffectSelection,
   effectiveGlobal,
+  readStored,
+  stalePick,
+  wornName,
+  type Folded,
+  type Selection,
+  type StalePick,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -59,7 +68,7 @@ export type EffectiveGlobals = ValuedGlobals & {
   // style's twin, settled by the view under a rule for the same reason.
   readonly effect: EffectSelection;
   // The active PRESET name — effectivePresetName(sessionState.preset,
-  // globals.preset, presets), collapsed to the floor if stale. Unlike every
+  // globals.preset, presets). Unlike every
   // other field here it is not itself a display value: it is the name of the
   // fragment whose `globals` were merged to PRODUCE the rest of this struct,
   // carried alongside so a menu label states the arrangement that actually
@@ -79,6 +88,11 @@ export type EffectiveGlobals = ValuedGlobals & {
   // bundled", so naming a floor here would be a second copy of a constant
   // that lives in rich-js.
   readonly separator: string | undefined;
+  // [LAW:no-silent-failure] Each pick the session stores outside its
+  // setting's domain, where the session's rung would have been in force: the
+  // fold's own answer, so a staged value that outranks a pick hides it. The
+  // draw reports each, beside the fallback it draws.
+  readonly stale: readonly StalePick[];
 };
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
@@ -96,16 +110,18 @@ function resolveValued<K extends ValuedField>(
   staged: Partial<Globals>,
   sessionPick: (key: string) => string | null,
   globals: Globals,
-): ValuedGlobals[K] {
+): Folded<ValuedGlobals[K]> {
   const row = valuedRow(field);
   return effectiveGlobal(
     staged[field] as ValuedGlobals[K] | undefined,
-    row.kind === "session"
-      ? sessionPick(settingNameOf(field as SessionField))
-      : null,
+    readStored(
+      row.kind === "session"
+        ? sessionPick(settingNameOf(field as SessionField))
+        : null,
+      row.parse,
+    ),
     globals[field] as ValuedGlobals[K] | undefined,
     row.floor,
-    row.parse,
   );
 }
 
@@ -114,7 +130,7 @@ function resolveValued<K extends ValuedField>(
 export function presetOf(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
-): string {
+): Folded<string> {
   return effectivePresetName(
     // [LAW:one-source-of-truth] Read under the key a preset pick is written
     // under.
@@ -123,6 +139,38 @@ export function presetOf(
     config.presets,
   );
 }
+
+// [LAW:one-source-of-truth] A setting's resolved value in the spelling its
+// SessionState key uses — the spelling a pick writes, decided by the value's
+// own primitive, so a setting declared in its row spells with no edit here.
+// A selection chosen by RULE has no name until a render evaluates it, so it
+// is `null`.
+export function spelledSetting(
+  e: Pick<EffectiveGlobals, SettingName>,
+  name: SettingName,
+): string | null {
+  const value: string | number | boolean | Selection<unknown> = e[name];
+  switch (typeof value) {
+    case "boolean":
+      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
+    case "number":
+      return String(value);
+    case "string":
+      return value;
+    default:
+      return value.kind === "decided" ? value.name : null;
+  }
+}
+
+// Every fold the resolution makes, under the name the resolution publishes it
+// as — a controlled field's under its setting's name.
+type Folds = { readonly [K in ValuedField]: Folded<ValuedGlobals[K]> } & {
+  readonly preset: Folded<string>;
+  readonly theme: Folded<ThemeSelection>;
+  readonly style: Folded<StyleSelection>;
+  readonly effect: Folded<EffectSelection>;
+};
+type FoldedValues = { readonly [K in keyof Folds]: Folds[K]["value"] };
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
 // chain uses the session’s pick and whether the active preset was customized.
@@ -135,13 +183,11 @@ export function resolveEffectiveGlobals(
   // The preset resolves FIRST: every field below reads globals, and which
   // globals is exactly what the preset decides.
   const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset);
+  const declared = presetGlobals(config, preset.value);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
   // mode is off" is the EMPTY value — the identity fragment, exactly as
   // PRESET_FLOOR's is. Every field below is resolved by the same expression
-  // whether or not edit mode is on; only the contents of `staged` differ. This
-  // is the whole of "no render-walk branch on edit mode": there is no branch
-  // here either, so there is none to leak downstream.
+  // whether or not edit mode is on; only the contents of `staged` differ.
   const staged: Partial<Globals> =
     sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
   // The theme resolves before the look, because the look's config-default
@@ -156,17 +202,16 @@ export function resolveEffectiveGlobals(
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme, config.themeDefaults),
+    themeDefaultsOf(theme.value, config.themeDefaults),
   );
-  return {
+  const folds: Folds = {
     ...(Object.fromEntries(
       VALUED_FIELDS.map((field) => [
         field,
         resolveValued(field, staged, sessionPick, globals),
       ]),
-    ) as ValuedGlobals),
+    ) as { readonly [K in ValuedField]: Folded<ValuedGlobals[K]> }),
     preset,
-    presetCustomized: presetCustomized(preset),
     theme,
     style: resolveStyleSelection(
       staged.style,
@@ -179,8 +224,32 @@ export function resolveEffectiveGlobals(
       sessionPick(settingNameOf("effect")),
       globals.effect,
     ),
+  };
+  const entries = Object.entries(folds) as ReadonlyArray<
+    [keyof Folds, Folded<unknown>]
+  >;
+  const values = Object.fromEntries(
+    entries.map(([name, folded]) => [name, folded.value]),
+  ) as FoldedValues;
+  return {
+    ...values,
+    presetCustomized: presetCustomized(preset.value),
     // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
     // config` — the same `??`, minus the rungs it does not have.
     separator: staged.default_separator ?? globals.default_separator,
+    // [LAW:no-silent-failure] What each fold passed over, saying what the bar
+    // wears in its place. Only a setting has a session rung to pass over, and a
+    // selection its rule decides has no name until the draw evaluates the rule.
+    stale: entries.flatMap(([name, folded]) => {
+      if (folded.stale === null) return [];
+      const wears = spelledSetting(values, name as SettingName);
+      return [
+        stalePick(
+          name,
+          folded.stale,
+          wears === null ? "its rule's answer" : wornName(wears),
+        ),
+      ];
+    }),
   };
 }

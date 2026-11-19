@@ -409,7 +409,7 @@ describe("globals.palette as an expression — loader", () => {
 
 describe("resolveThemeSelection", () => {
   test("a plain name decides, carrying both the name and the palette it denotes", () => {
-    expect(resolveThemeSelection(undefined, null, "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, null, "nord").value).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -417,7 +417,7 @@ describe("resolveThemeSelection", () => {
   });
 
   test("a session pick naming no installed theme falls through to the config rung", () => {
-    expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, "dark", "nord").value).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -425,15 +425,15 @@ describe("resolveThemeSelection", () => {
   });
 
   test("an expression is undecided only when no higher rung decided", () => {
-    expect(resolveThemeSelection(undefined, null, RULE)).toEqual({
+    expect(resolveThemeSelection(undefined, null, RULE).value).toEqual({
       kind: "expression",
       source: RULE,
     });
-    expect(resolveThemeSelection(undefined, "nord", RULE)).toMatchObject({
+    expect(resolveThemeSelection(undefined, "nord", RULE).value).toMatchObject({
       kind: "decided",
       name: "nord",
     });
-    expect(resolveThemeSelection("dracula", null, RULE)).toMatchObject({
+    expect(resolveThemeSelection("dracula", null, RULE).value).toMatchObject({
       kind: "decided",
       name: "dracula",
     });
@@ -444,16 +444,16 @@ describe("resolveThemeSelection", () => {
     // installs rode straight through to paletteForThemeName's throw. It now falls
     // through like every other field's — and the rung it falls to is the
     // expression, which is still the CONFIG's rung and must not be skipped.
-    expect(resolveThemeSelection(undefined, "no-such-theme", RULE)).toEqual({
+    expect(resolveThemeSelection(undefined, "no-such-theme", RULE).value).toEqual({
       kind: "expression",
       source: RULE,
     });
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", "nord"),
+      resolveThemeSelection(undefined, "no-such-theme", "nord").value,
     ).toMatchObject({ kind: "decided", name: "nord" });
     // Nothing left below: the floor.
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", undefined),
+      resolveThemeSelection(undefined, "no-such-theme", undefined).value,
     ).toMatchObject({ kind: "decided", name: THEME_FLOOR });
   });
 });

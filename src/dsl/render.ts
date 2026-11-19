@@ -23,10 +23,12 @@ import {
   type LayoutNode,
   type ParseDecl,
   type SegmentNode,
+  type SettingDecl,
   type SettingValue,
   type SourceDefault,
   parseArm,
   placementSetting,
+  settingSpelling,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -66,14 +68,20 @@ import {
   decideEffectName,
   decideStyleName,
   decideThemeName,
-  ruleFloorMessage,
+  fallbackMessage,
+  wornName,
   EXPRESSION_SLOTS,
   type ExpressionSlot,
   SLOT_FLOORS,
   EFFECT_FLOOR,
   transposedPalette,
 } from "../themes/index.js";
-import { ANIMATION_SPEEDS, FOLLOW_BAR } from "../themes/policy.js";
+import {
+  ANIMATION_SPEEDS,
+  FOLLOW_BAR,
+  stalePick,
+  type StalePick,
+} from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
 import {
   bindClock,
@@ -158,6 +166,7 @@ import {
   type CompiledSegments,
   type CompiledSegmentNode,
   type PlacementSettings,
+  type ResolvedPlacement,
   type RenderedLine,
   type RenderedLines,
   type NodeCompileCtx,
@@ -849,30 +858,50 @@ export function compileDslConfig({
   // [LAW:one-source-of-truth] A setting configure mode can change reads
   // through its draft variable (SegmentNode.drafts), whose default IS the
   // value filled here — so the render shows a session's unsaved pick the
-  // moment it lands, and the file's value while there is none. A pick the
-  // declaration no longer admits parses to nothing and reads as no pick.
-  const resolvedSettings = (node: SegmentNode): PlacementSettings => {
+  // moment it lands, and the file's value while there is none. A stale pick
+  // folds to the file's value, and `stale` says so through the same fold.
+  const resolvedSettings = (node: SegmentNode): ResolvedPlacement => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.
-    const declared = settingsOf(config.segments[node.name]!);
+    const decls = settingsOf(config.segments[node.name]!);
+    const fold = (name: string, decl: SettingDecl) =>
+      placementSetting(node, name, decl, (draft) =>
+        String(
+          renderBinding(actionRuntime, `setting ${name}`).store.read(
+            draft.variable,
+          ),
+        ),
+      );
     const out = Object.create(null) as Record<string, SettingValue>;
-    for (const [name, decl] of Object.entries(declared)) {
+    for (const [name, decl] of Object.entries(decls)) {
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: () =>
-          placementSetting(node, name, decl, (draft) =>
-            String(
-              renderBinding(actionRuntime, `setting ${name}`).store.read(
-                draft.variable,
-              ),
-            ),
-          ),
+        get: () => fold(name, decl).value,
       });
     }
-    // settingsOf always declares `theme` and `effect`, over domains whose
-    // values are names (an effect's, the placement effects) — the one cast from
-    // the record to what it provably holds.
-    return Object.freeze(out) as PlacementSettings;
+    return {
+      // settingsOf always declares `theme` and `effect`, over domains whose
+      // values are names (an effect's, the placement effects) — the one cast
+      // from the record to what it provably holds.
+      settings: Object.freeze(out) as PlacementSettings,
+      // Only a drafted setting has a pick to pass over. A slot is named by the
+      // placement that owns it, which a name label holding another
+      // placement's `theme` slot is not; configure mode drafts only declared
+      // settings.
+      stale: () =>
+        Object.entries(node.drafts ?? {}).flatMap(([name, slot]) => {
+          const { value, stale } = fold(name, decls[name]!);
+          return stale === null
+            ? []
+            : [
+                stalePick(
+                  `${slot.id}.${name}`,
+                  stale,
+                  wornName(settingSpelling(value)),
+                ),
+              ];
+        }),
+    };
   };
   const compileNode = <N extends LayoutNode>(
     node: N,
@@ -1112,9 +1141,9 @@ function ruleName(
       warn({
         kind: "rule",
         slot,
-        message: ruleFloorMessage(
+        message: fallbackMessage(
           rule.where,
-          slot,
+          wornName(SLOT_FLOORS[slot]),
           `the rule failed — ${outcome.error}`,
         ),
       });
@@ -1242,7 +1271,11 @@ export type RenderWarning =
       readonly variable: string;
       readonly error: string;
       readonly message: string;
-    };
+    }
+  // A pick the session stores outside its setting's domain, which the bar
+  // draws past: it names the setting, the stored spelling and what the bar
+  // wears in its place.
+  | StalePick;
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -1264,6 +1297,7 @@ export type DrawSelection = Pick<
   | "transitions"
   | "animationSpeed"
   | "menuTimeout"
+  | "stale"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
   // own t = 0) and the effects already made for its rows. The daemon hands
@@ -1335,6 +1369,10 @@ export function drawDsl(
 ): DrawnFrame {
   const warnings: RenderWarning[] = [];
   const warn = (warning: RenderWarning): void => void warnings.push(warning);
+  // [LAW:no-silent-failure] Each stale pick the bar draws past, once by its
+  // setting: the session's globals the fold passed over, and each drawn
+  // placement's, whose slot two placements can hold.
+  const stale = new Map(selection.stale.map((pick) => [pick.setting, pick]));
   const segments = new Map<string, readonly RichText[]>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
@@ -1538,6 +1576,7 @@ export function drawDsl(
           placement,
           message: `segment "${placement}": ${message}`,
         }),
+      stalePick: (pick) => void stale.set(pick.setting, pick),
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
         evaluateOnce(
@@ -1663,7 +1702,7 @@ export function drawDsl(
       pending: [...waited].sort(),
     },
     memory,
-    warnings,
+    warnings: [...stale.values(), ...warnings],
     segments,
     evaluated: parts.evaluated - evaluatedBefore,
     cellBreaks: rendered.reduce((sum, row) => sum + row.cellBreaks, 0),

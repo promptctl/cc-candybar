@@ -58,7 +58,7 @@ import {
   rootNode,
   type Unplaced,
 } from "./root.js";
-import { effectiveMemberName } from "../themes/policy.js";
+import { effectiveMemberName, type Folded } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -99,15 +99,15 @@ export function presetNames(
 
 // [LAW:one-type-per-behavior] The preset domain's instance of the shared
 // per-config-member resolver — the same call shape effectiveStyleName makes, one
-// dimension over. A stale or deleted name collapses to PRESET_FLOOR rather than
-// throwing, and the caller publishes this RESOLVED name as `preset.effective`
-// so the bar's label and the bar's layout can never disagree
-// [LAW:no-silent-failure].
+// dimension over. A pick naming no declared preset falls one rung onward and is
+// reported as passed over, and the caller publishes this RESOLVED name as
+// `preset.effective` so the bar's label and the bar's layout can never
+// disagree.
 export function effectivePresetName(
   sessionPreset: string | null,
   globalsPreset: string | undefined,
   declaredPresets: Readonly<Record<string, PresetDecl>>,
-): string {
+): Folded<string> {
   // [LAW:types-are-the-program] No staged rung, and the absence is enforced
   // rather than assumed: every globals fragment that could stage one — a
   // preset's own `globals`, edit mode's `editGlobals` — has `preset` swapped for

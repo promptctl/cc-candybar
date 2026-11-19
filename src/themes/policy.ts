@@ -59,59 +59,124 @@ export function retiredThemeNote(name: unknown): string {
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
 // when nothing above it decided. Spelled once because three things reach it — a
-// config declaring no `palette`, a session pick naming nothing installed, and an
-// EXPRESSION whose result names nothing (brandon-themes-dzl) — and, unlike the
-// style's floor, it is a SPECIFIC theme rather than an identity, which is why the
-// third of those reports itself (see `decideThemeName`).
+// config declaring no `palette`, a stale session pick, and an EXPRESSION whose
+// result names nothing (brandon-themes-dzl) — and, unlike the style's floor, it
+// is a SPECIFIC theme rather than an identity.
 export const THEME_FLOOR = "textual-dark";
 
 // --- The one globals resolution ---
 
-// [LAW:one-type-per-behavior] THE resolution every globals field a click can
-// pick shares: the session's own value, over the config default, over a floor.
-// Written once because the fields differ only in DATA — which floor, and how a
-// raw SessionState string becomes a value of that field's type. Theme, style,
-// preset, endcaps, autoWrap and padding are all this function with different
-// arguments, so the precedence order cannot land on one field and miss another.
+// [LAW:types-are-the-program][LAW:one-type-per-behavior] What a session holds
+// for one setting, read against that setting's domain — one shape for every
+// setting: nothing stored, a value of the domain, or a stored spelling the
+// domain does not hold, carried as written. The third is a pick made under a
+// build or config whose domain held it, which is not "no pick": a fold passing
+// over it can say what it passed over.
+export type Stored<T> =
+  | { readonly kind: "unset" }
+  | { readonly kind: "held"; readonly value: T }
+  | { readonly kind: "stale"; readonly stored: string };
+
+// [LAW:parse-dont-validate] A stored spelling read through `member`, the
+// setting's own parse of one spelling into its domain.
+export function readStored<T>(
+  raw: string | null,
+  member: (raw: string) => T | null,
+): Stored<T> {
+  if (raw === null) return { kind: "unset" };
+  const value = member(raw);
+  return value === null
+    ? { kind: "stale", stored: raw }
+    : { kind: "held", value };
+}
+
+// What a fold decided: the value in force, and the stored spelling it passed
+// over where the session's rung would have been in force — null when it passed
+// over none.
+export interface Folded<T> {
+  readonly value: T;
+  readonly stale: string | null;
+}
+
+// [LAW:one-type-per-behavior] THE resolution every setting a click can pick
+// shares: the staged fragment over the session's own value, over the config
+// default, over a floor. Written once because the settings differ only in DATA
+// — which floor, and the parse that reads the session's spelling (`Stored`) —
+// so the precedence cannot land on one setting and miss another.
 //
 // [LAW:dataflow-not-control-flow] The `??` chain IS the precedence; there is no
-// "does this session have one" branch. A session that has never clicked passes
-// null and lands on the config default by the same code path a session that
-// clicked lands on its pick.
+// "does this session have one" branch, and no "is edit mode on" branch: an
+// absent rung is `undefined`, skipped by the same path every rung takes.
 //
-// [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
-// SessionState string and this field's domain: it returns the typed value or
-// null, and null means "no session pick" — indistinguishable, on purpose, from
-// never having clicked. That is what makes a stale entry from a prior config's
-// vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
-// default rather than throw or render something the label disagrees with
-// [LAW:no-silent-failure] — the caller publishes what this returns as
-// `<field>.effective`, so bar and label always trace to one value.
+// [LAW:no-silent-failure] A stale pick falls through to the next rung, so the
+// bar still draws, and the fold says what it passed over. That is reported only
+// where the session's rung would have been in force: a staged value outranks
+// it, and hides it. The stored spelling stays where it is, so a domain restored
+// brings the pick back.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
 // chain documented in src/config/presets.ts — a fragment some transient MODE of
 // the bar puts on top while it is on (today: edit mode's `editGlobals`). It
 // outranks even the session pick because it is decided LATER: a user picks a
-// style, then afterwards enters edit mode. That is the same lifetime rule that
-// forced the preset's own position, applied one rung further along, which is
-// why it is a parameter of THIS function rather than a check at any call site —
-// a chain with a rung missing from one field is exactly the drift a single
-// resolver exists to prevent.
-//
-// [LAW:dataflow-not-control-flow] Absent ⇒ `undefined`, which the `??` chain
-// skips by the same code path a session that never clicked skips its own rung.
-// There is no "is edit mode on" branch anywhere below this line; the mode is
-// carried entirely by whether this argument has a value.
+// style, then afterwards enters edit mode.
 export function effectiveGlobal<T>(
   staged: T | null | undefined,
-  sessionPick: string | null,
+  session: Stored<T>,
   configDefault: T | null | undefined,
   floor: T,
-  parseSession: (raw: string) => T | null,
-): T {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor;
+): Folded<T> {
+  const picked = session.kind === "held" ? session.value : null;
+  return {
+    value: staged ?? picked ?? configDefault ?? floor,
+    stale: staged == null && session.kind === "stale" ? session.stored : null,
+  };
 }
+
+// [LAW:one-source-of-truth] A stale pick as the bar reports it: the setting it
+// was stored for, the spelling stored, and the sentence saying what the bar
+// wears instead. Its own kind, apart from a rule that named nothing, so a
+// reader tells the two apart without reading the words.
+export interface StalePick {
+  readonly kind: "stale";
+  readonly setting: string;
+  readonly stored: string;
+  readonly message: string;
+}
+
+// `wears` is what the bar wears in the pick's place, as `fallbackMessage`
+// takes it.
+export function stalePick(
+  setting: string,
+  stored: string,
+  wears: string,
+): StalePick {
+  return {
+    kind: "stale",
+    setting,
+    stored,
+    message: fallbackMessage(
+      `the session's ${setting}`,
+      wears,
+      `its stored "${stored}" is not one this build and config offer`,
+    ),
+  };
+}
+
+// [LAW:one-source-of-truth] The one spelling of "this could not be honoured,
+// so the bar wears something else": where it was written, what the bar wears
+// instead (a quoted name, or a phrase where only the draw knows the name), and
+// why — a stale pick, a rule that threw, a rule's result naming no installed
+// theme.
+export function fallbackMessage(
+  where: string,
+  wears: string,
+  why: string,
+): string {
+  return `${where} rendered ${wears}: ${why}`;
+}
+
+// A name as `fallbackMessage` shows what the bar wears.
+export const wornName = (name: string): string => `"${name}"`;
 
 // [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
 // is exactly the registry's names — no alias, so every name is its palette's
@@ -135,13 +200,20 @@ export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
 }
 
+// [LAW:single-enforcer] THE membership test of the installed themes: the
+// session's write gate, a theme pick's read, and a placement's `theme` all ask
+// it. The installed themes are fixed for the life of the process, so the set
+// is built once.
+let installedThemes: ReadonlySet<string> | undefined;
+export function isInstalledTheme(name: string): boolean {
+  installedThemes ??= new Set(listResolvablePaletteNames());
+  return installedThemes.has(name);
+}
+
 // Membership in `placementThemeNames`, which the render asks of every
-// placement's `theme` each render. The installed themes are fixed for the
-// life of the process, so the set is built once.
-let placementThemeSet: ReadonlySet<string> | undefined;
+// placement's `theme` each render.
 export function isPlacementThemeName(name: string): boolean {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
+  return name === FOLLOW_BAR || isInstalledTheme(name);
 }
 
 // --- Per-config member selection ---
@@ -151,33 +223,29 @@ export function isPlacementThemeName(name: string): boolean {
 // are both exactly this — what differs between them is only the floor name and
 // which map holds the members, i.e. DATA.
 //
-// The config default runs through the SAME membership parse the session pick
-// does, one layer down: a `style:`/`preset:` naming a member the config no longer
-// declares is no default at all, and collapses to the floor exactly as a stale
-// session pick does. The loader cannot catch that for a per-config domain, so
-// this resolution is where it is caught.
+// [LAW:parse-dont-validate] Every rung runs through the ONE membership parse,
+// read where the config that declares the domain is known: a session pick, a
+// staged fragment or a config default naming a member the config does not
+// declare is no value of the domain, and the fold moves one rung onward. Only
+// the session's miss is reported (`effectiveGlobal`); the loader refuses the
+// file's own.
 //
 // The floor's membership is a load-time guarantee, not a runtime hope: the
 // bundled stdlib ships it and merge-by-name cannot remove it.
-//
-// The staged rung runs through the SAME membership parse the other two do: a
-// fragment naming a member the config does not declare is no more a pick than a
-// stale session entry is, and collapses one rung onward rather than throwing.
 export function effectiveMemberName(
   stagedName: string | undefined,
   sessionPick: string | null,
   configDefault: string | undefined,
   floor: string,
   declared: Readonly<Record<string, unknown>>,
-): string {
+): Folded<string> {
   const member = (raw: string): string | null =>
     Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
   return effectiveGlobal(
     stagedName === undefined ? null : member(stagedName),
-    sessionPick,
+    readStored(sessionPick, member),
     member(configDefault ?? floor),
     floor,
-    member,
   );
 }
 
@@ -257,7 +325,7 @@ export function resolveSelection<T>(
   globalsValue: string | undefined,
   floor: Decided<T>,
   named: (raw: string) => Decided<T> | null,
-): Selection<T> {
+): Folded<Selection<T>> {
   // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
   // config-default rung, so `effectiveGlobal`'s `??` chain enforces the
   // precedence — there is no "is there an expression?" branch anywhere deciding
@@ -267,10 +335,9 @@ export function resolveSelection<T>(
     : named(globalsValue ?? floor.name);
   return effectiveGlobal<Selection<T>>(
     stagedName === undefined ? null : named(stagedName),
-    sessionPick,
+    readStored(sessionPick, named),
     configRung,
     floor,
-    named,
   );
 }
 
@@ -294,10 +361,9 @@ export function finishSelection<T>(
 // --- Style (theme-adaptation) identifiers ---
 
 // [LAW:one-source-of-truth] The style domain's floor: the name of the identity
-// adaptation every merged config carries. Spelled once because three different
-// things collapse to it — a stale session pick, a config default naming no
-// declared style, and an EXPRESSION whose result names none (brandon-looks-pe6)
-// — and they must all land on the same name.
+// adaptation every merged config carries. Spelled once because a config
+// declaring no style and an EXPRESSION whose result names none
+// (brandon-looks-pe6) must land on the same name.
 export const STYLE_FLOOR = "none";
 
 // The style instances of the two types above. A style's `value` is the ThemeKey
@@ -321,8 +387,7 @@ function namedStyle(
 // [LAW:single-enforcer] The membership policy for a style NAME, wherever the name
 // came from — a config default, a session pick, or an expression's RESULT. A
 // declared style decides; anything else is the floor. This is the one place the
-// forgiveness for an expression's result lives, and it is the same forgiveness a
-// stale session pick has always had.
+// forgiveness for an expression's result lives.
 //
 // Silent, unlike the theme's counterpart, and the asymmetry is the floor itself:
 // this floor is the IDENTITY adaptation, so collapsing to it means the bar wears
@@ -357,7 +422,7 @@ export function resolveStyleSelection(
   sessionStyle: string | null,
   globalsStyle: string | undefined,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
-): StyleSelection {
+): Folded<StyleSelection> {
   return resolveSelection(
     stagedStyle,
     sessionStyle,
@@ -370,9 +435,8 @@ export function resolveStyleSelection(
 // --- Effect identifiers ---
 
 // [LAW:one-source-of-truth] The effect domain's floor: no effect, the identity.
-// Like the style's, three things collapse to it — a stale session pick, a config
-// default naming nothing, and a rule whose result names nothing — and they must
-// all land on the same name.
+// Like the style's, a config naming nothing and a rule whose result names
+// nothing must land on the same name.
 export const EFFECT_FLOOR = "none";
 
 // [LAW:one-source-of-truth] Each rule slot's floor, by slot: what a render draws
@@ -383,17 +447,6 @@ export const SLOT_FLOORS: Readonly<Record<ExpressionSlot, string>> = {
   palette: THEME_FLOOR,
   effect: EFFECT_FLOOR,
 };
-
-// [LAW:one-source-of-truth] The one spelling of "this slot's rule could not be
-// honoured": where the rule was written, the floor it wears instead, and why —
-// a template that threw, or a palette result naming no installed theme.
-export function ruleFloorMessage(
-  where: string,
-  slot: ExpressionSlot,
-  why: string,
-): string {
-  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why}`;
-}
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The looping effects a bar
 // can wear are rich-js's catalogue, by name: this list is the floor and the
@@ -466,7 +519,7 @@ export function resolveEffectSelection(
   stagedEffect: string | undefined,
   sessionEffect: string | null,
   globalsEffect: string | undefined,
-): EffectSelection {
+): Folded<EffectSelection> {
   return resolveSelection(
     stagedEffect,
     sessionEffect,

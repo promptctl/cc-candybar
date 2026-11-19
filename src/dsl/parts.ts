@@ -58,7 +58,8 @@ import {
   decideStyleName,
   drawnDepth,
   isColorCompatibility,
-  ruleFloorMessage,
+  fallbackMessage,
+  wornName,
   SLOT_FLOORS,
   type ColorCompatibility,
   type ExpressionSlot,
@@ -413,9 +414,9 @@ export class ViewParts {
             last = SLOT_FLOORS[slot];
             return settled(
               last,
-              ruleFloorMessage(
+              fallbackMessage(
                 rule.where,
-                slot,
+                wornName(SLOT_FLOORS[slot]),
                 `the rule failed — ${outcome.error}`,
               ),
               null,

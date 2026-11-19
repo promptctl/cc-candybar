@@ -197,9 +197,9 @@ export function validateCrossReferences(
   //
   // An EXPRESSION in that slot is exempt (brandon-looks-pe6): it names no style,
   // it names the RULE for choosing one per render, so there is nothing here to
-  // check membership of. Its result gets the same forgiveness a stale session
-  // pick does (`decideStyleName` collapses a non-member to the floor), and its
-  // own well-formedness is checked where every other template's is — parsed
+  // check membership of. Its result is decided where the render evaluates it
+  // (`decideStyleName` draws a non-member as the floor), and its own
+  // well-formedness is checked where every other template's is — parsed
   // eagerly by registerDslConfig, so a malformed one is still a load error.
   // `isExpression` is the ONE predicate every reader uses, so this exemption
   // cannot be wider or narrower than what the render will actually evaluate.
@@ -250,11 +250,11 @@ export function validateCrossReferences(
   // [LAW:one-type-per-behavior] globals.preset is globals.style one dimension
   // over — the same post-merge membership check against the same kind of
   // per-config block, for the same reason (a user's default may name a
-  // bundled preset). A typo'd DEFAULT is a load error even though a stale
-  // SESSION pick collapses silently to the floor: the config file is authored
+  // bundled preset). A typo'd DEFAULT is a load error, while a stale
+  // SESSION pick draws the floor under a warning: the config file is authored
   // and re-readable, so naming a preset that does not exist is a mistake we can
   // point at; a session pick is a click made against a config that has since
-  // changed, which is not [LAW:no-silent-failure].
+  // changed, so it is reported where it draws and kept [LAW:no-silent-failure].
   if (
     cfg.globals.preset !== undefined &&
     !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)

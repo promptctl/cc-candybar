@@ -266,8 +266,9 @@ padding, preset — is a **draft** while the bar your session
 renders differs from the bar your config file renders on its own. Nothing
 records that: the daemon compares the two on every render and publishes how
 many differ as the payload input `unsaved`. Pick a value and then pick your
-saved one back, and there is nothing to save; a pick the bar ignores (a preset
-or style your config no longer declares) is never a draft.
+saved one back, and there is nothing to save; a pick the bar can't draw (a
+preset or style your config no longer declares) draws the fallback under a
+warning, and is never a draft.
 
 `{ save: true }` writes every draft to one layer as ONE edit. Each
 lands where the next reload reads it: a field the saved preset's own `globals`

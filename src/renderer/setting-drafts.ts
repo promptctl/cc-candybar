@@ -4,8 +4,8 @@
 // file renders on its own. That is derived here, never stored: there is no
 // dirty flag to fall out of step with the file, so a save — or a hand edit —
 // that makes the file agree with the session clears the draft the same instant
-// it clears the difference, and a pick the render ignores (a preset or style
-// the config no longer declares) is never one.
+// it clears the difference, and a pick the fold passes over (a preset or
+// style the config no longer declares) is never one.
 //
 // One function, two readers: the render publishes the count (the `💾 save`
 // cell exists while it is non-zero) and the `save` verb writes exactly the
@@ -13,7 +13,7 @@
 // so the button's count and the click's write cannot describe different sets.
 
 import {
-  parseSettingSpelling,
+  placementPick,
   settingOrderProblems,
   settingSpelling,
   settingsOf,
@@ -51,16 +51,12 @@ import {
   type SettingName,
   type SettingProjection,
 } from "../config/setting-projections.js";
-import {
-  BOOLEAN_FALSE,
-  BOOLEAN_TRUE,
-  listResolvablePaletteNames,
-  type Selection,
-} from "../themes/policy.js";
+import { listResolvablePaletteNames } from "../themes/policy.js";
 import { type SettingCounts } from "./render-payload.js";
 import {
   presetOf,
   resolveEffectiveGlobals,
+  spelledSetting,
   type EffectiveGlobals,
 } from "../config/effective-globals.js";
 
@@ -70,26 +66,6 @@ export interface SettingDraft extends SettingProjection {
   // The persist key the value lands at: the layer that wins for this field
   // under the preset being saved.
   readonly target: string;
-}
-
-// [LAW:one-source-of-truth] A setting's resolved value in the spelling its
-// SessionState key uses — the spelling a pick writes, decided by the value's
-// own primitive, so a setting declared in its row compares with no edit here.
-// A theme or style chosen by RULE has no name until a render evaluates it, so
-// it is `null`: it equals only the same rule, and saving a picked name
-// replaces the rule with it.
-function spelled(e: EffectiveGlobals, name: SettingName): string | null {
-  const value: string | number | boolean | Selection<unknown> = e[name];
-  switch (typeof value) {
-    case "boolean":
-      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-    case "number":
-      return String(value);
-    case "string":
-      return value;
-    default:
-      return value.kind === "decided" ? value.name : null;
-  }
 }
 
 const SETTING_ROWS = Object.entries(SETTINGS) as ReadonlyArray<
@@ -170,8 +146,8 @@ function differing(
   targetOf: (row: SettingProjection) => string,
 ): readonly SettingDraft[] {
   return rows.flatMap(([name, row]) => {
-    const value = spelled(session, name);
-    return value === null || value === spelled(baseOf(name), name)
+    const value = spelledSetting(session, name);
+    return value === null || value === spelledSetting(baseOf(name), name)
       ? []
       : [{ ...row, value, target: targetOf(row) }];
   });
@@ -188,7 +164,7 @@ export function sessionSettingValue(
   sessionPick: (key: string) => string | null,
   name: SettingName,
 ): string | null {
-  return spelled(sessionGlobals(config, sessionPick), name);
+  return spelledSetting(sessionGlobals(config, sessionPick), name);
 }
 
 // Every setting the session renders differently from the config file. The
@@ -238,7 +214,7 @@ export function durableLanding(
 ): DurableLanding {
   // [LAW:one-source-of-truth] The preset the session renders, as the render
   // resolves it.
-  const preset = presetOf(config, sessionPick);
+  const preset = presetOf(config, sessionPick).value;
   const target = parsePersistTarget(key);
   return {
     key:
@@ -265,9 +241,8 @@ export interface PlacementDraft {
 
 // Every placement setting the session holds a pick for that differs from the
 // value the file gives that placement, in the preset the session renders — a
-// pick in another preset is one the render ignores, so it is no draft. A pick
-// the declaration no longer admits parses to nothing, and is no draft either:
-// the render shows the file's value for it.
+// pick in another preset is one the render ignores, so it is no draft. A stale
+// pick is no draft either: the fold draws the file's value for it.
 export function placementDrafts(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
@@ -275,15 +250,30 @@ export function placementDrafts(
   const { preset } = sessionGlobals(config, sessionPick);
   return slotsOf(config, preset).flatMap(
     ({ id, setting, key, decl, saved }) => {
-      const pick = sessionPick(key);
-      const value =
-        pick === null ? undefined : parseSettingSpelling(decl, pick);
-      return value === undefined ||
-        settingSpelling(value) === settingSpelling(saved)
+      const { value } = placementPick(decl, saved, sessionPick(key));
+      return settingSpelling(value) === settingSpelling(saved)
         ? []
         : [{ preset, id, setting, key, value }];
     },
   );
+}
+
+// What the draft slot at `key` shows, in its SessionState spelling: the
+// session's pick folded over the file's value, as the render folds it — null
+// for a key no slot of any preset holds.
+export function draftSlotValue(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  key: string,
+): string | null {
+  const slot = presetNames(config.presets)
+    .flatMap((preset) => slotsOf(config, preset))
+    .find((s) => s.key === key);
+  return slot === undefined
+    ? null
+    : settingSpelling(
+        placementPick(slot.decl, slot.saved, sessionPick(key)).value,
+      );
 }
 
 // [LAW:single-enforcer] What unsaved picks about to land would break between
@@ -308,9 +298,7 @@ export function placementPickProblems(
       const values = Object.fromEntries(
         own.map((s) => {
           const pick = written.get(s.key) ?? sessionPick(s.key);
-          const value =
-            pick === null ? undefined : parseSettingSpelling(s.decl, pick);
-          return [s.setting, value ?? s.saved];
+          return [s.setting, placementPick(s.decl, s.saved, pick).value];
         }),
       );
       return settingOrderProblems(decls, values).map(
@@ -442,21 +430,23 @@ export function themeDefaultSave(
   sessionPick: (key: string) => string | null,
 ): ThemeDefaultSave {
   const session = sessionGlobals(config, sessionPick);
-  const theme = spelled(session, "theme");
+  const theme = spelledSetting(session, "theme");
   if (theme === null) return { kind: "rule" };
   const own = themeOwnLook(config, theme);
   const declared = presetGlobals(config, session.preset);
   const look = Object.fromEntries(
     THEME_DEFAULT_FIELDS.map((f) => [
       f,
-      spelled(declared[f] === undefined ? session : own, f),
+      spelledSetting(declared[f] === undefined ? session : own, f),
     ]),
   ) as Record<ThemeDefaultField, string>;
   return {
     kind: "look",
     theme,
     look,
-    differs: THEME_DEFAULT_FIELDS.some((f) => look[f] !== spelled(own, f)),
+    differs: THEME_DEFAULT_FIELDS.some(
+      (f) => look[f] !== spelledSetting(own, f),
+    ),
   };
 }
 

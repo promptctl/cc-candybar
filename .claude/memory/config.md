@@ -50,6 +50,8 @@ Precedence, lowest to highest: bundled default < file < active preset < session 
 
 Every globals field is one row of the fields table. The schema, the resolved globals, the menu control, the option domain, the payload field and the save format all derive from that row. A new setting is a row, the code that uses its value, and its tests. Controls are generated from the row's domain. A field no control fits is text-only. A field only the file sets has no control and no session pick; colour depth is one of these.
 
+A session pick outside its setting's domain stays stored and draws the fallback under a warning, because the profile outlives the build and config that defined the domain, and restoring the domain must bring the pick back.
+
 ## Drafts, save, reset
 
 A draft is derived, never flagged. It's a setting whose session value differs from what the file resolves to under the preset the save will land in. Save recomputes the drafts at click time against the config the session renders with, so it writes exactly what the button counted.

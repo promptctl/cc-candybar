@@ -33,7 +33,7 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeySeed, configKeySeed } from "./key-seeds";
+import { stateKeyShows, configKeySeed } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
@@ -378,10 +378,8 @@ const setState: VerbHandler = (rest, ctx) => {
 };
 
 // [LAW:single-enforcer] One integer-shape boundary, mirroring the range
-// validator's canonical `^-?\d+$`: the `by` delta and a stored current value are
-// integers or they are not values. Only an integer-shaped stored value is a
-// current value; absence (or a non-integer) is the genuine "unset" state, which
-// steps from what the session's config shows (stepFrom).
+// validator's canonical `^-?\d+$`: the `by` delta and the value a step steps
+// from are integers or they are not values (stepFrom).
 const STEP_INT_RE = /^-?\d+$/;
 
 // [LAW:no-ambient-temporal-coupling] A step that would pass a bound STOPS on it,
@@ -407,8 +405,8 @@ function stepWithin(
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
 // snapshot), so the SAME link string fires every render and N rapid clicks each
 // re-read live state and accumulate — the idempotent absolute-write bug is gone.
-// The absolute target is computed HERE: read the live value (an unset key
-// steps from what the session's config shows, NOT silently from min), wrap by
+// The absolute target is computed HERE: read what the bar shows for the key
+// (an unset key what the session's config shows, NOT silently min), wrap by
 // the signed delta against the bounds the session's own config declares, then
 // route the result through its gate so the one range gate owns the [min,max]
 // clamp and the canonical decimal form that persists.
@@ -438,17 +436,16 @@ const stepState: VerbHandler = (args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped =
-    stored && STEP_INT_RE.test(stored)
-      ? clampTo(params, parseInt(stored, 10))
-      : stepFrom(
-          "step-state",
-          key,
-          params,
-          stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key),
-        );
-  const next = stepWithin(clamped, by, params.min, params.max);
+  // [LAW:one-source-of-truth] Stepped from what the bar shows for the key: a
+  // setting's stored pick read through its setting's own fold, so a stale
+  // pick steps from the value the bar wears in its place.
+  const current = stepFrom(
+    "step-state",
+    key,
+    params,
+    stateKeyShows(config, (k) => ctx.sessionState.get(sid, k), key),
+  );
+  const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, "step-state", [{ key, value: result.value }]);
@@ -457,7 +454,7 @@ const stepState: VerbHandler = (args, ctx) => {
   );
   ctx.log(
     "info",
-    `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
+    `step-state: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
   );
 };
 
@@ -487,24 +484,24 @@ function clampTo(params: RangeParams, n: number): number {
   return Math.max(params.min, Math.min(params.max, n));
 }
 
-// [LAW:no-defensive-null-guards] "unset" is a real state: an unset key steps
-// from the value its session's config shows before any click (`declared`,
-// resolved from the session's picks). A key whose config shows nothing steps from `min`; one that shows a
-// non-integer is a stepper over a value that is no number, refused loudly
-// rather than stepped from a guess.
+// [LAW:no-defensive-null-guards] "unset" is a real state: a key steps from the
+// value it shows (`shown`, resolved from the session's picks and its config). A
+// key that shows nothing steps from `min`; one that shows a non-integer is a
+// stepper over a value that is no number, refused loudly rather than stepped
+// from a guess.
 function stepFrom(
   verb: string,
   key: string,
   params: RangeParams,
-  declared: string | null,
+  shown: string | null,
 ): number {
-  if (declared === null) return params.min;
-  if (!STEP_INT_RE.test(declared)) {
+  if (shown === null) return params.min;
+  if (!STEP_INT_RE.test(shown)) {
     throw new BadVerbArgs(
-      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`,
+      `${verb}: "${key}" shows ${JSON.stringify(shown)}, not an integer to step`,
     );
   }
-  return clampTo(params, parseInt(declared, 10));
+  return clampTo(params, parseInt(shown, 10));
 }
 
 // ─── The durable store: which file, and the history over it ─────────────────

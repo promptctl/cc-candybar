@@ -1062,7 +1062,7 @@ describe("RenderCache: the config file is the durable store", () => {
           undefined,
           sessionState.get(S1, "theme"),
           entry.state.config.globals.palette,
-        ),
+        ).value,
       ).toMatchObject({ kind: "decided", name: "dracula" });
       // A session that never picked reads the file's default.
       expect(
@@ -1070,7 +1070,7 @@ describe("RenderCache: the config file is the durable store", () => {
           undefined,
           sessionState.get(S2_NO_PICK, "theme"),
           entry.state.config.globals.palette,
-        ),
+        ).value,
       ).toMatchObject({ kind: "decided", name: "nord" });
     } finally {
       for (const fn of cleanups) fn();

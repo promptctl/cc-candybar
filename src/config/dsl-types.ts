@@ -29,10 +29,15 @@ import type {
   ThemeDefaultField,
 } from "./globals-fields.js";
 import {
+  effectiveGlobal,
   FOLLOW_BAR,
   isPlacementThemeName,
+  parseSessionBoolean,
   parseSessionInt,
   PLACEMENT_EFFECTS,
+  readStored,
+  type Folded,
+  type Stored,
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -1038,48 +1043,62 @@ export function inSettingDomain(
 
 // [LAW:one-source-of-truth] A setting value as a SessionState string, and
 // back. A session holds strings, so a pick crosses the click wire in this
-// spelling and the render parses it against the declaration — `undefined` for
-// a string the domain does not hold (a pick made before the declaration
-// changed), which the caller reads as "no pick", as a stale theme name is.
+// spelling and the render parses it against the declaration (`Stored`): a
+// string the domain does not hold is a pick made before the declaration
+// changed, kept as written.
 export function settingSpelling(value: SettingValue): string {
   return String(value);
 }
 
+// [LAW:single-enforcer] THE read of a placement setting's stored spelling:
+// every reader of a draft slot — the render, the drafts a save writes, the
+// order check, the stepper — reads it here.
 export function parseSettingSpelling(
   decl: SettingDecl,
-  raw: string,
-): SettingValue | undefined {
+  raw: string | null,
+): Stored<SettingValue> {
   const { domain } = decl;
-  if (typeof domain === "object" && "min" in domain) {
-    return parseSessionInt(raw, domain) ?? undefined;
-  }
-  const value: SettingValue =
-    domain === "bool"
-      ? raw === "true"
-        ? true
-        : raw === "false"
-          ? false
-          : raw
-      : raw;
-  return inSettingDomain(decl, value) ? value : undefined;
+  return readStored(raw, (spelled): SettingValue | null => {
+    if (typeof domain === "object" && "min" in domain) {
+      return parseSessionInt(spelled, domain);
+    }
+    const value: SettingValue =
+      domain === "bool" ? (parseSessionBoolean(spelled) ?? spelled) : spelled;
+    return inSettingDomain(decl, value) ? value : null;
+  });
+}
+
+// [LAW:one-type-per-behavior] A placement setting's fold, the one every
+// setting folds by: the session's pick over the placement's own value (`saved`,
+// itself the placement's value or else the declaration's default).
+export function placementPick(
+  decl: SettingDecl,
+  saved: SettingValue,
+  raw: string | null,
+): Folded<SettingValue> {
+  return effectiveGlobal(
+    undefined,
+    parseSettingSpelling(decl, raw),
+    undefined,
+    saved,
+  );
 }
 
 // [LAW:single-enforcer] What one setting of a placement holds: the session's
-// pick through the setting's draft slot (SegmentNode.drafts) when the
-// declaration admits it, else the placement's own value, else the
-// declaration's default. `pick` reads a slot — the render through its draft
-// variable, the doctor through the session's state — so the bar and the
-// doctor cannot disagree about what a placement wears.
+// pick through the setting's draft slot (SegmentNode.drafts), folded over the
+// placement's own value, else the declaration's default. `pick` reads a slot.
 export function placementSetting(
   node: SegmentNode,
   name: string,
   decl: SettingDecl,
   pick: (draft: DraftSlot) => string | null,
-): SettingValue {
-  const saved = node.settings?.[name] ?? decl.default;
+): Folded<SettingValue> {
   const draft = node.drafts?.[name];
-  const raw = draft === undefined ? null : pick(draft);
-  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
+  return placementPick(
+    decl,
+    node.settings?.[name] ?? decl.default,
+    draft === undefined ? null : pick(draft),
+  );
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

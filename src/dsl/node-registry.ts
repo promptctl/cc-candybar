@@ -42,7 +42,11 @@ import {
 } from "../config/dsl-types.js";
 import { placementPalette } from "../themes/palette-resolvers.js";
 import { groundOf } from "../template-engine/colors.js";
-import { FOLLOW_BAR, type PlacementEffect } from "../themes/policy.js";
+import {
+  FOLLOW_BAR,
+  type PlacementEffect,
+  type StalePick,
+} from "../themes/policy.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
@@ -83,6 +87,9 @@ export interface CompiledSegmentNode {
   // the default — so the render reads a finished object, never a fallback.
   readonly id: string;
   readonly settings: PlacementSettings;
+  // [LAW:no-silent-failure] The picks of its settings the session stores
+  // outside their domains, read through the same fold `settings` is.
+  readonly stale: () => readonly StalePick[];
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
@@ -197,9 +204,9 @@ export interface NodeCompileCtx {
     path: string,
     at: AddressStep | undefined,
   ): Compiled<N>;
-  // The resolved settings of a segment placement: the driver holds the
-  // declarations they resolve against.
-  placementSettings(node: SegmentNode): PlacementSettings;
+  // The resolved settings of a segment placement, and the picks its fold
+  // passed over: the driver holds the declarations they resolve against.
+  placementSettings(node: SegmentNode): ResolvedPlacement;
 }
 
 // What a placement's templates read as `.settings`: a frozen, null-prototype
@@ -210,6 +217,11 @@ export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
   readonly theme: string;
   readonly effect: PlacementEffect;
 };
+
+export interface ResolvedPlacement {
+  readonly settings: PlacementSettings;
+  readonly stale: () => readonly StalePick[];
+}
 
 // [LAW:types-are-the-program] A node's own `when` as the driver evaluated it,
 // a failure carrying the one way to say so: only a gate that failed can be
@@ -270,6 +282,9 @@ export interface NodeRenderCtx {
   // one line of the message, and this reports the whole of it as the draw's
   // `segment` warning in the bar's diagnostics.
   readonly brokenPlacement: (placementId: string, message: string) => void;
+  // [LAW:no-silent-failure] A pick of a drawn placement's setting the session
+  // stores outside the setting's domain, which the placement draws past.
+  readonly stalePick: (pick: StalePick) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only names a
   // placement and gets back its parts as the view keeps them
@@ -708,7 +723,7 @@ const segmentType: NodeType<"segment"> = {
       when: cctx.when,
       name: node.name,
       id: placementId(node),
-      settings: cctx.placementSettings(node),
+      ...cctx.placementSettings(node),
       // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
       // predicate by the one `disclosureGate` every disclosure reads through.
       ...(node.opens !== undefined && {
@@ -791,6 +806,9 @@ function drawSegment(
     if (bodyGate.kind === "failed") {
       return brokenSegment(node, scope, ctx, bodyGate.message);
     }
+    // What it draws in place of each stale pick of its settings, said once it
+    // draws at all.
+    node.stale().forEach(ctx.stalePick);
 
     // [LAW:dataflow-not-control-flow] The per-placement variability is
     // WHICH palette, and it is a value: this placement's `theme` setting,

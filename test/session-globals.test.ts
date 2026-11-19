@@ -322,18 +322,18 @@ describe("a stale session pick falls to the config default, not the floor", () =
 
   it("style: an orphaned name yields the configured style", () => {
     expect(
-      resolveStyleSelection(undefined, "deleted-look", "vivid", STYLES),
+      resolveStyleSelection(undefined, "deleted-look", "vivid", STYLES).value,
     ).toMatchObject({ kind: "decided", name: "vivid" });
     expect(
-      resolveStyleSelection(undefined, "deleted-look", undefined, STYLES),
+      resolveStyleSelection(undefined, "deleted-look", undefined, STYLES).value,
     ).toMatchObject({ kind: "decided", name: "none" });
   });
 
   it("preset: an orphaned name yields the configured preset", () => {
-    expect(effectivePresetName("deleted-preset", "compact", PRESETS)).toBe(
+    expect(effectivePresetName("deleted-preset", "compact", PRESETS).value).toBe(
       "compact",
     );
-    expect(effectivePresetName("deleted-preset", undefined, PRESETS)).toBe(
+    expect(effectivePresetName("deleted-preset", undefined, PRESETS).value).toBe(
       "default",
     );
   });
@@ -342,9 +342,9 @@ describe("a stale session pick falls to the config default, not the floor", () =
     // The per-config domains are the only ones where the loader cannot catch a
     // stale default, so both rungs have to be parsed, not just the session's.
     expect(
-      resolveStyleSelection(undefined, "deleted-look", "also-deleted", STYLES),
+      resolveStyleSelection(undefined, "deleted-look", "also-deleted", STYLES).value,
     ).toMatchObject({ kind: "decided", name: "none" });
-    expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");
+    expect(effectivePresetName(null, "also-deleted", PRESETS).value).toBe("default");
   });
 });
 
