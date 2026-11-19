@@ -1,3 +1,10 @@
+## [1.232.11](https://github.com/promptctl/cc-candybar/compare/v1.232.10...v1.232.11) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** a connection is one state, reads one frame, and answers an unencodable reply (df7i) ([#808](https://github.com/promptctl/cc-candybar/issues/808)) ([d136ccc](https://github.com/promptctl/cc-candybar/commit/d136cccfa79683af69b5dd8e2f57dd9cb53d1988))
+* **state:** a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80) ([#835](https://github.com/promptctl/cc-candybar/issues/835)) ([77b0e65](https://github.com/promptctl/cc-candybar/commit/77b0e659d9008283d4e326d77e02510c94fa4492))
+
 ## [1.232.10](https://github.com/promptctl/cc-candybar/compare/v1.232.9...v1.232.10) (2026-11-18)
 
 ### Bug Fixes
