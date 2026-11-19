@@ -62,12 +62,12 @@ export class SourceFiles {
       abort.signal.throwIfAborted();
       return { kind: "text", text: await this.readUtf8(file, abort.signal) };
     } catch (error) {
-      const err =
-        error instanceof Error ? (error as NodeJS.ErrnoException) : null;
+      // Node's filesystem errors can come from another realm.
+      const err = error as NodeJS.ErrnoException | null | undefined;
       return {
         kind: "error",
-        code: err?.code,
-        message: err?.message ?? String(error),
+        code: typeof err?.code === "string" ? err.code : undefined,
+        message: typeof err?.message === "string" ? err.message : String(error),
       };
     } finally {
       for (const signal of callers)
