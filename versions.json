@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-846",
+      "ref": "refs/pull/846/merge",
+      "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
+      "timestamp": "2026-11-19T10:14:03.031Z",
+      "commits": [
+        {
+          "sha": "f01e70680e0173f763923a066e31b1b8c34e85f8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:13:00-07:00",
+          "message": "Merge c9a506d0e423d6c0adc373e579bcc0b1ba1c704b into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "c9a506d0e423d6c0adc373e579bcc0b1ba1c704b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:11:37-07:00",
+          "message": "fix(renderer): keep live repository trust in edit previews\n"
+        },
+        {
+          "sha": "f94cfeaec2e12bff66870dc3a4bab3bdbac67b16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:08:06-07:00",
+          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
+        }
+      ]
+    },
+    {
       "version": "pr-844",
       "ref": "refs/pull/844/merge",
       "sha": "9da9745959d472116fdb671826fcda19b33676ce",
