@@ -1,3 +1,9 @@
+## [1.232.14](https://github.com/promptctl/cc-candybar/compare/v1.232.13...v1.232.14) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** integrate edit transactions and menu navigation ([#851](https://github.com/promptctl/cc-candybar/issues/851)) ([b2c14eb](https://github.com/promptctl/cc-candybar/commit/b2c14ebf42db01edd317ebe6cd8bedeee033c50f))
+
 ## [1.232.13](https://github.com/promptctl/cc-candybar/compare/v1.232.12...v1.232.13) (2026-11-19)
 
 ### Bug Fixes
