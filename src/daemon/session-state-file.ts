@@ -6,6 +6,11 @@ import { sessionKeyed, type SessionId } from "./foundations/session-id";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import type { Asked } from "../utils/outcome";
 import { isPlainObject } from "../config/loader/validate-core";
+import {
+  parseSessionPicks,
+  type SessionPicks,
+} from "../renderer-interface/stored-state";
+export type { SessionPicks } from "../renderer-interface/stored-state";
 
 // [LAW:one-type-per-behavior] What one per-session file holds: the name its
 // log lines say, each session's value as the file keeps it, and as a load
@@ -35,24 +40,11 @@ export const ephemeralSessionFile = <V>(): SessionFileStorage<V> => ({
   flush: async () => {},
 });
 
-// A session's picks: its key → value strings.
-export type SessionPicks = Readonly<Record<string, string>>;
-
-// The session picks' file.
+// The session picks' file uses the same value shape as a renderer profile.
 export const SESSION_STATE_FILE: SessionFileKind<SessionPicks> = {
   name: "session-state",
   record: (kv) => kv,
-  parse: (kv) => {
-    if (!isPlainObject(kv))
-      return { kind: "failed", reason: "is not an object" };
-    const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
-    return bad === undefined
-      ? { kind: "ok", value: kv as SessionPicks }
-      : {
-          kind: "failed",
-          reason: `has a ${JSON.stringify(bad)} that is not a string`,
-        };
-  },
+  parse: parseSessionPicks,
 };
 
 // [LAW:single-enforcer] The load of every per-session file, keyed by session

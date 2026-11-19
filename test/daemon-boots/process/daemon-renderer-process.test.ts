@@ -14,12 +14,16 @@ import {
   VERB_OPEN_VSCODE,
   VERB_REPO_CONFIG,
   VERB_RUN,
+  VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { RENDERER_WIRE_VERSION } from "../../../src/renderer-interface/wire";
+import { RENDERER_WIRE_VERSION, type HostLine } from "../../../src/renderer-interface/wire";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
-import { DISCLOSURE_GLYPH_CLOSE } from "../../../src/config/disclosure";
+import {
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSE,
+} from "../../../src/config/disclosure";
 import {
   click,
   drawnLink,
@@ -46,7 +50,6 @@ jest.setTimeout(30_000);
 const COMPATIBLE_BOOT = {
   wireVersion: RENDERER_WIRE_VERSION,
   boot: {
-    digest: "another-worktree-build",
     stored: EMPTY_STORED_STATE,
     locations: {
       home: "/home",
@@ -56,7 +59,7 @@ const COMPATIBLE_BOOT = {
     },
     memoryLimitBytes: 1,
   },
-};
+} satisfies Omit<Extract<HostLine, { kind: "boot" }>, "kind">;
 
 function bootChild(...lines: readonly object[]) {
   return runRealClient(
@@ -98,7 +101,7 @@ describe("the renderer wire handshake", () => {
     },
   );
 
-  test("the built child starts with a compatible version and unrelated build identity", () => {
+  test("the built child starts with a matching version and resolved inputs", () => {
     const child = bootChild(COMPATIBLE_BOOT);
     expect(child.status).toBe(0);
     expect(
@@ -112,6 +115,18 @@ describe("the renderer wire handshake", () => {
         wireVersion: RENDERER_WIRE_VERSION,
       }),
     );
+  });
+
+  test("a matching version with no resolved locations refuses before readiness", () => {
+    const child = bootChild({
+      ...COMPATIBLE_BOOT,
+      boot: { ...COMPATIBLE_BOOT.boot, locations: undefined },
+    });
+    expect(child.status).toBe(1);
+    expect(JSON.parse(child.stdout)).toMatchObject({
+      kind: "refused",
+      failure: { message: "renderer boot has no resolved locations" },
+    });
   });
 });
 
@@ -146,6 +161,45 @@ describe("the daemon's renderer process", () => {
     expect(pid).toBeDefined();
     expect(pid).not.toBe(handle.child.pid);
 
+    const profileConfig = path.join(projectDir, "profile.json5");
+    fs.writeFileSync(
+      profileConfig,
+      JSON.stringify({
+        segments: { choice: { template: "profile-body" } },
+        root: {
+          h: [
+            {
+              kind: "group",
+              name: "details",
+              label: "details",
+              open: true,
+              children: ["choice"],
+            },
+          ],
+        },
+      }),
+    );
+    const profileSession = "rproc-profile";
+    const drawProfile = () =>
+      render(handle.sockPath, profileSession, projectDir, {}, [
+        "cc-candybar",
+        "--config-only",
+        profileConfig,
+      ]);
+    const opened = await drawProfile();
+    expect(textOf(opened)).toContain("profile-body");
+    const close = linksOf(opened).find(({ url }) =>
+      effectsOf(url).some(
+        ({ verb, args }) =>
+          verb === VERB_SET_STATE &&
+          args[0] === profileSession &&
+          args[2] === DISCLOSURE_CLOSED,
+      ),
+    );
+    if (!close) throw new Error("the profile fixture drew no close action");
+    await click(handle.sockPath, close.url);
+    expect(textOf(await drawProfile())).not.toContain("profile-body");
+
     process.kill(pid!, "SIGKILL");
     await until(
       () => rendererStarts(handle).length === 2,
@@ -153,6 +207,9 @@ describe("the daemon's renderer process", () => {
       10_000,
     );
     expect(rendererStarts(handle)[1]).not.toBe(pid);
+    const restored = textOf(await drawProfile());
+    expect(restored).toContain("details");
+    expect(restored).not.toContain("profile-body");
 
     // The restarted renderer configures the session again from the request
     // the daemon holds, and the bar warns of the end.

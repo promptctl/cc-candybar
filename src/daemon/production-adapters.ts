@@ -15,7 +15,6 @@ import { fileStorage } from "./file-storage";
 import { productionBarPaneEdge } from "./lane-edge.js";
 import { linkKeyFile, linkKeyFromFile } from "./link-key.js";
 import { realLimitsDeps } from "./limits";
-import { inProcessPort } from "./renderer-process.js";
 import type { DaemonLog } from "./log";
 import { profilePaths, type DaemonPaths } from "./paths";
 import { checkoutFiles } from "../utils/git-root.js";
@@ -52,7 +51,6 @@ export function productionAdapters(
       }),
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
-    renderer: inProcessPort,
     rendererEntryOf: (reported) => {
       const entry = fs.realpathSync.native(reported);
       if (!fs.statSync(entry).isFile()) throw new Error("not a file");

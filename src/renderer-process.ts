@@ -12,7 +12,6 @@ import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
-import { createGates } from "./daemon/foundations/gates.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
@@ -24,7 +23,7 @@ import type { AdapterToHost } from "./renderer-interface/adapter.js";
 import {
   hostOverLines,
   lineSplitter,
-  rendererWireVersionProblem,
+  rendererBootFrom,
   RENDERER_WIRE_VERSION,
   serveRenderer,
   type HostLine,
@@ -64,17 +63,13 @@ export function runRenderer(world: World): void {
   let served: ((line: HostLine) => void) | null = null;
   const heard = (text: string): void => {
     if (leaving) return;
-    const line = JSON.parse(text) as HostLine;
     if (served !== null) {
-      served(line);
+      served(JSON.parse(text) as HostLine);
       return;
     }
-    if (line.kind !== "boot") throw new Error(`a ${line.kind} before the boot`);
     let renderer: TimedRenderer;
     try {
-      const mismatch = rendererWireVersionProblem("host", line.wireVersion);
-      if (mismatch !== null) throw new Error(mismatch);
-      renderer = booted(world, line.boot, host);
+      renderer = booted(world, rendererBootFrom(JSON.parse(text)), host);
     } catch (thrown) {
       send({ kind: "refused", failure: failureOf(thrown) });
       leave(1);
@@ -122,6 +117,6 @@ function booted(
   const { clock } = world;
   // [LAW:single-enforcer] Each turn timed in this process, around its
   // answer: the host tells the hop from the turn.
-  const renderer = mainRendererOf({ ...boot, gates: createGates() }, reaches);
+  const renderer = mainRendererOf(boot, reaches);
   return timed(renderer, () => clock.monotonic());
 }

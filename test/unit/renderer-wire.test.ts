@@ -5,7 +5,9 @@
 import {
   hostOverLines,
   lineSplitter,
+  rendererBootFrom,
   rendererOverLines,
+  RENDERER_WIRE_VERSION,
   serveRenderer,
   type HostLine,
   type RendererLine,
@@ -99,6 +101,71 @@ const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   push: { kind },
   at: 0 as Instant,
   tick: 0 as Tick,
+});
+
+describe("a renderer's boot line", () => {
+  const locations = {
+    home: "/h",
+    configHome: "/c",
+    dataHome: "/d",
+    dataDirs: ["/s"],
+  };
+  const stored = {
+    sessions: { "session-a": { pick: "blue" } },
+    history: { "session-a": { past: [], future: [] } },
+  };
+  const boot = {
+    locations,
+    stored,
+    memoryLimitBytes: Number.MAX_SAFE_INTEGER * 1024 * 1024,
+  };
+  const read = (value: unknown) =>
+    rendererBootFrom({
+      kind: "boot",
+      wireVersion: RENDERER_WIRE_VERSION,
+      boot: value,
+    });
+
+  test("selects the resolved fields and the committed profile", () => {
+    expect(
+      read({
+        ...boot,
+        digest: "a compatible build",
+        locations: { ...locations, tmp: "/unused" },
+      }),
+    ).toEqual(boot);
+  });
+
+  test.each([
+    [
+      { ...boot, locations: { ...locations, dataDirs: [1] } },
+      "invalid resolved locations",
+    ],
+    [{ ...boot, memoryLimitBytes: -1 }, "memoryLimitBytes"],
+    [{ ...boot, stored: {} }, "stored.sessions"],
+    [
+      {
+        ...boot,
+        stored: { ...stored, sessions: { "session-a": { pick: 1 } } },
+      },
+      "not a string",
+    ],
+    [
+      {
+        ...boot,
+        stored: {
+          ...stored,
+          history: { "session-a": { past: "one", future: [] } },
+        },
+      },
+      "not a list of steps",
+    ],
+  ] as const)(
+    "refuses a malformed boot before the first turn",
+    (value, reason) => {
+      expect(() => read(value)).toThrow(reason);
+    },
+  );
 });
 
 describe("the renderer over lines", () => {

@@ -123,9 +123,8 @@ export interface SessionConfig {
 
 // [LAW:effects-at-boundaries] exception: a reach of the host's into the
 // renderer that is not yet an event, listed in the adapter
-// (src/renderer-interface/adapter.ts). A push opens no view and names no
-// session's subscriptions, so it carries none of an event's turn: its output
-// is its reply alone.
+// (src/renderer-interface/adapter.ts). Its reply includes the subscriptions
+// and stored writes resulting from the push.
 export interface AdapterInput extends Readings {
   readonly kind: "adapter";
   readonly push: AdapterPush;

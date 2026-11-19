@@ -5,59 +5,18 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DaemonLogger } from "../utils/logger";
 import { writeAtomic } from "../utils/atomic-write.js";
-import { layerRoleOf } from "../config/layer-role";
 import { loadSessionFile, type SessionFileKind } from "./session-state-file";
-import type { Asked } from "../utils/outcome";
-import { isPlainObject } from "../config/loader/validate-core";
 import {
   type Change,
   type Step,
   type SessionHistory,
   type HistoryStorage,
   holdsNothing,
+  parseSessionHistory,
   isSettingKey,
 } from "../renderer-interface/history-storage";
 
 // ─── The file ───────────────────────────────────────────────────────────────
-
-function isChange(v: unknown): v is Change {
-  if (v === null || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  const state = (x: unknown) => x === null || typeof x === "string";
-  return (
-    ((o.kind === "session" && typeof o.key === "string") ||
-      (o.kind === "layer" &&
-        layerRoleOf(o.role) !== null &&
-        typeof o.digest === "string")) &&
-    state(o.before) &&
-    state(o.after)
-  );
-}
-
-function isSteps(v: unknown): v is Step[] {
-  return (
-    Array.isArray(v) &&
-    v.every((step) => Array.isArray(step) && step.every(isChange))
-  );
-}
-
-// [LAW:parse-dont-validate] Import only committed steps. A historical
-// savepoint described disk writes that already landed, so it cannot become
-// a live edit transaction on restart.
-function parseSessionHistory(v: unknown): Asked<SessionHistory> {
-  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
-  if (!isSteps(v.past))
-    return {
-      kind: "failed",
-      reason: "has a 'past' that is not a list of steps",
-    };
-  if (!isSteps(v.future))
-    return {
-      kind: "failed",
-      reason: "has a 'future' that is not a list of steps",
-    };
-  return { kind: "ok", value: { past: v.past, future: v.future } };
-}
 
 // [LAW:types-are-the-program] A session change is a change to a SETTING key —
 // the only kind the journal records. A key that has left that set since the

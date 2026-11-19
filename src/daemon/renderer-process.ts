@@ -22,11 +22,9 @@ import {
   type AdapterOutput,
   type EffectId,
   type EventInput,
-  type Renderer,
   type RendererBoot,
   type Timed,
   type TimedRenderer,
-  timed,
   type RendererOutput,
 } from "../renderer-interface/interface.js";
 import type {
@@ -76,27 +74,17 @@ export interface RendererProcess {
 }
 
 // Where a daemon's renderer runs, in two steps of the daemon's build: the
-// port is handed how to build the renderer and its boot as the daemon's build
+// port is handed the bound entry and its boot data as the daemon's build
 // begins, and its `start` the host's reaches once the host's parts exist.
 export type RendererPort = (prepared: {
   // The renderer's name, which every line its link says carries.
   readonly name: RendererName;
-  // The renderer in this process, built over the host's reaches from the
-  // stored state the host holds as it is called.
-  readonly build: (reaches: AdapterToHost) => Renderer;
-  // Read for each spawn: a boot carries the link key and the stored state
-  // as they are then.
+  // Read for each spawn so a replacement receives the current profile.
   readonly boot: () => RendererBoot;
   // The executable entry and the Node invocation which loads it.
   readonly entry: string;
   readonly node: readonly string[];
 }) => { start(own: LinkOwner): RendererLink };
-
-// [LAW:one-type-per-behavior] The renderer in this process: what a test's
-// daemon and the page run.
-export const inProcessPort: RendererPort = ({ name, build }) => ({
-  start: (own) => inProcessRenderer(name, build, own.reaches, own.clock),
-});
 
 // The renderer in a process of its own, built there from its boot.
 export function processPort(
@@ -106,51 +94,6 @@ export function processPort(
     start: (own) =>
       processRenderer({ ...own, ...run, name, node, entry, boot }),
   });
-}
-
-export function inProcessRenderer(
-  name: RendererName,
-  build: (reaches: AdapterToHost) => Renderer,
-  reaches: AdapterToHost,
-  clock: Pick<Timekeeper, "monotonic">,
-): RendererLink {
-  // [LAW:no-ambient-temporal-coupling] None until the daemon serves: an input
-  // before it fails as no renderer's.
-  let built: TimedRenderer | null = null;
-  const live = (): TimedRenderer => {
-    if (built === null)
-      throw new RendererDown(`renderer ${name} has not started`);
-    return built;
-  };
-  // [LAW:no-ambient-temporal-coupling] An input reaches the renderer once
-  // the stack that sent it has unwound, as it does over a process's lines.
-  // The host hands some in from inside its own MobX action, and one store
-  // runs both: a turn begun there would leave its views' reactions to run as
-  // the host's action ends, after the turn, with no time to read.
-  const crossed = async (): Promise<void> => {};
-  const renderer: TimedRenderer = rendererOf({
-    event: async (input) => {
-      await crossed();
-      return live().answer(input);
-    },
-    adapter: async (input) => {
-      await crossed();
-      return live().answer(input);
-    },
-  });
-  return {
-    renderer,
-    // [LAW:single-enforcer] Each turn timed around its answer, on the host's
-    // clock, which the renderer's process is.
-    serve: () => {
-      built ??= timed(build(reaches), () => clock.monotonic());
-    },
-    arm: () => {},
-    // Nothing restarts in process.
-    beginClose: () => {},
-    close: async () => {},
-    process: () => null,
-  };
 }
 
 // What the daemon hands a link as it starts it: the host's reaches; the

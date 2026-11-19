@@ -73,6 +73,17 @@ const CRASHED: Failed = {
 
 const SESSION = "s1" as SessionId;
 
+const RENDERER_BOOT = {
+  locations: {
+    home: "/home",
+    configHome: "/config",
+    dataHome: "/data",
+    dataDirs: [],
+  },
+  memoryLimitBytes: 1,
+  stored: EMPTY_STORED_STATE,
+} satisfies Extract<HostLine, { kind: "boot" }>["boot"];
+
 function rig(start: () => Promise<void> = async () => {}) {
   const clock: HeldClock = heldClock(new Date("2026-11-15T00:00:00Z"));
   const children: Child[] = [];
@@ -135,16 +146,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     cwd: "/state",
     heapCapMb: 512,
     name: MAIN_RENDERER,
-    boot: () => ({
-      locations: {
-        home: "/home",
-        configHome: "/config",
-        dataHome: "/data",
-        dataDirs: [],
-      },
-      memoryLimitBytes: 1,
-      stored: EMPTY_STORED_STATE,
-    }),
+    boot: () => RENDERER_BOOT,
   });
   // The inputs the host sent the child, in order.
   const inputs = (child: Child) =>
@@ -201,16 +203,7 @@ describe("a renderer process's start", () => {
       {
         kind: "boot",
         wireVersion: RENDERER_WIRE_VERSION,
-        boot: {
-          locations: {
-            home: "/home",
-            configHome: "/config",
-            dataHome: "/data",
-            dataDirs: [],
-          },
-          memoryLimitBytes: 1,
-          stored: EMPTY_STORED_STATE,
-        },
+        boot: RENDERER_BOOT,
       },
     ]);
     expect(rendererNodeArgs(["--max-old-space-size=9"], 7)).toEqual([

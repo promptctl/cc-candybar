@@ -9,6 +9,8 @@
 // around its answer, and its time crosses with its output.
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
+import { isPlainObject } from "../config/loader/validate-core.js";
+import { storedStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { AdapterToHost } from "./adapter.js";
@@ -41,6 +43,43 @@ export function rendererWireVersionProblem(
   const received =
     version === undefined ? "no version" : `version ${JSON.stringify(version)}`;
   return `renderer wire version mismatch (${peer} sent ${received}, expected version ${RENDERER_WIRE_VERSION})`;
+}
+
+// [LAW:parse-dont-validate] A worktree's private version is checked before
+// its boot shape. Report a mismatched value before announcing readiness.
+export function rendererBootFrom(raw: unknown): RendererBoot {
+  if (!isPlainObject(raw) || raw.kind !== "boot")
+    throw new Error("expected the renderer boot message first");
+  const mismatch = rendererWireVersionProblem("host", raw.wireVersion);
+  if (mismatch !== null) throw new Error(mismatch);
+  const boot = raw.boot;
+  if (!isPlainObject(boot)) throw new Error("renderer boot must be an object");
+  const locations = boot.locations;
+  if (!isPlainObject(locations))
+    throw new Error("renderer boot has no resolved locations");
+  const { home, configHome, dataHome, dataDirs } = locations;
+  if (
+    typeof home !== "string" ||
+    typeof configHome !== "string" ||
+    typeof dataHome !== "string" ||
+    !Array.isArray(dataDirs) ||
+    !dataDirs.every((dir): dir is string => typeof dir === "string")
+  )
+    throw new Error("renderer boot has invalid resolved locations");
+  const { memoryLimitBytes } = boot;
+  if (
+    typeof memoryLimitBytes !== "number" ||
+    !Number.isFinite(memoryLimitBytes) ||
+    memoryLimitBytes < 0
+  )
+    throw new Error(
+      "renderer boot memoryLimitBytes must be a finite nonnegative number",
+    );
+  return {
+    locations: { home, configHome, dataHome, dataDirs },
+    memoryLimitBytes,
+    stored: storedStateOf(boot.stored),
+  };
 }
 
 // A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.

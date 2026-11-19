@@ -35,7 +35,6 @@ import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
-import { bareGates } from "../helpers/gates";
 import { TEST_SIGNER } from "../helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
 import { viewFacts } from "../helpers/view-facts";
@@ -65,7 +64,6 @@ function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
         dataHome: "/nowhere/data",
         dataDirs: [],
       },
-      gates: bareGates(),
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
     {
