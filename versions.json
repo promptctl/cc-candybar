@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-905",
+      "ref": "refs/pull/905/merge",
+      "sha": "d10f5a7b39f7b146014590726a4bad85d800bef1",
+      "timestamp": "2026-11-19T19:26:03.055Z",
+      "commits": [
+        {
+          "sha": "d10f5a7b39f7b146014590726a4bad85d800bef1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:24:46-07:00",
+          "message": "Merge a79bd675eb483158e5dce7d8d8d7405a823622a5 into 31ff034e6eb41672a38be8ed9f148b237eb9a6a4\n"
+        },
+        {
+          "sha": "a79bd675eb483158e5dce7d8d8d7405a823622a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:22:57-07:00",
+          "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-902",
       "ref": "refs/pull/902/merge",
       "sha": "542bd15df5bcd0a140c19f08d1d2a3ff4607a3af",
