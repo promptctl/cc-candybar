@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-864",
+      "ref": "refs/pull/864/merge",
+      "sha": "1ad807491bc9673e88cc2aa943a46031418932d2",
+      "timestamp": "2026-11-19T12:19:49.677Z",
+      "commits": [
+        {
+          "sha": "1ad807491bc9673e88cc2aa943a46031418932d2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:18:10Z",
+          "message": "Merge c3ee4f2be239aa64559e05b282376fd601ae0e7d into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
+        },
+        {
+          "sha": "c3ee4f2be239aa64559e05b282376fd601ae0e7d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:06-07:00",
+          "message": "style(test): format the named renderer process fixture\n"
+        },
+        {
+          "sha": "3a247bd55dbcd68df6fd672d99346f752821a4ac",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:11:10-07:00",
+          "message": "feat(daemon): route named renderers through one shared host\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607",
@@ -13,28 +42,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T12:17:28Z",
           "message": "chore(release): set `package.json` to 1.233.0\n\n## [1.233.0](https://github.com/promptctl/cc-candybar/compare/v1.232.15...v1.233.0) (2026-11-19)\n\n### Features\n\n* **config:** offer layered and isolated file selection ([#861](https://github.com/promptctl/cc-candybar/issues/861)) ([c708550](https://github.com/promptctl/cc-candybar/commit/c7085504a53576be27550693c5b9d96a1afd8f94))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-864",
-      "ref": "refs/pull/864/merge",
-      "sha": "4d9df9121f0c7d020699f17d7ee48f38a345a7be",
-      "timestamp": "2026-11-19T12:15:28.265Z",
-      "commits": [
-        {
-          "sha": "4d9df9121f0c7d020699f17d7ee48f38a345a7be",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:14:22-07:00",
-          "message": "Merge 3a247bd55dbcd68df6fd672d99346f752821a4ac into c7085504a53576be27550693c5b9d96a1afd8f94\n"
-        },
-        {
-          "sha": "3a247bd55dbcd68df6fd672d99346f752821a4ac",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:11:10-07:00",
-          "message": "feat(daemon): route named renderers through one shared host\n"
         }
       ]
     },
