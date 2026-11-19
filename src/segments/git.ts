@@ -47,9 +47,7 @@ export interface PrFieldTypes {
 }
 
 // [LAW:one-source-of-truth] Every PR field a template can lay out: the mapped
-// type admits no PR field missing here, and the doctor reads this record to say
-// which segment needs the forge (src/doctor/data-needs.ts), so the two cannot
-// drift.
+// type admits no PR field missing here.
 export const PR_FIELDS: { readonly [F in keyof PrFieldTypes]: true } = {
   prNumber: true,
   prState: true,
@@ -224,9 +222,8 @@ export function classify(
   return failed(launchFailure(label, result), "read");
 }
 
-// [LAW:one-source-of-truth] The one spelling of a launch that did not answer —
-// the bar's `git.prError` and the doctor's forge probe (src/doctor/edge.ts)
-// report one launch in the same words.
+// [LAW:one-source-of-truth] The one spelling of a launch that did not answer,
+// as the bar's `git.prError` reports it.
 export function launchFailure(
   label: string,
   result: Extract<LaunchResult, { ok: false }>,
@@ -248,7 +245,7 @@ export function firstLine(s: string): string {
 // [LAW:single-enforcer] "The command is not installed": a spawn the OS refused
 // with ENOENT. Every other spawn failure (EACCES, resource limits) is a CLI
 // that is there but could not launch. The PR lookup reads this as "no forge
-// integration" and the doctor as "not installed" — one rule for both.
+// integration".
 export function isMissingCommand(result: LaunchResult): boolean {
   return (
     !result.ok &&
@@ -382,8 +379,7 @@ export interface GitRemote {
 }
 
 // [LAW:one-source-of-truth] The one read of a repo's remotes, as git arguments
-// and the fold of their result — the PR cache's async read and the doctor's
-// sync one (src/doctor/edge.ts) run the same command and read it the same way.
+// and the fold of their result.
 // Exit 1 is "no remotes" (an empty list); every other failure stays failed.
 export const REMOTES_ARGS: readonly string[] = [
   "config",
@@ -579,9 +575,8 @@ export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
 // (noPrPattern, parse) as data.
 //
 // [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
-//   ok + parse ok (open PR)         → ok            (the value)
-//   ok + parse ok (not open)        → absent        (branch's PR is done)
-//   ok + parse fails                → failed        (forge answered garbage)
+//   ok + parse ok (any state)       → ok            (the value: open, merged or closed)
+//   ok + parse fails               → failed        (forge answered garbage)
 //   non-zero + no-PR stderr         → absent        (genuine "none for branch")
 //   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
 //   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)

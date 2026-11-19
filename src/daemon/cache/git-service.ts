@@ -186,9 +186,9 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the launcher withholds
-  // them from the daemon's children, since they describe whichever shell
-  // spawned the daemon rather than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the ascent reads the
+  // filesystem, never the daemon's environment, which describes whichever
+  // shell spawned the daemon rather than the session being rendered.
   //
   findGitRoot(workingDir: string): Outcome<string> {
     return gitRootOf(workingDir);

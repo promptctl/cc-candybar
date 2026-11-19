@@ -240,7 +240,6 @@ describe("runPlugin", () => {
         ...world.host.env,
         GIT_DIR: path.join(other, ".git"),
         GIT_WORK_TREE: other,
-        GH_REPO: "o/other",
       }),
     );
     expect(runPlugin(["install", url], hooked)).toBe(0);
