@@ -388,10 +388,11 @@ function pipeEvent(
 
 // [LAW:single-enforcer] The one write after a pipe event: an answer carrying
 // `event` reached its client. A newer event since is left unmarked.
-function answeredPipeEvent(state: LaunchState, event: HeldEvent): void {
+function answeredPipeEvent(state: LaunchState, event: HeldEvent): boolean {
   const last = state.pipeEvent;
-  if (last === null || !answeredBy(last, event)) return;
+  if (last === null || !answeredBy(last, event)) return false;
   state.pipeEvent = { ...last, answered: true };
+  return true;
 }
 
 // What the launcher stands behind now: the lifeline's fault while it stands,

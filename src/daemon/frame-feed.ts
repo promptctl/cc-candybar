@@ -121,18 +121,19 @@ const failedFeed = (refusal: Refusal): EncodedFeed => {
   return { resp: encoded, statusline: encoded };
 };
 
-function sameAnswer(a: EncodedAnswer, b: EncodedAnswer): boolean {
-  if (a.json !== b.json) return false;
-  const seen = a.displayedEvents ?? [];
-  const offered = b.displayedEvents ?? [];
+function covers(prior: EncodedAnswer, offered: EncodedAnswer): boolean {
+  if (prior.json !== offered.json) return false;
   // [LAW:one-source-of-truth] Equal indicator bytes may stand for different
-  // events. The existing write can confirm only the occurrence it carried.
+  // events. A previous write covers the offer if it can confirm all of its
+  // still-unanswered occurrences as well as its bytes.
   return (
-    seen.length === offered.length &&
-    seen.every(({ kind, event }, index) => {
-      const other = offered[index];
-      return other?.kind === kind && sameOccurrence(event, other.event);
-    })
+    offered.displayedEvents === undefined ||
+    offered.displayedEvents.every(
+      ({ kind, event }) =>
+        prior.displayedEvents?.some(
+          (seen) => seen.kind === kind && sameOccurrence(seen.event, event),
+        ) ?? false,
+    )
   );
 }
 
@@ -535,7 +536,7 @@ export class FrameFeeds<Req> {
     const answer = answerOf(encoded, sub.lane);
     let latest: PendingWrite | undefined;
     for (const write of follower.writes) latest = write;
-    if (latest !== undefined && sameAnswer(latest.answer, answer)) {
+    if (latest !== undefined && covers(latest.answer, answer)) {
       const superseded = latest.done;
       latest.done = done;
       superseded?.(false);
@@ -544,7 +545,7 @@ export class FrameFeeds<Req> {
     if (
       latest === undefined &&
       follower.confirmed !== null &&
-      sameAnswer(follower.confirmed, answer)
+      covers(follower.confirmed, answer)
     ) {
       done?.(true);
       return;
@@ -554,12 +555,13 @@ export class FrameFeeds<Req> {
     this.pushed++;
     watched.pushed++;
     const finished: Delivered = (delivered) => {
+      // [LAW:effects-at-boundaries] A refusal can detach the subscription
+      // while the socket flushes its previous frame. That confirmed write
+      // still carried the daemon's event, even after the view receipt ended.
+      if (delivered && answer.displayedEvents !== undefined)
+        this.deps.acknowledgeDisplayed(answer.displayedEvents);
       if (!follower.writes.delete(write)) return;
-      if (delivered) {
-        follower.confirmed = answer;
-        if (answer.displayedEvents !== undefined)
-          this.deps.acknowledgeDisplayed(answer.displayedEvents);
-      }
+      if (delivered) follower.confirmed = answer;
       settleWrite(write, delivered);
     };
     try {

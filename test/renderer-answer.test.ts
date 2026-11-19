@@ -861,35 +861,43 @@ describe("a draw", () => {
 });
 
 describe("a feed's frame", () => {
-  test("a pane frame reports which daemon event its diagnostics display", async () => {
-    const event = joinedEvent(null, "a daemon act failed", READ.at);
-    const t = renderer(undefined, () => ({
-      ...daemonFactsOf(),
-      actFailed: event,
-    }));
-    await configure(t, checked("%1"));
-    answered(
-      await handIn(t.r, {
-        kind: "viewers",
-        viewers: {
-          [SESSION]: {
-            lanes: { pane: { drawing: true, subscribers: 1 } },
-            shown: true,
-            joined: 1,
+  test.each([false, true])(
+    "a pane frame displays the daemon warning while its answered state is %s",
+    async (shown) => {
+      const event = {
+        ...joinedEvent(null, "a daemon act failed", READ.at),
+        answered: shown,
+      };
+      const t = renderer(undefined, () => ({
+        ...daemonFactsOf(),
+        actFailed: event,
+      }));
+      await configure(t, checked("%1"));
+      answered(
+        await handIn(t.r, {
+          kind: "viewers",
+          viewers: {
+            [SESSION]: {
+              lanes: { pane: { drawing: true, subscribers: 1 } },
+              shown: true,
+              joined: 1,
+            },
           },
-        },
-      }),
-    );
-    const frame = await dueFrame(t.r);
-    expect(frame.displayedEvents).toEqual([{ kind: "act-failed", event }]);
-    const confirmed = answered(
-      await done(t.r, { session: SESSION, id: frame.receipt }, true),
-    );
-    expect(confirmed.record).toContainEqual([
-      "faults",
-      expect.stringContaining(event.text),
-    ]);
-  });
+        }),
+      );
+      const frame = await dueFrame(t.r);
+      expect(frame.displayedEvents).toEqual(
+        shown ? undefined : [{ kind: "act-failed", event }],
+      );
+      const confirmed = answered(
+        await done(t.r, { session: SESSION, id: frame.receipt }, true),
+      );
+      expect(confirmed.record).toContainEqual([
+        "faults",
+        expect.stringContaining(event.text),
+      ]);
+    },
+  );
 
   test("whose render threw names the failure for the host to publish", () => {
     const parts = {

@@ -325,22 +325,29 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // [LAW:single-enforcer] Both client writers acknowledge events at the
   // owner of the daemon's latest occurrences, independent of their renderer.
   const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
+    let changed = false;
     for (const { kind, event } of shown) {
       switch (kind) {
         case "launch-pipes":
-          launcher.answeredPipeEvent(event);
+          if (launcher.answeredPipeEvent(event)) changed = true;
           break;
         case "renderer-ended":
-          if (rendererEnded !== null && answeredBy(rendererEnded, event))
+          if (rendererEnded !== null && answeredBy(rendererEnded, event)) {
             rendererEnded = { ...rendererEnded, answered: true };
+            changed = true;
+          }
           break;
         case "act-failed":
-          if (actFailed !== null && answeredBy(actFailed, event))
+          if (actFailed !== null && answeredBy(actFailed, event)) {
             actFailed = { ...actFailed, answered: true };
+            changed = true;
+          }
           break;
       }
     }
-    restateFaults();
+    // [LAW:dataflow-not-control-flow] Writers can confirm independently;
+    // publish new facts only when the first confirmation changes an owner.
+    if (changed) restateFaults();
   };
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);

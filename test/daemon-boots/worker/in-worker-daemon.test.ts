@@ -8,11 +8,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { hostOf } from "../../helpers/host";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 
 import { effectsUrl, VERB_COPY, VERB_OPEN_VSCODE, VERB_SET_STATE } from "../../../src/click/wire";
 import { CLICK_ERROR_HOLD_S } from "../../../src/daemon/foundations/click-error";
 import { systemTimekeeper } from "../../../src/time";
-import { exits } from "../../../src/proc/spawner-fake";
+import { createLauncher, LIFELINE_PROGRAM } from "../../../src/proc/launch";
+import { exits, fakeSpawner, readsStdin } from "../../../src/proc/spawner-fake";
+import { DAEMON_EVENT_HOLD_S } from "../../../src/utils/event-hold";
 import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import { TEST_ENV } from "../../helpers/session-environment";
@@ -22,6 +25,7 @@ import {
   encodeFrame,
   makeFrameReader,
   PROTOCOL_VERSION,
+  type ReaderRenderRequest,
   type Request,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
@@ -29,7 +33,7 @@ import {
   DRAW_RESERVE_MS,
   REQUEST_TIMEOUT_MS,
 } from "../../../src/daemon/foundations/request-deadline";
-import { textOf, type Frame } from "../../../src/render/frame";
+import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import {
   click,
   findUrl,
@@ -163,6 +167,93 @@ describe("a daemon in this worker", () => {
 
     const events = await renderLines(env, sid, 3);
     expect(events.at(-1)).toContain(" clickError=over ");
+  });
+
+  test("a confirmed statusline write answers the daemon's act and launch pipe warnings", async () => {
+    const sid = "warning-owners";
+    const bin = "/usr/bin/pbcopy";
+    const spawner = fakeSpawner(systemTimekeeper);
+    spawner.program(
+      (program, args) => program === "awk" && args[0] === LIFELINE_PROGRAM,
+      readsStdin("until-end"),
+    );
+    spawner.program((program) => program === bin, exits(1));
+    // [LAW:effects-at-boundaries] Only the child and its inherited stream
+    // are simulated. The launcher owns the late read failure and its receipt.
+    const pipe = Object.assign(new PassThrough(), { unref() {} });
+    let now = Date.now();
+    const running = startDaemon(env, {
+      clock: { ...systemTimekeeper, now: () => now },
+      launcher: (owner) =>
+        createLauncher(owner, systemTimekeeper, {
+          ...spawner,
+          spawn: (program, args, options) => {
+            const child = spawner.spawn(program, args, options);
+            return program === bin
+              ? Object.assign(child, { stdout: pipe })
+              : child;
+          },
+        }),
+    });
+    daemon = running;
+    const pipeEvent = () =>
+      running.daemon.launcher
+        .standing()
+        .find((fact) => fact.kind === "launch-pipes")?.event;
+    const pending = async () => {
+      const { resp, settled } = await running.daemon.reply(
+        {
+          ...renderBody(sid, projectDir),
+          v: PROTOCOL_VERSION,
+          kind: "render",
+          encoding: "frame",
+        } as ReaderRenderRequest,
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      if (!resp.ok || !("frame" in resp))
+        throw new Error(`expected a frame: ${JSON.stringify(resp)}`);
+      return { frame: parseFrame(resp.frame), settled };
+    };
+    try {
+      const url = drawnLink(
+        running,
+        effectsUrl([{ verb: VERB_COPY, args: ["copy failure"] }]),
+      );
+      await refusedClick(running, url, "threw");
+      expect(spawner.spawned.find((child) => child.bin === bin)?.stdin).toBe(
+        "copy failure",
+      );
+      pipe.destroy(new Error("fixture cannot read the inherited pipe"));
+      await until(
+        () => pipeEvent() !== undefined,
+        "the actual launcher's pipe warning",
+      );
+      expect(pipeEvent()).toMatchObject({
+        answered: false,
+        text: expect.stringContaining("output failed to read"),
+      });
+
+      // Only a confirmed write can clear either event from the statusline's
+      // owed state after its hold. No other render confirms while we check it.
+      const dropped = await pending();
+      expect(indicatorOf(dropped.frame)).toBe("⚠ 2");
+      dropped.settled(false);
+      now += (DAEMON_EVENT_HOLD_S + 1) * 1000;
+      const owed = await pending();
+      expect(indicatorOf(owed.frame)).toBe("⚠ 2");
+      expect(pipeEvent()?.answered).toBe(false);
+      owed.settled(false);
+
+      expect(indicatorOf(await render(running, sid, projectDir))).toBe("⚠ 2");
+      expect(pipeEvent()?.answered).toBe(true);
+      const after = await pending();
+      expect(indicatorOf(after.frame)).toBeNull();
+      after.settled(false);
+    } finally {
+      pipe.destroy();
+    }
   });
 
   // [LAW:one-source-of-truth] A request's budget is its deadline less its
