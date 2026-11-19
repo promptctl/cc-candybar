@@ -1,3 +1,9 @@
+## [1.234.1](https://github.com/promptctl/cc-candybar/compare/v1.234.0...v1.234.1) (2026-11-19)
+
+### Performance Improvements
+
+* **host:** share physical transcript observations across sessions ([#866](https://github.com/promptctl/cc-candybar/issues/866)) ([6125487](https://github.com/promptctl/cc-candybar/commit/6125487488e90cbd9bd119f83430408afd97f01f))
+
 ## [1.234.0](https://github.com/promptctl/cc-candybar/compare/v1.233.2...v1.234.0) (2026-11-19)
 
 ### Features
