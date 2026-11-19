@@ -1,6 +1,6 @@
 import type { Launcher } from "../../proc/launcher";
 import { runTmuxAsync } from "../../proc/tmux";
-import type { TmuxHint } from "../../tmux-hint";
+import { paneKey, type TmuxHint } from "../../tmux-hint";
 import type { Timekeeper } from "../../time";
 import type { Holds } from "../../utils/holds";
 import {
@@ -43,12 +43,10 @@ export class TmuxService {
     readonly ledger?: RefreshLedger;
   }) {
     const logger = opts.logger ?? quietLogger;
-    this.names = new KeyedSource({
+    this.names = new KeyedSource<TmuxHint, string>({
       name: "tmux",
       scope: "pane",
-      // A socket path cannot hold a newline's worth of pane id, so the pair
-      // is unambiguous.
-      keyOf: (hint) => `${hint.socket}\n${hint.pane}`,
+      keyOf: paneKey,
       fields: (hint) =>
         `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
       read: (hint) => askSessionName(opts.launcher, hint),

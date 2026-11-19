@@ -36,6 +36,13 @@ export interface TmuxHint {
   readonly truecolor: string | null;
 }
 
+// [LAW:one-source-of-truth] A pane identity is the pair of server socket
+// and pane ID. Display capabilities can change without moving the pane.
+export const paneKey = ({
+  socket,
+  pane,
+}: Pick<TmuxHint, "socket" | "pane">): string => JSON.stringify([socket, pane]);
+
 // [LAW:one-source-of-truth] Whether a request's client reported its session in
 // a tmux pane: a client too old to answer (absent) is read as not in tmux.
 export const inTmux = (tmux: TmuxHint | null | undefined): boolean =>
