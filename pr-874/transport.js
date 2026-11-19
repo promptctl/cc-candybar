@@ -28580,39 +28580,23 @@ function ruling(answers, d) {
   const legacy = answerOf(answers.value, d.dir);
   return legacy === null ? { standing: "awaiting", under: key } : { standing: legacy, under: d.dir };
 }
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
+var NO_PROJECT_ACCESS = {
+  approved: null,
+  question: null,
+  unread: null
+};
+function projectAccess(answers, project) {
+  const unread2 = answers.kind === "failed" ? answers.reason : null;
+  if (project === null) return { ...NO_PROJECT_ACCESS, unread: unread2 };
+  const { standing: standing2, under: under2 } = ruling(answers, project);
   return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+    approved: standing2 === "approved" ? project.path : null,
+    question: project.contributes ? {
+      dir: under2,
+      standing: standing2,
+      unproven: project.link.kind === "unproven" ? project.link.reason : null
+    } : null,
+    unread: unread2
   };
 }
 function withAnswer(book, dir, answer2, superseded) {
@@ -61937,14 +61921,15 @@ var PROJECT_BASES = {
 function xdgConfigBase(locs) {
   return import_node_path6.default.join(locs.configHome, "cc-candybar", "config");
 }
+var admitsLayer = (project, role) => role === "user" || project.approved !== null;
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
 function userConfigDefault(locs) {
   return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
 function chainPlaces(resolved, locations2) {
   return LAYER_ROLES.flatMap((role) => {
+    if (!admitsLayer(resolved.project, role)) return [];
     if (role === "user") return [{ path: resolved.home, role }];
-    if (resolved.repos.plugins === null) return [];
     const place = resolved.layers.find((layer) => layer.role === role)?.path ?? locations2.find((location) => location.role === role)?.candidates[0]?.file;
     return place === void 0 ? [] : [{ path: place, role }];
   });
@@ -70220,6 +70205,7 @@ function renderCacheBudget(memoryLimitBytes2) {
   );
 }
 var MAX_ENTRIES = 256;
+var MAX_UNPINNED_FAILURES = 256;
 function configPaths(snapshot) {
   return snapshot.chain.flatMap(
     ({ path: path31, content }) => content.kind === "text" ? [path31] : []
@@ -70488,11 +70474,11 @@ function openView(state, cwd2, facts, {
   configAccess = () => ({ kind: "available", roles: state.writable })
 }, currentRequest) {
   const sessionId2 = facts.hookData.session_id;
-  const registry = state.registry.view();
-  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
+  const registry = state.registry.view();
   let source;
   try {
+    declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
     source = sourceOf({
       sessionId: sessionId2,
       state,
@@ -70500,11 +70486,11 @@ function openView(state, cwd2, facts, {
       requested: request2.read,
       configAccess
     });
+    bindView(state.compiled, registry.variableStore, registry, source);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
     () => [
       source.payload(),
@@ -70592,10 +70578,8 @@ var RenderCache = class {
   // long as the feed is open. The collector asks the feeds themselves whether
   // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
-  // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
+  // [LAW:no-silent-failure] A frame sees the opening's error while the view
+  // is absent. An open feed keeps the entry eligible for a config retry.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -70765,11 +70749,12 @@ var RenderCache = class {
   // view now so pushed frames and click validation see the same draft.
   refreshEditedView(sessionId2) {
     const view = this.views.get(sessionId2);
-    if (view === void 0) return;
-    const { origin } = this.leaseOf(view).entry;
-    const requested = view.facts();
+    const previous2 = view !== void 0 ? { entry: this.leaseOf(view).entry, requestOf: view.facts } : this.pinnedFailure(sessionId2);
+    if (previous2 === void 0) return;
+    const { origin } = previous2.entry;
+    const requested = previous2.requestOf(sessionId2);
     const entry = this.getOrCreate(origin, sessionId2);
-    if (this.views.get(sessionId2)?.state !== entry.state)
+    if (entry !== previous2.entry)
       this.viewOf(entry, entry.state, requested, "reload");
     if (this.deps.editSnapshot?.(origin, sessionId2) == null)
       this.dropDraft(sessionId2);
@@ -70818,6 +70803,19 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
+  pinnedFailure(sessionId2) {
+    return this.pins.has(sessionId2) ? this.openFailures.get(sessionId2) : void 0;
+  }
+  // [LAW:carrying-cost] Open feeds own their failures. Inactive errors keep
+  // only the latest bounded set, including after the last feed unpins.
+  trimOpenFailures() {
+    if (this.openFailures.size <= MAX_UNPINNED_FAILURES) return;
+    const idle = [...this.openFailures.keys()].filter(
+      (sid) => !this.pins.has(sid)
+    );
+    for (const sid of idle.slice(0, -MAX_UNPINNED_FAILURES))
+      this.openFailures.delete(sid);
+  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
   // session, so it follows the view wherever a request or a reload moves it.
@@ -70829,7 +70827,10 @@ var RenderCache = class {
       released = true;
       const left = (this.pins.get(sessionId2) ?? 0) - 1;
       if (left > 0) this.pins.set(sessionId2, left);
-      else this.pins.delete(sessionId2);
+      else {
+        this.pins.delete(sessionId2);
+        this.trimOpenFailures();
+      }
     };
   }
   // The session's view of `state`: the one it has, or a new one replacing it.
@@ -70858,9 +70859,9 @@ var RenderCache = class {
   opened(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
     const { cwd: cwd2 } = entry.origin;
+    const { currentRequest } = this.deps;
     let view;
     try {
-      const { currentRequest } = this.deps;
       view = openView(
         state,
         cwd2,
@@ -70874,7 +70875,13 @@ var RenderCache = class {
         currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
       );
     } catch (error) {
-      this.openFailures.set(sessionId2, { error });
+      this.openFailures.delete(sessionId2);
+      this.openFailures.set(sessionId2, {
+        entry,
+        requestOf: currentRequest ?? (() => facts),
+        error
+      });
+      this.trimOpenFailures();
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -71017,6 +71024,8 @@ var RenderCache = class {
   // serving it, and its state is retired.
   drop(key, entry, reason) {
     this.entries.delete(key);
+    for (const [session, failure2] of this.openFailures)
+      if (failure2.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
   }
   get stats() {
@@ -71052,8 +71061,8 @@ var RenderCache = class {
     const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId2) => {
-        const view = this.views.get(sessionId2);
-        return view === void 0 ? [] : [view.state];
+        const state = this.views.get(sessionId2)?.state ?? this.openFailures.get(sessionId2)?.entry.state;
+        return state === void 0 ? [] : [state];
       })
     );
     for (const [key, evicted] of this.entries) {
@@ -71102,21 +71111,25 @@ var RenderCache = class {
   retire(state, reason, successor) {
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
-      if (successor !== null) {
-        try {
-          this.opened(successor.entry, successor.state, view.facts(), "reload");
-        } catch (e) {
-          this.log(
-            "error",
-            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`
-          );
-        }
-      }
+      if (successor !== null)
+        this.reopen(successor, view.sessionId, view.facts);
       this.retireView(view, reason);
     }
     const hold2 = this.holdOf(state);
     hold2.retired = { reason, held: hold2.holders };
     this.reclaim(state, hold2);
+  }
+  // [LAW:single-enforcer] A reload opens a successor once. A failed opening
+  // remains visible to its feed and leaves the other sessions recoverable.
+  reopen(entry, session, requestOf) {
+    try {
+      this.opened(entry, entry.state, requestOf(session), "reload");
+    } catch (error) {
+      this.log(
+        "error",
+        `session view reopen failed sid=${JSON.stringify(session)}: ${String(error)}`
+      );
+    }
   }
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
@@ -71151,7 +71164,13 @@ var RenderCache = class {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   reloadInto(entry, { snapshot, digest: digest2 }, cause) {
-    const sessions = this.sessionsOn(entry);
+    const retry = [...this.openFailures].filter(
+      ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
+    );
+    const sessions = [
+      ...this.sessionsOn(entry),
+      ...retry.map(([session]) => session)
+    ];
     const served = entry.state;
     const loaded = this.load(entry.origin, snapshot, served);
     entry.snapshot = snapshot;
@@ -71167,8 +71186,10 @@ var RenderCache = class {
       this.serve(loaded.state);
     }
     this.holdFolders(entry.state);
-    if (loaded.kind === "built")
-      this.retire(served, "reload", { entry, state: loaded.state });
+    if (loaded.kind === "built") this.retire(served, "reload", entry);
+    if (loaded.state !== null)
+      for (const [session, failure2] of retry)
+        this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
@@ -86206,7 +86227,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.4";
+var PACKAGE_VERSION = "1.235.5";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -89728,20 +89749,24 @@ var import_node_path32 = __toESM(require_path_browserify(), 1);
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
+function installedPluginDirs(locs) {
   const installed = [
     ...[...locs.dataDirs].reverse().map((d) => import_node_path30.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path30.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
+  return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
   return import_node_path30.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
 var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path30.default.join(project, REPO_PLUGIN_DIR);
+function listedRepoRoot(approved, entries) {
+  if (entries === null) return null;
+  if ("error" in entries)
+    return { root: entries.path, scope: "repo", listed: entries };
+  return approved === null ? null : { root: repoPluginDir(approved), scope: "repo", listed: entries };
+}
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -89863,14 +89888,6 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
     };
   });
 }
-var NO_REPOS = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null
-};
 function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const searched = configLocations(locs, query);
   const selected = query.kind === "chain" && query.projectDir !== void 0 && query.path !== void 0 ? files.realpath(query.path) : null;
@@ -89885,25 +89902,14 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const found2 = locations2.flatMap(
     (location) => location.kind === "found" ? [location] : []
   );
-  const repoDirs = /* @__PURE__ */ new Map();
-  for (const { role, directory } of found2) {
-    if (role === "user" || repoDirs.has(directory)) continue;
-    repoDirs.set(directory, {
-      dir: directory,
-      link: files.worktree(directory)
-    });
-  }
-  const dirs = [...repoDirs.values()];
   const seen = repoProject(
     query.kind === "chain" ? query.projectDir : void 0,
+    found2.some(({ role }) => role !== "user"),
     files
   );
   const book = query.kind === "file" ? null : readAnswers();
-  const repos = book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
-  const question = book === null ? null : repoQuestion(book.result, dirs, seen.project);
-  const layers = found2.filter(
-    ({ role, directory }) => role === "user" || repos.approved.includes(directory)
-  ).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
+  const project = book === null ? NO_PROJECT_ACCESS : projectAccess(book.result, seen.project);
+  const layers = found2.filter(({ role }) => admitsLayer(project, role)).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
   const user = locations2.find(({ role }) => role === "user");
   const home = user?.kind === "found" ? user.winner.file : query.path ?? userConfigDefault(locs);
   const namedFailure = query.path !== void 0 && user?.kind !== "found";
@@ -89913,34 +89919,41 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const common = {
     layers,
     home,
-    repos,
+    project,
     unchecked: seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked]
   };
   const problem = user?.unchecked[0];
   const resolution = !namedFailure ? { ...common, kind: "chain" } : problem === void 0 ? { ...common, kind: "missing", path: home } : { ...common, kind: "unreadable", ...problem };
   return {
     resolution,
-    question,
+    repoRoot: listedRepoRoot(project.approved, seen.entries),
     locations: locations2,
     watchedFiles: [...candidates, ...book?.paths ?? []]
   };
 }
-function repoProject(projectDir, files = discoveryFiles()) {
-  if (projectDir === void 0) return { project: null, unchecked: null };
+function repoProject(projectDir, hasConfig, files) {
+  if (projectDir === void 0)
+    return { project: null, unchecked: null, entries: null };
   const present = files.presence(projectDir);
   if (present !== "present")
-    return { project: null, unchecked: present === "absent" ? null : present };
+    return {
+      project: null,
+      unchecked: present === "absent" ? null : present,
+      entries: null
+    };
   const dir = files.realpath(projectDir);
-  if (typeof dir !== "string") return { project: null, unchecked: dir };
-  const listed = files.folders(import_node_path32.default.join(projectDir, REPO_PLUGIN_DIR));
+  if (typeof dir !== "string")
+    return { project: null, unchecked: dir, entries: null };
+  const entries = files.folders(repoPluginDir(projectDir));
   return {
     project: {
       dir,
       link: files.worktree(dir),
       path: projectDir,
-      ships: !("error" in listed) && listed.folders.length > 0
+      contributes: hasConfig || !("error" in entries) && entries.folders.length > 0
     },
-    unchecked: null
+    unchecked: null,
+    entries
   };
 }
 function configCollisionNotice(locations2) {
@@ -89975,17 +89988,21 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return pluginRoots(locs, null).map((root) => listRoot(root, files));
+  return installedPluginDirs(locs).map(
+    (root) => readDefinitions(
+      { root, scope: "plugins", listed: files.folders(root) },
+      files
+    )
+  );
 }
-function listRoot({ dir, scope }, files) {
-  const listed = files.folders(dir);
+function readDefinitions({ root, scope, listed }, files) {
   return {
-    root: dir,
+    root,
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
         (name) => readDefinition(
-          import_node_path33.default.join(dir, name, DEFINITION_FILE),
+          import_node_path33.default.join(root, name, DEFINITION_FILE),
           scope,
           files
         )
@@ -90016,12 +90033,11 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) {
-  const repoRoots = pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map((root) => listRoot(root, files));
+function sessionPlugins(roots, checkout) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
-  for (const { root, scope, listed } of [...installed, ...repoRoots]) {
+  for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
       notices.push(
         `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
@@ -90040,12 +90056,7 @@ function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) 
     plugins: [...byNs.values()],
     strays,
     notices,
-    // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
-    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
-    // above it, since an ancestor watch per session is the cost; the next
-    // rediscovery reads the new checkout.
-    checkout: files.checkout(cwd2)
+    checkout
   };
 }
 function layerOf(role, file, content, home, batch = {
@@ -90085,14 +90096,13 @@ function snapshotOf(session, chain2) {
 function discover(query, shared) {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations: locations2, watchedFiles } = search;
-  const { repos } = resolution;
+  const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
+  const { project } = resolution;
   const session = sessionPlugins(
-    locs,
-    shared.installed,
-    repos.plugins,
-    query.cwd,
-    files
+    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
+    // on its next pass. Watching every parent would add a watch per ancestor.
+    files.checkout(query.cwd)
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)
@@ -90103,22 +90113,25 @@ function discover(query, shared) {
   const notices = [
     configCollisionNotice(locations2),
     configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
+    repoUnreadNotice(project),
     ...session.notices
   ].filter((n) => n !== null);
   return {
-    snapshot: { ...snapshotOf(session, chain2), repo: question, notices },
+    snapshot: {
+      ...snapshotOf(session, chain2),
+      repo: project.question,
+      notices
+    },
     targets: {
       files: watchedFiles,
       roots: [
         .../* @__PURE__ */ new Set([
-          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          ...shared.installed.map((r) => r.root),
           // A chain must hear a new repository plugin even before approval.
-          ...query.kind === "chain" && query.projectDir !== void 0 ? [import_node_path33.default.join(query.projectDir, REPO_PLUGIN_DIR)] : []
+          ...query.kind === "chain" && query.projectDir !== void 0 ? [repoPluginDir(query.projectDir)] : []
         ])
       ]
-    },
-    repos
+    }
   };
 }
 function contentAt({ resolution, locations: locations2 }, place, files) {
