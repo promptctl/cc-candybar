@@ -11,7 +11,6 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/renderer/session-state";
 
 import { validateConfig } from "./helpers/parse-and-validate";
@@ -53,7 +52,6 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     new SessionState(),
   );
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp",
   });
   return { config, compiled, store, registry };

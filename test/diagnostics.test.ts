@@ -8,6 +8,7 @@
 
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
+import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import {
   RichText,
   Segment,
@@ -369,8 +370,8 @@ describe("the viewer", () => {
     );
     expect(list[0]!.copy).toBe(prompt);
     const copy = list[0]!.lines[0]![0].link;
-    if (typeof copy !== "string") throw new Error("missing copy link");
-    expect(copy.length).toBeLessThan(200);
+    if (copy === null) throw new Error("missing copy link");
+    expect(hrefOfDrawnLink(copy).length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
     for (const url of linkUrls(viewer(list, at(1), SID, "request", geometry(80))))
       expect(url).not.toContain("FIX");
@@ -411,7 +412,7 @@ describe("the viewer and the handoff line at every colour depth", () => {
                 new Style({
                   color: fg,
                   bgcolor: bg,
-                  link: typeof link === "string" ? link : undefined,
+                  link: link === undefined ? undefined : hrefOfDrawnLink(link),
                 }),
               ),
           ),

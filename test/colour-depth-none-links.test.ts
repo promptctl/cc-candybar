@@ -9,7 +9,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { ansiOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -54,7 +53,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   const registry = new SourceRegistry(store, "", sessionState);
   recordRender(sessionState, S1);
   try {
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp/proj" });
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
     const ctx = testVerbContext(sessionState, undefined, config);
     // [LAW:one-source-of-truth] The daemon's own resolution: session picks fold
     // into the effective globals, which feed both the payload's `.effective`

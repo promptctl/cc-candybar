@@ -13,7 +13,6 @@ import path from "node:path";
 import { RenderCache } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { writeAtomic } from "../src/utils/atomic-write";
@@ -84,7 +83,6 @@ function setUp() {
       stateDir: stateDir(HOST),
       locations: locs(),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,

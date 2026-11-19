@@ -29,7 +29,7 @@ import {
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
-import type { AdmittedClick } from "../click/wire";
+import type { ClickAdmission } from "../click/wire";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
 import {
@@ -744,7 +744,7 @@ async function ranClick(
       noteFacts(facts, { link: read.link });
       return handleClick(
         parts,
-        read.click,
+        read,
         { via: "link", delivery: read.delivery },
         facts,
         click,
@@ -762,7 +762,7 @@ async function ranClick(
 // daemon's failure.
 async function handleClick(
   parts: DaemonParts,
-  admitted: AdmittedClick,
+  { click: admitted, runEvidence }: ClickAdmission,
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
@@ -779,6 +779,7 @@ async function handleClick(
       ? failureOf(new ClickAbandoned(verb))
       : {
           kind: "event",
+          runEvidence,
           event: {
             kind: "click",
             click: admitted,

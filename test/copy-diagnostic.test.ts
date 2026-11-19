@@ -8,6 +8,7 @@ import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
+import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
 import { clickActing, clickUrl, testVerbContext,
   verbContextWith } from "./helpers/click";
@@ -51,8 +52,9 @@ beforeEach(() => {
 
 test("the first line's click copies the full prompt, though its link carries only a key", async () => {
   const { list, copies } = drawn();
-  const link = list[0]!.lines[0]![0].link;
-  if (typeof link !== "string") throw new Error("missing copy link");
+  const target = list[0]!.lines[0]![0].link;
+  if (target === null) throw new Error("missing copy link");
+  const link = hrefOfDrawnLink(target);
   expect(link.length).toBeLessThan(200);
   expect(link).not.toContain("placement");
   const outcomes = await clickActing(
@@ -71,11 +73,11 @@ test("the first line's click copies the full prompt, though its link carries onl
 
 test("a key the session's last draw no longer lists is refused, and nothing is copied", async () => {
   const { list } = drawn();
-  const link = list[0]!.lines[0]![0].link;
-  if (typeof link !== "string") throw new Error("missing copy link");
+  const target = list[0]!.lines[0]![0].link;
+  if (target === null) throw new Error("missing copy link");
   await expect(
     clickActing(
-      link,
+      hrefOfDrawnLink(target),
       verbContextWith(testVerbContext(new SessionState()), {
         diagnosticCopy: () => undefined,
       }),

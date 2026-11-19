@@ -23,7 +23,6 @@
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -69,6 +68,8 @@ import {
 import { linkClick } from "./helpers/click";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { hrefOfDrawnLink } from "../src/render/drawn-link";
+import { linkFromStyle } from "../src/render/link-style";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -217,7 +218,6 @@ function build(src: string, withDefault = false) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp/proj",
   });
   const palette = getThemePalette(THEME);
@@ -269,11 +269,10 @@ function build(src: string, withDefault = false) {
   // The link spans of a segment's cells, by URL.
   const urlsIn = (name: string): string[] =>
     cellsOf(name).flatMap((cell) =>
-      cell.spans.flatMap((s) =>
-        resolvedStyle(s.style).link !== undefined
-          ? [resolvedStyle(s.style).link!]
-          : [],
-      ),
+      cell.spans.flatMap((span) => {
+        const link = linkFromStyle(resolvedStyle(span.style));
+        return link === undefined ? [] : [hrefOfDrawnLink(link)];
+      }),
     );
   // Click the affordance in `name` that writes `value` to `key` — a
   // disclosure toggle's set-state — loud when it is not on the bar.

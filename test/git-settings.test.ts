@@ -4,7 +4,6 @@
 // so it pins both the setting's effect and that two copies never share a value.
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig } from "../src/dsl/render";
@@ -70,7 +69,7 @@ function renderPair(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   try {
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     const { segments } = drawPayload(
       config,
       compiled,

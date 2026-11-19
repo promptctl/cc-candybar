@@ -21,7 +21,6 @@
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   DEFAULT_TERMINAL_THEME,
   cellLen,
@@ -406,7 +405,7 @@ describe("a fill segment fills wherever the walk places it", () => {
       "",
       new SessionState(),
     );
-    const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     const { frame: out, warnings } = drawPayload(
       config,
       compiled,

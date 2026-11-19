@@ -19,8 +19,8 @@ export const LINK_KEY_BYTES = 32;
 
 // What a link signs: the session it runs for, the action it names, that
 // action's declaration as the draw saw it, and the JSON of what the draw
-// evaluated. The verb reads the session, name and evaluation back from the
-// URL, and the declaration from the session's config.
+// evaluated. The host reads the session, name and evaluation from the link
+// and checks the declaration supplied by the renderer's turn.
 export interface SignedFields {
   readonly sessionId: string;
   readonly action: string;

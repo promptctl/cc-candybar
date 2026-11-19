@@ -31,7 +31,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linkUrls, runUnder, truecolorOf } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -186,7 +185,6 @@ function buildEditRuntime(src: string, sessionId = S1) {
   let authored = config;
   let registry = new SourceRegistry(store, "", base.edits.view);
   let compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: process.cwd(),
   });
   const effective = () => {
@@ -199,7 +197,6 @@ function buildEditRuntime(src: string, sessionId = S1) {
       store = new VariableStore(systemTimekeeper);
       registry = new SourceRegistry(store, "", base.edits.view);
       compiled = registerDslConfig(authored, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
     }
@@ -955,7 +952,6 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
     const basePalette = getThemePalette("textual-dark"!);

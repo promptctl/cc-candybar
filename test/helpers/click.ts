@@ -10,6 +10,8 @@ import { bareGates } from "./gates";
 import { HOST } from "./host";
 import type { Host } from "../../src/host";
 import { TEST_SIGNER } from "./link-signer";
+import type { LinkSigner } from "../../src/click/link-signer";
+import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
 import { NavigationHistory } from "../../src/renderer/navigation-history";
 import { clickOf } from "../../src/click/read";
 import { changeDone, runClick } from "../../src/renderer/verbs";
@@ -51,7 +53,7 @@ import {
   type RenderRequest,
 } from "../../src/daemon/foundations/protocol";
 import type { ConfigTarget } from "../../src/config-hint";
-import { admitClick, VERB_NAMES } from "../../src/click/wire";
+import { admitClick, VERB_NAMES, type ClickAdmission, type RunEvidence } from "../../src/click/wire";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -303,7 +305,6 @@ export function testVerbContext(
     sourcesFor: () => {
       throw new Error("sourcesFor: this test handed in no sources");
     },
-    links: TEST_SIGNER,
     // No draw here lists a diagnostic, so a copy-diagnostic click is refused.
     diagnosticCopy: () => undefined,
   });
@@ -324,12 +325,14 @@ export const CLICK_VERBS: ReadonlyMap<string, (value: string, ctx: VerbContext) 
   new Map(VERB_NAMES.map((verb) => [verb, (value, ctx) => clickVerb(verb, value, ctx)]));
 
 // Enter through the same admission and dispatch as the daemon.
-export function clickVerb(verb: string, value: string, ctx: VerbContext): void {
-  const click = admitClick(verb, value, ctx.links);
+export function clickVerb(verb: string, value: string, ctx: VerbContext): ClickAdmission {
+  const admission = admitClick(verb, value, TEST_SIGNER);
+  const { click } = admission;
   runClick(click, {
     ...ctx,
     context: click.scope === "session" ? bookedContext(ctx.sessionState, click.session) : null,
   });
+  return admission;
 }
 
 // The host's act performer over `deps`; a part the test does not hand in
@@ -373,6 +376,7 @@ export function actingWorld(
 ): HostWorld {
   const acts = testActs(ctx.log, deps);
   return {
+    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
     perform: (act) => acts.perform(act),
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
@@ -391,6 +395,8 @@ export function actingWorld(
 export async function performActs(
   ctx: VerbContext,
   deps: Partial<ActDeps> = {},
+  signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
+  captures: readonly RunEvidence[] = [],
 ): Promise<EffectOutcome[]> {
   const acts = testActs(ctx.log, deps);
   const asked = actsOf(ctx);
@@ -399,11 +405,20 @@ export async function performActs(
   const outcomes: EffectOutcome[] = [];
   for (const act of asked) {
     if (act.kind === "approve-repo") continue;
-    const settled = acts.perform(act).then((outcome) => {
+    const read = act.kind === "run"
+      ? authorizeRun(signer, act, captures)
+      : { kind: "ok", value: act } as const;
+    if (read.kind === "failed") {
+      const outcome = { kind: "refused", reason: `run: ${read.reason}` } as const;
+      (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
+      outcomes.push(outcome);
+      continue;
+    }
+    const settled = acts.perform(read.value).then((outcome) => {
       (ctx.acts as ActsOnTheirWay).done(act.id, act.session, outcome);
       return outcome;
     });
-    if (!outlives(act)) outcomes.push(await settled);
+    if (!outlives(read.value)) outcomes.push(await settled);
   }
   return outcomes;
 }
@@ -414,7 +429,9 @@ export async function clickActing(
   url: string,
   ctx: VerbContext,
   deps: Partial<ActDeps> = {},
+  signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
 ): Promise<EffectOutcome[]> {
-  await clickUrl(url, ctx);
-  return performActs(ctx, deps);
+  const { verb, value } = linkClick(url);
+  const { runEvidence } = clickVerb(verb, value, ctx);
+  return performActs(ctx, deps, signer, runEvidence);
 }

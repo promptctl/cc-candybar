@@ -6,7 +6,6 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { DEFAULT_TERMINAL_THEME, RichText } from "@promptctl/rich-js";
 
 import { selectionFor } from "./helpers/selection";
@@ -192,7 +191,6 @@ describe("a template's frames run at the session's animation speed; realtimeFram
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(CONFIG, registry, {
-      signer: TEST_SIGNER,
       cwd: "/tmp",
     });
     const effects = new SessionEffects<RenderedLine>("s");

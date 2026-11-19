@@ -88,7 +88,6 @@ import {
   renderBinding,
   type ActionRuntime,
 } from "../render/action.js";
-import type { LinkSigner } from "../click/link-signer.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
@@ -462,14 +461,13 @@ export function registerDslConfig(
   // [LAW:no-silent-failure] `cwd` is required: it is the directory `shell`
   // sources run in, and the daemon's own process.cwd() is
   // whichever shell spawned it — a default here would be that wrong answer.
-  // `signer` signs the `run` links the compile draws.
-  opts: { cwd: string; signer: LinkSigner },
+  opts: { cwd: string },
 ): RegisteredConfig {
   const { compiled, loadWarnings } = registerCompiled(
     config,
     registry,
     opts.cwd,
-    compileAlone(opts.signer),
+    compileAlone,
     EVERY_SCOPE,
   );
   return { ...compiled, loadWarnings };
@@ -482,10 +480,8 @@ export type CompileProvider = (
 ) => CompiledConfig;
 
 /** A compile of its own, for a caller with no other entry to share one with. */
-export const compileAlone =
-  (signer: LinkSigner): CompileProvider =>
-  (_key, input) =>
-    compileDslConfig(input, signer);
+export const compileAlone: CompileProvider = (_key, input) =>
+  compileDslConfig(input);
 
 /** A config composed into a registry: its compile, and its store's declarations. */
 export interface Registration {
@@ -634,12 +630,11 @@ export const EVERY_SCOPE: ReadonlySet<VarScope> = new Set([
 // Pre-parse every template the config holds against one engine whose
 // template functions read the store and clocks of the render in progress
 // (ActionRuntime.bound), so the compile holds no store of its own.
-export function compileDslConfig(
-  { config, stateReads, projections }: CompileInput,
-  // [LAW:locality-or-seam] Not part of the input: the compile's identity is
-  // the config's, and every compile one daemon makes signs with its one key.
-  signer: LinkSigner,
-): CompiledConfig {
+export function compileDslConfig({
+  config,
+  stateReads,
+  projections,
+}: CompileInput): CompiledConfig {
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
   // action runtime. Engine creation amortizes across all of this config's segment
   // templates (parse-once); per-config (not per-render) is the right granularity
@@ -652,7 +647,6 @@ export function compileDslConfig(
   const actionRuntime: ActionRuntime = {
     bound: undefined,
     compiled: new Map(),
-    signer,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its

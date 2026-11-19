@@ -59,6 +59,9 @@ import {
   type ConfigLanding,
 } from "./effect-interpreter.js";
 import { outlives, type HostAct } from "./acts.js";
+import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
+import type { RunEvidence } from "../click/wire.js";
+import type { Asked } from "../utils/outcome.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { RendererConfigs } from "./config-discovery/config-discovery.js";
@@ -87,6 +90,8 @@ type TakenTurn = TurnOutcome & {
 interface MadeEvent {
   readonly kind: "event";
   readonly event: Event;
+  // [LAW:locality-or-seam] Host-only data. Stamping sends the event alone.
+  readonly runEvidence?: readonly RunEvidence[];
 }
 export type Made = MadeEvent | Failure;
 
@@ -95,6 +100,10 @@ export type Made = MadeEvent | Failure;
 // the daemon's close has begun, and where an act's failure goes that no
 // session's bar can hold.
 export interface HostWorld {
+  readonly authorizeRun: (
+    request: RequestedRun,
+    captures: readonly RunEvidence[],
+  ) => Asked<RunAct>;
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
@@ -258,6 +267,7 @@ export function rendererHost(
   const inSlot = async (
     input: EventInput,
     queuedMs: number,
+    captures: readonly RunEvidence[] = [],
   ): Promise<Slotted> => {
     const session = sessionOf(input.event);
     let release = (): void => {};
@@ -282,7 +292,11 @@ export function rendererHost(
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
-    const { settled, configFailure } = await landInSlot(input.event, output);
+    const { settled, configFailure } = await landInSlot(
+      input.event,
+      output,
+      captures,
+    );
     return {
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled.finally(
@@ -297,6 +311,7 @@ export function rendererHost(
   const landInSlot = async (
     event: Event,
     output: RendererOutput,
+    captures: readonly RunEvidence[],
   ): Promise<{
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
@@ -358,6 +373,18 @@ export function rendererHost(
         const outcome: EffectOutcome =
           landed.kind === "ok" ? { kind: "ok" } : landed;
         owed.push((await settleInSlot(effect, outcome)).settled);
+      } else if (effect.kind === "run") {
+        const checked = world.authorizeRun(effect, captures);
+        if (checked.kind === "ok") acts.push(checked.value);
+        else
+          owed.push(
+            (
+              await settleInSlot(effect, {
+                kind: "refused",
+                reason: `run: ${checked.reason}`,
+              })
+            ).settled,
+          );
       } else acts.push(effect);
     }
 
@@ -554,7 +581,10 @@ export function rendererHost(
   // session's bar can hold — one with no session, or one whose renderer has
   // ended — is the daemon's, on every bar. The trust book's answer lands with
   // the turn's changes, and its failure is theirs.
-  const doneOf = (effect: Effect, outcome: EffectOutcome): MadeEvent => ({
+  const doneOf = (
+    effect: Pick<Effect, "id" | "session">,
+    outcome: EffectOutcome,
+  ): MadeEvent => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -672,7 +702,11 @@ export function rendererHost(
         holds(made.event.kind);
         return {
           event: made.event,
-          slotted: await inSlot(stamped(made), queuedMs),
+          slotted: await inSlot(
+            stamped(made),
+            queuedMs,
+            made.event.kind === "click" ? made.runEvidence : undefined,
+          ),
         };
       } finally {
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can

@@ -18,7 +18,6 @@ import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import os from "node:os";
 
 import {
@@ -215,7 +214,6 @@ describe("the bundled host segment", () => {
     const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(CONFIG, registry, {
-        signer: TEST_SIGNER,
         cwd: "/tmp",
       });
       return drawPayload(

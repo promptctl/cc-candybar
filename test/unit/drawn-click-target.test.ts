@@ -20,10 +20,10 @@ const CLOSE = DISCLOSURE_GLYPH_CLOSE;
 const KEY = "groups.details";
 const ACTION = {
   kind: "action",
-  effect: {
+  effects: [{
     verb: VERB_SET_STATE,
     args: [SESSION, KEY, DISCLOSURE_CLOSED],
-  },
+  }],
 } as const;
 
 function runs(fragments: readonly RichText[]) {
@@ -45,10 +45,10 @@ test("adjacent equivalent close targets retain one action and a different key re
       text: CLOSE,
       link: {
         kind: "action",
-        effect: {
+        effects: [{
           verb: VERB_SET_STATE,
           args: [SESSION, "groups.other", DISCLOSURE_CLOSED],
-        },
+        }],
       },
     },
   ]);
@@ -105,7 +105,7 @@ test("named style overlays keep the original safe href and a held placement carr
 });
 
 test("the host signs the generated control and retains legacy authored click behavior", () => {
-  const raw = effectsUrl([ACTION.effect]);
+  const raw = effectsUrl(ACTION.effects);
   const control = disclosureCloseFragment(SESSION, KEY);
   const copy = "cc-candybar://copy/literal%20text";
   const authored = template('{{ link .copy "literal" }}', { copy });

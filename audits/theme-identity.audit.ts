@@ -23,7 +23,6 @@
 import { drawPayload } from "../test/helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { backgroundsOf, truecolorOf } from "../test/helpers/frame";
-import { TEST_SIGNER } from "../test/helpers/link-signer";
 import {
   DIVIDER,
   drawnChars,
@@ -149,7 +148,6 @@ const CALM = {
 const STORE = new VariableStore(systemTimekeeper);
 const REGISTRY = new SourceRegistry(STORE, "", new SessionState());
 const COMPILED = registerDslConfig(CONFIG, REGISTRY, {
-  signer: TEST_SIGNER,
   cwd: process.cwd(),
 });
 const AT = instantOf(new Date());

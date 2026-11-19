@@ -19,7 +19,6 @@ import {
   CLICK_VERBS,
 } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { encodeSegments } from "../src/click/wire";
@@ -86,7 +85,6 @@ function session(): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
       watchers,

@@ -1,7 +1,6 @@
-// [LAW:effects-at-boundaries] The link key on disk: what the host opens every
-// click with and hands each renderer it starts. The key is stable across
-// restarts, so a link still in a terminal's scrollback verifies after the
-// daemon that drew it is gone.
+// [LAW:effects-at-boundaries] The host uses this key for clickable frame
+// publication and admission. The key is stable across restarts, so a link
+// still in scrollback verifies after the daemon that drew it is gone.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -15,12 +14,9 @@ export function linkKeyFile(dir: string): string {
   return path.join(dir, "link.key");
 }
 
-// [LAW:one-source-of-truth] The key in the file, read on first use and kept
-// once a read succeeds: the host opens every click with what this returns and
-// starts every renderer with it, so the two never hold different keys.
-// Importing the daemon touches no disk for it, and a key that could not be
-// read is read again at the next ask, so removing a broken file (its error's
-// own remedy) recovers with no restart.
+// [LAW:one-source-of-truth] First use reads the file and retains its key
+// for both host paths. An unsuccessful read is retried at the next use, so
+// removing a broken file recovers without restarting the daemon.
 export function linkKeyFromFile(
   file: string,
   log: DaemonLogger = quietLogger,

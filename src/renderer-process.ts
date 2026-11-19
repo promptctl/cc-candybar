@@ -14,7 +14,6 @@ import process from "node:process";
 import { inspect } from "node:util";
 import type { World } from "./host.js";
 import { locations } from "./daemon/paths.js";
-import { linkSigner } from "./click/link-signer.js";
 import { createGates } from "./daemon/foundations/gates.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
@@ -119,10 +118,6 @@ function booted(
   boot: RendererBoot,
   reaches: AdapterToHost,
 ): TimedRenderer {
-  // [LAW:no-silent-failure] A key the host could not read refuses this boot
-  // with its reason, on the bar's ⚠; the host's next start reads it again.
-  if (boot.linkKey.kind === "failed")
-    throw new Error(`the link key could not be read: ${boot.linkKey.reason}`);
   const { host } = boot;
   const { clock } = world;
   // [LAW:single-enforcer] Each turn timed in this process, around its
@@ -130,7 +125,6 @@ function booted(
   const renderer = mainRendererOf(
     {
       stored: boot.stored,
-      linkSigner: linkSigner(Buffer.from(boot.linkKey.value, "base64")),
       locations: locations(host),
       home: host.home,
       gates: createGates(),

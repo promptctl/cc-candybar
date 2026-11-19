@@ -1,4 +1,3 @@
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { NO_PROJECT } from "./helpers/no-project";
 import v8 from "node:v8";
@@ -43,7 +42,6 @@ function registerStdlib() {
   return {
     registry,
     compiled: registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
       cwd: "/tmp",
     }),
   };

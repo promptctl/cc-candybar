@@ -1,9 +1,22 @@
 import { RichText, Style } from "@promptctl/rich-js";
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
-import type { DrawnLink, LinkTarget } from "./drawn-link.js";
+import type { DrawnEffect, DrawnLink, LinkTarget } from "./drawn-link.js";
 
 const PROOF = Symbol("Candybar link target");
 const MARKER = "candybar-span:";
+
+function capture(effect: DrawnEffect): DrawnEffect {
+  if ("verb" in effect)
+    return Object.freeze({ ...effect, args: Object.freeze([...effect.args]) });
+  const { run, env } = effect.evaluated;
+  return Object.freeze({
+    ...effect,
+    evaluated: Object.freeze({
+      run: Object.freeze([...run]),
+      env: Object.freeze({ ...env }),
+    }),
+  });
+}
 
 class LinkProof {
   readonly marker: string;
@@ -13,16 +26,13 @@ class LinkProof {
     this.target =
       target.kind === "action"
         ? Object.freeze({
-            kind: "action",
-            effect: Object.freeze({
-              verb: target.effect.verb,
-              args: Object.freeze([...target.effect.args] as const),
-            }),
+            ...target,
+            effects: Object.freeze(target.effects.map(capture)),
           })
         : Object.freeze({ ...target });
     // [LAW:one-source-of-truth] Style.equals compares links and ignores meta.
     // The marker is the equality projection of the target kept with the span.
-    this.marker = `${MARKER}${Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
+    this.marker = MARKER + encodeURIComponent(JSON.stringify(this.target));
   }
 }
 

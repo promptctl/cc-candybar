@@ -12,7 +12,6 @@ import { fakeLauncher } from "./helpers/fake-launcher";
 import { hangs } from "../src/proc/spawner-fake";
 import { NO_PROJECT } from "./helpers/no-project";
 import { textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { validateConfig } from "./helpers/parse-and-validate";
@@ -69,7 +68,6 @@ describe("shipped examples load and render through the real cascade", () => {
     spawner.program(() => true, hangs());
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
       cwd: process.cwd(),
     });
     // [LAW:no-silent-failure] A variable that fails to declare is collected, not

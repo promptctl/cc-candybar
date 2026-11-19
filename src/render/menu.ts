@@ -48,7 +48,8 @@ import {
   type MenuOptions,
 } from "../config/menu-keys.js";
 import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
+import { VERB_SET_STATE } from "../click/wire.js";
+import { actionTarget } from "./drawn-link.js";
 import {
   linkFragment,
   clickSession,
@@ -122,7 +123,7 @@ function renderMenu(
   // closed) AND resets the page cursor to page 0, in one batch. So a reopened menu
   // is never stranded on a stale page left by ←/→ before the last close. This
   // mirrors the picker's closeOnPick page-reset fold: the picker builds its set-
-  // state URLs directly (not via renderAction) so it can couple two writes; the
+  // state targets directly so it can couple two writes; the
   // menu — the one part that knows BOTH the open-state key and the page key
   // [LAW:decomposition] — does the same. The synthesized cycle action stays the
   // GATE source (deriveActionValidators); both keys are independently gated, so the
@@ -137,7 +138,7 @@ function renderMenu(
   // edit mode's `+` came to read `+▸`.
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open ? 1 : 0),
-    effectsUrl([
+    actionTarget([
       {
         verb: VERB_SET_STATE,
         args: [sessionId, stateKey, successor, pageKey, "0"],

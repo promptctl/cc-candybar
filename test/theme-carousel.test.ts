@@ -19,9 +19,9 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { runUrl } from "./helpers/frame";
 import {
   ColorDepth,
   getThemePalette,
@@ -104,7 +104,6 @@ function rig(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp",
   });
   recordRender(sessionState, SID);
@@ -435,7 +434,7 @@ describe("the settings menu's look controls are pickers whose label opens a list
         text: plainOf(
           rendered.rows
             .flatMap(({ runs }) => runs)
-            .filter((run) => run.link === l.url),
+            .filter((run) => runUrl(run) === l.url),
         ),
         writes: effectsOf(l.url).find((e) => e.args[1] === "theme")?.args[2],
       }))
@@ -813,7 +812,6 @@ describe("the preset control's list carries the layout beneath it", () => {
       "",
     );
     const compiled = registerDslConfig(config, registry, {
-      signer: TEST_SIGNER,
       cwd: "/tmp",
     });
     // Every segment but edit mode's chrome, which edit mode alone shows.

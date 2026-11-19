@@ -12,7 +12,6 @@ import type { Failure } from "../daemon/foundations/verb-error.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Host } from "../host-facts.js";
-import type { Asked } from "../utils/outcome.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { StoredState } from "./stored-state.js";
 import type { Crosses } from "./crosses.js";
@@ -30,7 +29,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 4;
+export const RENDERER_WIRE_VERSION = 5;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -59,10 +58,6 @@ export interface RendererBoot {
     readonly env: Readonly<Record<string, string>>;
   };
   readonly memoryLimitBytes: number;
-  // The host's link key in base64, read as this renderer spawned, which it
-  // signs every link with; or why it could not be read, which the renderer
-  // refuses its boot with.
-  readonly linkKey: Asked<string>;
 }
 
 // A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.

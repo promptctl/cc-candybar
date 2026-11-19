@@ -44,7 +44,6 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
-import type { LinkSigner } from "../click/link-signer.js";
 import type { Locations } from "../config/loader/chain-places.js";
 import type { Gates } from "../daemon/foundations/gates.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
@@ -582,17 +581,13 @@ function closeIdleMenus(
   }
 }
 
-// What the main renderer is built from besides the host's parts: its
-// profile's stored state as the host holds it, the signer its links are drawn
-// with, and the facts of the machine its loads resolve under. No clock: every
-// input carries the host's readings.
+// The renderer starts from the profile's stored state and the machine facts
+// its loads resolve under. Each input carries the host's clock readings.
 export interface MainRendererInputs {
   // [LAW:one-source-of-truth] A renderer is built from its stored state, so
   // none exists without it: every write it makes leaves as a turn's stored
   // writes, and the next renderer is built from what the host then holds.
   readonly stored: StoredState;
-  // [LAW:single-enforcer] The signer over the state directory's key.
-  readonly linkSigner: LinkSigner;
   // Where the user's config and installed plugins live.
   readonly locations: Locations;
   readonly home: string;
@@ -608,7 +603,7 @@ export function mainRendererOf(
   inputs: MainRendererInputs,
   host: AdapterToHost,
 ): Renderer {
-  const { gates, linkSigner } = inputs;
+  const { gates } = inputs;
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
@@ -657,7 +652,6 @@ export function mainRendererOf(
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       storage: host.storage,
-      signer: linkSigner,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -754,7 +748,6 @@ export function mainRendererOf(
       renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
-    links: linkSigner,
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };

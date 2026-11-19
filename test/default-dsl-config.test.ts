@@ -12,7 +12,6 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { globalsFor, selectionFor } from "./helpers/selection";
 import {
   DEFAULT_DSL_CONFIG,
@@ -208,7 +207,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
     );
     try {
       const compiled = registerDslConfig(parsed, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       const basePalette = getThemePalette(
@@ -281,7 +279,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       const compiled = registerDslConfig(config, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       const row = (
@@ -504,7 +501,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
-    const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+    const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
     // A click is gated by the config its session renders: record the render
     // and hand the click that config, so the clicks below pass through the
     // same validator applyTheme/applyStyle would in production.
@@ -639,7 +636,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(parsed, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+        const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
         return textOf(drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
           endcaps: "powerline",
@@ -702,7 +699,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
         return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
       } finally {
@@ -759,7 +756,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         new SessionState(),
       );
       try {
-        const compiled = registerDslConfig(cfg, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
         return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
       } finally {
@@ -789,7 +786,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
-          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -893,7 +889,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
-          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1347,7 +1342,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
-          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1438,7 +1432,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
-            signer: TEST_SIGNER,
             cwd: process.cwd(),
           });
           const basePalette = getThemePalette(
@@ -1516,7 +1509,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
-          signer: TEST_SIGNER,
           cwd: process.cwd(),
         });
         const basePalette = getThemePalette(
@@ -1655,7 +1647,6 @@ describe("bundled preset library renders clean at every width — brandon-preset
     });
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {
-        signer: TEST_SIGNER,
         cwd: "/tmp",
       });
       const drawnAt = instantOf(new Date());

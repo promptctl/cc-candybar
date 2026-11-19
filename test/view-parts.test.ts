@@ -9,7 +9,6 @@ import { partsOf } from "../src/dsl/parts";
 import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { linksOf } from "../src/click/read";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -47,7 +46,6 @@ function viewOf(config: ValidatedConfig, sessionState = new SessionState()) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp",
   });
   const errors: string[] = [];

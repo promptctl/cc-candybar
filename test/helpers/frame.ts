@@ -10,6 +10,9 @@ import { plainOf, type Frame, type Run } from "../../src/render/frame";
 export const linkUrls = (frame: Pick<Frame, "rows">): string[] =>
   linksOf(frame).map(({ url }) => url);
 
+export const runUrl = ({ link }: Run): string | undefined =>
+  link === undefined ? undefined : hrefOfDrawnLink(link);
+
 /**
  * The URL of every link drawn bold — the renderer's "current selection"
  * marking — once per link, in order. A link whose cells change look is several
@@ -19,10 +22,7 @@ export const boldUrls = ({ rows }: Pick<Frame, "rows">): string[] =>
   rows.flatMap(({ runs }) =>
     runs
       .filter(({ text }) => text !== "")
-      .map(({ link, attrs }) => ({
-        attrs,
-        url: link === undefined ? undefined : hrefOfDrawnLink(link),
-      }))
+      .map((run) => ({ attrs: run.attrs, url: runUrl(run) }))
       .flatMap(({ url, attrs }, i, drawn) =>
         url !== undefined &&
         url !== drawn[i - 1]?.url &&

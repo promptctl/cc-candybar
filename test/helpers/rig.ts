@@ -32,7 +32,6 @@ import {
   type RegisteredConfig,
   type RenderSelection,
 } from "../../src/dsl/render";
-import type { LinkSigner } from "../../src/click/link-signer";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
@@ -53,7 +52,6 @@ import { readingsIn } from "./session-environment";
 import { drawPayload } from "./draw-payload";
 import { sessionOfPayload, TEST_SESSION } from "./payload-session";
 import { unscriptedRuns } from "./fake-launcher";
-import { TEST_SIGNER } from "./link-signer";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
 import { selectionFor } from "./selection";
 
@@ -97,7 +95,6 @@ export interface RigInit {
   /** What the click path is built with beyond the config: the history and host a durable-config test owns. */
   readonly history?: SettingsHistory;
   readonly host?: Host;
-  readonly signer?: LinkSigner;
 }
 
 export interface DrawInit {
@@ -145,14 +142,13 @@ export interface Rig {
 // other members.
 const parses = new WeakMap<DslConfig, Map<string, ValidatedConfig>>();
 
-// A compile is shared by what a compile takes: its config (the key) and its
-// signer. It holds no store, but it is not an immutable value: it carries
+// A compile is shared by its config key. It holds no store, but it carries
 // per-walk state — `activeSegment` (set while a segment renders),
 // `menuRuntime.action.bound` (the render's binding: `bindRender` sets it for the
 // walk and drops it on every exit, a second live bind throws) and the per-store
 // `views` map. Sharing is safe because every bind is synchronous and exclusive
 // and one test file's draws run one at a time; an overlap would throw.
-const compiles = new WeakMap<LinkSigner, Map<string, CompiledConfig>>();
+const compiles = new Map<string, CompiledConfig>();
 
 function held<K extends object, V>(
   memo: WeakMap<K, Map<string, V>>,
@@ -200,17 +196,14 @@ export function parsedConfig(
 }
 
 /** A compile provider that hands back the compile held for a key, building it on first ask. */
-export function sharedCompile(signer: LinkSigner): CompileProvider {
-  const entries = held(compiles, signer);
-  return (key, input) => {
-    let compiled = entries.get(key);
-    if (compiled === undefined) {
-      compiled = compileDslConfig(input, signer);
-      entries.set(key, compiled);
-    }
-    return compiled;
-  };
-}
+export const sharedCompile: CompileProvider = (key, input) => {
+  let compiled = compiles.get(key);
+  if (compiled === undefined) {
+    compiled = compileDslConfig(input);
+    compiles.set(key, compiled);
+  }
+  return compiled;
+};
 
 export function buildRig(init: RigInit = {}): Rig {
   const sessionId = init.sessionId ?? SESSION_ID;
@@ -240,7 +233,7 @@ export function buildRig(init: RigInit = {}): Rig {
     drawn,
     registry,
     cwd,
-    sharedCompile(init.signer ?? TEST_SIGNER),
+    sharedCompile,
     EVERY_SCOPE,
   );
   const compiled = {

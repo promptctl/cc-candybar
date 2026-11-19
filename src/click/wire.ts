@@ -192,6 +192,32 @@ export interface EvaluatedRun {
   readonly env: Readonly<Record<string, string>>;
 }
 
+// [LAW:types-are-the-program] Keep the precise legacy bytes the host verifies.
+// The declaration to check is supplied by the renderer's current config.
+export interface RunEvidence {
+  readonly session: SessionId;
+  readonly action: string;
+  readonly evaluated: string;
+  readonly mac: string;
+}
+
+// [LAW:single-enforcer] Publication and authorization use the same field
+// projection, preserving the legacy signatures.
+export function runLinkFields(
+  {
+    session,
+    action,
+    declaration,
+  }: {
+    readonly session: SessionId;
+    readonly action: string;
+    readonly declaration: string;
+  },
+  evaluated: string,
+): SignedFields {
+  return { sessionId: session, action, declaration, evaluated };
+}
+
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.
@@ -501,7 +527,10 @@ export type ClickStep =
   | GlobalStep
   | {
       readonly kind: "session";
-      readonly verb: Exclude<SessionVerb, typeof VERB_REPO_CONFIG>;
+      readonly verb: Exclude<
+        SessionVerb,
+        typeof VERB_REPO_CONFIG | typeof VERB_RUN
+      >;
       readonly args: readonly string[];
     }
   | {
@@ -509,6 +538,12 @@ export type ClickStep =
       readonly verb: typeof VERB_REPO_CONFIG;
       readonly dir: string;
       readonly answer: RepoAnswer;
+    }
+  | {
+      readonly kind: "run";
+      readonly verb: typeof VERB_RUN;
+      readonly action: string;
+      readonly capture: number;
     };
 
 export type AdmittedClick =
@@ -523,6 +558,13 @@ export type AdmittedClick =
       readonly session: SessionId;
       readonly steps: readonly ClickStep[];
     };
+
+// [LAW:effects-at-boundaries] Only the click crosses into the renderer.
+// Its capture index refers to evidence the host holds in this turn.
+export interface ClickAdmission {
+  readonly click: AdmittedClick;
+  readonly runEvidence: readonly RunEvidence[];
+}
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
   ...Object.keys(SAYS),
@@ -542,12 +584,13 @@ export function admitClick(
   verb: string,
   value: string,
   signer: Pick<LinkSigner, "verify">,
-): AdmittedClick {
+): ClickAdmission {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
 
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
   const global: GlobalStep[] = [];
+  const runEvidence: RunEvidence[] = [];
   let scoped: { id: SessionId; steps: ClickStep[] } | undefined;
 
   for (const step of batchAdjacentWrites(raw)) {
@@ -603,19 +646,35 @@ export function admitClick(
                 .split("/")
                 .map(decodeURIComponent),
             );
-      scoped.steps.push(
-        name === VERB_REPO_CONFIG
-          ? admitRepoAnswer(scoped.id, args, signer)
-          : { kind: "session", verb: name, args },
-      );
+      switch (name) {
+        case VERB_REPO_CONFIG:
+          scoped.steps.push(admitRepoAnswer(scoped.id, args, signer));
+          break;
+        case VERB_RUN: {
+          const [action = "", evaluated = "", mac = ""] = args;
+          const capture = runEvidence.length;
+          runEvidence.push({ session: scoped.id, action, evaluated, mac });
+          scoped.steps.push({
+            kind: "run",
+            verb: name,
+            action,
+            capture,
+          });
+          break;
+        }
+        default:
+          scoped.steps.push({ kind: "session", verb: name, args });
+      }
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
-  return scoped === undefined
-    ? { scope: "global", verb, steps: global }
-    : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+  const click: AdmittedClick =
+    scoped === undefined
+      ? { scope: "global", verb, steps: global }
+      : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+  return { click, runEvidence };
 }
 
 // [LAW:parse-dont-validate] An outer signature is also given to authored URLs.

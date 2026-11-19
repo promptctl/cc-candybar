@@ -11,6 +11,7 @@ import { decodeAnsi, Style } from "@promptctl/rich-js";
 import { textOf } from "../../../src/render/frame";
 import { effectsOf, linksOf } from "../../../src/click/read";
 import {
+  effectsUrl,
   VERB_OPEN_VSCODE,
   VERB_REPO_CONFIG,
   VERB_RUN,
@@ -22,18 +23,17 @@ import {
 import type { Response } from "../../../src/daemon/foundations/protocol";
 import { RENDERER_WIRE_VERSION } from "../../../src/renderer-interface/wire";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
-import { LINK_KEY_BYTES } from "../../../src/click/link-signer";
 import { DISCLOSURE_GLYPH_CLOSE } from "../../../src/config/disclosure";
 import {
   click,
   drawnLink,
   findUrl,
-  frameRequest,
   hookData,
   render,
   renderBody,
   renderRequest,
   renderUntil,
+  refusedClick,
   runRealClient,
 } from "../../helpers/daemon-e2e";
 import {
@@ -52,10 +52,6 @@ const COMPATIBLE_BOOT = {
     stored: EMPTY_STORED_STATE,
     host: { home: "/home", tmp: os.tmpdir(), env: {} },
     memoryLimitBytes: 1,
-    linkKey: {
-      kind: "ok",
-      value: Buffer.alloc(LINK_KEY_BYTES).toString("base64"),
-    },
   },
 };
 
@@ -84,8 +80,7 @@ describe("the renderer wire handshake", () => {
   ])(
     "the built child refuses %s before reading its boot payload",
     (_name, version, sent) => {
-      // Only an old digest is present. Building the renderer would fail for a
-      // missing key before it could report the actual version mismatch.
+      // Only an old digest is present. It cannot be accepted as a boot.
       const child = bootChild(
         { ...version, boot: { digest: "old-build" } },
         COMPATIBLE_BOOT,
@@ -123,6 +118,43 @@ function rendererStarts(handle: IsolatedDaemonHandle): number[] {
   return [...log.matchAll(/renderer main\[\d+\] started pid=(\d+)/g)].map((m) =>
     Number(m[1]),
   );
+}
+
+const urlsOfAnsi = (output: string): string[] =>
+  decodeAnsi(output).spans.flatMap(({ style }) =>
+    style instanceof Style && style.link !== undefined ? [style.link] : [],
+  );
+
+function observePane(sockPath: string, session: string) {
+  const frames: Response[] = [];
+  let ended: StreamEnd | null = null;
+  const stream = openFrameStream(
+    sockPath,
+    session,
+    "pane",
+    (frame) => frames.push(frame),
+    (end) => {
+      ended = end;
+    },
+  );
+  const waitFor = async (
+    matches: (text: string) => boolean,
+    wanted: string,
+  ): Promise<string> => {
+    const output = () =>
+      frames
+        .flatMap((frame) =>
+          frame.ok && "output" in frame ? [frame.output] : [],
+        )
+        .find((ansi) => matches(decodeAnsi(ansi).plain));
+    const seen = () =>
+      `${wanted} (last pane message: ${JSON.stringify(ended ?? frames.at(-1))})`;
+    await until(() => output() !== undefined || ended !== null, seen);
+    const match = output();
+    if (match === undefined) throw new Error(seen());
+    return match;
+  };
+  return { waitFor, close: stream.close };
 }
 
 describe("the daemon's renderer process", () => {
@@ -224,10 +256,6 @@ describe("the daemon's renderer process", () => {
     expect(effectsOf(authoredLink)).toEqual([
       { verb: VERB_OPEN_VSCODE, args: ["fixture"] },
     ]);
-    const urlsOfAnsi = (output: string): string[] =>
-      decodeAnsi(output).spans.flatMap(({ style }) =>
-        style instanceof Style && style.link !== undefined ? [style.link] : [],
-      );
     const ansi = await renderRequest(
       handle.sockPath,
       renderBody(session, projectDir, {}, args),
@@ -236,46 +264,25 @@ describe("the daemon's renderer process", () => {
       expect.arrayContaining([requestLink, external, authoredLink]),
     );
 
-    const frames: Response[] = [];
-    let ended: StreamEnd | null = null;
-    const stream = openFrameStream(
-      handle.sockPath,
-      session,
-      "pane",
-      (frame) => frames.push(frame),
-      (end) => {
-        ended = end;
-      },
-    );
+    const pane = observePane(handle.sockPath, session);
     try {
-      await until(
-        () => frames.length > 0 || ended !== null,
+      const frame = await pane.waitFor(
+        (text) => text.includes("DISCLOSURE-BODY"),
         "the pane's first frame",
       );
-      const frame = frames[0];
-      if (frame === undefined || !frame.ok || !("output" in frame))
-        throw new Error(
-          `the pane drew no bar: ${JSON.stringify(frame ?? ended)}`,
-        );
-      const urls = urlsOfAnsi(frame.output);
+      const urls = urlsOfAnsi(frame);
       const paneLink = urls.find((url) => url === requestLink);
-      expect(paneLink).toBe(requestLink);
+      if (paneLink === undefined)
+        throw new Error("pane has no disclosure close");
       expect(urls).toContain(external);
       expect(urls).toContain(authoredLink);
-      expect(decodeAnsi(frame.output).plain).toContain("DISCLOSURE-BODY");
-      await click(handle.sockPath, paneLink!);
-      await until(
-        () =>
-          frames.some(
-            (reply) =>
-              reply.ok &&
-              "output" in reply &&
-              !decodeAnsi(reply.output).plain.includes("DISCLOSURE-BODY"),
-          ),
+      await click(handle.sockPath, paneLink);
+      await pane.waitFor(
+        (text) => !text.includes("DISCLOSURE-BODY"),
         "the pane after its click",
       );
     } finally {
-      stream.close();
+      pane.close();
     }
   });
 
@@ -321,6 +328,7 @@ describe("the daemon's renderer process", () => {
     fs.writeFileSync(
       config,
       JSON.stringify({
+        globals: { experimentalPane: true },
         variables: {
           shown: { kind: "input", path: "model.display_name", type: "string" },
         },
@@ -343,26 +351,59 @@ describe("the daemon's renderer process", () => {
     const session = "rproc-run";
     const args = ["cc-candybar", "--config", config];
     const draw = (value: string) =>
-      frameRequest(handle.sockPath, {
+      renderRequest(handle.sockPath, {
         ...renderBody(session, projectDir, {}, args),
         hookData: {
           ...hookData(session, projectDir),
           model: { id: "fixture", display_name: value },
         },
       });
-    const before = await draw("first value");
-    const old = linksOf(before).find(
-      ({ text, url }) =>
-        text === "first value" && effectsOf(url).some(({ verb }) => verb === VERB_RUN),
-    )?.url;
-    if (old === undefined) throw new Error("missing run from the first frame");
-    expect(textOf(await draw("second value"))).toContain("second value");
-    await click(handle.sockPath, old);
-    const wanted = JSON.stringify(["first value", "first value"]);
-    await until(
-      () => fs.existsSync(record) && fs.readFileSync(record, "utf8") === wanted,
-      "the run's captured argv and env",
-    );
+    const runUrl = (output: string): string => {
+      const url = urlsOfAnsi(output).find((url) =>
+        effectsOf(url).some(({ verb }) => verb === VERB_RUN),
+      );
+      if (url === undefined) throw new Error("frame has no run");
+      return url;
+    };
+    const statuslineUrl = runUrl(await draw("first value"));
+
+    const pane = observePane(handle.sockPath, session);
+    const paneShowing = (text: string) =>
+      pane.waitFor((plain) => plain.includes(text), `pane showing ${text}`);
+    try {
+      const paneUrl = runUrl(await paneShowing("first value"));
+      expect(paneUrl).toBe(statuslineUrl);
+
+      // The request carries the new input while the active pane draws the bar.
+      await draw("second value");
+      expect(runUrl(await paneShowing("second value"))).not.toBe(paneUrl);
+      const displayed = effectsOf(statuslineUrl).find(
+        ({ verb }) => verb === VERB_RUN,
+      );
+      if (displayed === undefined) throw new Error("missing displayed run");
+      const outerOnly = drawnLink(
+        handle.sockPath,
+        effectsUrl([{ verb: VERB_RUN, args: displayed.args.slice(0, 3) }]),
+      );
+      await refusedClick(handle.sockPath, outerOnly, "bad-request");
+      expect(fs.existsSync(record)).toBe(false);
+
+      const wanted = JSON.stringify(["first value", "first value"]);
+      for (const [surface, url] of [
+        ["statusline", statuslineUrl],
+        ["pane", paneUrl],
+      ] as const) {
+        await click(handle.sockPath, url);
+        await until(
+          () =>
+            fs.existsSync(record) && fs.readFileSync(record, "utf8") === wanted,
+          `the run's captured argv and env from the ${surface}`,
+        );
+        fs.unlinkSync(record);
+      }
+    } finally {
+      pane.close();
+    }
   });
 
   test("a renderer outlives no daemon, even one killed with no cleanup", async () => {

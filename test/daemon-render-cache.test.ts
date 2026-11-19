@@ -5,7 +5,6 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, WORLD, hostOf, worldOf } from "./helpers/host";
 import type { Host, World } from "../src/host";
 import {
@@ -128,7 +127,6 @@ function makeCache(
       clock: systemTimekeeper,
       locations: locations(host),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
       log,
@@ -1455,7 +1453,6 @@ describe("RenderCache close", () => {
         clock: systemTimekeeper,
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         source: SOURCES_NOTHING,
@@ -1513,7 +1510,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         log: (_level, line) => logs.push(line),
@@ -1631,7 +1627,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         log: (_level, line) => logs.push(line),
@@ -1702,7 +1697,6 @@ describe("RenderCache frames and pins", () => {
         clock: systemTimekeeper,
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         log: () => {},

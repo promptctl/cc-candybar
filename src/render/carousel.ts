@@ -21,7 +21,7 @@
 
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { effectsUrl } from "../click/wire.js";
+import { actionTarget, type DrawnAction } from "./drawn-link.js";
 import {
   bindsTemplateValue,
   linkFragment,
@@ -86,16 +86,9 @@ export function renderCarousel(
   if (options.length === 0) return assemble([]);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset: number): string => options[indexAt(offset)]!;
-  const step = (offset: number): string =>
-    effectsUrl(
-      realize(
-        declared,
-        ring(offset),
-        ring(offset),
-        store,
-        sessionId,
-        runtime.signer,
-      ).effects,
+  const step = (offset: number): DrawnAction =>
+    actionTarget(
+      realize(declared, ring(offset), ring(offset), store, sessionId).effects,
     );
 
   return assemble([
@@ -110,14 +103,13 @@ export function renderCarousel(
         ring(0),
         label,
       ),
-      effectsUrl(
+      actionTarget(
         realize(
           runtime.compiled.get(openName)!,
           ring(0),
           undefined,
           store,
           sessionId,
-          runtime.signer,
         ).effects,
       ),
     ),

@@ -7,18 +7,17 @@ import {
   isBarLink,
   parseHandlerUrl,
   URL_SCHEME,
-  type AdmittedClick,
+  type ClickAdmission,
 } from "../click/wire.js";
 import type { Delivery } from "../renderer-interface/click-arrival.js";
 import { BadVerbArgs } from "./foundations/verb-error.js";
 
 export type ReadClick =
-  | {
+  | ({
       readonly kind: "link";
-      readonly click: AdmittedClick;
       readonly link: string;
       readonly delivery: Delivery;
-    }
+    } & ClickAdmission)
   | {
       readonly kind: "refused";
       readonly problem: string;
@@ -43,7 +42,7 @@ export function parseClick(
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value, links),
+      ...admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery,
     };
