@@ -22,6 +22,7 @@ import {
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { AdapterReply } from "../../src/renderer-interface/adapter";
+import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
 import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
@@ -546,6 +547,14 @@ test("failed replacement starts leave the accepted declaration until a complete 
   const previous = { ...NONE, sources: { kept: [] }, configs: [origin] };
   const taken: Subscriptions[] = [];
   const heard: Event[] = [];
+  const stored: StoreWrite[] = [];
+  const recorded: string[] = [];
+  const performed: string[] = [];
+  const write: StoreWrite = {
+    store: "session-state",
+    key: sessionIdOf("kept"),
+    value: { "open-menu": "before failing" },
+  };
   const read: string[] = [];
   const followed: string[][] = [];
   let available = true;
@@ -564,9 +573,15 @@ test("failed replacement starts leave the accepted declaration until a complete 
                 ...answered(),
                 kind: "threw",
                 failure: failureOf(new Error("opening failed")),
+                stored: [write],
+                record: [["restoring", "failed after work"]],
+                effects: [
+                  { kind: "copy", id: 1 as EffectId, session: null, text: "work completed" },
+                ],
               };
             return { ...answered(), subscriptions: keepsDemand ? previous : NONE };
           }
+          if (event.kind === "effect-done") return answered();
           return { ...answered(), subscriptions: previous };
         },
         adapter: async () => {
@@ -578,12 +593,18 @@ test("failed replacement starts leave the accepted declaration until a complete 
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
-      stored: () => {},
-      recorded: () => {},
+      stored: (writes) => void stored.push(...writes),
+      recorded: (record) =>
+        void recorded.push(...record.map(([key, value]) => `${key}=${value}`)),
       holding: () => () => {},
     },
     {
       ...NO_ACTS,
+      perform: async (act) => {
+        if (act.kind !== "copy") throw new Error(`unexpected ${act.kind}`);
+        performed.push(act.text);
+        return { kind: "ok" };
+      },
       configs: {
         ...NO_ACTS.configs,
         follow: (wanted) => followed.push(wanted.map(({ cwd }) => cwd)),
@@ -618,7 +639,18 @@ test("failed replacement starts leave the accepted declaration until a complete 
 
   available = true;
   rejectsStart = true;
-  expect(await start()).toMatchObject({ kind: "threw" });
+  expect(await start()).toMatchObject({
+    kind: "threw",
+    settled: [{ kind: "ok" }],
+  });
+  expect(stored).toEqual([write]);
+  expect(recorded).toContain("restoring=failed after work");
+  expect(performed).toEqual(["work completed"]);
+  expect(heard.at(-1)).toMatchObject({
+    kind: "effect-done",
+    of: 1,
+    outcome: { kind: "ok" },
+  });
   expect(taken).toEqual([previous]);
 
   rejectsStart = false;
@@ -627,7 +659,9 @@ test("failed replacement starts leave the accepted declaration until a complete 
     kind: "start",
     configs: [{ origin, config, retained: true }],
   });
-  expect(heard.map(({ kind }) => kind)).toEqual(["due", "config", "due", "start", "start"]);
+  expect(heard.map(({ kind }) => kind)).toEqual([
+    "due", "config", "due", "start", "effect-done", "start",
+  ]);
   expect(read).toEqual(["/p", "/p", "/p", "/p"]);
   expect(taken).toEqual([previous, previous]);
 

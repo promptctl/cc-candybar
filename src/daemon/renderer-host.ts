@@ -331,12 +331,10 @@ export function rendererHost(
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
     if (input.event.kind === "start") {
-      if (turn.kind === "threw") {
-        recordTaken("turn record", () => collector.recorded(output.record));
-        return { turn, settled: Promise.resolve([]) };
-      }
-      for (const { origin } of input.event.configs ?? [])
-        configs.set(originKey(origin), "received");
+      startFailure = turn.kind === "threw" ? turn.failure : null;
+      if (startFailure === null)
+        for (const { origin } of input.event.configs ?? [])
+          configs.set(originKey(origin), "received");
     }
     const { settled, configFailure } = await landInSlot(
       input.event,
@@ -533,9 +531,15 @@ export function rendererHost(
     requested: RenderOrigin | null,
     receipt: SettlePresentation,
   ): ConfigFollowing => {
-    recordTaken("wake declaration", () => wake.declare(nextWake));
+    // [LAW:effects-at-boundaries] A failed replacement still owes its own
+    // collected writes and effects. Its view and wake declarations cannot
+    // replace the predecessor's, including during effect settlement.
+    const adoptDemand = startFailure === null;
+    if (adoptDemand)
+      recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
     if (
+      adoptDemand &&
       (declared?.sources !== subscriptions.sources ||
         declared?.lanes !== subscriptions.lanes) &&
       recordTaken("subscriptions", () =>
@@ -564,6 +568,7 @@ export function rendererHost(
       )
         for (const frame of frames) settled(frame, false);
     }
+    if (!adoptDemand) return { kind: "following", named: [] };
     const named: RenderOrigin[] = [];
     const moved = origins !== subscriptions.configs;
     if (moved) {
@@ -821,7 +826,11 @@ export function rendererHost(
           if (starting) startFailure = made;
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
-        if (!starting && startFailure !== null)
+        if (
+          !starting &&
+          startFailure !== null &&
+          made.event.kind !== "effect-done"
+        )
           return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds(made.event.kind);
         const slotted = await inSlot(
