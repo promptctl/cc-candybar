@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-845",
+      "ref": "refs/pull/845/merge",
+      "sha": "6a9566c48ff1ebefd760574044de0705727bbc77",
+      "timestamp": "2026-11-19T10:12:44.610Z",
+      "commits": [
+        {
+          "sha": "6a9566c48ff1ebefd760574044de0705727bbc77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:10:56-07:00",
+          "message": "Merge 8c91fe107f14f56748a0ff70c340e3be6931c637 into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "8c91fe107f14f56748a0ff70c340e3be6931c637",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:54:51-07:00",
+          "message": "fix(test): each doctor click in the e2e waits for the run before it to report (boii)\n\nA doctor click while the session's run still waits for its reading starts\nno run, so two clicks one draw apart logged one or two runs depending on how\nfast the host read the machine. The effect-refresh case now draws its row\nback after each click before clicking again, and the URL-handler case waits\nfor its run's row instead of reading the first draw. Under a 1.5 s delay on\nthe host's reading, the old effect-refresh case logs three runs and fails;\nboth cases pass.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-843",
       "ref": "refs/pull/843/merge",
       "sha": "d20c596aafba46b288667e4c704f4373f672fa96",
