@@ -7,12 +7,13 @@
 import {
   chmodSync,
   mkdtempSync,
+  renameSync,
   utimesSync,
   writeFileSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { CacheExpiryProvider, cacheExpiresAt } from "../src/segments/cache";
 import { ABSENT, pendingOf, ok } from "../src/utils/outcome";
@@ -144,8 +145,8 @@ describe("cacheExpiresAt", () => {
 });
 
 // brandon-unfiled-3248.8ro6: a draw takes the expiry its session's last
-// request left, and a request reads the transcript again only when its stamp
-// (mtime:size) moved.
+// request left, and a request reads the transcript again when its file
+// version changes.
 describe("CacheExpiryProvider", () => {
   const at = (iso: string): number =>
     Math.floor(Date.parse(iso) / 1000) + TTL_SEC;
@@ -158,9 +159,7 @@ describe("CacheExpiryProvider", () => {
     );
   });
 
-  test("a failed read is read again under the same stamp, never believed", async () => {
-    // A failure says nothing about the bytes at the stamp: an unreadable file
-    // keeps its stat (and so its stamp), and becomes readable again.
+  test("a transcript is read again when its permissions let it be read", async () => {
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     const provider = new CacheExpiryProvider(systemTimekeeper);
     chmodSync(path, 0o000);
@@ -193,8 +192,7 @@ describe("CacheExpiryProvider", () => {
     });
   });
 
-  test("an unchanged stamp reads nothing; a moved one reads again", async () => {
-    // A whole-second mtime, so restoring it restores the stamp exactly.
+  test("a same-size replacement with the same mtime is read again", async () => {
     const MTIME = 1_700_000_000;
     const path = writeTranscript([entry({ ts: A, cacheRead: 1 })]);
     utimesSync(path, MTIME, MTIME);
@@ -202,13 +200,10 @@ describe("CacheExpiryProvider", () => {
     expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
     expect(provider.expiryOf("s")).toEqual(ok(at(A)));
 
-    // New bytes under the old stamp: the request believes the stamp.
-    writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n");
-    utimesSync(path, MTIME, MTIME);
-    expect(await provider.refresh("s", path, "change")).toEqual(ok(at(A)));
-
-    // The stamp moved: read again.
-    writeFileSync(path, entry({ ts: B, cacheRead: 1 }) + "\n\n");
+    const replacement = join(dirname(path), "replacement.jsonl");
+    writeFileSync(replacement, entry({ ts: B, cacheRead: 1 }) + "\n");
+    utimesSync(replacement, MTIME, MTIME);
+    renameSync(replacement, path);
     expect(await provider.refresh("s", path, "change")).toEqual(ok(at(B)));
     expect(provider.expiryOf("s")).toEqual(ok(at(B)));
   });
