@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-885",
+      "ref": "refs/pull/885/merge",
+      "sha": "88a7989b03abd58b5f8bd7553cb631e0c32b5223",
+      "timestamp": "2026-11-19T15:27:48.047Z",
+      "commits": [
+        {
+          "sha": "88a7989b03abd58b5f8bd7553cb631e0c32b5223",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:26:34-07:00",
+          "message": "Merge 642971ba8cfb0cdbb4e75289e530edec63d989c9 into 53453112ae58ddddcd39dca83f2f94c90b7165df\n"
+        },
+        {
+          "sha": "642971ba8cfb0cdbb4e75289e530edec63d989c9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:24:34-07:00",
+          "message": "refactor(config): share the host text reader with config writes (ibyq.auw)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "6d297b4f96749a8a315122208e7d68d557ff3419",
