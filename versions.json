@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-886",
+      "ref": "refs/pull/886/merge",
+      "sha": "e96f3fcd4cb8e677879ecd798e42832a99ec2fda",
+      "timestamp": "2026-11-19T18:55:36.046Z",
+      "commits": [
+        {
+          "sha": "e96f3fcd4cb8e677879ecd798e42832a99ec2fda",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T18:54:24Z",
+          "message": "Merge 04ff3b1a910a50e826428c4e5f14ce6de276eba5 into 2d21da5a247382b00e6ea729e0e1081bcecc4376\n"
+        },
+        {
+          "sha": "04ff3b1a910a50e826428c4e5f14ce6de276eba5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:27:36-07:00",
+          "message": "fix(config): one key classifier, one write router, and Back steps that end with their edit\n\nWhat a session key is (edit mode's own, a setting, a confirm, the\nviewer, a menu, an author's) is decided by one function, and every\nreader and writer switches on it. Every session write passes one\nrouter: an open edit holds it, and with none open edit mode's keys are\nset aside for the edit a click opens, or dropped and logged. An edit\nholds the Back steps taken in it, and the click that ends it lands its\nown step outside, without edit mode's keys. Whether an edit has work is\nthe files it changed and the drafts a save writes, one count for the\nsave cell, cancel and the idle close. The duplicate-id hint is fixed\ntext, the click error reads only records this build writes, and a\nsession left empty by the load takes no slot.\n"
+        },
+        {
+          "sha": "2a0a551708f1577e628c4907339f3a36119b38c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:06:19-07:00",
+          "message": "fix(config): decide edit-or-store once per click and check authored keys wherever they load\n\nA click outside an edit holds edit mode's keys aside: they open the edit\nit starts, or are dropped and logged at warn. Every reader takes the\nedit's view, the main undo never records an edit key, and drafts are\nneither main-undo nor navigation state. A closed edit's steps are never\nBack destinations because its state never reaches the store.\n\nThe authored-key check runs for plugins too, refuses raw keys by\nnamespace and accordion keys only where they meet the bar's own. The\nclick error lives under the settings namespace. Hover text decodes menu\nkeys. Minted placement ids retry a bounded number of times and throw.\n"
+        },
+        {
+          "sha": "1236590a9196ceab3c7be176c237f062fcf6fa5a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:59:22-07:00",
+          "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
+        }
+      ]
+    },
+    {
       "version": "pr-902",
       "ref": "refs/pull/902/merge",
       "sha": "c89dc0c1e8b1b73e857bb59fc3233aa31405690d",
@@ -267,35 +303,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:49:05-07:00",
           "message": "fix(renderer): use one outcome for each config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-886",
-      "ref": "refs/pull/886/merge",
-      "sha": "a3bf5275d897d9c07601cc7bd65154327ac6192c",
-      "timestamp": "2026-11-19T17:12:26.686Z",
-      "commits": [
-        {
-          "sha": "a3bf5275d897d9c07601cc7bd65154327ac6192c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:11:26Z",
-          "message": "Merge 1644aa7e17e3444535b75418c0760037ec0d7e89 into ef77b4b6f458a5db5b45685b221e90cda134e782\n"
-        },
-        {
-          "sha": "1644aa7e17e3444535b75418c0760037ec0d7e89",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:06:19-07:00",
-          "message": "fix(config): decide edit-or-store once per click and check authored keys wherever they load\n\nA click outside an edit holds edit mode's keys aside: they open the edit\nit starts, or are dropped and logged at warn. Every reader takes the\nedit's view, the main undo never records an edit key, and drafts are\nneither main-undo nor navigation state. A closed edit's steps are never\nBack destinations because its state never reaches the store.\n\nThe authored-key check runs for plugins too, refuses raw keys by\nnamespace and accordion keys only where they meet the bar's own. The\nclick error lives under the settings namespace. Hover text decodes menu\nkeys. Minted placement ids retry a bounded number of times and throw.\n"
-        },
-        {
-          "sha": "34c8554acf94f6352adf5eb62c3a7f04420ba481",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:59:22-07:00",
-          "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
         }
       ]
     }

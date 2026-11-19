@@ -28493,9 +28493,9 @@ var REFUSAL_LINES = {
   positional: (args) => `Unexpected arguments: ${args}`
 };
 function refusedArgsError(refused2) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why) => {
+    const args = refused2.filter((r) => r.why === why).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
 }
@@ -28569,50 +28569,45 @@ init_globals();
 init_globals();
 var REPO_ANSWERS = ["approved", "declined"];
 function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
+  switch (d.link.kind) {
+    case "linked":
+      return d.link.main;
+    case "unreadable":
+      return null;
+    case "unlinked":
+    case "unproven":
+      return d.dir;
+  }
 }
 var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
 function ruling(answers, d) {
   const key = answerDir(d);
+  if (key === null) return { standing: "unread", under: d.dir };
   if (answers.kind === "failed") return { standing: "unread", under: key };
   const repo2 = answerOf(answers.value, key);
   if (repo2 !== null) return { standing: repo2, under: key };
   const legacy = answerOf(answers.value, d.dir);
   return legacy === null ? { standing: "awaiting", under: key } : { standing: legacy, under: d.dir };
 }
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
+var NO_PROJECT_ACCESS = {
+  approved: null,
+  question: null,
+  unread: null,
+  unreadIdentity: null
+};
+function projectAccess(answers, project) {
+  const unread2 = answers.kind === "failed" ? answers.reason : null;
+  if (project === null) return { ...NO_PROJECT_ACCESS, unread: unread2 };
+  const { standing: standing2, under: under2 } = ruling(answers, project);
   return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+    approved: standing2 === "approved" ? project.path : null,
+    question: project.contributes ? {
+      dir: under2,
+      standing: standing2,
+      unproven: project.link.kind === "unproven" ? project.link.reason : null
+    } : null,
+    unread: unread2,
+    unreadIdentity: project.link.kind === "unreadable" ? { dir: project.dir, reason: project.link.reason } : null
   };
 }
 function withAnswer(book, dir, answer2, superseded) {
@@ -38874,8 +38869,8 @@ function parseCells(raw, form, part, parseOne) {
   if (!Array.isArray(cells))
     throw new Error(`${where}: ${form} ${part} is not a list of cells`);
   return Object.freeze(cells.map((cell3, i2) => {
-    const refuse4 = (why2) => {
-      throw new Error(`${where}: ${form} ${part}[${i2}] ${why2}`);
+    const refuse4 = (why) => {
+      throw new Error(`${where}: ${form} ${part}[${i2}] ${why}`);
     };
     return typeof cell3 === "object" && cell3 !== null ? parseOne(cell3, refuse4) : refuse4("is not a cell");
   }));
@@ -40910,6 +40905,8 @@ var MENU_NS = "menus.";
 var MENU_PAGE_NS = "menupages.";
 var EDIT_NS = "edit.";
 var SETTINGS_NS = "candybar.";
+var EDIT_MODE_KEY = `${EDIT_NS}mode`;
+var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 var RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
@@ -40923,9 +40920,6 @@ function reservedNamespaceOf(name) {
 function isReservedName(name) {
   return reservedNamespaceOf(name) !== void 0;
 }
-function isEditModeKey(key) {
-  return key.startsWith(EDIT_NS);
-}
 
 // src/config/door.ts
 var SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
@@ -40938,28 +40932,17 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
-// src/config/menu-keys.ts
+// src/config/session-key.ts
 init_globals();
 
-// src/config/ident.ts
+// src/config/setting-projections.ts
 init_globals();
-var ESCAPE = "Z";
-function escapedIdent(name) {
-  return Array.from(
-    name,
-    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
-      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
-      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
-    )
-  ).join("");
-}
-function unescapedIdent(spelled2) {
-  const name = spelled2.replace(
-    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
-    (_, hex) => String.fromCodePoint(parseInt(hex, 16))
-  );
-  return escapedIdent(name) === spelled2 ? name : void 0;
-}
+
+// src/config/globals-fields.ts
+init_globals();
+
+// src/themes/policy.ts
+init_globals();
 
 // src/themes/decor.ts
 init_globals();
@@ -41492,6 +41475,1901 @@ function decorationFor(palette, region, drawnAt) {
   }
 }
 
+// src/themes/policy.ts
+var RETIRED_THEMES = /* @__PURE__ */ new Map([
+  ["dark", "textual-dark"],
+  ["light", "textual-light"]
+]);
+function retiredThemeNote(name) {
+  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : void 0;
+  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
+}
+var THEME_FLOOR = "textual-dark";
+function effectiveGlobal(staged, sessionPick, configDefault, floor3, parseSession) {
+  const picked = sessionPick === null ? null : parseSession(sessionPick);
+  return staged ?? picked ?? configDefault ?? floor3;
+}
+function listResolvablePaletteNames() {
+  return listThemePalettes();
+}
+var FOLLOW_BAR = "bar";
+function placementThemeNames() {
+  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
+}
+var placementThemeSet;
+function isPlacementThemeName(name) {
+  placementThemeSet ??= new Set(placementThemeNames());
+  return placementThemeSet.has(name);
+}
+function effectiveMemberName(stagedName2, sessionPick, configDefault, floor3, declared) {
+  const member = (raw) => Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+  return effectiveGlobal(
+    stagedName2 === void 0 ? null : member(stagedName2),
+    sessionPick,
+    member(configDefault ?? floor3),
+    floor3,
+    member
+  );
+}
+var EXPRESSION_SLOTS = ["style", "palette", "effect"];
+function isExpression(globalsValue) {
+  return globalsValue !== void 0 && globalsValue.includes("{{");
+}
+function resolveSelection(stagedName2, sessionPick, globalsValue, floor3, named2) {
+  const configRung = isExpression(globalsValue) ? { kind: "expression", source: globalsValue } : named2(globalsValue ?? floor3.name);
+  return effectiveGlobal(
+    stagedName2 === void 0 ? null : named2(stagedName2),
+    sessionPick,
+    configRung,
+    floor3,
+    named2
+  );
+}
+var STYLE_FLOOR = "none";
+function namedStyle(name, declaredStyles) {
+  const value = declaredStyles[name];
+  return value === void 0 ? null : { kind: "decided", name, value };
+}
+function decideStyleName(name, declaredStyles) {
+  return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
+    kind: "decided",
+    name: STYLE_FLOOR,
+    value: IDENTITY
+  };
+}
+function resolveStyleSelection(stagedStyle, sessionStyle, globalsStyle, declaredStyles) {
+  return resolveSelection(
+    stagedStyle,
+    sessionStyle,
+    globalsStyle,
+    decideStyleName(STYLE_FLOOR, declaredStyles),
+    (raw) => namedStyle(raw, declaredStyles)
+  );
+}
+var EFFECT_FLOOR = "none";
+var SLOT_FLOORS = {
+  style: STYLE_FLOOR,
+  palette: THEME_FLOOR,
+  effect: EFFECT_FLOOR
+};
+function ruleFloorMessage(where, slot, why) {
+  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why}`;
+}
+var EFFECT_NAMES = Object.freeze([
+  EFFECT_FLOOR,
+  ...Object.keys(EFFECT_CATALOGUE.loops)
+]);
+var ANIMATION_SPEEDS = Object.freeze({
+  "1x": 1,
+  "5x": 5,
+  "10x": 10,
+  "20x": 20
+});
+var ANIMATION_SPEED_NAMES = Object.keys(
+  ANIMATION_SPEEDS
+);
+var PLACEMENT_EFFECTS = Object.freeze([
+  FOLLOW_BAR,
+  ...EFFECT_NAMES
+]);
+function namedEffect(name) {
+  const value = EFFECT_NAMES.find((member) => member === name);
+  return value === void 0 ? null : { kind: "decided", name, value };
+}
+function decideEffectName(name) {
+  return namedEffect(name) ?? {
+    kind: "decided",
+    name: EFFECT_FLOOR,
+    value: EFFECT_FLOOR
+  };
+}
+function resolveEffectSelection(stagedEffect, sessionEffect, globalsEffect) {
+  return resolveSelection(
+    stagedEffect,
+    sessionEffect,
+    globalsEffect,
+    decideEffectName(EFFECT_FLOOR),
+    namedEffect
+  );
+}
+var ENDCAPS_SHAPES = Object.freeze(
+  Object.keys(JOINERS2)
+);
+var STYLE_ERA_ENDCAPS = [
+  "powerline",
+  "capsule",
+  "plain"
+];
+function isStyleEraEndcaps(value) {
+  return STYLE_ERA_ENDCAPS.includes(value);
+}
+var COLOR_COMPATIBILITIES = [
+  "truecolor",
+  "256",
+  "ansi",
+  "none"
+];
+function isColorCompatibility(value) {
+  return COLOR_COMPATIBILITIES.includes(value);
+}
+function drawnDepth(compatibility) {
+  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
+}
+var VARIATION_NAMES = Object.keys(
+  VARIATIONS
+);
+var SHADE_NAMES = Object.keys(SHADES);
+var BOOLEAN_TRUE = "true";
+var BOOLEAN_FALSE = "false";
+var BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE];
+var PADDING_RANGE = { min: 0, max: 16 };
+function parseSessionBoolean(raw) {
+  return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
+}
+function parseSessionInt(raw, range) {
+  const value = Number(raw);
+  return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
+}
+
+// src/config/loader/validate-core.ts
+init_globals();
+
+// src/config/dsl-types.ts
+init_globals();
+var DIRECTIONS = ["vertical", "horizontal"];
+var AXIS_OF = {
+  vertical: "row",
+  horizontal: "cell"
+};
+function placementId(node) {
+  return node.id ?? node.name;
+}
+function placementIds(tree) {
+  return [...walkNodes(tree)].flatMap(
+    (n) => n.kind === "segment" ? [placementId(n)] : []
+  );
+}
+function mapOpens(node, f) {
+  return node.opens === void 0 ? node : { ...node, opens: { ...node.opens, body: f(node.opens.body) } };
+}
+function* walkNodes(node) {
+  yield node;
+  for (const child of childrenOf(node)) yield* walkNodes(child);
+}
+var childPath = (path31, i2) => `${path31}.children[${i2}]`;
+var bodyPath = (path31) => `${path31}.opens.body`;
+function* walkNodePaths(node, path31) {
+  yield [node, path31];
+  if (node.kind === "container") {
+    for (const [i2, child] of node.children.entries()) {
+      yield* walkNodePaths(child, childPath(path31, i2));
+    }
+  } else if (node.opens !== void 0) {
+    yield* walkNodePaths(node.opens.body, bodyPath(path31));
+  }
+}
+function childrenOf(node) {
+  return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
+}
+function parseArm(parse3) {
+  if (parse3 === void 0 || "text" in parse3) return "text";
+  return "regex" in parse3 ? "regex" : "json";
+}
+var CACHE_KEYS = [
+  "ttl",
+  "watch_file",
+  "depends_on",
+  "key",
+  "never"
+];
+function hasCacheField(v) {
+  return v.kind === "file" || v.kind === "shell";
+}
+function mapVariableTemplates(v, f) {
+  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
+  return hasCacheField(body) && "key" in body.cache ? {
+    ...body,
+    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
+  } : body;
+}
+function variableTemplates(v) {
+  const found2 = [];
+  mapVariableTemplates(v, (template, field) => {
+    found2.push([field, template]);
+    return template;
+  });
+  return found2;
+}
+function* stateVarDecls(config) {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "state") yield [name, decl];
+  }
+  for (const [segName, seg2] of Object.entries(config.segments)) {
+    if (!seg2.vars) continue;
+    for (const [varName, decl] of Object.entries(seg2.vars)) {
+      if (decl.kind === "state") yield [`${segName}.${varName}`, decl];
+    }
+  }
+}
+var THEME_SETTING = "theme";
+var EFFECT_SETTING = "effect";
+var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
+function settingsOf(seg2) {
+  return {
+    ...seg2.settings,
+    [THEME_SETTING]: {
+      label: THEME_SETTING,
+      domain: "theme",
+      default: seg2.palette ?? FOLLOW_BAR
+    },
+    // [LAW:one-type-per-behavior] A closed list of names, so the word-list arm
+    // every authored setting uses: the loader's membership test, configure
+    // mode's picker and save need nothing of their own for it.
+    [EFFECT_SETTING]: {
+      label: EFFECT_SETTING,
+      domain: PLACEMENT_EFFECTS,
+      default: FOLLOW_BAR
+    }
+  };
+}
+function rangeOf(decl) {
+  const domain = decl?.domain;
+  return typeof domain === "object" && "min" in domain ? domain : void 0;
+}
+function settingOrderProblems(decls, values2) {
+  return Object.entries(decls).flatMap(([name, decl]) => {
+    const floor3 = rangeOf(decl)?.atLeast;
+    if (floor3 === void 0) return [];
+    const value = values2[name];
+    const least = values2[floor3];
+    return value >= least ? [] : [
+      {
+        setting: name,
+        message: `"${name}" (${value}) is below "${floor3}" (${least}) \u2014 ${decl.label} must be at least ${decls[floor3].label}`
+      }
+    ];
+  });
+}
+function inSettingDomain(decl, value) {
+  const { domain } = decl;
+  if (domain === "bool") return typeof value === "boolean";
+  if (domain === "theme") {
+    return typeof value === "string" && isPlacementThemeName(value);
+  }
+  if ("min" in domain) {
+    return typeof value === "number" && Number.isInteger(value) && value >= domain.min && value <= domain.max;
+  }
+  return typeof value === "string" && domain.includes(value);
+}
+function settingSpelling(value) {
+  return String(value);
+}
+function parseSettingSpelling(decl, raw) {
+  const { domain } = decl;
+  if (typeof domain === "object" && "min" in domain) {
+    return parseSessionInt(raw, domain) ?? void 0;
+  }
+  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
+  return inSettingDomain(decl, value) ? value : void 0;
+}
+function placementSetting(node, name, decl, pick2) {
+  const saved = node.settings?.[name] ?? decl.default;
+  const draft = node.drafts?.[name];
+  const raw = draft === void 0 ? null : pick2(draft);
+  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
+}
+function describeSettingDomain(decl) {
+  const { domain } = decl;
+  if (domain === "bool") return "true or false";
+  if (domain === "theme") {
+    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
+  }
+  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
+  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
+}
+var JUSTIFY_MODES = [
+  "left",
+  "center",
+  "right"
+];
+var TRUNCATE_MODES = [
+  "right",
+  "left",
+  "middle"
+];
+
+// src/config/loader/diagnostics.ts
+init_globals();
+var import_json52 = __toESM(require_dist(), 1);
+
+// src/config/json5-edit.ts
+init_globals();
+var import_json5 = __toESM(require_dist(), 1);
+var Json5EditError = class extends Error {
+  constructor(reason, offset) {
+    super(`${reason} (at offset ${offset})`);
+    this.reason = reason;
+    this.offset = offset;
+    this.name = "Json5EditError";
+  }
+  reason;
+  offset;
+};
+var IDENT_START = /[A-Za-z_$\p{L}]/u;
+var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
+var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
+var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
+var Scanner = class {
+  constructor(text4) {
+    this.text = text4;
+  }
+  text;
+  pos = 0;
+  peek() {
+    return this.text[this.pos] ?? "";
+  }
+  fail(message) {
+    throw new Json5EditError(message, this.pos);
+  }
+  skipTrivia() {
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") return;
+      if (WHITESPACE.test(c)) {
+        this.pos++;
+      } else if (c === "/" && this.text[this.pos + 1] === "/") {
+        const nl = this.text.indexOf("\n", this.pos);
+        this.pos = nl === -1 ? this.text.length : nl;
+      } else if (c === "/" && this.text[this.pos + 1] === "*") {
+        const close = this.text.indexOf("*/", this.pos + 2);
+        if (close === -1) this.fail("unterminated block comment");
+        this.pos = close + 2;
+      } else {
+        return;
+      }
+    }
+  }
+  expect(c) {
+    if (this.peek() !== c) this.fail(`expected "${c}"`);
+    this.pos++;
+  }
+  value() {
+    this.skipTrivia();
+    const c = this.peek();
+    if (c === "{") return this.object();
+    if (c === "[") return this.array();
+    if (c === '"' || c === "'") {
+      const span2 = this.stringSpan();
+      return { kind: "string", span: span2, value: this.decode(span2) };
+    }
+    if (c === "") this.fail("unexpected end of input");
+    const start = this.pos;
+    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
+      this.pos++;
+    }
+    if (this.pos === start) this.fail(`unexpected character "${c}"`);
+    const span = { start, end: this.pos };
+    const decoded = this.decode(span);
+    if (decoded === null) return { kind: "null", span };
+    if (typeof decoded === "boolean") {
+      return { kind: "boolean", span, value: decoded };
+    }
+    if (typeof decoded === "number") {
+      return { kind: "number", span, value: decoded };
+    }
+    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
+  }
+  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
+  decode(span) {
+    try {
+      return import_json5.default.parse(this.text.slice(span.start, span.end));
+    } catch (e) {
+      throw new Json5EditError(e.message, span.start);
+    }
+  }
+  stringSpan() {
+    const start = this.pos;
+    const quote2 = this.peek();
+    this.pos++;
+    for (; ; ) {
+      const c = this.peek();
+      if (c === "") this.fail("unterminated string");
+      if (c === "\\") {
+        const crlf = this.text.startsWith("\r\n", this.pos + 1);
+        this.pos += crlf ? 3 : 2;
+        continue;
+      }
+      this.pos++;
+      if (c === quote2) return { start, end: this.pos };
+      if (c === "\n") this.fail("unterminated string");
+    }
+  }
+  key() {
+    const c = this.peek();
+    if (c === '"' || c === "'") {
+      const span = this.stringSpan();
+      return { key: this.decode(span), span };
+    }
+    const start = this.pos;
+    if (!IDENT_START.test(c)) this.fail("expected an object key");
+    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
+      this.pos++;
+    }
+    return {
+      key: this.text.slice(start, this.pos),
+      span: { start, end: this.pos }
+    };
+  }
+  object() {
+    const start = this.pos;
+    this.expect("{");
+    const entries = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "}") break;
+      const { key, span: keySpan } = this.key();
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
+      this.skipTrivia();
+      this.expect(":");
+      const value = this.value();
+      entries.push({
+        key,
+        keySpan,
+        value,
+        span: { start: keySpan.start, end: value.span.end }
+      });
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "}") this.fail('expected "," or "}"');
+    }
+    this.expect("}");
+    return { kind: "object", span: { start, end: this.pos }, entries };
+  }
+  array() {
+    const start = this.pos;
+    this.expect("[");
+    const elements = [];
+    for (; ; ) {
+      this.skipTrivia();
+      if (this.peek() === "]") break;
+      elements.push(this.value());
+      this.skipTrivia();
+      if (this.peek() === ",") {
+        this.pos++;
+        continue;
+      }
+      if (this.peek() !== "]") this.fail('expected "," or "]"');
+    }
+    this.expect("]");
+    return { kind: "array", span: { start, end: this.pos }, elements };
+  }
+};
+function parseDocument(text4) {
+  const s = new Scanner(text4);
+  const root = s.value();
+  s.skipTrivia();
+  if (s.pos !== text4.length) s.fail("trailing content after the document");
+  return root;
+}
+function entryOf2(node, key) {
+  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
+}
+function nodeAt(root, path31) {
+  let node = root;
+  for (const key of path31) {
+    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
+  }
+  return node;
+}
+function textOf(text4, node) {
+  return text4.slice(node.span.start, node.span.end);
+}
+function movableTextOf(text4, node) {
+  const indent2 = indentOfLine(text4, node.span.start);
+  const literals = literalSpans(node);
+  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
+  let lineStart = node.span.start;
+  return textOf(text4, node).split("\n").map((line, i2) => {
+    const at = lineStart;
+    lineStart += line.length + 1;
+    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
+    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
+  }).join("\n");
+}
+function literalSpans(node) {
+  switch (node.kind) {
+    case "object":
+      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
+    case "array":
+      return node.elements.flatMap(literalSpans);
+    case "string":
+      return [node.span];
+    default:
+      return [];
+  }
+}
+var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function keyText(key) {
+  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
+}
+var JSON5_DIALECT = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text4) => import_json5.default.parse(text4)
+};
+var JSON_DIALECT = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+  parse: (text4) => JSON.parse(text4)
+};
+function json5Text(value) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
+    return `[
+${items.join("\n")}
+]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).filter(
+      ([, v]) => v !== void 0
+    );
+    if (entries.length === 0) return "{}";
+    const items = entries.map(
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
+    );
+    return `{
+${items.join("\n")}
+}`;
+  }
+  return JSON.stringify(value);
+}
+function eolOf(text4) {
+  return text4.includes("\r\n") ? "\r\n" : "\n";
+}
+function reindent(valueText, indent2, eol) {
+  return valueText.split("\n").join(`${eol}${indent2}`);
+}
+function entryText(path31, valueText, dialect) {
+  const [head, ...rest2] = path31;
+  const inner = rest2.length === 0 ? valueText : `{
+  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
+}`;
+  return `${dialect.key(head)}: ${inner}`;
+}
+function splice(text4, start, end, insert) {
+  return text4.slice(0, start) + insert + text4.slice(end);
+}
+function lineStartOf(text4, offset) {
+  return text4.lastIndexOf("\n", offset - 1) + 1;
+}
+function isBlank(s) {
+  return /^[ \t]*$/.test(s);
+}
+function indentOfLine(text4, offset) {
+  const ls = lineStartOf(text4, offset);
+  return /^[ \t]*/.exec(text4.slice(ls))[0];
+}
+function startsLine(text4, offset) {
+  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
+}
+var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+function trailerAfter(text4, end) {
+  let i2 = end;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
+  if (commaEnd !== -1) i2 = commaEnd;
+  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
+  LINE_TRAILER.lastIndex = i2;
+  const m = LINE_TRAILER.exec(text4);
+  if (m === null) return { commaEnd, line: null };
+  const next2 = i2 + m[0].length;
+  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
+}
+function removeMember(text4, span) {
+  const { commaEnd, line } = trailerAfter(text4, span.end);
+  if (startsLine(text4, span.start) && line !== null) {
+    return splice(text4, lineStartOf(text4, span.start), line.next, "");
+  }
+  if (commaEnd !== -1) {
+    let end = commaEnd;
+    while (end < text4.length && text4[end] === " ") end++;
+    return splice(text4, span.start, end, "");
+  }
+  let start = span.start;
+  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
+    start--;
+  }
+  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
+  return splice(text4, span.start, span.end, "");
+}
+function insertLineAfter(text4, span, trailer, memberText, indent2) {
+  const hasComma = trailer.commaEnd !== -1;
+  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text4);
+  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
+  return splice(withComma, at, at, line);
+}
+function appendMember(text4, container, memberText, dialect) {
+  const members = container.kind === "object" ? container.entries : container.elements;
+  const last2 = members[members.length - 1];
+  const baseIndent = indentOfLine(text4, container.span.start);
+  if (last2 === void 0) {
+    const inner = baseIndent + "  ";
+    const eol = eolOf(text4);
+    return splice(
+      text4,
+      container.span.start + 1,
+      container.span.end - 1,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
+    );
+  }
+  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
+  if (startsLine(text4, last2.span.start) && line !== null) {
+    const indent2 = text4.slice(
+      lineStartOf(text4, last2.span.start),
+      last2.span.start
+    );
+    return insertLineAfter(
+      text4,
+      last2.span,
+      { commaEnd, line },
+      memberText,
+      indent2
+    );
+  }
+  const at = commaEnd === -1 ? last2.span.end : commaEnd;
+  const sep2 = commaEnd === -1 ? ", " : " ";
+  const tail = commaEnd === -1 ? "" : ",";
+  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
+}
+function setValue(text4, path31, valueText, dialect) {
+  if (path31.length === 0) {
+    throw new Json5EditError("setValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) {
+    const eol = eolOf(text4);
+    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
+  }
+  return setBelow(text4, parseDocument(text4), path31, valueText, dialect);
+}
+function insertValue(text4, path31, valueText, dialect, precedes) {
+  const parentPath = path31.slice(0, -1);
+  if (/^\s*$/.test(text4) && parentPath.length === 0)
+    return setValue(text4, path31, valueText, dialect);
+  const leaf = path31[path31.length - 1];
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  if (leaf === void 0 || parent?.kind !== "object")
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: its parent is not an object`,
+      parent?.span.start ?? 0
+    );
+  if (entryOf2(parent, leaf) !== void 0)
+    throw new Json5EditError(
+      `cannot insert ${path31.join(".")}: it is already there`,
+      parent.span.start
+    );
+  const member = entryText([leaf], valueText, dialect);
+  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next2 === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next2.span.start))
+    return splice(text4, next2.span.start, next2.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next2.span.start);
+  const eol = eolOf(text4);
+  const at = lineStartOf(text4, next2.span.start);
+  return splice(
+    text4,
+    at,
+    at,
+    `${indent2}${reindent(member, indent2, eol)},${eol}`
+  );
+}
+function setBelow(text4, start, path31, valueText, dialect) {
+  let node = start;
+  for (let i2 = 0; i2 < path31.length; i2++) {
+    if (node.kind !== "object") {
+      throw new Json5EditError(
+        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
+        node.span.start
+      );
+    }
+    const entry = entryOf2(node, path31[i2]);
+    if (entry === void 0) {
+      return appendMember(
+        text4,
+        node,
+        entryText(path31.slice(i2), valueText, dialect),
+        dialect
+      );
+    }
+    if (i2 === path31.length - 1) {
+      const indent2 = indentOfLine(text4, entry.keySpan.start);
+      return splice(
+        text4,
+        entry.value.span.start,
+        entry.value.span.end,
+        reindent(valueText, indent2, eolOf(text4))
+      );
+    }
+    node = entry.value;
+  }
+  throw new Json5EditError("unreachable: path exhausted", 0);
+}
+function deleteValue(text4, path31, keep = 0) {
+  if (path31.length === 0) {
+    throw new Json5EditError("deleteValue needs a non-empty path", 0);
+  }
+  if (/^\s*$/.test(text4)) return text4;
+  const parentPath = path31.slice(0, -1);
+  const parent = nodeAt(parseDocument(text4), parentPath);
+  const entry = parent === void 0 ? void 0 : entryOf2(parent, path31[path31.length - 1]);
+  if (entry === void 0 || parent?.kind !== "object") return text4;
+  const pruned = removeMember(text4, entry.span);
+  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
+}
+var CHILD_KEYS = ["h", "v", "children"];
+function placementIdOf(node) {
+  if (node.kind === "string") return node.value;
+  if (node.kind !== "object") return void 0;
+  const seg2 = entryOf2(node, "seg")?.value;
+  const kind = entryOf2(node, "kind")?.value;
+  const name = entryOf2(node, "name")?.value;
+  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
+  if (segName === void 0) return void 0;
+  const id2 = entryOf2(node, "id")?.value;
+  return id2?.kind === "string" ? id2.value : segName;
+}
+function childArraysOf(node) {
+  if (node.kind !== "object") return [];
+  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
+    (v) => v?.kind === "array"
+  );
+}
+function rowEntriesOf(node) {
+  const rows = entryOf2(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
+}
+function restagesFragment(node) {
+  if (node.kind !== "object") return true;
+  const rows = rowEntriesOf(node);
+  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
+}
+function* nodesIn(node, bareAt) {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row.value,
+      bareAt === null ? null : [...bareAt, "rows", row.key]
+    );
+  }
+}
+function hasSegmentRef(root, id2) {
+  for (const { node } of nodesIn(root, null)) {
+    if (placementIdOf(node) === id2) return true;
+  }
+  return false;
+}
+function refAt(text4, rootPath, id2) {
+  const root = nodeAt(parseDocument(text4), rootPath);
+  if (root === void 0) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (placementIdOf(node) !== id2) continue;
+    if (bareAt === null) return { text: text4, ref: node };
+    const wrapped = setValue(
+      text4,
+      bareAt,
+      `{ h: [${textOf(text4, node)}] }`,
+      JSON5_DIALECT
+    );
+    return refAt(wrapped, rootPath, id2);
+  }
+  return null;
+}
+function removeSegmentRef(text4, rootPath, target) {
+  const hit = refAt(text4, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
+}
+function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
+  const hit = refAt(text4, rootPath, anchor);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
+    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
+    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
+      src,
+      ref.span.start,
+      ref.span.start,
+      `${newText},${eolOf(src)}${indent2}`
+    );
+  }
+  const refText = textOf(src, ref);
+  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
+  return splice(src, ref.span.start, ref.span.end, pair);
+}
+function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
+  const hit = refAt(text4, rootPath, id2);
+  if (hit === null) return null;
+  const { text: src, ref } = hit;
+  const settings = `{ ${keyText(setting)}: ${valueText} }`;
+  if (ref.kind === "string") {
+    return splice(
+      src,
+      ref.span.start,
+      ref.span.end,
+      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
+    );
+  }
+  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
+}
+
+// src/config/loader/diagnostics.ts
+function parseJson5Syntax(source) {
+  try {
+    return { kind: "parsed", value: import_json52.default.parse(source) };
+  } catch (e) {
+    const error = e;
+    return {
+      kind: "invalid",
+      issue: {
+        path: "",
+        message: `JSON5 syntax error: ${error.message}`,
+        line: error.lineNumber,
+        col: error.columnNumber
+      }
+    };
+  }
+}
+var ConfigError = class extends Error {
+  file;
+  issues;
+  /** Advisories the file earned before it failed — reported beside the error. */
+  warnings;
+  constructor(file, issues, warnings = []) {
+    super(formatIssues(file, issues));
+    this.name = "ConfigError";
+    this.file = file;
+    this.issues = issues;
+    this.warnings = warnings;
+  }
+};
+var DroppedFileError = class extends ConfigError {
+  prompt;
+  constructor(file, issues) {
+    super(file, issues);
+    this.name = "DroppedFileError";
+    this.prompt = [
+      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
+      `Config file to edit: ${file}`,
+      this.message,
+      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
+    ].join("\n\n");
+  }
+};
+function findKeyLine(source, pathParts) {
+  return keyLocator(source)(pathParts);
+}
+function keyLocator(source) {
+  let parsed2;
+  const document = () => {
+    parsed2 ??= { node: parseOrUndefined(source) };
+    return parsed2.node;
+  };
+  return (pathParts) => keyLine(source, document, pathParts);
+}
+function parseOrUndefined(source) {
+  try {
+    return parseDocument(source);
+  } catch (e) {
+    if (e instanceof Json5EditError) return void 0;
+    throw e;
+  }
+}
+function keyLine(source, document, pathParts) {
+  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
+  if (indexed !== void 0) return indexed;
+  let cursor = 0;
+  let foundCursor;
+  for (const part of pathParts) {
+    if (part === "" || /^\d+$/.test(part)) continue;
+    const found2 = findKeyOccurrence(source, cursor, part);
+    if (found2 === -1) {
+      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+    }
+    cursor = found2;
+    foundCursor = found2;
+  }
+  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
+}
+function elementPathLine(source, document, pathParts) {
+  if (document === void 0) return void 0;
+  let node = document;
+  let reached;
+  let indexed = false;
+  for (const part of pathParts) {
+    const element = node.kind === "array" && /^\d+$/.test(part);
+    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
+    if (next2 === void 0) break;
+    indexed ||= element;
+    node = next2;
+    reached = next2;
+  }
+  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
+}
+function findKeyOccurrence(source, from, key) {
+  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
+  re.lastIndex = from;
+  const m = re.exec(source);
+  return m ? m.index : -1;
+}
+function lineFromOffset(source, offset) {
+  let line = 1;
+  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
+    if (source.charCodeAt(i2) === 10) line++;
+  }
+  return line;
+}
+function editabilityNotice(filePath2, source) {
+  try {
+    parseDocument(source);
+    return null;
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
+  }
+}
+function formatIssues(file, issues) {
+  if (issues.length === 0) return `${file}: invalid config (no details)`;
+  const lines2 = [
+    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
+  ];
+  for (const issue3 of issues) {
+    const locParts = [];
+    if (issue3.line !== void 0) {
+      locParts.push(
+        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
+      );
+    }
+    if (issue3.path) locParts.push(issue3.path);
+    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
+    lines2.push(`  ${loc}${issue3.message}`);
+  }
+  return lines2.join("\n");
+}
+
+// src/config/loader/validate-core.ts
+function requireString(ctx, path31, raw, field) {
+  const v = raw[field];
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return null;
+  }
+  return v;
+}
+function optionalTypedDefault(ctx, path31, raw, type3) {
+  const v = raw.default;
+  if (v === void 0) return void 0;
+  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
+  if (!ok3) {
+    ctx.issues.push({
+      path: `${path31}.default`,
+      message: `default must be a ${type3}, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), "default"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalStringField(ctx, path31, raw, field) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function validatePaletteName(ctx, path31, raw) {
+  const v = optionalStringField(ctx, path31, raw, "palette");
+  if (v === void 0) return void 0;
+  if (!ctx.allowedPalettes.has(v)) {
+    ctx.issues.push({
+      path: `${path31}.palette`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
+    });
+    return void 0;
+  }
+  return v;
+}
+function optionalEnum(ctx, path31, raw, field, allowed) {
+  const v = raw[field];
+  if (v === void 0) return void 0;
+  if (typeof v !== "string" || !allowed.includes(v)) {
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+  return v;
+}
+function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function describeType(v) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return "array";
+  return typeof v;
+}
+function describeValue(v) {
+  if (typeof v === "string") return JSON.stringify(v);
+  if (v === void 0) return "undefined";
+  return String(v);
+}
+function record(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${path31} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  rejectUnknownKeys(
+    ctx,
+    path31,
+    raw,
+    schema.noun,
+    new Set(Object.keys(schema.fields)),
+    refuseRemoved(ctx, schema.removed ?? {}, path31, raw)
+  );
+  return fields(ctx, schema.fields, path31, raw);
+}
+function refuseRemoved(ctx, removed, path31, raw) {
+  const present = Object.entries(removed).filter(
+    ([key]) => raw[key] !== void 0
+  );
+  for (const [key, pointer] of present) {
+    reject(ctx, `${path31}.${key}`, `${path31}.${key} was removed: ${pointer}`);
+  }
+  return new Set(present.map(([key]) => `${path31}.${key}`));
+}
+function fields(ctx, fieldMap, path31, raw) {
+  const specs = fieldMap;
+  const out = {};
+  let ok3 = true;
+  for (const [field, spec] of Object.entries(specs)) {
+    const value = spec.parse(ctx, path31, field, raw);
+    if (value !== void 0) out[field] = value;
+    else if (spec.required) ok3 = false;
+  }
+  return ok3 ? out : null;
+}
+var EMPTY_PATHS = /* @__PURE__ */ new Set();
+function rejectUnknownKeys(ctx, path31, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key) && !spokenFor.has(`${path31}.${key}`)) {
+      ctx.issues.push({
+        path: `${path31}.${key}`,
+        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path31.split("."), key])
+      });
+    }
+  }
+}
+function reject(ctx, path31, message) {
+  ctx.issues.push({
+    path: path31,
+    message,
+    line: findKeyLine(ctx.source, path31.split("."))
+  });
+  return null;
+}
+function oneOfPresent(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  const keys2 = Object.keys(arms);
+  const present = Object.keys(raw).filter((k) => k in arms);
+  const unknown = Object.keys(raw).filter((k) => !(k in arms));
+  for (const k of unknown) {
+    ctx.issues.push({
+      path: `${path31}.${k}`,
+      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, [...path31.split("."), k])
+    });
+  }
+  if (present.length === 0) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  if (present.length > 1) {
+    ctx.issues.push({
+      path: path31,
+      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const key = present[0];
+  return arms[key].parse(ctx, `${path31}.${key}`, raw[key]);
+}
+function taggedUnion(ctx, schema, path31, raw) {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: path31,
+      message: `${path31} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const tagValue = raw[schema.tag];
+  if (typeof tagValue !== "string") {
+    ctx.issues.push({
+      path: `${path31}.${schema.tag}`,
+      message: `${path31}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
+      line: findKeyLine(ctx.source, path31.split("."))
+    });
+    return null;
+  }
+  const arms = schema.arms;
+  if (!Object.hasOwn(arms, tagValue)) {
+    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
+    ctx.issues.push({
+      path: `${path31}.${schema.tag}`,
+      message,
+      line: findKeyLine(ctx.source, [...path31.split("."), schema.tag])
+    });
+    return null;
+  }
+  const arm2 = arms[tagValue];
+  const before = ctx.issues.length;
+  const parsed2 = arm2.parse(ctx, path31, raw);
+  const spokenFor = new Set(ctx.issues.slice(before).map((i2) => i2.path));
+  rejectUnknownKeys(
+    ctx,
+    path31,
+    raw,
+    `${tagValue} ${schema.memberNoun} key`,
+    arm2.keys,
+    spokenFor
+  );
+  return parsed2;
+}
+function armFacets(tag, tagValue, fieldMap) {
+  return {
+    json: withConst(objectJson(fieldMap), tag, tagValue),
+    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
+  };
+}
+function lazy(thunk) {
+  return (...args) => thunk()(...args);
+}
+function refine(inner, ...checks) {
+  return (ctx, path31, raw) => {
+    const value = inner(ctx, path31, raw);
+    if (value === null) return null;
+    for (const check of checks) {
+      if (check.ok(value)) continue;
+      const { field, message } = check.issue(value);
+      const at = field === "" ? path31 : `${path31}.${field}`;
+      ctx.issues.push({
+        path: at,
+        message,
+        line: findKeyLine(ctx.source, at.split("."))
+      });
+      return null;
+    }
+    return value;
+  };
+}
+function optionalStringSpec() {
+  return {
+    required: false,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => optionalStringField(ctx, path31, raw, field)
+  };
+}
+var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function optionalEnvNamesSpec() {
+  return {
+    required: false,
+    json: {
+      type: "array",
+      items: { type: "string", pattern: ENV_NAME.source }
+    },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalBooleanSpec() {
+  return {
+    required: false,
+    json: { type: "boolean" },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "boolean") {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be a boolean, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalIntSpec(bounds) {
+  const { min: min3, max: max3 } = bounds;
+  return {
+    required: false,
+    json: { type: "integer", minimum: min3, maximum: max3 },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min3 || v > max3) {
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function optionalNumberSpec(bounds = {}) {
+  const { min: min3 } = bounds;
+  return {
+    required: false,
+    json: { type: "number", ...min3 !== void 0 && { minimum: min3 } },
+    parse: (ctx, path31, field, raw) => {
+      const v = raw[field];
+      if (v === void 0) return void 0;
+      const bad = typeof v !== "number" || !Number.isFinite(v) || min3 !== void 0 && v < min3;
+      if (bad) {
+        const shape = min3 !== void 0 ? `a finite number >= ${min3}` : "a finite number";
+        ctx.issues.push({
+          path: `${path31}.${field}`,
+          message: `${field} must be ${shape}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field])
+        });
+        return void 0;
+      }
+      return v;
+    }
+  };
+}
+function paletteSpec() {
+  return {
+    required: false,
+    // Palette NAME membership is semantic (the allowed set is resolved at load
+    // from installed palettes, not a closed compile-time enum), so the schema
+    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    json: { type: "string" },
+    parse: (ctx, path31, _field, raw) => validatePaletteName(ctx, path31, raw)
+  };
+}
+function requireStringSpec() {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path31, field, raw) => requireString(ctx, path31, raw, field) ?? void 0
+  };
+}
+function optionalEnumSpec(allowed) {
+  return {
+    required: false,
+    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
+    // membership against it, `json` lists it as the schema `enum`.
+    json: { enum: [...allowed] },
+    parse: (ctx, path31, field, raw) => optionalEnum(ctx, path31, raw, field, allowed)
+  };
+}
+function objectJson(fieldMap, opts = { closed: true }) {
+  const specs = fieldMap;
+  const properties = {};
+  const required = [];
+  for (const [field, spec] of Object.entries(specs)) {
+    properties[field] = spec.json;
+    if (spec.required) required.push(field);
+  }
+  return {
+    type: "object",
+    properties,
+    ...required.length > 0 && { required },
+    ...opts.closed && { additionalProperties: false }
+  };
+}
+function recordJson(schema) {
+  return objectJson(schema.fields);
+}
+function withConst(base, key, value) {
+  const b = base;
+  const properties = {
+    [key]: { const: value },
+    ...b.properties
+  };
+  const required = [key, ...b.required ?? []];
+  return { ...b, properties, required };
+}
+function taggedUnionJson(schema) {
+  const arms = schema.arms;
+  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
+}
+function oneOfPresentJson(schema) {
+  const arms = schema.arms;
+  return {
+    anyOf: Object.entries(arms).map(([key, arm2]) => ({
+      type: "object",
+      properties: { [key]: arm2.json },
+      required: [key],
+      additionalProperties: false
+    }))
+  };
+}
+
+// src/config/lanes.ts
+init_globals();
+var IN_TMUX = 'ne .tmux.pane ""';
+var LANES = {
+  statusline: {
+    switch: { setting: "experimentalStatusline", on: true },
+    label: "\u{1F9EA} statusline (B)",
+    handsOff: false
+  },
+  pane: {
+    switch: { setting: "experimentalPane", on: true },
+    label: "\u{1F9EA} tmux pane (C)",
+    handsOff: true
+  }
+};
+var LANE_NAMES = Object.keys(LANES);
+var TOGGLED_LANES = LANE_NAMES.filter(
+  (lane) => LANES[lane].switch.on === true
+);
+var MOVING_FPS = 30;
+var ANSWERING = { by: "request" };
+var DRAWING_VAR = "drawing";
+var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
+var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
+var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
+function perLane(value) {
+  return Object.fromEntries(
+    LANE_NAMES.map((lane) => [lane, value(lane)])
+  );
+}
+var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+function parseLane(raw) {
+  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
+}
+function feedsFact(feeds) {
+  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
+    const { subscribers, fps, shown } = feeds[lane];
+    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
+  }).join(",") || "-";
+}
+
+// src/config/menu-timeout.ts
+init_globals();
+var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i2) => ({ lit: i2 % 2 === 0, seconds }));
+var CLOSING_FLASH = [
+  ...flashes(3, 1),
+  ...flashes(3, 0.25)
+];
+var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
+  (sum2, { seconds }) => sum2 + seconds,
+  0
+);
+var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
+var MENU_TIMEOUT_DEFAULT = 120;
+var closesAt = (since, timeoutS) => since + timeoutS;
+var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
+
+// src/config/globals-fields.ts
+var control = (label2, place, {
+  previews = [],
+  shown = "true"
+} = {}) => ({ label: label2, place, previews, shown });
+var enumValues = (members, optionDomain, facets = {}) => ({
+  spec: optionalEnumSpec(members),
+  domain: { from: members },
+  parse: (raw) => members.includes(raw) ? raw : null,
+  ...optionDomain !== void 0 && {
+    optionDomain: {
+      name: optionDomain,
+      members,
+      ...facets
+    }
+  }
+});
+var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
+var boolValues = {
+  spec: optionalBooleanSpec(),
+  domain: "bool",
+  parse: parseSessionBoolean
+};
+var intValues = (range) => ({
+  spec: optionalIntSpec(range),
+  domain: range,
+  parse: (raw) => parseSessionInt(raw, range)
+});
+function enumSetting(members, floor3, shown, extra = {}) {
+  return {
+    kind: "session",
+    ...enumValues(members, extra.optionDomain, {
+      library: extra.library,
+      labelOf: extra.labelOf
+    }),
+    floor: floor3,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+function boolSetting(floor3, shown) {
+  return {
+    kind: "session",
+    ...boolValues,
+    floor: floor3,
+    control: shown,
+    themeDefault: false
+  };
+}
+function intSetting(range, floor3, shown) {
+  return {
+    kind: "session",
+    ...intValues(range),
+    floor: floor3,
+    control: shown,
+    themeDefault: false
+  };
+}
+function selection(sessionKey, spec, domain, shown, extra = {}) {
+  return {
+    kind: "selection",
+    sessionKey,
+    spec,
+    domain,
+    control: shown,
+    themeDefault: extra.themeDefault ?? false
+  };
+}
+var text2 = (spec) => ({
+  kind: "text",
+  spec
+});
+var colorCompatibilitySpec = {
+  required: false,
+  json: { enum: [...COLOR_COMPATIBILITIES] },
+  parse: (ctx, path31, field, raw) => {
+    if (raw[field] === "auto") {
+      ctx.issues.push({
+        path: `${path31}.${field}`,
+        message: `${path31}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path31.split("."), field])
+      });
+      return void 0;
+    }
+    return optionalEnum(ctx, path31, raw, field, COLOR_COMPATIBILITIES);
+  }
+};
+var paletteOrRuleSpec = {
+  required: false,
+  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
+  // are resolved at load from installed palettes, and a rule is a string too.
+  json: { type: "string" },
+  parse: (ctx, path31, field, raw) => {
+    const v = optionalStringField(ctx, path31, raw, field);
+    return isExpression(v) ? v : validatePaletteName(ctx, path31, raw);
+  }
+};
+var effectOrRuleSpec = {
+  required: false,
+  json: {
+    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
+  },
+  parse: (ctx, path31, field, raw) => {
+    const v = raw[field];
+    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path31, raw, field, EFFECT_NAMES);
+  }
+};
+var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
+var CLOSE_GLYPH = new RegExp(
+  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
+  "u"
+);
+var menuGlyphSpec = {
+  required: false,
+  json: {
+    type: "string",
+    pattern: MENU_GLYPH.source,
+    not: { pattern: CLOSE_GLYPH.source }
+  },
+  parse: (ctx, path31, field, raw) => {
+    const v = optionalStringField(ctx, path31, raw, field);
+    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
+      return v;
+    ctx.issues.push({
+      path: `${path31}.${field}`,
+      message: `${path31}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
+      line: findKeyLine(ctx.source, [...path31.split("."), field])
+    });
+    return void 0;
+  }
+};
+var LANE_ROWS = Object.fromEntries(
+  TOGGLED_LANES.map((lane) => [
+    LANES[lane].switch.setting,
+    boolSetting(false, control(LANES[lane].label, "toggles"))
+  ])
+);
+var GLOBAL_FIELDS = {
+  // The config default for the base theme: a theme NAME, or a rule choosing
+  // one per render (brandon-themes-dzl). A placement's `theme` setting other
+  // than `bar` ignores it.
+  palette: selection(
+    "theme",
+    paletteOrRuleSpec,
+    { themes: "themes" },
+    control("\u{1F3A8} theme", "door")
+  ),
+  // The config default for the PRESET — a named fragment from `presets:`
+  // whose globals and root the session renders. Membership in the merged
+  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
+  // globals may NOT carry it: a
+  // preset selecting a preset is a second, cyclic authority over which is
+  // active. Its control sits on the door's first line, one click away:
+  // switching arrangement is what people open the menu for.
+  preset: selection(
+    "preset",
+    optionalStringSpec(),
+    { from: "presets" },
+    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
+  ),
+  // The config default for the STYLE (a named theme adaptation from
+  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
+  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
+  style: selection(
+    "style",
+    optionalStringSpec(),
+    { from: "styles" },
+    control("\u25D0 style", "gear", { previews: ["palette"] }),
+    { themeDefault: true }
+  ),
+  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
+  // or a rich-js catalogue loop name, or a rule rendering one.
+  effect: selection(
+    "effect",
+    effectOrRuleSpec,
+    { from: EFFECT_NAMES },
+    control("\u2728 effect", "look")
+  ),
+  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
+  endcaps: enumSetting(
+    ENDCAPS_SHAPES,
+    "powerline",
+    control("\u2726 endcaps", "look"),
+    {
+      optionDomain: "endcaps"
+    }
+  ),
+  // Which theme role each ROW of the closed bar wears, in order — a named
+  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
+  // `accent` by default (brandon-theme-picker-bgw.7g6).
+  variation: enumSetting(
+    VARIATION_NAMES,
+    "accent",
+    control("\u{1F3BC} variation", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "variations",
+      labelOf: markTrials(TRIAL_VARIATION_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Which of its role's shades each CELL of the closed bar wears — a named
+  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
+  // role's darkenings and lightenings, or its muted form. The default is the
+  // window centred on each role's own colour — "the default will be 'middle'
+  // (standard role)" (candybar-theme-colours-6fq5.e5n).
+  shade: enumSetting(
+    SHADE_NAMES,
+    "middle",
+    control("\u{1F506} shade", "gear", {
+      previews: ["layout"]
+    }),
+    {
+      optionDomain: "shades",
+      labelOf: markTrials(TRIAL_SHADE_NAMES),
+      themeDefault: true
+    }
+  ),
+  // Whether a placement that appears mid-session fades in over 20 s
+  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
+  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
+  transitions: boolSetting(false, control("fade in/out", "look")),
+  // How fast every decorative animation runs — the effects above, fades and
+  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
+  // the rate the session's animation clock advances against the wall clock
+  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
+  animationSpeed: enumSetting(
+    ANIMATION_SPEED_NAMES,
+    "1x",
+    control("speed", "look")
+  ),
+  // Whether a root row that exceeds the usable width soft-wraps, between
+  // cells and through a cell wider than a line (the legacy display.autoWrap).
+  // False renders each row as one unbounded line, overflow off-screen.
+  autoWrap: boolSetting(true, control("wrap", "config")),
+  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
+  // the bg fill — the legacy display.padding). Templates author content; this
+  // chrome is applied structurally at the cell-formation seam. Bounded above
+  // so a config value can never drive an unbounded `" ".repeat` in the daemon
+  // [LAW:no-silent-failure] — the file, the click and the session pick all
+  // honour PADDING_RANGE.
+  padding: intSetting(
+    { ...PADDING_RANGE, step: 1 },
+    1,
+    control("padding", "config")
+  ),
+  // Seconds without a click before every open menu flashes and closes
+  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
+  menuTimeout: intSetting(
+    MENU_TIMEOUT_RANGE,
+    MENU_TIMEOUT_DEFAULT,
+    control("menu timeout", "config")
+  ),
+  ...LANE_ROWS,
+  // The color depth rich-js downsamples output to (the legacy
+  // display.colorCompatibility) — truecolor by default, deliberately NOT the
+  // legacy "auto", which the detached daemon cannot honour (see
+  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
+  // control (brandon-menu-ia-q30.5y4).
+  colorCompatibility: {
+    kind: "config",
+    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
+    // Its own spec only for the migration-pointing "auto" refusal above.
+    spec: colorCompatibilitySpec,
+    floor: "truecolor"
+  },
+  // The text segments render when their value is empty.
+  default_empty_value: text2(optionalStringSpec()),
+  // The cell separator `plain` draws between segments. Absent means the glyph
+  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
+  // would be a second copy of a constant that lives in rich-js.
+  default_separator: text2(optionalStringSpec()),
+  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
+  menuGlyph: text2(menuGlyphSpec)
+};
+function settingNameOf(field) {
+  const row = GLOBAL_FIELDS[field];
+  return row.kind === "selection" ? row.sessionKey : field;
+}
+var ROWS = Object.entries(GLOBAL_FIELDS);
+var VALUED_FIELDS = ROWS.filter(
+  ([, row]) => row.kind === "session" || row.kind === "config"
+).map(([field]) => field);
+var CONTROLLED_FIELDS = ROWS.filter(
+  ([, row]) => row.kind === "session" || row.kind === "selection"
+).map(([field]) => field);
+var THEME_DEFAULT_FIELDS = ROWS.filter(
+  ([, row]) => (row.kind === "session" || row.kind === "selection") && row.themeDefault
+).map(([field]) => field);
+var NAMED_DOMAINS = ROWS.flatMap(
+  ([, row]) => "optionDomain" in row && row.optionDomain !== void 0 ? [row.optionDomain] : []
+);
+function valuedRow(field) {
+  return GLOBAL_FIELDS[field];
+}
+var floorOf2 = (field) => valuedRow(field).floor;
+function wireKindOf(field) {
+  const row = GLOBAL_FIELDS[field];
+  if (row.kind === "text") return "string";
+  const { domain } = row;
+  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
+}
+
+// src/config/setting-projections.ts
+var effectiveVarOf = (name) => `${name}.effective`;
+var SETTINGS = Object.fromEntries(
+  CONTROLLED_FIELDS.map((field) => {
+    const name = settingNameOf(field);
+    return [
+      name,
+      {
+        configKey: field,
+        sessionKey: name,
+        effectiveVar: effectiveVarOf(name),
+        ...GLOBAL_FIELDS[field].control
+      }
+    ];
+  })
+);
+var SETTING_NAMES = Object.keys(SETTINGS);
+var SETTING_PROJECTIONS = Object.values(SETTINGS);
+var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
+  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
+);
+var CONFIG_ONLY_KEYS = new Set(
+  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
+);
+var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
+  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
+    p2.configKey,
+    p2.effectiveVar
+  ])
+);
+var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
+function perSetting(value) {
+  return Object.fromEntries(
+    SETTING_NAMES.map((name) => [name, value(name)])
+  );
+}
+var SESSION_KEY_TO_SETTING = new Map(
+  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
+);
+
+// src/config/confirm-step.ts
+init_globals();
+var ARMED = "armed";
+var DISARMED = "disarmed";
+var CONFIRM_KEY_SUFFIX = ".armed";
+function confirms(key, disarm, fires) {
+  const gates = [...new Set(fires.map((f) => f.when))].filter(
+    (g) => g !== "true"
+  );
+  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
+  const actions = {};
+  for (let held = 0; held < 2 ** gates.length; held++)
+    actions[nameOf2(held)] = {
+      do: [
+        disarm,
+        ...fires.filter(
+          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
+        ).map((f) => f.action)
+      ]
+    };
+  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
+  return { link: link(0, 0), actions };
+}
+function confirmStep(key, labels, fires) {
+  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
+  const arm2 = `${key}.arm`;
+  const disarm = `${key}.disarm`;
+  const armed = `(eq .${key} "${ARMED}")`;
+  const confirm = confirms(key, disarm, fires);
+  return {
+    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
+    // value, read back here.
+    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
+    actions: {
+      [arm2]: { set: stateKey, to: ARMED },
+      [disarm]: { set: stateKey, to: DISARMED },
+      ...confirm.actions
+    },
+    armed,
+    variables: {
+      [key]: { kind: "state", key: stateKey, default: DISARMED }
+    },
+    disarm
+  };
+}
+
+// src/config/session-key.ts
+var SETTING_KEYS = new Set(
+  SETTING_PROJECTIONS.map((s) => s.sessionKey)
+);
+function sessionKeyKind(key) {
+  if (key.startsWith(EDIT_NS))
+    return {
+      kind: "edit",
+      part: key === EDIT_MODE_KEY ? "mode" : key.startsWith(PLACEMENT_DRAFT_NS) ? "draft" : "view"
+    };
+  if (SETTING_KEYS.has(key)) return { kind: "setting" };
+  if (key.endsWith(CONFIRM_KEY_SUFFIX)) return { kind: "confirm" };
+  if (key === DIAGNOSTICS_VIEWING) return { kind: "viewer" };
+  return reservedNamespaceOf(key) === void 0 ? { kind: "plain" } : { kind: "menu" };
+}
+var isEditModeKey = (key) => sessionKeyKind(key).kind === "edit";
+function isUndoStepKey(key) {
+  const k = sessionKeyKind(key);
+  return k.kind === "setting" || k.kind === "edit" && k.part === "draft";
+}
+function isNavigationKey(key) {
+  const k = sessionKeyKind(key);
+  return k.kind === "menu" || k.kind === "plain" || k.kind === "edit" && k.part === "view";
+}
+
+// src/config/menu-keys.ts
+init_globals();
+
+// src/config/ident.ts
+init_globals();
+var ESCAPE = "Z";
+function escapedIdent(name) {
+  return Array.from(
+    name,
+    (c) => /^[A-Za-z0-9]$/.test(c) && c !== ESCAPE ? c : (
+      // [LAW:no-defensive-null-guards] Array.from yields whole code points.
+      `${ESCAPE}${c.codePointAt(0).toString(16).padStart(6, "0")}`
+    )
+  ).join("");
+}
+function unescapedIdent(spelled2) {
+  const name = spelled2.replace(
+    new RegExp(`${ESCAPE}([0-9a-f]{6})`, "g"),
+    (_, hex) => String.fromCodePoint(parseInt(hex, 16))
+  );
+  return escapedIdent(name) === spelled2 ? name : void 0;
+}
+
 // src/config/menu-keys.ts
 var PAGE_HOLDING_CURRENT = "-1";
 function menuMember(applyName) {
@@ -41523,9 +43401,8 @@ function menuActionName(stateKey, member) {
   return `${stateKey}.${escapedIdent(member)}`;
 }
 function menuPageKey(stateKey) {
-  const at = stateKey.indexOf(MENU_NS);
-  if (at < 0) throw new Error(`"${stateKey}" is no menu's state key`);
-  return `${stateKey.slice(0, at)}${MENU_PAGE_NS}${stateKey.slice(at)}`;
+  const scope = menuScope(stateKey);
+  return `${scope}${MENU_PAGE_NS}${stateKey.slice(scope.length)}`;
 }
 var MENU_OPTION_NAMES = [
   "closeOnPick",
@@ -41643,10 +43520,11 @@ function configWriteEffect(verb, session, role, ...payload) {
 }
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 function sayWrite(key, value) {
-  if (key === DIAGNOSTICS_VIEWING)
+  const { kind } = sessionKeyKind(key);
+  if (kind === "viewer")
     return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
   const set2 = `set ${key} to ${value}`;
-  if (!isReservedName(key)) return set2;
+  if (kind !== "menu" && kind !== "edit") return set2;
   const menu = menuOfKey(key);
   if (menu?.page === true)
     return `turn ${menu.menu} to page ${Number(value) + 1}`;
@@ -42067,181 +43945,6 @@ function resolvedStyle(style) {
 
 // src/render/effect.ts
 init_globals();
-
-// src/themes/policy.ts
-init_globals();
-var RETIRED_THEMES = /* @__PURE__ */ new Map([
-  ["dark", "textual-dark"],
-  ["light", "textual-light"]
-]);
-function retiredThemeNote(name) {
-  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : void 0;
-  return to === void 0 ? "" : ` \u2014 "${name}" was retired; write "${to}", the same palette`;
-}
-var THEME_FLOOR = "textual-dark";
-function effectiveGlobal(staged, sessionPick, configDefault, floor3, parseSession) {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor3;
-}
-function listResolvablePaletteNames() {
-  return listThemePalettes();
-}
-var FOLLOW_BAR = "bar";
-function placementThemeNames() {
-  return [FOLLOW_BAR, ...listResolvablePaletteNames()];
-}
-var placementThemeSet;
-function isPlacementThemeName(name) {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
-}
-function effectiveMemberName(stagedName2, sessionPick, configDefault, floor3, declared) {
-  const member = (raw) => Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
-  return effectiveGlobal(
-    stagedName2 === void 0 ? null : member(stagedName2),
-    sessionPick,
-    member(configDefault ?? floor3),
-    floor3,
-    member
-  );
-}
-var EXPRESSION_SLOTS = ["style", "palette", "effect"];
-function isExpression(globalsValue) {
-  return globalsValue !== void 0 && globalsValue.includes("{{");
-}
-function resolveSelection(stagedName2, sessionPick, globalsValue, floor3, named2) {
-  const configRung = isExpression(globalsValue) ? { kind: "expression", source: globalsValue } : named2(globalsValue ?? floor3.name);
-  return effectiveGlobal(
-    stagedName2 === void 0 ? null : named2(stagedName2),
-    sessionPick,
-    configRung,
-    floor3,
-    named2
-  );
-}
-var STYLE_FLOOR = "none";
-function namedStyle(name, declaredStyles) {
-  const value = declaredStyles[name];
-  return value === void 0 ? null : { kind: "decided", name, value };
-}
-function decideStyleName(name, declaredStyles) {
-  return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
-    kind: "decided",
-    name: STYLE_FLOOR,
-    value: IDENTITY
-  };
-}
-function resolveStyleSelection(stagedStyle, sessionStyle, globalsStyle, declaredStyles) {
-  return resolveSelection(
-    stagedStyle,
-    sessionStyle,
-    globalsStyle,
-    decideStyleName(STYLE_FLOOR, declaredStyles),
-    (raw) => namedStyle(raw, declaredStyles)
-  );
-}
-var EFFECT_FLOOR = "none";
-var SLOT_FLOORS = {
-  style: STYLE_FLOOR,
-  palette: THEME_FLOOR,
-  effect: EFFECT_FLOOR
-};
-function ruleFloorMessage(where, slot, why2) {
-  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why2}`;
-}
-var EFFECT_NAMES = Object.freeze([
-  EFFECT_FLOOR,
-  ...Object.keys(EFFECT_CATALOGUE.loops)
-]);
-var ANIMATION_SPEEDS = Object.freeze({
-  "1x": 1,
-  "5x": 5,
-  "10x": 10,
-  "20x": 20
-});
-var ANIMATION_SPEED_NAMES = Object.keys(
-  ANIMATION_SPEEDS
-);
-var PLACEMENT_EFFECTS = Object.freeze([
-  FOLLOW_BAR,
-  ...EFFECT_NAMES
-]);
-function namedEffect(name) {
-  const value = EFFECT_NAMES.find((member) => member === name);
-  return value === void 0 ? null : { kind: "decided", name, value };
-}
-function decideEffectName(name) {
-  return namedEffect(name) ?? {
-    kind: "decided",
-    name: EFFECT_FLOOR,
-    value: EFFECT_FLOOR
-  };
-}
-function resolveEffectSelection(stagedEffect, sessionEffect, globalsEffect) {
-  return resolveSelection(
-    stagedEffect,
-    sessionEffect,
-    globalsEffect,
-    decideEffectName(EFFECT_FLOOR),
-    namedEffect
-  );
-}
-var ENDCAPS_SHAPES = Object.freeze(
-  Object.keys(JOINERS2)
-);
-var STYLE_ERA_ENDCAPS = [
-  "powerline",
-  "capsule",
-  "plain"
-];
-function isStyleEraEndcaps(value) {
-  return STYLE_ERA_ENDCAPS.includes(value);
-}
-var COLOR_COMPATIBILITIES = [
-  "truecolor",
-  "256",
-  "ansi",
-  "none"
-];
-function isColorCompatibility(value) {
-  return COLOR_COMPATIBILITIES.includes(value);
-}
-function drawnDepth(compatibility) {
-  return resolveColorSystem(compatibility) ?? ColorDepth.DEFAULT;
-}
-var VARIATION_NAMES = Object.keys(
-  VARIATIONS
-);
-var SHADE_NAMES = Object.keys(SHADES);
-var BOOLEAN_TRUE = "true";
-var BOOLEAN_FALSE = "false";
-var BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE];
-var PADDING_RANGE = { min: 0, max: 16 };
-function parseSessionBoolean(raw) {
-  return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
-}
-function parseSessionInt(raw, range) {
-  const value = Number(raw);
-  return Number.isInteger(value) && String(value) === raw && value >= range.min && value <= range.max ? value : null;
-}
-
-// src/config/menu-timeout.ts
-init_globals();
-var flashes = (count, seconds) => Array.from({ length: count * 2 }, (_, i2) => ({ lit: i2 % 2 === 0, seconds }));
-var CLOSING_FLASH = [
-  ...flashes(3, 1),
-  ...flashes(3, 0.25)
-];
-var CLOSING_FLASH_SECONDS = CLOSING_FLASH.reduce(
-  (sum2, { seconds }) => sum2 + seconds,
-  0
-);
-var MENU_TIMEOUT_RANGE = { min: 15, max: 600, step: 15 };
-var MENU_TIMEOUT_DEFAULT = 120;
-var closesAt = (since, timeoutS) => since + timeoutS;
-var flashBegins = (timeoutS) => timeoutS - CLOSING_FLASH_SECONDS;
-
-// src/render/effect.ts
 var STILL3 = { kind: "still" };
 var animationAt = (clock) => Timeline.at(clock.timeline, clock.wall);
 var BAR_SCOPE = /* @__PURE__ */ Symbol("bar");
@@ -42693,7 +44396,7 @@ function isStringish(value) {
 function isObject(value) {
   return value !== null && typeof value === "object";
 }
-function isPlainObject(value) {
+function isPlainObject2(value) {
   if (!isObject(value)) {
     return false;
   }
@@ -42896,7 +44599,7 @@ function deepEnhancer(v, _, name) {
       name
     });
   }
-  if (isPlainObject(v)) {
+  if (isPlainObject2(v)) {
     return observable.object(v, void 0, {
       name
     });
@@ -43383,7 +45086,7 @@ function createObservable(v, arg2, arg3) {
   if (isObservable(v)) {
     return v;
   }
-  if (isPlainObject(v)) {
+  if (isPlainObject2(v)) {
     return observable.object(v, arg2, arg3);
   }
   if (Array.isArray(v)) {
@@ -43432,7 +45135,7 @@ var computed = function computed2(arg1, arg2) {
   if (arg2 && typeof arg2.kind === "string") {
     return decorateComputed20223_(computedAnnotation, arg1, arg2);
   }
-  if (isPlainObject(arg1)) {
+  if (isPlainObject2(arg1)) {
     return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
   }
   if (__MOBX_DEV__) {
@@ -43443,7 +45146,7 @@ var computed = function computed2(arg1, arg2) {
       die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
     }
   }
-  const opts = isPlainObject(arg2) ? arg2 : {};
+  const opts = isPlainObject2(arg2) ? arg2 : {};
   opts.get = arg1;
   opts.name || (opts.name = arg1.name || "");
   return new ComputedValue(opts);
@@ -44651,7 +46354,7 @@ function reaction(expression, effect, opts = EMPTY_OBJECT) {
     if (!isFunction(expression) || !isFunction(effect)) {
       die("First and second argument to reaction should be functions");
     }
-    if (!isPlainObject(opts)) {
+    if (!isPlainObject2(opts)) {
       die("Third argument of reactions should be an object");
     }
   }
@@ -44715,7 +46418,7 @@ function extendObservable(target, properties, annotations, options) {
     if (isObservableMap(target)) {
       die("'extendObservable' should not be used on maps, use map.merge instead");
     }
-    if (!isPlainObject(properties)) {
+    if (!isPlainObject2(properties)) {
       die(`'extendObservable' only accepts plain objects as second argument`);
     }
     if (isObservable(properties) || isObservable(annotations)) {
@@ -45757,7 +47460,7 @@ var ObservableMap = class {
       other = new Map(other);
     }
     transaction(() => {
-      if (isPlainObject(other)) {
+      if (isPlainObject2(other)) {
         getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
       } else if (Array.isArray(other)) {
         other.forEach(([key, value]) => this.set(key, value));
@@ -45854,7 +47557,7 @@ function convertToMap(dataStructure) {
     return dataStructure;
   } else if (Array.isArray(dataStructure)) {
     return new Map(dataStructure);
-  } else if (isPlainObject(dataStructure)) {
+  } else if (isPlainObject2(dataStructure)) {
     const map = /* @__PURE__ */ new Map();
     for (const key in dataStructure) {
       map.set(key, dataStructure[key]);
@@ -46119,7 +47822,7 @@ var ObservableObjectAdministration = class {
     this.name_ = name_;
     this.defaultAnnotation_ = defaultAnnotation_;
     this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
-    this.isPlainObject_ = isPlainObject(this.target_);
+    this.isPlainObject_ = isPlainObject2(this.target_);
     if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
       die(`defaultAnnotation must be valid annotation`);
     }
@@ -46529,7 +48232,7 @@ Extending builtins is not supported.`);
   if (__MOBX_DEV__ && !Object.isExtensible(target)) {
     die("Cannot make the designated object observable; it is not extensible");
   }
-  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
+  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject2(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
   const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
   addHiddenProp(target, $mobx, adm);
   return target;
@@ -47289,1598 +48992,6 @@ function chainName(paths2, none2 = "bundled default (no config file loaded)") {
 // src/renderer/setting-drafts.ts
 init_globals();
 
-// src/config/dsl-types.ts
-init_globals();
-var DIRECTIONS = ["vertical", "horizontal"];
-var AXIS_OF = {
-  vertical: "row",
-  horizontal: "cell"
-};
-function placementId(node) {
-  return node.id ?? node.name;
-}
-function placementIds(tree) {
-  return [...walkNodes(tree)].flatMap(
-    (n) => n.kind === "segment" ? [placementId(n)] : []
-  );
-}
-function mapOpens(node, f) {
-  return node.opens === void 0 ? node : { ...node, opens: { ...node.opens, body: f(node.opens.body) } };
-}
-function* walkNodes(node) {
-  yield node;
-  for (const child of childrenOf(node)) yield* walkNodes(child);
-}
-var childPath = (path31, i2) => `${path31}.children[${i2}]`;
-var bodyPath = (path31) => `${path31}.opens.body`;
-function* walkNodePaths(node, path31) {
-  yield [node, path31];
-  if (node.kind === "container") {
-    for (const [i2, child] of node.children.entries()) {
-      yield* walkNodePaths(child, childPath(path31, i2));
-    }
-  } else if (node.opens !== void 0) {
-    yield* walkNodePaths(node.opens.body, bodyPath(path31));
-  }
-}
-function childrenOf(node) {
-  return node.kind === "container" ? node.children : node.opens === void 0 ? [] : [node.opens.body];
-}
-function parseArm(parse3) {
-  if (parse3 === void 0 || "text" in parse3) return "text";
-  return "regex" in parse3 ? "regex" : "json";
-}
-var CACHE_KEYS = [
-  "ttl",
-  "watch_file",
-  "depends_on",
-  "key",
-  "never"
-];
-function hasCacheField(v) {
-  return v.kind === "file" || v.kind === "shell";
-}
-function mapVariableTemplates(v, f) {
-  const body = v.kind === "template" ? { ...v, template: f(v.template, "template") } : v;
-  return hasCacheField(body) && "key" in body.cache ? {
-    ...body,
-    cache: { ...body.cache, key: f(body.cache.key, "cache.key") }
-  } : body;
-}
-function variableTemplates(v) {
-  const found2 = [];
-  mapVariableTemplates(v, (template, field) => {
-    found2.push([field, template]);
-    return template;
-  });
-  return found2;
-}
-function* stateVarDecls(config) {
-  for (const [name, decl] of Object.entries(config.variables)) {
-    if (decl.kind === "state") yield [name, decl];
-  }
-  for (const [segName, seg2] of Object.entries(config.segments)) {
-    if (!seg2.vars) continue;
-    for (const [varName, decl] of Object.entries(seg2.vars)) {
-      if (decl.kind === "state") yield [`${segName}.${varName}`, decl];
-    }
-  }
-}
-var THEME_SETTING = "theme";
-var EFFECT_SETTING = "effect";
-var IMPLIED_SETTINGS = [THEME_SETTING, EFFECT_SETTING];
-function settingsOf(seg2) {
-  return {
-    ...seg2.settings,
-    [THEME_SETTING]: {
-      label: THEME_SETTING,
-      domain: "theme",
-      default: seg2.palette ?? FOLLOW_BAR
-    },
-    // [LAW:one-type-per-behavior] A closed list of names, so the word-list arm
-    // every authored setting uses: the loader's membership test, configure
-    // mode's picker and save need nothing of their own for it.
-    [EFFECT_SETTING]: {
-      label: EFFECT_SETTING,
-      domain: PLACEMENT_EFFECTS,
-      default: FOLLOW_BAR
-    }
-  };
-}
-function rangeOf(decl) {
-  const domain = decl?.domain;
-  return typeof domain === "object" && "min" in domain ? domain : void 0;
-}
-function settingOrderProblems(decls, values2) {
-  return Object.entries(decls).flatMap(([name, decl]) => {
-    const floor3 = rangeOf(decl)?.atLeast;
-    if (floor3 === void 0) return [];
-    const value = values2[name];
-    const least = values2[floor3];
-    return value >= least ? [] : [
-      {
-        setting: name,
-        message: `"${name}" (${value}) is below "${floor3}" (${least}) \u2014 ${decl.label} must be at least ${decls[floor3].label}`
-      }
-    ];
-  });
-}
-function inSettingDomain(decl, value) {
-  const { domain } = decl;
-  if (domain === "bool") return typeof value === "boolean";
-  if (domain === "theme") {
-    return typeof value === "string" && isPlacementThemeName(value);
-  }
-  if ("min" in domain) {
-    return typeof value === "number" && Number.isInteger(value) && value >= domain.min && value <= domain.max;
-  }
-  return typeof value === "string" && domain.includes(value);
-}
-function settingSpelling(value) {
-  return String(value);
-}
-function parseSettingSpelling(decl, raw) {
-  const { domain } = decl;
-  if (typeof domain === "object" && "min" in domain) {
-    return parseSessionInt(raw, domain) ?? void 0;
-  }
-  const value = domain === "bool" ? raw === "true" ? true : raw === "false" ? false : raw : raw;
-  return inSettingDomain(decl, value) ? value : void 0;
-}
-function placementSetting(node, name, decl, pick2) {
-  const saved = node.settings?.[name] ?? decl.default;
-  const draft = node.drafts?.[name];
-  const raw = draft === void 0 ? null : pick2(draft);
-  return (raw === null ? void 0 : parseSettingSpelling(decl, raw)) ?? saved;
-}
-function describeSettingDomain(decl) {
-  const { domain } = decl;
-  if (domain === "bool") return "true or false";
-  if (domain === "theme") {
-    return `"${FOLLOW_BAR}" (the bar's own theme) or an installed theme name`;
-  }
-  if ("min" in domain) return `an integer from ${domain.min} to ${domain.max}`;
-  return `one of ${domain.map((m) => JSON.stringify(m)).join(", ")}`;
-}
-var JUSTIFY_MODES = [
-  "left",
-  "center",
-  "right"
-];
-var TRUNCATE_MODES = [
-  "right",
-  "left",
-  "middle"
-];
-
-// src/config/globals-fields.ts
-init_globals();
-
-// src/config/loader/validate-core.ts
-init_globals();
-
-// src/config/loader/diagnostics.ts
-init_globals();
-var import_json52 = __toESM(require_dist(), 1);
-
-// src/config/json5-edit.ts
-init_globals();
-var import_json5 = __toESM(require_dist(), 1);
-var Json5EditError = class extends Error {
-  constructor(reason, offset) {
-    super(`${reason} (at offset ${offset})`);
-    this.reason = reason;
-    this.offset = offset;
-    this.name = "Json5EditError";
-  }
-  reason;
-  offset;
-};
-var IDENT_START = /[A-Za-z_$\p{L}]/u;
-var IDENT_PART = /[A-Za-z0-9_$\u200C\u200D\p{L}\p{N}]/u;
-var WORD_PART = /[A-Za-z0-9_$.+\-\p{L}\p{N}]/u;
-var WHITESPACE = /[\t\n\v\f\r \u00A0\uFEFF\u2028\u2029\p{Zs}]/u;
-var Scanner = class {
-  constructor(text4) {
-    this.text = text4;
-  }
-  text;
-  pos = 0;
-  peek() {
-    return this.text[this.pos] ?? "";
-  }
-  fail(message) {
-    throw new Json5EditError(message, this.pos);
-  }
-  skipTrivia() {
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") return;
-      if (WHITESPACE.test(c)) {
-        this.pos++;
-      } else if (c === "/" && this.text[this.pos + 1] === "/") {
-        const nl = this.text.indexOf("\n", this.pos);
-        this.pos = nl === -1 ? this.text.length : nl;
-      } else if (c === "/" && this.text[this.pos + 1] === "*") {
-        const close = this.text.indexOf("*/", this.pos + 2);
-        if (close === -1) this.fail("unterminated block comment");
-        this.pos = close + 2;
-      } else {
-        return;
-      }
-    }
-  }
-  expect(c) {
-    if (this.peek() !== c) this.fail(`expected "${c}"`);
-    this.pos++;
-  }
-  value() {
-    this.skipTrivia();
-    const c = this.peek();
-    if (c === "{") return this.object();
-    if (c === "[") return this.array();
-    if (c === '"' || c === "'") {
-      const span2 = this.stringSpan();
-      return { kind: "string", span: span2, value: this.decode(span2) };
-    }
-    if (c === "") this.fail("unexpected end of input");
-    const start = this.pos;
-    while (this.pos < this.text.length && WORD_PART.test(this.peek())) {
-      this.pos++;
-    }
-    if (this.pos === start) this.fail(`unexpected character "${c}"`);
-    const span = { start, end: this.pos };
-    const decoded = this.decode(span);
-    if (decoded === null) return { kind: "null", span };
-    if (typeof decoded === "boolean") {
-      return { kind: "boolean", span, value: decoded };
-    }
-    if (typeof decoded === "number") {
-      return { kind: "number", span, value: decoded };
-    }
-    return this.fail(`unexpected word "${this.text.slice(start, this.pos)}"`);
-  }
-  // [LAW:single-enforcer] JSON5 itself decodes every leaf slice.
-  decode(span) {
-    try {
-      return import_json5.default.parse(this.text.slice(span.start, span.end));
-    } catch (e) {
-      throw new Json5EditError(e.message, span.start);
-    }
-  }
-  stringSpan() {
-    const start = this.pos;
-    const quote2 = this.peek();
-    this.pos++;
-    for (; ; ) {
-      const c = this.peek();
-      if (c === "") this.fail("unterminated string");
-      if (c === "\\") {
-        const crlf = this.text.startsWith("\r\n", this.pos + 1);
-        this.pos += crlf ? 3 : 2;
-        continue;
-      }
-      this.pos++;
-      if (c === quote2) return { start, end: this.pos };
-      if (c === "\n") this.fail("unterminated string");
-    }
-  }
-  key() {
-    const c = this.peek();
-    if (c === '"' || c === "'") {
-      const span = this.stringSpan();
-      return { key: this.decode(span), span };
-    }
-    const start = this.pos;
-    if (!IDENT_START.test(c)) this.fail("expected an object key");
-    while (this.pos < this.text.length && IDENT_PART.test(this.peek())) {
-      this.pos++;
-    }
-    return {
-      key: this.text.slice(start, this.pos),
-      span: { start, end: this.pos }
-    };
-  }
-  object() {
-    const start = this.pos;
-    this.expect("{");
-    const entries = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "}") break;
-      const { key, span: keySpan } = this.key();
-      if (entries.some((e) => e.key === key)) {
-        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
-      }
-      this.skipTrivia();
-      this.expect(":");
-      const value = this.value();
-      entries.push({
-        key,
-        keySpan,
-        value,
-        span: { start: keySpan.start, end: value.span.end }
-      });
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "}") this.fail('expected "," or "}"');
-    }
-    this.expect("}");
-    return { kind: "object", span: { start, end: this.pos }, entries };
-  }
-  array() {
-    const start = this.pos;
-    this.expect("[");
-    const elements = [];
-    for (; ; ) {
-      this.skipTrivia();
-      if (this.peek() === "]") break;
-      elements.push(this.value());
-      this.skipTrivia();
-      if (this.peek() === ",") {
-        this.pos++;
-        continue;
-      }
-      if (this.peek() !== "]") this.fail('expected "," or "]"');
-    }
-    this.expect("]");
-    return { kind: "array", span: { start, end: this.pos }, elements };
-  }
-};
-function parseDocument(text4) {
-  const s = new Scanner(text4);
-  const root = s.value();
-  s.skipTrivia();
-  if (s.pos !== text4.length) s.fail("trailing content after the document");
-  return root;
-}
-function entryOf2(node, key) {
-  return node.kind === "object" ? node.entries.find((e) => e.key === key) : void 0;
-}
-function nodeAt(root, path31) {
-  let node = root;
-  for (const key of path31) {
-    node = node === void 0 ? void 0 : entryOf2(node, key)?.value;
-  }
-  return node;
-}
-function textOf(text4, node) {
-  return text4.slice(node.span.start, node.span.end);
-}
-function movableTextOf(text4, node) {
-  const indent2 = indentOfLine(text4, node.span.start);
-  const literals = literalSpans(node);
-  const inLiteral = (at) => literals.some((s) => s.start < at && at < s.end);
-  let lineStart = node.span.start;
-  return textOf(text4, node).split("\n").map((line, i2) => {
-    const at = lineStart;
-    lineStart += line.length + 1;
-    const own2 = i2 > 0 && !inLiteral(at - 1) && line.startsWith(indent2);
-    return (own2 ? line.slice(indent2.length) : line).replace(/\r$/, "");
-  }).join("\n");
-}
-function literalSpans(node) {
-  switch (node.kind) {
-    case "object":
-      return node.entries.flatMap((e) => [e.keySpan, ...literalSpans(e.value)]);
-    case "array":
-      return node.elements.flatMap(literalSpans);
-    case "string":
-      return [node.span];
-    default:
-      return [];
-  }
-}
-var IDENT_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-function keyText(key) {
-  return IDENT_KEY.test(key) ? key : JSON.stringify(key);
-}
-var JSON5_DIALECT = {
-  key: keyText,
-  trailingComma: ",",
-  parse: (text4) => import_json5.default.parse(text4)
-};
-var JSON_DIALECT = {
-  key: (key) => JSON.stringify(key),
-  trailingComma: "",
-  parse: (text4) => JSON.parse(text4)
-};
-function json5Text(value) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
-    return `[
-${items.join("\n")}
-]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).filter(
-      ([, v]) => v !== void 0
-    );
-    if (entries.length === 0) return "{}";
-    const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`
-    );
-    return `{
-${items.join("\n")}
-}`;
-  }
-  return JSON.stringify(value);
-}
-function eolOf(text4) {
-  return text4.includes("\r\n") ? "\r\n" : "\n";
-}
-function reindent(valueText, indent2, eol) {
-  return valueText.split("\n").join(`${eol}${indent2}`);
-}
-function entryText(path31, valueText, dialect) {
-  const [head, ...rest2] = path31;
-  const inner = rest2.length === 0 ? valueText : `{
-  ${reindent(entryText(rest2, valueText, dialect), "  ", "\n")}${dialect.trailingComma}
-}`;
-  return `${dialect.key(head)}: ${inner}`;
-}
-function splice(text4, start, end, insert) {
-  return text4.slice(0, start) + insert + text4.slice(end);
-}
-function lineStartOf(text4, offset) {
-  return text4.lastIndexOf("\n", offset - 1) + 1;
-}
-function isBlank(s) {
-  return /^[ \t]*$/.test(s);
-}
-function indentOfLine(text4, offset) {
-  const ls = lineStartOf(text4, offset);
-  return /^[ \t]*/.exec(text4.slice(ls))[0];
-}
-function startsLine(text4, offset) {
-  return isBlank(text4.slice(lineStartOf(text4, offset), offset));
-}
-var LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
-function trailerAfter(text4, end) {
-  let i2 = end;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  const commaEnd = text4[i2] === "," ? i2 + 1 : -1;
-  if (commaEnd !== -1) i2 = commaEnd;
-  while (i2 < text4.length && (text4[i2] === " " || text4[i2] === "	")) i2++;
-  LINE_TRAILER.lastIndex = i2;
-  const m = LINE_TRAILER.exec(text4);
-  if (m === null) return { commaEnd, line: null };
-  const next2 = i2 + m[0].length;
-  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
-}
-function removeMember(text4, span) {
-  const { commaEnd, line } = trailerAfter(text4, span.end);
-  if (startsLine(text4, span.start) && line !== null) {
-    return splice(text4, lineStartOf(text4, span.start), line.next, "");
-  }
-  if (commaEnd !== -1) {
-    let end = commaEnd;
-    while (end < text4.length && text4[end] === " ") end++;
-    return splice(text4, span.start, end, "");
-  }
-  let start = span.start;
-  while (start > 0 && (text4[start - 1] === " " || text4[start - 1] === "	")) {
-    start--;
-  }
-  if (text4[start - 1] === ",") return splice(text4, start - 1, span.end, "");
-  return splice(text4, span.start, span.end, "");
-}
-function insertLineAfter(text4, span, trailer, memberText, indent2) {
-  const hasComma = trailer.commaEnd !== -1;
-  const withComma = hasComma ? text4 : splice(text4, span.end, span.end, ",");
-  const at = trailer.line.at + (hasComma ? 0 : 1);
-  const eol = eolOf(text4);
-  const line = `${eol}${indent2}${reindent(memberText, indent2, eol)}${hasComma ? "," : ""}`;
-  return splice(withComma, at, at, line);
-}
-function appendMember(text4, container, memberText, dialect) {
-  const members = container.kind === "object" ? container.entries : container.elements;
-  const last2 = members[members.length - 1];
-  const baseIndent = indentOfLine(text4, container.span.start);
-  if (last2 === void 0) {
-    const inner = baseIndent + "  ";
-    const eol = eolOf(text4);
-    return splice(
-      text4,
-      container.span.start + 1,
-      container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`
-    );
-  }
-  const { commaEnd, line } = trailerAfter(text4, last2.span.end);
-  if (startsLine(text4, last2.span.start) && line !== null) {
-    const indent2 = text4.slice(
-      lineStartOf(text4, last2.span.start),
-      last2.span.start
-    );
-    return insertLineAfter(
-      text4,
-      last2.span,
-      { commaEnd, line },
-      memberText,
-      indent2
-    );
-  }
-  const at = commaEnd === -1 ? last2.span.end : commaEnd;
-  const sep2 = commaEnd === -1 ? ", " : " ";
-  const tail = commaEnd === -1 ? "" : ",";
-  return splice(text4, at, at, `${sep2}${memberText}${tail}`);
-}
-function setValue(text4, path31, valueText, dialect) {
-  if (path31.length === 0) {
-    throw new Json5EditError("setValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) {
-    const eol = eolOf(text4);
-    return `{${eol}  ${reindent(entryText(path31, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
-  }
-  return setBelow(text4, parseDocument(text4), path31, valueText, dialect);
-}
-function insertValue(text4, path31, valueText, dialect, precedes) {
-  const parentPath = path31.slice(0, -1);
-  if (/^\s*$/.test(text4) && parentPath.length === 0)
-    return setValue(text4, path31, valueText, dialect);
-  const leaf = path31[path31.length - 1];
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  if (leaf === void 0 || parent?.kind !== "object")
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: its parent is not an object`,
-      parent?.span.start ?? 0
-    );
-  if (entryOf2(parent, leaf) !== void 0)
-    throw new Json5EditError(
-      `cannot insert ${path31.join(".")}: it is already there`,
-      parent.span.start
-    );
-  const member = entryText([leaf], valueText, dialect);
-  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next2 === void 0) return appendMember(text4, parent, member, dialect);
-  if (!startsLine(text4, next2.span.start))
-    return splice(text4, next2.span.start, next2.span.start, `${member}, `);
-  const indent2 = indentOfLine(text4, next2.span.start);
-  const eol = eolOf(text4);
-  const at = lineStartOf(text4, next2.span.start);
-  return splice(
-    text4,
-    at,
-    at,
-    `${indent2}${reindent(member, indent2, eol)},${eol}`
-  );
-}
-function setBelow(text4, start, path31, valueText, dialect) {
-  let node = start;
-  for (let i2 = 0; i2 < path31.length; i2++) {
-    if (node.kind !== "object") {
-      throw new Json5EditError(
-        `cannot set ${path31.join(".")}: ${path31.slice(0, i2).join(".") || "the document"} is not an object`,
-        node.span.start
-      );
-    }
-    const entry = entryOf2(node, path31[i2]);
-    if (entry === void 0) {
-      return appendMember(
-        text4,
-        node,
-        entryText(path31.slice(i2), valueText, dialect),
-        dialect
-      );
-    }
-    if (i2 === path31.length - 1) {
-      const indent2 = indentOfLine(text4, entry.keySpan.start);
-      return splice(
-        text4,
-        entry.value.span.start,
-        entry.value.span.end,
-        reindent(valueText, indent2, eolOf(text4))
-      );
-    }
-    node = entry.value;
-  }
-  throw new Json5EditError("unreachable: path exhausted", 0);
-}
-function deleteValue(text4, path31, keep = 0) {
-  if (path31.length === 0) {
-    throw new Json5EditError("deleteValue needs a non-empty path", 0);
-  }
-  if (/^\s*$/.test(text4)) return text4;
-  const parentPath = path31.slice(0, -1);
-  const parent = nodeAt(parseDocument(text4), parentPath);
-  const entry = parent === void 0 ? void 0 : entryOf2(parent, path31[path31.length - 1]);
-  if (entry === void 0 || parent?.kind !== "object") return text4;
-  const pruned = removeMember(text4, entry.span);
-  return parentPath.length > keep && parent.entries.length === 1 ? deleteValue(pruned, parentPath, keep) : pruned;
-}
-var CHILD_KEYS = ["h", "v", "children"];
-function placementIdOf(node) {
-  if (node.kind === "string") return node.value;
-  if (node.kind !== "object") return void 0;
-  const seg2 = entryOf2(node, "seg")?.value;
-  const kind = entryOf2(node, "kind")?.value;
-  const name = entryOf2(node, "name")?.value;
-  const segName = seg2?.kind === "string" ? seg2.value : kind?.kind === "string" && kind.value === "segment" && name?.kind === "string" ? name.value : void 0;
-  if (segName === void 0) return void 0;
-  const id2 = entryOf2(node, "id")?.value;
-  return id2?.kind === "string" ? id2.value : segName;
-}
-function childArraysOf(node) {
-  if (node.kind !== "object") return [];
-  return CHILD_KEYS.map((k) => entryOf2(node, k)?.value).filter(
-    (v) => v?.kind === "array"
-  );
-}
-function rowEntriesOf(node) {
-  const rows = entryOf2(node, "rows")?.value;
-  return rows?.kind === "object" ? rows.entries : null;
-}
-function restagesFragment(node) {
-  if (node.kind !== "object") return true;
-  const rows = rowEntriesOf(node);
-  return rows === null || rows.length > 0 || node.entries.some((entry) => entry.key !== "rows");
-}
-function* nodesIn(node, bareAt) {
-  yield { node, bareAt };
-  for (const array of childArraysOf(node)) {
-    for (const child of array.elements) yield* nodesIn(child, null);
-  }
-  for (const row of rowEntriesOf(node) ?? []) {
-    yield* nodesIn(
-      row.value,
-      bareAt === null ? null : [...bareAt, "rows", row.key]
-    );
-  }
-}
-function hasSegmentRef(root, id2) {
-  for (const { node } of nodesIn(root, null)) {
-    if (placementIdOf(node) === id2) return true;
-  }
-  return false;
-}
-function refAt(text4, rootPath, id2) {
-  const root = nodeAt(parseDocument(text4), rootPath);
-  if (root === void 0) return null;
-  for (const { node, bareAt } of nodesIn(root, rootPath)) {
-    if (placementIdOf(node) !== id2) continue;
-    if (bareAt === null) return { text: text4, ref: node };
-    const wrapped = setValue(
-      text4,
-      bareAt,
-      `{ h: [${textOf(text4, node)}] }`,
-      JSON5_DIALECT
-    );
-    return refAt(wrapped, rootPath, id2);
-  }
-  return null;
-}
-function removeSegmentRef(text4, rootPath, target) {
-  const hit = refAt(text4, rootPath, target);
-  return hit === null ? null : removeMember(hit.text, hit.ref.span);
-}
-function insertSegmentRef(text4, rootPath, placement, anchor, relation) {
-  const hit = refAt(text4, rootPath, anchor);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
-  const { commaEnd, line } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && line !== null) {
-    const indent2 = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
-    return relation === "after" ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent2) : splice(
-      src,
-      ref.span.start,
-      ref.span.start,
-      `${newText},${eolOf(src)}${indent2}`
-    );
-  }
-  const refText = textOf(src, ref);
-  const pair = relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(src, ref.span.start, ref.span.end, pair);
-}
-function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
-  const hit = refAt(text4, rootPath, id2);
-  if (hit === null) return null;
-  const { text: src, ref } = hit;
-  const settings = `{ ${keyText(setting)}: ${valueText} }`;
-  if (ref.kind === "string") {
-    return splice(
-      src,
-      ref.span.start,
-      ref.span.end,
-      `{ seg: ${JSON.stringify(ref.value)}, settings: ${settings} }`
-    );
-  }
-  return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
-}
-
-// src/config/loader/diagnostics.ts
-function parseJson5Syntax(source) {
-  try {
-    return { kind: "parsed", value: import_json52.default.parse(source) };
-  } catch (e) {
-    const error = e;
-    return {
-      kind: "invalid",
-      issue: {
-        path: "",
-        message: `JSON5 syntax error: ${error.message}`,
-        line: error.lineNumber,
-        col: error.columnNumber
-      }
-    };
-  }
-}
-var ConfigError = class extends Error {
-  file;
-  issues;
-  /** Advisories the file earned before it failed — reported beside the error. */
-  warnings;
-  constructor(file, issues, warnings = []) {
-    super(formatIssues(file, issues));
-    this.name = "ConfigError";
-    this.file = file;
-    this.issues = issues;
-    this.warnings = warnings;
-  }
-};
-var DroppedFileError = class extends ConfigError {
-  prompt;
-  constructor(file, issues) {
-    super(file, issues);
-    this.name = "DroppedFileError";
-    this.prompt = [
-      "Fix my cc-candybar statusline config. It places segments that do not exist, so those cells are not drawn.",
-      `Config file to edit: ${file}`,
-      this.message,
-      "For each placement: rename it to a segment the error lists as declared (if it names a plugin file, read that file to confirm), or remove the placement. Edit only the config file; do not change any plugin file."
-    ].join("\n\n");
-  }
-};
-function findKeyLine(source, pathParts) {
-  return keyLocator(source)(pathParts);
-}
-function keyLocator(source) {
-  let parsed2;
-  const document = () => {
-    parsed2 ??= { node: parseOrUndefined(source) };
-    return parsed2.node;
-  };
-  return (pathParts) => keyLine(source, document, pathParts);
-}
-function parseOrUndefined(source) {
-  try {
-    return parseDocument(source);
-  } catch (e) {
-    if (e instanceof Json5EditError) return void 0;
-    throw e;
-  }
-}
-function keyLine(source, document, pathParts) {
-  const indexed = pathParts.some((p2) => /^\d+$/.test(p2)) ? elementPathLine(source, document(), pathParts) : void 0;
-  if (indexed !== void 0) return indexed;
-  let cursor = 0;
-  let foundCursor;
-  for (const part of pathParts) {
-    if (part === "" || /^\d+$/.test(part)) continue;
-    const found2 = findKeyOccurrence(source, cursor, part);
-    if (found2 === -1) {
-      return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-    }
-    cursor = found2;
-    foundCursor = found2;
-  }
-  return foundCursor !== void 0 ? lineFromOffset(source, foundCursor) : void 0;
-}
-function elementPathLine(source, document, pathParts) {
-  if (document === void 0) return void 0;
-  let node = document;
-  let reached;
-  let indexed = false;
-  for (const part of pathParts) {
-    const element = node.kind === "array" && /^\d+$/.test(part);
-    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
-    if (next2 === void 0) break;
-    indexed ||= element;
-    node = next2;
-    reached = next2;
-  }
-  return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
-}
-function findKeyOccurrence(source, from, key) {
-  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-  const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
-  re.lastIndex = from;
-  const m = re.exec(source);
-  return m ? m.index : -1;
-}
-function lineFromOffset(source, offset) {
-  let line = 1;
-  for (let i2 = 0; i2 < offset && i2 < source.length; i2++) {
-    if (source.charCodeAt(i2) === 10) line++;
-  }
-  return line;
-}
-function editabilityNotice(filePath2, source) {
-  try {
-    parseDocument(source);
-    return null;
-  } catch (e) {
-    if (!(e instanceof Json5EditError)) throw e;
-    return `${filePath2}:${lineFromOffset(source, e.offset)}: ${e.reason} \u2014 the settings menu cannot edit this file until it is fixed`;
-  }
-}
-function formatIssues(file, issues) {
-  if (issues.length === 0) return `${file}: invalid config (no details)`;
-  const lines2 = [
-    `Invalid config in ${file} (${issues.length} issue${issues.length === 1 ? "" : "s"}):`
-  ];
-  for (const issue3 of issues) {
-    const locParts = [];
-    if (issue3.line !== void 0) {
-      locParts.push(
-        `line ${issue3.line}${issue3.col !== void 0 ? `:${issue3.col}` : ""}`
-      );
-    }
-    if (issue3.path) locParts.push(issue3.path);
-    const loc = locParts.length > 0 ? `[${locParts.join(" \u2022 ")}] ` : "";
-    lines2.push(`  ${loc}${issue3.message}`);
-  }
-  return lines2.join("\n");
-}
-
-// src/config/loader/validate-core.ts
-function requireString(ctx, path31, raw, field) {
-  const v = raw[field];
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return null;
-  }
-  return v;
-}
-function optionalTypedDefault(ctx, path31, raw, type3) {
-  const v = raw.default;
-  if (v === void 0) return void 0;
-  const ok3 = type3 === "string" && typeof v === "string" || type3 === "number" && typeof v === "number" || type3 === "boolean" && typeof v === "boolean";
-  if (!ok3) {
-    ctx.issues.push({
-      path: `${path31}.default`,
-      message: `default must be a ${type3}, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), "default"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalStringField(ctx, path31, raw, field) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function validatePaletteName(ctx, path31, raw) {
-  const v = optionalStringField(ctx, path31, raw, "palette");
-  if (v === void 0) return void 0;
-  if (!ctx.allowedPalettes.has(v)) {
-    ctx.issues.push({
-      path: `${path31}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
-    });
-    return void 0;
-  }
-  return v;
-}
-function optionalEnum(ctx, path31, raw, field, allowed) {
-  const v = raw[field];
-  if (v === void 0) return void 0;
-  if (typeof v !== "string" || !allowed.includes(v)) {
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-  return v;
-}
-function isPlainObject2(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function describeType(v) {
-  if (v === null) return "null";
-  if (Array.isArray(v)) return "array";
-  return typeof v;
-}
-function describeValue(v) {
-  if (typeof v === "string") return JSON.stringify(v);
-  if (v === void 0) return "undefined";
-  return String(v);
-}
-function record(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${path31} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  rejectUnknownKeys(
-    ctx,
-    path31,
-    raw,
-    schema.noun,
-    new Set(Object.keys(schema.fields)),
-    refuseRemoved(ctx, schema.removed ?? {}, path31, raw)
-  );
-  return fields(ctx, schema.fields, path31, raw);
-}
-function refuseRemoved(ctx, removed, path31, raw) {
-  const present = Object.entries(removed).filter(
-    ([key]) => raw[key] !== void 0
-  );
-  for (const [key, pointer] of present) {
-    reject(ctx, `${path31}.${key}`, `${path31}.${key} was removed: ${pointer}`);
-  }
-  return new Set(present.map(([key]) => `${path31}.${key}`));
-}
-function fields(ctx, fieldMap, path31, raw) {
-  const specs = fieldMap;
-  const out = {};
-  let ok3 = true;
-  for (const [field, spec] of Object.entries(specs)) {
-    const value = spec.parse(ctx, path31, field, raw);
-    if (value !== void 0) out[field] = value;
-    else if (spec.required) ok3 = false;
-  }
-  return ok3 ? out : null;
-}
-var EMPTY_PATHS = /* @__PURE__ */ new Set();
-function rejectUnknownKeys(ctx, path31, raw, noun, allowed, spokenFor = EMPTY_PATHS) {
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key) && !spokenFor.has(`${path31}.${key}`)) {
-      ctx.issues.push({
-        path: `${path31}.${key}`,
-        message: `Unknown ${noun} "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path31.split("."), key])
-      });
-    }
-  }
-}
-function reject(ctx, path31, message) {
-  ctx.issues.push({
-    path: path31,
-    message,
-    line: findKeyLine(ctx.source, path31.split("."))
-  });
-  return null;
-}
-function oneOfPresent(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  const keys2 = Object.keys(arms);
-  const present = Object.keys(raw).filter((k) => k in arms);
-  const unknown = Object.keys(raw).filter((k) => !(k in arms));
-  for (const k of unknown) {
-    ctx.issues.push({
-      path: `${path31}.${k}`,
-      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path31.split("."), k])
-    });
-  }
-  if (present.length === 0) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  if (present.length > 1) {
-    ctx.issues.push({
-      path: path31,
-      message: `${schema.noun} must declare exactly one of: ${keys2.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const key = present[0];
-  return arms[key].parse(ctx, `${path31}.${key}`, raw[key]);
-}
-function taggedUnion(ctx, schema, path31, raw) {
-  if (!isPlainObject2(raw)) {
-    ctx.issues.push({
-      path: path31,
-      message: `${path31} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const tagValue = raw[schema.tag];
-  if (typeof tagValue !== "string") {
-    ctx.issues.push({
-      path: `${path31}.${schema.tag}`,
-      message: `${path31}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
-      line: findKeyLine(ctx.source, path31.split("."))
-    });
-    return null;
-  }
-  const arms = schema.arms;
-  if (!Object.hasOwn(arms, tagValue)) {
-    const message = Object.hasOwn(schema.retired, tagValue) ? schema.retired[tagValue](raw) : `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`;
-    ctx.issues.push({
-      path: `${path31}.${schema.tag}`,
-      message,
-      line: findKeyLine(ctx.source, [...path31.split("."), schema.tag])
-    });
-    return null;
-  }
-  const arm2 = arms[tagValue];
-  const before = ctx.issues.length;
-  const parsed2 = arm2.parse(ctx, path31, raw);
-  const spokenFor = new Set(ctx.issues.slice(before).map((i2) => i2.path));
-  rejectUnknownKeys(
-    ctx,
-    path31,
-    raw,
-    `${tagValue} ${schema.memberNoun} key`,
-    arm2.keys,
-    spokenFor
-  );
-  return parsed2;
-}
-function armFacets(tag, tagValue, fieldMap) {
-  return {
-    json: withConst(objectJson(fieldMap), tag, tagValue),
-    keys: /* @__PURE__ */ new Set([tag, ...Object.keys(fieldMap)])
-  };
-}
-function lazy(thunk) {
-  return (...args) => thunk()(...args);
-}
-function refine(inner, ...checks) {
-  return (ctx, path31, raw) => {
-    const value = inner(ctx, path31, raw);
-    if (value === null) return null;
-    for (const check of checks) {
-      if (check.ok(value)) continue;
-      const { field, message } = check.issue(value);
-      const at = field === "" ? path31 : `${path31}.${field}`;
-      ctx.issues.push({
-        path: at,
-        message,
-        line: findKeyLine(ctx.source, at.split("."))
-      });
-      return null;
-    }
-    return value;
-  };
-}
-function optionalStringSpec() {
-  return {
-    required: false,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => optionalStringField(ctx, path31, raw, field)
-  };
-}
-var ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-function optionalEnvNamesSpec() {
-  return {
-    required: false,
-    json: {
-      type: "array",
-      items: { type: "string", pattern: ENV_NAME.source }
-    },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (!Array.isArray(v) || !v.every((name) => typeof name === "string" && ENV_NAME.test(name))) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be a list of environment variable names, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalBooleanSpec() {
-  return {
-    required: false,
-    json: { type: "boolean" },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "boolean") {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be a boolean, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalIntSpec(bounds) {
-  const { min: min3, max: max3 } = bounds;
-  return {
-    required: false,
-    json: { type: "integer", minimum: min3, maximum: max3 },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      if (typeof v !== "number" || !Number.isInteger(v) || v < min3 || v > max3) {
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be an integer between ${min3} and ${max3}, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function optionalNumberSpec(bounds = {}) {
-  const { min: min3 } = bounds;
-  return {
-    required: false,
-    json: { type: "number", ...min3 !== void 0 && { minimum: min3 } },
-    parse: (ctx, path31, field, raw) => {
-      const v = raw[field];
-      if (v === void 0) return void 0;
-      const bad = typeof v !== "number" || !Number.isFinite(v) || min3 !== void 0 && v < min3;
-      if (bad) {
-        const shape = min3 !== void 0 ? `a finite number >= ${min3}` : "a finite number";
-        ctx.issues.push({
-          path: `${path31}.${field}`,
-          message: `${field} must be ${shape}, got ${describeValue(v)}`,
-          line: findKeyLine(ctx.source, [field])
-        });
-        return void 0;
-      }
-      return v;
-    }
-  };
-}
-function paletteSpec() {
-  return {
-    required: false,
-    // Palette NAME membership is semantic (the allowed set is resolved at load
-    // from installed palettes, not a closed compile-time enum), so the schema
-    // checks only `type: string` — the same shape/meaning split the loader keeps.
-    json: { type: "string" },
-    parse: (ctx, path31, _field, raw) => validatePaletteName(ctx, path31, raw)
-  };
-}
-function requireStringSpec() {
-  return {
-    required: true,
-    json: { type: "string" },
-    parse: (ctx, path31, field, raw) => requireString(ctx, path31, raw, field) ?? void 0
-  };
-}
-function optionalEnumSpec(allowed) {
-  return {
-    required: false,
-    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
-    // membership against it, `json` lists it as the schema `enum`.
-    json: { enum: [...allowed] },
-    parse: (ctx, path31, field, raw) => optionalEnum(ctx, path31, raw, field, allowed)
-  };
-}
-function objectJson(fieldMap, opts = { closed: true }) {
-  const specs = fieldMap;
-  const properties = {};
-  const required = [];
-  for (const [field, spec] of Object.entries(specs)) {
-    properties[field] = spec.json;
-    if (spec.required) required.push(field);
-  }
-  return {
-    type: "object",
-    properties,
-    ...required.length > 0 && { required },
-    ...opts.closed && { additionalProperties: false }
-  };
-}
-function recordJson(schema) {
-  return objectJson(schema.fields);
-}
-function withConst(base, key, value) {
-  const b = base;
-  const properties = {
-    [key]: { const: value },
-    ...b.properties
-  };
-  const required = [key, ...b.required ?? []];
-  return { ...b, properties, required };
-}
-function taggedUnionJson(schema) {
-  const arms = schema.arms;
-  return { anyOf: Object.values(arms).map((arm2) => arm2.json) };
-}
-function oneOfPresentJson(schema) {
-  const arms = schema.arms;
-  return {
-    anyOf: Object.entries(arms).map(([key, arm2]) => ({
-      type: "object",
-      properties: { [key]: arm2.json },
-      required: [key],
-      additionalProperties: false
-    }))
-  };
-}
-
-// src/config/lanes.ts
-init_globals();
-var IN_TMUX = 'ne .tmux.pane ""';
-var LANES = {
-  statusline: {
-    switch: { setting: "experimentalStatusline", on: true },
-    label: "\u{1F9EA} statusline (B)",
-    handsOff: false
-  },
-  pane: {
-    switch: { setting: "experimentalPane", on: true },
-    label: "\u{1F9EA} tmux pane (C)",
-    handsOff: true
-  }
-};
-var LANE_NAMES = Object.keys(LANES);
-var TOGGLED_LANES = LANE_NAMES.filter(
-  (lane) => LANES[lane].switch.on === true
-);
-var MOVING_FPS = 30;
-var ANSWERING = { by: "request" };
-var DRAWING_VAR = "drawing";
-var drawingVar = (field) => `${DRAWING_VAR}.${field}`;
-var UNFOLLOWED = { subscribers: 0, fps: 0, shown: true };
-var laneFeedVar = (lane, field) => `feeds.${lane}.${field}`;
-function perLane(value) {
-  return Object.fromEntries(
-    LANE_NAMES.map((lane) => [lane, value(lane)])
-  );
-}
-var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
-function parseLane(raw) {
-  return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
-}
-function feedsFact(feeds) {
-  return LANE_NAMES.filter((lane) => feeds[lane].subscribers > 0).map((lane) => {
-    const { subscribers, fps, shown } = feeds[lane];
-    return `${lane}:${subscribers}sub/${fps}fps/${shown ? "shown" : "offscreen"}`;
-  }).join(",") || "-";
-}
-
-// src/config/globals-fields.ts
-var control = (label2, place, {
-  previews = [],
-  shown = "true"
-} = {}) => ({ label: label2, place, previews, shown });
-var enumValues = (members, optionDomain, facets = {}) => ({
-  spec: optionalEnumSpec(members),
-  domain: { from: members },
-  parse: (raw) => members.includes(raw) ? raw : null,
-  ...optionDomain !== void 0 && {
-    optionDomain: {
-      name: optionDomain,
-      members,
-      ...facets
-    }
-  }
-});
-var markTrials = (trials) => (option) => trials.includes(option) ? `\u{1F9EA} ${option}` : option;
-var boolValues = {
-  spec: optionalBooleanSpec(),
-  domain: "bool",
-  parse: parseSessionBoolean
-};
-var intValues = (range) => ({
-  spec: optionalIntSpec(range),
-  domain: range,
-  parse: (raw) => parseSessionInt(raw, range)
-});
-function enumSetting(members, floor3, shown, extra = {}) {
-  return {
-    kind: "session",
-    ...enumValues(members, extra.optionDomain, {
-      library: extra.library,
-      labelOf: extra.labelOf
-    }),
-    floor: floor3,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-function boolSetting(floor3, shown) {
-  return {
-    kind: "session",
-    ...boolValues,
-    floor: floor3,
-    control: shown,
-    themeDefault: false
-  };
-}
-function intSetting(range, floor3, shown) {
-  return {
-    kind: "session",
-    ...intValues(range),
-    floor: floor3,
-    control: shown,
-    themeDefault: false
-  };
-}
-function selection(sessionKey, spec, domain, shown, extra = {}) {
-  return {
-    kind: "selection",
-    sessionKey,
-    spec,
-    domain,
-    control: shown,
-    themeDefault: extra.themeDefault ?? false
-  };
-}
-var text2 = (spec) => ({
-  kind: "text",
-  spec
-});
-var colorCompatibilitySpec = {
-  required: false,
-  json: { enum: [...COLOR_COMPATIBILITIES] },
-  parse: (ctx, path31, field, raw) => {
-    if (raw[field] === "auto") {
-      ctx.issues.push({
-        path: `${path31}.${field}`,
-        message: `${path31}.${field}: "auto" is not supported \u2014 the render daemon runs detached, so terminal detection would read the daemon's environment, not your terminal's. Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path31.split("."), field])
-      });
-      return void 0;
-    }
-    return optionalEnum(ctx, path31, raw, field, COLOR_COMPATIBILITIES);
-  }
-};
-var paletteOrRuleSpec = {
-  required: false,
-  // Shape-only, exactly as `paletteSpec`'s schema facet is: the allowed names
-  // are resolved at load from installed palettes, and a rule is a string too.
-  json: { type: "string" },
-  parse: (ctx, path31, field, raw) => {
-    const v = optionalStringField(ctx, path31, raw, field);
-    return isExpression(v) ? v : validatePaletteName(ctx, path31, raw);
-  }
-};
-var effectOrRuleSpec = {
-  required: false,
-  json: {
-    anyOf: [{ enum: [...EFFECT_NAMES] }, { type: "string", pattern: "\\{\\{" }]
-  },
-  parse: (ctx, path31, field, raw) => {
-    const v = raw[field];
-    return typeof v === "string" && isExpression(v) ? v : optionalEnum(ctx, path31, raw, field, EFFECT_NAMES);
-  }
-};
-var MENU_GLYPH = /^[^\r\n]*\S[^\r\n]*$/u;
-var CLOSE_GLYPH = new RegExp(
-  `^(?:${DOOR_CLOSE_GLYPH}|${DISCLOSURE_GLYPH_CLOSE})[\\uFE0E\\uFE0F]?$`,
-  "u"
-);
-var menuGlyphSpec = {
-  required: false,
-  json: {
-    type: "string",
-    pattern: MENU_GLYPH.source,
-    not: { pattern: CLOSE_GLYPH.source }
-  },
-  parse: (ctx, path31, field, raw) => {
-    const v = optionalStringField(ctx, path31, raw, field);
-    if (v === void 0 || MENU_GLYPH.test(v) && !CLOSE_GLYPH.test(v))
-      return v;
-    ctx.issues.push({
-      path: `${path31}.${field}`,
-      message: `${path31}.${field}: must be one line of visible text other than a close glyph ("${DOOR_CLOSE_GLYPH}", "${DISCLOSURE_GLYPH_CLOSE}") \u2014 the settings menu needs a glyph to click`,
-      line: findKeyLine(ctx.source, [...path31.split("."), field])
-    });
-    return void 0;
-  }
-};
-var LANE_ROWS = Object.fromEntries(
-  TOGGLED_LANES.map((lane) => [
-    LANES[lane].switch.setting,
-    boolSetting(false, control(LANES[lane].label, "toggles"))
-  ])
-);
-var GLOBAL_FIELDS = {
-  // The config default for the base theme: a theme NAME, or a rule choosing
-  // one per render (brandon-themes-dzl). A placement's `theme` setting other
-  // than `bar` ignores it.
-  palette: selection(
-    "theme",
-    paletteOrRuleSpec,
-    { themes: "themes" },
-    control("\u{1F3A8} theme", "door")
-  ),
-  // The config default for the PRESET — a named fragment from `presets:`
-  // whose globals and root the session renders. Membership in the merged
-  // `presets` map is cross-ref's. [LAW:one-source-of-truth] A preset's own
-  // globals may NOT carry it: a
-  // preset selecting a preset is a second, cyclic authority over which is
-  // active. Its control sits on the door's first line, one click away:
-  // switching arrangement is what people open the menu for.
-  preset: selection(
-    "preset",
-    optionalStringSpec(),
-    { from: "presets" },
-    control("\u25A6 preset", "door", { previews: ["layout", "presetDelete"] })
-  ),
-  // The config default for the STYLE (a named theme adaptation from
-  // `styles:`), or a rule choosing one by data (brandon-looks-pe6).
-  // Membership in the merged `styles` map is cross-ref's, which exempts a rule.
-  style: selection(
-    "style",
-    optionalStringSpec(),
-    { from: "styles" },
-    control("\u25D0 style", "gear", { previews: ["palette"] }),
-    { themeDefault: true }
-  ),
-  // The looping EFFECT the whole bar wears (brandon-effects-2gka.d2i): `none`
-  // or a rich-js catalogue loop name, or a rule rendering one.
-  effect: selection(
-    "effect",
-    effectOrRuleSpec,
-    { from: EFFECT_NAMES },
-    control("\u2728 effect", "look")
-  ),
-  // The powerline cap/separator SHAPE — one of rich-js's bundled joiners.
-  endcaps: enumSetting(
-    ENDCAPS_SHAPES,
-    "powerline",
-    control("\u2726 endcaps", "look"),
-    {
-      optionDomain: "endcaps"
-    }
-  ),
-  // Which theme role each ROW of the closed bar wears, in order — a named
-  // entry of VARIATIONS (src/themes/decor.ts): rows in `secondary`, then
-  // `accent` by default (brandon-theme-picker-bgw.7g6).
-  variation: enumSetting(
-    VARIATION_NAMES,
-    "accent",
-    control("\u{1F3BC} variation", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "variations",
-      labelOf: markTrials(TRIAL_VARIATION_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Which of its role's shades each CELL of the closed bar wears — a named
-  // position of the shade dial, SHADES (src/themes/decor.ts): a window of the
-  // role's darkenings and lightenings, or its muted form. The default is the
-  // window centred on each role's own colour — "the default will be 'middle'
-  // (standard role)" (candybar-theme-colours-6fq5.e5n).
-  shade: enumSetting(
-    SHADE_NAMES,
-    "middle",
-    control("\u{1F506} shade", "gear", {
-      previews: ["layout"]
-    }),
-    {
-      optionDomain: "shades",
-      labelOf: markTrials(TRIAL_SHADE_NAMES),
-      themeDefault: true
-    }
-  ),
-  // Whether a placement that appears mid-session fades in over 20 s
-  // (brandon-effects-2gka.631) and one that leaves dissolves out over 30 s
-  // (brandon-effects-2gka.3vt). Off: a bloom is a look somebody chooses.
-  transitions: boolSetting(false, control("fade in/out", "look")),
-  // How fast every decorative animation runs — the effects above, fades and
-  // dissolves, and a template's `frames`/`stepped` (brandon-menus-sjhy.nt2):
-  // the rate the session's animation clock advances against the wall clock
-  // (`ANIMATION_SPEEDS`, src/render/effect.ts `SessionEffects.clockAt`).
-  animationSpeed: enumSetting(
-    ANIMATION_SPEED_NAMES,
-    "1x",
-    control("speed", "look")
-  ),
-  // Whether a root row that exceeds the usable width soft-wraps, between
-  // cells and through a cell wider than a line (the legacy display.autoWrap).
-  // False renders each row as one unbounded line, overflow off-screen.
-  autoWrap: boolSetting(true, control("wrap", "config")),
-  // Spaces synthesized INSIDE each segment cell per side (intra-cell, within
-  // the bg fill — the legacy display.padding). Templates author content; this
-  // chrome is applied structurally at the cell-formation seam. Bounded above
-  // so a config value can never drive an unbounded `" ".repeat` in the daemon
-  // [LAW:no-silent-failure] — the file, the click and the session pick all
-  // honour PADDING_RANGE.
-  padding: intSetting(
-    { ...PADDING_RANGE, step: 1 },
-    1,
-    control("padding", "config")
-  ),
-  // Seconds without a click before every open menu flashes and closes
-  // (src/config/menu-timeout.ts, src/renderer/menu-idle.ts).
-  menuTimeout: intSetting(
-    MENU_TIMEOUT_RANGE,
-    MENU_TIMEOUT_DEFAULT,
-    control("menu timeout", "config")
-  ),
-  ...LANE_ROWS,
-  // The color depth rich-js downsamples output to (the legacy
-  // display.colorCompatibility) — truecolor by default, deliberately NOT the
-  // legacy "auto", which the detached daemon cannot honour (see
-  // COLOR_COMPATIBILITIES). Set in the config file only: Brandon cut the
-  // control (brandon-menu-ia-q30.5y4).
-  colorCompatibility: {
-    kind: "config",
-    ...enumValues(COLOR_COMPATIBILITIES, "colorCompatibilities"),
-    // Its own spec only for the migration-pointing "auto" refusal above.
-    spec: colorCompatibilitySpec,
-    floor: "truecolor"
-  },
-  // The text segments render when their value is empty.
-  default_empty_value: text2(optionalStringSpec()),
-  // The cell separator `plain` draws between segments. Absent means the glyph
-  // rich-js's bundled `plain` joiner owns — no floor here, since naming one
-  // would be a second copy of a constant that lives in rich-js.
-  default_separator: text2(optionalStringSpec()),
-  // The settings menu's door glyph (🍫 by default, synthesized by the menu).
-  menuGlyph: text2(menuGlyphSpec)
-};
-function settingNameOf(field) {
-  const row = GLOBAL_FIELDS[field];
-  return row.kind === "selection" ? row.sessionKey : field;
-}
-var ROWS = Object.entries(GLOBAL_FIELDS);
-var VALUED_FIELDS = ROWS.filter(
-  ([, row]) => row.kind === "session" || row.kind === "config"
-).map(([field]) => field);
-var CONTROLLED_FIELDS = ROWS.filter(
-  ([, row]) => row.kind === "session" || row.kind === "selection"
-).map(([field]) => field);
-var THEME_DEFAULT_FIELDS = ROWS.filter(
-  ([, row]) => (row.kind === "session" || row.kind === "selection") && row.themeDefault
-).map(([field]) => field);
-var NAMED_DOMAINS = ROWS.flatMap(
-  ([, row]) => "optionDomain" in row && row.optionDomain !== void 0 ? [row.optionDomain] : []
-);
-function valuedRow(field) {
-  return GLOBAL_FIELDS[field];
-}
-var floorOf2 = (field) => valuedRow(field).floor;
-function wireKindOf(field) {
-  const row = GLOBAL_FIELDS[field];
-  if (row.kind === "text") return "string";
-  const { domain } = row;
-  return domain === "bool" ? "boolean" : typeof domain === "object" && "min" in domain ? "number" : "string";
-}
-
 // src/config/loader/globals.ts
 init_globals();
 var LIVE_GLOBALS_FIELDS = Object.fromEntries(
@@ -48951,7 +49062,7 @@ function nestedMenuGlyphSpec(subject) {
     (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
   );
 }
-function nameOnlySpec(spec, subject, why2) {
+function nameOnlySpec(spec, subject, why) {
   return {
     ...spec,
     json: { ...spec.json, not: { pattern: "\\{\\{" } },
@@ -48960,7 +49071,7 @@ function nameOnlySpec(spec, subject, why2) {
       if (typeof v === "string" && isExpression(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
-          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
           line: findKeyLine(ctx.source, [...path31.split("."), field])
         });
         return void 0;
@@ -49036,7 +49147,7 @@ var THEME_DEFAULT_SCHEMA = {
   }
 };
 function validateThemeDefaults(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "themeDefaults",
       message: `themeDefaults must be an object mapping theme names to { shade, variation, style }, got ${describeType(raw)}`,
@@ -49393,53 +49504,6 @@ init_globals();
 // src/config/default-dsl-config.ts
 init_globals();
 
-// src/config/confirm-step.ts
-init_globals();
-var ARMED = "armed";
-var DISARMED = "disarmed";
-var CONFIRM_KEY_SUFFIX = ".armed";
-var isConfirmKey = (key) => key.endsWith(CONFIRM_KEY_SUFFIX);
-function confirms(key, disarm, fires) {
-  const gates = [...new Set(fires.map((f) => f.when))].filter(
-    (g) => g !== "true"
-  );
-  const nameOf2 = (held) => gates.length === 0 ? key : `${key}.${held}`;
-  const actions = {};
-  for (let held = 0; held < 2 ** gates.length; held++)
-    actions[nameOf2(held)] = {
-      do: [
-        disarm,
-        ...fires.filter(
-          (f) => f.when === "true" || held & 1 << gates.indexOf(f.when)
-        ).map((f) => f.action)
-      ]
-    };
-  const link = (i2, held) => i2 === gates.length ? `"${nameOf2(held)}"` : `(ternary ${link(i2 + 1, held | 1 << i2)} ${link(i2 + 1, held)} (${gates[i2]}))`;
-  return { link: link(0, 0), actions };
-}
-function confirmStep(key, labels, fires) {
-  const stateKey = `${key}${CONFIRM_KEY_SUFFIX}`;
-  const arm2 = `${key}.arm`;
-  const disarm = `${key}.disarm`;
-  const armed = `(eq .${key} "${ARMED}")`;
-  const confirm = confirms(key, disarm, fires);
-  return {
-    // [LAW:dataflow-not-control-flow] Which view the step shows is the key's
-    // value, read back here.
-    template: `{{ if ${armed} }}{{ action ${confirm.link} "${labels.confirm}" }} {{ action "${disarm}" "\u2715" }}{{ else }}{{ action "${arm2}" "${labels.arm}" }}{{ end }}`,
-    actions: {
-      [arm2]: { set: stateKey, to: ARMED },
-      [disarm]: { set: stateKey, to: DISARMED },
-      ...confirm.actions
-    },
-    armed,
-    variables: {
-      [key]: { kind: "state", key: stateKey, default: DISARMED }
-    },
-    disarm
-  };
-}
-
 // src/config/dsl-loader.ts
 init_globals();
 var import_node_path7 = __toESM(require_path_browserify(), 1);
@@ -49449,49 +49513,6 @@ init_globals();
 
 // src/config/payload-inputs.ts
 init_globals();
-
-// src/config/setting-projections.ts
-init_globals();
-var effectiveVarOf = (name) => `${name}.effective`;
-var SETTINGS = Object.fromEntries(
-  CONTROLLED_FIELDS.map((field) => {
-    const name = settingNameOf(field);
-    return [
-      name,
-      {
-        configKey: field,
-        sessionKey: name,
-        effectiveVar: effectiveVarOf(name),
-        ...GLOBAL_FIELDS[field].control
-      }
-    ];
-  })
-);
-var SETTING_NAMES = Object.keys(SETTINGS);
-var SETTING_PROJECTIONS = Object.values(SETTINGS);
-var CONFIG_ONLY_PROJECTIONS = VALUED_FIELDS.filter((field) => GLOBAL_FIELDS[field].kind === "config").map(
-  (field) => ({ configKey: field, effectiveVar: effectiveVarOf(field) })
-);
-var CONFIG_ONLY_KEYS = new Set(
-  CONFIG_ONLY_PROJECTIONS.map((p2) => p2.configKey)
-);
-var CONFIG_KEY_TO_EFFECTIVE_VAR = new Map(
-  [...SETTING_PROJECTIONS, ...CONFIG_ONLY_PROJECTIONS].map((p2) => [
-    p2.configKey,
-    p2.effectiveVar
-  ])
-);
-var SESSION_KEY_TO_EFFECTIVE_VAR = new Map(SETTING_PROJECTIONS.map((p2) => [p2.sessionKey, p2.effectiveVar]));
-function perSetting(value) {
-  return Object.fromEntries(
-    SETTING_NAMES.map((name) => [name, value(name)])
-  );
-}
-var SESSION_KEY_TO_SETTING = new Map(
-  SETTING_NAMES.map((name) => [SETTINGS[name].sessionKey, name])
-);
-
-// src/config/payload-inputs.ts
 function effectiveInput(field, effectiveVar) {
   const row = GLOBAL_FIELDS[field];
   const kind = wireKindOf(field);
@@ -50024,7 +50045,7 @@ function retiredGitKindMessage(raw) {
 // src/config/loader/variables.ts
 function validateVariables(ctx, pathPrefix, raw) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: pathPrefix,
       message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
@@ -50125,7 +50146,7 @@ function sourceDefaultSpec() {
       type: ["string", "number", "boolean", "array", "object"],
       description: "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
     },
-    parse: (ctx, path31, _field, raw) => isPlainObject2(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path31, raw.default) : optionalStringField(ctx, path31, raw, "default")
+    parse: (ctx, path31, _field, raw) => isPlainObject(raw.parse) && "json" in raw.parse ? jsonDefault(ctx, path31, raw.default) : optionalStringField(ctx, path31, raw, "default")
   };
 }
 function jsonDefault(ctx, path31, value) {
@@ -50181,8 +50202,8 @@ var SHELL_FIELDS = {
   cache: requireCacheSpec("shell"),
   default: sourceDefaultSpec()
 };
-function noCachePolicy(why2) {
-  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
+function noCachePolicy(why) {
+  return { cache: `${why}, so it takes no cache policy \u2014 delete the key` };
 }
 var TEMPLATE_FIELDS = {
   template: requireStringSpec(),
@@ -50399,7 +50420,7 @@ function parseDomain(ctx, path31, raw) {
     }
     return words2;
   }
-  if (isPlainObject2(raw)) {
+  if (isPlainObject(raw)) {
     const { min: min3, max: max3, step: step4 = 1, atLeast } = raw;
     const extra = Object.keys(raw).filter((k) => !RANGE_KEYS.includes(k));
     if (extra.length === 0 && Number.isInteger(min3) && Number.isInteger(max3) && min3 <= max3 && Number.isInteger(step4) && step4 >= 1 && (atLeast === void 0 || typeof atLeast === "string")) {
@@ -50423,7 +50444,7 @@ function parseDomain(ctx, path31, raw) {
   );
 }
 function parseSettingDecl(ctx, path31, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     return issue(
       ctx,
       path31,
@@ -50485,7 +50506,7 @@ function settingsDeclSpec() {
       const v = raw[field];
       if (v === void 0) return void 0;
       const at = `${path31}.${field}`;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         return issue(
           ctx,
           at,
@@ -50553,7 +50574,7 @@ function placementSettingsSpec() {
       const v = raw[field];
       if (v === void 0) return void 0;
       const at = `${path31}.${field}`;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         return issue(
           ctx,
           at,
@@ -50583,7 +50604,7 @@ function inheritableSegmentNames(base) {
 }
 function validateSegments(ctx, raw, inherited) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "segments",
       message: `segments must be an object, got ${describeType(raw)}`,
@@ -50593,7 +50614,7 @@ function validateSegments(ctx, raw, inherited) {
   }
   const out = {};
   for (const [name, authored] of Object.entries(raw)) {
-    const decl = isPlainObject2(authored) && Object.hasOwn(authored, "missingData") ? Object.fromEntries(
+    const decl = isPlainObject(authored) && Object.hasOwn(authored, "missingData") ? Object.fromEntries(
       Object.entries(authored).filter(([key]) => key !== "missingData")
     ) : authored;
     const parsed2 = record(
@@ -50664,7 +50685,7 @@ function partialsSpec() {
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
       if (v === void 0) return void 0;
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `${path31}.${field} must be an object, got ${describeType(v)}`,
@@ -50995,7 +51016,7 @@ var validateRoot = (ctx, path31, raw) => {
     }
     return { kind: "segment", name: raw };
   }
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: path31,
       message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
@@ -51098,7 +51119,7 @@ function rowsSpec() {
     },
     parse: (ctx, path31, field, raw) => {
       const v = raw[field];
-      if (!isPlainObject2(v)) {
+      if (!isPlainObject(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
           message: `"rows" must be an object of row name \u2192 layout node, got ${describeType(v)}`,
@@ -51131,7 +51152,7 @@ var ROWS_SCHEMA = {
   }
 };
 function validateRootFragment(ctx, path31, raw) {
-  if (isPlainObject2(raw) && "rows" in raw) {
+  if (isPlainObject(raw) && "rows" in raw) {
     return record(ctx, ROWS_SCHEMA, path31, raw) ?? { rows: {} };
   }
   return validateRoot(ctx, path31, raw);
@@ -56320,12 +56341,10 @@ init_globals();
 var SYNTAX_ENGINE = createEngine({ fromString: (s) => s });
 
 // src/config/loader/edit-mode.ts
-var EDIT_MODE_KEY = "edit.mode";
 var EDIT_CONFIGURE_KEY = "edit.configure";
 var EDIT_TOGGLE_ACTION = "edit.toggle";
 var EDIT_UNCONFIGURE_ACTION = "edit.unconfigure";
 var EDIT_MODE_ARRANGE = "arrange";
-var PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
 function configureMember(preset, id2) {
   return `${escapedIdent(preset)}:${id2}`;
 }
@@ -57338,10 +57357,9 @@ var PICKER_KEY = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
 var submenuSeg = (name) => `${SETTINGS_NS}${name}`;
 var submenuToggle = (name) => `${submenuSeg(name)}.toggle`;
 var accordionOf = (place) => isSubmenu(place) ? sharedMenuStateKey(`${SETTINGS_NS}${place}Pickers`) : PICKER_KEY;
-var SETTINGS_ACCORDIONS = /* @__PURE__ */ new Set([
-  PICKER_KEY,
-  ...SUBMENU_NAMES.map(accordionOf)
-]);
+var SETTINGS_ACCORDIONS = new Set(
+  Object.values(PLACE).map(accordionOf)
+);
 var submenuRef = (name) => {
   const key = accordionOf(PLACE[SUBMENUS[name].beside]);
   return { variable: key, key, member: name };
@@ -57853,10 +57871,10 @@ function refuseMintedKeys(ctx, out, accordions) {
       (g) => g.key === void 0 ? [] : [{ path: `${g.path}.key`, key: g.key }]
     )
   ];
-  const refuse4 = ({ path: path31, key }, why2) => {
+  const refuse4 = ({ path: path31, key }, why) => {
     ctx.issues.push({
       path: path31,
-      message: `session key "${key}" ${why2} \u2014 rename it`,
+      message: `session key "${key}" ${why} \u2014 rename it`,
       line: findKeyLine(ctx.source, path31.split("."))
     });
   };
@@ -57869,14 +57887,13 @@ function refuseMintedKeys(ctx, out, accordions) {
       );
   }
   for (const authored of accordions) {
-    const state = sharedMenuStateKey(authored.key);
     const ns = reservedNamespaceOf(authored.key);
-    if (isEditModeKey(state))
+    if (isEditModeKey(authored.key))
       refuse4(
         authored,
         `names an accordion in the "${ns}" namespace, edit mode's, whose state ends with every edit`
       );
-    else if (SETTINGS_ACCORDIONS.has(state))
+    else if (SETTINGS_ACCORDIONS.has(sharedMenuStateKey(authored.key)))
       refuse4(
         authored,
         `names the settings menu's own accordion, in the "${ns}" namespace`
@@ -58359,7 +58376,7 @@ function synthesizeEditChrome(config) {
   artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${TO_KEEP} }}`
   };
   const lead = [
     { kind: "segment", name: EDIT_DONE_SEG },
@@ -58459,7 +58476,7 @@ init_globals();
 var import_node_path4 = __toESM(require_path_browserify(), 1);
 function validateActions(ctx, raw, home) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       "actions",
@@ -58482,7 +58499,7 @@ function issue2(ctx, path31, message) {
   });
 }
 function validateActionDecl(ctx, path31, raw, home) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     issue2(
       ctx,
       path31,
@@ -58691,7 +58708,7 @@ function runArm(home) {
       );
     }
     const env2 = raw.env ?? {};
-    if (!isPlainObject2(env2) || Object.entries(env2).some(
+    if (!isPlainObject(env2) || Object.entries(env2).some(
       ([name, value]) => !ENV_NAME.test(name) || typeof value !== "string"
     )) {
       issue2(
@@ -59176,7 +59193,7 @@ var STYLE_SCHEMA = {
   }
 };
 function validateStyles(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "styles",
       message: `styles must be an object mapping style names to adaptation objects, got ${describeType(raw)}`,
@@ -59225,7 +59242,7 @@ var PRESET_SCHEMA = {
   fields: { root: presetRootSpec, globals: presetGlobalsSpec }
 };
 function validatePresets(ctx, raw) {
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "presets",
       message: `presets must be an object mapping preset names to config fragments, got ${describeType(raw)}`,
@@ -59253,7 +59270,7 @@ function validatePresets(ctx, raw) {
 init_globals();
 function validateHelpers(ctx, raw) {
   if (raw === void 0) return {};
-  if (!isPlainObject2(raw)) {
+  if (!isPlainObject(raw)) {
     ctx.issues.push({
       path: "helpers",
       message: `helpers must be an object, got ${describeType(raw)}`,
@@ -59278,44 +59295,6 @@ function validateHelpers(ctx, raw) {
 
 // src/config/loader/cross-ref.ts
 init_globals();
-
-// src/config/layout-ops.ts
-init_globals();
-function encodeLayoutOp(op) {
-  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
-}
-function decodeLayoutOp(token) {
-  const parts = token.split(":");
-  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
-    return { op: "remove", target: parts[1] };
-  }
-  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
-    return {
-      op: "insert",
-      segment: parts[1],
-      anchor: parts[2],
-      relation: parts[3]
-    };
-  }
-  return null;
-}
-function mintPlacement(segment, anchor, trees, suffix) {
-  const taken2 = new Set(
-    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
-  );
-  return { seg: segment, id: mintPlacementId(segment, taken2, suffix) };
-}
-var randomSuffix = () => randomBytes(3).toString("hex");
-var MINT_TRIES = 16;
-function mintPlacementId(segment, taken2, suffix) {
-  for (let tries = 0; tries < MINT_TRIES; tries++) {
-    const id2 = `${segment}-${suffix()}`;
-    if (!taken2.has(id2)) return id2;
-  }
-  throw new Error(
-    `no free id for a placement of "${segment}" after ${MINT_TRIES} suffixes`
-  );
-}
 
 // src/config/loader/unplaced.ts
 init_globals();
@@ -60270,8 +60249,8 @@ function instantRead(template, basis) {
   }
   for (const { reaches } of basis.reads.ofTemplate(template)) {
     for (const name of reaches) {
-      const why2 = basis.projections.get(name);
-      if (why2 !== void 0) return `reads "${name}", which ${why2}`;
+      const why = basis.projections.get(name);
+      if (why !== void 0) return `reads "${name}", which ${why}`;
     }
   }
   return null;
@@ -60312,18 +60291,18 @@ function foldProjections(config) {
     grew = false;
     for (const [name, decl] of declared) {
       if (decl.kind !== "template" || projections.has(name)) continue;
-      const why2 = instantRead(decl.template, basis);
-      if (why2 !== null) {
-        projections.set(name, why2);
+      const why = instantRead(decl.template, basis);
+      if (why !== null) {
+        projections.set(name, why);
         grew = true;
       }
     }
     for (const slot of EXPRESSION_SLOTS) {
       if (slotReads.has(slot)) continue;
       for (const rule of rules[slot]) {
-        const why2 = instantRead(rule, basis);
-        if (why2 === null) continue;
-        slotReads.set(slot, why2);
+        const why = instantRead(rule, basis);
+        if (why === null) continue;
+        slotReads.set(slot, why);
         grew = true;
         break;
       }
@@ -60332,9 +60311,9 @@ function foldProjections(config) {
       const at = payloadPathOf(name, decl);
       if (at === void 0 || projections.has(name)) continue;
       const slot = slotAt(at);
-      const why2 = slot === void 0 ? void 0 : slotReads.get(slot);
-      if (why2 === void 0) continue;
-      projections.set(name, `reads the ${slot} rule, which ${why2}`);
+      const why = slot === void 0 ? void 0 : slotReads.get(slot);
+      if (why === void 0) continue;
+      projections.set(name, `reads the ${slot} rule, which ${why}`);
       grew = true;
     }
   }
@@ -60704,7 +60683,7 @@ function fragmentOf(file, dir, id2, { source, json: json2 }, { checkout, home })
   const fail2 = () => {
     throw new ConfigError(file, issues);
   };
-  if (!isPlainObject2(json2)) {
+  if (!isPlainObject(json2)) {
     issues.push({
       path: "",
       message: `a plugin definition must be an object, got ${describeType(json2)}`
@@ -60988,7 +60967,7 @@ var BUILT_SOURCE = {
   read: { file: { json: true } }
 };
 function sourcesOf(sources, dir, issues) {
-  if (!isPlainObject2(sources)) {
+  if (!isPlainObject(sources)) {
     issues.push({
       path: "sources",
       message: `"sources" must be an object of named sources, got ${describeType(sources)}`
@@ -61038,7 +61017,7 @@ function sourceFileOf(source) {
   return import_node_path5.default.join(source.storage, sessionFileName("<session id>"));
 }
 function unbuilt(authored, built, at) {
-  if (!isPlainObject2(built) || !isPlainObject2(authored)) {
+  if (!isPlainObject(built) || !isPlainObject(authored)) {
     return JSON.stringify(authored) === JSON.stringify(built) ? [] : [{ field: at, is: `is ${JSON.stringify(authored)}` }];
   }
   return [
@@ -61054,7 +61033,7 @@ function dataPathOf(data, file, checkout, home, issues) {
   if (typeof data === "string" && data !== "") {
     return resolveUserPath(import_node_path5.default.dirname(file), data, home);
   }
-  if (isPlainObject2(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
+  if (isPlainObject(data) && Object.keys(data).length === 1 && typeof data.checkout === "string" && data.checkout !== "") {
     const rel = data.checkout;
     if (import_node_path5.default.isAbsolute(rel) || rel.startsWith("~") || import_node_path5.default.normalize(rel).split(import_node_path5.default.sep)[0] === "..") {
       issues.push({
@@ -61066,13 +61045,13 @@ function dataPathOf(data, file, checkout, home, issues) {
     if (checkout === null) {
       issues.push({
         path: "data.checkout",
-        message: `data is read from the session's checkout, and this load has no session`
+        message: `data is read from the session's checkout, and this load has no usable checkout root`
       });
       return void 0;
     }
     return import_node_path5.default.resolve(checkout.root, rel);
   }
-  if (isPlainObject2(data) && "project" in data) {
+  if (isPlainObject(data) && "project" in data) {
     issues.push({
       path: "data.project",
       message: `data: { project } is now data: { checkout }: the same path, relative to the root of the git checkout the session works in (a linked worktree is its own checkout)`
@@ -61194,11 +61173,9 @@ function validateCrossReferences(ctx, cfg, authored, presence2) {
     }
     for (const [id2, nodes] of byId) {
       if (nodes.length < 2) continue;
-      const seg2 = nodes[1].name;
-      const free = mintPlacementId(seg2, new Set(byId.keys()), randomSuffix);
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg2}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id2}" \u2014 an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each placement a distinct id. A placement without an "id" takes its segment's name.`,
         line: layoutLine
       });
     }
@@ -61486,11 +61463,11 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
   if (!hasCacheField(v)) return;
   const line = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
   if ("key" in v.cache) {
-    const why2 = instantReadOf(v.cache.key, cfg);
-    if (why2 !== null) {
+    const why = instantReadOf(v.cache.key, cfg);
+    if (why !== null) {
       ctx.issues.push({
         path: `${declPath}.cache.key`,
-        message: `cache.key ${why2}: ${INSTANT_POLICY}`,
+        message: `cache.key ${why}: ${INSTANT_POLICY}`,
         line: line("key")
       });
     }
@@ -61498,11 +61475,11 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
   if ("depends_on" in v.cache) {
     const projections = projectionsOf(cfg);
     v.cache.depends_on.forEach((target, i2) => {
-      const why2 = projections.get(target);
-      if (why2 === void 0) return;
+      const why = projections.get(target);
+      if (why === void 0) return;
       ctx.issues.push({
         path: `${declPath}.cache.depends_on[${i2}]`,
-        message: `cache.depends_on names "${target}", which ${why2}: ${INSTANT_POLICY}`,
+        message: `cache.depends_on names "${target}", which ${why}: ${INSTANT_POLICY}`,
         line: line("depends_on")
       });
     });
@@ -61540,12 +61517,12 @@ function checkRuleSlotReads(ctx, cfg) {
     return null;
   };
   for (const { at, rule } of authoredRules(cfg)) {
-    const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
-    if (why2 === null) continue;
+    const why = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
+    if (why === null) continue;
     const path31 = at.join(".");
     ctx.issues.push({
       path: path31,
-      message: `${path31} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
+      message: `${path31} ${why}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
       line: findKeyLine(ctx.source, [...at])
     });
   }
@@ -62029,14 +62006,15 @@ var PROJECT_BASES = {
 function xdgConfigBase(locs) {
   return import_node_path6.default.join(locs.configHome, "cc-candybar", "config");
 }
+var admitsLayer = (project, role) => role === "user" || project.approved !== null;
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
 function userConfigDefault(locs) {
   return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
 function chainPlaces(resolved, locations2) {
   return LAYER_ROLES.flatMap((role) => {
+    if (!admitsLayer(resolved.project, role)) return [];
     if (role === "user") return [{ path: resolved.home, role }];
-    if (resolved.repos.plugins === null) return [];
     const place = resolved.layers.find((layer) => layer.role === role)?.path ?? locations2.find((location) => location.role === role)?.candidates[0]?.file;
     return place === void 0 ? [] : [{ path: place, role }];
   });
@@ -62334,14 +62312,14 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
           return { ...acc, taken: [...acc.taken, cell3] };
         } catch (err) {
           if (!(err instanceof ConfigError)) throw err;
-          const why2 = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
+          const why = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
           return {
             ...acc,
             refused: [
               ...acc.refused,
               insertNotice(
                 cell3,
-                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why2}`
+                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why}`
               )
             ]
           };
@@ -62496,7 +62474,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     ...payloadDeclarationNotices(
       filePath2,
       source,
-      isPlainObject2(json2) && isPlainObject2(json2.variables) ? Object.keys(json2.variables) : []
+      isPlainObject(json2) && isPlainObject(json2.variables) ? Object.keys(json2.variables) : []
     )
   ];
   const issues = [];
@@ -62508,7 +62486,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
     unplaced: [],
     inherited: []
   };
-  if (!isPlainObject2(json2)) {
+  if (!isPlainObject(json2)) {
     throw new ConfigError(
       filePath2,
       [
@@ -62522,7 +62500,7 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
   }
   const { inherited, layer } = under2(
     json2.plugins === void 0 ? [] : validatePluginRefs({ ...ctx, issues: [] }, json2.plugins) ?? [],
-    isPlainObject2(json2.segments) ? Object.keys(json2.segments) : []
+    isPlainObject(json2.segments) ? Object.keys(json2.segments) : []
   );
   const raw = validateTopLevel(
     ctx,
@@ -64100,14 +64078,14 @@ function spelled(e, name) {
   }
 }
 var SETTING_ROWS = Object.entries(SETTINGS);
-var SETTING_KEYS = new Set(
+var SETTING_KEYS2 = new Set(
   SETTING_PROJECTIONS.map((p2) => p2.sessionKey)
 );
 var NOT_CUSTOMIZED = () => false;
 function sessionGlobals(config, sessionPick) {
   return resolveEffectiveGlobals(
     config,
-    (key) => SETTING_KEYS.has(key) ? sessionPick(key) : null,
+    (key) => SETTING_KEYS2.has(key) ? sessionPick(key) : null,
     NOT_CUSTOMIZED
   );
 }
@@ -64280,6 +64258,9 @@ function fileHeldSettings(raw) {
     )
   );
 }
+function unsavedCount(config, sessionPick) {
+  return settingDrafts(config, sessionPick).length + placementDrafts(config, sessionPick).length;
+}
 function settingCounts(config, fileHeld, sessionPick) {
   const drafts = settingDrafts(config, sessionPick);
   const drafted = new Set(drafts.map((d) => d.configKey));
@@ -64288,7 +64269,7 @@ function settingCounts(config, fileHeld, sessionPick) {
   );
   const themeDefault = themeDefaultSave(config, sessionPick);
   return {
-    unsaved: drafts.length + placementDrafts(config, sessionPick).length,
+    unsaved: unsavedCount(config, sessionPick),
     resettable,
     themeDefault: themeDefault.kind === "look" && themeDefault.differs ? { differs: true, theme: themeDefault.theme } : { differs: false }
   };
@@ -64722,8 +64703,8 @@ var PENDINGS = {
   unread: Object.freeze({ kind: "pending", why: "unread" }),
   superseded: Object.freeze({ kind: "pending", why: "superseded" })
 };
-function pendingOf(why2) {
-  return PENDINGS[why2];
+function pendingOf(why) {
+  return PENDINGS[why];
 }
 function isPending(value) {
   return typeof value === "object" && value !== null && value.kind === "pending";
@@ -65049,24 +65030,19 @@ var VariableStore = class {
   getKind(name) {
     return this.requireNode(name).kind;
   }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
+  // [LAW:one-source-of-truth] A dependant sees the same change a node's own
+  // observers see, with pending blocking a first run and failures counting
+  // as changes. A document key uses the store's own structural comparison.
   changeKey(name) {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(["document", documentKey(doc)]);
     }
     try {
-      return ok(String(node.read()));
+      return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }
   // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
@@ -65626,11 +65602,11 @@ var SourceRegistry = class _SourceRegistry {
       reaction(
         () => this.inputs.get().env(envVar),
         (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
+          this.noteOutcome(name, fact, `env var "${envVar}" is not set`);
+          this.store.setBox(
+            name,
+            fact.kind === "pending" ? fact : orElse(fact, fallback)
+          );
         },
         { fireImmediately: true }
       )
@@ -65969,7 +65945,7 @@ var SourceRegistry = class _SourceRegistry {
       case "depends_on": {
         return this.answeredUnder(name, () => {
           const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value)) : pendingOf("unread");
         });
       }
     }
@@ -65997,7 +65973,7 @@ var SourceRegistry = class _SourceRegistry {
     return () => {
       const now2 = answer2.get();
       if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last2)) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
     };
   }
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -66040,14 +66016,15 @@ var SourceRegistry = class _SourceRegistry {
         });
     });
   }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
+  // [LAW:single-enforcer] The one fold from a source reading to the
+  // variable's error record. A pending or successful read ends an old error.
+  noteOutcome(name, outcome, absentReason = "no value") {
+    if (outcome.kind === "ok" || outcome.kind === "pending")
+      this.lastErrors.delete(name);
     else
       this.recordError(
         name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
+        outcome.kind === "failed" ? outcome.reason : absentReason
       );
   }
 };
@@ -66298,6 +66275,46 @@ function withStyle(frag, style) {
 
 // src/render/action.ts
 init_globals();
+
+// src/config/layout-ops.ts
+init_globals();
+function encodeLayoutOp(op) {
+  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
+}
+function decodeLayoutOp(token) {
+  const parts = token.split(":");
+  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
+    return { op: "remove", target: parts[1] };
+  }
+  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
+    return {
+      op: "insert",
+      segment: parts[1],
+      anchor: parts[2],
+      relation: parts[3]
+    };
+  }
+  return null;
+}
+function mintPlacement(segment, anchor, trees, suffix) {
+  const taken2 = new Set(
+    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
+  );
+  return { seg: segment, id: mintPlacementId(segment, taken2, suffix) };
+}
+var randomSuffix = () => randomBytes(3).toString("hex");
+var MINT_TRIES = 16;
+function mintPlacementId(segment, taken2, suffix) {
+  for (let tries = 0; tries < MINT_TRIES; tries++) {
+    const id2 = `${segment}-${suffix()}`;
+    if (!taken2.has(id2)) return id2;
+  }
+  throw new Error(
+    `no free id for a placement of "${segment}" after ${MINT_TRIES} suffixes`
+  );
+}
+
+// src/render/action.ts
 function renderBinding(runtime, reader) {
   if (runtime.bound === void 0) {
     throw new Error(
@@ -70282,17 +70299,21 @@ function renderCacheBudget(memoryLimitBytes2) {
   );
 }
 var MAX_ENTRIES = 256;
-function chainOf(snapshot, locs) {
-  const { chain: chain2 } = snapshot;
+var MAX_UNPINNED_FAILURES = 256;
+function configPaths(snapshot) {
+  return snapshot.chain.flatMap(
+    ({ path: path31, content }) => content.kind === "text" ? [path31] : []
+  );
+}
+function configFiles(chain2) {
+  const textPath = (role) => {
+    const layer = layerForRole(chain2, role);
+    return layer?.content.kind === "text" ? layer.path : null;
+  };
   return {
-    // [LAW:one-source-of-truth] The files reported are the files merged: a
-    // layer not written or not read is no layer of the load.
-    layers: chain2.filter((l) => l.content.kind === "text").map((l) => ({ path: l.path, role: l.role })),
-    // Every chain holds the user layer: it is the one no answer gates.
-    home: layerForRole(chain2, "user").path,
-    writable: chain2.filter((l) => writable(l.content)).map((l) => l.role),
-    snapshot,
-    locs
+    user: textPath("user"),
+    project: textPath("project"),
+    writable: chain2.filter(({ content }) => writable(content)).map(({ role }) => role)
   };
 }
 function pluginLoadLine(layers, {
@@ -70317,7 +70338,8 @@ function pluginLoadLine(layers, {
 }
 function configLoadedLine(entry, cause, settled3) {
   const { repo: repo2 } = entry.snapshot;
-  return `config loaded projectDir=${valueOf(entry.projectDir)} cwd=${valueOf(entry.cwd)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
+  const { projectDir, cwd: cwd2 } = entry.origin;
+  return `config loaded projectDir=${valueOf(projectDir)} cwd=${valueOf(cwd2)} cause=${cause.kind} state=${settled3} files=${valueOf(chainName(entry.configLayers, "<bundled default>"))} repo=${repo2 === null ? "-" : valueOf(`${repo2.standing}:${repo2.dir}`)} unproven=${repo2?.unproven == null ? "-" : JSON.stringify(repo2.unproven)} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warnings=${entry.lastWarnings.length === 0 ? "none" : JSON.stringify(entry.lastWarnings)}`;
 }
 function configDisposeLine(teardown, released) {
   return `config disposed reason=${teardown.reason} released=${released} held=${teardown.held}`;
@@ -70339,19 +70361,10 @@ function plugins(p2) {
   };
 }
 function loadKey(inputs) {
-  const { loaded, chain: chain2 } = inputs;
+  const { loaded } = inputs;
   return digestOf({
     cwd: inputs.cwd,
-    chain: {
-      layers: chain2.layers,
-      home: chain2.home,
-      writable: chain2.writable,
-      // Not keyed: its texts reach the state only through `loaded`, keyed
-      // below, where a whitespace or comment edit moves nothing; its paths
-      // are `layers`.
-      snapshot: null,
-      locs: chain2.locs
-    },
+    files: inputs.files,
     loaded: {
       layers: loaded.layers.map(
         (l) => ({
@@ -70391,18 +70404,15 @@ function declaredSources(config) {
     if (decl.kind === "source") sources.set(name, decl.storage);
   return sources;
 }
-function resolveLoad(cwd2, chain2) {
+function resolveLoad(cwd2, snapshot, home) {
   const warnings = [];
   try {
-    const loaded = loadSnapshot(
-      chain2.snapshot,
-      chain2.locs.home,
-      DEFAULT_DSL_CONFIG,
-      { warned: (w) => warnings.push(...w) }
-    );
+    const loaded = loadSnapshot(snapshot, home, DEFAULT_DSL_CONFIG, {
+      warned: (w) => warnings.push(...w)
+    });
     const inputs = {
       cwd: cwd2,
-      chain: chain2,
+      files: configFiles(snapshot.chain),
       loaded,
       sources: declaredSources(loaded.config)
     };
@@ -70413,12 +70423,11 @@ function resolveLoad(cwd2, chain2) {
   }
 }
 function buildRenderState(load, deps) {
-  const { cwd: cwd2, chain: chain2, loaded } = load;
+  const { cwd: cwd2, files, loaded } = load;
   const { layers, config, installed, dropped } = loaded;
   const merged = layers.at(-1)?.config ?? DEFAULT_DSL_CONFIG;
-  const homeRaw = layers.find((l) => l.path === chain2.home)?.raw ?? {};
-  const projectPath = layerForRole(chain2.snapshot.chain, "project")?.path;
-  const projectRaw = layers.find((layer) => layer.path === projectPath)?.raw;
+  const userRaw = layers.find(({ path: path31 }) => path31 === files.user)?.raw ?? {};
+  const projectRaw = layers.find(({ path: path31 }) => path31 === files.project)?.raw;
   const inserted = layers.flatMap(
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
@@ -70461,10 +70470,10 @@ function buildRenderState(load, deps) {
       registry,
       compiled: registration.compiled,
       // What the menu's resets clear is the user layer's: they name no other.
-      authoredRoots: authoredRoots(merged, homeRaw),
-      fileHeldSettings: fileHeldSettings(homeRaw),
-      configPath: chain2.layers.some((l) => l.path === chain2.home) ? chain2.home : null,
-      writable: chain2.writable,
+      authoredRoots: authoredRoots(merged, userRaw),
+      fileHeldSettings: fileHeldSettings(userRaw),
+      configPath: files.user,
+      writable: files.writable,
       remainingLanes: laneDefaultsAfterReset(
         config,
         loaded.base,
@@ -70495,14 +70504,10 @@ function buildRenderState(load, deps) {
     }
   };
 }
-function settle(chain2, resolveWarnings, attempt4) {
-  const common = {
-    // [LAW:one-source-of-truth] The files reported are the chain loaded.
-    layers: chain2.layers.map((l) => l.path),
-    home: chain2.home
-  };
+function settle(snapshot, resolveWarnings, attempt4) {
+  const layers = configPaths(snapshot);
   const warnings = (own2) => [
-    ...chain2.snapshot.notices,
+    ...snapshot.notices,
     ...resolveWarnings,
     ...own2
   ];
@@ -70510,7 +70515,7 @@ function settle(chain2, resolveWarnings, attempt4) {
     case "built":
     case "kept":
       return {
-        ...common,
+        layers,
         kind: attempt4.kind,
         warnings: warnings(attempt4.state.buildWarnings),
         state: attempt4.state,
@@ -70518,7 +70523,7 @@ function settle(chain2, resolveWarnings, attempt4) {
       };
     case "failed":
       return {
-        ...common,
+        layers,
         kind: "failed",
         warnings: warnings(attempt4.warnings),
         state: null,
@@ -70527,27 +70532,14 @@ function settle(chain2, resolveWarnings, attempt4) {
       };
   }
 }
-function loadChain(cwd2, chain2, deps, served = null) {
-  const resolved = resolveLoad(cwd2, chain2);
-  if (resolved.kind === "failed") {
-    return settle(chain2, [], resolved);
-  }
-  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
-  return settle(chain2, resolved.warnings, attempt4);
-}
 function loadOrigin(cwd2, snapshot, deps, served = null) {
-  return loadChain(cwd2, chainOf(snapshot, deps.locations), deps, served);
+  const resolved = resolveLoad(cwd2, snapshot, deps.locations.home);
+  if (resolved.kind === "failed") return settle(snapshot, [], resolved);
+  const attempt4 = served?.loadKey === resolved.key ? { kind: "kept", state: served } : buildRenderState(resolved, deps);
+  return settle(snapshot, resolved.warnings, attempt4);
 }
 function fallbackState(cwd2, snapshot, deps) {
-  const resolved = resolveLoad(cwd2, {
-    layers: [],
-    home: "",
-    // The fallback has no loaded chain for its writer to prove.
-    writable: [],
-    snapshot: { ...snapshot, chain: [] },
-    locs: deps.locations
-  });
-  const built = resolved.kind === "failed" ? resolved : buildRenderState(resolved, deps);
+  const built = loadOrigin(cwd2, { ...snapshot, chain: [] }, deps);
   if (built.kind === "failed")
     throw new Error(`bundled default failed to load: ${thrown(built.cause)}`, {
       cause: built.cause
@@ -70576,11 +70568,11 @@ function openView(state, cwd2, facts, {
   configAccess = () => ({ kind: "available", roles: state.writable })
 }, currentRequest) {
   const sessionId2 = facts.hookData.session_id;
-  const registry = state.registry.view();
-  declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
   const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
+  const registry = state.registry.view();
   let source;
   try {
+    declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
     source = sourceOf({
       sessionId: sessionId2,
       state,
@@ -70588,11 +70580,11 @@ function openView(state, cwd2, facts, {
       requested: request2.read,
       configAccess
     });
+    bindView(state.compiled, registry.variableStore, registry, source);
   } catch (e) {
     registry.dispose();
     throw e;
   }
-  bindView(state.compiled, registry.variableStore, registry, source);
   const stopChanged = reaction(
     () => [
       source.payload(),
@@ -70680,10 +70672,8 @@ var RenderCache = class {
   // long as the feed is open. The collector asks the feeds themselves whether
   // a session is watched before it retires one.
   pins = /* @__PURE__ */ new Map();
-  // [LAW:no-silent-failure] Each session whose view last failed to open, by
-  // the error, until a view opens for it: a frame draws that error, never the
-  // last bar it pushed. Written only by `opened`, which sets either this or
-  // the session's view, never both.
+  // [LAW:no-silent-failure] A frame sees the opening's error while the view
+  // is absent. An open feed keeps the entry eligible for a config retry.
   openFailures = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
@@ -70707,7 +70697,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] A `config` turn: what discovery found at `origin`
   // now. Its entry, when it has one, reloads from it unless it digests as the
   // one the entry last loaded, and a reload whose load inputs did not move
-  // keeps the state it serves (`loadChain`).
+  // keeps the state it serves (`loadOrigin`).
   configure(origin, snapshot) {
     if (this.closed) throw new Error("render cache used after close");
     const key = originKey(origin);
@@ -70772,17 +70762,16 @@ var RenderCache = class {
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    const { projectDir, cwd: cwd2 } = origin;
     const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
-    const loaded = this.load(cwd2, snapshot, null);
+    const { projectDir, cwd: cwd2 } = origin;
+    const loaded = this.load(origin, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     const entry = {
       origin,
-      projectDir,
-      cwd: cwd2,
-      configFile: origin.target.path,
-      configLayers: loaded.layers,
+      get configLayers() {
+        return configPaths(this.snapshot);
+      },
       snapshot,
       digest: digest2,
       lastError: loaded.error,
@@ -70854,11 +70843,12 @@ var RenderCache = class {
   // view now so pushed frames and click validation see the same draft.
   refreshEditedView(sessionId2) {
     const view = this.views.get(sessionId2);
-    if (view === void 0) return;
-    const { origin } = this.leaseOf(view).entry;
-    const requested = view.facts();
+    const previous2 = view !== void 0 ? { entry: this.leaseOf(view).entry, requestOf: view.facts } : this.pinnedFailure(sessionId2);
+    if (previous2 === void 0) return;
+    const { origin } = previous2.entry;
+    const requested = previous2.requestOf(sessionId2);
     const entry = this.getOrCreate(origin, sessionId2);
-    if (this.views.get(sessionId2)?.state !== entry.state)
+    if (entry !== previous2.entry)
       this.viewOf(entry, entry.state, requested, "reload");
     if (this.deps.editSnapshot?.(origin, sessionId2) == null)
       this.dropDraft(sessionId2);
@@ -70907,6 +70897,19 @@ var RenderCache = class {
   openFailure(sessionId2) {
     return this.openFailures.get(sessionId2) ?? null;
   }
+  pinnedFailure(sessionId2) {
+    return this.pins.has(sessionId2) ? this.openFailures.get(sessionId2) : void 0;
+  }
+  // [LAW:carrying-cost] Open feeds own their failures. Inactive errors keep
+  // only the latest bounded set, including after the last feed unpins.
+  trimOpenFailures() {
+    if (this.openFailures.size <= MAX_UNPINNED_FAILURES) return;
+    const idle = [...this.openFailures.keys()].filter(
+      (sid) => !this.pins.has(sid)
+    );
+    for (const sid of idle.slice(0, -MAX_UNPINNED_FAILURES))
+      this.openFailures.delete(sid);
+  }
   // [LAW:no-ambient-temporal-coupling] An open feed's pin on its session,
   // from the feed's open to its close (src/daemon/frame-feed.ts). Keyed by
   // session, so it follows the view wherever a request or a reload moves it.
@@ -70918,7 +70921,10 @@ var RenderCache = class {
       released = true;
       const left = (this.pins.get(sessionId2) ?? 0) - 1;
       if (left > 0) this.pins.set(sessionId2, left);
-      else this.pins.delete(sessionId2);
+      else {
+        this.pins.delete(sessionId2);
+        this.trimOpenFailures();
+      }
     };
   }
   // The session's view of `state`: the one it has, or a new one replacing it.
@@ -70946,12 +70952,13 @@ var RenderCache = class {
   // the budget, once however many it opens.
   opened(entry, state, facts, by) {
     const sessionId2 = facts.hookData.session_id;
+    const { cwd: cwd2 } = entry.origin;
+    const { currentRequest } = this.deps;
     let view;
     try {
-      const { currentRequest } = this.deps;
       view = openView(
         state,
-        entry.cwd,
+        cwd2,
         facts,
         {
           source: this.deps.source,
@@ -70962,7 +70969,13 @@ var RenderCache = class {
         currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
       );
     } catch (error) {
-      this.openFailures.set(sessionId2, { error });
+      this.openFailures.delete(sessionId2);
+      this.openFailures.set(sessionId2, {
+        entry,
+        requestOf: currentRequest ?? (() => facts),
+        error
+      });
+      this.trimOpenFailures();
       throw error;
     }
     this.openFailures.delete(sessionId2);
@@ -70970,7 +70983,7 @@ var RenderCache = class {
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
-      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${entry.cwd} views=${this.views.size}`
+      `session view opened sid=${JSON.stringify(sessionId2)} by=${by} cwd=${cwd2} views=${this.views.size}`
     );
     return view;
   }
@@ -71081,9 +71094,9 @@ var RenderCache = class {
   // `config` turn after the close.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(cwd2, snapshot, served) {
+  load(origin, snapshot, served) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(cwd2, snapshot, this.deps, served);
+    return loadOrigin(origin.cwd, snapshot, this.deps, served);
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
   // snapshot the host handed in for its origin. None is an event the renderer
@@ -71105,6 +71118,8 @@ var RenderCache = class {
   // serving it, and its state is retired.
   drop(key, entry, reason) {
     this.entries.delete(key);
+    for (const [session, failure2] of this.openFailures)
+      if (failure2.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
   }
   get stats() {
@@ -71140,8 +71155,8 @@ var RenderCache = class {
     const fits2 = () => this.entries.size <= this.maxEntries && this.accountedBytes() <= this.budgetBytes();
     const pinned = new Set(
       [...this.pins.keys()].flatMap((sessionId2) => {
-        const view = this.views.get(sessionId2);
-        return view === void 0 ? [] : [view.state];
+        const state = this.views.get(sessionId2)?.state ?? this.openFailures.get(sessionId2)?.entry.state;
+        return state === void 0 ? [] : [state];
       })
     );
     for (const [key, evicted] of this.entries) {
@@ -71190,21 +71205,25 @@ var RenderCache = class {
   retire(state, reason, successor) {
     for (const view of [...this.views.values()]) {
       if (view.state !== state) continue;
-      if (successor !== null) {
-        try {
-          this.opened(successor.entry, successor.state, view.facts(), "reload");
-        } catch (e) {
-          this.log(
-            "error",
-            `session view reopen failed sid=${JSON.stringify(view.sessionId)}: ${String(e)}`
-          );
-        }
-      }
+      if (successor !== null)
+        this.reopen(successor, view.sessionId, view.facts);
       this.retireView(view, reason);
     }
     const hold2 = this.holdOf(state);
     hold2.retired = { reason, held: hold2.holders };
     this.reclaim(state, hold2);
+  }
+  // [LAW:single-enforcer] A reload opens a successor once. A failed opening
+  // remains visible to its feed and leaves the other sessions recoverable.
+  reopen(entry, session, requestOf) {
+    try {
+      this.opened(entry, entry.state, requestOf(session), "reload");
+    } catch (error) {
+      this.log(
+        "error",
+        `session view reopen failed sid=${JSON.stringify(session)}: ${String(error)}`
+      );
+    }
   }
   // [LAW:single-enforcer] The one place a state is disposed: once it is
   // retired AND unheld, from whichever of the two transitions came last. The
@@ -71239,12 +71258,17 @@ var RenderCache = class {
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
   reloadInto(entry, { snapshot, digest: digest2 }, cause) {
-    const sessions = this.sessionsOn(entry);
+    const retry = [...this.openFailures].filter(
+      ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
+    );
+    const sessions = [
+      ...this.sessionsOn(entry),
+      ...retry.map(([session]) => session)
+    ];
     const served = entry.state;
-    const loaded = this.load(entry.cwd, snapshot, served);
+    const loaded = this.load(entry.origin, snapshot, served);
     entry.snapshot = snapshot;
     entry.digest = digest2;
-    entry.configLayers = loaded.layers;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
@@ -71256,8 +71280,10 @@ var RenderCache = class {
       this.serve(loaded.state);
     }
     this.holdFolders(entry.state);
-    if (loaded.kind === "built")
-      this.retire(served, "reload", { entry, state: loaded.state });
+    if (loaded.kind === "built") this.retire(served, "reload", entry);
+    if (loaded.state !== null)
+      for (const [session, failure2] of retry)
+        this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
     this.observers.onReload?.(entry, sessions, cause, loaded.kind);
   }
@@ -72492,10 +72518,10 @@ var Refreshes = class {
     if (outcome.kind === "failed") this.tally.failures++;
     const failure2 = outcome.kind === "failed";
     if (!failure2 && !this.lines.has(by)) return;
-    const why2 = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    const why = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure2 ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`
     );
   }
   // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
@@ -73039,7 +73065,7 @@ function sourceSummaryOf(names, runs, facts) {
 function sourceFieldsOf(summary) {
   return {
     sources: String(summary.count),
-    sourcesPending: summary.pending.map(({ name, why: why2 }) => `${name}:${why2}`).join(",") || "-",
+    sourcesPending: summary.pending.map(({ name, why }) => `${name}:${why}`).join(",") || "-",
     sourcesFailed: summary.failed.join(",") || "-"
   };
 }
@@ -73225,15 +73251,11 @@ function clickErrorAt(state, sessionId2, at, render3) {
   return kind === "over" ? { kind } : { kind, error: last2 };
 }
 function recordOf(raw) {
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { text: text4, at, answered } = value;
-  return typeof text4 === "string" && typeof at === "number" && (answered === void 0 || typeof answered === "boolean") ? { text: text4, at, answered: answered === true } : null;
+  const value = JSON.parse(raw);
+  const { text: text4, at, answered } = value ?? {};
+  if (typeof text4 !== "string" || typeof at !== "number" || typeof answered !== "boolean")
+    throw new Error(`click error record ${raw} is not one this build writes`);
+  return { text: text4, at, answered };
 }
 
 // src/daemon/foundations/request-event.ts
@@ -74571,37 +74593,165 @@ var ConfigWrites = class {
   }
 };
 
-// src/renderer-interface/history-storage.ts
+// src/renderer/navigation-history.ts
 init_globals();
-function isChange(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  const state = (x) => x === null || typeof x === "string";
-  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
+function followedBy(timeline, visit) {
+  const visits = [...timeline.visits.slice(0, timeline.cursor), visit].slice(
+    -MAX_VISITS
+  );
+  return { visits, cursor: visits.length };
 }
-function isSteps(v) {
-  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
+var EMPTY2 = { visits: [], cursor: 0 };
+var MAX_VISITS = 20;
+var MAX_SESSIONS3 = 32;
+var menuKeys = /* @__PURE__ */ new WeakMap();
+function capture2(store, sid, { gate: gate2 }) {
+  let keys2 = menuKeys.get(gate2);
+  if (keys2 === void 0) {
+    keys2 = gate2.listKeys().filter(isNavigationKey);
+    menuKeys.set(gate2, keys2);
+  }
+  const values2 = /* @__PURE__ */ new Map();
+  for (const key of keys2) {
+    const value = store.get(sid, key);
+    if (value !== null) values2.set(key, value);
+  }
+  return { values: values2 };
 }
-function parseSessionHistory(v) {
-  if (!isPlainObject2(v)) return { kind: "failed", reason: "is not an object" };
-  if (!isSteps(v.past))
-    return {
-      kind: "failed",
-      reason: "has a 'past' that is not a list of steps"
+function movedKeys(from, to) {
+  return [.../* @__PURE__ */ new Set([...from.values.keys(), ...to.values.keys()])].filter(
+    (key) => from.values.get(key) !== to.values.get(key)
+  );
+}
+function previous(timeline, current, context) {
+  const invalid = /* @__PURE__ */ new Set();
+  const values2 = new Map(current.values);
+  let destination = null;
+  let depth = 0;
+  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
+    const visit = timeline.visits[cursor];
+    const keys2 = movedKeys(visit.from, visit.to);
+    const step4 = keys2.flatMap((key) => {
+      const from = visit.from.values.get(key);
+      const to = visit.to.values.get(key);
+      return from === to ? [] : [{ key, from, to }];
+    });
+    if (step4.length === 0 || !step4.every(
+      ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
+    )) {
+      invalid.add(visit);
+      continue;
+    }
+    for (const { key, from } of step4) {
+      if (from === void 0) values2.delete(key);
+      else values2.set(key, from);
+    }
+    destination ??= { values: new Map(values2) };
+    depth++;
+  }
+  return { destination, depth, invalid };
+}
+var NavigationHistory = class {
+  timelines = observable.map(void 0, {
+    deep: false
+  });
+  depth(sessionId2, store, context) {
+    const timeline = this.timelines.get(sessionId2);
+    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
+  }
+  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
+  // cursor are staged alongside the click's settings. A guarded write that
+  // does not land publishes neither.
+  begin(store, choose) {
+    const before = /* @__PURE__ */ new Map();
+    const next2 = /* @__PURE__ */ new Map();
+    const ended = /* @__PURE__ */ new Map();
+    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY2;
+    const endVisit = (sid) => {
+      const start = before.get(sid);
+      if (start === void 0) return;
+      before.delete(sid);
+      const visit = {
+        from: start.view,
+        to: capture2(store, sid, start.context)
+      };
+      if (movedKeys(visit.from, visit.to).length === 0) return;
+      ended.set(sid, visit);
+      next2.set(sid, followedBy(timelineOf(sid), visit));
     };
-  if (!isSteps(v.future))
     return {
-      kind: "failed",
-      reason: "has a 'future' that is not a list of steps"
+      choose: (sid, writes, contextOf) => {
+        if (!before.has(sid) && writes.some(({ key }) => isNavigationKey(key))) {
+          const context = contextOf();
+          before.set(sid, { view: capture2(store, sid, context), context });
+        }
+        choose(sid, writes);
+      },
+      back: (sid, context) => {
+        endVisit(sid);
+        const timeline = timelineOf(sid);
+        const at = capture2(store, sid, context);
+        const { destination, invalid } = previous(timeline, at, context);
+        const discarded = invalid.size;
+        const cursor = Math.max(0, timeline.cursor - discarded - 1);
+        next2.set(sid, {
+          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
+          cursor
+        });
+        if (destination === null)
+          throw new BadVerbArgs(
+            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
+          );
+        const writes = movedKeys(at, destination).map((key) => ({
+          key,
+          value: destination.values.get(key) ?? null
+        }));
+        runInAction(() => {
+          store.setBatch(
+            sid,
+            writes.flatMap(
+              ({ key, value }) => value === null ? [] : [{ key, value }]
+            )
+          );
+          for (const { key, value } of writes)
+            if (value === null) store.clear(sid, key);
+        });
+        return { writes, discarded };
+      },
+      commit: () => {
+        for (const sid of before.keys()) endVisit(sid);
+        this.publish(next2);
+        next2.clear();
+        return ended;
+      }
     };
-  return { kind: "ok", value: { past: v.past, future: v.future } };
-}
-var holdsNothing = ({ past, future }) => past.length + future.length === 0;
-var SETTING_SESSION_KEYS = new Set(
-  SETTING_PROJECTIONS.map((s) => s.sessionKey)
-);
-var isSettingKey = (key) => SETTING_SESSION_KEYS.has(key);
-var isEditSettingKey = (key) => isSettingKey(key) || key.startsWith(PLACEMENT_DRAFT_NS);
+  }
+  // [LAW:one-source-of-truth] The visit of a click that ends an edit, as its
+  // writes land: outside the edit, without edit mode's keys, which end with
+  // it. Every other visit the edit held ends with it.
+  landOutsideEdit(visits) {
+    const outside = (view) => ({
+      values: new Map([...view.values].filter(([key]) => !isEditModeKey(key)))
+    });
+    const next2 = /* @__PURE__ */ new Map();
+    for (const [sid, visit] of visits) {
+      const landed = { from: outside(visit.from), to: outside(visit.to) };
+      if (movedKeys(landed.from, landed.to).length > 0)
+        next2.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY2, landed));
+    }
+    this.publish(next2);
+  }
+  publish(timelines) {
+    runInAction(() => {
+      for (const [sid, timeline] of timelines) {
+        this.timelines.delete(sid);
+        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
+      }
+      while (this.timelines.size > MAX_SESSIONS3)
+        this.timelines.delete(this.timelines.keys().next().value);
+    });
+  }
+};
 
 // src/renderer/settings-history.ts
 init_globals();
@@ -74766,27 +74916,51 @@ var SessionState = class {
   }
 };
 
+// src/renderer-interface/history-storage.ts
+init_globals();
+function isChange(v) {
+  if (v === null || typeof v !== "object") return false;
+  const o = v;
+  const state = (x) => x === null || typeof x === "string";
+  return (o.kind === "session" && typeof o.key === "string" || o.kind === "layer" && layerRoleOf(o.role) !== null && typeof o.digest === "string") && state(o.before) && state(o.after);
+}
+function isSteps(v) {
+  return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
+}
+function parseSessionHistory(v) {
+  if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
+  if (!isSteps(v.past))
+    return {
+      kind: "failed",
+      reason: "has a 'past' that is not a list of steps"
+    };
+  if (!isSteps(v.future))
+    return {
+      kind: "failed",
+      reason: "has a 'future' that is not a list of steps"
+    };
+  return { kind: "ok", value: { past: v.past, future: v.future } };
+}
+var holdsNothing = ({ past, future }) => past.length + future.length === 0;
+
 // src/renderer/settings-history.ts
 var MAX_STEPS = 50;
-var MAX_SESSIONS3 = 32;
+var MAX_SESSIONS4 = 32;
 var MAX_BYTES = 8 * 1024 * 1024;
-var EMPTY2 = { past: [], future: [] };
+var EMPTY3 = { past: [], future: [] };
 var identity = (c) => c.kind === "session" ? `session:${c.key}` : `layer:${c.role}:${c.digest}`;
 var SettingsHistory = class {
   // `loaded` is what the profile holds, oldest first, as the host handed it
-  // in: held to the same bounds as every step that lands. `records` is the
-  // session keys a step holds.
-  constructor(sessionState, logger, loaded = {}, records = isSettingKey) {
+  // in: held to the same bounds as every step that lands.
+  constructor(sessionState, logger, loaded = {}) {
     this.sessionState = sessionState;
     this.logger = logger;
-    this.records = records;
     this.adopt(
       new Map(Object.entries(loaded))
     );
   }
   sessionState;
   logger;
-  records;
   // [LAW:no-ambient-temporal-coupling] Observable, so a view's payload over a
   // session's depth (`↶`/`↷`) is recomputed in the turn a step lands — a
   // refused `↶` that drops steps included, which moves no pick. Per key: a
@@ -74827,7 +75001,7 @@ var SettingsHistory = class {
     };
   }
   history(sessionId2) {
-    return this.state.get(sessionId2) ?? EMPTY2;
+    return this.state.get(sessionId2) ?? EMPTY3;
   }
   begin(files) {
     const held = heldWrites(this.sessionState);
@@ -74850,7 +75024,7 @@ var SettingsHistory = class {
     };
     const sessionState = recordingView(
       held,
-      this.records,
+      isUndoStepKey,
       (sessionId2, key, before, after) => {
         note(sessionId2, { kind: "session", key, before, after });
       }
@@ -74894,7 +75068,7 @@ var SettingsHistory = class {
         const moved2 = new Map(working);
         working.clear();
         for (const [sessionId2, history] of moved2) this.put(sessionId2, history);
-        held.flush();
+        return held.flush();
       }
     };
   }
@@ -74996,7 +75170,7 @@ var SettingsHistory = class {
     this.state = next2;
   }
   bound(next2) {
-    while (next2.size > MAX_SESSIONS3 || weight(next2) > MAX_BYTES) {
+    while (next2.size > MAX_SESSIONS4 || weight(next2) > MAX_BYTES) {
       const [oldest, h] = next2.entries().next().value;
       if (next2.size > 1) {
         next2.delete(oldest);
@@ -75092,43 +75266,69 @@ function heldWrites(store) {
     },
     clear: (sessionId2, key) => put(sessionId2, key, null),
     // One transaction, so no observer sees half a click.
-    flush: () => runInAction(() => {
-      for (const [sessionId2, writes] of held) {
-        const sets = [...writes].flatMap(
-          ([key, value]) => value === null ? [] : [{ key, value }]
-        );
-        if (sets.length > 0) store.setBatch(sessionId2, sets);
-        for (const [key, value] of writes)
-          if (value === null) store.clear(sessionId2, key);
-      }
-      held.clear();
-    })
+    flush: () => {
+      const landed = new Map(held);
+      runInAction(() => {
+        for (const [sessionId2, writes] of held) {
+          const sets = [...writes].flatMap(
+            ([key, value]) => value === null ? [] : [{ key, value }]
+          );
+          if (sets.length > 0) store.setBatch(sessionId2, sets);
+          for (const [key, value] of writes)
+            if (value === null) store.clear(sessionId2, key);
+        }
+        held.clear();
+      });
+      return landed;
+    }
   };
 }
 
 // src/renderer/edit-transaction.ts
+function routedWrites(store, draftOf, unheld) {
+  const write = (sid, pairs2) => {
+    const draft = draftOf(sid);
+    const stored = [];
+    runInAction(() => {
+      for (const { key, value } of pairs2)
+        if (draft !== null) draft.put(key, value);
+        else if (isEditModeKey(key)) unheld.put(sid, key, value);
+        else if (value === null) store.clear(sid, key);
+        else stored.push({ key, value });
+      if (stored.length > 0) store.setBatch(sid, stored);
+    });
+  };
+  return {
+    get: (sid, key) => {
+      const draft = draftOf(sid);
+      return draft !== null ? draft.read(key) : isEditModeKey(key) ? unheld.get(sid, key) : store.get(sid, key);
+    },
+    revision: (sid) => store.revision(sid),
+    set: (sid, key, value) => write(sid, [{ key, value }]),
+    setBatch: write,
+    clear: (sid, key) => write(sid, [{ key, value: null }]),
+    write
+  };
+}
+function heldAside() {
+  const aside = /* @__PURE__ */ new Map();
+  return {
+    get: (sid, key) => aside.get(sid)?.get(key) ?? null,
+    put: (sid, key, value) => aside.set(sid, (aside.get(sid) ?? /* @__PURE__ */ new Map()).set(key, value)),
+    held: (sid) => aside.get(sid) ?? /* @__PURE__ */ new Map()
+  };
+}
+var ENDED = { get: () => null, put: () => {
+} };
 var EditDraft = class {
-  constructor(session, origin, base, committed, log, first2) {
+  constructor(session, origin, base, committed, sessions, log, first2) {
     this.session = session;
     this.origin = origin;
     this.base = base;
     this.committed = committed;
     this.writes = new Map(first2);
     this.latest = this.snapshot = base;
-    this.history = new SettingsHistory(
-      {
-        get: (sid, key) => sid === session ? this.read(key) : committed.get(sid, key),
-        revision: (sid) => committed.revision(sid),
-        set: (sid, key, value) => this.put(sid, key, value),
-        setBatch: (sid, pairs2) => runInAction(() => {
-          for (const { key, value } of pairs2) this.put(sid, key, value);
-        }),
-        clear: (sid, key) => this.put(sid, key, null)
-      },
-      log,
-      {},
-      isEditSettingKey
-    );
+    this.history = new SettingsHistory(sessions, log, {});
   }
   session;
   origin;
@@ -75139,6 +75339,7 @@ var EditDraft = class {
   writes;
   files = /* @__PURE__ */ new Map();
   history;
+  navigation = new NavigationHistory();
   latest;
   snapshot;
   // [LAW:effects-at-boundaries] A transaction pins the content it edits.
@@ -75160,26 +75361,21 @@ var EditDraft = class {
       })
     };
   }
-  // Cancel drops every write the edit holds. The bar's own menus and
-  // chrome reopen as they were, but a setting, a draft or an author's own
-  // state is work, which the count shows and a timer must not abandon.
+  // The files the edit changed. Its settings and drafts are the save's own
+  // count, derived over the config as the save derives them.
   depth() {
     return {
       ...this.history.depth(this.session),
-      sinceEdit: [...this.writes.keys()].filter(
-        (key) => isEditSettingKey(key) || !isReservedName(key)
-      ).length + this.files.size
+      sinceEdit: this.files.size
     };
   }
   read(key) {
     if (this.writes.has(key)) return this.writes.get(key);
     return this.committed.get(this.session, key);
   }
-  put(sid, key, value) {
-    if (sid !== this.session) {
-      if (value === null) this.committed.clear(sid, key);
-      else this.committed.set(sid, key, value);
-    } else if (this.committed.get(sid, key) === value) this.writes.delete(key);
+  put(key, value) {
+    if (this.committed.get(this.session, key) === value)
+      this.writes.delete(key);
     else this.writes.set(key, value);
   }
   begin(prove) {
@@ -75205,15 +75401,16 @@ var EditDraft = class {
     return {
       files,
       journal,
+      navigation: this.navigation,
       commit: () => {
-        const stateMoved = [...journal.writes(this.session)].some(
-          ([key, value]) => this.read(key) !== value
-        );
-        journal.commit();
-        if (sameFiles(working, this.files)) return stateMoved;
+        const before = new Map(this.writes);
+        const clicked = journal.commit().get(this.session) ?? /* @__PURE__ */ new Map();
+        const stateMoved = !sameEntries(before, this.writes);
+        if (sameEntries(working, this.files))
+          return { moved: stateMoved, clicked };
         this.files = working;
         this.refreshSnapshot();
-        return true;
+        return { moved: true, clicked };
       },
       save: (committedJournal, destination, latest) => {
         const rewritten2 = /* @__PURE__ */ new Map();
@@ -75249,81 +75446,62 @@ var EditDraft = class {
           new Map([...this.writes, ...journal.writes(this.session)])
         );
       },
-      leave: (own2) => this.land(this.committed, own2)
+      leave: (clicked) => this.land(this.committed, clicked)
     };
   }
-  // [LAW:single-enforcer] The edit's writes, landed past it: edit mode's own
-  // keys end with the edit, and the rest persist.
+  // The edit's writes, landed past it, through the router as for a session
+  // with no edit: edit mode's own keys end with the edit, and the rest
+  // persist.
   land(into, writes) {
-    for (const [key, value] of writes) {
-      if (isEditModeKey(key)) continue;
-      if (value === null) into.clear(this.session, key);
-      else into.set(this.session, key, value);
-    }
+    routedWrites(into, () => null, ENDED).write(
+      this.session,
+      [...writes].map(([key, value]) => ({ key, value }))
+    );
   }
 };
-function outsideEdit(journal) {
-  const aside = /* @__PURE__ */ new Map();
-  const write = (sid, pairs2) => {
-    const store = [];
-    for (const { key, value } of pairs2) {
-      if (isEditModeKey(key))
-        aside.set(sid, (aside.get(sid) ?? /* @__PURE__ */ new Map()).set(key, value));
-      else if (value === null) journal.clear(sid, key);
-      else store.push({ key, value });
-    }
-    if (store.length > 0) journal.setBatch(sid, store);
-  };
-  return {
-    sessionState: {
-      get: (sid, key) => isEditModeKey(key) ? aside.get(sid)?.get(key) ?? null : journal.get(sid, key),
-      revision: (sid) => journal.revision(sid),
-      set: (sid, key, value) => write(sid, [{ key, value }]),
-      setBatch: write,
-      clear: (sid, key) => write(sid, [{ key, value: null }])
-    },
-    held: (sid) => aside.get(sid) ?? /* @__PURE__ */ new Map()
-  };
-}
-function sameFiles(left, right) {
+function sameEntries(left, right) {
   return left.size === right.size && [...left].every(([key, value]) => right.get(key) === value);
 }
 var EditTransactions = class {
   constructor(committed, log) {
     this.committed = committed;
     this.log = log;
+    const routed = routedWrites(committed, (sid) => this.draftWrites(sid), {
+      get: () => null,
+      put: (sid, key) => log("warn", `edit: dropped ${key} \u2014 no edit is open (session=${sid})`)
+    });
+    this.view = {
+      get: routed.get,
+      set: routed.set,
+      setBatch: routed.setBatch,
+      clear: routed.clear,
+      revision: (sid) => committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0)
+    };
   }
   committed;
   log;
   entries = observable.map(void 0, {
     deep: false
   });
-  // [LAW:one-source-of-truth] The session's state as every reader sees it:
-  // its open edit's, else the store's.
-  view = {
-    get: (sid, key) => {
-      const draft = this.draft(sid);
-      return draft === null ? this.committed.get(sid, key) : draft.read(key);
-    },
-    revision: (sid) => this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
-    set: (sid, key, value) => this.write(sid, [{ key, value }]),
-    setBatch: (sid, pairs2) => this.write(sid, pairs2),
-    clear: (sid, key) => this.write(sid, [{ key, value: null }])
-  };
-  // A write outside a click (a failure the bar shows) lands where the session
-  // reads: its open edit, else the store.
-  write(sid, pairs2) {
-    const draft = this.draft(sid);
-    runInAction(() => {
-      for (const { key, value } of pairs2)
-        if (draft !== null) draft.put(sid, key, value);
-        else if (value === null) this.committed.clear(sid, key);
-        else this.committed.set(sid, key, value);
-    });
-    if (draft !== null) this.changed(sid);
-  }
+  // [LAW:one-source-of-truth] The session's state as every reader and every
+  // writer outside a click's journal sees it: its open edit's, else the
+  // store's, through the one router. An edit-mode key written with no edit
+  // open (a stale click's) is dropped, said.
+  view;
   draft(sid) {
     return this.entries.get(sid)?.draft ?? null;
+  }
+  // The session's open edit as the router writes into it: each write a
+  // change the session's view shows.
+  draftWrites(sid) {
+    const draft = this.draft(sid);
+    return draft === null ? null : {
+      read: (key) => draft.read(key),
+      put: (key, value) => {
+        draft.put(key, value);
+        this.changed(sid);
+      }
+    };
   }
   snapshot(origin, sid) {
     const draft = this.draft(sid);
@@ -75346,7 +75524,15 @@ var EditTransactions = class {
   open(sid, origin, snapshot, first2) {
     this.update(
       sid,
-      new EditDraft(sid, origin, snapshot, this.committed, this.log, first2)
+      new EditDraft(
+        sid,
+        origin,
+        snapshot,
+        this.committed,
+        this.view,
+        this.log,
+        first2
+      )
     );
   }
   close(sid) {
@@ -76297,7 +76483,10 @@ var stepState = (args, ctx) => {
   );
 };
 function refuseDisorderedPicks(ctx, verb, writes) {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => {
+    const kind = sessionKeyKind(w.key);
+    return kind.kind === "edit" && kind.part === "draft";
+  });
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -76814,8 +77003,12 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     (file, text4, read2) => proveLoadsAsLayer(scoped, origin, file, text4, read2)
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
-  const outside = edit === void 0 ? outsideEdit(journal.sessionState) : void 0;
-  const writes = outside?.sessionState ?? journal.sessionState;
+  const click2 = edit === void 0 ? { kind: "outside", aside: heldAside() } : { kind: "edit", edit };
+  const writes = click2.kind === "edit" ? journal.sessionState : routedWrites(
+    journal.sessionState,
+    (s) => ctx.edits.draftWrites(s),
+    click2.aside
+  );
   const requested = {};
   const failures = [];
   const sessionState = closingView(
@@ -76823,7 +77016,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     (target) => target === sid ? nestOf(scoped, origin) : NO_NEST,
     (line) => ctx.log("info", line)
   );
-  const navigation = ctx.navigation.begin(writes, sessionState.setBatch);
+  const navigation = (click2.kind === "edit" ? click2.edit.navigation : ctx.navigation).begin(journal.sessionState, sessionState.setBatch);
   try {
     handler({
       ...scoped,
@@ -76857,32 +77050,42 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   const consequence = () => {
     if (requested.finish === "save" && saved === null) return;
     const failed3 = [];
+    let visits = /* @__PURE__ */ new Map();
     try {
-      navigation.commit();
+      visits = navigation.commit();
     } catch (e) {
       failed3.push(e);
     }
     try {
-      const own2 = new Map(journal.writes(sid));
-      const aside = outside?.held(sid) ?? /* @__PURE__ */ new Map();
-      const mode = (outside === void 0 ? own2 : aside).get(EDIT_MODE_KEY);
-      const entering = outside !== void 0 && mode === EDIT_MODE_ARRANGE && origin !== null;
-      if (entering) ctx.edits.open(sid, origin, ctx.snapshotFor(origin), aside);
-      else if (aside.size > 0)
-        ctx.log(
-          "warn",
-          `edit: dropped ${[...aside.keys()].join(",")} \u2014 no edit is open (session=${sid})`
+      if (click2.kind === "outside") {
+        const clicked = new Map([
+          ...journal.commit().get(sid) ?? [],
+          ...click2.aside.held(sid)
+        ]);
+        const entering = clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
+        const edited = new Map(
+          [...clicked].filter(([key]) => isEditModeKey(key))
         );
-      let moved2 = false;
-      if (edit === void 0) journal.commit();
-      else if (saved !== null) saved.commit();
-      else moved2 = edit.commit();
-      if (origin !== null) {
-        if (edit !== void 0 && (saved !== null || mode !== void 0 && mode !== EDIT_MODE_ARRANGE)) {
-          if (saved === null) edit.leave(own2);
-          ctx.edits.close(sid);
+        if (entering) {
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (entering) {
+        } else if (edited.size > 0)
+          ctx.log(
+            "warn",
+            `edit: dropped ${[...edited.keys()].join(",")} \u2014 no edit is open (session=${sid})`
+          );
+      } else if (saved !== null) {
+        saved.commit();
+        ctx.navigation.landOutsideEdit(visits);
+        ctx.edits.close(sid);
+        ctx.editViewChanged(sid);
+      } else {
+        const { moved: moved2, clicked } = click2.edit.commit();
+        const mode = clicked.get(EDIT_MODE_KEY);
+        if (mode !== void 0 && mode !== EDIT_MODE_ARRANGE) {
+          click2.edit.leave(clicked);
+          ctx.navigation.landOutsideEdit(visits);
+          ctx.edits.close(sid);
           ctx.editViewChanged(sid);
         } else if (moved2) {
           ctx.edits.changed(sid);
@@ -76945,7 +77148,7 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const nest = nestOf(c, c.context?.durable.origin ?? null);
     const depth = c.edits.draft(sid)?.depth();
-    const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo > 0;
+    const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo + unsavedCount(sessionConfig(c), (key) => c.sessionState.get(sid, key)) > 0;
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key)).filter(
       (root) => !hasWork || !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY)
     );
@@ -76987,145 +77190,6 @@ function heardContextOf(req) {
     live: req
   };
 }
-
-// src/renderer/navigation-history.ts
-init_globals();
-var EMPTY3 = { visits: [], cursor: 0 };
-var MAX_VISITS = 20;
-var MAX_SESSIONS4 = 32;
-var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isEditSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
-var menuKeys = /* @__PURE__ */ new WeakMap();
-function capture2(store, sid, { gate: gate2 }) {
-  let keys2 = menuKeys.get(gate2);
-  if (keys2 === void 0) {
-    keys2 = gate2.listKeys().filter(isMenuKey);
-    menuKeys.set(gate2, keys2);
-  }
-  const values2 = /* @__PURE__ */ new Map();
-  for (const key of keys2) {
-    const value = store.get(sid, key);
-    if (value !== null) values2.set(key, value);
-  }
-  return { values: values2 };
-}
-function movedKeys(from, to) {
-  return [.../* @__PURE__ */ new Set([...from.values.keys(), ...to.values.keys()])].filter(
-    (key) => from.values.get(key) !== to.values.get(key)
-  );
-}
-function previous(timeline, current, context) {
-  const invalid = /* @__PURE__ */ new Set();
-  const values2 = new Map(current.values);
-  let destination = null;
-  let depth = 0;
-  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
-    const visit = timeline.visits[cursor];
-    const keys2 = movedKeys(visit.from, visit.to);
-    const step4 = keys2.flatMap((key) => {
-      const from = visit.from.values.get(key);
-      const to = visit.to.values.get(key);
-      return from === to ? [] : [{ key, from, to }];
-    });
-    if (step4.length === 0 || !step4.every(
-      ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
-    )) {
-      invalid.add(visit);
-      continue;
-    }
-    for (const { key, from } of step4) {
-      if (from === void 0) values2.delete(key);
-      else values2.set(key, from);
-    }
-    destination ??= { values: new Map(values2) };
-    depth++;
-  }
-  return { destination, depth, invalid };
-}
-var NavigationHistory = class {
-  timelines = observable.map(void 0, {
-    deep: false
-  });
-  depth(sessionId2, store, context) {
-    const timeline = this.timelines.get(sessionId2);
-    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
-  }
-  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
-  // cursor are staged alongside the click's settings. A guarded write that
-  // does not land publishes neither.
-  begin(store, choose) {
-    const before = /* @__PURE__ */ new Map();
-    const next2 = /* @__PURE__ */ new Map();
-    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY3;
-    const endVisit = (sid) => {
-      const start = before.get(sid);
-      if (start === void 0) return;
-      before.delete(sid);
-      const to = capture2(store, sid, start.context);
-      if (movedKeys(start.view, to).length === 0) return;
-      const { visits, cursor } = timelineOf(sid);
-      const followed = [
-        ...visits.slice(0, cursor),
-        { from: start.view, to }
-      ].slice(-MAX_VISITS);
-      next2.set(sid, { visits: followed, cursor: followed.length });
-    };
-    return {
-      choose: (sid, writes, contextOf) => {
-        if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
-          const context = contextOf();
-          before.set(sid, { view: capture2(store, sid, context), context });
-        }
-        choose(sid, writes);
-      },
-      back: (sid, context) => {
-        endVisit(sid);
-        const timeline = timelineOf(sid);
-        const at = capture2(store, sid, context);
-        const { destination, invalid } = previous(timeline, at, context);
-        const discarded = invalid.size;
-        const cursor = Math.max(0, timeline.cursor - discarded - 1);
-        next2.set(sid, {
-          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
-          cursor
-        });
-        if (destination === null)
-          throw new BadVerbArgs(
-            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
-          );
-        const writes = movedKeys(at, destination).map((key) => ({
-          key,
-          value: destination.values.get(key) ?? null
-        }));
-        runInAction(() => {
-          store.setBatch(
-            sid,
-            writes.flatMap(
-              ({ key, value }) => value === null ? [] : [{ key, value }]
-            )
-          );
-          for (const { key, value } of writes)
-            if (value === null) store.clear(sid, key);
-        });
-        return { writes, discarded };
-      },
-      commit: () => {
-        for (const sid of before.keys()) endVisit(sid);
-        this.publish(next2);
-        next2.clear();
-      }
-    };
-  }
-  publish(timelines) {
-    runInAction(() => {
-      for (const [sid, timeline] of timelines) {
-        this.timelines.delete(sid);
-        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
-      }
-      while (this.timelines.size > MAX_SESSIONS4)
-        this.timelines.delete(this.timelines.keys().next().value);
-    });
-  }
-};
 
 // src/renderer/acts.ts
 init_globals();
@@ -77838,9 +77902,13 @@ function mainRendererOf(inputs, host) {
         home: inputs.locations.home,
         history: (sessionId2) => edits.depth(sessionId2, settingsHistory),
         // Measured against the gate of the config the view draws with.
-        navigation: (sessionId2, config) => navigationHistory.depth(sessionId2, sessionState, {
-          gate: gates.state.gateFor(config)
-        })
+        navigation: (sessionId2, config) => (edits.draft(sessionId2)?.navigation ?? navigationHistory).depth(
+          sessionId2,
+          sessionState,
+          {
+            gate: gates.state.gateFor(config)
+          }
+        )
       })
     },
     {
@@ -79648,12 +79716,12 @@ init_globals();
 function unread() {
   return observable.box(pending("unread"), { deep: false });
 }
-function pending(why2) {
+function pending(why) {
   let land;
   const landed = new Promise((resolve2) => {
     land = resolve2;
   });
-  return { kind: "pending", why: why2, landed, land };
+  return { kind: "pending", why, landed, land };
 }
 function settle2(source, outcome) {
   const prior = source.reading.get();
@@ -79661,12 +79729,12 @@ function settle2(source, outcome) {
   runInAction(() => source.reading.set(outcome));
   if (prior.kind === "pending") prior.land();
 }
-function renew(source, why2) {
+function renew(source, why) {
   const prior = source.reading.get();
   if (prior.kind !== "pending") {
-    runInAction(() => source.reading.set(pending(why2)));
-  } else if (prior.why !== why2 && why2 === "unread") {
-    runInAction(() => source.reading.set({ ...prior, why: why2 }));
+    runInAction(() => source.reading.set(pending(why)));
+  } else if (prior.why !== why && why === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why }));
   }
 }
 function answerPending(source, outcome) {
@@ -79677,7 +79745,7 @@ function currentOf(source) {
 }
 function waitWithin(work, ms, late, after, closing) {
   const wait = new AbortController();
-  const end = (why2) => () => wait.abort(why2);
+  const end = (why) => () => wait.abort(why);
   const clear = after(Math.max(0, ms), end("deadline"));
   const ended = new Promise((resolve2, reject2) => {
     wait.signal.addEventListener(
@@ -80263,9 +80331,9 @@ var WatcherRegistry = class {
     try {
       take();
     } catch (thrown2) {
-      const why2 = thrown2 instanceof Error ? thrown2.message : String(thrown2);
+      const why = thrown2 instanceof Error ? thrown2.message : String(thrown2);
       const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why2}`);
+      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
     }
   }
   makeHandle(slot, holder) {
@@ -81499,13 +81567,24 @@ function failed2(host, failure2, doing = "") {
     settled: NOTHING_TO_SETTLE
   };
 }
+var NO_REPOSITORY = {
+  main: "",
+  worktree: "",
+  subpath: "",
+  noRepo: true
+};
 function located(req, locate) {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  if (dir === void 0 || !import_node_path17.default.isAbsolute(dir)) return { req, error: null };
+  const found2 = locate(dir);
   return {
-    ...req,
-    hookData: {
-      ...req.hookData,
-      ...dir !== void 0 && import_node_path17.default.isAbsolute(dir) && { location: locate(dir) }
+    error: found2.kind === "failed" ? found2.reason : null,
+    req: {
+      ...req,
+      hookData: {
+        ...req.hookData,
+        location: found2.kind === "ok" ? found2.value : found2.kind === "absent" ? NO_REPOSITORY : void 0
+      }
     }
   };
 }
@@ -81514,7 +81593,7 @@ function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
 async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
-  const req = located(arrived2, locate);
+  const { req, error: checkoutError } = located(arrived2, locate);
   const session = req.hookData.session_id;
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
   const worldState = collector.requested(req, environment);
@@ -81526,6 +81605,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       unlessClosing({ kind: "context", context: req, worldState })
     );
     recorded(facts, configured);
+    if (checkoutError !== null) noteFacts(facts, { checkoutError });
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.failure, "its context turn: ");
@@ -84491,47 +84571,53 @@ function readTextIfPresent(path31, read2 = readRegularTextSync) {
 }
 
 // src/utils/git-root.ts
-function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path22.default.join(dir, ".git"));
-}
-function ascend(start, entry) {
+function checkoutAt(start, files) {
   let dir = import_node_path22.default.resolve(start);
   for (; ; ) {
-    const found2 = entry(dir);
-    if (found2 !== void 0) return { root: dir, entry: found2 };
+    const found2 = gitEntryAt(dir, files);
+    if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
+    if (found2.kind === "failed") return found2;
     const parent = import_node_path22.default.dirname(dir);
-    if (parent === dir) return void 0;
+    if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
-function gitRootOf(start) {
-  return ascend(start, (dir) => holdsGit(dir) ? true : void 0)?.root;
+function gitEntryAt(dir, files = checkoutFiles) {
+  return files.stat(import_node_path22.default.join(dir, ".git"));
+}
+function gitRootOf(start, files = checkoutFiles) {
+  const found2 = checkoutAt(start, files);
+  return found2.kind === "ok" ? ok(found2.value.root) : found2;
 }
 function checkoutOf(cwd2, files = checkoutFiles) {
-  const root = checkoutAt(cwd2, files)?.root;
-  return root === void 0 ? { root: import_node_path22.default.resolve(cwd2), git: false } : { root, git: true };
+  const root = gitRootOf(cwd2, files);
+  switch (root.kind) {
+    case "ok":
+      return ok({ root: root.value, git: true });
+    case "absent":
+      return ok({ root: import_node_path22.default.resolve(cwd2), git: false });
+    case "failed":
+      return root;
+  }
 }
-function probe(read2) {
+function probe(file, read2) {
   try {
     const value = read2();
     return value === void 0 ? ABSENT2 : ok(value);
-  } catch (e) {
-    return e.code === "ENOENT" ? ABSENT2 : failed(e.message, "read");
+  } catch (error) {
+    const native2 = types.isNativeError(error);
+    if (native2 && "code" in error && error.code === "ENOENT") return ABSENT2;
+    const detail = native2 ? error.message : String(error);
+    const named2 = native2 && "path" in error && error.path === file;
+    return failed(named2 ? detail : `${file}: ${detail}`, "read");
   }
 }
 var checkoutFiles = {
-  stat: (file) => probe(() => fs_default.statSync(file, { throwIfNoEntry: false })),
-  lstat: (file) => probe(() => fs_default.lstatSync(file)),
-  realpath: (file) => probe(() => fs_default.realpathSync.native(file)),
-  text: (file) => probe(() => readRegularTextSync(file))
+  stat: (file) => probe(file, () => fs_default.statSync(file, { throwIfNoEntry: false })),
+  lstat: (file) => probe(file, () => fs_default.lstatSync(file)),
+  realpath: (file) => probe(file, () => fs_default.realpathSync.native(file)),
+  text: (file) => probe(file, () => readRegularTextSync(file))
 };
-function checkoutAt(dir, files) {
-  return ascend(dir, (candidate) => {
-    const entry = files.stat(import_node_path22.default.join(candidate, ".git"));
-    return entry.kind === "ok" ? entry.value : void 0;
-  });
-}
-var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root, files = checkoutFiles) {
   const text4 = files.text(import_node_path22.default.join(root, ".git"));
   if (text4.kind !== "ok") return text4;
@@ -84540,9 +84626,10 @@ function gitDirNamed(root, files = checkoutFiles) {
 }
 function sharedExcludeOf(root) {
   const dotGit = import_node_path22.default.join(root, ".git");
-  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
-  if (isDir.kind !== "ok") return isDir;
-  if (isDir.value) return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
+  const entry = gitEntryAt(root);
+  if (entry.kind !== "ok") return entry;
+  if (entry.value.isDirectory())
+    return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
@@ -84561,39 +84648,56 @@ var unproven = (reason) => ({
   kind: "unproven",
   reason
 });
+var unreadable = (reason) => ({
+  kind: "unreadable",
+  reason
+});
+function unverified(file, result) {
+  if (result.kind === "absent") return unproven(`${file} is not there`);
+  return result.failedAt === "parse" ? unproven(result.reason) : unreadable(result.reason);
+}
 function worktreeLink(dir, files = checkoutFiles) {
   const found2 = checkoutAt(dir, files);
-  if (found2 === void 0) return UNLINKED;
-  const link = worktreeLinkAt(found2, files);
+  if (found2.kind === "absent") return UNLINKED;
+  if (found2.kind === "failed") return unreadable(found2.reason);
+  const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.root, dir))
+    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
   const dotGit = import_node_path22.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
-  if (direct.kind !== "ok") return unproven(why(dotGit, direct));
+  if (direct.kind !== "ok") return unverified(dotGit, direct);
   if (!direct.value.isFile()) return unproven(`${dotGit} is not a file`);
   const named2 = gitDirNamed(root, files);
-  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
+  if (named2.kind !== "ok") return unverified(dotGit, named2);
   const gitDir = files.realpath(named2.value);
-  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
+  if (gitDir.kind !== "ok") return unverified(named2.value, gitDir);
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
-  if (common.kind === "failed") return unproven(common.reason);
+  if (common.kind === "failed")
+    return unverified(import_node_path22.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
-  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
+  if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
   if (import_node_path22.default.dirname(gitDir.value) !== import_node_path22.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
   const backFile = import_node_path22.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
-  if (back2.kind !== "ok") return unproven(why(backFile, back2));
+  if (back2.kind !== "ok") return unverified(backFile, back2);
   const pointer = import_node_path22.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = files.realpath(import_node_path22.default.dirname(pointer));
-  if (import_node_path22.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  if (import_node_path22.default.basename(pointer) !== ".git") {
+    return unproven(
+      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
+    );
+  }
+  const parent = import_node_path22.default.dirname(pointer);
+  const pointerDir = files.realpath(parent);
+  if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
+  if (pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
@@ -84603,20 +84707,21 @@ function worktreeLinkAt({ root, entry }, files) {
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
+  if (real.kind === "failed") return real;
   const at = real.kind === "ok" ? real.value : import_node_path22.default.resolve(dir);
   const found2 = checkoutAt(at, files);
-  if (found2 === void 0)
-    return { main: "", worktree: "", subpath: "", noRepo: true };
-  const { root } = found2;
+  if (found2.kind !== "ok") return found2;
+  const { root } = found2.value;
   const sub2 = import_node_path22.default.relative(root, at);
   const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path22.default.sep).join("/")}`;
-  const link = worktreeLinkAt(found2, files);
-  return link.kind === "linked" ? {
+  const link = worktreeLinkAt(found2.value, files);
+  if (link.kind === "unreadable") return failed(link.reason, "read");
+  return link.kind === "linked" ? ok({
     main: link.main,
     worktree: import_node_path22.default.basename(root),
     subpath,
     noRepo: false
-  } : { main: root, worktree: "", subpath, noRepo: false };
+  }) : ok({ main: root, worktree: "", subpath, noRepo: false });
 }
 
 // src/daemon/cache/git-service.ts
@@ -84647,9 +84752,6 @@ var GitService = class {
     this.launcher = launcher;
   }
   launcher;
-  isGitRepo(workingDir) {
-    return holdsGit(workingDir);
-  }
   // [LAW:types-are-the-program] args is a string[] so the boundary type
   // forbids the only-space-free-arguments contract the prior whitespace-split
   // implementation relied on. Returns the full LaunchResult — the typed
@@ -84680,19 +84782,22 @@ var GitService = class {
   // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
   // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
   resolveEffectiveGitDir(workingDir, projectDir) {
-    if (this.isWorktree(workingDir)) return ok(workingDir);
-    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
-    if (this.isGitRepo(workingDir)) return ok(workingDir);
-    return this.findGitRoot(workingDir);
+    const working = gitEntryAt(workingDir);
+    if (working.kind === "failed") return working;
+    if (working.kind === "ok" && working.value.isFile()) return ok(workingDir);
+    if (projectDir && projectDir !== workingDir) {
+      const project = gitEntryAt(projectDir);
+      if (project.kind === "ok") return ok(projectDir);
+      if (project.kind === "failed") return project;
+    }
+    return working.kind === "ok" ? ok(workingDir) : this.findGitRoot(workingDir);
   }
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
   // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
   // "not in a git repository", the everyday domain answer.
   //
-  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
-  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
-  // already short-circuit on, now asked at every level instead of only at
-  // `workingDir`. Before this, two resolvers answered one question and disagreed
+  // [LAW:one-source-of-truth] The repo root is the nearest directory with a
+  // checked .git entry. Before this, two resolvers answered one question and disagreed
   // — measured on a repo whose config sets `core.worktree = /elsewhere`:
   //
   //   cwd         git's answer   the short-circuit   the old rev-parse
@@ -84722,13 +84827,8 @@ var GitService = class {
   // the DAEMON's environment, which describes whichever shell spawned it rather
   // than the session being rendered.
   //
-  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
-  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
-  // through `classify(…, "absent")` — a state this never produced, so inventing
-  // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir) {
-    const root = gitRootOf(workingDir);
-    return root === void 0 ? ABSENT2 : ok(root);
+    return gitRootOf(workingDir);
   }
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
   // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
@@ -84750,18 +84850,9 @@ var GitService = class {
     }
   }
   async computeGitInfo(workingDir, projectDir) {
-    let gitDir;
-    if (this.isWorktree(workingDir)) {
-      gitDir = workingDir;
-    } else if (projectDir && this.isGitRepo(projectDir)) {
-      gitDir = projectDir;
-    } else if (this.isGitRepo(workingDir)) {
-      gitDir = workingDir;
-    } else {
-      const foundGitRoot = this.findGitRoot(workingDir);
-      if (foundGitRoot.kind !== "ok") return foundGitRoot;
-      gitDir = foundGitRoot.value;
-    }
+    const found2 = this.resolveEffectiveGitDir(workingDir, projectDir);
+    if (found2.kind !== "ok") return found2;
+    const gitDir = found2.value;
     const core = await this.getCoreAsync(gitDir);
     if (core.kind !== "ok") return core;
     const committedAt = await this.committedAt(gitDir, core.value.oid);
@@ -85126,17 +85217,6 @@ var GitService = class {
       );
     }
     return ABSENT2;
-  }
-  isWorktree(workingDir) {
-    try {
-      const gitDir = import_node_path23.default.join(workingDir, ".git");
-      if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
   }
   // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2
   // --branch` reports branch, short SHA, upstream, ahead/behind, and worktree
@@ -86290,7 +86370,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.3";
+var PACKAGE_VERSION = "1.235.7";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -88394,13 +88474,12 @@ var clickLaunchVia = (launcher) => (launch) => launcher.launch({
 async function clickLaunch(launch, opts, what, said2) {
   const result = await launch(opts);
   if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
-  const held = clickFailed(result, what);
-  return { outcome: { kind: "skipped", reason: held }, said: held };
-}
-function clickFailed(r, what) {
-  if (r.reason === "rate-limited") return `${what} not run: ${failureText(r)}`;
-  if (r.reason === "aborted") throw new DaemonClosing(what);
-  throw new Error(`${what} failed (${failureText(r)})`);
+  if (result.reason === "aborted") {
+    const reason2 = new DaemonClosing(what).message;
+    return { outcome: { kind: "closing", reason: reason2 }, said: reason2 };
+  }
+  const reason = result.reason === "rate-limited" ? `${what} not run: ${failureText(result)}` : `${what} failed (${failureText(result)})`;
+  return { outcome: { kind: "failed", reason }, said: reason };
 }
 
 // src/daemon/acts.ts
@@ -89033,10 +89112,11 @@ function performChanges(changes, book, files) {
   return { kind: "ok", files: landed };
 }
 function excludeRewrite(file, rewrites, readText) {
-  const root = gitRootOf(import_node_path29.default.dirname(file));
-  if (root === void 0) return ABSENT2;
+  const checkout = gitRootOf(import_node_path29.default.dirname(file));
+  if (checkout.kind !== "ok") return checkout;
+  const root = checkout.value;
   const at = sharedExcludeOf(root);
-  if (at.kind !== "ok") return at.kind === "absent" ? ABSENT2 : at;
+  if (at.kind !== "ok") return at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
   const was = prior === void 0 ? readText(exclude) : prior.was;
@@ -89439,13 +89519,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`
     } : { kind: "event", event: { kind: "config", origin, config } };
   };
-  const configInSlot = async (origin, why2) => {
+  const configInSlot = async (origin, why) => {
     let made;
     try {
       made = configMade(origin)();
     } catch (thrown2) {
       made = failureOf(thrown2);
-      record2(null, [["why", why2]], unanswered(made, 0).turn);
+      record2(null, [["why", why]], unanswered(made, 0).turn);
     }
     if (made.kind !== "event")
       return {
@@ -89455,7 +89535,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       };
     const input = stamped(made);
     const { turn, settled: settled3 } = await inSlot(input, 0);
-    record2(input.event, [["why", why2]], turn);
+    record2(input.event, [["why", why]], turn);
     const threw2 = turn.kind === "threw" ? [
       {
         kind: THREW_AS[turn.failure.kind],
@@ -89727,7 +89807,7 @@ init_globals();
 // src/renderer-interface/stored-state.ts
 init_globals();
 function parseSessionPicks(value) {
-  if (!isPlainObject2(value))
+  if (!isPlainObject(value))
     return { kind: "failed", reason: "is not an object" };
   const bad = Object.keys(value).find((key) => typeof value[key] !== "string");
   return bad === void 0 ? { kind: "ok", value } : {
@@ -89737,19 +89817,15 @@ function parseSessionPicks(value) {
 }
 function withoutEditModeKeys(sessions, log) {
   return new Map(
-    [...sessions].map(([session, picks]) => {
+    [...sessions].flatMap(([session, picks]) => {
       const dropped = Object.keys(picks).filter(isEditModeKey);
-      if (dropped.length === 0) return [session, picks];
+      if (dropped.length === 0) return [[session, picks]];
       log(
         "info",
         `session-state load: dropped ${dropped.join(",")} \u2014 no edit outlives the renderer (session=${session})`
       );
-      return [
-        session,
-        Object.fromEntries(
-          Object.entries(picks).filter(([key]) => !isEditModeKey(key))
-        )
-      ];
+      const kept = Object.entries(picks).filter(([key]) => !isEditModeKey(key));
+      return kept.length === 0 ? [] : [[session, Object.fromEntries(kept)]];
     })
   );
 }
@@ -89761,7 +89837,7 @@ var EPHEMERAL_HISTORY_STORAGE = {
   }
 };
 var HeldStores = class {
-  constructor(storage, log = quietLogger) {
+  constructor(storage, log) {
     this.storage = storage;
     this.log = log;
   }
@@ -89847,20 +89923,24 @@ var import_node_path32 = __toESM(require_path_browserify(), 1);
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
+function installedPluginDirs(locs) {
   const installed = [
     ...[...locs.dataDirs].reverse().map((d) => import_node_path30.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path30.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
+  return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
   return import_node_path30.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
 var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path30.default.join(project, REPO_PLUGIN_DIR);
+function listedRepoRoot(approved, entries) {
+  if (entries === null) return null;
+  if ("error" in entries)
+    return { root: entries.path, scope: "repo", listed: entries };
+  return approved === null ? null : { root: repoPluginDir(approved), scope: "repo", listed: entries };
+}
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -89982,14 +90062,6 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
     };
   });
 }
-var NO_REPOS = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null
-};
 function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const searched = configLocations(locs, query);
   const selected = query.kind === "chain" && query.projectDir !== void 0 && query.path !== void 0 ? files.realpath(query.path) : null;
@@ -90004,25 +90076,14 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const found2 = locations2.flatMap(
     (location) => location.kind === "found" ? [location] : []
   );
-  const repoDirs = /* @__PURE__ */ new Map();
-  for (const { role, directory } of found2) {
-    if (role === "user" || repoDirs.has(directory)) continue;
-    repoDirs.set(directory, {
-      dir: directory,
-      link: files.worktree(directory)
-    });
-  }
-  const dirs = [...repoDirs.values()];
   const seen = repoProject(
     query.kind === "chain" ? query.projectDir : void 0,
+    found2.some(({ role }) => role !== "user"),
     files
   );
   const book = query.kind === "file" ? null : readAnswers();
-  const repos = book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
-  const question = book === null ? null : repoQuestion(book.result, dirs, seen.project);
-  const layers = found2.filter(
-    ({ role, directory }) => role === "user" || repos.approved.includes(directory)
-  ).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
+  const project = book === null ? NO_PROJECT_ACCESS : projectAccess(book.result, seen.project);
+  const layers = found2.filter(({ role }) => admitsLayer(project, role)).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
   const user = locations2.find(({ role }) => role === "user");
   const home = user?.kind === "found" ? user.winner.file : query.path ?? userConfigDefault(locs);
   const namedFailure = query.path !== void 0 && user?.kind !== "found";
@@ -90032,34 +90093,41 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const common = {
     layers,
     home,
-    repos,
+    project,
     unchecked: seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked]
   };
   const problem = user?.unchecked[0];
   const resolution = !namedFailure ? { ...common, kind: "chain" } : problem === void 0 ? { ...common, kind: "missing", path: home } : { ...common, kind: "unreadable", ...problem };
   return {
     resolution,
-    question,
+    repoRoot: listedRepoRoot(project.approved, seen.entries),
     locations: locations2,
     watchedFiles: [...candidates, ...book?.paths ?? []]
   };
 }
-function repoProject(projectDir, files = discoveryFiles()) {
-  if (projectDir === void 0) return { project: null, unchecked: null };
+function repoProject(projectDir, hasConfig, files) {
+  if (projectDir === void 0)
+    return { project: null, unchecked: null, entries: null };
   const present = files.presence(projectDir);
   if (present !== "present")
-    return { project: null, unchecked: present === "absent" ? null : present };
+    return {
+      project: null,
+      unchecked: present === "absent" ? null : present,
+      entries: null
+    };
   const dir = files.realpath(projectDir);
-  if (typeof dir !== "string") return { project: null, unchecked: dir };
-  const listed = files.folders(import_node_path32.default.join(projectDir, REPO_PLUGIN_DIR));
+  if (typeof dir !== "string")
+    return { project: null, unchecked: dir, entries: null };
+  const entries = files.folders(repoPluginDir(projectDir));
   return {
     project: {
       dir,
       link: files.worktree(dir),
       path: projectDir,
-      ships: !("error" in listed) && listed.folders.length > 0
+      contributes: hasConfig || !("error" in entries) && entries.folders.length > 0
     },
-    unchecked: null
+    unchecked: null,
+    entries
   };
 }
 function configCollisionNotice(locations2) {
@@ -90094,17 +90162,21 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return pluginRoots(locs, null).map((root) => listRoot(root, files));
+  return installedPluginDirs(locs).map(
+    (root) => readDefinitions(
+      { root, scope: "plugins", listed: files.folders(root) },
+      files
+    )
+  );
 }
-function listRoot({ dir, scope }, files) {
-  const listed = files.folders(dir);
+function readDefinitions({ root, scope, listed }, files) {
   return {
-    root: dir,
+    root,
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
         (name) => readDefinition(
-          import_node_path33.default.join(dir, name, DEFINITION_FILE),
+          import_node_path33.default.join(root, name, DEFINITION_FILE),
           scope,
           files
         )
@@ -90135,12 +90207,11 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) {
-  const repoRoots = pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map((root) => listRoot(root, files));
+function sessionPlugins(roots, checkout) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
-  for (const { root, scope, listed } of [...installed, ...repoRoots]) {
+  for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
       notices.push(
         `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
@@ -90155,16 +90226,13 @@ function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) 
     for (const name of listed.files)
       strays.push({ path: import_node_path33.default.join(root, name), scope });
   }
+  if (checkout.kind === "failed")
+    notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
     plugins: [...byNs.values()],
     strays,
     notices,
-    // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
-    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
-    // above it, since an ancestor watch per session is the cost; the next
-    // rediscovery reads the new checkout.
-    checkout: files.checkout(cwd2)
+    checkout: checkout.kind === "ok" ? checkout.value : null
   };
 }
 function layerOf(role, file, content, home, batch = {
@@ -90204,14 +90272,13 @@ function snapshotOf(session, chain2) {
 function discover(query, shared) {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations: locations2, watchedFiles } = search;
-  const { repos } = resolution;
+  const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
+  const { project } = resolution;
   const session = sessionPlugins(
-    locs,
-    shared.installed,
-    repos.plugins,
-    query.cwd,
-    files
+    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
+    // on its next pass. Watching every parent would add a watch per ancestor.
+    files.checkout(query.cwd)
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)
@@ -90219,25 +90286,30 @@ function discover(query, shared) {
   const chain2 = places.map(
     (at) => layerOf(at.role, at.path, at.content, locs.home, shared)
   );
+  const { unreadIdentity } = project;
   const notices = [
     configCollisionNotice(locations2),
     configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
+    repoUnreadNotice(project),
+    unreadIdentity === null ? null : `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`,
     ...session.notices
   ].filter((n) => n !== null);
   return {
-    snapshot: { ...snapshotOf(session, chain2), repo: question, notices },
+    snapshot: {
+      ...snapshotOf(session, chain2),
+      repo: project.question,
+      notices
+    },
     targets: {
       files: watchedFiles,
       roots: [
         .../* @__PURE__ */ new Set([
-          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          ...shared.installed.map((r) => r.root),
           // A chain must hear a new repository plugin even before approval.
-          ...query.kind === "chain" && query.projectDir !== void 0 ? [import_node_path33.default.join(query.projectDir, REPO_PLUGIN_DIR)] : []
+          ...query.kind === "chain" && query.projectDir !== void 0 ? [repoPluginDir(query.projectDir)] : []
         ])
       ]
-    },
-    repos
+    }
   };
 }
 function contentAt({ resolution, locations: locations2 }, place, files) {
@@ -90386,8 +90458,8 @@ var ConfigDiscovery = class {
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
-  again(why2) {
-    this.heard([...this.followed.keys()], why2);
+  again(why) {
+    this.heard([...this.followed.keys()], why);
   }
   close() {
     if (this.closed) return;
@@ -90399,9 +90471,9 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why2) {
+  heard(keys2, why) {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys2, why2), null);
+    this.publish(this.rediscovered(keys2, why), null);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -90420,7 +90492,7 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why2) {
+  rediscovered(keys2, why) {
     if (keys2.length === 0) return [];
     const shared = this.batch();
     const moved2 = [];
@@ -90437,13 +90509,13 @@ var ConfigDiscovery = class {
       } catch (thrown2) {
         this.deps.log(
           "error",
-          `config discovery why=${why2} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
         );
       }
     }
     this.deps.log(
       "info",
-      `config discovery why=${why2} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
     return moved2;
   }
@@ -91568,7 +91640,7 @@ function loadSessionFile(kind, filePath2, logger) {
     logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
     return loaded;
   }
-  if (!isPlainObject2(parsed2)) {
+  if (!isPlainObject(parsed2)) {
     logger("warn", `${kind.name} load: unexpected shape, starting empty`);
     return loaded;
   }
@@ -91795,7 +91867,7 @@ var import_node_path36 = __toESM(require_path_browserify(), 1);
 function withoutRetiredKeys(history) {
   const retired2 = /* @__PURE__ */ new Set();
   const keep = (change) => {
-    if (change.kind === "layer" || isSettingKey(change.key)) return true;
+    if (change.kind === "layer" || isUndoStepKey(change.key)) return true;
     retired2.add(change.key);
     return false;
   };
