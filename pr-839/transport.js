@@ -91787,11 +91787,7 @@ function mainRenderer(parts, pushed, drained) {
         return;
       }
       case "request": {
-        const { frame: frame2, delivery } = answerRequest(
-          parts,
-          event.context,
-          record2
-        );
+        const { frame: frame2, delivery } = answerRequest(parts, event.context, record2);
         const id2 = parts.mint();
         deliveries.set(id2, delivery);
         effects.push({

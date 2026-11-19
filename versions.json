@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-839",
+      "ref": "refs/pull/839/merge",
+      "sha": "b48194c6a746ae31c30ae7b843eb8030f8ca55a5",
+      "timestamp": "2026-11-19T09:57:31.561Z",
+      "commits": [
+        {
+          "sha": "b48194c6a746ae31c30ae7b843eb8030f8ca55a5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:56:24Z",
+          "message": "Merge b1f095e21bef78df16336c65a3253c20d65ad42d into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "b1f095e21bef78df16336c65a3253c20d65ad42d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:56:16-07:00",
+          "message": "fix(settings): satisfy pane reconciliation lint\n"
+        },
+        {
+          "sha": "b3b9c11985f0523e3781506a45fa5a3b95ec3324",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:52:27-07:00",
+          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-838",
       "ref": "refs/pull/838/merge",
       "sha": "9a5e1ff947d4433ff5508b0fc0bfc0c0b9426c50",
@@ -27,28 +56,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:38:14-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-839",
-      "ref": "refs/pull/839/merge",
-      "sha": "c195d0903eacfae45f17512a4f09be205b232cc7",
-      "timestamp": "2026-11-19T09:53:54.798Z",
-      "commits": [
-        {
-          "sha": "c195d0903eacfae45f17512a4f09be205b232cc7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:52:47-07:00",
-          "message": "Merge b3b9c11985f0523e3781506a45fa5a3b95ec3324 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "b3b9c11985f0523e3781506a45fa5a3b95ec3324",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:52:27-07:00",
-          "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
         }
       ]
     },
