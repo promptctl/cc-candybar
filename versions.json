@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-844",
+      "ref": "refs/pull/844/merge",
+      "sha": "124eb211e66868bb68379da18e240054feb90529",
+      "timestamp": "2026-11-19T10:28:08.776Z",
+      "commits": [
+        {
+          "sha": "124eb211e66868bb68379da18e240054feb90529",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:27:09Z",
+          "message": "Merge efa1e8b1de511037d459d20027ef8f2da80ffadd into 5702b0a6f481af905b25fe6469d345b86a5c5bb3\n"
+        },
+        {
+          "sha": "efa1e8b1de511037d459d20027ef8f2da80ffadd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:23:38-07:00",
+          "message": "fix(daemon): reset config coverage for either start entry\n"
+        },
+        {
+          "sha": "07319ca6e028b231f98b5ac5c9cf97384612f95e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:12:21-07:00",
+          "message": "test(daemon): cover failed starts and wake reporting\n"
+        },
+        {
+          "sha": "314f39286b966c88567571f45e6b9640a5d05764",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:46-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "5702b0a6f481af905b25fe6469d345b86a5c5bb3",
@@ -13,42 +49,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:25:01-07:00",
           "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb) (#839)\n\n* fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n\n* fix(settings): satisfy pane reconciliation lint\n\n* fix(tmux): reconcile existing panes and retry interrupted splits\n\n* test(daemon): exercise retained feed and shutdown behavior"
-        }
-      ]
-    },
-    {
-      "version": "pr-844",
-      "ref": "refs/pull/844/merge",
-      "sha": "8db80c1f77faa0e41e8ba1577555698ba26f2de5",
-      "timestamp": "2026-11-19T10:24:43.861Z",
-      "commits": [
-        {
-          "sha": "8db80c1f77faa0e41e8ba1577555698ba26f2de5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:23:44Z",
-          "message": "Merge af91fc4409d840597d1cbf3f8a08138187b63ede into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "af91fc4409d840597d1cbf3f8a08138187b63ede",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:23:38-07:00",
-          "message": "fix(daemon): reset config coverage for either start entry\n"
-        },
-        {
-          "sha": "a5618522ca878015245477d00dbf265f38c18d00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:12:21-07:00",
-          "message": "test(daemon): cover failed starts and wake reporting\n"
-        },
-        {
-          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:46-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
         }
       ]
     },
