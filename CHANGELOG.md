@@ -1,3 +1,9 @@
+## [1.235.15](https://github.com/promptctl/cc-candybar/compare/v1.235.14...v1.235.15) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** settle pane deliveries and inspections in their owning turns ([#912](https://github.com/promptctl/cc-candybar/issues/912)) ([5963672](https://github.com/promptctl/cc-candybar/commit/5963672e13da996839cf05d223e81c4ddc63f648))
+
 ## [1.235.14](https://github.com/promptctl/cc-candybar/compare/v1.235.13...v1.235.14) (2026-11-19)
 
 ### Bug Fixes
