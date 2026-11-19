@@ -20,7 +20,7 @@ import {
   type HostLine,
   type RendererLine,
 } from "../../../src/renderer-interface/wire";
-import type { Event } from "../../../src/renderer-interface/interface";
+import type { Event, RequestId } from "../../../src/renderer-interface/interface";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
@@ -56,6 +56,7 @@ import {
 } from "../../helpers/oversized-renderer-history";
 import type { Instant, Tick } from "../../../src/utils/instant";
 import { fieldsOf } from "../../../src/utils/logfmt";
+import { heardRequest } from "../../helpers/click";
 
 jest.setTimeout(30_000);
 
@@ -176,7 +177,11 @@ require("node:module").syncBuiltinESMExports();`,
     expect(child.status).toBe(1);
     expect(JSON.parse(child.stdout)).toMatchObject({
       kind: "refused",
-      failure: { message: "renderer boot has no resolved locations" },
+      failure: {
+        kind: "threw",
+        message: "renderer boot has no resolved locations",
+        detail: "Error: renderer boot has no resolved locations",
+      },
     });
   });
 
@@ -275,6 +280,69 @@ test("a built renderer answers command and draw events on the same numbered stre
     { kind: "close-journal" },
     { kind: "close-views" },
   ]);
+});
+
+test("the same failed turn returns identical data from different worker paths", () => {
+  const relocated = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-replay-worker-"));
+  try {
+    const built = path.resolve("dist/index.mjs");
+    const second = path.join(relocated, "index.mjs");
+    // A relocated entry with a different source line offset runs the same code.
+    const source = fs.readFileSync(built, "utf8");
+    expect(source.startsWith("#!")).toBe(true);
+    fs.writeFileSync(second, source.replace("\n", "\n\n"));
+    const answer = (bundle: string, session: string) => {
+      const lines: readonly HostLine[] = [
+        { kind: "boot", ...COMPATIBLE_BOOT },
+        {
+          kind: "input",
+          n: 1,
+          input: {
+            kind: "event",
+            at: 0 as Instant,
+            tick: 0 as Tick,
+            event: {
+              kind: "request",
+              id: 1 as RequestId,
+              context: heardRequest(session),
+            },
+          },
+        },
+      ];
+      const result = spawnSync(process.execPath, [bundle, "renderer"], {
+        encoding: "utf8",
+        env: {},
+        timeout: 10_000,
+        input: lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
+      });
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      const [started, reply] = result.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as RendererLine);
+      expect(started?.kind).toBe("started");
+      if (reply?.kind !== "output" || reply.output.kind !== "threw")
+        throw new Error(
+          `the worker did not answer its missing context: ${result.stdout}`,
+        );
+      // Transport time records each execution. Replay compares the answer
+      // itself, including its complete failure and diagnostics.
+      const { turnMs: _elapsed, ...output } = reply.output;
+      return output;
+    };
+
+    const first = answer(built, "missing-context");
+    expect(first.failure.message).toContain('"missing-context"');
+    expect(JSON.stringify(answer(second, "missing-context"))).toBe(
+      JSON.stringify(first),
+    );
+    const different = answer(second, "another-context");
+    expect(different.failure.message).toContain('"another-context"');
+    expect(different.failure.detail).not.toBe(first.failure.detail);
+  } finally {
+    fs.rmSync(relocated, { recursive: true, force: true });
+  }
 });
 
 test("the supervisor names the unanswered input when its built worker is killed", async () => {

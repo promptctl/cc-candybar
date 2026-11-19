@@ -6,6 +6,7 @@ import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import {
   BadVerbArgs,
+  CrossedFailure,
   failureOf,
 } from "../../src/daemon/foundations/verb-error";
 import { rendererHost } from "../../src/daemon/renderer-host";
@@ -220,7 +221,10 @@ test("a failed end-clock read leaves the completed answer and its diagnostics in
   ]);
   expect(fixture.logged).toEqual([
     { level: "info", line: "menu opened" },
-    { level: "warn", line: expect.stringContaining("end clock failed") },
+    {
+      level: "warn",
+      line: "renderer turn timing failed: Error: end clock failed",
+    },
   ]);
   expect(await fixture.due()).toMatchObject({ kind: "answered", turnMs: 0 });
   expect(fixture.logged).toHaveLength(2);
@@ -358,16 +362,26 @@ test("the first failure in collection still lands history, holds subscriptions, 
   fixture.host.closeWake();
 });
 
-test("a failed command still lands current writes and carries the second failure to its caller", async () => {
-  const primary = new BadVerbArgs(
-    "invalid command\ntook=999ms finalize.settings-history=spoofed",
+test("a failed command lands writes and carries both failures without runtime frames", async () => {
+  const primary = Object.assign(
+    new BadVerbArgs(
+      "invalid command\ntook=999ms finalize.settings-history=spoofed",
+    ),
+    { note: "/project/authored.json5:19:3" },
   );
   const fixture = rig({
     closeJournal: () => {
       throw primary;
     },
     history: () => {
-      throw new Error("command history drain failed");
+      throw new AggregateError(
+        [
+          new RangeError("too many entries", {
+            cause: new TypeError("bad count"),
+          }),
+        ],
+        "command history drain failed",
+      );
     },
   });
   fixture.setTheme("nord");
@@ -380,13 +394,47 @@ test("a failed command still lands current writes and carries the second failure
   });
   const fields = fieldsOf(failure.detail);
   expect(fields.get("took")).toBe("0ms");
-  expect(fields.get("error")).toBe(failureOf(primary).detail);
-  expect(fields.get("finalize.settings-history")).toContain(
-    "command history drain failed",
+  expect(fields.get("error")).toBe(
+    `BadVerbArgs: ${primary.message}\nnote: '/project/authored.json5:19:3'`,
   );
+  expect(fields.get("finalize.settings-history")).toBe(
+    [
+      "threw: AggregateError: command history drain failed",
+      "errors[0]: RangeError: too many entries",
+      "cause: TypeError: bad count",
+    ].join("\n"),
+  );
+  expect(failureOf(primary).detail).toContain("\n    at ");
   expect(fixture.stored).toEqual([
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
   ]);
+});
+
+test("a renderer answer preserves explicit crossed failure details", async () => {
+  const report = async (detail: string) => {
+    const original = {
+      kind: "threw",
+      message: "authored config failed",
+      detail,
+    } as const;
+    const fixture = rig({
+      state: () => {
+        throw new CrossedFailure(original);
+      },
+    });
+    const output = await fixture.due();
+    if (output.kind !== "threw") throw new Error("the failed turn succeeded");
+    expect(output.failure).toEqual(original);
+    return output.failure;
+  };
+  const first = await report(
+    "invalid scalar\n    at /project/settings.json5:19:3",
+  );
+  const second = await report(
+    "invalid scalar\n    at /project/settings.json5:20:3",
+  );
+  expect(second.message).toBe(first.message);
+  expect(second.detail).not.toBe(first.detail);
 });
 
 test("a successful command reports its first finalizer failure and lands its successful drain", async () => {

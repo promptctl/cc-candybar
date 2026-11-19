@@ -13,7 +13,11 @@ import { isPlainObject } from "../config/loader/validate-core.js";
 import { compareStructural } from "mobx";
 import { storedStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
-import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
+import {
+  CrossedFailure,
+  failureOf,
+  rendererFailureOf,
+} from "../daemon/foundations/verb-error.js";
 import type { Crosses } from "./crosses.js";
 import type { LogLine } from "../utils/logger.js";
 import {
@@ -466,7 +470,11 @@ export function serveRenderer(deps: {
         void renderer.answer(line.input).then(
           (output) => answer(line.n, output),
           (thrown: unknown) =>
-            send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),
+            send({
+              kind: "rejected",
+              n: line.n,
+              failure: rendererFailureOf(thrown),
+            }),
         );
         return;
       case "ping":

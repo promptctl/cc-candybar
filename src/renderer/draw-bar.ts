@@ -95,7 +95,7 @@ import {
   warningChanges,
 } from "./render-warnings.js";
 import type { Acceptance, FrameCandidate } from "./presented-frames.js";
-import { failureOf } from "../daemon/foundations/verb-error.js";
+import { rendererFailureOf } from "../daemon/foundations/verb-error.js";
 import { renderFailure } from "../daemon/foundations/render-answers";
 
 // The renderer's own state, including the world state its views were handed.
@@ -166,7 +166,7 @@ export function renderFrame(
       failure: null,
     };
   } catch (error) {
-    const outcome = renderFailure(failureOf(error));
+    const outcome = renderFailure(rendererFailureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
     return {
       frame: { kind: "failed", message: outcome.message },

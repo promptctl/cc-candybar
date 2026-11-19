@@ -78,7 +78,7 @@ import {
 import { earliestOf, type Tick } from "../utils/instant.js";
 import {
   CrossedFailure,
-  failureOf,
+  rendererFailureOf,
   type Failure,
 } from "../daemon/foundations/verb-error.js";
 import {
@@ -223,7 +223,7 @@ export function mainRenderer(
         holdClickError(
           parts.sessionState,
           click.session,
-          failureOf(thrown).message,
+          rendererFailureOf(thrown).message,
           time.at,
         );
         throw thrown;
@@ -396,7 +396,7 @@ export function mainRenderer(
           try {
             parts.renderCache.configure(event.origin, event.config);
           } catch (thrown) {
-            const failure = failureOf(thrown);
+            const failure = rendererFailureOf(thrown);
             parts.renderCache.rejectConfig(event.origin, failure);
             failClicks(ready, failure);
             throw new CrossedFailure(failure);
@@ -649,7 +649,7 @@ export function mainRenderer(
     try {
       outcome = { kind: "answered", value: run() };
     } catch (thrown) {
-      outcome = { kind: "threw", failure: failureOf(thrown) };
+      outcome = { kind: "threw", failure: rendererFailureOf(thrown) };
     }
     const stored: StoreWrite[] = [];
     // [LAW:no-silent-failure] The first classified failure owns the outcome.
@@ -658,7 +658,7 @@ export function mainRenderer(
       try {
         read();
       } catch (thrown) {
-        const failure = failureOf(thrown);
+        const failure = rendererFailureOf(thrown);
         if (outcome.kind === "answered") outcome = { kind: "threw", failure };
         else {
           const after = { stage, failure };
@@ -749,7 +749,7 @@ function closeIdleMenus(
         effects,
       );
     } catch (thrown) {
-      const failure = failureOf(thrown);
+      const failure = rendererFailureOf(thrown);
       // A close the daemon's close cut off is a refusal, as a click's is.
       parts.turnLog.add(
         failure.kind === "closing" ? "info" : "error",
@@ -766,7 +766,7 @@ export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
     try {
       return { kind: "built", renderer: build(inputs, turnLog) };
     } catch (thrown) {
-      return { kind: "refused", failure: failureOf(thrown) };
+      return { kind: "refused", failure: rendererFailureOf(thrown) };
     }
   });
 }

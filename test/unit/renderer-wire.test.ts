@@ -404,9 +404,10 @@ describe("the renderer over lines", () => {
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);
-    expect(failureOf(thrownThere)).toMatchObject({
+    expect(failureOf(thrownThere)).toEqual({
       kind: thrownHere.kind,
       message: thrownHere.message,
+      detail: "Error: close refused",
     });
   });
 

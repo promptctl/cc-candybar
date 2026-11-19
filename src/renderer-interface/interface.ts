@@ -10,7 +10,10 @@
 
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
-import { failureOf, type Failure } from "../daemon/foundations/verb-error";
+import {
+  rendererFailureOf,
+  type Failure,
+} from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -95,7 +98,7 @@ export function timed(
         // its effects, writes or diagnostics.
         const missed: LogLine = {
           level: "warn",
-          line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
+          line: `renderer turn timing failed: ${rendererFailureOf(thrown).detail}`,
         };
         const diagnostics: [LogLine, ...LogLine[]] =
           output.diagnostics === undefined

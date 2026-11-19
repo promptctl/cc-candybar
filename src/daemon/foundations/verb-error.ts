@@ -43,9 +43,9 @@ export class RendererDown extends Error {
 // [LAW:types-are-the-program] How a request or a turn failed, as data: its
 // kind, which a request's outcome is named by and its reader routes by
 // (`bad-request` the client's fault, `threw` the daemon's, and the others
-// neither: a close, a client that left, no renderer live), the message a reply carries, and the detail a log keeps (an
-// Error's stack). A class crosses no process, so a failure is classified
-// where it was thrown and travels as this.
+// neither: a close, a client that left, no renderer live), the message a
+// reply carries, and the detail a log keeps. A class crosses no process,
+// so a failure is classified where it was thrown and travels as this.
 export interface Failure {
   readonly kind: "bad-request" | "threw" | "closing" | "abandoned" | "down";
   readonly message: string;
@@ -73,16 +73,62 @@ export class CrossedFailure extends Error {
   }
 }
 
-// [LAW:single-enforcer] The one classification of a thrown value. `inspect` is
-// total over anything a handler can throw and carries an Error's stack. A
-// crossed failure was classified where it was thrown, so it keeps its kind.
-export function failureOf(thrown: unknown): Failure {
+// [LAW:single-enforcer] A crossed failure was classified where it was
+// thrown, so it keeps both its kind and its original detail.
+function classified(
+  thrown: unknown,
+  detailOf: (value: unknown) => string,
+): Failure {
   if (thrown instanceof CrossedFailure) return thrown.failure;
+  const detail = detailOf(thrown);
   return {
     kind: KINDS.find(([as]) => thrown instanceof as)?.[1] ?? "threw",
-    message: thrown instanceof Error ? thrown.message : inspect(thrown),
-    detail: inspect(thrown),
+    message: thrown instanceof Error ? thrown.message : detail,
+    detail,
   };
+}
+
+export function failureOf(thrown: unknown): Failure {
+  return classified(thrown, inspect);
+}
+
+// [LAW:effects-at-boundaries] A renderer answer records what failed, which
+// does not depend on where the runtime put the executing code. Report the
+// exception and its explicit fields without inspecting its native stack.
+export function rendererFailureOf(thrown: unknown): Failure {
+  return classified(thrown, (value) => rendererDetail(value, new Set()));
+}
+
+function rendererDetail(value: unknown, path: Set<Error>): string {
+  if (value instanceof CrossedFailure) return value.failure.detail;
+  if (!(value instanceof Error))
+    return inspect(value, { customInspect: false });
+  const title = Error.prototype.toString.call(value);
+  if (path.has(value)) return `[Circular: ${title}]`;
+  path.add(value);
+  const lines = [title];
+  if (Object.hasOwn(value, "cause"))
+    lines.push(`cause: ${rendererDetail(value.cause, path)}`);
+  if (value instanceof AggregateError) {
+    const errors: readonly unknown[] = value.errors;
+    for (const [index, error] of errors.entries())
+      lines.push(`errors[${index}]: ${rendererDetail(error, path)}`);
+  }
+  for (const key of Object.keys(value)) {
+    if (
+      key === "name" ||
+      key === "message" ||
+      key === "stack" ||
+      key === "cause"
+    )
+      continue;
+    if (key === "errors" && value instanceof AggregateError) continue;
+    const field = Object.getOwnPropertyDescriptor(value, key);
+    if (field !== undefined && "value" in field)
+      lines.push(`${key}: ${rendererDetail(field.value, path)}`);
+  }
+  path.delete(value);
+  return lines.join("\n");
 }
 
 // A request refused for what it carried, nothing having thrown.
