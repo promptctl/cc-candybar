@@ -2,24 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-911",
-      "ref": "refs/pull/911/merge",
-      "sha": "8f0f2311dc2ce229d8c8e5286e5e26f612b116ff",
-      "timestamp": "2026-11-19T22:16:33.516Z",
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
+      "timestamp": "2026-11-19T22:29:01.070Z",
       "commits": [
         {
-          "sha": "8f0f2311dc2ce229d8c8e5286e5e26f612b116ff",
+          "sha": "1772bff36a50b978f6c15660a166714a2b6ce717",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:15:16-07:00",
-          "message": "Merge e827adbb235484beec6f2a169063ceb784162e6b into 6815d8573c5c838d7ac874225c050015cf78201b\n"
-        },
-        {
-          "sha": "e827adbb235484beec6f2a169063ceb784162e6b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:14:27-07:00",
-          "message": "refactor(renderer): keep transcript readers outside the renderer import graph\n"
+          "timestamp": "2026-11-19T15:27:50-07:00",
+          "message": "refactor(renderer): keep transcript readers outside the renderer import graph (#911)"
         }
       ]
     },
@@ -49,21 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T14:54:49-07:00",
           "message": "refactor(renderer): return diagnostics with the owning answer\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "6815d8573c5c838d7ac874225c050015cf78201b",
-      "timestamp": "2026-11-19T22:09:57.636Z",
-      "commits": [
-        {
-          "sha": "6815d8573c5c838d7ac874225c050015cf78201b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T22:08:49Z",
-          "message": "chore(release): set `package.json` to 1.235.14\n\n## [1.235.14](https://github.com/promptctl/cc-candybar/compare/v1.235.13...v1.235.14) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** share managed plugin watches across renderer lifetimes ([#909](https://github.com/promptctl/cc-candybar/issues/909)) ([30e8732](https://github.com/promptctl/cc-candybar/commit/30e873263e903714b0febd0021507e4d0bc6b95a))\n"
         }
       ]
     },
