@@ -2,6 +2,56 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-872",
+      "ref": "refs/pull/872/merge",
+      "sha": "da4ce4a89f5a51a083d43cd3ec2c52fe62f3ea77",
+      "timestamp": "2026-11-19T14:15:15.099Z",
+      "commits": [
+        {
+          "sha": "da4ce4a89f5a51a083d43cd3ec2c52fe62f3ea77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:13:55Z",
+          "message": "Merge f04e46b70a6ab4dbbad30bd7c730cc50cd98eefe into 4521bf6f3ff8442f1ade1eb3785e9b245dd454e6\n"
+        },
+        {
+          "sha": "f04e46b70a6ab4dbbad30bd7c730cc50cd98eefe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:13:47-07:00",
+          "message": "test(native): exercise cold and steady statusline ticks over the socket\n"
+        },
+        {
+          "sha": "f640d6b641eb11524137e5306d4cf425bf6938ce",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:09:38-07:00",
+          "message": "fix(host): admit compact renders through the shared checkpoint\n"
+        },
+        {
+          "sha": "24878b346030488dd9d37a125b2de34074c686c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:27:19-07:00",
+          "message": "perf(host): reuse the reported environment for each session\n"
+        },
+        {
+          "sha": "07d82157d982619e28da49f5011561624ec66210",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:17:52-07:00",
+          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
+        },
+        {
+          "sha": "a635d76888c88b437fe7e9400e183f367bd0ae54",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:10:17-07:00",
+          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
+        }
+      ]
+    },
+    {
       "version": "pr-880",
       "ref": "refs/pull/880/merge",
       "sha": "bcefffda4cbefb64ce6c9393844cd3da2ce9d54f",
@@ -181,42 +231,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-872",
-      "ref": "refs/pull/872/merge",
-      "sha": "03d493f21f8fd9b450a68a16357c696877a88040",
-      "timestamp": "2026-11-19T13:30:31.977Z",
-      "commits": [
-        {
-          "sha": "03d493f21f8fd9b450a68a16357c696877a88040",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:29:32-07:00",
-          "message": "Merge 80ad584782eb93b4fdc747f70f9c619156e8853e into b572777cc8c9de4ce37090fcea33fb72d08cf127\n"
-        },
-        {
-          "sha": "80ad584782eb93b4fdc747f70f9c619156e8853e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:27:19-07:00",
-          "message": "perf(host): reuse the reported environment for each session\n"
-        },
-        {
-          "sha": "b3547b454d8e366949ab687790a5b156360c5066",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:17:52-07:00",
-          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
-        },
-        {
-          "sha": "8b05acce75279cf2cf471b09a951bd08fbdfcb4a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:10:17-07:00",
-          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
         }
       ]
     },
