@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-893",
+      "ref": "refs/pull/893/merge",
+      "sha": "e741eb2570163a1a1e6e08fca8eb0860ef1a822b",
+      "timestamp": "2026-11-19T18:26:35.866Z",
+      "commits": [
+        {
+          "sha": "e741eb2570163a1a1e6e08fca8eb0860ef1a822b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T18:25:25Z",
+          "message": "Merge 582b477feea7fa1021e2c8db67ed440b90324179 into aac59c95e05357cbdee5cfbd3e1759fb98fc8686\n"
+        },
+        {
+          "sha": "582b477feea7fa1021e2c8db67ed440b90324179",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:40:36-07:00",
+          "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-898",
       "ref": "refs/pull/898/merge",
       "sha": "ab5a8b6ee62d244ca4bbeabc9a355f1cb9326d04",
@@ -35,28 +57,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T18:21:28Z",
           "message": "chore(release): set `package.json` to 1.235.6\n\n## [1.235.6](https://github.com/promptctl/cc-candybar/compare/v1.235.5...v1.235.6) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** preserve Git checkout read errors ([#892](https://github.com/promptctl/cc-candybar/issues/892)) ([b430a64](https://github.com/promptctl/cc-candybar/commit/b430a64a7ab7be113b28a91192cf47cb2e26835f))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-893",
-      "ref": "refs/pull/893/merge",
-      "sha": "58cd846a37957c69e2958467a6aca4b51a87f47a",
-      "timestamp": "2026-11-19T18:18:14.151Z",
-      "commits": [
-        {
-          "sha": "58cd846a37957c69e2958467a6aca4b51a87f47a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:17:15-07:00",
-          "message": "Merge b2262c76cbac416243c113c6680c1ec88cb43378 into b430a64a7ab7be113b28a91192cf47cb2e26835f\n"
-        },
-        {
-          "sha": "b2262c76cbac416243c113c6680c1ec88cb43378",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:40:36-07:00",
-          "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
         }
       ]
     },
