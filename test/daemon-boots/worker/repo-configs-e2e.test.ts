@@ -252,7 +252,7 @@ describe("a repository's config waits for the user's one answer", () => {
     expect(fs.existsSync(marker)).toBe(false);
   });
 
-  test("a worktree asks for its repository, and one answer there covers the repository and supersedes the worktree's own", async () => {
+  test("one answer from a new worktree covers the project and supersedes an older worktree entry", async () => {
     const git = (...args: string[]): void => {
       execFileSync("git", args, { stdio: "ignore" });
     };
@@ -277,11 +277,12 @@ describe("a repository's config waits for the user's one answer", () => {
       path.join(wt, ".cc-candybar.json5"),
       repoConfig(wtMarker, "WTSEG"),
     );
-    // An answer kept under the worktree's own path, before answers were kept
-    // by repository: it disagrees with the repository's, so it asks.
+    const older = `${project}-older`;
+    git("-C", project, "worktree", "add", "-q", "--detach", older);
+    // This worktree predates project approvals. The new worktree asks for
+    // the project, and the explicit answer replaces the older entry.
     repoConfigs(stateDir(hostOf(isolated.env))).update(() => ({
-      [project]: "declined",
-      [wt]: "approved",
+      [older]: "declined",
     }));
     try {
       start();
@@ -310,7 +311,7 @@ describe("a repository's config waits for the user's one answer", () => {
           fs
             .readFileSync(logPath(hostOf(isolated.env)), "utf8")
             .includes(
-              `repo-config: ${project} approved superseded=${wt} absent=- unchecked=- `,
+              `repo-config: ${project} approved superseded=${older} absent=- unchecked=- `,
             ),
         "the repo-config event naming the superseded worktree entry",
       );
@@ -324,6 +325,7 @@ describe("a repository's config waits for the user's one answer", () => {
       expect(indicatorOf(main)).toBeNull();
     } finally {
       fs.rmSync(wt, { recursive: true, force: true });
+      fs.rmSync(older, { recursive: true, force: true });
     }
   });
 });

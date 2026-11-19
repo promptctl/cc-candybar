@@ -7,20 +7,27 @@
 // [LAW:effects-at-boundaries] The parsers are pure; the file is read and
 // written only here.
 
-import fs from "node:fs";
-import path from "node:path";
+import { types } from "node:util";
 import { writeAtomic } from "../utils/atomic-write.js";
-import type { Asked } from "../utils/outcome.js";
+import { ok, type Asked } from "../utils/outcome.js";
+import { readTextIfPresent } from "../utils/regular-text.js";
+
+export interface StateObservation<T> {
+  readonly result: Asked<T>;
+  readonly paths: readonly string[];
+}
 
 export interface StateFile<T> {
+  readonly observe: () => StateObservation<T>;
   readonly read: () => Asked<T>;
   // The file with `next` of what it holds, and what it holds now — or, when
   // the file does not read, that failure, with nothing filed: a document's
   // other contents are never lost to a filing. A `next` that returns what it
-  // was given writes nothing. Only a write that fails throws.
+  // was given writes only when promoting an older file. Only a write that
+  // fails throws.
   readonly update: (next: (current: T) => T) => Asked<T>;
   // What `update` would write, unwritten: the file, its next text — null when
-  // `next` returns what it was given — and the value, so a caller that lands
+  // neither a change nor a promotion is needed — and the value, so a caller that lands
   // several files together writes this one with the rest.
   readonly plan: (next: (current: T) => T) => Asked<Planned<T>>;
 }
@@ -35,59 +42,83 @@ export interface Planned<T> {
 const textOf = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
 
-// The store named `name` under the daemon's state directory. `parse` reads
-// the parsed document; its failure reason is told after the file's name
-// ("<file> is not a list of terminals"). Only cc-candybar writes these files,
-// so text that does not read is that failure, never the empty value.
+// [LAW:one-source-of-truth] Only absence advances to an older location.
+// The paths actually consulted are the watch dependencies of this result.
+// Writes always use the current location and carry forward the old contents.
 export function stateFile<T>(
-  dir: string,
-  name: string,
+  locations: readonly [string, ...string[]],
   empty: T,
   parse: (doc: unknown) => Asked<T>,
+  readText: (file: string) => string | null = readTextIfPresent,
 ): StateFile<T> {
-  const file = path.join(dir, name);
-  const read = (): Asked<T> => {
-    let text: string;
-    try {
-      text = fs.readFileSync(file, "utf8");
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        return { kind: "ok", value: empty };
+  const file = locations[0];
+  const observe = () => {
+    const paths: string[] = [];
+    for (const candidate of locations) {
+      paths.push(candidate);
+      let text: string | null;
+      try {
+        text = readText(candidate);
+      } catch (e) {
+        const result: Asked<T> = {
+          kind: "failed",
+          reason: types.isNativeError(e) ? e.message : String(e),
+        };
+        return { result, paths, source: candidate };
       }
-      return { kind: "failed", reason: `${file}: ${(e as Error).message}` };
-    }
-    let doc: unknown;
-    try {
-      doc = JSON.parse(text);
-    } catch (e) {
+      if (text === null) continue;
       return {
-        kind: "failed",
-        reason: `${file} is not JSON: ${(e as Error).message}`,
+        result: documentAt(candidate, text, parse),
+        paths,
+        source: candidate,
       };
     }
-    const parsed = parse(doc);
-    return parsed.kind === "ok"
-      ? parsed
-      : { kind: "failed", reason: `${file} ${parsed.reason}` };
+    return { result: ok(empty), paths, source: null };
   };
   const plan = (next: (current: T) => T): Asked<Planned<T>> => {
-    const current = read();
+    const { result: current, source } = observe();
     if (current.kind === "failed") return current;
     const value = next(current.value);
+    const promote = source !== null && source !== file;
     return {
       kind: "ok",
       value: {
         file,
-        text: value === current.value ? null : textOf(value),
+        text: promote || value !== current.value ? textOf(value) : null,
         value,
       },
     };
   };
-  return { read, plan, update: (next) => written(plan(next)) };
+  return {
+    observe,
+    read: () => observe().result,
+    plan,
+    update: (next) => written(plan(next)),
+  };
+}
+
+function documentAt<T>(
+  file: string,
+  text: string,
+  parse: (doc: unknown) => Asked<T>,
+): Asked<T> {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: `${file} is not JSON: ${(e as Error).message}`,
+    };
+  }
+  const parsed = parse(doc);
+  return parsed.kind === "ok"
+    ? parsed
+    : { kind: "failed", reason: `${file} ${parsed.reason}` };
 }
 
 // [LAW:single-enforcer] A plan written: its text, when it has any.
-export function written<T>(planned: Asked<Planned<T>>): Asked<T> {
+function written<T>(planned: Asked<Planned<T>>): Asked<T> {
   if (planned.kind === "failed") return planned;
   const { file, text, value } = planned.value;
   if (text !== null) writeAtomic(file, text);

@@ -1,4 +1,4 @@
-// The one policy every doctor state file holds (src/daemon/state-file.ts):
+// The policy for a stored JSON document (src/daemon/state-file.ts):
 // absent is the empty value, anything else must read, and nothing is written
 // over a file that does not.
 import fs from "node:fs";
@@ -21,18 +21,17 @@ describe("a stored JSON document", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-state-file-"));
     file = path.join(dir, "state", NAME);
   });
-  const at = (): string => path.dirname(file);
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   test("absent is the empty value; an update is read back by the next reader, its directory made", () => {
-    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({ kind: "ok", value: [] });
-    expect(stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile([file], [], numbers).read()).toEqual({ kind: "ok", value: [] });
+    expect(stateFile([file], [], numbers).update((ns) => [...ns, 1])).toEqual({ kind: "ok", value: [1] });
     // Another process — the CLI, a later daemon — reads the same document.
-    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({ kind: "ok", value: [1] });
+    expect(stateFile([file], [], numbers).read()).toEqual({ kind: "ok", value: [1] });
   });
 
   test("an update that returns what it was given writes nothing", () => {
-    const store = stateFile<readonly number[]>(at(), NAME, [], numbers);
+    const store = stateFile<readonly number[]>([file], [], numbers);
     store.update(() => [1]);
     fs.utimesSync(file, 0, 0);
     expect(store.update((ns) => ns)).toEqual({ kind: "ok", value: [1] });
@@ -42,12 +41,12 @@ describe("a stored JSON document", () => {
   test("text that does not read is a failure naming the file, never the empty value", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "{");
-    expect(stateFile(at(), NAME, [], numbers).read()).toMatchObject({
+    expect(stateFile([file], [], numbers).read()).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file} is not JSON: `),
     });
     fs.writeFileSync(file, '["x"]');
-    expect(stateFile(at(), NAME, [], numbers).read()).toEqual({
+    expect(stateFile([file], [], numbers).read()).toEqual({
       kind: "failed",
       reason: `${file} is not a list of numbers`,
     });
@@ -55,16 +54,16 @@ describe("a stored JSON document", () => {
 
   test("a file that cannot be read for any reason but absence is a failure naming it", () => {
     fs.mkdirSync(file, { recursive: true });
-    expect(stateFile(at(), NAME, [], numbers).read()).toMatchObject({
+    expect(stateFile([file], [], numbers).read()).toMatchObject({
       kind: "failed",
-      reason: expect.stringContaining(`${file}: EISDIR`),
+      reason: expect.stringContaining(`${file}: not a file`),
     });
   });
 
   test("nothing is filed over a file that does not read", () => {
     fs.mkdirSync(path.dirname(file));
     fs.writeFileSync(file, "junk");
-    expect(stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toMatchObject({
+    expect(stateFile([file], [], numbers).update((ns) => [...ns, 1])).toMatchObject({
       kind: "failed",
       reason: expect.stringContaining(`${file} is not JSON`),
     });
@@ -77,7 +76,7 @@ describe("a stored JSON document", () => {
     fs.mkdirSync(path.dirname(file));
     fs.chmodSync(path.dirname(file), 0o500);
     try {
-      expect(() => stateFile(at(), NAME, [], numbers).update((ns) => [...ns, 1])).toThrow(
+      expect(() => stateFile([file], [], numbers).update((ns) => [...ns, 1])).toThrow(
         expect.objectContaining({ code: "EACCES" }),
       );
     } finally {

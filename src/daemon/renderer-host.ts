@@ -363,9 +363,9 @@ export function rendererHost(
       }
     }
     const moved =
-      landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0)
+      landed.kind === "ok" && landed.files.length > 0
         ? (recordTaken("landed config discovery", () =>
-            world.configs.landed(landed.files, answers.length > 0),
+            world.configs.landed(landed.files),
           ) ?? [])
         : [];
     const reloaded: Array<Promise<readonly EffectOutcome[]>> = [];

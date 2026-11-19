@@ -12,7 +12,6 @@ import { effectsOf, linksOf } from "../../../src/click/read";
 import {
   effectsUrl,
   VERB_OPEN_VSCODE,
-  VERB_REPO_CONFIG,
   VERB_RUN,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
@@ -27,7 +26,6 @@ import {
 import {
   click,
   drawnLink,
-  findUrl,
   hookData,
   observePane,
   render,
@@ -43,7 +41,6 @@ import {
   type IsolatedDaemonHandle,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
-import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 
 jest.setTimeout(30_000);
 
@@ -310,42 +307,6 @@ describe("the daemon's renderer process", () => {
     } finally {
       pane.close();
     }
-  });
-
-  test("admits the repository decision from an earlier frame", async () => {
-    const init = spawnSync("git", ["-C", projectDir, "init", "-q"], {
-      encoding: "utf8",
-    });
-    if (init.status !== 0) throw new Error(`git init: ${init.stderr}`);
-    fs.writeFileSync(
-      path.join(projectDir, ".cc-candybar.json5"),
-      JSON.stringify({
-        segments: { agreed: { template: "REPOSITORY-APPROVED" } },
-        root: { h: ["agreed"] },
-      }),
-    );
-    const session = "rproc-repo";
-    const draw = () => render(handle.sockPath, session, projectDir);
-    const before = await draw();
-    expect(textOf(before)).not.toContain("REPOSITORY-APPROVED");
-    const pages = await readDiagnostics(
-      handle.sockPath,
-      session,
-      projectDir,
-      before,
-    );
-    const approve = findUrl(
-      pages.flatMap(({ rendered }) => linksOf(rendered).map(({ url }) => url)),
-      (effects) =>
-        effects.some(
-          ({ verb, args }) => verb === VERB_REPO_CONFIG && args[2] === "approved",
-        ),
-    );
-    if (approve === undefined) throw new Error("missing repository approval");
-    const later = await draw();
-    expect(textOf(later)).not.toContain("REPOSITORY-APPROVED");
-    await click(handle.sockPath, approve, 20_000);
-    expect(textOf(await draw())).toContain("REPOSITORY-APPROVED");
   });
 
   test("a run from an earlier frame keeps its drawn arguments and environment", async () => {

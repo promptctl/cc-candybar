@@ -352,6 +352,16 @@ describe("the book in the state directory", () => {
       value: { [project]: "declined" },
     });
   });
+
+  test("a failure reaching the current book is reported by both a read and an update", () => {
+    write(loose(), { [project]: "approved" });
+    fs.writeFileSync(path.dirname(repoConfigsPath(state())), "ordinary file");
+    const store = repoConfigs(state());
+    const failed = { kind: "failed", reason: expect.stringContaining("ENOTDIR") };
+    expect(store.read()).toMatchObject(failed);
+    expect(store.update(() => ({}))).toMatchObject(failed);
+    expect(JSON.parse(fs.readFileSync(loose(), "utf8"))).toEqual({ [project]: "approved" });
+  });
 });
 
 describe("a repository's worktrees answer as the repository", () => {
@@ -432,17 +442,16 @@ describe("a repository's worktrees answer as the repository", () => {
     expect(resolveAt(answers, project).repos.awaiting).toEqual([]);
   });
 
-  test("a worktree's own answer that disagrees with its repository's asks, loads nothing, and the answer supersedes it", () => {
+  test("the project decision covers its worktrees even when an older worktree entry disagrees", () => {
     const legacy = { [project]: "approved", [wt]: "declined" } as const;
     expect(resolveAt(book(legacy), wt)).toMatchObject({
-      layers: [],
-      repos: { plugins: null, approved: [], awaiting: [project] },
+      layers: [{ path: path.join(wt, ".cc-candybar.json5"), role: "project" }],
+      repos: { plugins: wt, approved: [wt], awaiting: [], declined: [] },
     });
-    // One that agrees changes nothing.
-    expect(
-      resolveAt(book({ [project]: "approved", [wt]: "approved" }), wt).repos
-        .approved,
-    ).toEqual([wt]);
+    expect(resolveAt(book({ [project]: "declined", [wt]: "approved" }), wt)).toMatchObject({
+      layers: [],
+      repos: { plugins: null, approved: [], awaiting: [], declined: [project] },
+    });
 
     const state = repoConfigs(path.join(root, "state"));
     state.update(() => legacy);

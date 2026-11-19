@@ -48,7 +48,6 @@ import type { PluginScope } from "../../config/loader/plugin-scope.js";
 import {
   repoUnreadNotice,
   type ApprovedRepo,
-  type RepoAnswers,
   type RepoGate,
 } from "../../config/loader/repo-gate.js";
 
@@ -70,7 +69,7 @@ export interface RootListing {
 // batch of origins discovered together reads each of them once.
 export interface SharedFacts {
   readonly locs: Locations;
-  readonly answers: () => RepoAnswers;
+  readonly answers: Parameters<typeof searchConfig>[1];
   readonly installed: readonly RootListing[];
   readonly files: DiscoveryFiles;
   readonly references: (text: string) => readonly string[];
@@ -84,13 +83,15 @@ export interface DiscoveryWorld {
 export function readShared(
   world: DiscoveryWorld,
   source: DiscoveryFiles = diskFiles,
+  readBookText?: (file: string) => string | null,
 ): SharedFacts {
   const files = discoveryFiles(source);
   const included = new Map<string, readonly string[]>();
-  let answers: RepoAnswers | undefined;
+  const book = repoConfigs(world.stateDir, readBookText);
+  let answers: ReturnType<typeof book.observe> | undefined;
   return {
     locs: world.locations,
-    answers: () => (answers ??= repoConfigs(world.stateDir).read()),
+    answers: () => (answers ??= book.observe()),
     installed: installedRoots(world.locations, files),
     files,
     // The same bytes can name different physical files relative to their
@@ -305,7 +306,7 @@ export type DiscoverQuery = ConfigQuery & { readonly cwd: string };
 // names: every candidate location of the chain, there or not, and the plugin
 // roots searched, so a file or a root appearing reloads.
 export interface ConfigTargets {
-  readonly candidates: readonly string[];
+  readonly files: readonly string[];
   readonly roots: readonly string[];
 }
 
@@ -333,7 +334,7 @@ export function discover(
 ): Discovered {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations, candidates } = search;
+  const { resolution, question, locations, watchedFiles } = search;
   const { repos } = resolution;
   const session = sessionPlugins(
     locs,
@@ -359,7 +360,7 @@ export function discover(
   return {
     snapshot: { ...snapshotOf(session, chain), repo: question, notices },
     targets: {
-      candidates,
+      files: watchedFiles,
       roots: [
         ...new Set([
           ...pluginRoots(locs, repos.plugins).map((r) => r.dir),

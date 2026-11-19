@@ -162,7 +162,7 @@ export function performChanges(
         rewrites.set(excluded.value.file, excluded.value);
     }
     if (book !== null && book.answers.length > 0) {
-      const planned = answeredBook(book.stateDir, book.answers);
+      const planned = answeredBook(book.stateDir, book.answers, files.readText);
       if (planned.kind === "failed")
         return {
           kind: "failed",

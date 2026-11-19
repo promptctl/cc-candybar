@@ -4,7 +4,6 @@
 // are kept, and it is the host's, because it opens the book.
 
 import type { SessionId } from "../foundations/session-id.js";
-import fs from "node:fs";
 import path from "node:path";
 import {
   answerDir,
@@ -16,12 +15,7 @@ import {
 import { worktreeLink } from "../../utils/git-root.js";
 import { ok, type Asked } from "../../utils/outcome.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
-import {
-  stateFile,
-  written,
-  type Planned,
-  type StateFile,
-} from "../state-file.js";
+import { stateFile, type Planned, type StateFile } from "../state-file.js";
 
 const REPO_CONFIGS_FILE = "repo-configs.json";
 // The book's own folder. The daemon polls the book's path, so a hand edit
@@ -41,30 +35,17 @@ export function repoConfigsPath(dir: string): string {
 // [LAW:one-source-of-truth] The book in its folder is the answers. One kept
 // directly in the state directory, where the book used to live, is read
 // only while the folder holds none, and the first answer recorded writes it
-// into the folder with that answer: nothing is moved, so no answer is lost
-// to a move, and every reader sees the
-// same answers.
-export const repoConfigs = (dir: string): StateFile<RepoConfigBook> => {
-  const book = stateFile(
-    repoConfigsDir(dir),
-    REPO_CONFIGS_FILE,
+// into the folder with that answer.
+export const repoConfigs = (
+  dir: string,
+  readText?: (file: string) => string | null,
+): StateFile<RepoConfigBook> =>
+  stateFile(
+    [repoConfigsPath(dir), path.join(dir, REPO_CONFIGS_FILE)],
     {},
     parseRepoConfigBook,
+    readText,
   );
-  const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
-  const filed = (): boolean => fs.existsSync(repoConfigsPath(dir));
-  const plan: StateFile<RepoConfigBook>["plan"] = (next) => {
-    if (filed()) return book.plan(next);
-    const kept = loose.read();
-    if (kept.kind === "failed") return kept;
-    return book.plan(() => next(kept.value));
-  };
-  return {
-    read: () => (filed() ? book : loose).read(),
-    plan,
-    update: (next) => written(plan(next)),
-  };
-};
 
 // What recording an answer did to the book's other entries: the worktrees'
 // own answers it superseded, and the entries no key can be proven for, which
@@ -135,9 +116,10 @@ export interface Answer {
 export function answeredBook(
   stateDir: string,
   answers: readonly Answer[],
+  readText: (file: string) => string | null,
 ): Asked<Planned<RepoConfigBook> & { readonly said: readonly string[] }> {
   const said: string[] = [];
-  const planned = repoConfigs(stateDir).plan((current) =>
+  const planned = repoConfigs(stateDir, readText).plan((current) =>
     answers.reduce((book, { session, dir, answer }) => {
       const answered = answering(book, dir, answer);
       const { superseded, absent, unchecked } = answered.recorded;

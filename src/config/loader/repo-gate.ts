@@ -54,12 +54,9 @@ export function answerDir(d: RepoDir): string {
 const answerOf = (book: RepoConfigBook, dir: string): RepoAnswer | null =>
   Object.hasOwn(book, dir) ? book[dir]! : null;
 
-// A directory's standing, and the book entry it stands under. Only `approved`
-// loads. The answer is its repository's; an answer the book still holds under
-// a worktree's own path, kept from before answers were kept by repository,
-// stands while the repository has none, and one that disagrees with the
-// repository's leaves it awaiting, so neither answer wins unseen. Answering
-// supersedes it (`withAnswer`).
+// [LAW:one-source-of-truth] The project's decision covers every verified
+// linked worktree. A worktree's older entry serves it until the project has
+// a decision of its own. Answering the project supersedes its older entries.
 interface Ruling {
   readonly standing: RepoStanding;
   readonly under: string;
@@ -68,16 +65,11 @@ function ruling(answers: RepoAnswers, d: RepoDir): Ruling {
   const key = answerDir(d);
   if (answers.kind === "failed") return { standing: "unread", under: key };
   const repo = answerOf(answers.value, key);
-  const own = answerOf(answers.value, d.dir);
-  if (repo === null) {
-    return own === null
-      ? { standing: "awaiting", under: key }
-      : { standing: own, under: d.dir };
-  }
-  return {
-    standing: own === null || own === repo ? repo : "awaiting",
-    under: key,
-  };
+  if (repo !== null) return { standing: repo, under: key };
+  const legacy = answerOf(answers.value, d.dir);
+  return legacy === null
+    ? { standing: "awaiting", under: key }
+    : { standing: legacy, under: d.dir };
 }
 // A directory claiming to be a linked worktree that the repository does not
 // vouch for, and why: it answers under its own path.
