@@ -380,7 +380,7 @@ export function editGlobalsJson(): JsonNode {
 // engine-71o.2) to catch a typo'd persist target at config-load time instead
 // of a confusing click-time "invariant broken" error.
 const GLOBALS_FIELD_NAMES: ReadonlySet<string> = new Set(
-  Object.keys(GLOBALS_FIELDS),
+  Object.keys(LIVE_GLOBALS_FIELDS),
 );
 export function isGlobalsField(key: string): key is keyof Globals {
   return GLOBALS_FIELD_NAMES.has(key);
