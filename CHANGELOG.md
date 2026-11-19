@@ -1,3 +1,9 @@
+## [1.233.1](https://github.com/promptctl/cc-candybar/compare/v1.233.0...v1.233.1) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** restore live sessions on renderer restart (ibyq.fqw) ([#862](https://github.com/promptctl/cc-candybar/issues/862)) ([2ea914d](https://github.com/promptctl/cc-candybar/commit/2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8))
+
 ## [1.233.0](https://github.com/promptctl/cc-candybar/compare/v1.232.15...v1.233.0) (2026-11-19)
 
 ### Features
