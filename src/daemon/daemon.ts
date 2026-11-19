@@ -56,6 +56,7 @@ import { clickLaunchVia } from "./foundations/click-launch.js";
 import { Acts } from "./acts.js";
 import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
+import { authorizeRun } from "./foundations/run-authorization.js";
 import { publishingFrames } from "./foundations/frame-publication.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
@@ -126,8 +127,8 @@ export interface DaemonAdapters {
   ) => SessionFileStorage<DurableContext>;
   readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
-  // [LAW:one-source-of-truth] The link key, asked for at each use: every
-  // click is opened with it and every renderer draws with it.
+  // [LAW:one-source-of-truth] The host uses one key to publish and admit
+  // terminal clicks.
   readonly linkKey: () => Asked<Buffer>;
   // What the memory backstop reads and writes on the machine.
   readonly limits: (own: {
@@ -599,7 +600,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         mainRendererOf(
           {
             stored: stores.current(),
-            linkSigner,
             locations: locs,
             home: host.home,
             gates,
@@ -607,18 +607,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           },
           hostReaches,
         ),
-      boot: () => {
-        const key = inputs.linkKey();
-        return {
-          stored: stores.current(),
-          host: { ...host, env: plainEnvironment(host.env) },
-          memoryLimitBytes,
-          linkKey:
-            key.kind === "ok"
-              ? { kind: "ok", value: key.value.toString("base64") }
-              : key,
-        };
-      },
+      boot: () => ({
+        stored: stores.current(),
+        host: { ...host, env: plainEnvironment(host.env) },
+        memoryLimitBytes,
+      }),
       node: bundle.node,
     });
     return { name, reported, entry, stores, prepared };
@@ -690,6 +683,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         recorded: () => {},
       },
       {
+        authorizeRun: (request, captures) =>
+          authorizeRun(linkSigner, request, captures),
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),

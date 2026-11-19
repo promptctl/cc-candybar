@@ -11,7 +11,6 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { feedInputs } from "./helpers/inputs";
 import { readingsIn } from "./helpers/session-environment";
@@ -93,7 +92,6 @@ function buildPopulatedState(): DaemonDslState {
     new SessionState(),
   );
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: process.cwd(),
   });
   // Apply a known payload so the 'session.id' input has a value.

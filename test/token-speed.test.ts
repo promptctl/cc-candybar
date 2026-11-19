@@ -16,7 +16,6 @@ import { HOST } from "./helpers/host";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -413,7 +412,6 @@ function renderSpeed(payload: Record<string, unknown>): Frame {
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, {
-      signer: TEST_SIGNER,
       cwd: "/tmp",
     });
     return drawPayload(

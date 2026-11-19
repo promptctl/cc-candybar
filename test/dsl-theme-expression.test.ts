@@ -26,7 +26,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -306,7 +305,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const drawn = drawPayload(
         config,
         compiled,
@@ -334,7 +333,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       new SessionState(),
     );
     try {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const drawn = drawPayload(
         config,
         compiled,
@@ -399,7 +398,7 @@ describe("globals.palette as an expression — loader", () => {
       new SessionState(),
     );
     try {
-      expect(() => registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() })).toThrow(
+      expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
         /globals\.palette is not a valid template/,
       );
     } finally {
@@ -528,7 +527,7 @@ describe("a rule inside a preset's globals", () => {
 
   test("the active preset's rule is evaluated per render, for both the theme and the style", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const effective = resolveEffectiveGlobals(
         config,
         (key) => (key === "preset" ? "ruled" : null),
@@ -568,7 +567,7 @@ describe("a rule inside a preset's globals", () => {
       presetSrc("{{ if ge (int .ctx.pct) 50 }}nord"),
       (config, registry) => {
         expect(() =>
-          registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() }),
+          registerDslConfig(config, registry, { cwd: process.cwd() }),
         ).toThrow(/presets\.ruled\.globals\.palette is not a valid template/);
       },
     );
@@ -576,7 +575,7 @@ describe("a rule inside a preset's globals", () => {
 
   test("a caller picking only a preset renders the ACTIVE preset's rule, not the config's top-level palette", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const frame = drawPayload(
         config,
         compiled,
@@ -595,7 +594,7 @@ describe("a rule inside a preset's globals", () => {
     withRegistry(
       presetSrc("{{ if true }}no-such-theme{{ end }}"),
       (config, registry, store) => {
-        const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+        const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
         const said = drawPayload(
           config,
           compiled,
@@ -616,7 +615,7 @@ describe("a rule inside a preset's globals", () => {
   test("one text written in both slots is two rules — the theme report names only the palette", () => {
     const shared = "{{ if true }}none{{ end }}";
     withRegistry(presetSrc(shared, shared), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
       const said = drawPayload(
         config,
         compiled,

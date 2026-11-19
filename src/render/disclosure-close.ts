@@ -29,10 +29,12 @@ export function disclosureCloseFragment(
     DISCLOSURE_GLYPH_CLOSE,
     {
       kind: "action",
-      effect: {
-        verb: VERB_SET_STATE,
-        args: [sessionId, key, DISCLOSURE_CLOSED],
-      },
+      effects: [
+        {
+          verb: VERB_SET_STATE,
+          args: [sessionId, key, DISCLOSURE_CLOSED],
+        },
+      ],
     },
     false,
   );

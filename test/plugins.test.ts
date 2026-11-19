@@ -6,7 +6,6 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, WORLD, hostOf, worldOf, processLauncher } from "./helpers/host";
 import type { Host, World } from "../src/host";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -592,7 +591,6 @@ test("the daemon's load records the plugins it merged and dropped", () => {
     clock: systemTimekeeper,
     stateDir: stateDir(host),
     locations: locations(host),
-    signer: TEST_SIGNER,
     gates: bareGates(),
     sessionState: new SessionState(),
   });
@@ -651,7 +649,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -698,7 +695,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -755,7 +751,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -773,7 +768,6 @@ describe("a plugin's own variables", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -928,7 +922,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
       },
@@ -987,7 +980,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1085,7 +1077,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
       });
@@ -1612,7 +1603,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -1651,7 +1641,6 @@ describe("an installed plugin", () => {
         stateDir: stateDir(host),
         locations: locations(host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1765,7 +1754,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -1845,7 +1833,6 @@ describe("an installed plugin", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });
@@ -2005,7 +1992,6 @@ describe("a repo's plugin beside an installed one of its name", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(host),
       locations: locations(host),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });

@@ -12,6 +12,7 @@ import {
   effectsUrl,
   VERB_COPY,
   VERB_REPO_CONFIG,
+  VERB_RUN,
   VERB_SET_STATE,
 } from "../../src/click/wire";
 import { effectsOf } from "../../src/click/read";
@@ -44,6 +45,7 @@ describe("a link the bar draws", () => {
           verb: "dispatch",
           steps: [{ kind: "global", verb: VERB_COPY, value: "rm -rf ~" }],
         },
+        runEvidence: [],
         link: COPY,
         delivery,
       });
@@ -222,5 +224,31 @@ describe("a draw's frames", () => {
         ],
       },
     });
+  });
+
+  test("indexes each drawn run separately and retains its signing evidence in the host", () => {
+    const action = "export";
+    const declaration = "registered action";
+    const captures = ["earlier", "later"].map((value) => {
+      const evaluated = JSON.stringify({ run: ["/bin/true", value], env: {} });
+      const mac = TEST_SIGNER.sign({
+        sessionId: session,
+        action,
+        declaration,
+        evaluated,
+      });
+      return { session, action, evaluated, mac };
+    });
+    const raw = effectsUrl(captures.map((run) => ({
+      verb: VERB_RUN,
+      args: [run.session, run.action, run.evaluated, run.mac],
+    })));
+    const admitted = parseClick(TEST_SIGNER.signLink(raw), CLI, TEST_SIGNER);
+    if (admitted.kind !== "link") throw new Error(admitted.problem);
+    expect(admitted.click.steps).toEqual([
+      { kind: "run", verb: VERB_RUN, action, capture: 0 },
+      { kind: "run", verb: VERB_RUN, action, capture: 1 },
+    ]);
+    expect(admitted.runEvidence).toEqual(captures);
   });
 });

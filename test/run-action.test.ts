@@ -49,7 +49,7 @@ import { linkSigner, linkSignerOver } from "../src/click/link-signer";
 import { linkKeyFromFile } from "../src/daemon/link-key";
 import { runDeclaration, type RunAction } from "../src/config/action";
 import { effectsUrl, VERB_RUN, type EvaluatedRun } from "../src/click/wire";
-import { BadVerbArgs, type VerbContext } from "../src/renderer/verbs";
+import type { VerbContext } from "../src/renderer/verbs";
 import {
   sessionIdOf,
   type SessionId,
@@ -67,6 +67,7 @@ import { heardRequest } from "./helpers/click";
 import { throughout, until } from "./helpers/until";
 import { untilHeard } from "./helpers/reload-signal";
 import { textOf } from "../src/render/frame";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -238,7 +239,6 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
       sessionState,
       watchers,
       storage: providers.managedStorage,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -304,7 +304,7 @@ function draw(view: SessionView<SessionSource>): {
     effective,
   );
   const errors = segmentErrorsOf(warnings);
-  return { text: textOf(frame), links: linkUrls(frame), errors };
+  return { text: textOf(frame), links: linkUrls(publishingFrames(TEST_SIGNER)(frame)), errors };
 }
 
 function viewOf(
@@ -426,7 +426,6 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -454,7 +453,6 @@ describe("a run's declaration", () => {
       stateDir: stateDir(HOST),
       locations: locs(),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -669,9 +667,9 @@ describe("a click on a run link", () => {
       // Another session that has rendered: what its link must prove is the
       // signature.
       recordRender(r.sessionState, S2, dir);
-      await expect(clickUrl(relink(tampered), ctx)).rejects.toThrow(
-        BadVerbArgs,
-      );
+      await expect(clickActing(relink(tampered), ctx, running(r))).resolves.toEqual([
+        { kind: "refused", reason: expect.stringContaining("signature does not match") },
+      ]);
       expect(r.runs.stats()).toMatchObject({ started: 0 });
       // The refusal is in the bar of the session the link names.
       expect(
@@ -703,9 +701,9 @@ describe("a click on a run link", () => {
       },
     } as typeof drawnUnder;
     const ctx = clickContext(r, view, { configFor: () => edited });
-    await expect(clickUrl(link.url, ctx)).rejects.toThrow(
-      /its action has been edited since it was drawn/,
-    );
+    await expect(clickActing(link.url, ctx, running(r))).resolves.toEqual([
+      { kind: "refused", reason: expect.stringContaining("its action has been edited since it was drawn") },
+    ]);
     expect(r.runs.stats()).toMatchObject({ started: 0 });
     // The same link under the declaration it was drawn from runs.
     await clickActing(link.url, clickContext(r, view), running(r));
@@ -715,12 +713,12 @@ describe("a click on a run link", () => {
   test("a link signed with another key is refused", async () => {
     const r = rig();
     const { view, link } = await drawnLink(r);
-    const ctx = clickContext(r, view, {
-      links: linkSigner(Buffer.alloc(32, 9)),
-    });
-    await expect(clickUrl(link.url, ctx)).rejects.toThrow(
-      /signature does not match/,
-    );
+    const ctx = clickContext(r, view);
+    await expect(
+      clickActing(link.url, ctx, running(r), linkSigner(Buffer.alloc(32, 9))),
+    ).resolves.toEqual([
+      { kind: "refused", reason: expect.stringContaining("signature does not match") },
+    ]);
     expect(r.runs.stats()).toMatchObject({ started: 0 });
   });
 

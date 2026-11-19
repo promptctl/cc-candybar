@@ -15,7 +15,6 @@ import { homeLayer } from "../src/config/dsl-loader";
 import { loadDiscovered, originOf } from "./helpers/config-host";
 import { SessionState } from "../src/renderer/session-state";
 import { systemTimekeeper } from "../src/time";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { bareGates } from "./helpers/gates";
 import { loadChain } from "./helpers/discovered-load";
 import { contentOfText } from "../src/config/config-snapshot";
@@ -722,7 +721,6 @@ describe("a project layer inserting into the user's row", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       sessionState: new SessionState(),
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -843,7 +841,6 @@ test("a layer that could not be read fails the load naming it", () => {
     stateDir: stateDir(host),
     locations: locations(host),
     sessionState: new SessionState(),
-    signer: TEST_SIGNER,
     gates: bareGates(),
   });
   try {

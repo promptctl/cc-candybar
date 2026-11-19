@@ -43,7 +43,6 @@ import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
 import {
-  effectsUrl,
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_OPEN_VSCODE,
@@ -61,12 +60,12 @@ import {
   VERB_STEP_STATE,
   VERB_UNDO,
   VERB_SLASH,
-  VERB_RUN,
-  type EvaluatedRun,
-  type Effect,
 } from "../click/wire.js";
-import type { LinkSigner } from "../click/link-signer.js";
-import type { DrawnLink } from "./drawn-link.js";
+import {
+  actionTarget,
+  type DrawnEffect,
+  type DrawnLink,
+} from "./drawn-link.js";
 import { styleWithLink } from "./link-style.js";
 import {
   LAYER_ROLES,
@@ -291,11 +290,6 @@ export interface ActionRuntime {
   // render bound rather than answering from whichever entry drew last.
   bound: RenderBinding | undefined;
   compiled: CompiledActions;
-  // [LAW:single-enforcer] What signs every `run` link this compile draws: the
-  // daemon's from the key file, and check's from a per-process
-  // preview key whose links are refused when clicked, a test's from a fixed
-  // key. There is one render path, and it always signs.
-  readonly signer: LinkSigner;
 }
 
 /** The look a render draws in, as that render resolved it. */
@@ -774,10 +768,13 @@ export function linkFragment(
 // makes the cell bold, and never unbolds a display its author made bold.
 export function linkOver(
   cell: RichText,
-  url: string,
+  target: DrawnLink,
   current = false,
 ): RichText {
-  const link = new Style({ link: url, bold: current ? true : undefined });
+  const link = styleWithLink(
+    new Style({ bold: current ? true : undefined }),
+    target,
+  );
   const linked = new RichText(cell.plain, {
     style: Style.combine([resolvedStyle(cell.style), link]),
   });
@@ -831,8 +828,7 @@ export function realize(
   boundValue: string | undefined,
   store: VariableStore,
   sessionId: SessionId,
-  signer: LinkSigner,
-): { effects: readonly Effect[]; active: boolean } {
+): { effects: readonly DrawnEffect[]; active: boolean } {
   switch (c.kind) {
     case "set-literal": {
       const current = readVar(store, c.stateVar);
@@ -1034,12 +1030,12 @@ export function realize(
         active: false,
       };
     // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
-    // draw, as copy's text is. The link carries what was evaluated and its
-    // mac, so the click runs what the bar showed and nothing a URL made up.
+    // draw, as copy's text is. The host signs the captured evaluation when it
+    // publishes the frame, so the click runs what the bar showed.
     // Never "active": a run is a one-shot trigger.
     case "run": {
       const scope = buildScope(store);
-      const evaluated = JSON.stringify({
+      const evaluated = {
         run: c.argv.map((item) => evalTemplate(item, scope)),
         env: Object.fromEntries(
           c.env.map(([variable, value]) => [
@@ -1047,16 +1043,16 @@ export function realize(
             evalTemplate(value, scope),
           ]),
         ),
-      } satisfies EvaluatedRun);
-      const mac = signer.sign({
-        sessionId,
-        action: c.name,
-        declaration: c.declaration,
-        evaluated,
-      });
+      };
       return {
         effects: [
-          { verb: VERB_RUN, args: [sessionId, c.name, evaluated, mac] },
+          {
+            kind: "run",
+            session: sessionId,
+            action: c.name,
+            declaration: c.declaration,
+            evaluated,
+          },
         ],
         active: false,
       };
@@ -1084,20 +1080,12 @@ export function realize(
       // displayed. Nothing here makes them one transaction — the daemon's
       // dispatch joins adjacent session writes into one batch, for this
       // producer and every other.
-      const head = realize(
-        c.head,
-        display,
-        boundValue,
-        store,
-        sessionId,
-        signer,
-      );
+      const head = realize(c.head, display, boundValue, store, sessionId);
       return {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) =>
-              realize(m, display, undefined, store, sessionId, signer).effects,
+            (m) => realize(m, display, undefined, store, sessionId).effects,
           ),
         ],
         active: head.active,
@@ -1199,9 +1187,8 @@ export function renderAction(
     boundValue,
     store,
     sessionId,
-    runtime.signer,
   );
-  return linkOver(display, effectsUrl(effects), active);
+  return linkOver(display, actionTarget(effects), active);
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

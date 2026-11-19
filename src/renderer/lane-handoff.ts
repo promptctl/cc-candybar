@@ -15,7 +15,8 @@ import {
   type Lane,
   type LaneSwitches,
 } from "../config/lanes.js";
-import { effectsUrl, VERB_RESET_CONFIG } from "../click/wire.js";
+import { VERB_RESET_CONFIG } from "../click/wire.js";
+import { actionTarget } from "../render/drawn-link.js";
 import {
   diagnosticSpan,
   HANDOFF_SEVERITY,
@@ -50,7 +51,7 @@ export function laneHandoff(
   writable: readonly LayerRole[],
   lanes: readonly [Lane, ...Lane[]],
 ): ChannelMessage {
-  const reset = effectsUrl(
+  const reset = actionTarget(
     writable
       .filter((layer) => layer !== "project")
       .map((layer) => ({

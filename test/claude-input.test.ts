@@ -8,7 +8,6 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { processLauncher } from "./helpers/host";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -245,7 +244,6 @@ function runtime(tmux: TmuxHint | null) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp/proj",
   });
   const raw = drawPayload(
@@ -454,7 +452,6 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: "/tmp/proj",
   });
   const ctx = testVerbContext(sessionState, undefined, config);

@@ -205,7 +205,7 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(admitClick(verb, v, TEST_SIGNER)).toMatchObject({ scope: "session", session: SID });
+    expect(admitClick(verb, v, TEST_SIGNER).click).toMatchObject({ scope: "session", session: SID });
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

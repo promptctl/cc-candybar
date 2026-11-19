@@ -1,6 +1,6 @@
 import type { LinkSigner } from "../../click/link-signer.js";
-import { hrefOfDrawnLink, repoAnswerUrl } from "../../render/drawn-link.js";
-import { isBarLink, repoAnswerFields } from "../../click/wire.js";
+import { publishedHref } from "../../render/drawn-link.js";
+import { isBarLink } from "../../click/wire.js";
 import { parseFrame, type Frame, type WireFrame } from "../../render/frame.js";
 
 export type PublishFrame = (wire: WireFrame) => Frame<string>;
@@ -19,15 +19,7 @@ export function publishingFrames(
         ...row,
         runs: row.runs.map(({ link, ...run }) => {
           if (link === undefined) return run;
-          const href =
-            typeof link !== "string" && link.kind === "repo-answer"
-              ? repoAnswerUrl(
-                  link,
-                  signer.sign(
-                    repoAnswerFields(link.session, link.dir, link.answer),
-                  ),
-                )
-              : hrefOfDrawnLink(link);
+          const href = publishedHref(link, signer.sign);
           return {
             ...run,
             link: isBarLink(href) ? signer.signLink(href) : href,

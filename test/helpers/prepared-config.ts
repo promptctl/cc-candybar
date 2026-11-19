@@ -1,5 +1,4 @@
 // A config fixture uses the same loader, compiler, collector and DSL renderer as the statusline.
-import { TEST_SIGNER } from "./link-signer";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { locations } from "../../src/daemon/paths";
 import { createGates, deriveActionGates } from "../../src/daemon/foundations/gates";
@@ -143,7 +142,6 @@ export function prepareSnapshot(
   try {
     const compiled = registerDslConfig(config, registry, {
       cwd,
-      signer: TEST_SIGNER,
     });
     warnings.push(...compiled.loadWarnings);
     return {

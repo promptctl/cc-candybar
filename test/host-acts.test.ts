@@ -25,6 +25,9 @@ import type {
 import type { Monotonic } from "../src/time";
 import { eventRenderer, hostHeld } from "./helpers/renderers";
 import { NO_CONFIGS } from "./helpers/renderers";
+import { authorizeRun } from "../src/daemon/foundations/run-authorization";
+import { VERB_RUN, type RunEvidence } from "../src/click/wire";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const S = sessionIdOf("s");
 // No wake is declared, so no timer is set.
@@ -36,6 +39,8 @@ const CLOCK = {
   },
 };
 const FILE = `{ globals: { theme: "dusk" } }\n`;
+const RUN_INPUT = JSON.stringify({ run: ["/bin/true"], env: {} });
+const RUN_DECLARATION = "the run's declaration";
 
 let dir: string;
 let file: string;
@@ -62,16 +67,26 @@ const copy = (session = S as typeof S | null): Act => ({
   session,
   text: "x",
 });
-const run = (): Act => ({
+const run = (): Extract<Act, { kind: "run" }> => ({
   kind: "run",
   id: ++ids as EffectId,
   session: S,
   action: "a",
-  program: "/bin/true",
-  args: [],
-  env: {},
+  declaration: RUN_DECLARATION,
+  capture: 0,
   cwd: "/",
   refreshes: [],
+});
+const evidence = (): RunEvidence => ({
+  session: S,
+  action: "a",
+  evaluated: RUN_INPUT,
+  mac: TEST_SIGNER.sign({
+    sessionId: S,
+    action: "a",
+    declaration: RUN_DECLARATION,
+    evaluated: RUN_INPUT,
+  }),
 });
 const change = (before: string, after: string): Effect => ({
   kind: "change",
@@ -95,7 +110,9 @@ function hostOver(
 ) {
   const did: string[] = [];
   const unheard: string[] = [];
+  const heard: EventInput[] = [];
   const world: HostWorld = {
+    authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
     perform: async (act: HostAct): Promise<EffectOutcome> => {
       did.push(
         `perform ${act.kind} ${act.id} (file says ${fs.readFileSync(file, "utf8").includes("dawn") ? "dawn" : "dusk"})`,
@@ -114,6 +131,7 @@ function hostOver(
     CLOCK,
     hostHeld(
       eventRenderer(async (input) => {
+        heard.push(input);
         if (input.event.kind === "effect-done") {
           did.push(`done ${input.event.of} ${input.event.outcome.kind}`);
           return done(input);
@@ -131,9 +149,32 @@ function hostOver(
     },
     world,
   );
-  const turn = () =>
-    host.answer(() => ({ kind: "event", event: { kind: "due" } }));
-  return { turn, did, unheard };
+  const turn = (runEvidence?: readonly RunEvidence[]) =>
+    host.answer(() =>
+      runEvidence === undefined
+        ? { kind: "event", event: { kind: "due" } }
+        : {
+            kind: "event",
+            runEvidence,
+            event: {
+              kind: "click",
+              click: {
+                scope: "session",
+                verb: VERB_RUN,
+                session: S,
+                steps: runEvidence.map(({ action }, capture) => ({
+                  kind: "run",
+                  verb: VERB_RUN,
+                  action,
+                  capture,
+                })),
+              },
+              arrival: { via: "link", delivery: { kind: "cli" } },
+              context: null,
+            },
+          },
+    );
+  return { turn, did, unheard, heard };
 }
 
 test("an act is performed once the turn's changes have landed and had their effect-done, wherever the turn returned it, and both are settled before the turn's caller hears it", async () => {
@@ -240,15 +281,53 @@ test("the acts of one turn are performed in the order the turn returned them", a
 test("an act that outlives its turn is not waited for: it is settled when it ends", async () => {
   let end!: (outcome: EffectOutcome) => void;
   const lasting = run();
-  const { turn, did } = hostOver([lasting], {
+  const { turn, did, heard } = hostOver([lasting], {
     perform: () => new Promise((r) => (end = r)),
   });
-  const answered = await turn();
+  const captured = evidence();
+  const answered = await turn([captured]);
+  expect(heard[0]?.event).toMatchObject({
+    kind: "click",
+    click: { steps: [{ kind: "run", action: "a", capture: 0 }] },
+  });
+  const sent = JSON.stringify(heard[0]);
+  expect(sent).not.toContain("evaluated");
+  expect(sent).not.toContain(captured.mac);
   expect(answered.settled).toEqual([]);
   expect(did).toEqual([]);
   end({ kind: "failed", reason: "run a: exited with code 1" });
   await new Promise((r) => setImmediate(r));
   expect(did).toEqual([`done ${lasting.id} failed`]);
+});
+
+test("a denied run settles as a refusal before it can outlive the click", async () => {
+  const denied = run();
+  const [before, after] = [copy(), copy()];
+  const { turn, did } = hostOver([before, denied, after]);
+  const answered = await turn([{ ...evidence(), mac: "" }]);
+  expect(answered.settled).toContainEqual({
+    kind: "refused",
+    reason: expect.stringContaining("signature does not match"),
+  });
+  expect(did).toContain(`done ${denied.id} refused`);
+  expect(did.filter((line) => line.startsWith("perform"))).toEqual([
+    `perform copy ${before.id} (file says dusk)`,
+    `perform copy ${after.id} (file says dusk)`,
+  ]);
+});
+
+test("a capture index has authority only within its click", async () => {
+  const requested = run();
+  const { turn, did } = hostOver([requested]);
+  expect((await turn([evidence()])).settled).toEqual([]);
+  const attempted = await turn();
+  expect(attempted.settled).toEqual([
+    { kind: "refused", reason: "run: the click did not capture this run" },
+  ]);
+  expect(did.filter((line) => line.startsWith("perform"))).toEqual([
+    `perform run ${requested.id} (file says dusk)`,
+  ]);
+  expect(did).toContain(`done ${requested.id} refused`);
 });
 
 test("an act with no session that failed is the daemon's to show", async () => {

@@ -11,7 +11,6 @@ import { unscriptedRuns } from "./helpers/fake-launcher";
 
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import {
   mkdtempSync,
   writeFileSync,
@@ -628,7 +627,6 @@ describe("the bundled activity segment renders the payload", () => {
     const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(narrowed, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       return drawPayload(

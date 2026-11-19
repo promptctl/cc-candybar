@@ -25,7 +25,12 @@
 
 import { RichText, Style, type ColorRgba } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { effectsUrl, VERB_SET_STATE, type Effect } from "../click/wire.js";
+import { VERB_SET_STATE } from "../click/wire.js";
+import {
+  actionTarget,
+  type DrawnAction,
+  type DrawnEffect,
+} from "./drawn-link.js";
 import {
   presentedAction,
   linkFragment,
@@ -403,15 +408,15 @@ export function renderPicker(
       : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
 
-  const pageUrl = (value: number): string =>
-    effectsUrl([
+  const pageTarget = (value: number): DrawnAction =>
+    actionTarget([
       { verb: VERB_SET_STATE, args: [sessionId, page.key, String(value)] },
     ]);
   // [LAW:dataflow-not-control-flow] The close writes arrive as data (see
   // CloseWrites); ✕ performs exactly them, and a closeOnPick option click folds
   // the same pairs into its apply write — one atomic set-state either way, so
   // "what closing means" cannot diverge between the two affordances.
-  const closeWrite: readonly Effect[] =
+  const closeWrite: readonly DrawnEffect[] =
     close.kind === "led"
       ? []
       : [
@@ -428,15 +433,14 @@ export function renderPicker(
   // This is the same concatenation a `do` action's members get: one rule for
   // "several writes, one click", not one per producer.
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
-  const optionUrl = (option: string): string =>
-    effectsUrl([
-      ...realize(declared, option, option, store, sessionId, runtime.signer)
-        .effects,
+  const optionTarget = (option: string): DrawnAction =>
+    actionTarget([
+      ...realize(declared, option, option, store, sessionId).effects,
       ...closeEffects,
     ]);
 
   const optionCell = (face: RichText, i: number): RichText =>
-    linkOver(face, optionUrl(apply.options[i]!));
+    linkOver(face, optionTarget(apply.options[i]!));
   // [LAW:dataflow-not-control-flow] A led picker is closed by the body's ✕.
   const nav: RichText[] =
     close.kind === "led"
@@ -444,7 +448,7 @@ export function renderPicker(
       : [
           linkFragment(
             DISCLOSURE_GLYPH_CLOSE,
-            effectsUrl(closeWrite),
+            actionTarget(closeWrite),
             false,
             closeStyle,
           ),
@@ -455,9 +459,8 @@ export function renderPicker(
     ...steps.map(({ glyph, option }) =>
       linkFragment(
         glyph,
-        effectsUrl([
-          ...realize(declared, option, option, store, sessionId, runtime.signer)
-            .effects,
+        actionTarget([
+          ...realize(declared, option, option, store, sessionId).effects,
           {
             verb: VERB_SET_STATE,
             args: [
@@ -472,11 +475,11 @@ export function renderPicker(
     ),
   );
   if (pageIdx > 0) {
-    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
+    nav.push(linkFragment(PICKER_PREV, pageTarget(pageIdx - 1), false));
   }
   const next =
     pageIdx < pages.length - 1
-      ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)]
+      ? [linkFragment(PICKER_NEXT, pageTarget(pageIdx + 1), false)]
       : [];
 
   if (catalogue === undefined) {

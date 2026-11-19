@@ -10,7 +10,6 @@
 // the run in flight before any draw.
 
 import { TEST_SESSION } from "./helpers/payload-session";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { processLauncher } from "./helpers/host";
 import fs from "node:fs";
 import os from "node:os";
@@ -53,7 +52,6 @@ function viewOver(
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: os.tmpdir(),
   });
   const answer = observable.box(payload, { deep: false });

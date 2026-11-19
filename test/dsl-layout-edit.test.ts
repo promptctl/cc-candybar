@@ -49,7 +49,6 @@ import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { picked, selectionFor } from "./helpers/selection";
 import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/reserved-names";
@@ -558,7 +557,6 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, {
-    signer: TEST_SIGNER,
     cwd: process.cwd(),
   });
   const basePalette = getThemePalette("textual-dark"!);
@@ -894,7 +892,6 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
     }).not.toThrow();
@@ -946,7 +943,6 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
     const registry = new SourceRegistry(store, "", sessionState);
     try {
       const compiled = registerDslConfig(config, registry, {
-        signer: TEST_SIGNER,
         cwd: process.cwd(),
       });
       const basePalette = getThemePalette("textual-dark"!);
@@ -1013,7 +1009,6 @@ function makeCache(reloads?: ReloadSignal): {
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState,
       watchers,
@@ -1223,7 +1218,6 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         stateDir: stateDir(durable.host),
         locations: locations(durable.host),
         storage: NO_PLUGIN_STORAGE,
-        signer: TEST_SIGNER,
         gates: bareGates(),
         sessionState,
         watchers,

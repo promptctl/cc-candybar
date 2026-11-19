@@ -260,7 +260,6 @@ function rig(): Rig {
           providers.managedStorage.release(id);
         },
       },
-      signer: TEST_SIGNER,
       gates: bareGates(),
       log,
       source: sessionSource({
@@ -415,7 +414,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -510,7 +508,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -543,7 +540,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {
@@ -665,7 +661,6 @@ describe("a source's declaration", () => {
       stateDir: stateDir(host),
       locations: locations(host),
       sessionState: r.sessionState,
-      signer: TEST_SIGNER,
       gates: bareGates(),
     });
     try {

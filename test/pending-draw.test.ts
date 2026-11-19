@@ -11,7 +11,6 @@ import { drawPayload, segmentErrorsOf } from "./helpers/draw-payload";
 import { fakeLauncher, turns } from "./helpers/fake-launcher";
 import { systemTimekeeper } from "../src/time";
 import { heldClock } from "./helpers/held-clock";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { SessionState } from "../src/renderer/session-state";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -65,7 +64,7 @@ interface Drawn {
 }
 
 function renderer(cfg: ValidatedConfig) {
-  const compiled = compileDslConfig(compileInputOf(cfg), TEST_SIGNER);
+  const compiled = compileDslConfig(compileInputOf(cfg));
   const clock = heldClock(new Date(AT * 1000));
   const { launcher, spawner } = fakeLauncher(clock);
   // The two commands the configs here run: one never answers, one answers empty

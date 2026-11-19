@@ -16,9 +16,9 @@ import type { Resume } from "../utils/keyed-source.js";
 import { elapsedMs, type Timekeeper } from "../time.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { RunStats } from "./foundations/stats-snapshot";
-import type { Act, EffectOutcome } from "../renderer-interface/interface.js";
-
-export type RunAct = Extract<Act, { kind: "run" }>;
+import type { EffectOutcome } from "../renderer-interface/interface.js";
+import type { RunAct } from "./foundations/run-authorization.js";
+export type { RunAct } from "./foundations/run-authorization.js";
 
 // How a run ended: its outcome, and its facts for its act's line.
 export interface RunEnd {

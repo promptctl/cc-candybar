@@ -3,7 +3,6 @@
 // what waits for a start, how an end is said and backed off from, when a
 // silent renderer is ended, and whose ids cross.
 
-import type { Asked } from "../../src/utils/outcome";
 import { EMPTY_STORED_STATE } from "../../src/renderer-interface/stored-state";
 import {
   BACKOFF_FIRST_MS,
@@ -81,8 +80,6 @@ function rig(start: () => Promise<void> = async () => {}) {
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
   const held: Array<["hold" | "release", StorageHoldId]> = [];
-  // The key as the host reads it now: what each boot carries.
-  const key = { read: { kind: "ok", value: "a2V5" } as Asked<string> };
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -142,7 +139,6 @@ function rig(start: () => Promise<void> = async () => {}) {
       host: { env: {}, home: "/home", tmp: "/tmp" },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
-      linkKey: key.read,
       stored: EMPTY_STORED_STATE,
     }),
   });
@@ -158,7 +154,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     held,
     link,
     inputs,
-    key,
   };
 }
 
@@ -206,7 +201,6 @@ describe("a renderer process's start", () => {
           host: { env: {}, home: "/home", tmp: "/tmp" },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
-          linkKey: { kind: "ok", value: "a2V5" },
           stored: EMPTY_STORED_STATE,
         },
       },
@@ -372,27 +366,6 @@ describe("a renderer process's end", () => {
   test("renderers that end young wait twice as long each time, to a minute, and one that lived restarts at once", () => {
     expect([0, 1, 2, 3, 7, 30].map(backoffMs)).toEqual([
       0, 1_000, 2_000, 4_000, 60_000, 60_000,
-    ]);
-  });
-
-  // Removing a broken key file, its error's own remedy, recovers at the next
-  // start with no restart of the host.
-  test("each start boots with the key as the host reads it then", async () => {
-    const { link, children, clock, key } = rig();
-    key.read = { kind: "failed", reason: "link key holds 3 bytes" };
-    link.arm();
-    children[0]!.exit(CRASHED);
-    await settled();
-    key.read = { kind: "ok", value: "bmV3" };
-    clock.advance(backoffMs(1));
-    const boots = children.map(
-      (child) => child.written.find((l) => l.kind === "boot")!,
-    );
-    expect(
-      boots.map((l) => (l.kind === "boot" ? l.boot.linkKey : null)),
-    ).toEqual([
-      { kind: "failed", reason: "link key holds 3 bytes" },
-      { kind: "ok", value: "bmV3" },
     ]);
   });
 

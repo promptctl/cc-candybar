@@ -12,7 +12,6 @@ import { textOf } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { drawPayload } from "./helpers/draw-payload";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { projectCostPerHour } from "../src/renderer/render-payload";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
@@ -188,7 +187,6 @@ function renderBurnrate(
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, {
-      signer: TEST_SIGNER,
       cwd: "/tmp",
     });
     return drawPayload(

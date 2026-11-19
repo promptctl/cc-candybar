@@ -25,6 +25,7 @@ import { SessionState } from "../src/renderer/session-state";
 import { FOLLOW_BAR, listResolvablePaletteNames } from "../src/themes/policy";
 import { paletteForThemeName } from "../src/themes/palette-resolvers";
 import { resolvedStyle } from "../src/render/rich-theme.js";
+import { runUrl } from "./helpers/frame";
 import { settingsOf } from "../src/config/dsl-types";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -262,7 +263,7 @@ describe("configure mode picks a placement's theme", () => {
       const { url } = swatchOf(value);
       const { fg, bg } = out.rows
         .flatMap(({ runs }) => runs)
-        .find((run) => run.link === url && run.text.includes("▀"))!;
+        .find((run) => runUrl(run) === url && run.text.includes("▀"))!;
       return { fg, bg };
     };
     expect(swatchOf(first!).text).toBe("▀▀▀");

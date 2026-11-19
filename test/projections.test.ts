@@ -2,7 +2,6 @@
 // what the store does with its answer: a projection is derived again by every
 // read, at the draw in progress; anything else is cached.
 
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { HOST, locs } from "./helpers/host";
 import { unscriptedLauncher, unscriptedRuns } from "./helpers/fake-launcher";
 import { projectionsOf } from "../src/config/loader/projections";
@@ -212,7 +211,6 @@ test("the config load line names the load's projections", () => {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
     });

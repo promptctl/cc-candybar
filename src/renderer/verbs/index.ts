@@ -120,14 +120,11 @@ import {
   VERB_STEP_STATE,
   VERB_UNDO,
   VERB_SLASH,
-  VERB_RUN,
   VERB_COPY_DIAGNOSTIC,
-  type EvaluatedRun,
   type AdmittedClick,
   type ClickStep,
   type GlobalStep,
 } from "../../click/wire";
-import type { LinkSigner } from "../../click/link-signer";
 import {
   requireLayerText,
   type ConfigWrites,
@@ -199,9 +196,6 @@ export interface DaemonContext {
   // The storage folder of each source that config declares, from the same
   // render state: what a `run` supersedes.
   readonly sourcesFor: (origin: RenderOrigin) => DeclaredSources;
-  // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
-  // is honoured only if it verifies here.
-  readonly links: LinkSigner;
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
   readonly diagnosticCopy: (
@@ -1161,15 +1155,10 @@ const slash: VerbHandler = (args, ctx) => {
 
 // ─── Run (a `run` action) ───────────────────────────────────────────────────
 
-// [LAW:parse-dont-validate] A run link is honoured only when it names a `run`
-// action the session's config declares and its mac verifies — it was drawn by
-// this daemon's key, for this session, from that declaration as it stands
-// now, with exactly the program, arguments and environment it carries. The
-// directory the program runs in and the sources it refreshes come from that
-// declaration, never from the link. Any web page can open a `cc-candybar://`
-// link, so either check failing refuses the click before anything runs.
+// [LAW:effects-at-boundaries] Supply the session's current declaration and
+// source context. The host verifies the evidence and owns the launch.
 function runOf(
-  [action = "", evaluated = "", mac = ""]: readonly string[],
+  { action, capture }: Extract<ClickStep, { kind: "run" }>,
   ctx: ClickContext,
 ): Extract<ActRequest, { kind: "run" }> {
   const sid = ctx.session;
@@ -1181,35 +1170,13 @@ function runOf(
       `"${action}" is not a run action this session's config declares`,
     );
   }
-  const declaration = runDeclaration(decl);
-  if (
-    !ctx.links.verify({ sessionId: sid, action, declaration, evaluated }, mac)
-  ) {
-    throw new BadVerbArgs(
-      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn",
-    );
-  }
-  // Signed, so it is what a draw wrote: the JSON of an EvaluatedRun.
-  let drawn: EvaluatedRun;
-  try {
-    drawn = JSON.parse(evaluated) as EvaluatedRun;
-  } catch {
-    throw new BadVerbArgs(`run ${action}: what the link carries is not JSON`);
-  }
-  const [program, ...args] = drawn.run;
-  if (program === undefined || program === "") {
-    throw new BadVerbArgs(`run ${action}: the program evaluated to nothing`);
-  }
   const sources = ctx.sourcesFor(origin);
   return {
     kind: "run",
     session: sid,
     action,
-    program,
-    args,
-    // [LAW:single-enforcer] The action's own variables only: the host lays
-    // them over the session's environment, which no renderer holds.
-    env: drawn.env,
+    declaration: runDeclaration(decl),
+    capture,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
@@ -1220,8 +1187,6 @@ function runOf(
     })),
   };
 }
-
-const run: VerbHandler = (args, ctx) => ask(ctx, runOf(args, ctx));
 
 // The decoded session verbs index this complete table.
 const SESSION_HANDLERS: Record<
@@ -1243,7 +1208,6 @@ const SESSION_HANDLERS: Record<
   [VERB_BACK]: back,
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
-  [VERB_RUN]: run,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic,
 };
 
@@ -1469,6 +1433,9 @@ export function runClick(click: AdmittedClick, ctx: VerbContext): void {
               break;
             case "repo-answer":
               c.configWrites.answer(step.dir, step.answer);
+              break;
+            case "run":
+              ask(c, runOf(step, c));
               break;
           }
         },

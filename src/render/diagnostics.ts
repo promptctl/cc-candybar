@@ -15,11 +15,7 @@
 import { createHash } from "node:crypto";
 
 import { RichText, Style, asCellCol, chopCells } from "@promptctl/rich-js";
-import {
-  effectsUrl,
-  VERB_COPY_DIAGNOSTIC,
-  VERB_SET_STATE,
-} from "../click/wire.js";
+import { VERB_COPY_DIAGNOSTIC, VERB_SET_STATE } from "../click/wire.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import type { Drawing } from "../config/lanes.js";
 import { sanitizeText } from "./diagnostic-text.js";
@@ -30,7 +26,11 @@ import {
   type DiagnosticColors,
 } from "./diagnostic-style.js";
 import type { Row } from "./frame.js";
-import type { DrawnLink } from "./drawn-link.js";
+import {
+  actionTarget,
+  type DrawnAction,
+  type DrawnLink,
+} from "./drawn-link.js";
 import { styleWithLink } from "./link-style.js";
 import {
   drawStripCells,
@@ -239,8 +239,8 @@ function copyLink(
   by: Drawing["by"],
   key: string,
   position: number,
-): string {
-  return effectsUrl(
+): DrawnAction {
+  return actionTarget(
     [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId, by, key] }],
     `copy diagnostic ${position}`,
   );
@@ -387,8 +387,8 @@ export function viewerRows(
   const body = channelRows(shown, opts, []);
   const colors = colorsOf(shown.severity);
   const style = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const button = (text: string, link: string | null): RichText =>
-    cell(text, link === null ? style : style.withLink(link));
+  const button = (text: string, link: DrawnAction | null): RichText =>
+    cell(text, link === null ? style : styleWithLink(style, link));
   // [LAW:dataflow-not-control-flow] A step with nowhere to go is a blank of
   // the arrow's width, so the header never shifts as the reader pages.
   const step = (glyph: string, to: ViewerPosition | null): RichText =>
@@ -488,7 +488,8 @@ export function handoffRows(
       : [
           cell(
             label,
-            new Style({ bgcolor: bg, color: fg }).withLink(
+            styleWithLink(
+              new Style({ bgcolor: bg, color: fg }),
               viewerLink(sessionId, open),
             ),
           ),
@@ -497,8 +498,12 @@ export function handoffRows(
 }
 
 // The click that shows the message whose key is `key`, or closes the viewer.
-function viewerLink(sessionId: string, key: string, says?: string): string {
-  return effectsUrl(
+function viewerLink(
+  sessionId: string,
+  key: string,
+  says?: string,
+): DrawnAction {
+  return actionTarget(
     [{ verb: VERB_SET_STATE, args: [sessionId, DIAGNOSTICS_VIEWING, key] }],
     says,
   );

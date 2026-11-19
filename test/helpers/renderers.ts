@@ -14,6 +14,8 @@ import { rendererOf, timed } from "../../src/renderer-interface/interface";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { Collector } from "../../src/daemon/collector";
 import { systemTimekeeper } from "../../src/time";
+import { authorizeRun } from "../../src/daemon/foundations/run-authorization";
+import { TEST_SIGNER } from "./link-signer";
 
 // `renderer` as the host holds it in process: each turn timed around its
 // answer, on `monotonic` — a unit test's own clock, which reads no time.
@@ -87,6 +89,7 @@ export const NO_CONFIGS: HostWorld["configs"] = {
 // name, its renderer names no origin, the daemon is not closing, and an act's
 // failure no bar holds would be the rig's bug.
 export const NO_ACTS: HostWorld = {
+  authorizeRun: (request, captures) => authorizeRun(TEST_SIGNER, request, captures),
   perform: async (act) => ({
     kind: "failed",
     reason: `${act.kind}: this rig performs no act`,

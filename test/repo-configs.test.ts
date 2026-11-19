@@ -29,7 +29,6 @@ import {
 } from "../src/daemon/config-discovery/repo-configs";
 import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
-import { linkSigner } from "../src/click/link-signer";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "../src/time";
@@ -158,7 +157,6 @@ describe("the gate over a project's plugins", () => {
     const deps = {
       clock: systemTimekeeper,
       sessionState: new SessionState(),
-      signer: linkSigner(Buffer.alloc(32)),
       gates: bareGates(),
       stateDir: stateDir(host),
       locations: locations(host),

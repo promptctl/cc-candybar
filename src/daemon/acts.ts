@@ -27,8 +27,7 @@ import {
 import type { RunAct, RunEnd } from "./runs.js";
 
 // An act the landing performs with the config files, not here.
-type Landed = "approve-repo";
-export type HostAct = Exclude<Act, { kind: Landed }>;
+export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
 type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 export interface ActDeps {

@@ -18,7 +18,6 @@ import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { textOf } from "../src/render/frame";
 import type { Frame } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { ColorDepth, getThemePalette, transposePalette } from "@promptctl/rich-js";
 import type { RichText, ThemeKey } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -95,7 +94,7 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
   // The cells of the latest draw, which bgOf and fgOf read after it.
   let segments: ReadonlyMap<string, readonly RichText[]> = new Map();
   const render = (payload: object = {}, variation?: VariationName, shade?: ShadeName): Frame => {

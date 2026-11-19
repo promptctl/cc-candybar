@@ -8,7 +8,6 @@ import { sameDraw } from "./helpers/frame";
 
 import { drawPayload } from "./helpers/draw-payload";
 import { linkUrls } from "./helpers/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import { selectionFor } from "./helpers/selection";
 
 import { SessionState } from "../src/renderer/session-state";
@@ -81,7 +80,7 @@ function renderer(
   const session = new SessionState();
   for (const [key, value] of Object.entries(state)) session.set(S, key, value);
   const registry = new SourceRegistry(store, "", session);
-  const compiled = registerDslConfig(config, registry, { signer: TEST_SIGNER, cwd: "/tmp" });
+  const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const opts = {
     endcaps: "powerline" as const,
     colorCompatibility: "truecolor" as const,

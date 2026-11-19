@@ -1,7 +1,6 @@
 // What the rig promises a test that builds it: the parse and the compile of one
 // source are shared between rigs, and everything that holds a subscription or a
 // session's picks is a rig's own.
-import { linkSigner } from "../src/click/link-signer";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { settingNameOf } from "../src/config/globals-fields";
 import { registerOptionDomain } from "../src/config/option-domain";
@@ -117,19 +116,12 @@ describe("buildRig", () => {
     }
   });
 
-  test("a compile is shared by signer: one signer's compile is not another's", () => {
+  test("a compile is shared by its config key", () => {
     const rig = buildRig({ source: SOURCE });
     try {
       const input = compileInputOf(rig.config);
-      const one = linkSigner(Buffer.alloc(32, 1));
-      const two = linkSigner(Buffer.alloc(32, 2));
       const key = compileKey(input);
-      expect(sharedCompile(one)(key, input)).toBe(
-        sharedCompile(one)(key, input),
-      );
-      expect(sharedCompile(two)(key, input)).not.toBe(
-        sharedCompile(one)(key, input),
-      );
+      expect(sharedCompile(key, input)).toBe(sharedCompile(key, input));
     } finally {
       rig.dispose();
     }

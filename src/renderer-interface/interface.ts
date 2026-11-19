@@ -346,10 +346,10 @@ export type Act = { readonly id: EffectId } & (
       readonly kind: "run";
       readonly session: SessionId;
       readonly action: string;
-      readonly program: string;
-      readonly args: readonly string[];
-      // Laid over the session's environment, which the host holds.
-      readonly env: Readonly<Record<string, string>>;
+      // [LAW:effects-at-boundaries] The host checks the turn's captured
+      // evidence against this declaration before it decodes the arguments.
+      readonly declaration: string;
+      readonly capture: number;
       readonly cwd: string;
       readonly refreshes: readonly RunRefresh[];
     }

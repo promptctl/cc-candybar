@@ -1,7 +1,6 @@
 import { drawPayload } from "./helpers/draw-payload";
 import { HOST, locs, processLauncher } from "./helpers/host";
 import { textOf } from "../src/render/frame";
-import { TEST_SIGNER } from "./helpers/link-signer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,7 +93,6 @@ function makeCache(
       stateDir: stateDir(HOST),
       locations: locs(),
       storage: NO_PLUGIN_STORAGE,
-      signer: TEST_SIGNER,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
