@@ -32,6 +32,7 @@ import { URLSearchParams } from "node:url";
 
 import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
+import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import {
   isReservedName,
   MENU_NS,
@@ -42,6 +43,7 @@ import {
   parseSessionId,
   type SessionId,
 } from "../daemon/foundations/session-id";
+import type { LinkSigner, SignedFields } from "./link-signer.js";
 
 // [LAW:one-source-of-truth] The scheme string lives here, with the codec that
 // emits it; install/ (Launch Services registration) imports it.
@@ -156,8 +158,23 @@ export const VERB_RUN = "run";
 // [LAW:effects-at-boundaries] Answer the bar's question about a repository's
 // cc-candybar config. Args: `[sessionId, dir, answer, mac]` — `answer` is
 // approved or declined, and `mac` signs the session, directory and answer
-// (src/config/repo-question.ts), so only an answer the bar drew is recorded.
+// so only an answer the bar drew is recorded.
 export const VERB_REPO_CONFIG = "repo-config";
+
+// [LAW:single-enforcer] The same fields sign a drawn decision and verify an
+// answer from a terminal. Their spelling preserves already-issued links.
+export function repoAnswerFields(
+  sessionId: SessionId,
+  dir: string,
+  answer: RepoAnswer,
+): SignedFields {
+  return {
+    sessionId,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer,
+  };
+}
 
 // Copy what a diagnostic message copies (src/render/diagnostics.ts): its text,
 // or the prompt that fixes what it reports. Args: `[sessionId, by, key]` — the
@@ -484,8 +501,14 @@ export type ClickStep =
   | GlobalStep
   | {
       readonly kind: "session";
-      readonly verb: SessionVerb;
+      readonly verb: Exclude<SessionVerb, typeof VERB_REPO_CONFIG>;
       readonly args: readonly string[];
+    }
+  | {
+      readonly kind: "repo-answer";
+      readonly verb: typeof VERB_REPO_CONFIG;
+      readonly dir: string;
+      readonly answer: RepoAnswer;
     };
 
 export type AdmittedClick =
@@ -515,7 +538,11 @@ function isEffectVerb(verb: string): verb is EffectVerb {
 // An invalid session cannot reach a renderer. An invalid argument after a
 // valid session is that step's failure, so the bar can report it and the
 // other steps still run in order.
-export function admitClick(verb: string, value: string): AdmittedClick {
+export function admitClick(
+  verb: string,
+  value: string,
+  signer: Pick<LinkSigner, "verify">,
+): AdmittedClick {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
 
@@ -576,7 +603,11 @@ export function admitClick(verb: string, value: string): AdmittedClick {
                 .split("/")
                 .map(decodeURIComponent),
             );
-      scoped.steps.push({ kind: "session", verb: name, args });
+      scoped.steps.push(
+        name === VERB_REPO_CONFIG
+          ? admitRepoAnswer(scoped.id, args, signer)
+          : { kind: "session", verb: name, args },
+      );
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
@@ -585,4 +616,23 @@ export function admitClick(verb: string, value: string): AdmittedClick {
   return scoped === undefined
     ? { scope: "global", verb, steps: global }
     : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+}
+
+// [LAW:parse-dont-validate] An outer signature is also given to authored URLs.
+// Only a valid inner proof projects a repository answer into the typed event.
+function admitRepoAnswer(
+  session: SessionId,
+  [dir = "", value = "", mac = ""]: readonly string[],
+  signer: Pick<LinkSigner, "verify">,
+): Extract<ClickStep, { kind: "repo-answer" }> {
+  const answer = REPO_ANSWERS.find((known) => known === value);
+  if (
+    answer === undefined ||
+    !signer.verify(repoAnswerFields(session, dir, answer), mac)
+  ) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon",
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer };
 }

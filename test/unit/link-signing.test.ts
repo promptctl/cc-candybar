@@ -8,11 +8,18 @@ import {
   unprovenLink,
   type LinkSigner,
 } from "../../src/click/link-signer";
-import { effectsUrl, VERB_COPY } from "../../src/click/wire";
+import {
+  effectsUrl,
+  VERB_COPY,
+  VERB_REPO_CONFIG,
+  VERB_SET_STATE,
+} from "../../src/click/wire";
 import { effectsOf } from "../../src/click/read";
 import { parseClick } from "../../src/daemon/click-reading";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import type { Frame } from "../../src/render/frame";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import type { DrawnLink } from "../../src/render/drawn-link";
 import { TEST_SIGNER } from "../helpers/link-signer";
 
 const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
@@ -124,11 +131,11 @@ test("a retired status-line range cannot bypass signed click admission", () => {
 
 
 describe("a draw's frames", () => {
-  const run = (text: string, link?: string) => ({
+  const run = (text: string, link?: DrawnLink) => ({
     text,
     ...(link === undefined ? {} : { link }),
   });
-  const frame = (links: Array<string | undefined>): Frame => ({
+  const frame = (links: Array<DrawnLink | undefined>): Frame => ({
     depth: "truecolor",
     rows: [{ kind: "bar", runs: links.map((link, i) => run(`w${i}`, link)) }],
     nextChange: Infinity,
@@ -150,5 +157,70 @@ describe("a draw's frames", () => {
       undefined,
     ]);
     expect(drawn[1]!.rows[0]!.runs[0]!.link).toBe(TEST_SIGNER.signLink(COPY));
+  });
+
+  const session = sessionIdOf("repo-session");
+  const dir = "/example/repo?a+b";
+  const decision = "approved";
+  const proof = TEST_SIGNER.sign({
+    sessionId: session,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: decision,
+  });
+  const unsigned = (args: readonly string[]) =>
+    effectsUrl([{ verb: VERB_REPO_CONFIG, args }]);
+  const legacy = unsigned([session, dir, decision, proof]);
+
+  test("publishes and admits a typed repository decision with identical legacy bytes", () => {
+    const sign = publishingFrames(TEST_SIGNER);
+    const target = { kind: "repo-answer", session, dir, answer: decision } as const;
+    const sent = sign(frame([target, legacy])).rows[0]?.runs.map(({ link }) => link);
+    const signed = TEST_SIGNER.signLink(legacy);
+    expect(sent).toEqual([signed, signed]);
+    expect(parseClick(signed, FORWARDED, TEST_SIGNER)).toMatchObject({
+      kind: "link",
+      click: {
+        scope: "session",
+        session,
+        steps: [{ kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: decision }],
+      },
+    });
+  });
+
+  test.each([
+    ["missing inner proof", [session, dir, decision]],
+    ["wrong inner proof", [session, dir, decision, "0".repeat(64)]],
+    ["another repository", [session, "/example/other", decision, proof]],
+    ["another session", ["other-session", dir, decision, proof]],
+    ["another answer", [session, dir, "declined", proof]],
+    ["unknown answer", [session, dir, "pending", proof]],
+  ])("leaves an authored repository href with %s inert", (_, args) => {
+    const [run] = publishingFrames(TEST_SIGNER)(frame([unsigned(args)])).rows[0]!.runs;
+    expect(parseClick(run!.link!, CLI, TEST_SIGNER)).toMatchObject({
+      kind: "link",
+      click: {
+        steps: [{ kind: "invalid", reason: expect.stringContaining("signature does not match") }],
+      },
+    });
+  });
+
+  test("keeps the valid effects on either side of an invalid repository step", () => {
+    const write = (key: string) => ({ verb: VERB_SET_STATE, args: [session, key, "closed"] }) as const;
+    const url = effectsUrl([
+      write("one"),
+      { verb: VERB_REPO_CONFIG, args: [session, dir, decision] },
+      write("two"),
+    ]);
+    expect(parseClick(TEST_SIGNER.signLink(url), CLI, TEST_SIGNER)).toMatchObject({
+      kind: "link",
+      click: {
+        steps: [
+          { kind: "session", verb: VERB_SET_STATE, args: ["one", "closed"] },
+          { kind: "invalid" },
+          { kind: "session", verb: VERB_SET_STATE, args: ["two", "closed"] },
+        ],
+      },
+    });
   });
 });

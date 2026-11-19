@@ -30,6 +30,8 @@ import {
   type DiagnosticColors,
 } from "./diagnostic-style.js";
 import type { Row } from "./frame.js";
+import type { DrawnLink } from "./drawn-link.js";
+import { styleWithLink } from "./link-style.js";
 import {
   drawStripCells,
   WIDEST_GLYPH_COLS,
@@ -103,11 +105,11 @@ const colorsOf = (severity: DiagnosticSeverity): DiagnosticColors =>
 // every span the viewer meets is already safe to emit, whatever produced it.
 export interface DiagnosticSpan {
   readonly text: string;
-  readonly link: string | null;
+  readonly link: DrawnLink | null;
 }
 export function diagnosticSpan(
   text: string,
-  link: string | null,
+  link: DrawnLink | null,
 ): DiagnosticSpan {
   return { text: sanitizeText(text), link };
 }
@@ -548,8 +550,8 @@ function channelRows(
 ): readonly Row[] {
   const colors = colorsOf(message.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link: string | null): Style =>
-    link === null ? base : base.withLink(link);
+  const styled = (link: DrawnLink | null): Style =>
+    link === null ? base : styleWithLink(base, link);
   // A cell plus its trailing space must fit one row, so words fold at width−1
   // — never below the widest glyph (2 cells): a fold narrower than one glyph
   // is not a fold, and a 1–2 cell terminal simply cannot hold one.

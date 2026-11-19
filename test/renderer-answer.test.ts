@@ -521,21 +521,12 @@ describe("a feed's frame", () => {
     expect(parts.effectSessions.getStats().sessions).toBe(1);
   });
 
-  test("draws clickable addresses without calling the outer signer", async () => {
+  test("draws unsigned clickable addresses for the host to publish", async () => {
     const { r, parts, rig } = renderer();
     answered(await request({ r, rig }));
     const view = viewOf(rig)!;
-    const drawing: RendererParts = {
-      ...parts,
-      linkSigner: {
-        ...parts.linkSigner,
-        signLink: () => {
-          throw new Error("only the host may sign the outer address");
-        },
-      },
-    };
     const frame = renderFrame(
-      drawing,
+      parts,
       SESSION,
       MOVING_FPS,
       READ,

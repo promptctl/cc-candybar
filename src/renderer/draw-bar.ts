@@ -95,7 +95,6 @@ import {
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
-import type { LinkSigner } from "../click/link-signer.js";
 import { failureOf } from "../daemon/foundations/verb-error.js";
 import { renderFailure } from "../daemon/foundations/render-answers";
 
@@ -111,9 +110,6 @@ export interface RendererState {
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
   readonly effectSessions: EffectSessions<RenderedLine>;
-  // [LAW:single-enforcer] The repository trust question's inner signature.
-  // The host publishes the drawn frames' clickable addresses.
-  readonly linkSigner: LinkSigner;
   // Each session's idle period, which a draw reports what it showed to and
   // reads its flash from.
   readonly menuIdle: Pick<MenuIdle, "drew" | "since">;
@@ -438,8 +434,7 @@ export function drawRender(
   // What the draw made, which the turn that drew it keeps (`keepDraw`).
   kept: DrawMemory;
 } {
-  const { sessionState, linkSigner, renderWarnings, effectSessions, menuIdle } =
-    parts;
+  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId, entry, state, view, hintsError } =
     setup;
   const { at } = readings;
@@ -487,7 +482,7 @@ export function drawRender(
       : null;
   // [LAW:single-enforcer] Each repository awaiting the user's answer asks,
   // in every session drawn from the entry, until one of them answers.
-  const questions = repoQuestions(entry.snapshot.repo, sessionId, linkSigner);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId);
   // What a load or a request could not honour: each its own message, named by
   // what it is about. A load's error is about the session's config, and a
   // drop about the file that wrote it, so their text may change under an open

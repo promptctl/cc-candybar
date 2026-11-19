@@ -27,11 +27,9 @@ import {
   repoConfigs,
   repoConfigsPath,
 } from "../src/daemon/config-discovery/repo-configs";
-import { repoAnswerFields, repoQuestions } from "../src/config/repo-question";
+import { repoQuestions } from "../src/config/repo-question";
 import { SessionState } from "../src/renderer/session-state";
-import { VERB_REPO_CONFIG } from "../src/click/wire";
 import { linkSigner } from "../src/click/link-signer";
-import { effectsOf } from "./helpers/click";
 import { answerRepo } from "./helpers/repo-approval";
 import { locations, stateDir } from "../src/daemon/paths";
 import { createGates } from "../src/daemon/foundations/gates";
@@ -302,40 +300,19 @@ test("the config loaded event names the repository's standing, and why its workt
   expect(line).toContain(` repo=awaiting:/a unproven="/x is not there" `);
 });
 
-test("the question offers each answer as a link signed for its session, directory and answer", () => {
-  const signer = linkSigner(Buffer.alloc(32, 7));
+test("the question captures its session, directory and decision on each answer", () => {
   const [channel, ...rest] = repoQuestions(
     { dir: project, standing: "awaiting", unproven: null },
     SID_1,
-    signer,
   );
   expect(rest).toEqual([]);
   expect(channel!.message).toBe(
     `a cc-candybar config for ${project} — run it?`,
   );
-  const answers = channel!.lines[0]
-    .flatMap((span) => (span.link === null ? [] : effectsOf(span.link)))
-    .filter((e) => e.verb === VERB_REPO_CONFIG);
-  expect(answers.map((e) => e.args.slice(0, 3))).toEqual([
-    ["sid-1", project, "approved"],
-    ["sid-1", project, "declined"],
+  expect(channel!.lines[0].flatMap(({ link }) => link === null ? [] : [link])).toEqual([
+    { kind: "repo-answer", session: SID_1, dir: project, answer: "approved" },
+    { kind: "repo-answer", session: SID_1, dir: project, answer: "declined" },
   ]);
-  for (const e of answers) {
-    const [sid, dir, answer, mac] = e.args as [
-      string,
-      string,
-      "approved",
-      string,
-    ];
-    expect(
-      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, answer), mac),
-    ).toBe(true);
-    // The mac answers for this answer only.
-    const other = answer === "approved" ? "declined" : "approved";
-    expect(
-      signer.verify(repoAnswerFields(sessionIdOf(sid), dir, other), mac),
-    ).toBe(false);
-  }
 });
 
 // An answer kept where the book used to live, directly in the state
