@@ -67027,10 +67027,13 @@ var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
-var locatorOf = (req, environment) => ({
-  hookData: req.hookData,
-  cwd: req.cwd,
-  hints: req.hints,
+var locatorOf = ({
+  context: { hookData: hookData2, cwd: cwd2, hints },
+  environment
+}) => ({
+  hookData: hookData2,
+  cwd: cwd2,
+  hints,
   environment
 });
 var sourcesOf2 = (subscriptions, prior) => ({
@@ -67056,7 +67059,10 @@ var sourcesOf2 = (subscriptions, prior) => ({
   ].sort()
 });
 var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && a.env.length === b.env.length && a.env.every((name, i2) => b.env[i2] === name);
-function release2({ stop: stop2, holds: holds2 }) {
+function release2({
+  stop: stop2,
+  holds: holds2
+}) {
   stop2();
   holds2.close();
 }
@@ -67083,21 +67089,21 @@ var Collector = class {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req, environment) {
-    const locator = locatorOf(req, environment);
-    const sessionId2 = req.hookData.session_id;
+  requested(context, environment) {
+    const request2 = { context, environment };
+    const sessionId2 = context.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId2);
       if (held === void 0) {
-        const opened = this.open(sessionId2, locator);
+        const opened = this.open(sessionId2, request2);
         this.records.set(sessionId2, opened);
         return opened.stamped.document;
       }
       held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
-        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
-      const live = phase.kind === "live" ? phase : this.live(held, locator);
+        phase.declared.set(this.declared({ ...held, request: request2 }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, request2);
       held.phase = live;
       this.stamp(held, live.inputs.get());
       return held.stamped.document;
@@ -67170,7 +67176,7 @@ var Collector = class {
         if (phase.kind === "live")
           phase.declared.set(
             this.declared(
-              { ...record2, locator: phase.declared.get().locator },
+              { ...record2, request: phase.declared.get() },
               phase.holds
             )
           );
@@ -67193,14 +67199,17 @@ var Collector = class {
       record2.turns--;
     };
   }
-  // Each session the collector reads now, with its latest stamp: what a
-  // renderer's complete start configures again. Unlike a request, it marks no
-  // session active, so a restart keeps none past a sweep that would retire it.
-  liveDocuments() {
-    return new Map(
-      [...this.records.values()].flatMap(
-        (r) => r.phase.kind === "live" ? [[r.session, r.stamped.document]] : []
-      )
+  // [LAW:one-source-of-truth] Every session the collector reads has its
+  // request at the keys of its latest stamp. Restarting reads that pair
+  // without reactivating a session or handing the renderer its environment.
+  liveSessions() {
+    return [...this.records.values()].flatMap(
+      ({ phase, stamped }) => phase.kind === "live" ? [
+        {
+          context: phase.declared.get().context,
+          worldState: stamped.document
+        }
+      ] : []
     );
   }
   // One sweep. Public so a test can run it at an instant it chose.
@@ -67226,13 +67235,13 @@ var Collector = class {
       if (phase.kind === "live") release2(phase);
     runInAction(() => this.records.clear());
   }
-  open(session, locator) {
+  open(session, request2) {
     const subscriptions = {
       plugins: /* @__PURE__ */ new Map(),
       runs: /* @__PURE__ */ new Map(),
       env: []
     };
-    const reader = this.reader({ session, locator, subscriptions });
+    const reader = this.reader({ session, request: request2, subscriptions });
     const first2 = reader.inputs.get();
     let document;
     try {
@@ -67273,11 +67282,11 @@ var Collector = class {
   }
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
-  live(record2, locator) {
+  live(record2, request2) {
     return this.watch(
       record2.session,
       record2.stamped,
-      this.reader({ ...record2, locator })
+      this.reader({ ...record2, request: request2 })
     );
   }
   reader(keys2) {
@@ -67326,7 +67335,7 @@ var Collector = class {
   // is released (`Holds.declare`).
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
-  declared({ session, locator, subscriptions }, holds2) {
+  declared({ session, request: request2, subscriptions }, holds2) {
     const sid = JSON.stringify(session);
     try {
       const {
@@ -67334,7 +67343,12 @@ var Collector = class {
         acquired,
         released
       } = holds2.declare(
-        () => declareLanes(this.deps.owners, holds2, locator, subscriptions)
+        () => declareLanes(
+          this.deps.owners,
+          holds2,
+          locatorOf(request2),
+          subscriptions
+        )
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -67343,14 +67357,14 @@ var Collector = class {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
         );
-      return { locator, lanes };
+      return { ...request2, lanes };
     } catch (e) {
       this.deps.log(
         "error",
         `session declaration threw sid=${sid}: ${inspect(e)}`
       );
       return {
-        locator,
+        ...request2,
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions
@@ -67361,9 +67375,9 @@ var Collector = class {
   inputsOf(locator) {
     return { ...locator, deps: this.deps.owners };
   }
-  read({ locator, lanes }) {
+  read(declared) {
     try {
-      return ok(readingsOf(this.inputsOf(locator), lanes));
+      return ok(readingsOf(this.inputsOf(locatorOf(declared)), declared.lanes));
     } catch (e) {
       return failed(`reading the owners: ${String(e)}`, "read");
     }
@@ -89246,8 +89260,8 @@ function createDaemon(inputs) {
     log,
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session whose newest request the host holds
-    // gets its context with its latest stamp, all in the one `start` turn, so
+    // request would: every live session gets the context of its latest stamp,
+    // all in the one `start` turn, so
     // its output names every session it serves; and who watches each, so its
     // feeds open. All through the host's one path to the renderer, each turn
     // recorded there.
@@ -89263,12 +89277,7 @@ function createDaemon(inputs) {
           event: {
             kind: "start",
             viewers,
-            sessions: [...collector.liveDocuments()].flatMap(
-              ([sessionId2, worldState]) => {
-                const req = frameFeeds.latest(sessionId2);
-                return req === null ? [] : [{ context: located(req, checkoutLocation), worldState }];
-              }
-            )
+            sessions: collector.liveSessions()
           }
         };
       }, [["why", "renderer-start"]]);

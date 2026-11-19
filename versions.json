@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-863",
+      "ref": "refs/pull/863/merge",
+      "sha": "8144df661544d8d2e2efb239d6c077e36fe57f1e",
+      "timestamp": "2026-11-19T12:32:58.366Z",
+      "commits": [
+        {
+          "sha": "8144df661544d8d2e2efb239d6c077e36fe57f1e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:30:56Z",
+          "message": "Merge 76a69cfefe75a7e7836a60e68eb7099635b1628e into 2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8\n"
+        },
+        {
+          "sha": "76a69cfefe75a7e7836a60e68eb7099635b1628e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:10:16-07:00",
+          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-867",
       "ref": "refs/pull/867/merge",
       "sha": "870632928099f4280f8115ccd22bd8a1c0e2d521",
@@ -100,28 +122,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:28:15-07:00",
           "message": "fix(daemon): restore live sessions on renderer restart (ibyq.fqw) (#862)\n\nfix(daemon): restore live sessions on renderer restart\n\nRefs candybar-law-review-ibyq.fqw."
-        }
-      ]
-    },
-    {
-      "version": "pr-863",
-      "ref": "refs/pull/863/merge",
-      "sha": "eb600ad40d77ffacb318a6867e06f9031ab1527c",
-      "timestamp": "2026-11-19T12:25:56.541Z",
-      "commits": [
-        {
-          "sha": "eb600ad40d77ffacb318a6867e06f9031ab1527c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:24:50Z",
-          "message": "Merge 6e14435eb28a0049ba1bba737010bbaf6cd47468 into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
-        },
-        {
-          "sha": "6e14435eb28a0049ba1bba737010bbaf6cd47468",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:10:16-07:00",
-          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
         }
       ]
     },
