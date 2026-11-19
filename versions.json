@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-877",
+      "ref": "refs/pull/877/merge",
+      "sha": "3f0141625dbdd8f642df84afe3b553a3d0152511",
+      "timestamp": "2026-11-19T13:55:22.110Z",
+      "commits": [
+        {
+          "sha": "3f0141625dbdd8f642df84afe3b553a3d0152511",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:54:25-07:00",
+          "message": "Merge 101c331380a576bedf66395a6808908c8ea2036b into 6b98f5c610697d392140c302f633044ebe7a2aac\n"
+        },
+        {
+          "sha": "101c331380a576bedf66395a6808908c8ea2036b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:52:22-07:00",
+          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-875",
       "ref": "refs/pull/875/merge",
       "sha": "f65e907539c0aeabf4599a864887e94ae8b6b654",
