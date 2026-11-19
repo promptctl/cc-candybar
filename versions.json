@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b2358835f03f153e4d7bc004388a3266ead58038",
+      "timestamp": "2026-11-19T16:03:57.055Z",
+      "commits": [
+        {
+          "sha": "b2358835f03f153e4d7bc004388a3266ead58038",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T16:02:46Z",
+          "message": "chore(release): set `package.json` to 1.235.1\n\n## [1.235.1](https://github.com/promptctl/cc-candybar/compare/v1.235.0...v1.235.1) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** keep one presentation record for delivered frames ([#878](https://github.com/promptctl/cc-candybar/issues/878)) ([7f6f9c5](https://github.com/promptctl/cc-candybar/commit/7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-882",
       "ref": "refs/pull/882/merge",
       "sha": "938ade060410f16c53610939de51a5ccef7c1790",
@@ -27,21 +42,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T07:42:39-07:00",
           "message": "fix(daemon): drain live renderers before closing links\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d",
-      "timestamp": "2026-11-19T15:57:24.121Z",
-      "commits": [
-        {
-          "sha": "7f6f9c57ca163ae9d55d9ea16fea5fec16241b6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:56:10-07:00",
-          "message": "fix(renderer): keep one presentation record for delivered frames (#878)\n\n* fix(renderer): commit request frame memory on delivery\n\n* fix(renderer): settle pushed frame memory on actual subscriber delivery\n\n* fix(renderer): retain delivered diagnostics and give each message one copy key\n\n* refactor(renderer): own each accepted draw in one presentation record\n\n* test(daemon): verify named feed publication retains its delivery receipt\n\n* test(renderer): confirm frame delivery before comparing diagnostics\n\n* test(renderer): distinguish late receipts with a changing frame clock\n\n* fix(renderer): inspect the newest accepted layout in the active view\n\n* test(plugin): sweep again when a frame receipt holds the session"
         }
       ]
     },
