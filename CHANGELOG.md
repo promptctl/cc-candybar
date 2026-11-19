@@ -1,3 +1,9 @@
+## [1.235.14](https://github.com/promptctl/cc-candybar/compare/v1.235.13...v1.235.14) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** share managed plugin watches across renderer lifetimes ([#909](https://github.com/promptctl/cc-candybar/issues/909)) ([30e8732](https://github.com/promptctl/cc-candybar/commit/30e873263e903714b0febd0021507e4d0bc6b95a))
+
 ## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)
 
 ### Bug Fixes
