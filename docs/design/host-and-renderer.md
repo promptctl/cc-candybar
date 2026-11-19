@@ -130,66 +130,13 @@ An open pane feed keeps its config entry pinned when its view fails to open. A s
 
 ### The renderer interface
 
+The in-process and child-process transports use the same renderer contract. The host constructs each renderer with resolved locations, its memory limit and stored values. Construction can succeed or refuse and can produce diagnostics in either case. The host keeps the session environment and the link-signing key. [Renderer contract](../../src/renderer-interface/interface.ts)
+
+The first event is `start`. It carries the live session contexts, their world states, their viewers, and config snapshots by origin. A replacement can receive the authorized revision its predecessor selected alongside the latest observation. Subsequent inputs deliver requests, admitted clicks, world or config changes, scheduled draws, viewer changes, effect completions and session retirement. Inspection and shutdown use the same mailbox and turn clock.
+
+Every completed event returns its outcome, frames, effects, record, store writes, subscriptions, next wake and any diagnostics. A failed turn can still have writes or effects from work it completed. Inspection and shutdown answer with a typed reply or failure and their resulting declarations. The host times each turn and performs the effects. The host records an interrupted input when a worker exits before answering.
+
 ```ts
-// [LAW:one-type-per-behavior] One interface over two transports: the
-// renderer's own process, or in-process for the site and tests.
-interface Renderer {
-  answer(input: RendererInput): Promise<RendererOutput>;
-}
-
-// Every input carries two readings the host made as its mailbox slot came:
-// the wall instant a frame shows, and a monotonic tick, which everything the
-// renderer schedules is measured on, so a stepped wall moves no schedule.
-type RendererInput =
-  | { kind: "start"; start: Start; at: Instant; tick: Tick }
-  | { kind: "event"; event: Event; at: Instant; tick: Tick };
-
-// [LAW:one-source-of-truth] Complete, like a world state: a renderer that
-// (re)starts holds everything it would hold had it never stopped, except the
-// unsaved state its own process kept.
-interface Start {
-  readonly name: RendererName;
-  readonly cause: "first" | "crashed" | "bundle-changed";
-  readonly linkKey: LinkKey;
-  readonly stored: StoredState;
-  readonly sessions: readonly SessionSnapshot[];
-  readonly viewers: Viewers;                 // who watches each session, whole
-}
-
-interface SessionSnapshot {
-  readonly session: SessionId;
-  readonly worldState: WorldState;
-  readonly surfaces: readonly Surface[];   // the ones with viewers
-}
-
-type Event =
-  | { kind: "request"; id: RequestId; session: SessionId; hook: ClaudeHookData; context: RendererContext }   // the session context a renderer reads; the environment stays in the host
-  | { kind: "click"; click: VerifiedClick; arrival: ClickArrival }
-  | { kind: "world-state"; worldState: WorldState }
-  | { kind: "context"; context: RendererContext; worldState: WorldState }   // a request's opening turn (Router)
-  | { kind: "config"; origin: RenderOrigin; config: ConfigSnapshot }   // what discovery found at an origin the renderer subscribes
-  | { kind: "effect-done"; of: EffectId; outcome: Outcome<EffectResult> }
-  | { kind: "due" }                          // the tick the last output declared has come
-  | { kind: "viewers"; viewers: Viewers }    // who watches each session, whole
-  | { kind: "retire"; session: SessionId };
-
-interface RendererOutput {
-  readonly effects: readonly Effect[];
-  // [LAW:one-source-of-truth] The current declaration. Its identity changes
-  // when the open views, their sources, their lanes or their config needs do.
-  readonly subscriptions: Subscriptions;
-  // The host's one timer. A wake can move while all subscriptions stand.
-  readonly wake: Tick | null;
-  // [LAW:nothing-unseen] The turn's own record. A renderer writes no log;
-  // the host writes this one.
-  readonly record: TurnRecord;
-  // Diagnostic lines, in order, on both successful and failed turns.
-  readonly diagnostics?: readonly [LogLine, ...LogLine[]];
-  // The frames this turn's feeds drew. The host encodes the bar and any
-  // statusline handoff, then sends each subscriber whose lane's bytes changed.
-  readonly frames: readonly PushedFrame[];
-}
-
 interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
   // Managed storage folders named by retained configs, including idle configs.
@@ -201,6 +148,8 @@ interface Subscriptions {
   // each a parked event waits on. The host discovers an origin as it is first
   // named, follows its files while it is named, and lets it go when it is not.
   readonly configs: readonly RenderOrigin[];
+  // Authored revisions this renderer successfully retained at those origins.
+  readonly configSelections: readonly ConfigSelection[];
 }
 
 // Where a declaration came from is what repository trust is judged on. A layer
