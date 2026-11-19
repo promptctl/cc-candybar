@@ -192,19 +192,6 @@ export function placementIds(tree: LayoutNode): string[] {
   );
 }
 
-// A free id for a placement of `segment` beside the ids `taken`, which the
-// load's duplicate-id message suggests: the
-// segment's name while it is free, else the first free `<name>-<n>`, n from 2.
-export function freePlacementId(
-  segment: string,
-  taken: ReadonlySet<string>,
-): string {
-  if (!taken.has(segment)) return segment;
-  let n = 2;
-  while (taken.has(`${segment}-${n}`)) n++;
-  return `${segment}-${n}`;
-}
-
 // Where an open body's rows go: `drop` hangs them below the trigger's row;
 // `above` lifts them over the whole bar, and the trigger rises with them to
 // lead their first row as the body's close, so the bar's rows render as if

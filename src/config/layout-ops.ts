@@ -14,6 +14,7 @@
 // root. This module owns only the op's shape, its wire codec, and the id an
 // insertion mints.
 
+import { randomBytes } from "node:crypto";
 import { placementIds, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
@@ -99,7 +100,29 @@ export function mintPlacement(
       .filter((held) => held.includes(anchor))
       .flat(),
   );
-  let id = `${segment}-${suffix()}`;
-  while (taken.has(id)) id = `${segment}-${suffix()}`;
-  return { seg: segment, id };
+  return { seg: segment, id: mintPlacementId(segment, taken, suffix) };
+}
+
+// What a click, or a load suggesting an id, draws a suffix from.
+export const randomSuffix = (): string => randomBytes(3).toString("hex");
+
+// Suffixes drawn before a mint gives up: a draw from a million meets a taken
+// one this often only from a source that is not random.
+const MINT_TRIES = 16;
+
+// [LAW:single-enforcer] THE spelling of a new placement's id, free of `taken`.
+// [LAW:no-silent-failure] A source that keeps meeting taken ids fails loudly
+// rather than spinning.
+export function mintPlacementId(
+  segment: string,
+  taken: ReadonlySet<string>,
+  suffix: () => string,
+): string {
+  for (let tries = 0; tries < MINT_TRIES; tries++) {
+    const id = `${segment}-${suffix()}`;
+    if (!taken.has(id)) return id;
+  }
+  throw new Error(
+    `no free id for a placement of "${segment}" after ${MINT_TRIES} suffixes`,
+  );
 }

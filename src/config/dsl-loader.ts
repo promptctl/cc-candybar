@@ -1202,18 +1202,17 @@ function validateTopLevel(
     out.helpers = validateHelpers(ctx, raw.helpers);
   if (raw.plugins !== undefined)
     out.plugins = validatePluginRefs(ctx, raw.plugins);
-  // Before any synthesis writes a minted key into these sections.
-  refuseMintedKeys(ctx, out);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
   // parsed: each group collected during the root walk emits its state var +
   // cycle action + toggle segment into the raw sections (so they merge over the
   // default and cross-ref like any user declaration), and user names under the
   // reserved namespace are rejected against the fully-parsed sections.
-  synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
   // call's shape, checked where the author wrote them; the keys each placement
-  // derives are minted after merge (validateRenderable).
-  checkMenuDecls(ctx, out);
+  // derives are minted after merge (validateRenderable). Then the authored
+  // keys, before any synthesis writes a minted key into these sections.
+  refuseMintedKeys(ctx, out, checkMenuDecls(ctx, out));
+  synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
   // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger

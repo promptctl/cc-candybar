@@ -34,7 +34,7 @@ import {
   resolveOptionDomain,
 } from "../src/config/option-domain";
 import { settingControl } from "../src/config/setting-control";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuPageKey, sharedMenuStateKey } from "../src/config/menu-keys";
 import type { ActionDecl } from "../src/config/action";
 import type { ValidatedConfig as DslConfig } from "../src/config/dsl-types";
 import {
@@ -170,12 +170,14 @@ describe("each controlled field's control is generated from its declared domain"
 describe("a global the menu has never seen gets its control from the generator", () => {
   // A throwaway enum global: its declaration, fed through the SAME generator
   // the settings menu builds every control with, into a real config.
+  // The list joins an accordion of its own, keyed as the menu keys one.
+  const LIST = sharedMenuStateKey("zoomList");
   const control = settingControl(
     { label: "🧪", domain: { from: ["low", "mid", "high"] } },
     "zoom",
     "zoom",
     "apply.zoom",
-    "zoomList",
+    LIST,
   );
   const { actions } = control;
 
@@ -192,7 +194,7 @@ describe("a global the menu has never seen gets its control from the generator",
       "set" in a ? [a.set] : [],
     );
     expect(new Set(writes)).toEqual(
-      new Set(["zoom", "zoomList", menuPageKey("zoomList")]),
+      new Set(["zoom", LIST, menuPageKey(LIST)]),
     );
   });
 
@@ -208,7 +210,6 @@ describe("a global the menu has never seen gets its control from the generator",
       `{
       variables: ${JSON.stringify({
         zoom: { kind: "state", key: "zoom", default: "mid" },
-        "zoomList": { kind: "state", key: "zoomList", default: "apply.zoom" },
       })},
       segments: {
         zoomer: { template: ${JSON.stringify(control.template)} },
@@ -219,7 +220,11 @@ describe("a global the menu has never seen gets its control from the generator",
       ALLOWED,
       {
         ...DEFAULT_DSL_CONFIG,
-        variables: { ...DEFAULT_DSL_CONFIG.variables, ...control.variables },
+        variables: {
+          ...DEFAULT_DSL_CONFIG.variables,
+          ...control.variables,
+          [LIST]: { kind: "state", key: LIST, default: "apply.zoom" },
+        },
         actions: { ...DEFAULT_DSL_CONFIG.actions, ...actions },
       },
     );
@@ -244,7 +249,7 @@ describe("a global the menu has never seen gets its control from the generator",
     expect(
       linkUrls(out).some((u) =>
         effectsOf(u).some(
-          (e) => e.args[1] === "zoomList" && e.args[2] === "closed",
+          (e) => e.args[1] === LIST && e.args[2] === "closed",
         ),
       ),
     ).toBe(true);

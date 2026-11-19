@@ -86,7 +86,7 @@ function thresholdBar(src: string, utilization: number) {
   const pick = (id: string, setting: string): string | null =>
     rig.ctx.edits.view.get(SID, placementDraftKey("default", id, setting));
   // `rig.click` goes through the verb the URL names — `dispatch` included,
-  // which is what turns a refused effect into the bar's transient `click.error`.
+  // which is what turns a refused effect into the bar's transient `candybar.clickError`.
   return { ...rig, render, stepper, pick };
 }
 

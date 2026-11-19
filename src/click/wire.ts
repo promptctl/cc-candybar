@@ -34,12 +34,8 @@ import { DISCLOSURE_CLOSED, DISCLOSURE_OPEN } from "../config/disclosure.js";
 import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
-import {
-  EDIT_NS,
-  isReservedName,
-  MENU_NS,
-  MENU_PAGE_NS,
-} from "../config/reserved-names.js";
+import { isReservedName } from "../config/reserved-names.js";
+import { menuOfKey } from "../config/menu-keys.js";
 import { BadVerbArgs, decodeWire } from "../daemon/foundations/verb-error";
 import {
   parseSessionId,
@@ -129,7 +125,7 @@ export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // VERB_RESET_CONFIG's coarse "back to the bundled default". Args: `[sessionId]` — there is
 // no key: the history is one stack of clicks per session, not a per-key log.
 // An empty stack, or a target changed since the step, is a loud BAD_REQUEST
-// surfaced through click.error like any other verb failure, never a silent
+// surfaced through candybar.clickError like any other verb failure, never a silent
 // no-op.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
@@ -255,9 +251,6 @@ export function configWriteEffect(
 const sayStep = (key: string, by: string): string =>
   `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 
-const withoutNs = (key: string, ns: string): string =>
-  key.startsWith(ns) ? key.slice(ns.length) : key;
-
 // One session write in words. A disclosure's state keys read as the menu they
 // open or close, and a page cursor, which counts from 0, as the page the bar
 // numbers from 1; the rest read as the key they set. Disclosures are synthesized,
@@ -268,18 +261,13 @@ function sayWrite(key: string, value: string): string {
     return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
   const set = `set ${key} to ${value}`;
   if (!isReservedName(key)) return set;
-  // A menu edit mode hosts carries edit's scope before the menu spelling.
-  const scoped = withoutNs(key, EDIT_NS);
-  const inner =
-    scoped.startsWith(MENU_PAGE_NS) || scoped.startsWith(MENU_NS)
-      ? scoped
-      : key;
-  const menu = withoutNs(withoutNs(inner, MENU_PAGE_NS), MENU_NS);
-  if (inner.startsWith(MENU_PAGE_NS))
-    return `turn ${menu} to page ${Number(value) + 1}`;
-  if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
-  if (value === DISCLOSURE_OPEN) return `open ${menu}`;
-  return inner.startsWith(MENU_NS) ? `open ${value}` : set;
+  const menu = menuOfKey(key);
+  if (menu?.page === true)
+    return `turn ${menu.menu} to page ${Number(value) + 1}`;
+  const name = menu?.menu ?? key;
+  if (value === DISCLOSURE_CLOSED) return `close ${name}`;
+  if (value === DISCLOSURE_OPEN) return `open ${name}`;
+  return menu !== undefined ? `open ${value}` : set;
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Only a

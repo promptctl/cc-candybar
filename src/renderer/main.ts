@@ -56,8 +56,6 @@ import type {
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
-import { isEditModeKey } from "../config/reserved-names.js";
-import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
@@ -765,16 +763,12 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   const now = () => time.at;
   const log = turnLog.add;
   const store = new SessionState(inputs.stored.sessions);
-  // Edit mode's keys belong to an open edit, and no edit outlives the
-  // renderer, so a profile that held one from an older build loses it.
-  for (const [sid, values] of Object.entries(inputs.stored.sessions))
-    for (const key of Object.keys(values).filter(isEditModeKey))
-      store.clear(sessionIdOf(sid), key);
   const edits = new EditTransactions(store, log);
-  // [LAW:single-enforcer] Every writer reaches the store through the edits.
-  const sessionState = edits.committed;
+  // [LAW:one-source-of-truth] Every reader takes the session as its open
+  // edit shows it.
+  const sessionState = edits.view;
   const settingsHistory = new SettingsHistory(
-    sessionState,
+    store,
     log,
     inputs.stored.history,
   );

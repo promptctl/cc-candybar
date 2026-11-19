@@ -1,5 +1,8 @@
-import { randomBytes } from "node:crypto";
-import type { EditFinish, EditTransactions } from "../edit-transaction.js";
+import {
+  outsideEdit,
+  type EditFinish,
+  type EditTransactions,
+} from "../edit-transaction.js";
 import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
@@ -95,7 +98,7 @@ import {
   SETTING_PROJECTIONS,
   SETTINGS,
 } from "../../config/setting-projections";
-import { decodeLayoutOp } from "../../config/layout-ops";
+import { decodeLayoutOp, randomSuffix } from "../../config/layout-ops";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
@@ -999,8 +1002,12 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
   }
   const into = heldLayer(ctx, origin, role);
   // [LAW:effects-at-boundaries] The click draws the new placement's suffix.
-  const placed = applyLayoutOpToFile(editStore(ctx, sid), into, key, op, () =>
-    randomBytes(3).toString("hex"),
+  const placed = applyLayoutOpToFile(
+    editStore(ctx, sid),
+    into,
+    key,
+    op,
+    randomSuffix,
   );
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
@@ -1015,7 +1022,7 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
 // session or in a config file. No key, no value: the history owns which step
 // moves and what it restores; this handler is plumbing between the wire and
 // it. [LAW:no-silent-failure] An empty stack and a stale target are loud
-// BAD_REQUESTs, surfaced as a transient click.error.
+// BAD_REQUESTs, surfaced as a transient candybar.clickError.
 const undo: VerbHandler = (_args, ctx) => {
   const sid = ctx.session;
   const step = ctx.journal.undo(sid);
@@ -1252,20 +1259,23 @@ function journaled<C extends DaemonContext>(
     proveLoadsAsLayer(scoped, origin, file, text, read),
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
+  // [LAW:single-enforcer] Where the click's session writes go is decided
+  // here, with its journal: a click in an open edit writes the edit whole,
+  // and any other holds edit mode's keys aside for the edit it may open.
+  const outside =
+    edit === undefined ? outsideEdit(journal.sessionState) : undefined;
+  const writes = outside?.sessionState ?? journal.sessionState;
   const requested: { finish?: EditFinish } = {};
   const failures: unknown[] = [];
   const sessionState = closingView(
-    journal.sessionState,
+    writes,
     (target) => (target === sid ? nestOf(scoped, origin) : NO_NEST),
     (line) => ctx.log("info", line),
   );
   // [LAW:single-enforcer] Choosing a menu uses the same disclosure rules as
-  // any state write. Back receives the bare journal so it can install an
+  // any state write. Back receives the bare writes so it can install an
   // already computed view without applying new closure rules to it.
-  const navigation = ctx.navigation.begin(
-    journal.sessionState,
-    sessionState.setBatch,
-  );
+  const navigation = ctx.navigation.begin(writes, sessionState.setBatch);
   try {
     handler({
       ...scoped,
@@ -1308,12 +1318,20 @@ function journaled<C extends DaemonContext>(
       failed.push(e);
     }
     try {
-      const mode = journal.writes(sid)?.get(EDIT_MODE_KEY);
-      // The edit opens before the click that opened it lands, so that
-      // click's writes to edit mode's keys are the edit's first.
+      const own = new Map(journal.writes(sid));
+      const aside = outside?.held(sid) ?? new Map<string, string | null>();
+      const mode = (outside === undefined ? own : aside).get(EDIT_MODE_KEY);
       const entering =
-        edit === undefined && mode === EDIT_MODE_ARRANGE && origin !== null;
-      if (entering) ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+        outside !== undefined && mode === EDIT_MODE_ARRANGE && origin !== null;
+      // [LAW:no-silent-failure] A click outside an edit that opens none (one
+      // drawn before its edit closed) has no edit for those writes to mean
+      // anything in.
+      if (entering) ctx.edits.open(sid, origin, ctx.snapshotFor(origin), aside);
+      else if (aside.size > 0)
+        ctx.log(
+          "warn",
+          `edit: dropped ${[...aside.keys()].join(",")} — no edit is open (session=${sid})`,
+        );
       let moved = false;
       if (edit === undefined) journal.commit();
       else if (saved !== null) saved.commit();
@@ -1323,7 +1341,7 @@ function journaled<C extends DaemonContext>(
           edit !== undefined &&
           (saved !== null || (mode !== undefined && mode !== EDIT_MODE_ARRANGE))
         ) {
-          if (saved === null) edit.leave();
+          if (saved === null) edit.leave(own);
           ctx.edits.close(sid);
           ctx.editViewChanged(sid);
         } else if (entering) {

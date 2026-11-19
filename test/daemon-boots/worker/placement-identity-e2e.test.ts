@@ -196,6 +196,8 @@ describe("edit mode leaves nothing behind", () => {
       },
     }));
     expect(textOf(await b.render())).not.toContain("✓");
+    // The session's next write stores it as the daemon now holds it.
+    await b.click(DOOR_GLYPH);
     expect(await storedEditKeys(b)).toEqual([]);
   });
 });
@@ -233,6 +235,54 @@ describe("a write to an edit-mode key with no edit open", () => {
     const clicked = await b.stale(live);
     expect(textOf(clicked.rendered)).not.toContain("✓ done");
     expect(await storedEditKeys(b)).toEqual([]);
+  });
+
+  test("a stale placement-setting click records no undo step", async () => {
+    const b = await barOf(CONFIG);
+    await enter(b);
+    const configuring = (await b.click("🔧", 2)).rendered;
+    const step = linksOf(configuring).filter((l) => l.text === "▶")[1]!;
+    await b.click("✓ done");
+    const frame = (await b.stale(step)).rendered;
+    expect(textOf(frame)).toContain("✎ arrange");
+    expect(linksOf(frame).map((l) => l.text)).not.toContain("↶");
+    expect(await storedEditKeys(b)).toEqual([]);
+  });
+});
+
+describe("one view of the session, in edit mode and out of it", () => {
+  test("a draft on a removed placement does not come back with an undone save", async () => {
+    const b = await barOf(CONFIG);
+    await enter(b);
+    await b.click("🔧", 2);
+    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    await b.click("✖", 3);
+    await b.click("✓ save");
+    const frame = (await b.click("↶")).rendered;
+    expect(fs.readFileSync(b.configPath, "utf8")).toBe(CONFIG);
+    expect(barRow(frame)).toContain("c1 ▸");
+    expect(await storedEditKeys(b)).toEqual([]);
+  });
+
+  test("◁ goes back from a library opened in edit mode, and closes it", async () => {
+    const b = await barOf(CONFIG);
+    await enter(b);
+    const opened = (await b.click("✚")).rendered;
+    const library = (frame: Frame): boolean =>
+      linksOf(frame).some((l) => l.text.startsWith("directory "));
+    expect(library(opened)).toBe(true);
+    const back = (await b.click("◁")).rendered;
+    expect(library(back)).toBe(false);
+    expect(textOf(back)).toContain("✓ done");
+  });
+
+  test("◁ steps the panels, never a placement's unsaved value", async () => {
+    const b = await barOf(CONFIG);
+    await enter(b);
+    await b.click("🔧", 2);
+    expect(textOf((await b.click("▶", 2)).rendered)).toContain("n 2");
+    expect(textOf((await b.click("◁")).rendered)).not.toContain("n 2");
+    expect(textOf((await b.click("🔧", 2)).rendered)).toContain("n 2");
   });
 });
 

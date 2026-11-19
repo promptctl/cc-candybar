@@ -8,6 +8,7 @@
 import {
   decodeLayoutOp,
   encodeLayoutOp,
+  mintPlacementId,
   type LayoutOp,
 } from "../../src/config/layout-ops";
 
@@ -37,5 +38,22 @@ describe("layout-ops codec", () => {
     "bogus:a",
   ])("decodeLayoutOp(%j) is null", (token) => {
     expect(decodeLayoutOp(token)).toBeNull();
+  });
+});
+
+// A placement's minted id is its segment's name and a suffix no placement
+// holds; a run of taken suffixes is a failure said, never a spin.
+describe("mintPlacementId", () => {
+  test("skips a taken suffix for the next free one", () => {
+    const suffixes = ["a1", "b2"];
+    expect(
+      mintPlacementId("clock", new Set(["clock-a1"]), () => suffixes.shift()!),
+    ).toBe("clock-b2");
+  });
+
+  test("throws once every try is taken", () => {
+    expect(() =>
+      mintPlacementId("clock", new Set(["clock-a1"]), () => "a1"),
+    ).toThrow(/no free id for a placement of "clock"/);
   });
 });

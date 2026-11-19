@@ -663,8 +663,9 @@ describe("a user menu cannot join a synthesized accordion", () => {
     root: { h: ['hello'] },
   }`;
 
-  // Every namespace on the one reserved list.
-  for (const key of ["candybar.pickers", "groups.main", "edit.things", "menus.mine"]) {
+  // The keys whose accordion is the bar's own: the settings menu's, and any
+  // in edit mode's namespace.
+  for (const key of ["candybar.pickers", "candybar.togglesPickers", "edit.things"]) {
     test(`the key "${key}" is a load error naming its namespace`, () => {
       try {
         parseAndValidate("<user>", withKey(key), ALLOWED);
@@ -678,9 +679,16 @@ describe("a user menu cannot join a synthesized accordion", () => {
     });
   }
 
-  // A key outside every reserved namespace meets no minted key, so it loads,
-  // spellings that differ only in punctuation included.
-  for (const key of ["settings", "pickers", "candybar-pickers", "candybar_pickers"]) {
+  // Any other key meets no minted key, so it loads, spellings that differ
+  // only in punctuation and keys spelled like a namespace included.
+  for (const key of [
+    "settings",
+    "pickers",
+    "candybar-pickers",
+    "candybar_pickers",
+    "menus.mine",
+    "groups.main",
+  ]) {
     test(`the ordinary key "${key}" still loads and owns its own state key`, () => {
       const config = parseAndValidate("<user>", withKey(key), ALLOWED);
       const stateKey = sharedMenuStateKey(key);

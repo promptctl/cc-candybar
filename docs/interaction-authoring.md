@@ -888,7 +888,7 @@ own clicks, and neither can overwrite the other's.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
 loud, transient message in the bar (`undo: nothing to undo`
-/ `redo: nothing to redo`, on the same `click.error` channel any failed click
+/ `redo: nothing to redo`, on the same `candybar.clickError` channel any failed click
 surfaces through), never a silent no-op. A fresh settings change after an
 `undo` abandons whatever was undone (the classic redo-stack branch: `redo`
 truncates rather than staying reachable past a new edit).
@@ -2287,7 +2287,7 @@ whose options (dict …) is not fully literal — every option value must be a l
 
 ### A session key in a reserved namespace
 
-The bar mints its own session keys under its reserved namespaces (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`): the settings menu's pickers share the accordion key `candybar.pickers`, and edit mode keeps its panels and lists under `edit.`. A key you author there, as a `{{ menu }}` accordion key, a `state` variable's key, a `set` target or a group's key, could read or overwrite one of them, so it is refused. A key anywhere else, `candybar-pickers` included, is your own:
+The bar mints its own session keys under its reserved namespaces (`groups.`, `menus.`, `menupages.`, `edit.`, `candybar.`): edit mode keeps its panels and lists under `edit.`, and a click's error is `candybar.clickError`. A key you author as a `state` variable's key, a `set` target or a group's key IS the session key, so one in a reserved namespace could read or overwrite one of the bar's, and is refused. A `{{ menu }}` accordion key is spelled into a menu key of its own, so it is refused only where it meets the bar's: an accordion in `edit.`, whose state would end with every edit, and the settings menu's own accordions, such as `candybar.pickers`. Any other key is your own:
 
 ```json5 check:fail
 {
@@ -2304,7 +2304,7 @@ The bar mints its own session keys under its reserved namespaces (`groups.`, `me
 ```
 
 ```error
-session key "candybar.pickers" is in the "candybar." namespace, where the bar mints its own keys — an authored key there could read or overwrite one of them; rename it
+session key "candybar.pickers" names the settings menu's own accordion, in the "candybar." namespace — rename it
 ```
 
 ### A dynamic LAST argument, where the options dict would also fit

@@ -5,7 +5,7 @@
 //      (the literal `true`, no key — there is nothing to name), rejecting any
 //      other key or value.
 //   2. Cross-ref requires a global session.id anchor when undo/redo are
-//      declared, exactly like set/persist/reset (click.error surfacing needs
+//      declared, exactly like set/persist/reset (candybar.clickError surfacing needs
 //      it).
 //   3. deriveConfigActionValidators derives NOTHING for undo/redo — there is
 //      no value a template could smuggle, so there is no gate to derive.
@@ -14,7 +14,7 @@
 //      time — a session pick, a `persist` overwrite, a `reset` delete, and a
 //      `presets.<name>.root` structural edit through the SAME mechanism.
 //   5. Undo at the bottom / redo at the top of the stack are loud
-//      BAD_REQUESTs (surfaced as a transient click.error), never silent
+//      BAD_REQUESTs (surfaced as a transient candybar.clickError), never silent
 //      no-ops.
 //   6. A fresh change after an undo truncates the abandoned redo path.
 //   7. History survives a restart (a fresh read of the same on-disk files).

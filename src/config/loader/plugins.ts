@@ -34,6 +34,8 @@ import {
 } from "../action.js";
 import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
+import { refuseMintedKeys } from "./authored-keys.js";
+import { checkMenuDecls } from "./menu-synth.js";
 import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
 import type { PluginFile } from "../config-snapshot.js";
@@ -766,6 +768,9 @@ function fragmentOf(
   };
   issues.push(...wrongScopeRefs(authored, id));
   const fragment = boundToSelf(ns, authored);
+  // [LAW:single-enforcer] A plugin's keys and menus are authored as a file's
+  // are, and checked by the same passes.
+  refuseMintedKeys(ctx, fragment, checkMenuDecls(ctx, fragment));
   // [LAW:single-enforcer] Template syntax is otherwise first parsed by the
   // compile, after every plugin has merged — too late to drop just this one.
   for (const [where, template] of fragmentTemplates(fragment)) {
