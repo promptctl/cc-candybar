@@ -11,7 +11,7 @@ const THEN = ";";
 const BUFFER = "cc-candybar-slash";
 
 async function tmux(
-  launcher: Launcher,
+  launcher: Pick<Launcher, "launch">,
   hint: TmuxHint,
   category: LaunchCategory,
   args: string[],
@@ -22,7 +22,10 @@ async function tmux(
   return run;
 }
 
-async function read(launcher: Launcher, hint: TmuxHint): Promise<PaneSnapshot> {
+async function read(
+  launcher: Pick<Launcher, "launch">,
+  hint: TmuxHint,
+): Promise<PaneSnapshot> {
   const run = await tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
@@ -78,7 +81,7 @@ export function pasteLineArgs(
 // ctrl+s stashes a draft (a no-op on an empty input) and Claude Code restores
 // it after the submit.
 async function type(
-  launcher: Launcher,
+  launcher: Pick<Launcher, "launch">,
   hint: TmuxHint,
   line: SlashLine,
 ): Promise<Typed> {
@@ -97,7 +100,9 @@ async function type(
       };
 }
 
-export function productionClaudeInputEdge(launcher: Launcher): ClaudeInputEdge {
+export function productionClaudeInputEdge(
+  launcher: Pick<Launcher, "launch">,
+): ClaudeInputEdge {
   return {
     read: (hint) => read(launcher, hint),
     type: (hint, line) => type(launcher, hint, line),

@@ -15,7 +15,10 @@ import { linksOf } from "../../../src/click/read";
 import { textOf, type Frame } from "../../../src/render/frame";
 import { listResolvablePaletteNames } from "../../../src/themes/policy";
 import type { TmuxHint } from "../../../src/tmux-hint";
-import { click, clickAnswer, render, saidOf } from "../../helpers/daemon-e2e";
+import { click, clickAnswer, frameRequest, render, renderBody, saidOf } from "../../helpers/daemon-e2e";
+import type { AsyncLaunchOpts } from "../../../src/proc/launcher";
+import { fakeLauncher } from "../../helpers/fake-launcher";
+import { systemTimekeeper } from "../../../src/time";
 import { startDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
 
@@ -105,6 +108,70 @@ test("a click after a restart writes the session's own config, and types into no
     expect(typed).toEqual(["%7", "%9"]);
   } finally {
     await second.stop();
+    removeTmpDirs();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("a click in either session uses its environment for desktop tools and both tmux calls", async () => {
+  const { env, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-click-env");
+  const project = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "ccb-click-env-project-")));
+  const config = path.join(project, "actions.json5");
+  fs.writeFileSync(config, `{
+    actions: {
+      copyText: { copy: "copied text" },
+      openFile: { open: "vscode://file/tmp/sample" },
+      compact: { slash: "/compact" },
+      sessionTools: { do: ["copyText", "openFile", "compact"] },
+    },
+    segments: {
+      tools: { template: '{{ action "sessionTools" "TOOLS" }}' },
+      desktop: { template: '{{ action "copyText" "DESKTOP" }}' },
+    },
+    root: { h: ["tools", "desktop"] },
+  }`);
+  const launches: AsyncLaunchOpts[] = [];
+  const daemon = startDaemon(env, {
+    launcher: (owner) => {
+      const { launcher } = fakeLauncher(systemTimekeeper, owner);
+      return {
+        ...launcher,
+        launch: async (options) => {
+          const category = options.category;
+          if (category === "click.pbcopy" || category === "click.open" ||
+              category === "claude-input.read" || category === "claude-input.type") {
+            launches.push(options);
+            const stdout = category === "claude-input.read" ? ["0", ...READY_SCREEN].join("\n") : "";
+            return { ok: true, stdout, stderr: "", exitCode: 0 };
+          }
+          return launcher.launch(options);
+        },
+      };
+    },
+  });
+  const draw = (session: string, pane: string, marker: string) => frameRequest(daemon, {
+    ...renderBody(session, project, { tmux: paneOf(pane) }, ["cc-candybar", "--config-only", config]),
+    env: { SESSION_MARKER: marker },
+  });
+  const categories = ["click.pbcopy", "click.open", "claude-input.read", "claude-input.type"];
+  try {
+    const first = await draw("click-a", "%7", "first");
+    const second = await draw("click-b", "%8", "second");
+    for (const [frame, session, marker] of [
+      [first, "click-a", "first"], [second, "click-b", "second"],
+    ] as const) {
+      launches.length = 0;
+      await click(daemon, linkTo(frame, "TOOLS"));
+      expect(launches.map((launch) => launch.category)).toEqual(categories);
+      for (const launch of launches) {
+        expect(launch.environment).toMatchObject({ SESSION_MARKER: marker, CLAUDE_CODE_SESSION_ID: session });
+      }
+    }
+    launches.length = 0;
+    await click(daemon, linkTo(first, "DESKTOP"));
+    expect(launches.map((launch) => [launch.category, launch.environment])).toEqual([["click.pbcopy", undefined]]);
+  } finally {
+    await daemon.stop();
     removeTmpDirs();
     fs.rmSync(project, { recursive: true, force: true });
   }

@@ -127,7 +127,7 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
+  readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   // [LAW:one-source-of-truth] The host uses one key to publish and admit
   // terminal clicks.
@@ -408,9 +408,23 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's
   // turns return (src/daemon/acts.ts).
+  const programs = (edge: Pick<Launcher, "launch">) => ({
+    launch: clickLaunchVia(edge),
+    claudeInput: inputs.claudeInput(edge),
+  });
+  const desktopPrograms = programs(launcher);
   const acts = new Acts({
-    launch: clickLaunchVia(launcher),
-    claudeInput: inputs.claudeInput(launcher),
+    programsFor: (session) => {
+      // Historical and sessionless desktop links still open and copy. Config
+      // programs have their own admission rule in Runs and SourceRuns.
+      const heard =
+        session === null ? undefined : sessionBook.environmentOf(session);
+      if (heard?.kind !== "ok") return desktopPrograms;
+      return programs({
+        launch: (options) =>
+          launcher.launch({ ...options, environment: heard.value }),
+      });
+    },
     run: (run) => runs.start(run),
     barPane: {
       edge: inputs.barPaneEdge(launcher),

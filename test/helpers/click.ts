@@ -38,7 +38,7 @@ import type {
   EffectOutcome,
 } from "../../src/renderer-interface/interface";
 import { ActsOnTheirWay } from "../../src/renderer/acts";
-import { Acts, outlives, type ActDeps } from "../../src/daemon/acts";
+import { Acts, outlives, type ActPrograms, type ActDeps } from "../../src/daemon/acts";
 import type { HostWorld } from "../../src/daemon/renderer-host";
 import type { BarPaneEdge, BarPaneHost } from "../../src/daemon/lane-setup";
 import { holdClickError } from "../../src/daemon/foundations/click-error";
@@ -335,21 +335,22 @@ export function clickVerb(verb: string, value: string, ctx: VerbContext): ClickA
   return admission;
 }
 
+type TestActDeps = Partial<ActPrograms & Omit<ActDeps, "programsFor">>;
+
 // The host's act performer over `deps`; a part the test does not hand in
 // fails by name.
 export function testActs(
   log: VerbContext["log"],
-  deps: Partial<ActDeps> = {},
+  deps: TestActDeps = {},
 ): Acts {
   const missing = (part: string) => async (): Promise<never> => {
     throw new Error(`${part}: no host part in this test`);
   };
+  const { launch = missing("launch"), claudeInput = {
+    read: missing("claude input read"), type: missing("claude input type"),
+  }, ...rest } = deps;
   return new Acts({
-    launch: missing("launch"),
-    claudeInput: {
-      read: missing("claude input read"),
-      type: missing("claude input type"),
-    },
+    programsFor: () => ({ launch, claudeInput }),
     run: missing("run"),
     barPane: {
       edge: new Proxy({} as BarPaneEdge, {
@@ -361,7 +362,7 @@ export function testActs(
     },
     closing: () => false,
     log,
-    ...deps,
+    ...rest,
   });
 }
 
@@ -369,7 +370,7 @@ export function testActs(
 // an act's failure no bar holds handed to `unheard`.
 export function actingWorld(
   ctx: Pick<VerbContext, "log">,
-  deps: Partial<ActDeps> = {},
+  deps: TestActDeps = {},
   unheard: (text: string) => void = (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },
@@ -394,7 +395,7 @@ export function actingWorld(
 // context with no act to perform.
 export async function performActs(
   ctx: VerbContext,
-  deps: Partial<ActDeps> = {},
+  deps: TestActDeps = {},
   signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
   captures: readonly RunEvidence[] = [],
 ): Promise<EffectOutcome[]> {
@@ -428,7 +429,7 @@ export async function performActs(
 export async function clickActing(
   url: string,
   ctx: VerbContext,
-  deps: Partial<ActDeps> = {},
+  deps: TestActDeps = {},
   signer: Pick<LinkSigner, "verify"> = TEST_SIGNER,
 ): Promise<EffectOutcome[]> {
   const { verb, value } = linkClick(url);

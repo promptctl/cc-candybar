@@ -12,7 +12,7 @@ import {
   type ClaudeInputEdge,
   type TypeResult,
 } from "../claude-input/typing.js";
-import type { SlashLine } from "../claude-input/slash-line.js";
+import type { SessionId } from "./foundations/session-id.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import { valueOf } from "../utils/logfmt.js";
 import { KeyedSerialQueue } from "../utils/keyed-serial-queue.js";
@@ -30,12 +30,18 @@ import type { RunAct, RunEnd } from "./runs.js";
 export type HostAct = Exclude<Act, { kind: "approve-repo" | "run" }> | RunAct;
 type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
-export interface ActDeps {
+export interface ActPrograms {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
   // [LAW:one-source-of-truth] The daemon's one edge onto Claude Code's
   // prompt: every read of it and every slash line typed into it go through
   // this edge.
   readonly claudeInput: ClaudeInputEdge;
+}
+
+export interface ActDeps {
+  // [LAW:effects-at-boundaries] The host selects the launch environment for
+  // the session that drew this click. Both tmux operations share the selection.
+  readonly programsFor: (session: SessionId | null) => ActPrograms;
   readonly run: (run: RunAct) => Promise<RunEnd>;
   readonly barPane: { readonly edge: BarPaneEdge; readonly host: BarPaneHost };
   // Whether the daemon's close has begun: no act starts after it.
@@ -81,7 +87,7 @@ export class Acts {
     this.performers = {
       copy: (act) =>
         clickLaunch(
-          deps.launch,
+          deps.programsFor(act.session).launch,
           {
             bin: "/usr/bin/pbcopy",
             stdinInput: act.text,
@@ -92,7 +98,7 @@ export class Acts {
         ),
       open: (act) =>
         clickLaunch(
-          deps.launch,
+          deps.programsFor(act.session).launch,
           {
             bin: "/usr/bin/open",
             args: ["-a", "Visual Studio Code", act.target],
@@ -102,7 +108,7 @@ export class Acts {
           `opened ${act.target}`,
         ),
       "type-slash": async (act) => {
-        const typed = await this.typed(act.pane, act.line);
+        const typed = await this.typed(act);
         return typed.kind === "typed"
           ? did(`typed into ${typed.pane}`)
           : not({ kind: "refused", reason: typed.reason });
@@ -130,9 +136,12 @@ export class Acts {
     );
   }
 
-  private typed(pane: TmuxHint, line: SlashLine): Promise<TypeResult> {
-    return this.inPaneTurn(pane, () =>
-      typeInPane(this.deps.claudeInput)(pane, line),
+  private typed(act: Of<"type-slash">): Promise<TypeResult> {
+    return this.inPaneTurn(act.pane, () =>
+      typeInPane(this.deps.programsFor(act.session).claudeInput)(
+        act.pane,
+        act.line,
+      ),
     );
   }
 
