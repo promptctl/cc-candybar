@@ -8,6 +8,7 @@ import { retainerPathsTo } from "./helpers/retainer-path";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import v8 from "node:v8";
 import vm from "node:vm";
 import {
@@ -161,12 +162,9 @@ const render = (
 class ProbeStore extends VariableStore {}
 
 // Draw one frame of `compiled` from a store and registry of its own, as a
-// render-cache entry would, then dispose the registry; the store is returned
-// so a caller can watch whether anything still holds it.
-const drawAlone = (
-  config: ValidatedConfig,
-  compiled: CompiledConfig,
-): VariableStore => {
+// render-cache entry would, then dispose the registry and release the store
+// within this synchronous call.
+const drawAlone = (config: ValidatedConfig, compiled: CompiledConfig): void => {
   const store = new ProbeStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   declareDslVariables(config, registry, dir, EVERY_SCOPE);
@@ -184,9 +182,8 @@ const drawAlone = (
       padding: 1,
       width: 200,
     },
-  ).frame;
+  );
   registry.dispose();
-  return store;
 };
 
 const exposeGc = (): (() => void) => {
@@ -436,16 +433,11 @@ test("a compile keeps nothing of a render once it returns", async () => {
   // wait is in the verdict. One store is held on purpose, as the control: it
   // is the one path the snapshot must show, so an empty answer for the drawn
   // store is one this reader could have failed to give, whatever happens to
-  // the class's name. The drawn store's result is dropped here, so a second
-  // path is a holder the draw left behind, printed from the heap's roots.
+  // the class's name. The draw runs in its own event-loop turn before the
+  // snapshot, with no store crossing into the suspended test frame.
   heldStores.push(new ProbeStore(systemTimekeeper));
   try {
-    // Drawn in a frame of its own that returns before the await: a suspended
-    // async frame keeps its registers, and one may still hold what a call in
-    // it returned, as the snapshot's path through the test's own frame.
-    (() => {
-      drawAlone(config, compiled);
-    })();
+    await nextTurn().then(() => drawAlone(config, compiled));
     expect(await retainerPathsTo("ProbeStore")).toHaveLength(1);
   } finally {
     heldStores.length = 0;

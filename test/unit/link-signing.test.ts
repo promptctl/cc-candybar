@@ -20,7 +20,8 @@ import { parseClick } from "../../src/daemon/click-reading";
 import { publishingFrames } from "../../src/daemon/foundations/frame-publication";
 import type { Frame } from "../../src/render/frame";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
-import type { DrawnLink } from "../../src/render/drawn-link";
+import { actionTarget, type DrawnLink } from "../../src/render/drawn-link";
+import { rendererNameOf } from "../../src/daemon/foundations/renderer-name";
 import { TEST_SIGNER } from "../helpers/link-signer";
 
 const FORWARDED = { kind: "forwarder", urlV: 2 } as const;
@@ -66,10 +67,37 @@ describe("a link the bar draws", () => {
       expect(new URL(signed).href).toBe(signed);
       expect(TEST_SIGNER.openLink(signed)).toEqual({
         kind: "ok",
-        value: transitForm(link),
+        value: { href: transitForm(link) },
       });
     },
   );
+
+  test("binds the authenticated destination to its drawing session and renderer", () => {
+    const source = {
+      renderer: rendererNameOf("worktree"),
+      session: sessionIdOf("session# ✓"),
+    };
+    const signed = TEST_SIGNER.signLink(COPY, source);
+    expect(new URL(signed).href).toBe(signed);
+    expect(unprovenLink(signed)).toBe(COPY);
+    expect(TEST_SIGNER.openLink(signed)).toEqual({
+      kind: "ok",
+      value: { href: COPY, source },
+    });
+    expect(parseClick(signed, FORWARDED, TEST_SIGNER)).toMatchObject({
+      kind: "link",
+      source,
+      click: { scope: "global", session: source.session },
+    });
+    expect(
+      parseClick(signed.replace("/worktree/", "/main/"), CLI, TEST_SIGNER),
+    ).toMatchObject({
+      kind: "refused",
+      problem: expect.stringContaining("signature"),
+    });
+    const legacy = TEST_SIGNER.signLink(COPY);
+    expect(parseClick(legacy, CLI, TEST_SIGNER)).not.toHaveProperty("source");
+  });
 
   test("keeps what an effect list says when its readers take the mac off", () => {
     const signed = TEST_SIGNER.signLink(COPY);
@@ -159,6 +187,47 @@ describe("a draw's frames", () => {
       undefined,
     ]);
     expect(drawn[1]!.rows[0]!.runs[0]!.link).toBe(TEST_SIGNER.signLink(COPY));
+  });
+
+  test("publishes provenance only for generated targets", () => {
+    const source = {
+      renderer: rendererNameOf("worktree"),
+      session: sessionIdOf("drawn"),
+    };
+    const target = actionTarget([{ verb: VERB_COPY, args: ["copy"] }]);
+    const href = effectsUrl([{ verb: VERB_COPY, args: ["copy"] }]);
+    const issued = TEST_SIGNER.signLink(href, source);
+    const authored = issued.slice(0, issued.lastIndexOf("/"));
+    const sent = publishingFrames(TEST_SIGNER)(
+      frame([target, authored, "https://example.test/#fragment"]),
+      source,
+    );
+    const links = sent.rows[0]?.runs.map((run) => run.link);
+    expect(links).toEqual([
+      issued,
+      TEST_SIGNER.signLink(authored),
+      "https://example.test/#fragment",
+    ]);
+    expect(TEST_SIGNER.openLink(TEST_SIGNER.signLink(authored))).toEqual({
+      kind: "ok",
+      value: { href: transitForm(authored) },
+    });
+  });
+
+  test("refuses mismatched drawing and action sessions", () => {
+    const href = effectsUrl([
+      { verb: VERB_SET_STATE, args: ["another-session", "details", "closed"] },
+    ]);
+    const source = {
+      renderer: rendererNameOf("worktree"),
+      session: sessionIdOf("drawn"),
+    };
+    expect(
+      parseClick(TEST_SIGNER.signLink(href, source), CLI, TEST_SIGNER),
+    ).toMatchObject({
+      kind: "refused",
+      problem: expect.stringContaining("different sessions"),
+    });
   });
 
   const session = sessionIdOf("repo-session");

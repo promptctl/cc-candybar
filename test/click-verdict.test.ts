@@ -4,6 +4,8 @@
 
 import { handleRequest, type HandledRequest } from "../src/daemon/reply";
 import type { DaemonParts } from "../src/daemon/daemon-parts";
+import { rendererNameOf } from "../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { RuntimeStats } from "../src/daemon/stats";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_COPY } from "../src/click/wire";
@@ -50,6 +52,7 @@ function host(
     clock: systemTimekeeper,
     payloadProviders: {},
     frameFeeds: { latest: () => null },
+    rendererForClick: () => undefined,
     log: (_level: string, line: string) => events.push(line),
     ...clickParts(verbCtx, undefined, world),
   } as unknown as DaemonParts;
@@ -92,6 +95,23 @@ test("a signed link with an invalid session is refused in the forwarder verdict"
   await answered.land();
   expect(h.events).toEqual([expect.stringContaining("outcome=bad-request")]);
   expect(h.events[0]).toContain("verb=undo");
+  expect(h.events[0]).not.toContain("mailbox=");
+});
+
+test("the forwarder hears that the issuing renderer has no bundle before promising delivery", async () => {
+  const h = host();
+  const url = TEST_SIGNER.signLink(COPY, {
+    renderer: rendererNameOf("worktree"),
+    session: sessionIdOf("drawn"),
+  });
+  const answered = await h.frame(url);
+  expect(answered.verdict).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("renderer worktree"),
+  });
+  await answered.land();
+  expect(h.copied).toEqual([]);
+  expect(h.events).toEqual([expect.stringContaining("outcome=down")]);
   expect(h.events[0]).not.toContain("mailbox=");
 });
 

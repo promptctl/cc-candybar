@@ -696,6 +696,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         },
         frames: (frames) =>
           frameFeeds.took(
+            name,
             frames.filter(({ session }) => nameOf(session) === name),
           ),
         stored: (writes) => stores.take(writes),
@@ -843,6 +844,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     limits,
     collector,
     renderer: primary.renderer,
+    // [LAW:single-enforcer] Only a render request binds or starts a bundle.
+    rendererForClick: (name) => renderers.get(name)?.renderer,
     rendererFor,
   };
 

@@ -1146,8 +1146,8 @@ describe("the link key", () => {
   });
 
   // The error's own remedy, removing the file, works with no restart: the
-  // key is read again at the next click and the next renderer start.
-  test("a broken key refuses a click and a renderer's start with the reason, and removing it recovers both", () => {
+  // key is read again at the next publication or admission.
+  test("a broken key refuses a click with its reason and removing it recovers publication", () => {
     const file = write("state/link.key", "short");
     const key = linkKeyFromFile(file);
     const host = linkSignerOver(key);
@@ -1165,13 +1165,12 @@ describe("the link key", () => {
     const drawn = linkSigner(started.value).signLink("cc-candybar://copy/x");
     expect(host.openLink(drawn)).toEqual({
       kind: "ok",
-      value: "cc-candybar://copy/x",
+      value: { href: "cc-candybar://copy/x" },
     });
   });
 
-  // A key file removed and made again while the daemon runs does not split
-  // them: a renderer started after still draws links the host opens.
-  test("the host and every renderer start hold the one key the daemon read", () => {
+  // The host keeps publishing and admitting with the first key it read.
+  test("publication and admission hold the one key the host read", () => {
     const file = path.join(dir, "state", "link.key");
     const key = linkKeyFromFile(file);
     const host = linkSignerOver(key);
@@ -1183,7 +1182,7 @@ describe("the link key", () => {
     const drawn = linkSigner(started.value).signLink("cc-candybar://copy/x");
     expect(host.openLink(drawn)).toEqual({
       kind: "ok",
-      value: "cc-candybar://copy/x",
+      value: { href: "cc-candybar://copy/x" },
     });
   });
 });

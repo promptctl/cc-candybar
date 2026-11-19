@@ -1,7 +1,7 @@
 // [LAW:single-enforcer] The URL handler and CLI enter through the same
 // signature and argument admission before a click reaches a renderer.
 
-import type { LinkSigner } from "../click/link-signer.js";
+import type { FrameSource, LinkSigner } from "../click/link-signer.js";
 import {
   admitClick,
   isBarLink,
@@ -17,6 +17,7 @@ export type ReadClick =
       readonly kind: "link";
       readonly link: string;
       readonly delivery: Delivery;
+      readonly source?: FrameSource;
     } & ClickAdmission)
   | {
       readonly kind: "refused";
@@ -37,21 +38,39 @@ export function parseClick(
   const opened = links.openLink(url);
   if (opened.kind === "failed")
     return { kind: "refused", problem: opened.reason };
-  const link = parseHandlerUrl(opened.value);
+  const { href, source } = opened.value;
+  const link = parseHandlerUrl(href);
   if (!link.ok) return { kind: "refused", problem: link.problem };
   try {
+    const admitted = admitClick(link.verb, link.value, links);
+    const { click, runEvidence } = admitted;
+    // [LAW:types-are-the-program] A published click acts for its drawing
+    // session. An effect's own argument cannot switch that identity.
+    if (
+      source !== undefined &&
+      click.scope === "session" &&
+      click.session !== source.session
+    )
+      throw new BadVerbArgs(
+        "the link's action and its frame name different sessions",
+      );
     return {
       kind: "link",
-      ...admitClick(link.verb, link.value, links),
-      link: opened.value,
+      click:
+        source !== undefined && click.scope === "global"
+          ? { ...click, session: source.session }
+          : click,
+      runEvidence,
+      link: href,
       delivery,
+      ...(source === undefined ? {} : { source }),
     };
   } catch (e) {
     if (!(e instanceof BadVerbArgs)) throw e;
     return {
       kind: "refused",
       problem: e.message,
-      signed: { link: opened.value, verb: link.verb },
+      signed: { link: href, verb: link.verb },
     };
   }
 }

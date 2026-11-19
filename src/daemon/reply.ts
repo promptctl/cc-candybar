@@ -31,14 +31,16 @@ import {
 } from "./foundations/protocol";
 import { parseSessionId, type SessionId } from "./foundations/session-id";
 import { type SourceSnapshots } from "./foundations/stats-snapshot";
-import type { ClickAdmission } from "../click/wire";
 import { type LinkSigner } from "../click/link-signer.js";
 import { parseClick, type ReadClick } from "./click-reading.js";
+import type { RendererHost } from "./renderer-host.js";
 import {
   badRequest,
   ClickAbandoned,
   DaemonClosing,
   failureOf,
+  RendererDown,
+  type Failure,
 } from "./foundations/verb-error";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
@@ -694,7 +696,7 @@ async function clickOutcome(
     return badRequest(`a click's url is a string, got ${typeof url}`);
   return ranClick(
     parts,
-    parseClick(url, { kind: "cli" }, parts.linkSigner),
+    routeClick(parts, parseClick(url, { kind: "cli" }, parts.linkSigner)),
     facts,
     click,
   );
@@ -733,13 +735,13 @@ function urlClick(
   accepted: Acceptance,
   clientLeft: () => boolean,
 ): HandledRequest {
-  const read = readUrlFrame(frame, parts.linkSigner);
+  const read = routeClick(parts, readUrlFrame(frame, parts.linkSigner));
   return {
     kind: "url",
     awaitsVerdict: awaitsVerdict(frame.urlV),
     verdict:
       read.kind === "refused"
-        ? clickReply(badRequest(read.problem))
+        ? clickReply(read.failure)
         : { ok: true, output: "" },
     land: () =>
       clickEvent(
@@ -755,18 +757,53 @@ function urlClick(
   };
 }
 
+type ClickLink = Extract<ReadClick, { kind: "link" }>;
+type RoutedClick =
+  | (ClickLink & { readonly target: RendererHost })
+  | {
+      readonly kind: "refused";
+      readonly failure: Failure;
+      readonly signed: Extract<ReadClick, { kind: "refused" }>["signed"];
+    };
+
+// [LAW:single-enforcer] Both entrances resolve the signed publisher before
+// they promise delivery. A link never admits a renderer bundle of its own.
+function routeClick(parts: DaemonParts, read: ReadClick): RoutedClick {
+  if (read.kind === "refused")
+    return {
+      kind: "refused",
+      failure: badRequest(read.problem),
+      signed: read.signed,
+    };
+
+  const { source } = read;
+  if (source === undefined) return { ...read, target: parts.renderer };
+  const target = parts.rendererForClick(source.renderer);
+  return target === undefined
+    ? {
+        kind: "refused",
+        failure: failureOf(
+          new RendererDown(
+            `renderer ${source.renderer} has no statusline client's bundle`,
+          ),
+        ),
+        signed: { link: read.link, verb: read.click.verb },
+      }
+    : { ...read, target };
+}
+
 // [LAW:types-are-the-program] A refused click has an outcome already.
 // An admitted click enters the renderer mailbox.
 async function ranClick(
   parts: DaemonParts,
-  read: ReadClick,
+  read: RoutedClick,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
   switch (read.kind) {
     case "refused":
       if (read.signed !== undefined) noteFacts(facts, read.signed);
-      return badRequest(read.problem);
+      return read.failure;
     case "link":
       noteFacts(facts, { link: read.link });
       return handleClick(
@@ -789,19 +826,23 @@ async function ranClick(
 // daemon's failure.
 async function handleClick(
   parts: DaemonParts,
-  { click: admitted, runEvidence }: ClickAdmission,
+  {
+    click: admitted,
+    runEvidence,
+    target,
+  }: Extract<RoutedClick, { kind: "link" }>,
   arrival: Extract<ClickArrival, { via: "link" }>,
   facts: RequestFacts,
   click: ClickInFlight,
 ): Promise<RequestOutcome> {
   const { verb } = admitted;
-  const session = admitted.scope === "session" ? admitted.session : null;
-  noteFacts(facts, { verb, sid: session ?? "-" });
+  const session = admitted.session ?? null;
+  noteFacts(facts, { verb, sid: session ?? "-", renderer: target.name });
   if (session !== null) parts.collector.clicked(session);
   // [LAW:no-ambient-temporal-coupling] Made as its turn comes: a click whose
   // client took a TIMEOUT or left while it waited never lands, so clicking
   // again cannot revert a toggle.
-  const delivered = await parts.renderer.answerClick(session, () =>
+  const delivered = await target.answerClick(session, () =>
     click.gone()
       ? failureOf(new ClickAbandoned(verb))
       : {
@@ -812,11 +853,11 @@ async function handleClick(
             click: admitted,
             arrival,
             context:
-              session === null
+              admitted.scope === "global"
                 ? null
                 : parts.sessionBook.contextOf(
-                    session,
-                    parts.frameFeeds.latest(session),
+                    admitted.session,
+                    parts.frameFeeds.latest(admitted.session),
                   ),
           },
         },

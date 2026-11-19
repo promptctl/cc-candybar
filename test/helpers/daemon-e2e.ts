@@ -13,6 +13,8 @@
 import { linkUrls } from "./frame";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import path from "node:path";
+import { decodeAnsi, Style } from "@promptctl/rich-js";
+import { openFrameStream, type StreamEnd } from "../../src/daemon/client-frames";
 
 import {
   PROTOCOL_VERSION,
@@ -23,7 +25,7 @@ import {
 import { textOf, parseFrame, type Frame } from "../../src/render/frame";
 import type { ClaudeHookData } from "../../src/utils/claude";
 import { linkKeyFile, linkKeyFromFile } from "../../src/daemon/link-key";
-import { linkSignerOver, unprovenLink } from "../../src/click/link-signer";
+import { linkSignerOver, unprovenLink, type FrameSource } from "../../src/click/link-signer";
 import { effectsOf, type DecodedEffect } from "./click";
 import {
   endpointOf,
@@ -201,6 +203,43 @@ export async function renderRequest(
   return resp.output;
 }
 
+export const urlsOfAnsi = (output: string): string[] =>
+  decodeAnsi(output).spans.flatMap(({ style }) =>
+    style instanceof Style && style.link !== undefined ? [style.link] : [],
+  );
+
+export function observePane(sockPath: string, session: string) {
+  const frames: Response[] = [];
+  let ended: StreamEnd | null = null;
+  const stream = openFrameStream(
+    sockPath,
+    session,
+    "pane",
+    (frame) => frames.push(frame),
+    (end) => {
+      ended = end;
+    },
+  );
+  const waitFor = async (
+    matches: (text: string) => boolean,
+    wanted: string,
+  ): Promise<string> => {
+    const output = () =>
+      frames
+        .flatMap((frame) =>
+          frame.ok && "output" in frame ? [frame.output] : [],
+        )
+        .find((ansi) => matches(decodeAnsi(ansi).plain));
+    const seen = () =>
+      `${wanted} (last pane message: ${JSON.stringify(ended ?? frames.at(-1))})`;
+    await until(() => output() !== undefined || ended !== null, seen);
+    const match = output();
+    if (match === undefined) throw new Error(seen());
+    return match;
+  };
+  return { waitFor, close: stream.close };
+}
+
 // The Frame of a render, as a reader of one render's answer asks for it.
 export async function frameRequest(
   target: DaemonTarget,
@@ -268,10 +307,10 @@ export function clickBody(url: string) {
 // that daemon's key, which lives in the state directory beside its log. For a
 // test that builds the link a draw makes, or edits one a draw made, rather
 // than clicking one read off a frame as it was drawn.
-export function drawnLink(target: DaemonTarget, link: string): string {
+export function drawnLink(target: DaemonTarget, link: string, source?: FrameSource): string {
   return linkSignerOver(
     linkKeyFromFile(linkKeyFile(path.dirname(endpointOf(target).log))),
-  ).signLink(unprovenLink(link));
+  ).signLink(unprovenLink(link), source);
 }
 
 // A click sent as the URL handler app sends it. The daemon's answer is

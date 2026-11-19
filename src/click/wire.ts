@@ -549,6 +549,8 @@ export type ClickStep =
 export type AdmittedClick =
   | {
       readonly scope: "global";
+      // The host may know the drawing session even for effects that need no journal.
+      readonly session?: SessionId;
       readonly verb: string;
       readonly steps: readonly GlobalStep[];
     }
