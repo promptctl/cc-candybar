@@ -38,7 +38,7 @@ type ObservedLocation = ConfigLocation & {
 
 export function observeConfigLocations(
   locations: readonly ConfigLocation[],
-  files: Pick<DiscoveryFiles, "presence" | "directory">,
+  files: Pick<DiscoveryFiles, "presence" | "realpath">,
 ): readonly ObservedLocation[] {
   return locations.map((location) => {
     const present: Array<{ candidate: ConfigCandidate; directory: string }> =
@@ -51,7 +51,7 @@ export function observeConfigLocations(
         unchecked.push(observed);
         continue;
       }
-      const dir = files.directory(path.dirname(candidate.file));
+      const dir = files.realpath(path.dirname(candidate.file));
       if (typeof dir !== "string") {
         unchecked.push({ path: candidate.file, error: dir.error });
         continue;
@@ -150,7 +150,7 @@ export function repoProject(
   const present = files.presence(projectDir);
   if (present !== "present")
     return { project: null, unchecked: present === "absent" ? null : present };
-  const dir = files.directory(projectDir);
+  const dir = files.realpath(projectDir);
   if (typeof dir !== "string") return { project: null, unchecked: dir };
   // The same authored root `sessionPlugins` lists once the gate approves it.
   const listed = files.folders(path.join(projectDir, REPO_PLUGIN_DIR));
