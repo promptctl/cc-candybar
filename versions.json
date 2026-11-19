@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7df1347f46b6e135236f014e234935a7b5ffc5fc",
+      "timestamp": "2026-11-19T19:30:23.182Z",
+      "commits": [
+        {
+          "sha": "7df1347f46b6e135236f014e234935a7b5ffc5fc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:29:32-07:00",
+          "message": "fix(daemon): skip abandoned statusline draws (#902)\n\n* fix(daemon): skip abandoned statusline draws\n\n* test(client): reserve independent directories for concurrent feedback cases\n\n* test(daemon): state deadlines in the fixture clock domain\n\n* test(frames): assert handoffs on delivered renders"
+        }
+      ]
+    },
+    {
       "version": "pr-905",
       "ref": "refs/pull/905/merge",
       "sha": "d10f5a7b39f7b146014590726a4bad85d800bef1",
@@ -20,64 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T12:22:57-07:00",
           "message": "test(daemon): report an explicit session environment (ibyq.xrv)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-902",
-      "ref": "refs/pull/902/merge",
-      "sha": "542bd15df5bcd0a140c19f08d1d2a3ff4607a3af",
-      "timestamp": "2026-11-19T19:24:12.265Z",
-      "commits": [
-        {
-          "sha": "542bd15df5bcd0a140c19f08d1d2a3ff4607a3af",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:23:01Z",
-          "message": "Merge 3fcbf71162b7adca705d799fc3a860b79b5cac2a into 31ff034e6eb41672a38be8ed9f148b237eb9a6a4\n"
-        },
-        {
-          "sha": "3fcbf71162b7adca705d799fc3a860b79b5cac2a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:22:56-07:00",
-          "message": "test(frames): assert handoffs on delivered renders\n"
-        },
-        {
-          "sha": "1116737e6cdc0065399ccf255b4ac46449ca3b1b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:08:07-07:00",
-          "message": "test(daemon): state deadlines in the fixture clock domain\n"
-        },
-        {
-          "sha": "0ef989620104975da5fc6778ca6c6dafd63e8ba4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:53:32-07:00",
-          "message": "test(client): reserve independent directories for concurrent feedback cases\n"
-        },
-        {
-          "sha": "9a5c76fc300b11777a6bb67bf846709cf0a9eb21",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:44:16-07:00",
-          "message": "fix(daemon): skip abandoned statusline draws\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "31ff034e6eb41672a38be8ed9f148b237eb9a6a4",
-      "timestamp": "2026-11-19T19:19:41.602Z",
-      "commits": [
-        {
-          "sha": "31ff034e6eb41672a38be8ed9f148b237eb9a6a4",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T19:18:39Z",
-          "message": "chore(release): set `package.json` to 1.235.9\n\n## [1.235.9](https://github.com/promptctl/cc-candybar/compare/v1.235.8...v1.235.9) (2026-11-19)\n\n### Bug Fixes\n\n* **launch:** withhold repository-local variables from inherited child environments ([#874](https://github.com/promptctl/cc-candybar/issues/874)) ([c81ae90](https://github.com/promptctl/cc-candybar/commit/c81ae9059d7ae162e1e829259980391659766628))\n"
         }
       ]
     },

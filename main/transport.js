@@ -81433,7 +81433,42 @@ function todayReading(lane, usage, sessionId2) {
 // src/daemon/statusline-answer.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var timeoutResponse = (request2, error = `request exceeded ${REQUEST_TIMEOUT_MS}ms`) => ({
+  ok: false,
+  error,
+  code: "TIMEOUT",
+  daemonV: PROTOCOL_VERSION,
+  request: request2
+});
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function renderDeadlines(deadline, acceptedMonoMs, arrival) {
+  const clientEndsAt = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : null;
+  const sourceEnd = Math.min(
+    acceptedMonoMs + REQUEST_TIMEOUT_MS,
+    clientEndsAt ?? acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS
+  );
+  const waitEndsAt = arrival.monoMs + Math.round(sourceEnd - DRAW_RESERVE_MS - arrival.monoMs);
+  return { waitEndsAt, clientEndsAt };
+}
+
+// src/daemon/statusline-answer.ts
 var NOTHING_TO_SETTLE = (_delivered) => {
+};
+var DRAW_ABANDONED = {
+  kind: "abandoned",
+  message: "the statusline reply has no recipient",
+  detail: "the statusline reply has no recipient"
 };
 function failed2(host, failure2, doing = "") {
   return {
@@ -81468,14 +81503,15 @@ var msOf2 = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, recipient, facts) {
   const { req, error: checkoutError } = located(arrived2, locate);
   const session = req.hookData.session_id;
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
+  const abandoned = () => !closing.aborted && recipient.gone();
   const worldState = collector.requested(req, environment);
   const release3 = collector.holding(session);
   let configured;
-  let delivered;
+  let delivered = null;
   try {
     configured = await host.answer(
       unlessClosing({ kind: "context", context: req, worldState })
@@ -81490,46 +81526,53 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.configFailure, "its config turn: ");
     }
-    const waitFrom = clock.monotonic();
-    const budget = waitEndsAt - waitFrom;
-    noteFacts(facts, {
-      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
-    });
-    const ended = await waitWithin(
-      (signal) => collector.settled(session, signal),
-      budget,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the
-      // daemon.
-      (e, how) => log(
-        "error",
-        `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
-      ),
-      clock.after,
-      closing
-    );
-    noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    delivered = await host.answer(
-      unlessClosing({
-        kind: "request",
-        id: id2,
-        context: req
-      })
-    );
+    if (!abandoned()) {
+      const waitFrom = clock.monotonic();
+      const budget = recipient.waitEndsAt - waitFrom;
+      noteFacts(facts, {
+        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
+      });
+      const ended = await waitWithin(
+        (signal) => collector.settled(session, signal),
+        budget,
+        // [LAW:no-silent-failure] A late failure belongs to the session.
+        (e, how) => log(
+          "error",
+          `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
+        ),
+        clock.after,
+        closing
+      );
+      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+      if (!abandoned()) {
+        const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
+        delivered = await host.answer(
+          () => abandoned() ? DRAW_ABANDONED : draw2()
+        );
+      }
+    }
   } finally {
     release3();
   }
-  recorded(facts, delivered);
-  const done = delivered.settlePresentation;
+  if (delivered !== null) recorded(facts, delivered);
+  const drawHop = delivered === null ? 0 : delivered.hopMs;
   noteFacts(facts, {
     configured: msOf2(configured.turnMs),
-    drew: msOf2(delivered.turnMs),
-    mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
-    hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
+    drew: msOf2(delivered?.turnMs ?? null),
+    mailbox: `${configured.queuedMs + (delivered?.queuedMs ?? 0)}ms`,
+    hop: configured.hopMs === null || drawHop === null ? "-" : `${configured.hopMs + drawHop}ms`,
+    renderer: host.name
   });
+  if (delivered === null || delivered.kind === "threw" && delivered.failure === DRAW_ABANDONED)
+    return {
+      outcome: DRAW_ABANDONED,
+      resp: timeoutResponse(id2, DRAW_ABANDONED.message),
+      seen: "failed",
+      settled: NOTHING_TO_SETTLE
+    };
+  const done = delivered.settlePresentation;
   const { effects } = delivered;
   noteFacts(facts, {
-    renderer: host.name,
     effects: effects.map((e) => e.kind === "present" ? `present:${e.surface}` : e.kind).join(",") || "-"
   });
   let answer2 = null;
@@ -81803,23 +81846,6 @@ var RenderSightings = class {
     }));
   }
 };
-
-// src/daemon/foundations/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
 
 // src/daemon/render-checkpoint.ts
 function parseRenderArgs(args, cwd2, home, configEnv) {
@@ -82338,6 +82364,11 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
+        const { waitEndsAt, clientEndsAt } = renderDeadlines(
+          checked.req.deadline,
+          accepted.at,
+          { epochMs: started2.getTime(), monoMs: t0 }
+        );
         answered = await answerStatusline(
           renderer2,
           parts.publishFrame,
@@ -82352,13 +82383,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           // environment.
           parts.sessionBook.environmentOf(checked.req.hookData.session_id),
           order2,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/foundations/request-deadline.ts).
-          t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
-            epochMs: started2.getTime(),
-            monoMs: t0
-          }),
+          {
+            waitEndsAt,
+            // [LAW:no-ambient-temporal-coupling] Loss of the only recipient
+            // comes from the connection's phase or its reply deadline.
+            gone: () => timedOut() || clientLeft() || clientEndsAt !== null && clock.monotonic() >= clientEndsAt
+          },
           facts
         );
         noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
