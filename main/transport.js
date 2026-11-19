@@ -28580,39 +28580,23 @@ function ruling(answers, d) {
   const legacy = answerOf(answers.value, d.dir);
   return legacy === null ? { standing: "awaiting", under: key } : { standing: legacy, under: d.dir };
 }
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
+var NO_PROJECT_ACCESS = {
+  approved: null,
+  question: null,
+  unread: null
+};
+function projectAccess(answers, project) {
+  const unread2 = answers.kind === "failed" ? answers.reason : null;
+  if (project === null) return { ...NO_PROJECT_ACCESS, unread: unread2 };
+  const { standing: standing2, under: under2 } = ruling(answers, project);
   return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+    approved: standing2 === "approved" ? project.path : null,
+    question: project.contributes ? {
+      dir: under2,
+      standing: standing2,
+      unproven: project.link.kind === "unproven" ? project.link.reason : null
+    } : null,
+    unread: unread2
   };
 }
 function withAnswer(book, dir, answer2, superseded) {
@@ -61937,14 +61921,15 @@ var PROJECT_BASES = {
 function xdgConfigBase(locs) {
   return import_node_path6.default.join(locs.configHome, "cc-candybar", "config");
 }
+var admitsLayer = (project, role) => role === "user" || project.approved !== null;
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
 function userConfigDefault(locs) {
   return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
 function chainPlaces(resolved, locations2) {
   return LAYER_ROLES.flatMap((role) => {
+    if (!admitsLayer(resolved.project, role)) return [];
     if (role === "user") return [{ path: resolved.home, role }];
-    if (resolved.repos.plugins === null) return [];
     const place = resolved.layers.find((layer) => layer.role === role)?.path ?? locations2.find((location) => location.role === role)?.candidates[0]?.file;
     return place === void 0 ? [] : [{ path: place, role }];
   });
@@ -89699,20 +89684,24 @@ var import_node_path32 = __toESM(require_path_browserify(), 1);
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
 var import_node_path30 = __toESM(require_path_browserify(), 1);
-function pluginRoots(locs, repo2) {
+function installedPluginDirs(locs) {
   const installed = [
     ...[...locs.dataDirs].reverse().map((d) => import_node_path30.default.join(d, "cc-candybar", "plugins")),
     userPluginRoot(locs)
   ];
-  return [
-    ...installed.filter((r, i2) => installed.lastIndexOf(r) === i2).map((dir) => ({ dir, scope: "plugins" })),
-    ...repo2 === null ? [] : [{ dir: import_node_path30.default.join(repo2, REPO_PLUGIN_DIR), scope: "repo" }]
-  ];
+  return installed.filter((r, i2) => installed.lastIndexOf(r) === i2);
 }
 function userPluginRoot(locs) {
   return import_node_path30.default.join(locs.dataHome, "cc-candybar", "plugins");
 }
 var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins");
+var repoPluginDir = (project) => import_node_path30.default.join(project, REPO_PLUGIN_DIR);
+function listedRepoRoot(approved, entries) {
+  if (entries === null) return null;
+  if ("error" in entries)
+    return { root: entries.path, scope: "repo", listed: entries };
+  return approved === null ? null : { root: repoPluginDir(approved), scope: "repo", listed: entries };
+}
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
@@ -89834,14 +89823,6 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
     };
   });
 }
-var NO_REPOS = {
-  plugins: null,
-  approved: [],
-  awaiting: [],
-  declined: [],
-  unproven: [],
-  unread: null
-};
 function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const searched = configLocations(locs, query);
   const selected = query.kind === "chain" && query.projectDir !== void 0 && query.path !== void 0 ? files.realpath(query.path) : null;
@@ -89856,25 +89837,14 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const found2 = locations2.flatMap(
     (location) => location.kind === "found" ? [location] : []
   );
-  const repoDirs = /* @__PURE__ */ new Map();
-  for (const { role, directory } of found2) {
-    if (role === "user" || repoDirs.has(directory)) continue;
-    repoDirs.set(directory, {
-      dir: directory,
-      link: files.worktree(directory)
-    });
-  }
-  const dirs = [...repoDirs.values()];
   const seen = repoProject(
     query.kind === "chain" ? query.projectDir : void 0,
+    found2.some(({ role }) => role !== "user"),
     files
   );
   const book = query.kind === "file" ? null : readAnswers();
-  const repos = book === null ? NO_REPOS : gateRepos(book.result, dirs, seen.project);
-  const question = book === null ? null : repoQuestion(book.result, dirs, seen.project);
-  const layers = found2.filter(
-    ({ role, directory }) => role === "user" || repos.approved.includes(directory)
-  ).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
+  const project = book === null ? NO_PROJECT_ACCESS : projectAccess(book.result, seen.project);
+  const layers = found2.filter(({ role }) => admitsLayer(project, role)).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
   const user = locations2.find(({ role }) => role === "user");
   const home = user?.kind === "found" ? user.winner.file : query.path ?? userConfigDefault(locs);
   const namedFailure = query.path !== void 0 && user?.kind !== "found";
@@ -89884,34 +89854,41 @@ function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
   const common = {
     layers,
     home,
-    repos,
+    project,
     unchecked: seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked]
   };
   const problem = user?.unchecked[0];
   const resolution = !namedFailure ? { ...common, kind: "chain" } : problem === void 0 ? { ...common, kind: "missing", path: home } : { ...common, kind: "unreadable", ...problem };
   return {
     resolution,
-    question,
+    repoRoot: listedRepoRoot(project.approved, seen.entries),
     locations: locations2,
     watchedFiles: [...candidates, ...book?.paths ?? []]
   };
 }
-function repoProject(projectDir, files = discoveryFiles()) {
-  if (projectDir === void 0) return { project: null, unchecked: null };
+function repoProject(projectDir, hasConfig, files) {
+  if (projectDir === void 0)
+    return { project: null, unchecked: null, entries: null };
   const present = files.presence(projectDir);
   if (present !== "present")
-    return { project: null, unchecked: present === "absent" ? null : present };
+    return {
+      project: null,
+      unchecked: present === "absent" ? null : present,
+      entries: null
+    };
   const dir = files.realpath(projectDir);
-  if (typeof dir !== "string") return { project: null, unchecked: dir };
-  const listed = files.folders(import_node_path32.default.join(projectDir, REPO_PLUGIN_DIR));
+  if (typeof dir !== "string")
+    return { project: null, unchecked: dir, entries: null };
+  const entries = files.folders(repoPluginDir(projectDir));
   return {
     project: {
       dir,
       link: files.worktree(dir),
       path: projectDir,
-      ships: !("error" in listed) && listed.folders.length > 0
+      contributes: hasConfig || !("error" in entries) && entries.folders.length > 0
     },
-    unchecked: null
+    unchecked: null,
+    entries
   };
 }
 function configCollisionNotice(locations2) {
@@ -89946,17 +89923,21 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return pluginRoots(locs, null).map((root) => listRoot(root, files));
+  return installedPluginDirs(locs).map(
+    (root) => readDefinitions(
+      { root, scope: "plugins", listed: files.folders(root) },
+      files
+    )
+  );
 }
-function listRoot({ dir, scope }, files) {
-  const listed = files.folders(dir);
+function readDefinitions({ root, scope, listed }, files) {
   return {
-    root: dir,
+    root,
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
         (name) => readDefinition(
-          import_node_path33.default.join(dir, name, DEFINITION_FILE),
+          import_node_path33.default.join(root, name, DEFINITION_FILE),
           scope,
           files
         )
@@ -89987,12 +89968,11 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) {
-  const repoRoots = pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map((root) => listRoot(root, files));
+function sessionPlugins(roots, checkout) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
-  for (const { root, scope, listed } of [...installed, ...repoRoots]) {
+  for (const { root, scope, listed } of roots) {
     if ("error" in listed) {
       notices.push(
         `Plugin folder could not be listed: ${listed.path} \u2014 ${listed.error}`
@@ -90011,12 +89991,7 @@ function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) 
     plugins: [...byNs.values()],
     strays,
     notices,
-    // [LAW:single-enforcer] The one place a session's working directory
-    // becomes the checkout its plugins' data paths resolve against.
-    // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
-    // above it, since an ancestor watch per session is the cost; the next
-    // rediscovery reads the new checkout.
-    checkout: files.checkout(cwd2)
+    checkout
   };
 }
 function layerOf(role, file, content, home, batch = {
@@ -90056,14 +90031,13 @@ function snapshotOf(session, chain2) {
 function discover(query, shared) {
   const { locs, answers, files } = shared;
   const search = searchConfig(locs, answers, query, files);
-  const { resolution, question, locations: locations2, watchedFiles } = search;
-  const { repos } = resolution;
+  const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
+  const { project } = resolution;
   const session = sessionPlugins(
-    locs,
-    shared.installed,
-    repos.plugins,
-    query.cwd,
-    files
+    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
+    // on its next pass. Watching every parent would add a watch per ancestor.
+    files.checkout(query.cwd)
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)
@@ -90074,22 +90048,25 @@ function discover(query, shared) {
   const notices = [
     configCollisionNotice(locations2),
     configResolutionNotice(resolution),
-    repoUnreadNotice(repos),
+    repoUnreadNotice(project),
     ...session.notices
   ].filter((n) => n !== null);
   return {
-    snapshot: { ...snapshotOf(session, chain2), repo: question, notices },
+    snapshot: {
+      ...snapshotOf(session, chain2),
+      repo: project.question,
+      notices
+    },
     targets: {
       files: watchedFiles,
       roots: [
         .../* @__PURE__ */ new Set([
-          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          ...shared.installed.map((r) => r.root),
           // A chain must hear a new repository plugin even before approval.
-          ...query.kind === "chain" && query.projectDir !== void 0 ? [import_node_path33.default.join(query.projectDir, REPO_PLUGIN_DIR)] : []
+          ...query.kind === "chain" && query.projectDir !== void 0 ? [repoPluginDir(query.projectDir)] : []
         ])
       ]
-    },
-    repos
+    }
   };
 }
 function contentAt({ resolution, locations: locations2 }, place, files) {

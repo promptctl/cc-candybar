@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "1b747e5500b197edd1e1a626e5634c0f35723f44",
+      "timestamp": "2026-11-19T17:38:57.172Z",
+      "commits": [
+        {
+          "sha": "1b747e5500b197edd1e1a626e5634c0f35723f44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:37:50-07:00",
+          "message": "refactor(config): use one project decision for layers and plugins (#890)\n\nrefactor(config): derive project layers and plugins from one decision"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "4ca12f8dcfd9b79c37dfd73898bcb9d18e88604e",
@@ -135,21 +150,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:06:46-07:00",
           "message": "fix(renderer): recover pinned pane views on config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e04e83316aabc769ec7d2a322cf9ecc6ff181f44",
-      "timestamp": "2026-11-19T17:31:27.774Z",
-      "commits": [
-        {
-          "sha": "e04e83316aabc769ec7d2a322cf9ecc6ff181f44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:30:14-07:00",
-          "message": "refactor(renderer): keep one origin and config layer projection (#888)"
         }
       ]
     },
