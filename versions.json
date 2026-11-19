@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "6125487488e90cbd9bd119f83430408afd97f01f",
+      "timestamp": "2026-11-19T13:30:42.886Z",
+      "commits": [
+        {
+          "sha": "6125487488e90cbd9bd119f83430408afd97f01f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:29:37-07:00",
+          "message": "perf(host): share physical transcript observations across sessions (#866)\n\n* perf(host): share physical transcript observations across sessions\n\n* test(host): prove two live feeds share source invalidation\n\n* test(cache): cover transcript replacement with unchanged mtime and size"
+        }
+      ]
+    },
+    {
       "version": "pr-872",
       "ref": "refs/pull/872/merge",
       "sha": "03d493f21f8fd9b450a68a16357c696877a88040",
@@ -63,21 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:18:15-07:00",
           "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b572777cc8c9de4ce37090fcea33fb72d08cf127",
-      "timestamp": "2026-11-19T13:23:27.973Z",
-      "commits": [
-        {
-          "sha": "b572777cc8c9de4ce37090fcea33fb72d08cf127",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T13:22:06Z",
-          "message": "chore(release): set `package.json` to 1.234.0\n\n## [1.234.0](https://github.com/promptctl/cc-candybar/compare/v1.233.2...v1.234.0) (2026-11-19)\n\n### Features\n\n* **daemon:** route named renderers through one shared host ([#864](https://github.com/promptctl/cc-candybar/issues/864)) ([9df2afa](https://github.com/promptctl/cc-candybar/commit/9df2afa5338a7144c675bbd4ff228c85f32fe868))\n"
         }
       ]
     },

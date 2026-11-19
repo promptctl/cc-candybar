@@ -39810,10 +39810,10 @@ function anchored(timeline, host, time, rate) {
 }
 function played(animation, { origin, time, rate }) {
   const mapped = (host) => time + rate * (host - origin);
-  const forward = rate > 0;
-  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
-  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
-  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
+  const forward2 = rate > 0;
+  const ahead = forward2 ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
+  const behind = forward2 ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
+  const past = forward2 ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
     const sum2 = origin + (edge - time) / rate;
     return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
@@ -41190,14 +41190,14 @@ var CellJoiner = class {
         const hasLeft = left !== null && (!reads.seam.left || leftBg !== void 0);
         const hasRight = right !== null && (!reads.seam.right || rightBg !== void 0);
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
-        const tails = hasLeft && (!reads.tail || leftBg !== void 0);
+        const tails2 = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
         const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
           const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
           return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
-          if (leads || tails)
+          if (leads || tails2)
             yield* styled(leads ? "lead" : "tail");
           return;
         }
@@ -50087,14 +50087,42 @@ var Limiter = class {
   }
 };
 
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
 // src/utils/transcript-fs.ts
 function statStamp(filePath2) {
   if (!filePath2) return "";
   try {
-    return stampOf(statSync(filePath2));
+    const stat3 = statSync(filePath2, { bigint: true });
+    return stat3.isFile() ? transcriptVersion(stat3) : "";
   } catch {
     return "";
   }
+}
+function transcriptVersion(stat3) {
+  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
 }
 function stampOf(st) {
   return `${st.mtimeMs}:${st.size}`;
@@ -50133,24 +50161,84 @@ async function readAppended(path31, prior, until2) {
     });
   });
 }
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
+var Observations = class {
+  pending = new SingleFlight();
+  recent = /* @__PURE__ */ new Map();
+  async read(path31, range, read2) {
+    const stamp2 = statStamp(path31);
+    if (stamp2 === "") return observedValue(await read2());
+    const key = `${stamp2}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== void 0) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed, originalPath } = await this.pending.run(key, async () => {
+      const observed2 = await read2();
+      if (observed2.kind === "ok" && observed2.value.stamp === stamp2 && observed2.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed2.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed: observed2, originalPath: path31 };
+    });
+    return observedValue(
+      originalPath === path31 || observed.kind === "ok" && observed.value.stamp === stamp2 ? observed : await read2()
+    );
   }
+};
+function observedValue(found2) {
+  return found2.kind === "ok" ? ok(found2.value.value) : found2;
+}
+var forward = new Observations();
+var tails = new Observations();
+function readAppendedText(path31, prior, until2) {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
+  return forward.read(path31, range, async () => {
+    var _stack = [];
+    try {
+      const read2 = await readAppended(path31, prior, until2);
+      if (read2.kind !== "ok") return read2;
+      const lent = __using(_stack, read2.value);
+      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
+      const bytes = lines2.length;
+      return ok({
+        stamp: info.stamp,
+        bytes,
+        value: { ...info, bytes, text: lines2.toString("utf8") }
+      });
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  });
+}
+function readTailText(path31, maxBytes) {
+  return tails.read(path31, String(maxBytes), async () => {
+    const read2 = await readTail(path31, maxBytes);
+    if (read2.kind !== "ok") return read2;
+    const { stamp: stamp2, fromStart, buf } = read2.value;
+    return ok({
+      stamp: stamp2,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart }
+    });
+  });
 }
 async function readWholeLines(path31, prior, until2, window2) {
   let fh = null;
   try {
-    fh = await open(path31, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
+    fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path31}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp2 = transcriptVersion(st);
     const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
     const start = reset || prior === void 0 ? 0 : prior.offset;
     const end = reset || until2 === void 0 ? size : Math.min(size, until2);
@@ -50225,12 +50313,16 @@ async function readTail(path31, maxBytes) {
   return gate.run(async () => {
     let fh = null;
     try {
-      fh = await open(path31, "r");
-      const { size } = await fh.stat();
+      fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat3 = await fh.stat({ bigint: true });
+      if (!stat3.isFile())
+        return failed(`readTail ${path31}: not a regular file`, "read");
+      const size = Number(stat3.size);
       const start = Math.max(0, size - maxBytes);
       return ok({
         buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
+        fromStart: start === 0,
+        stamp: transcriptVersion(stat3)
       });
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT;
@@ -52347,18 +52439,14 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
         paths2.push(filePath2);
         continue;
       }
-      const read2 = await readAppended(filePath2, void 0, void 0);
+      const read2 = await readAppendedText(filePath2, void 0, void 0);
       if (read2.kind !== "ok") {
         debug(`Failed to check agent file ${filePath2}`);
         continue;
       }
       longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
+      const { text: text4 } = read2.value;
+      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
       if (line.kind === "object" && line.value.sessionId === sessionId2) {
         paths2.push(filePath2);
       }
@@ -52481,7 +52569,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
   let value = prior?.value ?? empty2;
   let end;
   for (; ; ) {
-    const read2 = await readAppended(
+    const read2 = await readAppendedText(
       filePath2,
       cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
       end?.size
@@ -52493,11 +52581,8 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next2 = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
+    const next2 = window2.start + window2.bytes;
+    value = await step4(value, parseJsonlLines(window2.text));
     cursor = {
       offset: next2,
       stamp: end.stamp,
@@ -52506,30 +52591,6 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
 }
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
 
 // src/var-system/store.ts
 init_globals();
@@ -53630,8 +53691,8 @@ var SessionUsageStore = class {
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath2 = (0, import_node_path16.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(stat2(filePath2, { bigint: true }));
+          if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
           if (!id2.ok) {
             this.log(
@@ -53643,7 +53704,7 @@ var SessionUsageStore = class {
           candidates.push({
             sessionId: id2.id,
             path: filePath2,
-            stamp: stampOf(st)
+            stamp: transcriptVersion(st)
           });
         }
       }
@@ -55562,18 +55623,17 @@ async function cacheExpiresAt(transcriptPath) {
 }
 async function findLastCacheActivityTs(transcriptPath) {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
+    const tail = await readTailText(transcriptPath, maxBytes);
     if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    const ts = scanLastCacheTs(tail.value.text, tail.value.fromStart);
     if (ts != null) return ok(ts);
     if (tail.value.fromStart) return ABSENT;
   }
   return ABSENT;
 }
-function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text4 = buf.toString("utf8");
+function scanLastCacheTs(text4, fromStart) {
   const lines2 = text4.split("\n");
-  const start = bufStartsAtFileBeginning ? 0 : 1;
+  const start = fromStart ? 0 : 1;
   for (let i2 = lines2.length - 1; i2 >= start; i2--) {
     const line = lines2[i2];
     if (!line || !CACHE_HIT_RE.test(line)) continue;
