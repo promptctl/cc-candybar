@@ -227,8 +227,9 @@ Every action that writes config names the layer it writes with `layer`:
 `.cc-candybar.json5`) or `"local"` (`.cc-candybar.local.json5` beside it, yours
 alone in that project). The chain merges them user < project < local, and a
 write defaults to `"user"`. The file is resolved at the moment of the click by
-the same search the render runs; an explicit path (`--config`, or
-`$CC_CANDYBAR_CONFIG`) is the session's only layer, so only `"user"` writes it.
+the same search the render runs. `--config` and `$CC_CANDYBAR_CONFIG` select
+the user layer, with approved project and local layers still available.
+`--config-only` selects the named file alone, writable as `"user"`.
 A project layer in a session with no approved project is refused. When the
 file does not exist yet, the first write creates it, and a local file it
 creates is added to the repository's `info/exclude` so git never shows it. A

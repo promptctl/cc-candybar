@@ -25,8 +25,8 @@ export interface ConfigSnapshot {
 }
 
 // A chain is user, project, local. The file `--config` names is the user
-// layer, and it replaces the chain, so the chain is that one layer. A
-// repository's layers are in the chain only once it is approved.
+// layer. With `--config-only` it is the only layer. A repository's layers
+// are in the chain only after approval.
 export interface Layer {
   readonly role: LayerRole;
   // Where the layer lives: messages, the directory its `run` actions start

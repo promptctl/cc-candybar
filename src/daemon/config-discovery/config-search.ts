@@ -9,12 +9,13 @@ import {
   gateRepos,
   repoQuestion,
   type RepoAnswers,
+  type RepoGate,
   type RepoDir,
   type RepoProject,
 } from "../../config/loader/repo-gate.js";
 import {
   configLocations,
-  userHome,
+  userConfigDefault,
   type ConfigCandidate,
   type ConfigLayer,
   type ConfigLocation,
@@ -39,13 +40,23 @@ type ObservedLocation = ConfigLocation & {
 export function observeConfigLocations(
   locations: readonly ConfigLocation[],
   files: Pick<DiscoveryFiles, "presence" | "realpath">,
+  selectedBase: string | null = null,
 ): readonly ObservedLocation[] {
   return locations.map((location) => {
     const present: Array<{ candidate: ConfigCandidate; directory: string }> =
       [];
     const unchecked: Unchecked[] = [];
+    const candidates: ConfigCandidate[] = [];
     for (const candidate of location.candidates) {
       const observed = files.presence(candidate.file);
+      if (
+        observed === "present" &&
+        location.role !== "user" &&
+        selectedBase !== null &&
+        files.realpath(candidate.file) === selectedBase
+      )
+        continue;
+      candidates.push(candidate);
       if (observed === "absent") continue;
       if (observed !== "present") {
         unchecked.push(observed);
@@ -59,12 +70,12 @@ export function observeConfigLocations(
       present.push({ candidate, directory: dir });
     }
     const [winner, ...shadowed] = present;
+    const scope = { role: location.role, candidates, unchecked };
     return winner === undefined
-      ? { ...location, kind: "no-winner", unchecked }
+      ? { ...scope, kind: "no-winner" }
       : {
-          ...location,
+          ...scope,
           kind: "found",
-          unchecked,
           winner: winner.candidate,
           shadowed: shadowed.map(({ candidate }) => candidate),
           directory: winner.directory,
@@ -72,18 +83,43 @@ export function observeConfigLocations(
   });
 }
 
+const NO_REPOS: RepoGate = {
+  plugins: null,
+  approved: [],
+  awaiting: [],
+  declined: [],
+  unproven: [],
+  unread: null,
+};
+
 export function searchConfig(
   locs: Locations,
-  answers: RepoAnswers,
+  readAnswers: () => RepoAnswers,
   query: ConfigQuery,
   files = discoveryFiles(),
 ): {
   readonly resolution: ConfigResolution;
   readonly question: RepoQuestion | null;
   readonly locations: readonly ObservedLocation[];
+  readonly candidates: readonly string[];
 } {
-  const { projectDir, configFile } = query;
-  const locations = observeConfigLocations(configLocations(locs, query), files);
+  const searched = configLocations(locs, query);
+  const selected =
+    query.kind === "chain" &&
+    query.projectDir !== undefined &&
+    query.path !== undefined
+      ? files.realpath(query.path)
+      : null;
+  // A link to the named base stays watched, since it can become a separate
+  // project file on retarget. It cannot be another layer or write target now.
+  const locations = observeConfigLocations(
+    searched,
+    files,
+    typeof selected === "string" ? selected : null,
+  );
+  const candidates = searched.flatMap(({ candidates }) =>
+    candidates.map(({ file }) => file),
+  );
   const found = locations.flatMap((location) =>
     location.kind === "found" ? [location] : [],
   );
@@ -96,9 +132,15 @@ export function searchConfig(
     });
   }
   const dirs = [...repoDirs.values()];
-  const seen = repoProject(projectDir, files);
-  const repos = gateRepos(answers, dirs, seen.project);
-  const question = repoQuestion(answers, dirs, seen.project);
+  const seen = repoProject(
+    query.kind === "chain" ? query.projectDir : undefined,
+    files,
+  );
+  const answers = query.kind === "file" ? null : readAnswers();
+  const repos =
+    answers === null ? NO_REPOS : gateRepos(answers, dirs, seen.project);
+  const question =
+    answers === null ? null : repoQuestion(answers, dirs, seen.project);
   const layers: ConfigLayer[] = found
     .filter(
       ({ role, directory }) =>
@@ -106,34 +148,29 @@ export function searchConfig(
     )
     .reverse()
     .map(({ role, winner }) => ({ role, path: winner.file }));
-  const projectUnchecked = seen.unchecked === null ? [] : [seen.unchecked];
-  const unchecked = locations.flatMap((location) => location.unchecked);
-  const [failure] = unchecked;
-  const resolution: ConfigResolution =
-    configFile === undefined || layers.length > 0
-      ? {
-          kind: "chain",
-          layers,
-          home: configFile ?? userHome(locs, layers),
-          unchecked: [...unchecked, ...projectUnchecked],
-          repos,
-        }
-      : failure === undefined
-        ? {
-            kind: "missing",
-            path: configFile,
-            home: configFile,
-            unchecked: projectUnchecked,
-            repos,
-          }
-        : {
-            kind: "unreadable",
-            ...failure,
-            home: configFile,
-            unchecked: projectUnchecked,
-            repos,
-          };
-  return { resolution, question, locations };
+  const user = locations.find(({ role }) => role === "user");
+  const home =
+    user?.kind === "found"
+      ? user.winner.file
+      : (query.path ?? userConfigDefault(locs));
+  const namedFailure = query.path !== undefined && user?.kind !== "found";
+  const unchecked = locations.flatMap((location) =>
+    namedFailure && location === user ? [] : location.unchecked,
+  );
+  const common = {
+    layers,
+    home,
+    repos,
+    unchecked:
+      seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked],
+  };
+  const problem = user?.unchecked[0];
+  const resolution: ConfigResolution = !namedFailure
+    ? { ...common, kind: "chain" }
+    : problem === undefined
+      ? { ...common, kind: "missing", path: home }
+      : { ...common, kind: "unreadable", ...problem };
+  return { resolution, question, locations, candidates };
 }
 
 // [LAW:no-silent-failure] The failure to inspect a project is independent of

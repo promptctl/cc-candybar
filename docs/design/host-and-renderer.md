@@ -339,7 +339,7 @@ interface Program {
 - **Every write target is named, never spelled.** A `layer` is named by an origin the renderer subscribes and its role in that origin's chain; the interpreter refuses an origin discovery does not hold. `claude-settings` is reached through a session the renderer holds. Durable state is written by `store`, so no target names a file under the profile. Undo stores these names, so a history copied to another renderer resolves only against what that renderer was handed.
 - **Which layer a write goes to is a value.** Every action that writes config names its target: a role, or `ask`, which offers the session's approved layers. The bundled config sets today's behaviour: steppers, persist actions and edit mode write the user layer, and save asks. Changing a default is a config edit. Undo writes to the layer its step wrote.
 - **Save asks which layer.** It offers the layers of the session's chain:
-  - **user:** the profile's config file, or the file `--config` names, which is then the only layer.
+  - **user:** the profile's config file, or the file `--config` names. With `--config-only`, the user layer is the only one.
   - **project:** the project's checked-in `.cc-candybar` file.
   - **local:** `.cc-candybar.local` beside the project's file, holding one person's settings for that project.
 

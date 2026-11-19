@@ -75,9 +75,14 @@ Debugging:
   CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
 
 Configuration:
-  Layout and segment options are defined in .cc-candybar.json5 (place in your
-  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. To see the effective merged config:
+  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
+  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
+  --config PATH            Use PATH as the user layer. Approved project
+                           config and repository plugins still load.
+  --config-only PATH       Load only PATH over the bundled base. Installed
+                           plugins and definitions listed in PATH still load.
+  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
+  To see the effective merged config:
     cc-candybar config
 
   Every bar carries a settings menu, whatever your config says — no config
@@ -125,13 +130,13 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH]
+  frames --lane LANE [--config PATH | --config-only PATH]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a
                            click — one JSON message per stdout line. Reads
                            Claude Code's statusline JSON from stdin (one object
                            a line) and sends it as the session's data
-                           (--config rides with it). LANE is one of
+                           (config flags ride with it). LANE is one of
                            ${LANE_NAMES.join(", ")}:
                            the experimental lane this stream serves,
                            which streams only while its toggle in the settings
@@ -148,7 +153,8 @@ Config tooling:
   check [--render] [file]  Validate a config on the full render pipeline (parse
                            → merge → validate → register → render, under
                            every preset) with no daemon. With no path, checks
-                           the same file the daemon would load from here. Exit
+                           the same layers the daemon would load from here.
+                           Use --config-only PATH to check in isolation. Exit
                            0 clean (warnings on stderr), 1 invalid, 2
                            unreadable. --render also prints the bar a fresh
                            session opens on, so you can read a config without

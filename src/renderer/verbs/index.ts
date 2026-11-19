@@ -641,7 +641,7 @@ function heldLayer(
   return writeLayerOf(
     ctx.snapshotFor(origin),
     role,
-    origin.target.path ?? null,
+    origin.target.source === "argument-only" ? origin.target.path : null,
     ctx.locations.home,
   );
 }
