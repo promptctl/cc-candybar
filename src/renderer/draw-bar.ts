@@ -38,7 +38,10 @@ import type { RichText } from "@promptctl/rich-js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
-import { laneSwitches, resolveEffectiveGlobals } from "../config/effective-globals.js";
+import {
+  laneSwitches,
+  resolveEffectiveGlobals,
+} from "../config/effective-globals.js";
 import {
   type PassageFrame,
   type EffectSessions,
@@ -224,7 +227,9 @@ export function viewLanes(
 
   // [LAW:effects-at-boundaries] Only committed settings declare a live
   // host surface. A draft changes the bar's preview until Save lands.
-  const { config, authoredRoots } = renderCache.getOrCreate(hold.entry.origin).state;
+  const { config, authoredRoots } = renderCache.getOrCreate(
+    hold.entry.origin,
+  ).state;
   return laneSwitches(
     resolveEffectiveGlobals(
       config,

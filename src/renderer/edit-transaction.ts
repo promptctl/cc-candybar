@@ -43,6 +43,7 @@ export interface EditTurn {
 }
 
 class EditDraft {
+  readonly navigationScope = Symbol();
   private readonly picks = new Map<string, string | null>();
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;

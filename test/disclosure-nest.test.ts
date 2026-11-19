@@ -187,6 +187,21 @@ test("◁ back over a closed door restores the menu with what was open in it", a
   expect(rt.held(PICKERS)).toBe("candybar.apply.effect");
 });
 
+test("Back reopens the door after an edit closes without carrying old edit menus into a new draft", async () => {
+  const rt = nestBar(BUNDLED);
+  await openDoor(rt);
+  await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  const gap = insertGap("default", "directory", "before");
+  await rt.clickWriting(gap.stateKey, gap.apply);
+  await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+  await CLICK_VERBS.get("back")!(SID, rt.ctx);
+  expect(rt.held(SETTINGS_ANCHOR)).toBe("open");
+  expect(rt.held(gap.stateKey)).toBe(DISCLOSURE_CLOSED);
+  expect(rt.ctx.edits.draft(SID)).toBeNull();
+  await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  expect(rt.held(gap.stateKey)).toBe(DISCLOSURE_CLOSED);
+});
+
 test("the close is logged with what it folded", async () => {
   const rt = nestBar(BUNDLED);
   await openDoor(rt);
@@ -243,6 +258,19 @@ describe("cases 7–9: a config's nested groups and menus", () => {
     await rt.clickWriting("acc", DISCLOSURE_CLOSED);
     await rt.clickWriting("acc", "outer");
     expect(rt.held(MENU_KEY)).toBe(DISCLOSURE_CLOSED);
+  });
+
+  test("Back skips a picker from a placement the reloaded config removed", async () => {
+    const rt = nestBar(GROUPS);
+    await rt.clickWriting("acc", "outer");
+    await rt.clickWriting(MENU_KEY, "applyTheme");
+    const reloaded = nestBar(GROUPS.replace("      'picky',", ""));
+    await CLICK_VERBS.get("back")!(SID, {
+      ...rt.ctx,
+      configFor: () => reloaded.config,
+    });
+    expect(rt.held("acc")).toBe(DISCLOSURE_CLOSED);
+    expect(rt.logged).toContain(`back: acc=∅ discarded=1 (session=${SID})`);
   });
 
   test("a group two levels down closes too, under one that starts open", async () => {
