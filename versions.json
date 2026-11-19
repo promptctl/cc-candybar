@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "19a035d767753cfdb962f8696891d8c5f54c8c6f",
+      "timestamp": "2026-11-19T10:56:45.412Z",
+      "commits": [
+        {
+          "sha": "19a035d767753cfdb962f8696891d8c5f54c8c6f",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T10:55:30Z",
+          "message": "chore(release): set `package.json` to 1.232.13\n\n## [1.232.13](https://github.com/promptctl/cc-candybar/compare/v1.232.12...v1.232.13) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** settle host effects after the renderer answers (ibyq.3h0) ([#844](https://github.com/promptctl/cc-candybar/issues/844)) ([30d7a34](https://github.com/promptctl/cc-candybar/commit/30d7a34587b836199bfd5c0bb320894e7119c63e))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-853",
       "ref": "refs/pull/853/merge",
       "sha": "cd908d972901fdbd670c4f35410ad58a88528b8d",
@@ -84,21 +99,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:06-07:00",
           "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "30d7a34587b836199bfd5c0bb320894e7119c63e",
-      "timestamp": "2026-11-19T10:48:30.467Z",
-      "commits": [
-        {
-          "sha": "30d7a34587b836199bfd5c0bb320894e7119c63e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:46:45-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0) (#844)\n\n* fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n\n* test(daemon): cover failed starts and wake reporting\n\n* fix(daemon): reset config coverage for either start entry\n\n* test(daemon): exercise settlement after Doctor removal\n\n* test(daemon): distinguish a landed write from a refresh failure"
         }
       ]
     },
@@ -200,35 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:38:14-07:00",
           "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-845",
-      "ref": "refs/pull/845/merge",
-      "sha": "139cc2c6ba6361fde7008553a5a93919d84e7610",
-      "timestamp": "2026-11-19T10:31:58.900Z",
-      "commits": [
-        {
-          "sha": "139cc2c6ba6361fde7008553a5a93919d84e7610",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:31:04Z",
-          "message": "Merge 2dd028072df7b88d17dfbc3e132b0cdc69780f78 into 5702b0a6f481af905b25fe6469d345b86a5c5bb3\n"
-        },
-        {
-          "sha": "2dd028072df7b88d17dfbc3e132b0cdc69780f78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:30:27-07:00",
-          "message": "fix(doctor): a doctor click records whether it started a run or joined the one on its way (boii)\n\nA doctor click while the session's run waits for its reading starts no\nrun, and nothing said so. Each doctor click now notes on its record\ndoctorRun=started|joined and doctorRunName, the run it asked.\n\nThe effect-refresh e2e drops the click that judged the same at-rest bar\nunder the same menu as the one before it, so it expects three runs. After\neach click it waits for that run's note in the log, which is the source its\nfinal assertion reads, and every row that moves is matched by one constant\nfor the full reason.\n"
-        },
-        {
-          "sha": "6fb6bd0bc8643771787f440e0a1f2c0d57648bc1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:54:51-07:00",
-          "message": "fix(test): each doctor click in the e2e waits for the run before it to report (boii)\n\nA doctor click while the session's run still waits for its reading starts\nno run, so two clicks one draw apart logged one or two runs depending on how\nfast the host read the machine. The effect-refresh case now draws its row\nback after each click before clicking again, and the URL-handler case waits\nfor its run's row instead of reading the first draw. Under a 1.5 s delay on\nthe host's reading, the old effect-refresh case logs three runs and fails;\nboth cases pass.\n"
         }
       ]
     },
