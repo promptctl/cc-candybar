@@ -196,8 +196,8 @@ const targetsOf = (folder: string) => ({
   polled: [],
 });
 
-// A config observation can provision immediately. A delivery check that
-// discovers a missing folder lets a pending uninstall finish first.
+// A new config declaration or an observed config can provision immediately.
+// File-event recovery gives discovery a turn to observe a removed plugin.
 type Trigger = "config" | "period" | "caught-up";
 
 // [LAW:single-enforcer] The one owner of every plugin's managed storage, for
@@ -210,9 +210,8 @@ type Trigger = "config" | "period" | "caught-up";
 // retained config in any renderer declares it. A folder gone or replaced
 // ends its generation. A config observation rechecks the folders it names.
 // File-event periods and catch-up recheck all retained folders.
-// A lost folder is made again by the next trigger, not
-// by the event that found it gone, so a plugin folder being removed is gone,
-// and its hold released, before the folder is made in it again.
+// A delivery check that finds a lost folder records the loss. Provisioning
+// can resume on the next observation while a config still declares it.
 //
 // [LAW:one-source-of-truth] Whether the OS is delivering file events is the
 // daemon's one fact, not a folder's (file-events.ts): a stall is every
@@ -221,7 +220,7 @@ export class ManagedStorage {
   private readonly files: SourceFiles;
   private readonly sessions: KeyedSource<SessionFile, JsonValue>;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
-  // a hold names.
+  // a loaded config declares.
   private readonly folders = new Map<string, Folder>();
   // By folder: the faults last logged and counted, so each is told once as it
   // starts, changes and clears.
@@ -303,6 +302,7 @@ export class ManagedStorage {
   // A physical config observation retries only the retained plugin folders it
   // observed. A renderer redraw or another holder joining reads no directory.
   recheck(observed: ReadonlySet<string>): void {
+    if (this.closed) return;
     const held = [...observed].filter((folder) => this.folders.has(folder));
     this.refreshFolders(this.reconcile(held, "config"));
   }
@@ -311,8 +311,8 @@ export class ManagedStorage {
   // A generation's folder is read, never made: a stat that fails keeps the
   // generation, and the registry judges its watch again, as it does for an
   // acquire joining the slot, so a deaf watch reopens on the owner's own
-  // triggers. A folder found gone or replaced is lost, except at a hold, which
-  // makes it again at once. Any other state is made and read again, and a
+  // triggers. A config observation reprovisions a missing or replaced folder
+  // immediately. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
   private asked(folder: string, trigger: Trigger): boolean {
     const was = this.folders.get(folder);
@@ -328,7 +328,7 @@ export class ManagedStorage {
           .release();
         return this.settle(folder);
       }
-      // [LAW:nothing-unseen] Lost at every trigger; a hold makes it again.
+      // [LAW:nothing-unseen] Record the loss before attempting to provision again.
       this.lostAt(was, read);
       if (trigger === "config") this.moved(folder, this.made(folder));
       return true;

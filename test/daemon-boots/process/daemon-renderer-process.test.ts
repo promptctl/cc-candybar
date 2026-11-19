@@ -76,6 +76,11 @@ describe("the renderer wire handshake", () => {
   test.each([
     ["no version", {}, "no version"],
     [
+      "a previous worktree build",
+      { wireVersion: RENDERER_WIRE_VERSION - 1 },
+      `version ${RENDERER_WIRE_VERSION - 1}`,
+    ],
+    [
       "a different version",
       { wireVersion: RENDERER_WIRE_VERSION + 1 },
       `version ${RENDERER_WIRE_VERSION + 1}`,
