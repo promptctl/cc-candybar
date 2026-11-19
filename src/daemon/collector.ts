@@ -306,7 +306,7 @@ export class Collector<Context extends ViewFacts = ViewFacts> {
     if (record?.phase.kind === "live") record.active = true;
   }
 
-  // [LAW:one-source-of-truth] Every renderer output's subscriptions, whole:
+  // [LAW:one-source-of-truth] The aggregate of the renderers' subscriptions:
   // a session whose set moved is declared again, and one absent from them has
   // no plugin sources. A retiring session takes its set too, and holds none
   // of it.

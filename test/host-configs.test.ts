@@ -77,7 +77,8 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs, wake: null },
+  subscriptions: { sources: {}, lanes: {}, configs },
+  wake: null,
   record: [],
   frames: [],
 });
@@ -96,9 +97,12 @@ function hostOver(
 ) {
   const heard: string[] = [];
   const logged: string[] = [];
+  const follows: Array<readonly RenderOrigin[]> = [];
+  const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
     follow: (origins) => {
+      follows.push(origins);
       followed = origins;
     },
     snapshotOf: (origin) =>
@@ -127,7 +131,7 @@ function hostOver(
     ),
     (level, line) => logged.push(`${level} ${line}`),
     {
-      subscribed: () => {},
+      subscribed: (value) => void declarations.push(value),
       frames: () => {},
       holding: () => () => {},
       stored: () => {},
@@ -140,7 +144,7 @@ function hostOver(
       unheard: (text) => void logged.push(`unheard ${text}`),
     },
   );
-  return { host, heard, logged };
+  return { host, heard, logged, follows, declarations };
 }
 
 const due = { kind: "due" } as const;
@@ -151,6 +155,34 @@ test("an origin a turn newly names gets its config turn in that turn's slot, ahe
   const second = host.answer(() => ({ kind: "event", event: due }));
   await Promise.all([first, second]);
   expect(heard).toEqual(["due", "config", "due"]);
+});
+
+test("the host takes a declaration once, drops its origins on replacement, and takes the same first plan after restart", async () => {
+  const opened = output([], [ORIGIN]);
+  const empty = output([], []);
+  let current = opened;
+  const { host, heard, follows, declarations } = hostOver(() => current);
+  const dueTurn = () => host.answer(() => ({ kind: "event", event: due }));
+  await dueTurn();
+  await dueTurn();
+  expect(heard).toEqual(["due", "config", "due"]);
+  expect(follows).toEqual([[ORIGIN]]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  current = empty;
+  await dueTurn();
+  expect(follows).toEqual([[ORIGIN], []]);
+  expect(declarations).toEqual([opened.subscriptions, empty.subscriptions]);
+  await dueTurn();
+  await host.answer(() => ({
+    kind: "event",
+    event: { kind: "start", viewers: {}, sessions: [] },
+  }));
+  expect(follows).toEqual([[ORIGIN], [], []]);
+  expect(declarations).toEqual([
+    opened.subscriptions,
+    empty.subscriptions,
+    empty.subscriptions,
+  ]);
 });
 
 function themeChange(origin = ORIGIN): Effect {

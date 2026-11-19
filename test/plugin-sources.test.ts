@@ -85,7 +85,7 @@ import type { WorldStates } from "../src/renderer/world-states";
 import { NOTHING_READ } from "../src/dsl/view-source";
 import { mainRenderer } from "../src/renderer/main";
 import { rendererParts } from "./helpers/renderer-parts";
-import { rendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, type RendererHost } from "../src/daemon/renderer-host";
 import { answerStatusline } from "../src/daemon/statusline-answer";
 import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { checkRenderRequest } from "../src/daemon/render-checkpoint";
@@ -177,6 +177,7 @@ interface Rig {
   readonly storageCalls: string[];
   readonly collector: Collector;
   readonly worldStates: WorldStates;
+  readonly route: (host: RendererHost) => void;
   // A request's turn as the main renderer takes one: the world state the
   // collector read at its keys taken, the session's view held, and the
   // cache's subscriptions handed back to the collector.
@@ -297,6 +298,7 @@ function rig(): Rig {
     storageCalls,
     collector: served.collector,
     worldStates: served.worldStates,
+    route: served.route,
     hold: (configFile, sid = "s1") => {
       const facts = heardRequest(sid, dir);
       return served.config(facts, () =>
@@ -857,6 +859,8 @@ function statusline(r: Rig, configFile: string) {
     unfollowedCollector(r.collector),
     { ...NO_ACTS, configs: r.configs.discovery },
   );
+  r.route(host);
+  cleanups.push(host.closeWake);
   let id = 0;
   return async (): Promise<{ text: string; facts: RequestFacts }> => {
     const { hookData } = viewFacts(dir, "s1");

@@ -3,6 +3,7 @@ import {
   compareShallow,
   makeObservable,
   observable,
+  observableRef,
   reaction,
   runInAction,
 } from "mobx";
@@ -1152,7 +1153,9 @@ export class RenderCache<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
 > {
-  private readonly entries = new Map<string, CacheEntry>();
+  private readonly entries = observable.map<string, CacheEntry>(undefined, {
+    deep: false,
+  });
   // [LAW:one-source-of-truth] The latest delivery of each retained origin
   // gates admission and writes, including controls on an already live view.
   private readonly configDeliveries = observable.map<string, ArrivedConfig>(
@@ -1173,7 +1176,10 @@ export class RenderCache<
   private storageHolds = 0;
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
-  private readonly views = new Map<SessionId, SessionView<S, F>>();
+  private readonly views = observable.map<SessionId, SessionView<S, F>>(
+    undefined,
+    { deep: false },
+  );
   readonly presentations = new PresentedFrames((session) => {
     const view = this.views.get(session);
     if (view !== undefined) {
@@ -1314,8 +1320,10 @@ export class RenderCache<
       !lostApproval &&
       originKey(existing.origin) === originKey(origin)
     ) {
-      this.entries.delete(key);
-      this.entries.set(key, existing);
+      runInAction(() => {
+        this.entries.delete(key);
+        this.entries.set(key, existing);
+      });
       if (draft !== null && existing.snapshot !== draft)
         this.reloadInto(
           existing,
@@ -1353,7 +1361,7 @@ export class RenderCache<
     };
     // [LAW:one-source-of-truth] The current load's failure gates writes even
     // when the view keeps rendering its previous compiled configuration.
-    makeObservable(entry, { lastError: observable });
+    makeObservable(entry, { lastError: observable, state: observableRef });
     this.serve(entry.state);
     // [LAW:single-enforcer] Insert, hold, bound, then notify — in that order.
     // From the moment the entry is in the map it is reachable for eviction
@@ -1364,7 +1372,7 @@ export class RenderCache<
     // The bound is a fact about the MAP, complete at insertion: nothing later
     // (including an observer throwing) can skip it.
     // [LAW:dataflow-not-control-flow]
-    this.entries.set(key, entry);
+    runInAction(() => this.entries.set(key, entry));
     this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
@@ -1479,6 +1487,11 @@ export class RenderCache<
     );
   }
 
+  // The shared committed state, without changing the cache's use order.
+  committedState(origin: RenderOrigin): DslRenderState | null {
+    return this.entries.get(originKey(origin))?.state ?? null;
+  }
+
   // `held` with `lease` on `view` beside it, both released by the one
   // `using`. Nothing in it throws, so `held` is never stranded.
   private holdViewOf(
@@ -1554,8 +1567,10 @@ export class RenderCache<
     const current = this.views.get(sessionId);
     if (current?.state === state) {
       // Move to end (most recently used), as getOrCreate does an entry.
-      this.views.delete(sessionId);
-      this.views.set(sessionId, current);
+      runInAction(() => {
+        this.views.delete(sessionId);
+        this.views.set(sessionId, current);
+      });
       // A request is the one the view draws by from here.
       current.requested?.(facts);
       return current;
@@ -1565,7 +1580,7 @@ export class RenderCache<
     // most recently used, as a kept view moves there. The old view is retired
     // whether or not the new one opens: the session's render resolved to
     // another entry either way.
-    this.views.delete(sessionId);
+    runInAction(() => this.views.delete(sessionId));
     let view: SessionView<S, F>;
     try {
       view = this.opened(entry, state, facts, by);
@@ -1616,7 +1631,7 @@ export class RenderCache<
       throw error;
     }
     this.openFailures.delete(sessionId);
-    this.views.set(sessionId, view);
+    runInAction(() => this.views.set(sessionId, view));
     this.viewHolds.set(view, { entry, holders: 0, retired: null });
     this.log(
       "info",
@@ -1659,7 +1674,7 @@ export class RenderCache<
   // last render holding it returns.
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
-      this.views.delete(view.sessionId);
+      runInAction(() => this.views.delete(view.sessionId));
     const successor = this.views.has(view.sessionId);
     this.presentations.retireView(
       view.sessionId,
@@ -1695,9 +1710,8 @@ export class RenderCache<
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their storage folders, the runs
   // its `shell` and `file` sources name, and the variables of the session's
-  // environment its `env` sources read. Read
-  // off the views each turn, so a view that opened, moved or closed is the
-  // next output's.
+  // environment its `env` sources read. A declaration observes the current
+  // views and what each sources from the host.
   // [LAW:one-source-of-truth] The origins the entries load from. An origin's
   // config is held as long as an entry at it lives, not as long as a session:
   // a session retires when idle while its entry stays to draw it again.
@@ -1780,7 +1794,7 @@ export class RenderCache<
     entry: CacheEntry,
     reason: Teardown["reason"],
   ): void {
-    this.entries.delete(key);
+    runInAction(() => this.entries.delete(key));
     for (const [session, failure] of this.openFailures)
       if (failure.entry === entry) this.openFailures.delete(session);
     this.retire(entry.state, reason, null);
@@ -1989,8 +2003,11 @@ export class RenderCache<
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
-      entry.state = loaded.state;
-      this.serve(loaded.state);
+      const state = loaded.state;
+      runInAction(() => {
+        entry.state = state;
+      });
+      this.serve(state);
     }
     // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
     // The successor's hold precedes its predecessor's release, so a folder

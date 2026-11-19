@@ -349,7 +349,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     write(channel, {
       kind: "boot",
       wireVersion: RENDERER_WIRE_VERSION,
-      boot: own.boot(),
+      boot: { ...own.boot(), subscriptionUpdates: true },
     });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after

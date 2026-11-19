@@ -28,7 +28,6 @@ test("a renderer restart restores live sessions beyond the feed's request histor
     sources: {},
     lanes: {},
     configs: [],
-    wake: null,
   };
   const renderer: RendererPort = () => ({
     start(own) {
@@ -44,6 +43,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
                 frames: [],
                 stored: [],
                 subscriptions,
+                wake: null,
                 effects:
                   event.kind === "request"
                     ? [
@@ -66,6 +66,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
                 kind: "replied",
                 reply: { kind: push.kind },
                 subscriptions,
+                wake: null,
                 stored: [],
               };
             },

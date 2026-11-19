@@ -29,7 +29,7 @@ import type { Renderer } from "../../src/renderer-interface/interface";
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
-const NONE: Subscriptions = { sources: {}, lanes: {}, configs: [], wake: null };
+const NONE: Subscriptions = { sources: {}, lanes: {}, configs: [] };
 
 // A clock that reads `wall` and `mono` as they stand, and sets no timer: no
 // output here declares a wake.
@@ -61,6 +61,7 @@ function hostOver(output: Ended) {
         async (): Promise<AdapterOutput> => ({
           ...output,
           subscriptions: NONE,
+          wake: null,
           stored: [],
         }),
       ),
@@ -136,6 +137,7 @@ const answered = (): RendererOutput => ({
   stored: [],
   effects: [],
   subscriptions: NONE,
+  wake: null,
   record: [],
   frames: [],
 });
@@ -161,6 +163,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
             stored: [],
             reply: { kind: "close-journal" },
             subscriptions: NONE,
+            wake: null,
           };
         },
       }),
@@ -487,6 +490,7 @@ test("a config named by a push reaches the renderer before the next queued event
             kind: "replied",
             reply: { kind: "close-journal" },
             subscriptions,
+            wake: null,
             stored: [],
           };
         },
@@ -595,10 +599,7 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
           heard.push(input.event.kind);
           return {
             ...answered(),
-            subscriptions: {
-              ...NONE,
-              wake: input.event.kind === "due" ? null : (1 as Tick),
-            },
+            wake: input.event.kind === "due" ? null : (1 as Tick),
           };
         },
         adapter: async () => {
@@ -658,7 +659,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
             input.event.kind === "due"
               ? [{ kind: "copy", id: 1 as never, session: null, text: "x" }]
               : [],
-          subscriptions: { ...NONE, wake: (read.mono / 1000 + 1) as Tick },
+          wake: (read.mono / 1000 + 1) as Tick,
         }),
         adapter: async () => {
           throw new Error("no push here");
@@ -719,10 +720,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
           if (named(input.event) === "retire:long") await opened;
           return {
             ...answered(),
-            subscriptions: {
-              ...NONE,
-              wake: input.event.kind === "due" ? null : (1 as Tick),
-            },
+            wake: input.event.kind === "due" ? null : (1 as Tick),
           };
         },
         adapter: async () => {
@@ -760,7 +758,6 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
   await settled();
   expect(heard).toEqual(["retire:first", "retire:long", "retire:next", "due"]);
 });
-
 
 test("a scheduled frame is published while ordinary renderer turns replenish the mailbox", async () => {
   const fire: Array<() => void> = [];
@@ -809,7 +806,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
         }
         return {
           ...answered(),
-          subscriptions: { ...NONE, wake: traffic === 0 ? (1 as Tick) : null },
+          wake: traffic === 0 ? (1 as Tick) : null,
         };
       },
       adapter: async () => { throw new Error("no push here"); },

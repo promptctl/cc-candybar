@@ -23,6 +23,7 @@ import type { Drawing } from "../../config/lanes.js";
 import {
   answeredBy,
   eventHoldAt,
+  heldEventText,
   joinedEvent,
   type HeldEvent,
 } from "../../utils/event-hold.js";
@@ -110,10 +111,21 @@ function recordOf(raw: string): ClickErrorRecord | null {
     return null;
   }
   if (typeof value !== "object" || value === null) return null;
-  const { text, at, answered } = value as Record<string, unknown>;
-  return typeof text === "string" &&
-    typeof at === "number" &&
-    (answered === undefined || typeof answered === "boolean")
-    ? { text, at: at as Instant, answered: answered === true }
-    : null;
+  const { text, at, answered, revision } = value as Record<string, unknown>;
+  if (
+    typeof text !== "string" ||
+    typeof at !== "number" ||
+    (answered !== undefined && typeof answered !== "boolean")
+  )
+    return null;
+  return {
+    text: heldEventText(text),
+    at: at as Instant,
+    answered: answered === true,
+    ...(typeof revision === "number" &&
+    Number.isSafeInteger(revision) &&
+    revision > 0
+      ? { revision }
+      : {}),
+  };
 }

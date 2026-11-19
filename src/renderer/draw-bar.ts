@@ -186,23 +186,23 @@ export function renderFrame(
 export function viewLanes(
   parts: RendererParts,
   sessionId: SessionId,
-  committed: SessionStateRW,
-  editing: boolean,
+  committed: {
+    readonly settings: SessionStateRW;
+    readonly state: DslRenderState;
+  } | null,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
   if (hold === null) return null;
-  if (!editing) return laneSwitches(hold.view.source.effective());
+  if (committed === null) return laneSwitches(hold.view.source.effective());
 
   // [LAW:effects-at-boundaries] Only committed settings declare a live
   // host surface. A draft changes the bar's preview until Save lands.
-  const { config, authoredRoots } = renderCache.getOrCreate(
-    hold.entry.origin,
-  ).state;
+  const { config, authoredRoots } = committed.state;
   return laneSwitches(
     resolveEffectiveGlobals(
       config,
-      (key) => committed.get(sessionId, key),
+      (key) => committed.settings.get(sessionId, key),
       (preset) => authoredRoots.has(preset),
     ),
   );

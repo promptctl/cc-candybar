@@ -495,6 +495,15 @@ test("two named renderer processes draw separately and share config, transcript 
       "the primary feed stays live during worktree recovery",
       8000,
     );
+    // Both subscriptions survived the change of process. A fresh file
+    // observation reaches its existing feed without another render request.
+    const afterRecovery = "existing-feeds-after-worktree-restart";
+    fs.writeFileSync(source, `${afterRecovery}\n`);
+    await until(
+      () => delivered(afterRecovery),
+      "both existing feeds draw after the renderer restart",
+      8_000,
+    );
     expect(readLog().match(/renderer main\[\d+\] started pid=/g)).toHaveLength(
       1,
     );

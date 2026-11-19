@@ -1,7 +1,7 @@
 // The host's one path to a renderer: every input it hands one passes the
 // renderer's mailbox, and is one turn, which answers with the turn's output or
 // with how the turn failed: a turn's throw comes back as a value, never as a
-// rejection. Every turn's subscriptions are taken here, in the order the turns
+// rejection. Subscription changes are taken here, in the order the turns
 // answered, its config changes landed, and its acts performed once they have;
 // a present a turn that answers no request returned is refused. A caller whose
 // own event records the turn takes it by `answer`; every other input is taken
@@ -190,7 +190,7 @@ export function rendererHost(
   renderer: TimedRenderer,
   log: DaemonLogger,
   collector: {
-    // [LAW:single-enforcer] Where every output's subscriptions go: the
+    // [LAW:single-enforcer] Where changed subscriptions go: the
     // collector, which diffs each whole set against the last.
     readonly subscribed: (subscriptions: Subscriptions) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
@@ -229,6 +229,9 @@ export function rendererHost(
   // latest subscriptions. Reserve a batch before entering its config turns,
   // which can publish subscriptions of their own. A start clears delivery.
   let configs = new Map<string, ConfigDelivery>();
+  let declared: Subscriptions | undefined;
+  let origins: Subscriptions["configs"] | undefined;
+  let followFailure: Failure | null = null;
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -297,7 +300,7 @@ export function rendererHost(
       const key = originKey(input.event.origin);
       if (configs.has(key)) configs.set(key, "received");
     }
-    const { subscriptions, frames, stored, turnMs, ...answer } = output;
+    const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
     const turn: TakenTurn = {
       ...answer,
       settlePresentation: receipt,
@@ -339,10 +342,11 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
-    const requested =
-      event.kind === "context" ? originKey(event.context.requested) : null;
+    const requested = event.kind === "context" ? event.context.requested : null;
+    const requestedKey = requested === null ? null : originKey(requested);
     const followed = took(
       output.subscriptions,
+      output.wake,
       output.frames,
       output.stored,
       requested,
@@ -352,12 +356,12 @@ export function rendererHost(
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
     const unreceived: RenderOrigin[] = [];
     if (followed.kind === "failed") {
-      if (requested !== null && configs.get(requested) !== "received")
+      if (requestedKey !== null && configs.get(requestedKey) !== "received")
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
         const config = await configInSlot(origin, "config-subscribed");
-        if (originKey(origin) === requested) configFailure = config.failure;
+        if (originKey(origin) === requestedKey) configFailure = config.failure;
         if (config.kind === "unreceived") unreceived.push(origin);
         waited.push(config.settled);
       }
@@ -493,14 +497,22 @@ export function rendererHost(
   // [LAW:no-silent-failure] A taker's throw is the daemon's, on every bar.
   const took = (
     subscriptions: Subscriptions,
+    nextWake: RendererOutput["wake"],
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
-    requested: string | null,
+    requested: RenderOrigin | null,
     receipt: SettlePresentation,
   ): ConfigFollowing => {
-    recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
+    recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    recordTaken("subscriptions", () => collector.subscribed(subscriptions));
+    if (
+      (declared?.sources !== subscriptions.sources ||
+        declared?.lanes !== subscriptions.lanes) &&
+      recordTaken("subscriptions", () =>
+        collector.subscribed(subscriptions),
+      ) !== null
+    )
+      declared = subscriptions;
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(({ frame }) =>
@@ -523,17 +535,13 @@ export function rendererHost(
         for (const frame of frames) settled(frame, false);
     }
     const named: RenderOrigin[] = [];
-    try {
+    const moved = origins !== subscriptions.configs;
+    if (moved) {
       const next = new Map<string, ConfigDelivery>();
       for (const origin of subscriptions.configs) {
         const key = originKey(origin);
         const before = configs.get(key);
-        // [LAW:no-ambient-temporal-coupling] A new context retries only the
-        // undelivered config it needs. A feed tick cannot poll it.
-        if (
-          before === undefined ||
-          (key === requested && before === "unreceived")
-        ) {
+        if (before === undefined) {
           named.push(origin);
           next.set(key, "scheduled");
         } else next.set(key, before);
@@ -541,11 +549,28 @@ export function rendererHost(
       // A renderer has already dropped any unlisted config, even when the
       // host cannot update its discovery subscriptions.
       configs = next;
-      world.configs.follow(subscriptions.configs);
+      origins = subscriptions.configs;
+    }
+    // [LAW:no-ambient-temporal-coupling] A new context retries just its
+    // undelivered config, even if the complete declaration stayed the same.
+    // A feed tick cannot poll a failed follow or delivery.
+    if (requested !== null) {
+      const key = originKey(requested);
+      if (configs.get(key) === "unreceived") {
+        named.push(requested);
+        configs.set(key, "scheduled");
+      }
+    }
+    try {
+      if (moved || (requested !== null && followFailure !== null)) {
+        world.configs.follow(subscriptions.configs);
+        followFailure = null;
+      }
       return { kind: "following", named };
     } catch (thrown) {
       for (const origin of named) markUnreceived(origin);
       const failure = failureOf(thrown);
+      followFailure = failure;
       notTaken("configs", failure);
       return { kind: "failed", failure };
     }
@@ -755,8 +780,12 @@ export function rendererHost(
         if (
           at === "first" ||
           (made.kind === "event" && made.event.kind === "start")
-        )
+        ) {
           configs.clear();
+          declared = undefined;
+          origins = undefined;
+          followFailure = null;
+        }
         if (made.kind !== "event")
           return { event: null, slotted: unanswered(made, queuedMs) };
         holds(made.event.kind);
@@ -823,15 +852,17 @@ export function rendererHost(
     const output = await inMailbox(async (_queuedMs, holds) => {
       holds(`push:${push.kind}`);
       try {
-        const { subscriptions, stored, ...answered } = await renderer.answer({
-          kind: "adapter",
-          push,
-          ...readingsAt(clock),
-        });
+        const { subscriptions, wake, stored, ...answered } =
+          await renderer.answer({
+            kind: "adapter",
+            push,
+            ...readingsAt(clock),
+          });
         // [LAW:no-ambient-temporal-coupling] A push's newly named configs
         // enter before the next queued slot, as they do for an event.
         const followed = took(
           subscriptions,
+          wake,
           [],
           stored,
           null,

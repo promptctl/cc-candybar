@@ -461,6 +461,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     publishFrame,
+    requestChanged: (session, previous) =>
+      declaredBarPanes.reported(session, previous?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: async (make) => {
@@ -786,6 +788,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     if (route === undefined || order >= route.order) {
       routes.set(session, { name, order });
       if (route !== undefined && route.name !== name) {
+        // Routing changes the aggregate even when neither renderer's
+        // declarations moved. Apply the existing plans under the new owner.
+        aggregate();
         const former = renderers.get(route.name);
         if (former !== undefined)
           void former.renderer

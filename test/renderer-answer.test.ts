@@ -78,7 +78,7 @@ import { TEST_SIGNER } from "./helpers/link-signer";
 import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
-import type { HeldEvent } from "../src/utils/event-hold";
+import { joinedEvent, type HeldEvent } from "../src/utils/event-hold";
 import {
   hearingEvents,
   hostHeld,
@@ -345,6 +345,55 @@ async function dueFrame(r: Renderer, elapsed = 0) {
 }
 
 describe("a statusline request", () => {
+  test("successive ordinary draws retain the active subscription declaration", async () => {
+    const t = renderer();
+    const first = answered(await request(t));
+    const shown = presentOf(first.effects);
+    expect(first.subscriptions.configs).toHaveLength(1);
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    answered(await done(t.r, shown, true));
+
+    const next = answered(await request(t));
+    expect(presentOf(next.effects).frame.rows).toEqual(shown.frame.rows);
+    expect(next.subscriptions).toBe(first.subscriptions);
+  });
+
+  test("still feed draws do not read all active subscriptions again", async () => {
+    const t = renderer();
+    const mine = checked();
+    const second = sessionIdOf("another-session");
+    const theirs: CheckedRenderRequest = {
+      ...mine,
+      hookData: { ...mine.hookData, session_id: second },
+    };
+    await configure(t, mine);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: mine }),
+    );
+    await configure(t, theirs);
+    answered(
+      await handIn(t.r, { kind: "request", id: REQUEST, context: theirs }),
+    );
+    const subscribed = await followFeed(t.r);
+    expect(Object.keys(subscribed.subscriptions.sources)).toEqual([
+      SESSION,
+      second,
+    ]);
+    const declarations = jest.spyOn(t.parts.renderCache, "subscriptions");
+    const origins = jest.spyOn(t.parts.renderCache, "origins");
+    const sessions = jest.spyOn(t.parts.worldStates, "sessions");
+    await dueFrame(t.r);
+    await dueFrame(t.r, 1_000);
+    expect(declarations).toHaveBeenCalledTimes(0);
+    expect(origins).toHaveBeenCalledTimes(0);
+    expect(sessions).toHaveBeenCalledTimes(0);
+    const retired = answered(
+      await handIn(t.r, { kind: "retire", session: second }),
+    );
+    expect(retired.subscriptions).not.toBe(subscribed.subscriptions);
+    expect(Object.keys(retired.subscriptions.sources)).toEqual([SESSION]);
+  });
+
   test("is answered by one present for the statusline, carrying its request and the drawn bar", async () => {
     const { effects, record } = answered(await request(renderer()));
     const present = presentOf(effects);
@@ -447,11 +496,7 @@ describe("a statusline request", () => {
   });
 
   test("draws an act's failure no session's bar held as the daemon's warning, and an answer that carried it tells the host once it arrived", async () => {
-    const event = {
-      text: "copy: pbcopy failed: exit 1",
-      ...READ,
-      answered: false,
-    };
+    const event = joinedEvent(null, "copy: pbcopy failed: exit 1", READ.at);
     const t = renderer(undefined, () => ({
       ...daemonFactsOf(),
       actFailed: event,
@@ -1732,11 +1777,11 @@ describe("the idle close", () => {
       });
     expect(answered(await due(29)).effects).toEqual([]);
     expect(closed).toEqual([]);
-    const { effects, subscriptions } = answered(await due(30));
+    const { effects, wake } = answered(await due(30));
     expect(effects).toEqual([]);
     expect(closed).toEqual([[SESSION, 30]]);
     // Taken as closed: no close is due until a draw shows a menu again.
-    expect(subscriptions.wake).toBeNull();
+    expect(wake).toBeNull();
     expect(answered(await due(1000)).effects).toEqual([]);
     expect(closed).toHaveLength(1);
   });

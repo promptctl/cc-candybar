@@ -173,9 +173,11 @@ type Event =
 
 interface RendererOutput {
   readonly effects: readonly Effect[];
-  // [LAW:one-source-of-truth] Whole, replacing the last: what this renderer's
-  // state needs read. The host diffs it; nothing is declared by message.
+  // [LAW:one-source-of-truth] The current declaration. Its identity changes
+  // when the open views, their sources, their lanes or their config needs do.
   readonly subscriptions: Subscriptions;
+  // The host's one timer. A wake can move while all subscriptions stand.
+  readonly wake: Tick | null;
   // [LAW:nothing-unseen] The turn's own record. A renderer writes no log;
   // the host writes this one.
   readonly record: TurnRecord;
@@ -193,9 +195,6 @@ interface Subscriptions {
   // each a parked event waits on. The host discovers an origin as it is first
   // named, follows its files while it is named, and lets it go when it is not.
   readonly configs: readonly RenderOrigin[];
-  // The one tick the renderer next wants a turn at, or null. The host keeps
-  // one timer for it and hands in a `due` when it comes.
-  readonly wake: Tick | null;
 }
 
 // Where a declaration came from is what repository trust is judged on. A layer
@@ -372,6 +371,7 @@ interface Program {
 - **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. Ordinary Claude Code statusline ticks currently activate and recover it. Other clients and renderers connect to the available host. A future launchd owner (A-4) must preserve that ordinary statusline cold-start path.
 - **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
 - **Renderer startup checks the private wire version.** The host advertises it in `boot` and the renderer declares its own in `started`. Both sides require a match before the worker can take inputs. Separate worktree builds can share a host when they speak that version. The daemon still uses its bundle identity for binary currency.
+- In private v8, a host can opt in to subscription updates in `boot`. The first output on each child connection includes the whole declaration, even when empty. Later outputs omit an unchanged declaration and still carry each wake, frame, effect and store write. A change replaces the whole per-renderer declaration. Peers using the original v8 exchange continue to carry the complete declaration and its wake in each output. The in-process renderer and child link both hand the host the same declaration identity while it holds, so static draws repeat neither source aggregation nor config following.
 - **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
 - **Renderer startup.** The host resolves home and XDG config and data locations once. At each worker start it supplies those locations, the current stored values for the renderer, and the memory limit. The site and test roots select an in-process adapter that consumes the same inputs and constructs the same config validators. The production host selects the subprocess adapter. A replacement validates its startup data before reporting ready.
 - **What needs an install.** A new built-in field of world state, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.

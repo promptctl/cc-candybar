@@ -180,7 +180,8 @@ const PINNED: Timed<AdapterOutput> = {
   kind: "replied",
   stored: [],
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+  subscriptions: { sources: {}, lanes: {}, configs: [] },
+  wake: null,
   turnMs: 0,
 };
 
@@ -204,7 +205,7 @@ describe("a renderer process's start", () => {
       {
         kind: "boot",
         wireVersion: RENDERER_WIRE_VERSION,
-        boot: RENDERER_BOOT,
+        boot: { ...RENDERER_BOOT, subscriptionUpdates: true },
       },
     ]);
     expect(rendererNodeArgs(["--max-old-space-size=9"], 7)).toEqual([
@@ -576,7 +577,8 @@ describe("ids a renderer mints", () => {
       stored: [],
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+      subscriptions: { sources: {}, lanes: {}, configs: [] },
+      wake: null,
       frames: [],
       turnMs: 0,
     };
@@ -627,7 +629,8 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, configs: [], wake: null },
+        subscriptions: { sources: {}, lanes: {}, configs: [] },
+        wake: null,
         frames: [],
         turnMs: 0,
       },

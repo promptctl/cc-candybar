@@ -137,10 +137,8 @@ export interface AdapterInput extends Readings {
 export type AdapterOutput = (
   | { readonly kind: "replied"; readonly reply: AdapterReply }
   | { readonly kind: "threw"; readonly failure: Failure }
-) & {
-  readonly subscriptions: Subscriptions;
-  readonly stored: readonly StoreWrite[];
-};
+) &
+  RendererDeclaration;
 
 // [LAW:types-are-the-program] Every input and output of a turn is plain data:
 // the build fails on one a process could not carry.
@@ -228,7 +226,7 @@ export type Event =
       readonly viewers: Viewers;
     }
   | {
-      // The tick the renderer last declared (`Subscriptions.wake`) has
+      // The tick the renderer last declared (`RendererDeclaration.wake`) has
       // come: what is due by the turn's tick runs in it.
       readonly kind: "due";
       // An admitted click postpones only its session's idle close. Omitted
@@ -243,9 +241,9 @@ export type Event =
 export interface SessionViewers {
   readonly lanes: Readonly<Partial<Record<Lane, LaneViewers>>>;
   readonly shown: boolean;
-  // Where the latest of its subscribers came among every subscriber the host
-  // has taken: one that joins is owed a frame even when the counts read as
-  // they did, as when one leaves and another takes its place.
+  // The host's draw demand revision. A new viewer the host could not hand a
+  // frame still needs one when the counts read as they did. The v8 wire name
+  // remains `joined`; renderers only compare its value for changes.
   readonly joined: number;
 }
 
@@ -399,10 +397,8 @@ export type Subscription =
   | { readonly kind: "env"; readonly name: string };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
-// renderer holds needs read, which lanes its settings switch on, and when the
-// renderer next wants a turn. The host diffs it; nothing is declared by
-// message, so nothing has to remember what it asked. A session absent from it
-// needs nothing read.
+// renderer holds needs read and which lanes its settings switch on. A session
+// absent from it needs nothing read. An unchanged declaration keeps its identity.
 // [LAW:types-are-the-program] Keyed by session, so no session is listed twice,
 // and a record, so it crosses a process as it is: a session absent is a key
 // absent, never one holding `undefined`, which JSON does not carry.
@@ -418,10 +414,14 @@ export interface Subscriptions {
   // first named, follows its files while it is named, and lets it go when it
   // is not.
   readonly configs: readonly RenderOrigin[];
-  // [LAW:no-ambient-temporal-coupling] The tick the renderer next wants a
-  // turn at, derived from its own state as each turn ends: the host keeps one
-  // timer to it and hands it in as a `due`. Null while nothing is due.
+}
+
+interface RendererDeclaration {
+  readonly subscriptions: Subscriptions;
+  // [LAW:no-ambient-temporal-coupling] The host keeps one timer to this tick
+  // and hands it in as a `due`. It can move while all subscriptions stand.
   readonly wake: Tick | null;
+  readonly stored: readonly StoreWrite[];
 }
 
 // [LAW:types-are-the-program] A feed's draw has one bar. A handoff stands
@@ -465,8 +465,7 @@ export type TurnOutcome = {
 // [LAW:one-source-of-truth] Its stored writes are what the turn moved of the
 // renderer's stores, which the host's copy takes before any later input: a
 // write answers nothing, so it is no effect, and no `effect-done` comes back.
-export type RendererOutput = TurnOutcome & {
-  readonly subscriptions: Subscriptions;
-  readonly frames: readonly PushedFrame[];
-  readonly stored: readonly StoreWrite[];
-};
+export type RendererOutput = TurnOutcome &
+  RendererDeclaration & {
+    readonly frames: readonly PushedFrame[];
+  };
