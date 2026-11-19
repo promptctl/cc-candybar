@@ -88673,8 +88673,8 @@ function writeRevisions(rewrites, retire) {
     }
     const files = written2.map(({ file }) => file);
     if (retire !== null) {
-      fs_default.rmSync(retire, { force: true });
-      files.push(retire);
+      fs_default.renameSync(retire.from, retire.to);
+      files.push(retire.from, retire.to);
     }
     return files;
   } catch (cause) {
@@ -88744,34 +88744,39 @@ function stateFile(locations2, empty2, parse3, readText = readTextIfPresent) {
     const value = next2(current.value);
     const promote = source !== null && source !== file;
     const rewrite = promote || value !== current.value ? { file, was: source === file ? text4 : null, will: textOf2(value) } : null;
-    return {
-      kind: "ok",
-      value: {
-        rewrite,
-        retire: previousName(file, previous2, source),
-        value
-      }
-    };
+    try {
+      const old = previousName(file, previous2, source);
+      const retire = old === null ? null : { from: old, to: `${old}.migrated-${randomUUID()}` };
+      return ok({ rewrite, retire, value });
+    } catch (e) {
+      return {
+        kind: "failed",
+        reason: `cannot inspect the former state file ${previous2}: ${asError(e).message}`
+      };
+    }
   };
   return {
     observe: observe2,
     read: () => observe2().result,
-    plan,
-    update: (next2) => {
-      const planned = plan(next2);
-      if (planned.kind === "failed") return planned;
-      const { rewrite, retire, value } = planned.value;
-      writeRevisions(rewrite === null ? [] : [rewrite], retire);
-      return ok(value);
-    }
+    plan
   };
 }
 function previousName(file, previous2, source) {
-  if (previous2 === void 0 || source === null) return null;
+  if (previous2 === void 0) return null;
   if (source === previous2) return previous2;
   const old = fs_default.lstatSync(previous2, { throwIfNoEntry: false });
   if (!old?.isFile() && !old?.isSymbolicLink()) return null;
-  const entry = (at) => import_node_path27.default.join(fs_default.realpathSync.native(import_node_path27.default.dirname(at)), import_node_path27.default.basename(at));
+  const entry = (at) => {
+    try {
+      return import_node_path27.default.join(
+        fs_default.realpathSync.native(import_node_path27.default.dirname(at)),
+        import_node_path27.default.basename(at)
+      );
+    } catch (cause) {
+      if (cause.code === "ENOENT") return null;
+      throw cause;
+    }
+  };
   const oldEntry = entry(previous2);
   return linkChain(file).some((hop) => entry(hop) === oldEntry) ? null : previous2;
 }
@@ -88835,7 +88840,7 @@ function answeredBook(stateDir2, answers, readText) {
   if (planned.kind === "failed") return planned;
   if (planned.value.retire !== null)
     said2.push(
-      `repo-config: retired ${planned.value.retire} after updating ${repoConfigsPath(stateDir2)}`
+      `repo-config: retired ${planned.value.retire.from} to ${planned.value.retire.to} after updating ${repoConfigsPath(stateDir2)}`
     );
   return ok({ ...planned.value, said: said2 });
 }
@@ -88938,7 +88943,7 @@ function performChanges(changes, book, files) {
       reason: `config write failed: ${asError(e).message}`
     };
   }
-  for (const line of answered) book.said(line);
+  for (const line of answered) book?.said(line);
   return { kind: "ok", files: landed };
 }
 function excludeRewrite(file, rewrites, readText) {
