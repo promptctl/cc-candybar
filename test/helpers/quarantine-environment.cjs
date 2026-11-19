@@ -52,6 +52,25 @@ class QuarantineEnvironment extends TestEnvironment {
     this.file = path.relative(rootDir, context.testPath);
     this.list = testEnvironmentOptions.quarantine ?? QUARANTINE_FILE;
     this.entries = readQuarantine(rootDir, this.list);
+    this.fixtureReleases = [];
+    this.global.releaseTestFixture = (release) => this.fixtureReleases.push(release);
+  }
+
+  // The sandbox is per file. Release its fixtures after every test and hook
+  // has finished, even when another fixture's cleanup fails.
+  async teardown() {
+    try {
+      const releases = await Promise.allSettled(
+        this.fixtureReleases.map(async (release) => release()),
+      );
+      const errors = releases.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (errors.length > 0)
+        throw new AggregateError(errors, `Fixture teardown failed in ${this.file}`);
+    } finally {
+      await super.teardown();
+    }
   }
 
   handleTestEvent(event, state) {

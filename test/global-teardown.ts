@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { DEFAULT_POOL_DIR, daemonPool } from "./helpers/daemon-pool";
 import { JEST_TMP_PREFIX, jestTmpOwner } from "./helpers/jest-tmp";
-import { processProbe } from "./helpers/host";
+import { processProbe, releaseFixtureLaunchers } from "./helpers/host";
 
 // [LAW:one-source-of-truth] A directory under this prefix is in use while the
 // worker its name carries is alive: another run's daemons and in-worker cases
@@ -53,9 +53,12 @@ export function sweepJestTmp(root: string, sweeper: number): void {
 }
 
 export default async function globalTeardown(): Promise<void> {
-  // The shared pool's own bookkeeping: drop slot files whose recorded owner
-  // is provably dead.
-  await daemonPool.sweepStale();
-
-  sweepJestTmp(os.tmpdir(), process.pid);
+  try {
+    // The shared pool's own bookkeeping: drop slot files whose recorded owner
+    // is provably dead.
+    await daemonPool.sweepStale();
+    sweepJestTmp(os.tmpdir(), process.pid);
+  } finally {
+    await releaseFixtureLaunchers();
+  }
 }
