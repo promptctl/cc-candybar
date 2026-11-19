@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-875",
+      "ref": "refs/pull/875/merge",
+      "sha": "71d60e61f159428247addb3f8b9c52a65d2cb779",
+      "timestamp": "2026-11-19T14:37:42.910Z",
+      "commits": [
+        {
+          "sha": "71d60e61f159428247addb3f8b9c52a65d2cb779",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:36:41Z",
+          "message": "Merge aaa17ead7c8e088dba92459ce1a29d0f1653345e into 481101f839d97ef1ae569bddbf9336ec8cfe52b5\n"
+        },
+        {
+          "sha": "aaa17ead7c8e088dba92459ce1a29d0f1653345e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:34:35-07:00",
+          "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "481101f839d97ef1ae569bddbf9336ec8cfe52b5",
@@ -187,28 +209,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:52:22-07:00",
           "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-875",
-      "ref": "refs/pull/875/merge",
-      "sha": "f65e907539c0aeabf4599a864887e94ae8b6b654",
-      "timestamp": "2026-11-19T13:53:50.218Z",
-      "commits": [
-        {
-          "sha": "f65e907539c0aeabf4599a864887e94ae8b6b654",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:52:18Z",
-          "message": "Merge ded7488e35331bd0c1804611542eba56c183bbad into 6b98f5c610697d392140c302f633044ebe7a2aac\n"
-        },
-        {
-          "sha": "ded7488e35331bd0c1804611542eba56c183bbad",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:34:35-07:00",
-          "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
         }
       ]
     }
