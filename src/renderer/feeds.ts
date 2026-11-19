@@ -30,7 +30,7 @@ import {
 import type { Frame } from "../render/frame.js";
 import {
   followingOf,
-  type Answers,
+  type FeedFrame,
   type PushedFrame,
   type SessionViewers,
   type Viewers,
@@ -43,6 +43,7 @@ import {
   type Tick,
 } from "../utils/instant.js";
 import { runEach } from "../utils/run-each.js";
+import { compareStructural } from "mobx";
 
 // Milliseconds from the start of one frame to the next: the closest a feed
 // draws a bar on a screen, and the furthest apart it draws any bar — what a
@@ -88,13 +89,9 @@ const TIMER_RESOLUTION_S = 0.002;
 // How often a long-lived feed writes its summary to the log.
 const SUMMARY_EVERY_S = 60;
 
-// One frame as the renderer drew it for a feed: its bar, its answers, what it
-// cost in parts, and, for a render that threw, the render event describing it.
+// One draw, what it cost in parts, and the render event if it failed.
 export interface FeedDraw {
-  // [LAW:types-are-the-program] Every frame has a bar: one that failed draws
-  // its diagnostic Frame, so a lane holds no failure branch.
-  readonly bar: Frame;
-  readonly answers: Answers;
+  readonly frame: FeedFrame<Frame>;
   // How many of the view's parts the frame evaluated (src/dsl/parts.ts).
   readonly evaluated: number;
   // How many strip items dividing cells too wide for a line added.
@@ -134,8 +131,8 @@ interface Feed {
   change: Instant | null;
   // The tick the last frame was drawn at: what a wake is spaced from.
   last: Tick;
-  // The last frame's answers, which a lane's rate counts changes against.
-  answers: Answers | null;
+  // The last frame drawn, which a lane's rate counts changes against.
+  frame: FeedFrame<Frame> | null;
   // The ticks at which each followed lane's answer changed, within the
   // window: a subscriber's hand-over on joining is not one.
   readonly rates: Map<Lane, Tick[]>;
@@ -159,6 +156,30 @@ interface Feed {
   // due to the tick of the turn that drew it.
   readonly lateness: Histogram;
   readonly unpin: () => void;
+}
+
+// [LAW:one-source-of-truth] Sample the selected presentation without encoding
+// it. Timing, pending sources and row roles do not change the visible runs.
+// The host separately deduplicates the bytes it actually sends.
+function sameDraw(
+  previous: FeedFrame<Frame> | null,
+  next: FeedFrame<Frame>,
+  lane: Lane,
+): boolean {
+  if (next.kind === "failed")
+    return previous?.kind === "failed" && previous.message === next.message;
+  if (previous?.kind !== "drawn") return false;
+  const forLane = ({ bar, handoff }: typeof next) =>
+    answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const before = forLane(previous);
+  const after = forLane(next);
+  return (
+    before.depth === after.depth &&
+    before.rows.length === after.rows.length &&
+    before.rows.every(({ runs }, row) =>
+      compareStructural(runs, after.rows[row]?.runs),
+    )
+  );
 }
 
 // [LAW:one-source-of-truth] The frames a second a spacing allows: the most a
@@ -296,7 +317,7 @@ export class Feeds {
       next: tick,
       change: null,
       last: -Infinity as Tick,
-      answers: null,
+      frame: null,
       rates: new Map(),
       opened: tick,
       summarizedAt: tick,
@@ -375,28 +396,26 @@ export class Feeds {
     this.drawnTotal++;
     feed.evaluated += drawn.evaluated;
     feed.cellBreaks += drawn.cellBreaks;
-    const before = feed.answers;
-    const changed = (lane: Lane | null): boolean =>
-      before === null ||
-      (lane === null
-        ? before.resp !== drawn.answers.resp ||
-          before.statusline !== drawn.answers.statusline
-        : answerOf(before, lane) !== answerOf(drawn.answers, lane));
+    const before = feed.frame;
+    const { frame } = drawn;
     if (drawn.failure !== null) {
       feed.failed++;
       // [LAW:nothing-unseen] A failing frame's render event is logged when its
       // failure first shows: one that keeps throwing the same way draws the
       // same bytes, and the summary counts it.
-      if (changed(null)) this.deps.log(drawn.failure.level, drawn.failure.line);
+      if (!sameDraw(before, frame, "statusline"))
+        this.deps.log(drawn.failure.level, drawn.failure.line);
     }
     for (const [lane, rate] of feed.rates)
-      if (changed(lane)) noteSent(rate, tick);
-    feed.answers = drawn.answers;
-    this.schedule(feed, drawn.bar, drawAt, tick);
-    return {
-      session: feed.sessionId,
-      answers: drawn.answers,
-    };
+      if (!sameDraw(before, frame, lane)) noteSent(rate, tick);
+    feed.frame = frame;
+    this.schedule(
+      feed,
+      frame.kind === "drawn" ? frame.bar.nextChange : Infinity,
+      drawAt,
+      tick,
+    );
+    return { session: feed.sessionId, frame };
   }
 
   // [LAW:no-ambient-temporal-coupling] The next frame falls due when the bar
@@ -408,18 +427,21 @@ export class Feeds {
   // between two frames moves no schedule.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's next
   // change is Infinity, and an unseen bar's spacing is the still period.
-  private schedule(feed: Feed, bar: Frame, drawAt: Instant, tick: Tick) {
+  private schedule(
+    feed: Feed,
+    nextChange: number,
+    drawAt: Instant,
+    tick: Tick,
+  ) {
     const { moving, still } = this.deps.periods;
-    const until = (bar.nextChange - drawAt) * 1000;
+    const until = (nextChange - drawAt) * 1000;
     const shownPeriod = Math.min(Math.max(until, moving), still);
     const { shown } = feed.viewers;
     if (shownPeriod < still && shown) feed.moving++;
     if (shownPeriod < still && !shown) feed.unseen++;
     const period = shown ? shownPeriod : still;
     feed.next = (tick + period / 1000) as Tick;
-    feed.change = Number.isFinite(bar.nextChange)
-      ? (bar.nextChange as Instant)
-      : null;
+    feed.change = Number.isFinite(nextChange) ? (nextChange as Instant) : null;
   }
 
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they
