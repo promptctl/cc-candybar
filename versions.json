@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-883",
+      "ref": "refs/pull/883/merge",
+      "sha": "f70836d66e2d00c178b342b2bb124f25e74eaaa6",
+      "timestamp": "2026-11-19T15:33:07.327Z",
+      "commits": [
+        {
+          "sha": "f70836d66e2d00c178b342b2bb124f25e74eaaa6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:31:57Z",
+          "message": "Merge 0256eb9b71e9f234cbe9969cb79d068f3256487f into ce2ac88bf897455ae62bb613793a5d30fd7ddf35\n"
+        },
+        {
+          "sha": "0256eb9b71e9f234cbe9969cb79d068f3256487f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:31:28-07:00",
+          "message": "refactor(renderer): construct both transports from one checked boot\n"
+        },
+        {
+          "sha": "1562124e8da72d33d1b4b8cd4dd1a18a5dcb1654",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:00:46-07:00",
+          "message": "refactor(renderer): boot from host-resolved locations\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ce2ac88bf897455ae62bb613793a5d30fd7ddf35",
@@ -207,28 +236,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:12:10-07:00",
           "message": "fix(settings): draw a stale setting pick's fallback under a warning (3248.fdzi)\n\nA session pick its setting's domain no longer holds (an uninstalled or\nretired theme, a style, preset or effect the config dropped, an enum or\nrange value out of bounds, a placement theme that is not one) is parsed\nonce into unset | held | stale. Every reader takes that parse: the render,\nthe picker mark, the carousel, the stepper and the step click. The bar\ndraws the next rung down, and a stale warning beside the settings door\nnames the setting, the stored spelling and what the bar wears. It is\nreported only where the pick decides, so staging above it hides the miss.\n\nThe pick stays stored: save, save-preset and save-theme-default leave it,\nso it holds again when its domain returns.\n\nOne installed-theme authority and one \"not an installed theme\" wording\nserve the loader, the session gate, the fold and the retired note, which\nremoves the allowed-palettes plumbing. A state variable may not take a\nsetting's key: the loader refuses it and names the setting.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-883",
-      "ref": "refs/pull/883/merge",
-      "sha": "ca97743391cfe8f1dafd5b256560501b6a725acd",
-      "timestamp": "2026-11-19T15:13:05.349Z",
-      "commits": [
-        {
-          "sha": "ca97743391cfe8f1dafd5b256560501b6a725acd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:12:13Z",
-          "message": "Merge f8140fe7d377d4db185e40978f1fca1416d5b551 into f10951d9400d761190b757a8dd55db47ac30e372\n"
-        },
-        {
-          "sha": "f8140fe7d377d4db185e40978f1fca1416d5b551",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:00:46-07:00",
-          "message": "refactor(renderer): boot from host-resolved locations\n"
         }
       ]
     },
