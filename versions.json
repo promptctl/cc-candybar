@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-888",
+      "ref": "refs/pull/888/merge",
+      "sha": "e48d7fd5392adab390c779c4277fdc51f826a71e",
+      "timestamp": "2026-11-19T17:24:00.111Z",
+      "commits": [
+        {
+          "sha": "e48d7fd5392adab390c779c4277fdc51f826a71e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:22:49Z",
+          "message": "Merge b722ce6a9fdc01d3fe8cf6c6583792a34d257a4e into 9da36ac5cf93db8fc262b083c7e18134a3a833b9\n"
+        },
+        {
+          "sha": "b722ce6a9fdc01d3fe8cf6c6583792a34d257a4e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:22:01-07:00",
+          "message": "refactor(renderer): keep one origin and config layer projection\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9da36ac5cf93db8fc262b083c7e18134a3a833b9",
@@ -13,28 +35,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T17:20:35Z",
           "message": "chore(release): set `package.json` to 1.235.4\n\n## [1.235.4](https://github.com/promptctl/cc-candybar/compare/v1.235.3...v1.235.4) (2026-11-19)\n\n### Bug Fixes\n\n* **click:** report desktop launch failures ([#879](https://github.com/promptctl/cc-candybar/issues/879)) ([11ce0f4](https://github.com/promptctl/cc-candybar/commit/11ce0f48bd2e5d1ed177c07770dc3fdfd4ad8b52))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-888",
-      "ref": "refs/pull/888/merge",
-      "sha": "4b4e76263b4ca140df0f9a0a1621d4e57ae5a6f4",
-      "timestamp": "2026-11-19T17:16:32.471Z",
-      "commits": [
-        {
-          "sha": "4b4e76263b4ca140df0f9a0a1621d4e57ae5a6f4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:15:34-07:00",
-          "message": "Merge 2c6d7aae86f5b439ddea5e452698e2790009920f into 11ce0f48bd2e5d1ed177c07770dc3fdfd4ad8b52\n"
-        },
-        {
-          "sha": "2c6d7aae86f5b439ddea5e452698e2790009920f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:22:01-07:00",
-          "message": "refactor(renderer): keep one origin and config layer projection\n"
         }
       ]
     },
