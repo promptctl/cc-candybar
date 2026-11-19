@@ -138,7 +138,8 @@ export type ChannelMessage = Pick<DiagnosticMessage, "severity" | "lines">;
 // constructor, so the first message is of the level the list counts as.
 // Empty is "nothing to show".
 declare const worstFirst: unique symbol;
-export type DiagnosticList = readonly DiagnosticMessage[] & {
+type ListedMessage = DiagnosticMessage & { readonly stop: number };
+export type DiagnosticList = readonly ListedMessage[] & {
   readonly [worstFirst]: true;
 };
 
@@ -184,23 +185,28 @@ export function collectDiagnostics(
   ].sort((a, b) => rankOf(a) - rankOf(b));
   // A message's key depends on the whole list (which occurrence it is), so
   // its first line's click is minted once the list stands.
-  const keys = copyKeys(list);
-  const minted: readonly DiagnosticMessage[] = list.map(
-    (m, i): DiagnosticMessage =>
-      plain.has(m)
-        ? {
-            ...m,
-            lines: [
-              [
-                diagnosticSpan(
-                  m.lines[0][0].text,
-                  copyLink(sessionId, by, keys[i]!, i + 1),
-                ),
-              ],
-              ...m.lines.slice(1),
-            ],
-          }
-        : m,
+  const seen = new Map<number, number>();
+  const minted: readonly ListedMessage[] = list.map(
+    (message, i): ListedMessage => {
+      const id = identityOf(message);
+      const occurrence = seen.get(id) ?? 0;
+      seen.set(id, occurrence + 1);
+      const stop = id * OCCURRENCES + Math.min(occurrence, OCCURRENCES - 1);
+      if (!plain.has(message)) return { ...message, stop };
+      return {
+        ...message,
+        stop,
+        lines: [
+          [
+            diagnosticSpan(
+              message.lines[0][0].text,
+              copyLink(sessionId, by, pageKey(stop, 0), i + 1),
+            ),
+          ],
+          ...message.lines.slice(1),
+        ],
+      };
+    },
   );
   // [LAW:parse-dont-validate] The stamp: the list was just sorted worst first.
   return minted as DiagnosticList;
@@ -225,10 +231,12 @@ function plainMessage(
 
 // [LAW:one-source-of-truth] The key a copy click names each message by: the
 // key the viewer opens it at, so one identity names a message for both.
-export function copyKeys(
-  list: readonly DiagnosticMessage[],
-): readonly string[] {
-  return stopsOf(list).map((stop) => String(stop * PAGES + 1));
+export function diagnosticCopies(
+  list: DiagnosticList,
+): ReadonlyMap<string, string> {
+  return new Map(
+    list.map((message) => [pageKey(message.stop, 0), message.copy]),
+  );
 }
 
 // [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
@@ -279,16 +287,7 @@ function identityOf(message: DiagnosticMessage): number {
   );
 }
 
-// Each message's identity and the occurrence of it, in list order.
-function stopsOf(list: readonly DiagnosticMessage[]): readonly number[] {
-  const seen = new Map<number, number>();
-  return list.map((m) => {
-    const id = identityOf(m);
-    const n = seen.get(id) ?? 0;
-    seen.set(id, n + 1);
-    return id * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
-  });
-}
+const pageKey = (stop: number, page: number) => String(stop * PAGES + page + 1);
 
 // The key showing page `page` of the message at `at` (0-based). A positive
 // integer below 2^52, so the viewer's key keeps the integer gate every click
@@ -298,7 +297,7 @@ export function viewerKey(
   at: number,
   page: number,
 ): string {
-  return String(stopsOf(list)[at]! * PAGES + page + 1);
+  return pageKey(list[at]!.stop, page);
 }
 
 // Where the viewer stands: the message (1-based) and its page (0-based).
@@ -346,7 +345,8 @@ export function viewedIndex(
   list: DiagnosticList,
 ): ViewerPosition | null {
   const key = Number(raw) - 1;
-  const at = stopsOf(list).indexOf(Math.floor(key / PAGES));
+  const stop = Math.floor(key / PAGES);
+  const at = list.findIndex((message) => message.stop === stop);
   return raw === null || at === -1
     ? null
     : { index: at + 1, page: key % PAGES };

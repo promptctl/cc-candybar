@@ -28,6 +28,7 @@ import {
   type LaneFeeds,
 } from "../config/lanes.js";
 import type { Frame } from "../render/frame.js";
+import type { PrepareDelivery } from "./draw-bar.js";
 import {
   followingOf,
   type FeedFrame,
@@ -112,6 +113,7 @@ export interface FeedDeps {
     readings: Readings,
     following: ReadonlySet<Lane>,
     feeds: LaneFeeds,
+    prepare: PrepareDelivery,
   ) => FeedDraw | null;
   // [LAW:no-ambient-temporal-coupling] Holds the session's view open from the
   // feed's open to its close, and wakes the feed whenever the session's own
@@ -254,7 +256,11 @@ export class Feeds {
   // feed is its own error boundary, so one that throws keeps no other's frame
   // from going out, and it is due again a still period on: a feed that throws
   // on every frame throws once a still period, never at every turn.
-  drawDue(readings: Readings, frames: PushedFrame[]): void {
+  drawDue(
+    readings: Readings,
+    frames: PushedFrame[],
+    prepare: PrepareDelivery,
+  ): void {
     const { tick } = readings;
     runEach(
       [...this.feeds.values()]
@@ -266,7 +272,7 @@ export class Feeds {
         .map(({ feed, next }) => () => {
           recordMs(feed.lateness, (tick - next) * 1000);
           try {
-            const frame = this.drawOne(feed, readings);
+            const frame = this.drawOne(feed, readings, prepare);
             if (frame !== null) frames.push(frame);
             if (tick - feed.summarizedAt >= SUMMARY_EVERY_S)
               this.summarize(feed, "running", tick);
@@ -366,7 +372,11 @@ export class Feeds {
     return (feed.viewers.shown ? moving : still) / 1000;
   }
 
-  private drawOne(feed: Feed, readings: Readings): PushedFrame | null {
+  private drawOne(
+    feed: Feed,
+    readings: Readings,
+    prepare: PrepareDelivery,
+  ): PushedFrame | null {
     const { at, tick } = readings;
     // A frame due for a change is drawn for that change's instant when the
     // due's wall reading falls just short of it.
@@ -382,6 +392,7 @@ export class Feeds {
       { at: drawAt, tick },
       this.following(feed.sessionId),
       this.feedsOf(feed.sessionId, tick),
+      prepare,
     );
     // [LAW:no-ambient-temporal-coupling] No view to draw: the feed waits until
     // the event that opens one wakes it. A frame not drawn spaces nothing.

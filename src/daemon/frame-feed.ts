@@ -35,9 +35,12 @@ import type {
 } from "../renderer-interface/interface";
 
 // A subscriber holds the ANSI answer for its own display.
+type Delivered = (delivered: boolean) => void;
+
 export interface Subscriber {
   readonly lane: Lane;
-  readonly frame: (json: string) => void;
+  // The writer reports completion or replacement for each offered chunk.
+  readonly frame: (json: string, done: Delivered) => void;
   readonly refused: (resp: Refusal) => void;
   readonly drawing: () => boolean;
 }
@@ -69,10 +72,21 @@ interface Noted<Req> {
   readonly order: number;
 }
 
+interface PendingWrite {
+  readonly json: string;
+  done: Delivered | undefined;
+}
+
+interface Follower {
+  readonly joined: number;
+  confirmed: string | null;
+  // [LAW:single-enforcer] The transport bounds its outstanding writes. Each
+  // carries at most one candidate, replaced when the latest draw is identical.
+  readonly writes: Set<PendingWrite>;
+}
+
 interface Watched {
-  // Each subscriber, with the bytes it was last sent: a lane whose answer a
-  // frame left as it was is not sent it again; and where it joined.
-  readonly followers: Map<Subscriber, { sent: string | null; joined: number }>;
+  readonly followers: Map<Subscriber, Follower>;
   // The last frame drawn: what a subscriber is handed as it joins.
   last: EncodedFeed | null;
   pushed: number;
@@ -87,6 +101,12 @@ const failedFeed = (refusal: Refusal): EncodedFeed => {
   const encoded = JSON.stringify(refusal);
   return { resp: encoded, statusline: encoded };
 };
+
+function settleWrite(write: PendingWrite, delivered: boolean): void {
+  const done = write.done;
+  write.done = undefined;
+  done?.(delivered);
+}
 
 // [LAW:single-enforcer] Encode the host's structured frame once for all of
 // its subscribers. With no separate handoff there is only one presentation.
@@ -179,10 +199,16 @@ export class FrameFeeds<Req> {
       this.watched.set(sessionId, watched);
       this.stopWatching ??= this.deps.watching();
     }
-    watched.followers.set(sub, { sent: null, joined: ++this.joins });
+    if (watched.followers.has(sub))
+      return () => this.unsubscribe(sessionId, sub);
+    watched.followers.set(sub, {
+      confirmed: null,
+      joined: ++this.joins,
+      writes: new Set(),
+    });
     // A subscriber is handed the frame as it stands; the renderer draws the
     // next, since who follows the session is drawn into it.
-    this.send(watched, sub);
+    if (watched.last !== null) this.send(sessionId, watched, sub, watched.last);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId)} subscribed lane=${sub.lane} subscribers=${watched.followers.size} view=${sessionId in this.lanes ? "Y" : "N"}`,
@@ -283,13 +309,22 @@ export class FrameFeeds<Req> {
 
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
-  took(renderer: RendererName, frames: readonly PushedFrame[]): void {
-    for (const { session, frame } of frames) {
+  took(
+    renderer: RendererName,
+    frames: readonly PushedFrame[],
+    settled: (pushed: PushedFrame, delivered: boolean) => void,
+  ): void {
+    for (const pushed of frames) {
+      const { session, frame } = pushed;
       const watched = this.watched.get(session);
-      // Unwatched since the renderer drew it.
-      if (watched === undefined) continue;
+      if (watched === undefined) {
+        settled(pushed, false);
+        continue;
+      }
+      let encoded: EncodedFeed;
+      let drawn = frame.kind === "drawn";
       try {
-        watched.last = encodeFeed(frame, this.deps.publishFrame, {
+        encoded = encodeFeed(frame, this.deps.publishFrame, {
           renderer,
           session,
         });
@@ -297,16 +332,47 @@ export class FrameFeeds<Req> {
         // [LAW:no-silent-failure] A bad presentation is visible to the lane,
         // and leaves other sessions' frames deliverable.
         const refused = renderFailed(error);
-        const failed = failedFeed(refused);
-        if (watched.last?.resp !== failed.resp)
+        encoded = failedFeed(refused);
+        if (watched.last?.resp !== encoded.resp)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused.error)}`,
           );
-        watched.last = failed;
+        drawn = false;
       }
-      for (const sub of watched.followers.keys()) this.send(watched, sub);
+      watched.last = encoded;
+      if (drawn) {
+        this.publish(session, watched, encoded, (ok) => settled(pushed, ok));
+      } else {
+        this.publish(session, watched, encoded);
+        settled(pushed, false);
+      }
     }
+  }
+
+  private publish(
+    session: SessionId,
+    watched: Watched,
+    encoded: EncodedFeed,
+    settled?: Delivered,
+  ): void {
+    const subscribers = [...watched.followers.keys()];
+    let remaining = subscribers.length;
+    let complete = false;
+    // [LAW:single-enforcer] Any confirmed lane presents the draw. Failures
+    // finish it only when every subscriber in this publication has declined.
+    const done: Delivered | undefined =
+      settled &&
+      ((delivered) => {
+        if (complete) return;
+        if (delivered || --remaining === 0) {
+          complete = true;
+          settled(delivered);
+        }
+      });
+    if (remaining === 0) settled?.(false);
+    for (const sub of subscribers)
+      this.send(session, watched, sub, encoded, done);
   }
 
   // The session of the newest request `match` accepts, among the latest
@@ -358,7 +424,9 @@ export class FrameFeeds<Req> {
 
   private unsubscribe(sessionId: SessionId, sub: Subscriber): void {
     const watched = this.watched.get(sessionId);
-    if (watched === undefined || !watched.followers.delete(sub)) return;
+    const follower = watched?.followers.get(sub);
+    if (watched === undefined || follower === undefined) return;
+    watched.followers.delete(sub);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId);
       this.deps.log(
@@ -371,6 +439,9 @@ export class FrameFeeds<Req> {
       }
     }
     this.announce();
+    const writes = [...follower.writes];
+    follower.writes.clear();
+    for (const write of writes) settleWrite(write, false);
   }
 
   private shown(sessionId: SessionId): boolean {
@@ -378,16 +449,51 @@ export class FrameFeeds<Req> {
     return noted === undefined || this.deps.shown(noted.req);
   }
 
-  // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  private send(watched: Watched, sub: Subscriber): void {
+  // The offered frame's answer for this lane. An identical outstanding write
+  // can carry the latest candidate, but only the writer can confirm it.
+  private send(
+    session: SessionId,
+    watched: Watched,
+    sub: Subscriber,
+    encoded: EncodedFeed,
+    done?: Delivered,
+  ): void {
     const follower = watched.followers.get(sub);
-    if (watched.last === null || follower === undefined) return;
-    const json = answerOf(watched.last, sub.lane);
-    if (follower.sent === json) return;
-    follower.sent = json;
+    if (follower === undefined) {
+      done?.(false);
+      return;
+    }
+    const json = answerOf(encoded, sub.lane);
+    let latest: PendingWrite | undefined;
+    for (const write of follower.writes) latest = write;
+    if (latest?.json === json) {
+      const superseded = latest.done;
+      latest.done = done;
+      superseded?.(false);
+      return;
+    }
+    if (latest === undefined && follower.confirmed === json) {
+      done?.(true);
+      return;
+    }
+    const write: PendingWrite = { json, done };
+    follower.writes.add(write);
     this.pushed++;
     watched.pushed++;
-    sub.frame(json);
+    const finished: Delivered = (delivered) => {
+      if (!follower.writes.delete(write)) return;
+      if (delivered) follower.confirmed = json;
+      settleWrite(write, delivered);
+    };
+    try {
+      sub.frame(json, finished);
+    } catch (error) {
+      this.deps.log(
+        "error",
+        `frame sid=${JSON.stringify(session)} lane=${sub.lane} send failed: ${inspect(error)}`,
+      );
+      finished(false);
+    }
   }
 
   // A subscription its lane's toggle refuses, told why.

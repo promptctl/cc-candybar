@@ -13,7 +13,7 @@ The daemon speaks JSON lines over the renderer child’s standard input and outp
 - It ends on its stdin's EOF, so it dies with a host killed with no cleanup; the launcher's lifeline is no part of that.
 - While no renderer is live an input fails at once rather than starting one, because a request per tick that spawns would be a fork storm under a crash loop.
 
-A request is answered by the frame its renderer presents, and the renderer keeps what that frame showed (its copies, the click error it carried) until the host says whether the client took it. So the connection settles every reply on every exit, including a reply superseded by the backstop's and a write that threw: an exit that forgets leaks one record per request, and nothing shows it.
+A request is answered by the frame its renderer presents. A request or feed keeps what its frame showed only when the host confirms it. The socket settles every receipt, including a buffered frame that was replaced and a write that threw. An exit that forgets leaks an otherwise unshown record. Surface layouts and shared session motion follow draw order, so a delayed receipt cannot restore an old view or rewind the animation clock.
 
 The shipped client is native (Rust) and handles only the render hot path. It hands every other subcommand to the Node entry. On a daemon miss it spawns a detached daemon and prints an empty line, so the next refresh finds the daemon running.
 

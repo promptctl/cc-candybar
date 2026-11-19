@@ -4,9 +4,7 @@ import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // inert host (`AdapterToHost`, src/renderer-interface/adapter.ts) for what its
 // side reaches. No daemon is built.
 
-import { RenderWarningRecords } from "../../src/renderer/render-warnings";
 import type { SessionState } from "../../src/renderer/session-state";
-import { EffectSessions } from "../../src/render/effect";
 import type {
   MainRendererParts,
   RendererVerbs,
@@ -15,7 +13,6 @@ import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { EffectId } from "../../src/renderer-interface/interface";
 import { TurnTime } from "../../src/renderer/turn-time";
-import { MenuIdle } from "../../src/renderer/menu-idle";
 import { FEED_PERIODS, Feeds } from "../../src/renderer/feeds";
 
 // A renderer that acts no verb: every click names a verb it does not have,
@@ -74,19 +71,18 @@ export function rendererParts({
   readonly worldStates: WorldStates;
   readonly verbs?: RendererVerbs;
 }): MainRendererParts {
+  const renderCache = cache as MainRendererParts["renderCache"];
   return {
     ...inertHost(),
     // The rig's own time: a test drawing outside a turn runs it in one
     // (`time.during`).
     time: new TurnTime(),
     // No feed follows a session, and nothing is idle.
-    menuIdle: new MenuIdle(),
+    menuIdle: renderCache.presentations.menuIdle,
     feeds: noFeeds(),
     sessionState,
-    renderCache: cache as never,
+    renderCache,
     worldStates,
-    renderWarnings: new RenderWarningRecords(),
-    effectSessions: new EffectSessions(),
     // A rig's sessions have no lane switched, so no setup is owed.
     verbs,
     edits: new EditTransactions(sessionState, () => {}),

@@ -430,6 +430,7 @@ export interface Subscriptions {
 export type FeedFrame<Body = WireFrame> =
   | {
       readonly kind: "drawn";
+      readonly receipt: EffectId;
       readonly bar: Body;
       readonly handoff: Body | null;
     }

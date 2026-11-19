@@ -499,7 +499,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
       // [LAW:no-silent-failure] A frame that cannot be pushed (past the cap)
       // is pushed as the render failure naming why. Ending the stream
       // would cause subscribers to reconnect into the same failure.
-      frame: (json) => {
+      frame: (json, settled) => {
         const { frame, unsent } = framed(
           json,
           (answer) => answer,
@@ -507,7 +507,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
         );
         if (unsent !== null)
           daemon.log("error", `pushed frame unsendable: ${inspect(unsent)}`);
-        push(frame);
+        push(frame, (written) => settled(written && unsent === null));
       },
       refused: (resp) => on({ kind: "refused", answer: replyOf(resp) }),
       drawing: () => true,

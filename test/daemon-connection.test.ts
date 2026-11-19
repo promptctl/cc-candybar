@@ -681,10 +681,13 @@ describe("a connection over a stream", () => {
       expect(daemon.stats.requestsTimedOut).toBe(0);
       expect(ended()).toBe(false);
 
-      subscriptions[0]!.frame(JSON.stringify(ANSWER));
-      subscriptions[0]!.frame(JSON.stringify(ANSWER));
+      const confirmations: boolean[] = [];
+      const confirm = (ok: boolean) => confirmations.push(ok);
+      subscriptions[0]!.frame(JSON.stringify(ANSWER), confirm);
+      subscriptions[0]!.frame(JSON.stringify(ANSWER), confirm);
       await settled();
       expect(received).toEqual([ANSWER, ANSWER]);
+      expect(confirmations).toEqual([true, true]);
     });
 
     test("a refusal ends the stream", async () => {
@@ -743,9 +746,12 @@ describe("a connection over a stream", () => {
         await settled();
         const huge = "x".repeat(MAX_FRAME_BYTES);
         const json = JSON.stringify({ ok: true, output: huge });
-        subscriptions[0]!.frame(json);
-        subscriptions[0]!.frame(JSON.stringify(ANSWER));
+        const confirmations: boolean[] = [];
+        const confirm = (ok: boolean) => confirmations.push(ok);
+        subscriptions[0]!.frame(json, confirm);
+        subscriptions[0]!.frame(JSON.stringify(ANSWER), confirm);
         await settled();
+        expect(confirmations).toEqual([false, true]);
         // The renderer's own render failure (src/renderer/draw-bar.ts): its
         // bar, and its RENDER_FAILED answer, naming why.
         let failed!: ReturnType<typeof renderFailed>;
@@ -876,14 +882,16 @@ describe("a connection over a stream", () => {
       client.pause();
       // Over a stream's high-water mark on every node this runs on, so the
       // first frame fills the stream.
+      const confirmed = new Map<string, boolean>();
       const frame = (name: string): void => {
         const resp: Response = { ok: true, output: name.repeat(128 * 1024) };
-        subscriptions[0]!.frame(JSON.stringify(resp));
+        subscriptions[0]!.frame(JSON.stringify(resp), (ok) => confirmed.set(name, ok));
       };
       ["a", "b", "c", "d"].forEach(frame);
       await settled();
       client.resume();
       await until(() => received.length >= 2, "the newest frame");
+      expect(Object.fromEntries(confirmed)).toEqual({ a: true, b: false, c: false, d: true });
 
       expect(received.map((r) => "output" in r && r.output[0])).toEqual([
         "a",

@@ -37,7 +37,6 @@ import {
   type PlacementEffect,
 } from "../themes/policy.js";
 import type { AnimationTime, Instant } from "../utils/instant.js";
-import type { SessionId } from "../daemon/foundations/session-id.js";
 import { CLOSING_FLASH, flashBegins } from "../config/menu-timeout.js";
 import type {
   Drawing,
@@ -410,9 +409,10 @@ const NO_MOTION: SessionMotion = {
  * its successor; its only writer is `keep`, called by the turn that drew it.
  */
 export class SessionEffects<Line> {
-  private kept: SessionMotion = NO_MOTION;
-
-  constructor(private readonly key: string) {}
+  constructor(
+    private readonly key: string,
+    private kept: SessionMotion = NO_MOTION,
+  ) {}
 
   // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
@@ -767,48 +767,5 @@ export class SessionEffects<Line> {
         passages: basis === "off" ? null : passages,
       }),
     };
-  }
-}
-
-// The cap on sessions whose effect memory the daemon keeps — the same bound its
-// session state keeps, so an idle session's memory goes when its state would.
-const MAX_SESSIONS = 256;
-
-/**
- * [LAW:no-shared-mutable-globals] Every session's effect memory, by session id:
- * single owner, hard cap, least-recently-rendered evicted first. A session whose
- * memory was evicted (or a restarted daemon) starts its effect again at t = 0.
- */
-export class EffectSessions<Line> {
-  private readonly sessions = new Map<SessionId, SessionEffects<Line>>();
-
-  constructor(private readonly maxSessions: number = MAX_SESSIONS) {}
-
-  // The session's memory as a draw reads it: a session with none kept yet
-  // draws from a fresh one, held only once its frame is kept.
-  of(sessionId: SessionId): SessionEffects<Line> {
-    return this.sessions.get(sessionId) ?? new SessionEffects<Line>(sessionId);
-  }
-
-  // [LAW:single-enforcer] The one writer: the turn that drew the session's
-  // frame keeps the motion it returned, as the most recently rendered.
-  keep(sessionId: SessionId, motion: SessionMotion): void {
-    const known = this.of(sessionId);
-    known.keep(motion);
-    this.sessions.delete(sessionId);
-    this.sessions.set(sessionId, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-  }
-
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats(): { sessions: number; effects: number } {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
   }
 }

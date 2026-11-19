@@ -76,7 +76,12 @@ import type { RendererName } from "./foundations/renderer-name.js";
 export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
+type SettlePresentation = (
+  effect: Pick<Effect, "id" | "session">,
+  reason: string | null,
+) => void;
 type TakenTurn = TurnOutcome & {
+  readonly settlePresentation: SettlePresentation;
   readonly queuedMs: number;
   readonly turnMs: number | null;
   readonly hopMs: number | null;
@@ -190,7 +195,10 @@ export function rendererHost(
     readonly subscribed: (subscriptions: Subscriptions) => void;
     // Where the frames an output's feeds drew go: the host's feeds, which
     // send each subscriber what changed for it.
-    readonly frames: (frames: readonly PushedFrame[]) => void;
+    readonly frames: (
+      frames: readonly PushedFrame[],
+      settled: (frame: PushedFrame, delivered: boolean) => void,
+    ) => void;
     // [LAW:single-enforcer] Where every output's stored writes go: the host's
     // copy of the renderer's stores, before any later input.
     readonly stored: (writes: readonly StoreWrite[]) => void;
@@ -205,6 +213,7 @@ export function rendererHost(
   world: HostWorld,
 ): RendererHost {
   const mailbox = new KeyedSerialQueue<RendererName>();
+  let generation = 0;
   const stamped = stampedOf(clock);
   // [LAW:nothing-unseen] The input whose slot holds the mailbox, and since
   // when: its answer, its changes landing and their `effect-done` turns.
@@ -255,6 +264,7 @@ export function rendererHost(
       failure,
       record: [],
       effects: [],
+      settlePresentation: receiptFor(generation),
       queuedMs,
       turnMs: null,
       hopMs: null,
@@ -269,6 +279,8 @@ export function rendererHost(
     queuedMs: number,
     captures: readonly RunEvidence[] = [],
   ): Promise<Slotted> => {
+    if (input.event.kind === "start") generation++;
+    const receipt = receiptFor(generation);
     const session = sessionOf(input.event);
     let release = (): void => {};
     let output: RendererOutput & { readonly turnMs: number };
@@ -288,6 +300,7 @@ export function rendererHost(
     const { subscriptions, frames, stored, turnMs, ...answer } = output;
     const turn: TakenTurn = {
       ...answer,
+      settlePresentation: receipt,
       queuedMs,
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
@@ -296,6 +309,7 @@ export function rendererHost(
       input.event,
       output,
       captures,
+      receipt,
     );
     return {
       turn: configFailure === null ? turn : { ...turn, configFailure },
@@ -312,6 +326,7 @@ export function rendererHost(
     event: Event,
     output: RendererOutput,
     captures: readonly RunEvidence[],
+    receipt: SettlePresentation,
   ): Promise<{
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
@@ -331,6 +346,7 @@ export function rendererHost(
       output.frames,
       output.stored,
       requested,
+      receipt,
     );
     let configFailure: Failure | null = null;
     const waited: Array<Promise<readonly EffectOutcome[]>> = [];
@@ -478,11 +494,32 @@ export function rendererHost(
     frames: readonly PushedFrame[],
     stored: readonly StoreWrite[],
     requested: string | null,
+    receipt: SettlePresentation,
   ): ConfigFollowing => {
     recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
     recordTaken("stored writes", () => collector.stored(stored));
     recordTaken("subscriptions", () => collector.subscribed(subscriptions));
-    recordTaken("frames", () => collector.frames(frames));
+    if (frames.length > 0) {
+      const owed = new Set(
+        frames.flatMap(({ frame }) =>
+          frame.kind === "drawn" ? [frame.receipt] : [],
+        ),
+      );
+      const settled = (
+        { session, frame }: PushedFrame,
+        delivered: boolean,
+      ): void => {
+        if (frame.kind === "drawn" && owed.delete(frame.receipt))
+          receipt(
+            { session, id: frame.receipt },
+            delivered ? null : "no subscriber took the frame",
+          );
+      };
+      if (
+        recordTaken("frames", () => collector.frames(frames, settled)) === null
+      )
+        for (const frame of frames) settled(frame, false);
+    }
     const named: RenderOrigin[] = [];
     try {
       const next = new Map<string, ConfigDelivery>();
@@ -593,6 +630,27 @@ export function rendererHost(
       outcome,
     },
   });
+  // Worker-local effect IDs start again at boot. A socket can finish after
+  // its worker exits, or while the replacement's start is heading the mailbox.
+  const receiptFor =
+    (issuer: number): SettlePresentation =>
+    (effect, reason) => {
+      if (issuer !== generation) return;
+      const retired = "the renderer that drew the frame has ended";
+      unawaited(
+        "frame receipt",
+        deliver(
+          () =>
+            issuer === generation
+              ? doneOf(
+                  effect,
+                  reason === null ? { kind: "ok" } : { kind: "failed", reason },
+                )
+              : { kind: "down", message: retired, detail: retired },
+          [["effect", String(effect.id)]],
+        ),
+      );
+    };
   // An act's, once it ended: its `effect-done` joins the mailbox.
   const settle = async (
     effect: HostAct,
@@ -770,7 +828,13 @@ export function rendererHost(
         });
         // [LAW:no-ambient-temporal-coupling] A push's newly named configs
         // enter before the next queued slot, as they do for an event.
-        const followed = took(subscriptions, [], stored, null);
+        const followed = took(
+          subscriptions,
+          [],
+          stored,
+          null,
+          receiptFor(generation),
+        );
         if (followed.kind === "following")
           for (const origin of followed.named) {
             const config = await configInSlot(origin, "config-subscribed");

@@ -5,7 +5,6 @@
 
 import path from "node:path";
 import type {
-  Effect,
   Event,
   Present,
   RequestId,
@@ -121,22 +120,6 @@ export async function answerStatusline(
 ): Promise<StatuslineAnswer> {
   const req = located(arrived, locate);
   const session = req.hookData.session_id;
-  // [LAW:single-enforcer] The one `effect-done` each effect is owed, through
-  // the host's one path to the renderer.
-  const done = (effect: Effect, reason: string | null): void =>
-    void host.deliver(
-      () => ({
-        kind: "event",
-        event: {
-          kind: "effect-done",
-          session: effect.session,
-          of: effect.id,
-          outcome:
-            reason === null ? { kind: "ok" } : { kind: "failed", reason },
-        },
-      }),
-      [["effect", String(effect.id)]],
-    );
   // [LAW:single-enforcer] Each of the request's turns is made as its slot
   // comes, and none once the daemon's close has begun: the teardown is
   // closing the views it would open or draw into.
@@ -214,6 +197,7 @@ export async function answerStatusline(
     release();
   }
   recorded(facts, delivered);
+  const done = delivered.settlePresentation;
   // [LAW:nothing-unseen] Both turns' times in the renderer, their waits in
   // the mailbox and their hops, beside `took`: what the renderer and reaching
   // it cost this request. `drew=` is what the draw's reserve is held to
