@@ -516,6 +516,7 @@ describe("config probe", () => {
       ["config", true],
       ["install", true],
       ["daemon", true],
+      ["environment", true],
       ["urlHandler", true],
       ["links", true],
       ["tmuxTruecolor", true],

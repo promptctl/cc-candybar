@@ -330,16 +330,17 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(
       lines[toolsRow + 1]!.startsWith(POWERLINE.lead + DISCLOSURE_GLYPH_CLOSE),
     ).toBe(true);
-    const reports = lines.slice(toolsRow + 2, toolsRow + 8);
+    const reports = lines.slice(toolsRow + 2, toolsRow + 9);
     for (const report of reports) {
       expect(report.startsWith(`${POWERLINE.lead} `)).toBe(true);
     }
     expect(reports[0]).toContain("✓ config");
     expect(reports[1]).toContain("✓ install");
     expect(reports[2]).toContain("✓ daemon");
-    expect(reports[3]).toContain("✓ URL handler");
-    expect(reports[4]).toContain("✓ links");
-    expect(reports[5]).toContain("✗ tmux truecolor");
+    expect(reports[3]).toContain("✓ environment");
+    expect(reports[4]).toContain("✓ URL handler");
+    expect(reports[5]).toContain("✓ links");
+    expect(reports[6]).toContain("✗ tmux truecolor");
   });
 
   // brandon-doctor-v62x.e91: the config check's row, and the run's log line
@@ -362,7 +363,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     expect(out).toContain("✓ tmux truecolor");
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     expect(rt.reported()).toEqual([
-      `doctor: config=failed(2) install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
+      `doctor: config=failed(2) install=ok daemon=ok environment=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=ok segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=ghostty@- font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
     ]);
   });
 
@@ -384,7 +385,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
     expect(rt.clicked.value()).toEqual(["Terminal"]);
     expect(rt.reported()).toEqual([
-      `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
+      `doctor: config=ok install=ok daemon=ok environment=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=apple-terminal@455.1 font=- mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
     ]);
   });
 
@@ -682,7 +683,7 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
         [{ name: "iterm2", version: "3.7.2" }, ITERM_MENLO.env, BUNDLED_GLYPHS],
       ]);
       expect(rt.reported()).toEqual([
-        `doctor: config=ok install=ok daemon=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font=Menlo-Regular:lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
+        `doctor: config=ok install=ok daemon=ok environment=ok urlHandler=ok links=ok tmuxTruecolor=ok utf8=ok termWidth=ok effectRefresh=ok nerdFont=failed(1) segmentData=ok sessionData=ok configTarget=search glyphs=${BUNDLED_GLYPHS_LOGGED} terminal=iterm2@3.7.2 font=Menlo-Regular:lacks${[...BUNDLED_GLYPHS].length} mark=- tmuxLinks=- clicked=yes cols=148 widthOf=session clientUtf8=- clients=native/same/- daemons=1 others=- memory=phys_footprint:120/512 processes=host:4100:160 postMortems=0/0 data=pr:-,rateLimits:- transcripts=1/0/0 unparsed=0 frames=0/0/1/0/0 chains=absent truecolorEnv=unset`,
       ]);
     });
 

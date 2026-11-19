@@ -84,6 +84,9 @@ export const LAUNCH_CATEGORIES = [
   // (src/plugin-install.ts): three git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
+  // The variables that locate a repository, asked of git once per process as
+  // its world is built (src/host.ts), before anything else launches.
+  "host.git",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
   // one query per server a second, paced by its own clock, so no rate limit.
   "frames.visibility",

@@ -5,6 +5,7 @@
 // wrong for every other session (.claude/memory/architecture.md).
 
 import type { SessionId } from "./session-id";
+import type { Host } from "../../host-facts";
 import { ABSENT, ok, type Asked, type Outcome } from "../../utils/outcome";
 import { CLAUDE_CONFIG_DIR_ENV } from "../../claude-settings";
 import { ownValue } from "../../utils/plain";
@@ -22,6 +23,17 @@ export function plainEnvironment(
       value === undefined ? [] : [[name, value]],
     ),
   );
+}
+
+// [LAW:single-enforcer] A process's own environment as it reports it for the
+// session it stands in for (a statusline client, `check`, the doctor): the
+// one it was started with, so the variables its world dropped are back. They
+// locate the session's own repository for the programs run for it, as the
+// native client reports them.
+export function reportedEnvironment(
+  host: Pick<Host, "env" | "dropped">,
+): Environment {
+  return { ...plainEnvironment(host.env), ...host.dropped.values };
 }
 
 // [LAW:single-enforcer] One variable of an environment: its value, or absent

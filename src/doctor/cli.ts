@@ -33,7 +33,7 @@ import {
 import { discover, readShared } from "../daemon/config-discovery/discover.js";
 import { daemonGates } from "../daemon/foundations/update-keys.js";
 import { PROTOCOL_VERSION } from "../daemon/foundations/protocol.js";
-import { plainEnvironment } from "../daemon/foundations/session-env.js";
+import { reportedEnvironment } from "../daemon/foundations/session-env.js";
 import { MAIN_RENDERER } from "../daemon/foundations/renderer-name.js";
 import { checkRenderRequest } from "../daemon/render-checkpoint.js";
 import {
@@ -208,7 +208,7 @@ async function doctorRun(
       ],
       cwd,
       encoding: "frame",
-      env: plainEnvironment(host.env),
+      env: reportedEnvironment(host),
       ...hints,
     },
     { firstSightOfUnknownHookField: () => false },
@@ -303,7 +303,7 @@ async function doctorRun(
       );
       return providers;
     },
-    daemon: () => commandDaemonFacts(at),
+    daemon: () => commandDaemonFacts(at, world.host.dropped.fault),
     build: inputs.build,
   });
   // The bar closes first: what it drew with closes after it. What it logged

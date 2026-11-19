@@ -119,6 +119,7 @@ describe("doctorPlan with no daemon", () => {
         "✓ config — bundled default (no config file loaded)\n" +
         `✓ install — ${notJudged("which client draws the bar")}\n` +
         `✓ daemon — ${notJudged("the daemon's memory")}\n` +
+        "✓ environment — none was set of the variables that locate a repository ()\n" +
         "✓ URL handler\n" +
         "✓ links\n" +
         "✓ tmux truecolor\n" +

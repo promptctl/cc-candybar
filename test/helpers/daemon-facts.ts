@@ -17,6 +17,7 @@ export const daemonFactsOf = (
   newer: Fact<Update> = pendingOf("unread"),
 ): DaemonFacts => ({
   update: { newer, act: IDLE, actsError: null },
+  environmentFault: null,
   fileEvents: [],
   launcher: [],
   rendererEnded: null,

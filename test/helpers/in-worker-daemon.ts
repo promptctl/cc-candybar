@@ -4,7 +4,7 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
-import { HOST } from "./host";
+import { HOST, hostOver } from "./host";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -82,8 +82,11 @@ export interface BuiltDaemon {
 // Delivery unstarted is `unmeasured` with nothing missed, and adds no warning
 // (src/daemon/cache/file-events.ts).
 export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
-  // The env a case placed names where the daemon lives, read once here.
-  const paths = overrides.paths ?? daemonPaths(HOST);
+  // [LAW:single-enforcer] The env a case placed, settled as a daemon process
+  // settles its own: what locates a repository is dropped from it before the
+  // daemon launches anything. It names where the daemon lives, read once here.
+  const host = hostOver({ env: process.env, home: HOST.home, tmp: HOST.tmp });
+  const paths = overrides.paths ?? daemonPaths(host);
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog =
     overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
@@ -91,7 +94,7 @@ export function buildDaemon(overrides: DaemonOverrides = {}): BuiltDaemon {
     const daemon = createDaemon({
       ...productionAdapters(paths, daemonLog, systemTimekeeper),
       bundle: bundleAt(path.join(paths.state, "checkout")),
-      host: HOST,
+      host,
       memoryLimitBytes: memoryLimitBytes(process.env),
       // test/setup.ts points it at a closed port.
       registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL!,

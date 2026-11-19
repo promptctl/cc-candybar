@@ -3,7 +3,7 @@
 // user's plugin root, from a local path, a GitHub slug, or a git URL.
 
 import { execFileSync } from "node:child_process";
-import { HOST, hostOf, worldOf } from "./helpers/host";
+import { HOST, hostOf, hostOver, worldOf } from "./helpers/host";
 import type { World } from "../src/host";
 import fs from "node:fs";
 import os from "node:os";
@@ -70,7 +70,12 @@ describe("parsePluginSource", () => {
 
   test("a directory that exists is a path, even one spelled like a slug", () => {
     expect(
-      parsePluginSource("owner/repo", "/cwd", HOST.home, isDir(["/cwd/owner/repo"])),
+      parsePluginSource(
+        "owner/repo",
+        "/cwd",
+        HOST.home,
+        isDir(["/cwd/owner/repo"]),
+      ),
     ).toEqual({
       kind: "path",
       dir: "/cwd/owner/repo",
@@ -78,7 +83,9 @@ describe("parsePluginSource", () => {
   });
 
   test("anything else names nothing, and says so", () => {
-    expect(parsePluginSource("./nowhere/at/all", "/cwd", HOST.home, isDir([]))).toEqual({
+    expect(
+      parsePluginSource("./nowhere/at/all", "/cwd", HOST.home, isDir([])),
+    ).toEqual({
       error: `"./nowhere/at/all" is not a directory, a GitHub repo slug (owner/repo) or a git URL`,
     });
   });
@@ -156,7 +163,12 @@ describe("installFromRepo", () => {
 
   test("a repo with no plugins is an error, never an empty install", () => {
     expect(() =>
-      installFromRepo(repoWith({}), path.join(dir, "plugins"), "repo", HOST.home),
+      installFromRepo(
+        repoWith({}),
+        path.join(dir, "plugins"),
+        "repo",
+        HOST.home,
+      ),
     ).toThrow(
       /^repo has no plugins: none at \.cc-candybar\/plugins\/<name>\/plugin\.json5/,
     );
@@ -212,7 +224,9 @@ describe("runPlugin", () => {
   let log: jest.SpyInstance;
   let err: jest.SpyInstance;
   beforeEach(() => {
-    world = worldOf(hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }));
+    world = worldOf(
+      hostOf({ ...HOST.env, XDG_DATA_HOME: path.join(dir, "data") }),
+    );
     log = jest.spyOn(console, "log").mockImplementation(() => {});
     err = jest.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -231,11 +245,16 @@ describe("runPlugin", () => {
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
     const url = `file://${repo}`;
 
-    // A hook's GIT_DIR names another repository; the clone ignores it.
+    // A hook's GIT_DIR names another repository; the process's world drops
+    // it, so the clone ignores it.
     const other = path.join(dir, "other");
     execFileSync("git", ["init", "-q", other]);
     const hooked = worldOf(
-      hostOf({ ...world.host.env, GIT_DIR: path.join(other, ".git") }),
+      hostOver({
+        env: { ...world.host.env, GIT_DIR: path.join(other, ".git") },
+        home: world.host.home,
+        tmp: world.host.tmp,
+      }),
     );
     expect(runPlugin(["install", url], hooked)).toBe(0);
     expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(

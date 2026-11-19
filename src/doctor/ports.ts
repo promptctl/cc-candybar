@@ -2,6 +2,7 @@
 // (src/doctor/read.ts), and its stores, which the renderer files.
 
 import type { Outcome } from "../utils/outcome.js";
+import type { DroppedEnv } from "../host-facts.js";
 import type { RepoQuestion } from "../config/config-snapshot.js";
 import type { Probed } from "./busy.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -73,6 +74,9 @@ export interface DoctorEdge {
   readonly managedSettingsDir: string;
   // The user's home: where Claude Code's default directory is.
   readonly home: string;
+  // What the host's world dropped from the environment its reads inherit
+  // (`Host.dropped`).
+  readonly dropped: DroppedEnv;
   // Every cc-candybar daemon process this user runs (`daemonProcesses`).
   readonly daemons: () => Promise<Asked<readonly DaemonProcess[]>>;
   // Whether the forge CLI the checkout's remote names is installed and logged

@@ -29,7 +29,7 @@ import { instantOf } from "../../src/utils/instant";
 import { ABSENT, failed, ok, pendingOf } from "../../src/utils/outcome";
 import { settledLane } from "../../src/utils/reading";
 import { bareGates } from "./gates";
-import { locs } from "./host";
+import { hostOf, locs } from "./host";
 import { TEST_SIGNER } from "./link-signer";
 import { NO_PLUGIN_STORAGE } from "./plugin-storage";
 import {
@@ -165,7 +165,7 @@ export function sessionRig(
   const cache = new DiscoveringCache<SessionSource>(
     {
       clock: systemTimekeeper,
-      stateDir: stateDir({ env: {}, home: dir, tmp: dir }),
+      stateDir: stateDir(hostOf({}, { home: dir, tmp: dir })),
       locations: locs(),
       sessionState,
       watchers,

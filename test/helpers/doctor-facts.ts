@@ -164,13 +164,15 @@ export const CARRIED = held(["carried" as const]);
 // The edge's reads of the outside data segments need and of the session's
 // transcript: the checkout's gh logged in, the transcript all JSON.
 // The managed settings directory every test edge reads: test/setup.ts's, a
-// directory that holds no policy.
+// directory that holds no policy; and the worker's own host, whose git named
+// what it dropped.
 export const noManagedSettings = (): Pick<
   DoctorEdge,
-  "managedSettingsDir" | "home"
+  "managedSettingsDir" | "home" | "dropped"
 > => ({
   managedSettingsDir: process.env.CC_CANDYBAR_CLAUDE_MANAGED_DIR!,
   home: HOST.home,
+  dropped: HOST.dropped,
 });
 
 export const healthyDataEdge = (): Pick<
@@ -237,6 +239,7 @@ export const HEALTHY_FACTS: DoctorFacts = {
     },
   ]),
   urlHandler: { kind: "unsupported" },
+  environment: HOST.dropped,
   install: held({
     kind: "ok",
     value: {

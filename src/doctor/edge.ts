@@ -370,6 +370,7 @@ export function productionMachineEdge(
     transcript: async (file) => readTranscriptWindow(file),
     install: productionInstallEdge,
     home: host.home,
+    dropped: host.dropped,
     managedSettingsDir: claudeManagedSettingsDirIn(host.env),
   };
 }

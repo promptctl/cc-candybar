@@ -76,6 +76,10 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // same way: null while none has.
 export interface DaemonFacts {
   readonly update: UpdateState;
+  // [LAW:no-silent-failure] Why the environment everything the daemon launches
+  // inherits may still locate a repository: git could not name the variables
+  // that do (src/host.ts); null when it named them.
+  readonly environmentFault: string | null;
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;

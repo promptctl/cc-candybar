@@ -20,7 +20,7 @@ import {
   type Response,
 } from "./foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline";
-import { plainEnvironment } from "./foundations/session-env";
+import { reportedEnvironment } from "./foundations/session-env";
 
 export const RENDER_BUDGETS: RoundTripBudgets = {
   connectMs: CONNECT_TIMEOUT_MS,
@@ -76,7 +76,7 @@ export function tryRenderViaDaemon(
 ): Promise<ClientOutcome> {
   // The environment Claude Code gave this client, which the host runs the
   // session's programs in (src/daemon/foundations/session-env.ts).
-  const env = plainEnvironment(world.host.env);
+  const env = reportedEnvironment(world.host);
   return requestOutcome(
     world,
     (deadline) => ({

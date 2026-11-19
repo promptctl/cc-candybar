@@ -59,6 +59,7 @@ import {
   type TmuxClientTerm,
   type UnreadTerminal,
 } from "./terminal.js";
+import { describeDropped, type DroppedEnv } from "../host-facts.js";
 
 // [LAW:types-are-the-program] What tmux says about the client attached to the
 // session's pane, or why it could not be asked: its verdict on the terminal's
@@ -521,6 +522,9 @@ export interface DoctorFacts {
   // from (src/daemon/render-sightings.ts).
   readonly install: Held<InstallFacts>;
   readonly daemon: DaemonFacts;
+  // What the host's world dropped from the environment its git and gh reads
+  // inherit, and why git's own list was not taken (src/host.ts).
+  readonly environment: DroppedEnv;
   readonly nerdFont: NerdFontFacts;
   // The user's marks, or why the book could not be read; a check honours
   // only the mark on the sighting it shows.
@@ -1216,6 +1220,20 @@ const daemon: Check = {
   },
 };
 
+// [LAW:no-silent-failure] Whether the git and gh reads find each session's
+// repository from its directory: the row names what the host's world dropped,
+// and fails when git could not name the variables that locate a repository,
+// so a fixed list stood in for them.
+const environment: Check = {
+  name: "environment",
+  label: "environment",
+  takesMark: false,
+  probe: ({ environment: dropped }) =>
+    dropped.fault === null
+      ? { ok: true, note: describeDropped(dropped) }
+      : { ok: false, reason: dropped.fault, more: [describeDropped(dropped)] },
+};
+
 type SeenTerminal = Extract<TerminalIdentity, { kind: "seen" }>;
 
 const CLICK_TO_SEE =
@@ -1789,6 +1807,7 @@ export const CHECKS: readonly Check[] = [
   config,
   install,
   daemon,
+  environment,
   urlHandler,
   links,
   tmuxTruecolor,

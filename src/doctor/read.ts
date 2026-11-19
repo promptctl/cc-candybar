@@ -325,6 +325,7 @@ export async function readDoctor(
     terminal,
     nerdFont,
     urlHandler,
+    environment: edge.dropped,
     daemon: {
       serving: sighted.serving,
       processes,

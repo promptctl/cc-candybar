@@ -6,6 +6,7 @@ import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
 import type { Host } from "../host";
+import { describeDropped } from "../host-facts";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
@@ -265,6 +266,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // [LAW:one-source-of-truth] What this daemon's work logs through.
   const log: DaemonLogger = (level, msg) =>
     inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
+  // [LAW:nothing-unseen] What the process's world dropped from the environment
+  // every launch here inherits, said once as the daemon is built; a list git
+  // could not name is a warning, with its reason.
+  log(
+    host.dropped.fault === null ? "info" : "warn",
+    `environment: ${describeDropped(host.dropped)}${host.dropped.fault === null ? "" : `; ${host.dropped.fault}`}`,
+  );
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
@@ -642,6 +650,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     owners: payloadProviders,
     daemon: () => ({
       update: { newer: updateFact.get(), ...updateWatch.acts() },
+      environmentFault: host.dropped.fault,
       ...daemonFaults.get(),
     }),
     clock,

@@ -15,9 +15,9 @@
 // did with it. `frame` is a reader's lookup between samples, asking for what no
 // client asks for, so no series measures it.
 
-import { plainEnvironment } from "../../src/daemon/foundations/session-env.js";
+import { reportedEnvironment } from "../../src/daemon/foundations/session-env.js";
 import { spawn } from "node:child_process";
-import { processWorld } from "../../src/host.js";
+import { processWorld, settledHost } from "../../src/host.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -198,7 +198,10 @@ export async function startWorld(
   const terminal = sessionEnv(dirs.claude);
   // The host this world's clients are handed: its socket, its home.
   const machine = processWorld();
-  const host = { env, home: dirs.home, tmp: machine.host.tmp };
+  const host = settledHost(
+    { env, home: dirs.home, tmp: machine.host.tmp },
+    machine.launcher,
+  );
   // What its clients ask the daemon with: this world's host, the machine's clock.
   const client = { host, clock: machine.clock };
   const log = logPath(host);
@@ -356,7 +359,7 @@ export async function startWorld(
         (deadline) => ({
           kind: "render",
           encoding: "frame",
-          env: plainEnvironment(client.host.env),
+          env: reportedEnvironment(client.host),
           hookData: hookDataOf(session, n),
           args: [BUNDLE],
           cwd: session.cwd,

@@ -43,7 +43,7 @@ import {
   type SessionId,
 } from "./daemon/foundations/session-id.js";
 import { PROTOCOL_VERSION } from "./daemon/foundations/protocol.js";
-import { plainEnvironment } from "./daemon/foundations/session-env.js";
+import { reportedEnvironment } from "./daemon/foundations/session-env.js";
 import { checkRenderRequest } from "./daemon/render-checkpoint.js";
 import { EMPTY_STORED_STATE } from "./renderer-interface/stored-state.js";
 import {
@@ -369,6 +369,7 @@ function readPass(pass: Pass, draw: LocalDraw, settleMs: number): PassReading {
       case "renderer-ended":
       case "act-failed":
       case "config-watch":
+      case "environment":
       case "update-failed":
         advisories.push(fault.message);
         return;
@@ -458,7 +459,7 @@ async function drawnVerdict(
         args: ["cc-candybar", ...args],
         cwd,
         encoding: "frame",
-        env: plainEnvironment(world.host.env),
+        env: reportedEnvironment(world.host),
         termCols: columnsReserving(CHECK_WIDTH),
         ...CHECK_HINTS,
       },
@@ -494,7 +495,7 @@ async function drawnVerdict(
       ),
     },
     owners: (sourceRuns, log) => checkOwners(at, sourceRuns, log),
-    daemon: () => commandDaemonFacts(at),
+    daemon: () => commandDaemonFacts(at, world.host.dropped.fault),
     build,
   });
   const read: PassReading[] = [];

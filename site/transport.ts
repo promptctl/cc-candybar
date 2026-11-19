@@ -6,7 +6,7 @@
 // simulated machine (world.ts) through node:fs and node:child_process, as it
 // reads a real one, and the scenario (scenario.ts) moves that machine.
 
-import { plainEnvironment } from "../src/daemon/foundations/session-env";
+import { reportedEnvironment } from "../src/daemon/foundations/session-env";
 import { VERB_COPY } from "../src/click/wire";
 import { processWorld } from "../src/host";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
@@ -201,7 +201,7 @@ async function frame(size: Size): Promise<Frame> {
     v: PROTOCOL_VERSION,
     kind: "render",
     encoding: "frame",
-    env: plainEnvironment(HOST.env),
+    env: reportedEnvironment(HOST),
     hookData: hookData(),
     args: ["cc-candybar"],
     cwd: REPO,

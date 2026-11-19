@@ -130,7 +130,12 @@ function rig(start: () => Promise<void> = async () => {}) {
     name: MAIN_RENDERER,
     boot: () => ({
       digest: "d1",
-      host: { env: {}, home: "/home", tmp: "/tmp" },
+      host: {
+        env: {},
+        home: "/home",
+        tmp: "/tmp",
+        dropped: { names: [], values: {}, fault: null },
+      },
       bundle: "/app/index.mjs",
       memoryLimitBytes: 1,
       linkKey: key.read,
@@ -194,7 +199,12 @@ describe("a renderer process's start", () => {
         kind: "boot",
         boot: {
           digest: "d1",
-          host: { env: {}, home: "/home", tmp: "/tmp" },
+          host: {
+        env: {},
+        home: "/home",
+        tmp: "/tmp",
+        dropped: { names: [], values: {}, fault: null },
+      },
           bundle: "/app/index.mjs",
           memoryLimitBytes: 1,
           linkKey: { kind: "ok", value: "a2V5" },

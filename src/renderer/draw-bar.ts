@@ -649,6 +649,16 @@ export function drawRender(
     (e) => (e === undefined ? [] : [e]),
   );
   const standing: readonly StandingWarning[] = [
+    // [LAW:no-silent-failure] Every git and gh read the daemon makes may
+    // follow a variable git could not name to another repository.
+    ...(daemon.environmentFault === null
+      ? []
+      : [
+          {
+            kind: "environment" as const,
+            message: daemon.environmentFault,
+          },
+        ]),
     ...daemon.fileEvents,
     ...launched,
     ...held,
@@ -838,6 +848,7 @@ export function drawRender(
         return `${w.kind}:${w.state}`;
       case "load":
       case "facts":
+      case "environment":
       case "config-watch":
       case "lifeline":
       case "launch-pipes":
@@ -1058,6 +1069,12 @@ interface ConfigWatchWarning {
   readonly message: string;
 }
 
+// The environment the daemon launches with may still locate a repository.
+interface EnvironmentWarning {
+  readonly kind: "environment";
+  readonly message: string;
+}
+
 // The facts the bar is drawn from are behind: the latest turn could not be
 // stamped.
 interface FactsWarning {
@@ -1093,6 +1110,7 @@ type StandingWarning =
   | LauncherWarning
   | DaemonEventWarning
   | ConfigWatchWarning
+  | EnvironmentWarning
   | LoadWarning
   | FactsWarning;
 

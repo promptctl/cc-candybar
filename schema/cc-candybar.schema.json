@@ -1228,6 +1228,7 @@
                   "config",
                   "install",
                   "daemon",
+                  "environment",
                   "urlHandler",
                   "links",
                   "tmuxTruecolor",
