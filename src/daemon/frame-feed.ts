@@ -294,6 +294,12 @@ export class FrameFeeds<Req> {
     return this.requests.get(sessionId)?.req ?? null;
   }
 
+  // The latest request and its arrival order, for consumers reconciling
+  // declarations from sessions that have reported the same pane.
+  latestWithOrder(sessionId: SessionId): Noted<Req> | undefined {
+    return this.requests.get(sessionId);
+  }
+
   // The frames the renderer drew are its own count (`RendererStats`).
   getStats(): Omit<FeedStats, "drawn"> {
     let subscribers = 0;

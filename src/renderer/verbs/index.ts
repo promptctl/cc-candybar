@@ -36,7 +36,7 @@ import {
   type DisclosureNest,
 } from "../../config/disclosure-nest";
 import { DISCLOSURE_CLOSED } from "../../config/disclosure";
-import type { Drawing, LaneSwitches } from "../../config/lanes";
+import type { Drawing } from "../../config/lanes";
 import { closingView } from "../closing-view";
 import type { Gates } from "../../daemon/foundations/gates";
 import type {
@@ -136,7 +136,6 @@ import type {
 import { repoAnswerFields } from "../../config/repo-question";
 import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
-  CheckedRenderRequest,
   DeclaredSources,
   SessionContext,
 } from "../../renderer-interface/request-context";
@@ -220,27 +219,6 @@ export interface DaemonContext {
   // [LAW:single-enforcer] The signer every `run` link was drawn with: a link
   // is honoured only if it verifies here.
   readonly links: LinkSigner;
-  // [LAW:effects-at-boundaries] A session's animation-lane switches over the
-  // config it renders with (`of`, looked up like `configFor`), and what
-  // follows a click of that session (`clicked`): the click path measures
-  // them before each click and after its commit (`journaled`), and hands
-  // both to the one owner of lane setup (src/renderer/lane-acts.ts), whose
-  // acts join `effects`. `live` is the session's request heard since the
-  // daemon started, whose hints name its pane.
-  readonly lanes: {
-    readonly of: (
-      origin: RenderOrigin,
-      sessionId: SessionId,
-      live: CheckedRenderRequest | null,
-    ) => LaneSwitches;
-    readonly clicked: (
-      sessionId: SessionId,
-      live: CheckedRenderRequest | null,
-      before: LaneSwitches,
-      after: LaneSwitches,
-      effects: Effect[],
-    ) => void;
-  };
   // What the diagnostic the frame renderer `by` last delivered for the
   // session listed under `key` copies; undefined when it lists none under it.
   readonly diagnosticCopy: (
@@ -687,29 +665,6 @@ function proveLoadsAsLayer(
 // merge of every config the daemon holds.
 function sessionConfig(ctx: VerbContext, sid: SessionId): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
-}
-
-// A session's lane switches as a click found them, and their read over the
-// config it renders with as it stands at each read, which the click's own
-// write can change. Null for a session that has never rendered, which has no
-// config to switch them.
-interface LaneMeter {
-  readonly sessionId: SessionId;
-  readonly live: CheckedRenderRequest | null;
-  readonly before: LaneSwitches;
-  readonly read: () => LaneSwitches;
-}
-
-function laneMeter(
-  ctx: DaemonContext,
-  sid: SessionId,
-  context: SessionContext | null,
-): LaneMeter | null {
-  const origin = originOf(context, sid);
-  if (origin === null) return null;
-  const live = contextFor(context, sid)?.live ?? null;
-  const read = (): LaneSwitches => ctx.lanes.of(origin, sid, live);
-  return { sessionId: sid, live, before: read(), read };
 }
 
 // What the session's config nests; a session the context names nothing of
@@ -1181,7 +1136,6 @@ const undo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const step = ctx.journal.undo(sid);
-  ctx.journal.wrote();
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1206,8 +1160,6 @@ const back: VerbHandler = (value, ctx) => {
 // other target was put back, naming the target it kept.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  // Said first: a stale target throws after the rest were put back.
-  ctx.journal.wrote();
   const restored = ctx.journal.rewind(sid);
   ctx.log(
     "info",
@@ -1220,7 +1172,6 @@ const redo: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
   const step = ctx.journal.redo(sid);
-  ctx.journal.wrote();
   ctx.log("info", `redo: re-applied ${describeStep(step)} (session=${sid})`);
 };
 
@@ -1506,7 +1457,6 @@ const repoConfig: VerbHandler = (value, ctx) => {
     );
   }
   ctx.configWrites.answer(dir, answered);
-  ctx.journal.wrote();
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────
@@ -1631,13 +1581,6 @@ function foldEffects(
 // click that changed no config file, and otherwise in the turn its changes
 // land (changeLanded), or never, when they are refused.
 //
-// [LAW:single-enforcer] It is also where every click of a session passes, so
-// it measures that session's lane switches (`sid` names it): before the
-// handler, and after the commit — after the reload its landing made, since a
-// reload is synchronous. What a lane runs follows the difference, which no
-// render, frame or other session's write can make, and what it asks joins the
-// effects of the turn the click landed in.
-//
 // [LAW:no-ambient-temporal-coupling] It runs whole within one turn, begin
 // through seal: the host's mailbox hands the renderer one input at a time,
 // and a handler awaits nothing, so no other journal opens beside it.
@@ -1657,7 +1600,6 @@ function journaled<C extends DaemonContext>(
       );
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
-  const lanes = sid === null ? null : laneMeter(ctx, sid, context);
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
@@ -1689,28 +1631,11 @@ function journaled<C extends DaemonContext>(
     failures.push(e);
   }
   // Each commit runs whatever the other did: both record what landed.
-  const consequence = (landedIn: Effect[]): void => {
+  const consequence = (): void => {
     const failed: unknown[] = [];
     for (const step of [navigation, journal]) {
       try {
         step.commit();
-      } catch (e) {
-        failed.push(e);
-      }
-    }
-    if (lanes !== null) {
-      try {
-        // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have
-        // moved its lanes: for one that wrote nothing, what moved while it
-        // parked is a watcher reload, and no move of its own.
-        const after = lanes.read();
-        ctx.lanes.clicked(
-          lanes.sessionId,
-          lanes.live,
-          journal.written() ? lanes.before : after,
-          after,
-          landedIn,
-        );
       } catch (e) {
         failed.push(e);
       }

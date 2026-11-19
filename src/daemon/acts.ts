@@ -84,7 +84,8 @@ function nameOf(act: HostAct): string {
   }
 }
 
-const paneKey = (pane: TmuxHint): string => `${pane.socket}\0${pane.pane}`;
+export const paneKey = (pane: TmuxHint): string =>
+  `${pane.socket}\0${pane.pane}`;
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
 // line says of it — what it did, or why it did not.
@@ -185,18 +186,20 @@ export class Acts {
               ),
             );
           case "pane":
-            return did(
-              await this.setups.run(act.session, () =>
-                this.inPane.run(paneKey(act.pane), () =>
-                  act.on
-                    ? paneOn(act.pane, lanes.host, lanes.edge)
-                    : paneOff(act.pane, lanes.edge),
-                ),
-              ),
-            );
+            return did(await this.setBarPane(act.pane, act.on));
         }
       },
     };
+  }
+
+  // [LAW:single-enforcer] A bar-pane split and input typing share the pane's
+  // queue regardless of what changed the display setting.
+  setBarPane(pane: TmuxHint, on: boolean): Promise<string> {
+    const { edge, host } = this.deps.lanes;
+    return this.inPane.run(paneKey(pane), async () => {
+      if (this.deps.closing()) return "daemon closing";
+      return on ? paneOn(pane, host, edge) : paneOff(pane, edge);
+    });
   }
 
   // A slash line typed into `pane` in its turn.

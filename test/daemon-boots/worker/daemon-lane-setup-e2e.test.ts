@@ -1,10 +1,5 @@
 import { unprovenLink } from "../../../src/click/link-signer";
 import type { Frame } from "../../../src/render/frame";
-// What a lane runs follows the session's own clicks, measured at the click,
-// and the tmux status line follows a request's arrival and a click's commit:
-// no draw — a request's or a frame's — starts either (src/daemon/lane-setup.ts,
-// src/daemon/tmux-status.ts).
-
 import { textOf } from "../../../src/render/frame";
 import { linkUrls } from "../../helpers/frame";
 import {
@@ -13,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  existsSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -53,7 +49,7 @@ jest.setTimeout(30_000);
 // Every lane off: each test's own clicks switch them.
 const CONFIG = `{ segments: { mark: { template: 'a lane mark' } }, root: { h: ['mark'] } }`;
 
-describe("lane setups and the tmux status line follow events, never a draw", () => {
+describe("tmux surfaces follow effective display settings", () => {
   let removeTmpDirs: () => void;
   let env: NodeJS.ProcessEnv;
   let projectDir: string;
@@ -67,16 +63,36 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     otherDir = path.join(projectDir, "elsewhere");
     mkdirSync(otherDir);
     writeFileSync(path.join(projectDir, "lanes.json5"), CONFIG);
-    // A tmux first on the daemon's PATH whose server shows pane %7, attached
-    // and active, and answers anything else with nothing to say.
     const bin = path.join(projectDir, "bin");
     mkdirSync(bin);
     writeFileSync(
       path.join(bin, "tmux"),
-      `#!/bin/sh\ncase "$*" in *list-panes*) printf '%%7 $1 1 1 0 1\\n' ;; *) printf '' ;; esac\n`,
+      `#!/bin/sh
+held="$CANDYBAR_TEST_TMUX_STATE/${"$"}{2##*/}.split"
+case "$*" in
+  *list-panes*'pane_start_command'*)
+    if [ -f "$held" ]; then printf '%%9 cc-candybar bar-pane %%7\n'; fi
+    ;;
+  *list-panes*) printf '%%7 $1 1 1 0 1\n' ;;
+  *split-window*)
+    if [ -f "$held.fail" ]; then
+      rm "$held.fail"
+      printf 'temporary split failure\n' >&2
+      exit 1
+    fi
+    touch "$held"
+    printf '%%9\n'
+    ;;
+  *kill-pane*'-t %9') rm -f "$held" ;;
+esac
+`,
     );
     chmodSync(path.join(bin, "tmux"), 0o755);
-    env = { ...prepared.env, PATH: `${bin}:${prepared.env.PATH ?? ""}` };
+    env = {
+      ...prepared.env,
+      PATH: `${bin}:${prepared.env.PATH ?? ""}`,
+      CANDYBAR_TEST_TMUX_STATE: projectDir,
+    };
     daemon = startDaemon(env);
   });
 
@@ -120,10 +136,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
         ),
       ),
     );
-  const laneLines = (sid: string): string[] =>
-    logLines(env).filter(
-      (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
-    );
   const statusLines = (sid: string, what: "holding" | "released"): string[] =>
     logLines(env).filter((l) =>
       l.includes(`tmux-status: ${what} sid=${JSON.stringify(sid)}`),
@@ -140,17 +152,11 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     await renderLines(env, sid, before + 1);
   };
 
-  test("a lane toggle with no request after it is set up once, in the turn after its click", async () => {
+  test("a preference change takes effect without another render request", async () => {
     const sid = "lane-click";
     await renderIn(sid);
     const events = (await renderLines(env, sid)).length;
     await switchLanes(sid, true, "tmuxStatus");
-    await until(() => laneLines(sid).length > 0, "the toggle's setup");
-    expect(laneLines(sid)).toEqual([
-      expect.stringContaining(
-        `lane: tmuxStatus on — the daemon draws %7's bar in its status line by=click (session=${sid})`,
-      ),
-    ]);
     // The click itself held the status line: no request came after it.
     await until(
       () => statusLines(sid, "holding").length > 0,
@@ -161,9 +167,66 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     // again and keep the status line held.
     await renderedAgain(sid);
     await renderedAgain(sid, otherDir);
-    expect(laneLines(sid)).toHaveLength(1);
     expect(statusLines(sid, "holding")).toHaveLength(1);
     expect(statusLines(sid, "released")).toEqual([]);
+  });
+
+  test("an enabled tmux pane opens from config on the first render", async () => {
+    const sid = "lane-pane-config";
+    const file = path.join(projectDir, "pane.json5");
+    writeFileSync(file, "{ globals: { experimentalPane: true } }");
+    await render(daemon, sid, projectDir, inTmux(sid), [
+      "cc-candybar",
+      "--config",
+      file,
+    ]);
+    const opened = (): string[] =>
+      logLines(env).filter((line) =>
+        line.includes(`bar-pane sid=${JSON.stringify(sid)} pane="%7" desired=on — opened bar pane %9`),
+      );
+    await until(
+      () => opened().length > 0,
+      () => `the configured bar pane (${logLines(env).filter((line) => line.includes("bar-pane")).join("; ")})`,
+    );
+    await render(daemon, sid, projectDir, inTmux(sid), [
+      "cc-candybar",
+      "--config",
+      file,
+    ]);
+    expect(opened()).toHaveLength(1);
+    await render(daemon, "lane-pane-next", projectDir, inTmux(sid), args());
+    await until(
+      () => logLines(env).some((line) =>
+        line.includes(
+          'bar-pane sid="lane-pane-next" pane="%7" desired=off — closed bar pane %9',
+        ),
+      ),
+      "the next session's disabled bar pane setting",
+    );
+  });
+
+  test("a first off declaration closes a split left by a previous host", async () => {
+    const sid = "lane-pane-previous";
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    writeFileSync(held, "");
+    await renderIn(sid);
+    await until(() => !existsSync(held), "the previous host's split to close");
+  });
+
+  test("an enabled pane retries a temporary split failure", async () => {
+    const sid = "lane-pane-retry";
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    writeFileSync(`${held}.fail`, "");
+    await renderIn(sid);
+    await switchLanes(sid, true, "pane");
+    await until(
+      () => logLines(env).some((line) => line.includes("temporary split failure")),
+      "the first split to fail",
+    );
+    await until(async () => {
+      await renderIn(sid);
+      return existsSync(held);
+    }, "the configured pane to open on retry");
   });
 
   // [LAW:nothing-unseen] A status-line click's event names its own verb, the
@@ -211,19 +274,6 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(event).toContain(" outcome=ok");
   });
 
-  test("one click of two lane toggles sets up both", async () => {
-    const sid = "lane-two";
-    await renderIn(sid);
-    await switchLanes(sid, true, "tmuxStatus", "band");
-    await until(() => laneLines(sid).length >= 2, "both toggles' setups");
-    expect(
-      laneLines(sid)
-        .map((l) => l.match(/lane: (\w+ \w+)/)![1])
-        .sort(),
-    ).toEqual(["band on", "tmuxStatus on"]);
-    for (const line of laneLines(sid)) expect(line).toContain(" by=click ");
-  });
-
   test("a status line switched off is released once, and nothing re-takes it", async () => {
     const sid = "lane-off";
     await renderIn(sid);
@@ -260,13 +310,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
     expect(statusLines(sid, "released")).toEqual([
       expect.stringContaining(`pane taken by sid="lane-taker"`),
     ]);
-    // The band's setup runs in the turn after its click: anything the click
-    // held was logged before it.
     await switchLanes(sid, true, "band");
-    await until(
-      () => laneLines(sid).some((l) => l.includes("lane: band on")),
-      "the band's setup",
-    );
     expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 
@@ -291,20 +335,13 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
 
   // The daemon before a restart drew the bar the toggle is clicked on: this
   // daemon holds no request of the session yet.
-  test("a click before the session's first request owes its setup to that request", async () => {
+  test("a preference set before the first request is used once the session renders", async () => {
     const sid = "lane-owed";
     await renderIn(sid);
     await daemon.stop();
     daemon = startDaemon(env);
     await switchLanes(sid, true, "tmuxStatus");
     await renderedAgain(sid);
-    await until(() => laneLines(sid).length > 1, "the owed setup");
-    // Owed at the click, which had no session to set up, and set up once, by
-    // the request.
-    expect(laneLines(sid)).toEqual([
-      expect.stringContaining(`lane: owed tmuxStatus on (session=${sid})`),
-      expect.stringContaining(" by=owed "),
-    ]);
     expect(statusLines(sid, "holding")).toHaveLength(1);
   });
 
@@ -335,8 +372,7 @@ describe("lane setups and the tmux status line follow events, never a draw", () 
       const written = (): bigint => statSync(cfg, { bigint: true }).mtimeNs;
       const unwritten = written();
       await switchLanes(`${sid}-0`, true, "pane");
-      await until(() => laneLines(`${sid}-0`).length > 0, "the pane's setup");
-      const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
+        const clicked = `set-state: ${LANES.pane.switch.setting}=true (session=${sid}-0)`;
       // The click's one file write, landed: a save after the click wrote a
       // snapshot taken after its pick.
       await until(() => {

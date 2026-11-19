@@ -89,7 +89,6 @@ export function rendererParts({
     renderWarnings: new RenderWarningRecords(),
     effectSessions: new EffectSessions(),
     // A rig's sessions have no lane switched, so no setup is owed.
-    laneActs: { noted: () => {}, clicked: () => {} },
     verbs,
     mint: minter(),
     // A rig's verbs ask no act, so no `effect-done` is an act's.

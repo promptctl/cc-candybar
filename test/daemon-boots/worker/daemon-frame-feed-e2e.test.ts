@@ -719,14 +719,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     await band.ended;
   });
 
-  // The daemon log's lines for `sid`: its render events, and how each of its
-  // lane setups ended (src/daemon/lane-setup.ts).
+  // The daemon log's render events for this session.
   const renderEvents = (sid: string): string[] =>
     renderEventsOf(logLines(env), sid);
-  const laneLines = (sid: string): string[] =>
-    logLines(env).filter(
-      (l) => l.includes(" lane: ") && l.includes(`(session=${sid})`),
-    );
   const setState = async (
     sid: string,
     key: string,
@@ -795,21 +790,9 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
     ).toContain("a handed-off mark");
     // And the band's stream is refused now its lane is off.
     expect(await band.ended).toMatchObject({ kind: "refused" });
-    // The reset deleted the file's value and released no pick — the session
-    // held none — and the lane's setup still followed it off (a bar pane the
-    // pane lane opened closes the same way).
-    await until(
-      () => laneLines(sid).some((l) => l.includes("lane: band off")),
-      "the lane's off setup",
-    );
   });
 
-  // What a lane runs follows the session's own clicks on its switch. Another
-  // session's save to a file both read moves this session's switch too, and
-  // nothing — its renders included — sets it up: setting up a lane there
-  // would restart every idle Claude Code reading that file for one session's
-  // save.
-  test("a switch moved only by the file starts no lane setup, until the session moves it itself", async () => {
+  test("both a config reload and a session preference control the same feed", async () => {
     const sid = "feed-file-lane";
     const file = path.join(projectDir, "fileLane.json5");
     await render(sockPath, sid, projectDir, { termCols: 80 }, args("fileLane"));
@@ -838,14 +821,10 @@ describe("a subscriber receives a session's frames as the bar moves", () => {
       "a render drawn by the file's switch",
     );
     await render(sockPath, sid, projectDir, { termCols: 20 }, args("fileLane"));
-    // The session moves the switch itself: its click sets it up, with no
-    // request after it, and it is the only setup this session's log holds.
+    const band = subscribeUntilEnd(sid, "band");
+    await until(() => band.live().length > 0, "the enabled feed's first frame");
     await setState(sid, "experimentalBand", "false");
-    await until(
-      () => laneLines(sid).length > 0,
-      "the session's own move's setup",
-    );
-    expect(laneLines(sid)).toEqual([expect.stringContaining("lane: band off")]);
+    expect(await band.ended).toMatchObject({ kind: "refused" });
   });
 
   // The bar is handed off whole: the lane drawing it carries the indicator,

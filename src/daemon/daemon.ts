@@ -54,6 +54,7 @@ import type { ClaudeInputEdge } from "../claude-input/typing.js";
 import { clickLaunchVia } from "./foundations/click-launch.js";
 import type { LaneEdge } from "./lane-setup.js";
 import { Acts } from "./acts.js";
+import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
@@ -514,6 +515,18 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     tmuxStatusLines,
     (sessionId) => frameFeeds.latest(sessionId)?.hints.tmux,
   );
+  const declaredBarPanes = new DeclaredBarPanes(
+    (sessionId) => {
+      const latest = frameFeeds.latestWithOrder(sessionId);
+      const pane = latest?.req.hints.tmux;
+      return latest !== undefined && pane != null
+        ? { pane, order: latest.order }
+        : undefined;
+    },
+    (pane, on) => acts.setBarPane(pane, on),
+    clock,
+    log,
+  );
   // Who watches each session's frames (candybar-animation-wbxz.jmm.usl),
   // handed to the renderer, whose feeds draw them, and what each subscriber
   // was sent.
@@ -769,6 +782,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         subscribed: (subscriptions) => {
           collector.subscribed(subscriptions);
           frameFeeds.switched(subscriptions.lanes);
+          declaredBarPanes.declare(subscriptions.lanes);
           // [LAW:one-source-of-truth] The rows held are the sessions whose
           // view switches the tmux status line on.
           declaredStatusLines.declare(

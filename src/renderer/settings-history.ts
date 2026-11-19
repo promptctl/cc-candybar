@@ -118,10 +118,6 @@ export interface Journal {
   redo(sessionId: SessionId): Step;
   rewind(sessionId: SessionId): Step;
   commit(): void;
-  // A write this journal holds no step for (a history step, the repo book).
-  wrote(): void;
-  // Whether the click wrote at all, a value it found included, across commits.
-  written(): boolean;
 }
 
 // A pending change, keyed by what it touched so a click that writes one target
@@ -203,9 +199,7 @@ export class SettingsHistory {
       move: (sessionId, history) => working.set(sessionId, history),
     };
     const pending: Pending = new Map();
-    let written = false;
     const note = (sessionId: SessionId, change: Change): void => {
-      written = true;
       const changes = pending.get(sessionId) ?? new Map<string, Change>();
       const earlier = changes.get(identity(change));
       changes.set(
@@ -222,11 +216,8 @@ export class SettingsHistory {
     const toggles = new Map<SessionId, EditToggle>();
     const sessionState = recordingView(
       held,
-      // Every key, since a write of any can move a lane: only settings are steps.
-      () => true,
+      (key) => isSettingKey(key) || key === EDIT_MODE_KEY,
       (sessionId, key, before, after) => {
-        written = true;
-        if (!isSettingKey(key) && key !== EDIT_MODE_KEY) return;
         if (key === EDIT_MODE_KEY) {
           const earlier = toggles.get(sessionId);
           toggles.set(sessionId, {
@@ -278,10 +269,6 @@ export class SettingsHistory {
         });
         files.land(file, before, after);
       },
-      wrote: () => {
-        written = true;
-      },
-      written: () => written,
       undo: (sessionId) => {
         step();
         return this.undo(click, sessionId);
