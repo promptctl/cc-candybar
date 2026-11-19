@@ -143,8 +143,9 @@ describe("the Node client's deadline", () => {
         envKey: compact!.envKey,
         deadline: compact!.deadline,
         env: { SESSION_MARKER: "synthetic-session" },
-        ssh: true,
       });
+      if (firstReply.ok) expect(full).not.toHaveProperty("ssh");
+      else expect(full?.ssh).toBe(true);
     },
   );
 

@@ -4,12 +4,14 @@
 
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import vector from "../fixtures/session-environment-key.json";
 import { environmentKey } from "../../src/daemon/foundations/session-env";
 
 function check(
   env: unknown,
   claudeConfigDir?: string,
   extra: Record<string, unknown> = {},
+  accountHome: () => string = () => "/account/home",
 ) {
   return checkRenderRequest(
     {
@@ -32,22 +34,36 @@ function check(
     { firstSightOfUnknownHookField: () => false },
     () => {},
     "/nowhere/home",
+    { reportedFor: () => null, accountHome },
   );
 }
 
 describe("a reported environment", () => {
+  test("home expansion uses the reported cwd or the account home, acquired only for a tilde", () => {
+    const account = jest.fn(() => "/account/home");
+    for (const [env, config, path] of [
+      [{}, "chosen", "/p/chosen"],
+      [{ HOME: "relative-home" }, "~/chosen", "/p/relative-home/chosen"],
+      [{}, "~/chosen", "/account/home/chosen"],
+    ] as const) {
+      const checked = check(
+        env,
+        undefined,
+        { envKey: environmentKey(env), args: ["bar", "--config-only", config] },
+        account,
+      );
+      if (!checked.ok) throw new Error(checked.problems.join("; "));
+      expect(checked.req.requested.target.path).toBe(path);
+    }
+    expect(account).toHaveBeenCalledTimes(1);
+  });
   test("agrees with the native wire digest for numeric, escaped and non-ASCII names and values", () => {
-    const pairs = [
-      ["\u{10000}", "astral"],
-      ["10", "ten"],
-      ["2", "two"],
-      ["CTRL", 'a\b\t\n\f\r\u001b"\\'],
-      ["\ue000", "bmp\u2028\u2029"],
-    ];
-    const expected =
-      "827ce63406a6cbdb3bbeb908e75973e13bd6ca1b406448709d48b631279632b5";
-    expect(environmentKey(Object.fromEntries(pairs))).toBe(expected);
-    expect(environmentKey(Object.fromEntries(pairs.reverse()))).toBe(expected);
+    expect(environmentKey(Object.fromEntries(vector.pairs))).toBe(
+      vector.sha256,
+    );
+    expect(
+      environmentKey(Object.fromEntries([...vector.pairs].reverse())),
+    ).toBe(vector.sha256);
   });
 
   test("a verified snapshot supplies hints from the client's cwd and home and stays outside the renderer", () => {

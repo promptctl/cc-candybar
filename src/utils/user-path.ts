@@ -3,14 +3,16 @@
 
 import path from "node:path";
 
+export type UserHome = string | (() => string);
+
 // [LAW:types-are-the-program] Only the shell-standard home-expansion forms trigger
 // replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
 // `~alice/cfg` (POSIX named-home lookup) is NOT expanded — we have no way
 // to resolve another user's home and a literal substitution would corrupt
 // the path (`<homedir>alice/cfg`).
-function expandHome(p: string, home: string): string {
+function expandHome(p: string, home: UserHome): string {
   return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
-    ? home + p.slice(1)
+    ? (typeof home === "function" ? home() : home) + p.slice(1)
     : p;
 }
 
@@ -23,7 +25,11 @@ function expandHome(p: string, home: string): string {
 // resolved against whichever shell spawned the daemon); for one named in a
 // file, that file's directory. The Rust client mirrors it for the hint
 // (rust-client/src/main.rs, config_env_hint).
-export function resolveUserPath(base: string, p: string, home: string): string {
+export function resolveUserPath(
+  base: string,
+  p: string,
+  home: UserHome,
+): string {
   return path.resolve(base, expandHome(p, home));
 }
 
@@ -34,7 +40,7 @@ export function resolveUserPath(base: string, p: string, home: string): string {
 export function explicitConfigPath(
   base: string,
   p: unknown,
-  home: string,
+  home: UserHome,
 ): string | undefined {
   return typeof p === "string" && p !== ""
     ? resolveUserPath(base, p, home)

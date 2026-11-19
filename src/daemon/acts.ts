@@ -32,9 +32,7 @@ type Of<K extends HostAct["kind"]> = Extract<HostAct, { kind: K }>;
 
 export interface ActPrograms {
   readonly launch: (launch: ClickLaunch) => Promise<LaunchResult>;
-  // [LAW:one-source-of-truth] The daemon's one edge onto Claude Code's
-  // prompt: every read of it and every slash line typed into it go through
-  // this edge.
+  // Reading the prompt and typing into it must use the same tmux session.
   readonly claudeInput: ClaudeInputEdge;
 }
 

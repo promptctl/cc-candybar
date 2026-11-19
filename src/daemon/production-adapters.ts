@@ -3,6 +3,7 @@
 // build their daemon over these or over fakes of them, and `createDaemon` names
 // none (eslint.config.mjs lets only this file construct each).
 
+import { userInfo } from "node:os";
 import { SESSION_BOOK_FILE } from "./session-book.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
@@ -29,7 +30,9 @@ export function productionAdapters(
   daemonLog: DaemonLog,
   machine: Timekeeper,
 ): DaemonAdapters {
+  let accountHome: string | undefined;
   return {
+    accountHome: () => (accountHome ??= userInfo().homedir),
     daemonLog,
     launcher: (own) => systemLauncher(own, machine),
     profile: (name, log) =>

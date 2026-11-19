@@ -3,6 +3,7 @@
 // sending a full request compatible with an older daemon.
 
 import type { Host } from "./host";
+import type { UserHome } from "./utils/user-path";
 import type { ClientHints } from "./daemon/foundations/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
@@ -41,7 +42,7 @@ export function terminalObservation(
 // Every hint but `client`: what the calling program IS is no fact of its
 // environment, and only a statusline client has one to report.
 export function detectClientHints(
-  host: Pick<Host, "env" | "home">,
+  host: Pick<Host, "env"> & { readonly home: UserHome },
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
 ): Omit<ClientHints, "client"> {

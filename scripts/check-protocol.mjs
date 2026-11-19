@@ -172,6 +172,11 @@ function followerCodesTheDaemonSends() {
 // vendored statusline push (`push`) or the Swift URL handler (`swift`); the
 // runner diffs any of them against TS.
 const CHECKS = [
+  ...["SESSION_RENDER_KIND", "ENVIRONMENT_NEEDED", "UNKNOWN_REQUEST_KIND"].map((name) => ({
+    label: name,
+    ts: lit(TS_PROTOCOL, new RegExp(`export const ${name} = "([^"]+)";`)),
+    rust: lit(RS_MAIN, new RegExp(`^const ${name}: &str = "([^"]+)";$`, "m")),
+  })),
   {
     label: "FRAME_HEADER_BYTES, as the URL handler writes frames",
     ts: num(TS_PROTOCOL, /export const FRAME_HEADER_BYTES = ([\d\s*]+);/),

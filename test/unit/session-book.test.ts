@@ -230,7 +230,7 @@ describe("the book", () => {
       claudeConfigDir: undefined,
       execution: reported,
     };
-    book.heard(request("s1"), { kind: "ok", value: reported }, registration);
+    book.heard(request("s1"), registration);
     expect(book.reportedFor(S1, registration.key)).toBe(registration);
     expect(book.reportedFor(S2, registration.key)).toBeNull();
     expect(book.reportedFor(S1, "b".repeat(64))).toBeNull();
@@ -241,7 +241,7 @@ describe("the book", () => {
     expect(restarted.reportedFor(S1, registration.key)).toBeNull();
     book.heard(request("s1"), TEST_ENVIRONMENT);
     expect(book.reportedFor(S1, registration.key)).toBeNull();
-    book.heard(request("s1"), { kind: "ok", value: reported }, registration);
+    book.heard(request("s1"), registration);
     for (let i = 0; i < 256; i++)
       book.heard(request(`other-${i}`), TEST_ENVIRONMENT);
     expect(book.reportedFor(S1, registration.key)).toBeNull();

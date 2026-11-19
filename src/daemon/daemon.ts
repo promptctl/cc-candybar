@@ -112,6 +112,7 @@ export interface RunningBundle {
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
 // its stats and its closing signal, is a factory over those.
 export interface DaemonAdapters {
+  readonly accountHome: () => string;
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
@@ -415,8 +416,9 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const desktopPrograms = programs(launcher);
   const acts = new Acts({
     programsFor: (session) => {
-      // Historical and sessionless desktop links still open and copy. Config
-      // programs have their own admission rule in Runs and SourceRuns.
+      // Fixed desktop tools also serve sessionless links, old clients and
+      // links opened before a restarted host hears from the session again.
+      // Runs and SourceRuns require a report for user-configured programs.
       const heard =
         session === null ? undefined : sessionBook.environmentOf(session);
       if (heard?.kind !== "ok") return desktopPrograms;
@@ -817,6 +819,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   };
 
   const parts: DaemonParts = {
+    accountHome: inputs.accountHome,
     closing: cancelWork.signal,
     home: host.home,
     launcher,

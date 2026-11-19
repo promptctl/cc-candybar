@@ -13,14 +13,14 @@ import {
   NOTHING_TO_SETTLE,
   type StatuslineAnswer,
 } from "./statusline-answer.js";
-import {
-  checkRenderRequest,
-  environmentForRender,
-} from "./render-checkpoint.js";
+import { checkRenderRequest } from "./render-checkpoint.js";
 import type { EffectOutcome } from "../renderer-interface/interface.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import {
   PROTOCOL_VERSION,
+  SESSION_RENDER_KIND,
+  ENVIRONMENT_NEEDED,
+  UNKNOWN_REQUEST_KIND,
   URL_FRAME_VERSIONS,
   awaitsVerdict,
   type ClickRequest,
@@ -146,7 +146,7 @@ function closingResponse(
   accepted: Acceptance,
 ): Response {
   const kind =
-    rawKind === "render-session"
+    rawKind === SESSION_RENDER_KIND
       ? "render"
       : rawKind === "render" || rawKind === "click"
         ? rawKind
@@ -196,7 +196,7 @@ export function refuseClosingInbound(
 export type ReplyRequest = Exclude<Request, SubscribeRequest>;
 const REPLY_KINDS: Readonly<Record<ReplyRequest["kind"], true>> = {
   render: true,
-  "render-session": true,
+  [SESSION_RENDER_KIND]: true,
   "pane-session": true,
   shutdown: true,
   stats: true,
@@ -302,7 +302,7 @@ export async function handleRequest(
   // would coerce into one — is refused here, so replyTo is total over the
   // kinds it is typed for.
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
-    return refuse("BAD_REQUEST", "unknown kind");
+    return refuse("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 
@@ -392,11 +392,7 @@ export async function replyTo(
     });
   }
 
-  if (req.kind === "render" || req.kind === "render-session") {
-    const env = environmentForRender(req, (session, key) =>
-      parts.sessionBook.reportedFor(session, key),
-    );
-    if (env.kind === "needed") return stay({ ok: true, need: "environment" });
+  if (req.kind === "render" || req.kind === SESSION_RENDER_KIND) {
     // [LAW:effects-at-boundaries] The render request's two clock reads: the
     // instant it arrived at, which its client sightings are stamped with, and the
     // monotonic start its wait and duration are measured from, so a clock
@@ -412,7 +408,6 @@ export async function replyTo(
     // A throw is this request's own RENDER_FAILED reply, so the event is the
     // one record of it and the connection's catch never sees a render.
     const facts: RequestFacts = [];
-    stats.requestsTotal++;
     // Where this request came in the order they arrived: renders of one session
     // can finish out of it.
     // [LAW:one-source-of-truth] The request's id, its place in the order the
@@ -464,16 +459,33 @@ export async function replyTo(
       parts.log(level, line);
       return reply;
     };
+    const failedDraw = (error: unknown) => {
+      const failure = renderFailure(failureOf(error));
+      return renderRecord({
+        outcome: failure,
+        resp: failedWith(failure.message),
+        settled: NOTHING_TO_SETTLE,
+      });
+    };
+    let checked: ReturnType<typeof checkRenderRequest>;
+    try {
+      checked = checkRenderRequest(req, stats, parts.log, parts.home, {
+        reportedFor: (session, key) =>
+          parts.sessionBook.reportedFor(session, key),
+        accountHome: parts.accountHome,
+      });
+    } catch (error) {
+      stats.requestsTotal++;
+      return recorded(failedDraw(error));
+    }
+    if ("need" in checked) {
+      stats.environmentMisses++;
+      return stay({ ok: true, need: ENVIRONMENT_NEEDED });
+    }
+    stats.requestsTotal++;
     const draw = async (): Promise<ReturnType<typeof renderRecord>> => {
       let answered: StatuslineAnswer | undefined;
       try {
-        const checked = checkRenderRequest(
-          req,
-          stats,
-          parts.log,
-          parts.home,
-          env,
-        );
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
         const renderer =
           parts.rendererFor?.(checked.req, checked.environment, order) ??
@@ -491,8 +503,7 @@ export async function replyTo(
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
           parts.sessionBook.heard(
             checked.req,
-            checked.environment,
-            checked.registration,
+            checked.registration ?? checked.environment,
           );
         const tmux = checked.req.hints.tmux;
         if (tmux != null) void parts.retiredTmuxStatus.observe(tmux.socket);
@@ -531,12 +542,7 @@ export async function replyTo(
         // [LAW:single-enforcer] If the answer never reaches the connection,
         // it still settles the present that the renderer handed back.
         answered?.settled(false);
-        const failure = renderFailure(failureOf(error));
-        return renderRecord({
-          outcome: failure,
-          resp: failedWith(failure.message),
-          settled: NOTHING_TO_SETTLE,
-        });
+        return failedDraw(error);
       }
     };
     return recorded(await draw());

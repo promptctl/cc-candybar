@@ -1,8 +1,8 @@
 // The one crossing an untrusted render request makes into a checked one.
 
 import { parseArgs } from "node:util";
-import { isAbsolute } from "node:path";
-import { explicitConfigPath } from "../utils/user-path";
+import { isAbsolute, resolve } from "node:path";
+import { explicitConfigPath, type UserHome } from "../utils/user-path";
 import { detectClientHints } from "../client-hints";
 import {
   CONFIG_FLAGS,
@@ -12,6 +12,7 @@ import {
 } from "../config-hint";
 import {
   parseClientHints,
+  ENVIRONMENT_NEEDED,
   refusedHints,
   RENDER_ENCODINGS,
   type ReaderRenderRequest,
@@ -41,7 +42,7 @@ import {
 function parseRenderArgs(
   args: string[],
   cwd: string,
-  home: string,
+  home: UserHome,
   configEnv: string | undefined,
 ):
   | { target: RequestedTarget; refusedArgs: readonly RefusedArg[] }
@@ -123,27 +124,49 @@ function parseRenderEncoding(
       };
 }
 
-// [LAW:parse-dont-validate] The checkpoint a render request crosses once: a
-// checked request, or the problems that refuse it.
-export function checkRenderRequest(
-  req: ReaderRenderRequest | SessionRenderRequest,
-  stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
-  log: DaemonLogger,
-  home: string,
-  env: PresentedEnvironment = readFullEnvironment(
-    "env" in req ? req.env : undefined,
-    req.envKey,
-  ),
-):
+type CheckedRender =
   | {
       ok: true;
       req: CheckedRenderRequest;
-      // Beside the request, never in it: the request is the renderer's
-      // context, and no renderer input carries an environment.
+      // Both stay with the host. The renderer receives only req.
       environment: SessionEnvironment;
       registration: RegisteredEnvironment | null;
     }
-  | { ok: false; problems: string[] } {
+  | { ok: false; problems: string[] };
+
+type CheckInputs = [
+  stats: Pick<RuntimeStats, "firstSightOfUnknownHookField">,
+  log: DaemonLogger,
+  home: string,
+];
+interface EnvironmentLookup {
+  readonly reportedFor: (
+    session: SessionId,
+    key: string,
+  ) => RegisteredEnvironment | null;
+  readonly accountHome: () => string;
+}
+interface EnvironmentChallenge {
+  readonly need: typeof ENVIRONMENT_NEEDED;
+}
+
+// A full render always has a final verdict. A reference can ask for a snapshot
+// once its hook, arguments, session id and deadline have crossed this checkpoint.
+export function checkRenderRequest(
+  req: ReaderRenderRequest,
+  ...inputs: [...CheckInputs, lookup?: EnvironmentLookup]
+): CheckedRender;
+export function checkRenderRequest(
+  req: ReaderRenderRequest | SessionRenderRequest,
+  ...inputs: [...CheckInputs, lookup: EnvironmentLookup]
+): CheckedRender | EnvironmentChallenge;
+export function checkRenderRequest(
+  req: ReaderRenderRequest | SessionRenderRequest,
+  stats: CheckInputs[0],
+  log: DaemonLogger,
+  home: string,
+  lookup?: EnvironmentLookup,
+): CheckedRender | EnvironmentChallenge {
   // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
   // The validator reports missing/wrong-typed required fields and unknown
   // top-level keys. Required-field problems are *protocol* failures
@@ -202,7 +225,8 @@ export function checkRenderRequest(
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`,
     );
   }
-  if (env.kind === "refused") wireProblems.push(env.problem);
+  const presented = readEnvironment(req);
+  if (presented.kind === "refused") wireProblems.push(presented.problem);
   const encoding = parseRenderEncoding(req.encoding);
   if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
@@ -214,24 +238,41 @@ export function checkRenderRequest(
     wireProblems.length > 0 ||
     !sessionId.ok ||
     !encoding.ok ||
-    env.kind === "refused"
+    presented.kind === "refused"
   )
     return { ok: false, problems: wireProblems };
-  const reportedHome =
-    env.kind === "reported" && env.key !== undefined ? env.env.HOME : undefined;
-  const clientHome =
-    reportedHome && isAbsolute(reportedHome) ? reportedHome : home;
+  let env: Exclude<PresentedEnvironment, { kind: "refused" }>;
+  if (presented.kind === "reference") {
+    const previous = lookup?.reportedFor(sessionId.id, presented.key);
+    if (!previous) return { need: ENVIRONMENT_NEEDED };
+    env = {
+      kind: "reported",
+      env: previous.reported,
+      key: previous.key,
+      previous,
+    };
+  } else {
+    env = presented;
+  }
+  const keyed =
+    env.kind === "reported" && env.key !== undefined ? env.env : undefined;
+  // HOME may be relative to the live client. If it is unset, expand a tilde
+  // using the account's home, independent of the shell that started the host.
+  const clientHome = keyed
+    ? keyed.HOME
+      ? resolve(req.cwd, keyed.HOME)
+      : (lookup?.accountHome ?? home)
+    : home;
   // A keyed report is the source of the environmental hints. The physical
   // terminal and the program that sent the request are live observations.
-  const rawHints =
-    env.kind === "reported" && env.key !== undefined
-      ? {
-          ...detectClientHints({ env: env.env, home: clientHome }, req.cwd, {}),
-          ...(req.termCols !== undefined && { termCols: req.termCols }),
-          ...(req.termRows !== undefined && { termRows: req.termRows }),
-          client: req.client,
-        }
-      : req;
+  const rawHints = keyed
+    ? {
+        ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
+        ...(req.termCols !== undefined && { termCols: req.termCols }),
+        ...(req.termRows !== undefined && { termRows: req.termRows }),
+        client: req.client,
+      }
+    : req;
   const hints = parseClientHints(rawHints);
   // [LAW:dataflow-not-control-flow] The *request's* cwd, not the daemon's
   // process.cwd(), so config resolution depends only on request data — the
@@ -346,12 +387,17 @@ function environmentForSession(
   return { environment: { kind: "ok", value: execution }, registration };
 }
 
-function readFullEnvironment(raw: unknown, key: unknown): PresentedEnvironment {
-  if (key !== undefined && !validKey(key))
+function readEnvironment(
+  req: ReaderRenderRequest | SessionRenderRequest,
+): PresentedEnvironment | { kind: "reference"; key: string } {
+  const key = req.envKey;
+  if ((req.kind !== "render" || key !== undefined) && !validKey(key))
     return {
       kind: "refused",
       problem: "request 'envKey' is not a SHA-256 digest",
     };
+  if (req.kind !== "render") return { kind: "reference", key: req.envKey };
+  const raw: unknown = req.env;
   if (key !== undefined && raw === undefined)
     return {
       kind: "refused",
@@ -375,23 +421,4 @@ function readFullEnvironment(raw: unknown, key: unknown): PresentedEnvironment {
       problem: "request 'envKey' does not match its environment",
     };
   return { kind: "reported", env, key };
-}
-
-// A miss asks the client for its snapshot before a render or a sighting starts.
-export function environmentForRender(
-  req: ReaderRenderRequest | SessionRenderRequest,
-  lookup: (session: SessionId, key: string) => RegisteredEnvironment | null,
-): PresentedEnvironment | { kind: "needed" } {
-  if (req.kind === "render") return readFullEnvironment(req.env, req.envKey);
-  if (!validKey(req.envKey))
-    return {
-      kind: "refused",
-      problem: "request 'envKey' is not a SHA-256 digest",
-    };
-  const session = parseSessionId(req.hookData?.session_id);
-  if (!session.ok) return { kind: "absent" }; // The render checkpoint reports the session's error.
-  const previous = lookup(session.id, req.envKey);
-  return previous === null
-    ? { kind: "needed" }
-    : { kind: "reported", env: previous.reported, key: previous.key, previous };
 }

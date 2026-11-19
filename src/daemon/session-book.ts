@@ -2,9 +2,8 @@
 // context (src/renderer-interface/request-context.ts), from its newest
 // request, kept in the host's state directory, so a click after a restart,
 // before the session's next request, still has the config it acts on. What
-// its client reports now (pane, terminal) is the newest request's, held in
-// memory by the frame feeds, and never kept here. The session's environment
-// is held here in memory alone, never written: it carries keys and tokens,
+// its client reports now (pane, terminal) comes from the newest request and
+// its environment. The session's environment is held here in memory alone: it carries keys and tokens,
 // and a click finds it here after the collector has retired the session.
 
 import { isAbsolute } from "node:path";
@@ -79,10 +78,7 @@ export class SessionBook {
   // The environment of each session heard since the daemon started.
   private readonly environments = new Map<
     SessionId,
-    {
-      execution: SessionEnvironment;
-      registration: RegisteredEnvironment | null;
-    }
+    SessionEnvironment | RegisteredEnvironment
   >();
   // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
   // and the close flushes what the open phase saved: before the load, a save
@@ -110,11 +106,10 @@ export class SessionBook {
   // it moved.
   heard(
     req: CheckedRenderRequest,
-    environment: SessionEnvironment,
-    registration: RegisteredEnvironment | null = null,
+    environment: SessionEnvironment | RegisteredEnvironment,
   ): void {
     const session = req.hookData.session_id;
-    this.environments.set(session, { execution: environment, registration });
+    this.environments.set(session, environment);
     const durable = durableOf(req);
     const held = this.book.get(session);
     this.book.delete(session);
@@ -139,12 +134,13 @@ export class SessionBook {
   // [LAW:one-source-of-truth] The environment a program the host runs for
   // the session starts from: its newest request's, or why the host has none.
   environmentOf(session: SessionId): SessionEnvironment {
-    return this.environments.get(session)?.execution ?? NOT_HEARD;
+    const held = this.environments.get(session) ?? NOT_HEARD;
+    return "execution" in held ? { kind: "ok", value: held.execution } : held;
   }
 
   reportedFor(session: SessionId, key: string): RegisteredEnvironment | null {
-    const held = this.environments.get(session)?.registration;
-    return held?.key === key ? held : null;
+    const held = this.environments.get(session);
+    return held && "key" in held && held.key === key ? held : null;
   }
 
   close(): Promise<void> {

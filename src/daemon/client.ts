@@ -16,6 +16,9 @@ import {
 import {
   CONNECT_TIMEOUT_MS,
   TOTAL_BUDGET_MS,
+  SESSION_RENDER_KIND,
+  ENVIRONMENT_NEEDED,
+  UNKNOWN_REQUEST_KIND,
   type ClientHints,
   type Response,
 } from "./foundations/protocol";
@@ -77,14 +80,15 @@ export async function tryRenderViaDaemon(
   const expiresAt = world.clock.now() + budgets.budgetMs;
   const env = plainEnvironment(world.host.env);
   const envKey = environmentKey(env);
-  const fields = { hookData, args, cwd, envKey, ...observed };
+  const { termCols, termRows, client } = observed;
+  const fields = { hookData, args, cwd, envKey, termCols, termRows, client };
   const needed = Symbol("environment");
   const first = await requestOutcome<string | typeof needed>(
     world,
-    (deadline) => ({ kind: "render-session", ...fields, deadline }),
+    (deadline) => ({ kind: SESSION_RENDER_KIND, ...fields, deadline }),
     budgets,
     (resp) =>
-      "need" in resp && resp.need === "environment"
+      "need" in resp && resp.need === ENVIRONMENT_NEEDED
         ? needed
         : projectOutput(resp),
     expiresAt,
@@ -94,16 +98,19 @@ export async function tryRenderViaDaemon(
   } else if (
     first.kind !== "permanent" ||
     first.cause !== "bad_request" ||
-    first.message !== "unknown kind"
+    first.message !== UNKNOWN_REQUEST_KIND
   ) {
     return first;
   }
   // A missing snapshot and an older v3 daemon's refusal are both definite
   // answers before a render. Resending after any other failure could draw twice.
-  const legacyHints = detectClientHints({ env, home: world.host.home }, cwd, {
-    columns: observed.termCols,
-    rows: observed.termRows,
-  });
+  const legacyHints =
+    first.kind === "ok"
+      ? undefined
+      : detectClientHints({ env, home: world.host.home }, cwd, {
+          columns: observed.termCols,
+          rows: observed.termRows,
+        });
   return requestOutcome(
     world,
     (deadline) => ({

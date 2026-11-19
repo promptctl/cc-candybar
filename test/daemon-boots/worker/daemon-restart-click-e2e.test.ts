@@ -188,6 +188,9 @@ test("a click in either session uses its environment for desktop tools and both 
       termCols: 120,
     };
     const turns = answeredEvents(daemon.log, session).length;
+    await expect(
+      sendDaemonRequest(daemon, { ...compact, cwd: "relative" }),
+    ).resolves.toMatchObject({ ok: false, code: "BAD_REQUEST" });
     await expect(sendDaemonRequest(daemon, compact)).resolves.toEqual({
       ok: true,
       need: "environment",
@@ -234,6 +237,12 @@ test("a click in either session uses its environment for desktop tools and both 
     );
     await checkTools(second, "click-b", "second");
     launches.length = 0;
+    await expect(
+      sendDaemonRequest(daemon, { v: PROTOCOL_VERSION, kind: "stats" }),
+    ).resolves.toMatchObject({
+      ok: true,
+      stats: { requests: { environmentMisses: 3 } },
+    });
     await click(daemon, linkTo(first, "DESKTOP"));
     expect(
       launches.map((launch) => [launch.category, launch.environment]),

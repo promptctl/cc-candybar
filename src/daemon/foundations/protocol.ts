@@ -40,6 +40,10 @@ import type { Timekeeper } from "../../time";
 // blank-statusbar minutes for a feature their session doesn't even use.
 // Don't bump for growth.
 export const PROTOCOL_VERSION = 3;
+export const SESSION_RENDER_KIND = "render-session";
+export const ENVIRONMENT_NEEDED = "environment";
+// The precise v3 refusal that proves an older host did not draw a frame.
+export const UNKNOWN_REQUEST_KIND = "unknown kind";
 
 // [LAW:one-source-of-truth] A statusline client's budgets: how long its
 // connect may take, and how long its render round trip has. Wire facts, read
@@ -119,7 +123,7 @@ export type SessionRenderRequest = Pick<
   | "termCols"
   | "termRows"
   | "client"
-> & { kind: "render-session"; envKey: string };
+> & { kind: typeof SESSION_RENDER_KIND; envKey: string };
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
@@ -479,7 +483,7 @@ export type Request =
 
 export type Response =
   | { ok: true; output: string }
-  | { ok: true; need: "environment" }
+  | { ok: true; need: typeof ENVIRONMENT_NEEDED }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
   | { ok: true; frame: WireFrame<string> }
   | { ok: true; stats: StatsSnapshot }

@@ -55,6 +55,7 @@ const ROLLING_BUFFER_CAP = 16384;
 export class RuntimeStats {
   readonly startedAt: Date;
   requestsTotal = 0;
+  environmentMisses = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
@@ -354,6 +355,7 @@ export class RuntimeStats {
       arrayBuffersBytes: mem.arrayBuffers,
       requests: {
         total: this.requestsTotal,
+        environmentMisses: this.environmentMisses,
         errored: this.requestsErrored,
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
