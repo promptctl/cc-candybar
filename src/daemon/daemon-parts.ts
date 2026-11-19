@@ -13,7 +13,6 @@ import type { Runs } from "./runs.js";
 import type { SourceRuns } from "./source-runs.js";
 import type { RuntimeStats } from "./stats";
 import type { DeclaredStatusLines, TmuxStatusLines } from "./tmux-status.js";
-import type { UpdateWatch } from "./update-notice";
 import type { RendererHost } from "./renderer-host.js";
 import type { RefreshLedger } from "../utils/refresh-ledger";
 import type { DaemonLogger } from "../utils/logger";
@@ -48,7 +47,6 @@ export interface DaemonParts {
   readonly tmuxStatusLines: TmuxStatusLines;
   readonly declaredStatusLines: DeclaredStatusLines;
   readonly frameFeeds: FrameFeeds<CheckedRenderRequest>;
-  readonly updateWatch: UpdateWatch;
   readonly limits: LimitsHandle;
   // The host's one path to the main renderer (src/daemon/renderer-host.ts).
   readonly renderer: RendererHost;

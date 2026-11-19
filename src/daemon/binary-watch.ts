@@ -4,15 +4,9 @@
 // stops existing (a pruned `pnpm dlx` cache, a moved or deleted checkout),
 // exit at the next sample so the next client respawns from code a file holds.
 // Cheap (one stat per target a minute); the timer is unref()'d so it never
-// holds the process alive. `checkNow` is the same sampler the interval runs,
-// for the moment the daemon itself changed the bundle (the update notice's
-// rebuild) and need not wait a minute to notice.
-//
-// [LAW:no-ambient-temporal-coupling] A sample awaits `held`, which waits on the
-// update watch's act queue, so `ended` is read after that await: of two samples
-// overlapping there, or one the close landed on, none exits twice or late.
+// holds the process alive.
 
-import { changeLogger, type DaemonLogger } from "../utils/logger";
+import type { DaemonLogger } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import type { Timekeeper } from "../time";
 
@@ -46,8 +40,6 @@ export interface BinaryWatchOptions {
   readonly targets: readonly string[];
   readonly intervalMs: number;
   readonly stat: BundleStat;
-  /** True while something the restart would kill is rewriting the bundle. */
-  readonly held: () => Promise<boolean>;
   /** The daemon's one exit funnel, which owns running only once. */
   readonly exit: () => void;
   readonly log: DaemonLogger;
@@ -55,14 +47,11 @@ export interface BinaryWatchOptions {
 
 export interface BinaryWatch {
   arm(): void;
-  // Settles when this check has run; never rejects, so it can be left running.
-  checkNow(): Promise<void>;
   close(): void;
 }
 
 export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
-  const { targets, intervalMs, stat, held, exit, log, clock } = opts;
-  const logHeld = changeLogger(log);
+  const { targets, intervalMs, stat, exit, log, clock } = opts;
   // The stamps the daemon booted with, taken the same way every sample is.
   const boot = targets.map((path) => ({ path, stamp: mtimeOf(path, stat) }));
   // [LAW:types-are-the-program] A stat that failed at boot leaves nothing to
@@ -78,7 +67,7 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
     ended = true;
     stopSampling?.();
   };
-  const sample = async (): Promise<void> => {
+  const sample = (): void => {
     if (ended) return;
     for (const { path, stamp } of watched) {
       const now = mtimeOf(path, stat);
@@ -88,15 +77,6 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       }
       if (!sameStamp(stamp, now)) {
         const what = `binary ${now.kind === "absent" ? "gone" : "changed"} (${path})`;
-        const waiting = await held();
-        if (ended) return;
-        if (waiting) {
-          logHeld([
-            "info",
-            `${what}; the restart waits for the running update`,
-          ]);
-          return;
-        }
         log("info", `${what}; shutting down`);
         end();
         exit();
@@ -104,13 +84,14 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
       }
     }
   };
-  // [LAW:no-silent-failure] Nothing awaits a check, and a rejection nobody
-  // holds is the daemon's death (server.ts): a check that failed is logged, and
-  // the next one looks again.
-  const check = (): Promise<void> =>
-    sample().catch((e: unknown) => {
-      log("error", `binary check failed: ${(e as Error).message}`);
-    });
+  // [LAW:no-silent-failure] A failed sample is logged at the timer boundary.
+  const check = (): void => {
+    try {
+      sample();
+    } catch (error) {
+      log("error", `binary check failed: ${(error as Error).message}`);
+    }
+  };
   return {
     arm() {
       for (const { path, stamp } of boot) {
@@ -121,11 +102,10 @@ export function makeBinaryWatch(opts: BinaryWatchOptions): BinaryWatch {
           );
         }
       }
-      stopSampling = clock.every(intervalMs, () => void check(), {
+      stopSampling = clock.every(intervalMs, check, {
         unref: true,
       });
     },
-    checkNow: check,
     close: end,
   };
 }

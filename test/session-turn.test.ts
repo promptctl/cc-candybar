@@ -6,9 +6,9 @@
 //
 // [LAW:behavior-not-structure] Each case is a view opened through the daemon's
 // own composition (test/helpers/session-rig.ts) and read the way a draw reads
-// it; what moves is an owner, a pick, a request or the update fact.
+// it; what moves is an owner, a pick, a request or a daemon warning.
 
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,8 +25,7 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { instantOf } from "../src/utils/instant";
 import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
-import type { Fact } from "../src/facts/fact";
-import type { Update } from "../src/facts/world-state";
+import type { DaemonFacts } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -169,7 +168,7 @@ describe("a world state that cannot be stamped", () => {
 describe("a fault that persists", () => {
   test("is one world state: a later move under the same failure hands in nothing and logs nothing again", async () => {
     const broken = observable.box(false);
-    // What the stamp reads beside the failing update, so it stamps again.
+    // What the stamp reads beside the failing read, so it stamps again.
     const tick = observable.box(0);
     const logged: string[] = [];
     const changed: string[] = [];
@@ -202,26 +201,26 @@ describe("what wakes a view", () => {
   async function woken() {
     const changed: string[] = [];
     const depth = observable.box(0);
-    const update = observable.box<Fact<Update>>(pendingOf("unread"));
+    const warnings = observable.box<DaemonFacts["fileEvents"]>([]);
     const rig = sessionRig(dir, cleanups, {
-      daemon: () => daemonFactsOf(update.get()),
+      daemon: () => daemonFactsOf(warnings.get()),
       source: {
         history: () => ({ undo: depth.get(), redo: 0, sinceEdit: 0 }),
       },
       observers: { onViewChanged: (sid) => changed.push(sid) },
     });
     const view = await openSettled(rig, dir, cleanups, null);
-    return { rig, view, changed, depth, update };
+    return { rig, view, changed, depth, warnings };
   }
 
-  test("a history move and an update move each wake it", async () => {
-    const { changed, depth, update } = await woken();
+  test("a history move and a daemon warning each wake it", async () => {
+    const { changed, depth, warnings } = await woken();
     const settled = changed.length;
     runInAction(() => depth.set(1));
     expect(changed.length).toBeGreaterThan(settled);
 
     const afterDepth = changed.length;
-    runInAction(() => update.set({ kind: "absent", at: AT }));
+    runInAction(() => warnings.set(FILE_EVENTS_STALLED));
     expect(changed.length).toBeGreaterThan(afterDepth);
   });
 

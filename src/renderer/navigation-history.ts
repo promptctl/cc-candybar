@@ -14,7 +14,6 @@
 
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "../renderer-interface/history-storage";
-import { UPDATE_DISMISSED_KEY } from "../daemon/foundations/update-keys";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
 import { observable, runInAction } from "mobx";
 import { recordingView } from "./session-state";
@@ -37,15 +36,12 @@ const MAX_STEPS = 20;
 const MAX_SESSIONS = 32;
 
 // [LAW:one-source-of-truth] The keys going back restores: everything those
-// verbs write except a DECISION — a setting (undo's), a dismissed update
-// notice, or a confirm's arming, which would come back one click from firing —
+// verbs write except a DECISION — a setting (undo's) or a confirmation's
+// arming, which would come back one click from firing —
 // and the diagnostics viewer, which is paged and closed by its own ‹ › ✕, so
 // a step through the messages never fills the history ◁ walks.
 const isNavigationKey = (key: string): boolean =>
-  !isSettingKey(key) &&
-  !isConfirmKey(key) &&
-  key !== UPDATE_DISMISSED_KEY &&
-  key !== DIAGNOSTICS_VIEWING;
+  !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
 
 // Records one click's navigation. Writes through `sessionState` land in the
 // store it wraps and are recorded; `commit` turns them into one step.

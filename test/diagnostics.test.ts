@@ -24,7 +24,6 @@ import {
   ERROR_SEVERITY,
   HANDOFF_SEVERITY,
   handoffRows,
-  UPDATE_SEVERITY,
   viewerKey,
   viewedIndex,
   viewerRows,
@@ -82,7 +81,7 @@ const ERROR = [
 ].join("\n");
 
 const notice = (text: string): DiagnosticMessage => ({
-  severity: UPDATE_SEVERITY,
+  severity: HANDOFF_SEVERITY,
   about: text,
   message: text,
   copy: text,
@@ -113,7 +112,7 @@ describe("the diagnostic list", () => {
     };
     const list = collectDiagnostics(
       ["first error", "second error"],
-      [notice("newer"), question],
+      [notice("pushed surface"), question],
       ["a warning", "another"],
     );
     expect(list.map((m) => [m.severity, m.message])).toEqual([
@@ -121,7 +120,7 @@ describe("the diagnostic list", () => {
       [ERROR_SEVERITY, "second error"],
       [WARNING_SEVERITY, "a warning"],
       [WARNING_SEVERITY, "another"],
-      [UPDATE_SEVERITY, "newer"],
+      [HANDOFF_SEVERITY, "pushed surface"],
       [APPROVAL_SEVERITY, "run it?"],
     ]);
   });
@@ -427,7 +426,7 @@ describe("the viewer and the handoff line at every colour depth", () => {
     lines: [[diagnosticSpan("the bar is drawn in the band", null)]],
   } as const;
   // Nothing wrong, so the indicator after the line is in its colours too.
-  const offered = collectDiagnostics([], [notice("newer")], []);
+  const offered = collectDiagnostics([], [notice("pushed surface")], []);
 
   test.each(COLOR_COMPATIBILITIES)("the viewer at %s", (depth) => {
     const list = collectDiagnostics([ERROR, "second"], [], []);

@@ -147,8 +147,6 @@ export async function startBar(
     fs.mkdirSync(claudeConfigDir);
     daemon = await startDaemon({
       ...daemonEnv.env,
-      // No update notice reaches the network: the registry is a closed port.
-      CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
       // An empty Claude Code config dir, so the daemon reads none of the host's
       // Claude Code settings or transcripts.
       CLAUDE_CONFIG_DIR: claudeConfigDir,

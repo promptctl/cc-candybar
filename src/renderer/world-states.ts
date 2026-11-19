@@ -16,8 +16,7 @@ import type { RequestFacts } from "../daemon/foundations/request-event";
 
 export class WorldStates {
   // [LAW:single-enforcer] Told every document taken, with the record of the
-  // turn that took it: each one carries the daemon-wide facts, which the
-  // update gate follows, and its session's doctor reading.
+  // turn that took it, so the doctor can take its reading from that turn.
   constructor(
     private readonly took: (document: WorldState, record: RequestFacts) => void,
   ) {}

@@ -426,7 +426,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(out).toContain("◀ ✦ endcaps ▶"); // style
     expect(out).toContain("☑ wrap"); // autoWrap
     expect(out).toContain("padding 1"); // padding
-    expect(out).toContain("☑ update notice"); // updateNotice
+    expect(out).not.toContain("update notice");
     // Nothing picked, nothing to save.
     expect(out).not.toContain("💾");
     expect(saveUrl()).toBeUndefined();

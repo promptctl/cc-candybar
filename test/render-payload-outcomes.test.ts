@@ -478,9 +478,6 @@ describe("payloadOf — effective globals projection", () => {
     expect(payload.endcaps).toEqual({ effective: "capsule" });
     expect(payload.padding).toEqual({ effective: 3 });
     expect(payload.experimentalPane).toEqual({ effective: true });
-    // `updateNotice` gates the notice channel AND labels its settings-menu
-    // toggle; `separator` only feeds the joiner, and no template reads it.
-    expect(payload.updateNotice).toEqual({ effective: true });
     expect(payload).not.toHaveProperty("separator");
   });
 });

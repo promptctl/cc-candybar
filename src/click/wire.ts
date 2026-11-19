@@ -140,13 +140,6 @@ export const VERB_BACK = "back";
 // Saving is the settings menu's `save`; leaving edit mode releases the
 // savepoint.
 export const VERB_REWIND = "rewind";
-// [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
-// 5d6): rebuild a source checkout, or stage the newer release over an
-// install. Args: `[sessionId]` — carried for click.error surfacing only. The
-// verb takes NO command and NO version: the daemon runs the act its own
-// provenance implies (src/daemon/update-notice.ts), so nothing a URL carries
-// ever reaches a shell.
-export const VERB_APPLY_UPDATE = "apply-update";
 
 // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a). `doctor-run`
 // args: `[sessionId]` — runs every check over the session's RECORDED client
@@ -292,7 +285,6 @@ const SAYS = {
   [VERB_REDO]: () => ["redo"],
   [VERB_BACK]: () => ["go back"],
   [VERB_REWIND]: () => ["cancel edits"],
-  [VERB_APPLY_UPDATE]: () => ["update cc-candybar"],
   [VERB_DOCTOR_RUN]: () => ["run doctor"],
   [VERB_DOCTOR_FIX]: ([, check]) => [`fix ${check}`],
   [VERB_DOCTOR_MARK]: ([, check, mark]) => [`mark ${check} ${mark}`],
@@ -523,7 +515,6 @@ const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
   VERB_REDO,
   VERB_BACK,
   VERB_REWIND,
-  VERB_APPLY_UPDATE,
   VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
   VERB_DOCTOR_MARK,

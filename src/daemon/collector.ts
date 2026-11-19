@@ -79,9 +79,8 @@ export interface CollectorDeps {
   // The owners every lane is read from, and the log for those whose owner
   // does not log.
   readonly owners: RenderPayloadDeps;
-  // What every session's document carries of the daemon itself: its update
-  // and the act on it (src/daemon/update-notice.ts), and its own faults.
-  // Observable, so a move of either restamps every session.
+  // The daemon diagnostics every session's document carries. An observable
+  // change restamps every session.
   readonly daemon: () => DaemonFacts;
   readonly clock: Pick<Timekeeper, "now" | "every">;
   // [LAW:one-source-of-truth] Whether an open feed draws the session: the

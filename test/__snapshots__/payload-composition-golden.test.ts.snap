@@ -162,7 +162,6 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -187,9 +186,6 @@ exports[`\`check\`'s representative payload preset compact: the payload and its 
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -374,7 +370,6 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -399,9 +394,6 @@ exports[`\`check\`'s representative payload preset default: the payload and its 
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -586,7 +578,6 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -611,9 +602,6 @@ exports[`\`check\`'s representative payload preset dense: the payload and its da
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -798,7 +786,6 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -823,9 +810,6 @@ exports[`\`check\`'s representative payload preset git: the payload and its day 
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -1010,7 +994,6 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -1035,9 +1018,6 @@ exports[`\`check\`'s representative payload preset usage: the payload and its da
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -1222,7 +1202,6 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -1247,9 +1226,6 @@ exports[`\`check\`'s representative payload preset verbose: the payload and its 
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -1434,7 +1410,6 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "style": true,
       "theme": true,
       "transitions": true,
-      "updateNotice": true,
       "variation": true,
     },
     "resumeCommand": "cd /home/tester/code/cc-candybar && claude --resume test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
@@ -1459,9 +1434,6 @@ exports[`\`check\`'s representative payload preset zen: the payload and its day 
       "effective": false,
     },
     "unsaved": 1,
-    "updateNotice": {
-      "effective": true,
-    },
     "variation": {
       "effective": "accent",
     },
@@ -1645,7 +1617,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -1672,9 +1643,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset com
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -1855,7 +1823,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -1882,9 +1849,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset def
     "effective": false,
   },
   "unsaved": 0,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -2065,7 +2029,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -2092,9 +2055,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset den
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -2275,7 +2235,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -2302,9 +2261,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset git
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -2485,7 +2441,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -2512,9 +2467,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset nul
     "effective": false,
   },
   "unsaved": 0,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -2696,7 +2648,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -2723,9 +2674,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset usa
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -2908,7 +2856,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -2935,9 +2882,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset ver
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },
@@ -3115,7 +3059,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "style": false,
     "theme": false,
     "transitions": false,
-    "updateNotice": false,
     "variation": false,
   },
   "resumeCommand": "cd /home/tester/code/project && claude --resume golden0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a",
@@ -3142,9 +3085,6 @@ exports[`a session's view, drawn from fixed owners at a fixed instant preset zen
     "effective": false,
   },
   "unsaved": 1,
-  "updateNotice": {
-    "effective": true,
-  },
   "variation": {
     "effective": "accent",
   },

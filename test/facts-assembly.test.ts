@@ -3,7 +3,7 @@
 // a turn in which nothing moved leaves untouched, and what the stamp says when
 // one answer does.
 
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
 import { restamp, type Fact } from "../src/facts/fact";
 import type { BuiltinFacts } from "../src/facts/world-state";
 import type { GitRead } from "../src/segments/git";
@@ -13,7 +13,6 @@ import {
   FACTS_VERSION,
 } from "../src/daemon/facts-assembly";
 import { stampFailureOf } from "../src/facts/world-state";
-import type { Update } from "../src/facts/world-state";
 import { readingsOf } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { oneDay } from "../src/daemon/foundations/today-facts";
@@ -335,34 +334,28 @@ describe("a session's facts document", () => {
       expect(third.diagnostics).toEqual([]);
     });
 
-    test("the update is the fact it is handed, by reference", async () => {
+    test("daemon warnings land without restamping the built-ins", async () => {
       const r = await sampled(rig());
       const readings = readingsOf(r.inputs, r.inputs.lanes());
-      const none = restamp(undefined, ABSENT, T0);
       const first = assembleFacts(
         undefined,
         SID,
         readings,
-        daemonFactsOf(none),
+        daemonFactsOf(),
         T0,
       );
-      expect(first.daemon.update.newer).toBe(none);
+      expect(first.daemon.fileEvents).toEqual([]);
       expect(
-        assembleFacts(first, SID, readings, daemonFactsOf(none), at(5)),
+        assembleFacts(first, SID, readings, daemonFactsOf(), at(5)),
       ).toBe(first);
-      const newer = restamp(
-        none,
-        ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
-        at(10),
-      );
       const second = assembleFacts(
         first,
         SID,
         readings,
-        daemonFactsOf(newer),
+        daemonFactsOf(FILE_EVENTS_STALLED),
         at(10),
       );
-      expect(second.daemon.update.newer).toBe(newer);
+      expect(second.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(second.seq).toBe(2);
       for (const key of BUILTIN_KEYS) {
         expect(second.builtins[key]).toBe(first.builtins[key]);
@@ -392,18 +385,13 @@ describe("a session's facts document", () => {
       ).toBe("another");
       // The daemon's facts are read apart from the owners that threw, so a
       // failure that persists still carries them as they stand.
-      const newer = restamp(
-        first.daemon.update.newer,
-        ok<Update>({ kind: "release", newer: [2, 0, 0], running: [1, 0, 0] }),
-        at(10),
-      );
       const moved = failedStamp(
         failedOnce,
         "the read broke",
-        daemonFactsOf(newer),
+        daemonFactsOf(FILE_EVENTS_STALLED),
       );
       expect(moved.seq).toBe(failedOnce.seq + 1);
-      expect(moved.daemon.update.newer).toBe(newer);
+      expect(moved.daemon.fileEvents).toBe(FILE_EVENTS_STALLED);
       expect(moved.builtins).toBe(first.builtins);
       expect(stampFailureOf(first)).toBeNull();
       // The next clean stamp is a document without it.

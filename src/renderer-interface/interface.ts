@@ -274,8 +274,7 @@ export type EffectOutcome =
   | { readonly kind: "failed"; readonly reason: string }
   // Refused before it acted: a change to a setting that moved since the
   // renderer read it, so nothing made over that reading can land; or an act
-  // the world it acts in would not take (a pane not at its prompt, an update
-  // already running).
+  // the world it acts in would not take (a pane not at its prompt).
   | { readonly kind: "refused"; readonly reason: string }
   // The daemon's close began before it acted, or cut it off: no failure of
   // its own, so no bar holds it.
@@ -391,12 +390,6 @@ export type Act = { readonly id: EffectId } & (
       readonly origin: RenderOrigin;
       readonly dir: string;
       readonly answer: RepoAnswer;
-    }
-  | {
-      // The update notice's act: what it applies is the update watch's to
-      // decide, from its own provenance.
-      readonly kind: "apply-update";
-      readonly session: SessionId;
     }
   | {
       // Claude Code in the pane ended and started again under the attach

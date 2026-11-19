@@ -105,9 +105,6 @@
           "minimum": 0,
           "maximum": 16
         },
-        "updateNotice": {
-          "type": "boolean"
-        },
         "menuTimeout": {
           "type": "integer",
           "minimum": 15,
@@ -148,6 +145,11 @@
           "not": {
             "pattern": "^(?:✖|✕)[\\uFE0E\\uFE0F]?$"
           }
+        },
+        "updateNotice": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete. Candybar no longer offers updates in the bar."
         }
       },
       "additionalProperties": false
@@ -1516,9 +1518,6 @@
                 "minimum": 0,
                 "maximum": 16
               },
-              "updateNotice": {
-                "type": "boolean"
-              },
               "menuTimeout": {
                 "type": "integer",
                 "minimum": 15,
@@ -1556,6 +1555,11 @@
               "menuGlyph": {
                 "not": {},
                 "description": "not allowed here — a preset cannot change the settings menu glyph"
+              },
+              "updateNotice": {
+                "type": "boolean",
+                "deprecated": true,
+                "description": "Obsolete. Candybar no longer offers updates in the bar."
               }
             },
             "additionalProperties": false
@@ -1674,9 +1678,6 @@
           "minimum": 0,
           "maximum": 16
         },
-        "updateNotice": {
-          "type": "boolean"
-        },
         "menuTimeout": {
           "type": "integer",
           "minimum": 15,
@@ -1714,6 +1715,11 @@
         "menuGlyph": {
           "not": {},
           "description": "not allowed here — the editGlobals fragment cannot change the settings menu glyph"
+        },
+        "updateNotice": {
+          "type": "boolean",
+          "deprecated": true,
+          "description": "Obsolete. Candybar no longer offers updates in the bar."
         }
       },
       "additionalProperties": false
