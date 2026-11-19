@@ -120,6 +120,8 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 
 A live session has one renderer record containing its current context and its latest world document. Only a context turn opens that record. World updates apply during its lifetime, and retirement ends it along with any waiting work. When config arrives, a waiting view or click uses the session's current origin and context. A statusline request draws from that same record and returns its present in its own turn.
 
+A draw returns frame observations. The host confirms request replies when their writes complete and pushed frames once a subscriber confirms delivery. A subscriber already showing the same bytes can confirm without another write. The renderer keeps accepted layout, cells and diagnostics by surface, with one motion and menu baseline per session. An older completion can fill its surface without changing newer session motion. View replacement and feed closure retire the matching presentation targets, so their pending receipts can settle without restoring the old layout. The successor view can still serve the copy text from a frame that remains visible.
+
 ## 7. Interfaces
 
 ### The renderer interface

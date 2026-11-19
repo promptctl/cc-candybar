@@ -143,10 +143,11 @@ function renderer(
   cleanups.push(() => parts.feeds.closeAll(READ.tick));
   // The cache's record of a delivered frame, heard on its way in.
   const recorded: string[][] = [];
-  const record = rig.cache.delivered.bind(rig.cache);
-  rig.cache.delivered = (sessionId, by, copies) => {
-    recorded.push([...copies.values()]);
-    record(sessionId, by, copies);
+  const accept = rig.cache.acceptFrame.bind(rig.cache);
+  rig.cache.acceptFrame = (id, candidate) => {
+    const result = accept(id, candidate);
+    if (result !== null) recorded.push([...candidate.frame.copies.values()]);
+    return result;
   };
   return {
     r: mainRenderer(parts, NO_PUSHES, NOTHING_STORED),
@@ -268,6 +269,13 @@ function viewOf(rig: SessionRig) {
   if (held === null) return null;
   held[Symbol.dispose]();
   return held.view;
+}
+
+function presentation(rig: SessionRig, by: "request" | "feed") {
+  const view = viewOf(rig);
+  return view === null
+    ? undefined
+    : rig.cache.presentations.layout(SESSION, by, view.presentationTargets[by]);
 }
 
 const done = (
@@ -463,17 +471,28 @@ describe("a statusline request", () => {
   test("a dropped statusline reply preserves the last delivered layout and segment cells", async () => {
     const t = renderer();
     const first = presentOf(answered(await request(t)).effects);
-    const view = viewOf(t.rig)!;
-    expect(view.frames.get("request")).toBeUndefined();
+    expect(presentation(t.rig, "request")).toBeUndefined();
     await done(t.r, first, true);
-    const record = view.frames.get("request");
-    const segments = view.frames.get("request")?.segments;
+    const record = presentation(t.rig, "request");
+    const segments = presentation(t.rig, "request")?.segments;
     expect(record).toBeDefined();
     const next = presentOf(answered(await request(t)).effects);
-    expect(view.frames.get("request")).toBe(record);
+    expect(presentation(t.rig, "request")).toBe(record);
     await done(t.r, next, false);
-    expect(view.frames.get("request")).toBe(record);
-    expect(view.frames.get("request")?.segments).toBe(segments);
+    expect(presentation(t.rig, "request")).toBe(record);
+    expect(presentation(t.rig, "request")?.segments).toBe(segments);
+  });
+
+  test("a late statusline receipt cannot replace a newer delivered frame", async () => {
+    const t = renderer();
+    const older = presentOf(answered(await request(t)).effects);
+    const newer = presentOf(answered(await request(t)).effects);
+    answered(await done(t.r, newer, true));
+    const accepted = presentation(t.rig, "request");
+    expect(accepted).toBeDefined();
+    answered(await done(t.r, older, true));
+    expect(presentation(t.rig, "request")).toBe(accepted);
+    expect(t.recorded).toHaveLength(1);
   });
 
   test("records nothing for a present its client never took, and hears of each present once", async () => {
@@ -495,29 +514,35 @@ describe("a draw", () => {
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
     const deliveries = recorded.length;
-    const view = viewOf(rig)!;
-    const record = view.frames.get("request");
-    const cells = view.frames.get("request")?.segments;
-    const motion = parts.effectSessions.of(SESSION).lastFrame();
-    const warned = parts.renderWarnings.of(SESSION, "request");
+    const record = presentation(rig, "request");
+    const cells = presentation(rig, "request")?.segments;
+    const motion = parts.renderCache.presentations.effects(SESSION).lastFrame();
+    const warned = parts.renderCache.presentations.diagnostics(
+      SESSION,
+      "request",
+    );
     const draw = () => {
       using setup = setUpRender(parts, checked(), READ, []);
-      const { drawn, kept } = drawRender(
+      const { drawn, candidate } = drawRender(
         parts,
         setup,
         ANSWERING,
         UNFOLLOWED_FEEDS,
       );
-      return { drawn, kept };
+      return { drawn, candidate };
     };
     const first = draw();
     const second = draw();
     expect(second.drawn).toEqual(first.drawn);
-    expect(second.kept).toEqual(first.kept);
-    expect(view.frames.get("request")).toBe(record);
-    expect(view.frames.get("request")?.segments).toBe(cells);
-    expect(parts.effectSessions.of(SESSION).lastFrame()).toBe(motion);
-    expect(parts.renderWarnings.of(SESSION, "request")).toBe(warned);
+    expect(second.candidate).toEqual(first.candidate);
+    expect(presentation(rig, "request")).toBe(record);
+    expect(presentation(rig, "request")?.segments).toBe(cells);
+    expect(parts.renderCache.presentations.effects(SESSION).lastFrame()).toBe(
+      motion,
+    );
+    expect(
+      parts.renderCache.presentations.diagnostics(SESSION, "request"),
+    ).toBe(warned);
     expect(recorded).toHaveLength(deliveries);
   });
 });
@@ -553,21 +578,29 @@ describe("a feed's frame", () => {
     const { r, recorded, rig } = t;
     await configure(t, checked());
     const by: string[] = [];
-    const record = rig.cache.delivered.bind(rig.cache);
-    rig.cache.delivered = (sessionId, drawer, copies) => {
-      by.push(drawer);
-      record(sessionId, drawer, copies);
+    const accept = rig.cache.acceptFrame.bind(rig.cache);
+    rig.cache.acceptFrame = (id, candidate) => {
+      const result = accept(id, candidate);
+      if (result !== null) by.push(candidate.by);
+      return result;
     };
     answered(await followFeed(r));
     const frame = await dueFrame(r);
     expect(recorded).toEqual([]);
-    expect(viewOf(rig)?.frames.get("feed")).toBeUndefined();
-    const delivered = answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(delivered.record).toContainEqual(["faults", expect.stringContaining("--bogus")]);
+    expect(presentation(rig, "feed")).toBeUndefined();
+    const delivered = answered(
+      await done(r, { session: SESSION, id: frame.receipt }, true),
+    );
+    expect(delivered.record).toContainEqual([
+      "faults",
+      expect.stringContaining("--bogus"),
+    ]);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
     expect(by).toEqual(["feed"]);
     const same = await dueFrame(r, 1);
-    const confirmed = answered(await done(r, { session: SESSION, id: same.receipt }, true));
+    const confirmed = answered(
+      await done(r, { session: SESSION, id: same.receipt }, true),
+    );
     expect(confirmed.record).toEqual([]);
   });
 
@@ -577,21 +610,36 @@ describe("a feed's frame", () => {
     const { r, parts, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
-    const view = viewOf(rig)!;
-    const answeredRecord = view.frames.get("request");
+    const answeredRecord = presentation(rig, "request");
     expect(answeredRecord).toBeDefined();
     answered(await followFeed(r));
     const frame = await dueFrame(r);
-    expect(view.frames.get("feed")).toBeUndefined();
+    expect(presentation(rig, "feed")).toBeUndefined();
     answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(view.frames.get("request")).toBe(answeredRecord);
-    const feedRecord = view.frames.get("feed");
+    expect(presentation(rig, "request")).toBe(answeredRecord);
+    const feedRecord = presentation(rig, "feed");
     expect(feedRecord).toBeDefined();
     expect(feedRecord).not.toBe(answeredRecord);
     const nextRequest = presentOf(answered(await request({ r, rig })).effects);
     answered(await done(r, nextRequest, true));
-    expect(view.frames.get("feed")).toBe(feedRecord);
-    expect(parts.effectSessions.getStats().sessions).toBe(1);
+    expect(presentation(rig, "feed")).toBe(feedRecord);
+    expect(parts.renderCache.presentations.stats().effects.sessions).toBe(1);
+  });
+
+  test("an older feed receipt keeps its layout without rewinding the newer request's motion", async () => {
+    const t = renderer();
+    await configure(t, checked());
+    answered(await followFeed(t.r));
+    const feed = await dueFrame(t.r);
+    const requestFrame = presentOf(answered(await request(t)).effects);
+    answered(await done(t.r, requestFrame, true));
+    const motion = t.rig.cache.presentations.effects(SESSION).lastFrame();
+    const requestLayout = presentation(t.rig, "request");
+
+    answered(await done(t.r, { session: SESSION, id: feed.receipt }, true));
+    expect(presentation(t.rig, "feed")).toBeDefined();
+    expect(presentation(t.rig, "request")).toBe(requestLayout);
+    expect(t.rig.cache.presentations.effects(SESSION).lastFrame()).toBe(motion);
   });
 
   test("a dropped frame preserves the last accepted layout, cells and copies", async () => {
@@ -620,7 +668,7 @@ describe("a feed's frame", () => {
     expect(textOf(parseFrame(first.bar))).not.toContain("ADDED");
     answered(await done(t.r, { session: SESSION, id: first.receipt }, true));
     const view = viewOf(t.rig)!;
-    const prior = view.frames.get("feed");
+    const prior = presentation(t.rig, "feed");
     expect(prior).toBeDefined();
     const deliveries = t.recorded.length;
 
@@ -634,10 +682,10 @@ describe("a feed's frame", () => {
     const next = await dueFrame(t.r, 2);
     expect(textOf(parseFrame(next.bar))).toContain("ADDED");
     expect(viewOf(t.rig)).toBe(view);
-    expect(view.frames.get("feed")).toBe(prior);
+    expect(presentation(t.rig, "feed")).toBe(prior);
     answered(await done(t.r, { session: SESSION, id: next.receipt }, false));
-    expect(view.frames.get("feed")).toBe(prior);
-    expect(view.frames.get("feed")?.segments).toBe(prior?.segments);
+    expect(presentation(t.rig, "feed")).toBe(prior);
+    expect(presentation(t.rig, "feed")?.segments).toBe(prior?.segments);
     expect(t.recorded).toHaveLength(deliveries);
   });
 
@@ -664,14 +712,15 @@ describe("a feed's frame", () => {
     const { r, parts, rig } = renderer();
     const present = presentOf(answered(await request({ r, rig })).effects);
     await done(r, present, true);
-    const view = viewOf(rig)!;
     answered(await followFeed(r));
     const frame = await dueFrame(r);
     answered(await done(r, { session: SESSION, id: frame.receipt }, true));
-    expect(view.frames.get("feed")).toBeDefined();
+    expect(presentation(rig, "feed")).toBeDefined();
+    const pending = await dueFrame(r, 1);
     parts.renderCache.stopDrawing(SESSION, "feed");
-    expect(view.frames.get("feed")).toBeUndefined();
-    expect(view.frames.get("request")).toBeDefined();
+    answered(await done(r, { session: SESSION, id: pending.receipt }, true));
+    expect(presentation(rig, "feed")).toBeUndefined();
+    expect(presentation(rig, "request")).toBeDefined();
   });
 
   // A wake while a frame is out is owed a frame after it, so a draw that woke
@@ -698,7 +747,7 @@ describe("a feed's frame", () => {
     expect(draw(AT)?.failure).toBeNull();
     expect(draw((AT + 1) as Instant)?.failure).toBeNull();
     expect(candidates).toHaveLength(2);
-    expect(viewOf(rig)?.frames.get("feed")).toBeUndefined();
+    expect(presentation(rig, "feed")).toBeUndefined();
     expect(changed.slice(changedBefore)).toEqual([]);
     expect(rig.sessionState.latestRevision()).toBe(revision);
   });

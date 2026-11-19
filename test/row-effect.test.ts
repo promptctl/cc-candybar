@@ -1,4 +1,3 @@
-import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { plainOf, textOf, type Frame, type Run } from "../src/render/frame";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import { runUnder, sameDraw } from "./helpers/frame";
@@ -26,7 +25,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { EffectSessions, SessionEffects } from "../src/render/effect";
+import { SessionEffects } from "../src/render/effect";
 import type { RenderedLine } from "../src/dsl/node-registry";
 import {
   decideEffectName,
@@ -226,27 +225,29 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
   });
 
   test("a session holds the effects of the rows its latest render drew, and no others", () => {
-    const sessions = new EffectSessions<RenderedLine>();
-    const session = sessionIdOf("s");
+    const effects = new SessionEffects<RenderedLine>("s");
     const draw = (when: Instant, rows: number): void => {
-      const effects = sessions.of(session);
-      const motion = effects.motion("shimmer", effects.clockAt(when, 1), STILL_FRAME);
+      const motion = effects.motion(
+        "shimmer",
+        effects.clockAt(when, 1),
+        STILL_FRAME,
+      );
       for (let row = 0; row < rows; row++) {
         const moving = motion.row(`flow.own#${row}`, "bar", []);
         if (moving.kind !== "moving") throw new Error("shimmer is still");
         moving.wrap(new RichText("x"));
       }
-      sessions.keep(session, motion.memory().motion);
+      effects.keep(motion.memory().motion);
     };
     // A menu opens: five rows. It closes: one row, whose effect is reused.
     draw(at(0), 5);
-    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 5 });
+    expect(effects.heldCount).toBe(5);
     draw(at(1), 1);
-    expect(sessions.getStats()).toEqual({ sessions: 1, effects: 1 });
-    expect(sessions.of(session).lastFrame()).toMatchObject({ made: 0, reused: 1 });
+    expect(effects.heldCount).toBe(1);
+    expect(effects.lastFrame()).toMatchObject({ made: 0, reused: 1 });
     // The menu opens again: the rows it released are made afresh.
     draw(at(2), 5);
-    expect(sessions.of(session).lastFrame()).toMatchObject({ made: 4, reused: 1 });
+    expect(effects.lastFrame()).toMatchObject({ made: 4, reused: 1 });
   });
 
   test("a row says when it next changes: now while its loop moves, never while every part holds still", () => {

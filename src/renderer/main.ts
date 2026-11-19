@@ -27,7 +27,6 @@ import {
 } from "./draw-bar.js";
 import { TurnTime } from "./turn-time.js";
 import { runEach } from "../utils/run-each.js";
-import { MenuIdle } from "./menu-idle.js";
 import { FEED_PERIODS, Feeds } from "./feeds.js";
 import type { LaneSwitches } from "../config/lanes.js";
 import {
@@ -61,8 +60,6 @@ import type {
 } from "../daemon/foundations/debug-types.js";
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
-import { EffectSessions } from "../render/effect.js";
-import type { RenderedLine } from "../dsl/node-registry.js";
 import { EditTransactions } from "./edit-transaction.js";
 import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
 import { sessionIdOf } from "../daemon/foundations/session-id.js";
@@ -70,7 +67,6 @@ import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
 import { disclosureNest } from "../config/disclosure-nest.js";
 import { NavigationHistory } from "./navigation-history.js";
-import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
@@ -78,7 +74,6 @@ import {
   configLoadedLine,
   RenderCache,
   renderCacheBudget,
-  type SessionView,
 } from "./render-cache.js";
 import {
   buildDebugSnapshot,
@@ -367,7 +362,6 @@ export function mainRenderer(
       case "retire":
         opening.delete(event.session);
         parked = parked.filter((click) => click.session !== event.session);
-        menuIdle.retire(event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -383,9 +377,13 @@ export function mainRenderer(
           );
         deliveries.delete(event.of);
         if (event.outcome.kind === "ok") {
-          const faults = deliver(parts, delivery);
-          if (delivery.kept.by === "feed" && faults !== null)
-            record.push(["surface", "feed"], ["faults", faults]);
+          const accepted = deliver(parts, event.of, delivery);
+          if (
+            delivery.candidate.by === "feed" &&
+            accepted !== null &&
+            accepted.faults !== null
+          )
+            record.push(["surface", "feed"], ["faults", accepted.faults]);
         }
         return;
       }
@@ -598,7 +596,6 @@ export function mainRendererOf(
   // each input carries, and the work held for a later `due`.
   const time = new TurnTime();
   const now = () => time.at;
-  const menuIdle = new MenuIdle();
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
@@ -626,12 +623,6 @@ export function mainRendererOf(
     holdClickError(sessionState, session, reason, now());
   const acts = new ActsOnTheirWay(mint, actFailed);
   const navigationHistory = new NavigationHistory();
-  // Each session's effect memory — when its effect came into force — held in
-  // daemon memory only: a restarted daemon starts every session's effect again.
-  const effectSessions = new EffectSessions<RenderedLine>();
-  // [LAW:single-enforcer] What each session's renderers could not honour, as
-  // their frames recorded it (src/renderer/render-warnings.ts).
-  const renderWarnings = new RenderWarningRecords();
   const worldStates = new WorldStates();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
@@ -682,6 +673,7 @@ export function mainRendererOf(
       },
     },
   );
+  const { menuIdle } = renderCache.presentations;
   // [LAW:no-ambient-temporal-coupling] Each open feed's pin, from its open
   // to its close: the view's hold and the reaction that wakes the feed when
   // the session's state moves, so the reaction lives exactly as long as the
@@ -721,9 +713,6 @@ export function mainRendererOf(
     sessionState: edits.view,
     renderCache,
     worldStates,
-    renderWarnings,
-    effectSessions,
-    menuIdle,
     feeds,
   };
   const verbCtx: DaemonVerbContext = {
@@ -761,7 +750,7 @@ export function mainRendererOf(
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
+            effectCache: renderCache.presentations.stats().effects,
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
@@ -775,7 +764,7 @@ export function mainRendererOf(
       case "debug":
         return {
           kind: "debug",
-          snapshot: debugOf(renderCache.latestView(), push.what),
+          snapshot: debugOf(renderCache, push.what),
         };
       // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
       // runs whole, so none is in flight.
@@ -815,10 +804,23 @@ export function mainRendererOf(
 // stores StripCell arrays (cheap, written by drawDsl), and only the `segments`
 // projection needs strings, so a normal render pays no serializer cost.
 function debugOf(
-  view: SessionView<SessionSource, CheckedRenderRequest> | null,
+  cache: RenderCache<SessionSource, CheckedRenderRequest>,
   what: DebugWhat,
 ): DebugSnapshot {
-  const frame = view?.frames.get("request") ?? view?.frames.get("feed");
+  const view = cache.latestView();
+  const frame =
+    view === null
+      ? undefined
+      : (cache.presentations.layout(
+          view.sessionId,
+          "request",
+          view.presentationTargets.request,
+        ) ??
+        cache.presentations.layout(
+          view.sessionId,
+          "feed",
+          view.presentationTargets.feed,
+        ));
   return buildDebugSnapshot(
     what,
     view === null

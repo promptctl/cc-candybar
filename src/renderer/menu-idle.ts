@@ -19,10 +19,33 @@ import {
   type Tick,
 } from "../utils/instant.js";
 
-interface Idle {
-  since: Tick;
-  timeoutS: number;
-  shown: boolean;
+export interface Idle {
+  readonly since: Tick;
+  readonly timeoutS: number;
+  readonly shown: boolean;
+}
+
+export interface DrawnMenu {
+  readonly tick: Tick;
+  readonly shown: boolean;
+  readonly timeoutS: number;
+}
+
+interface IdleRecords {
+  get(session: SessionId): Idle | undefined;
+  set(session: SessionId, idle: Idle): void;
+  delete(session: SessionId): void;
+  entries(): Iterable<readonly [SessionId, Idle]>;
+}
+
+// [LAW:no-ambient-temporal-coupling] An older draw cannot undo a click or
+// reopen an idle period that already expired while its delivery was pending.
+export function idleAfterDraw(prior: Idle | undefined, menu: DrawnMenu): Idle {
+  const { tick, shown, timeoutS } = menu;
+  if (prior === undefined) return { since: tick, shown, timeoutS };
+  if (tick < prior.since) return prior;
+  const since = shown && !prior.shown ? tick : prior.since;
+  return { since, shown, timeoutS };
 }
 
 // An idle period that ran out: how long the session was idle by then, and the
@@ -33,28 +56,25 @@ export interface IdleSpan {
 }
 
 export class MenuIdle {
-  private readonly sessions = new Map<SessionId, Idle>();
+  constructor(private readonly sessions: IdleRecords = new Map()) {}
 
   // What the session's draw at `tick` showed: whether a menu row, and the
   // timeout its settings resolve to. A menu shown where the last draw showed
   // none begins its idle period here, so one nobody clicked open (a group
   // open by default, a reload) is not closed by a click from long ago.
   drew(sessionId: SessionId, tick: Tick, shown: boolean, timeoutS: number) {
-    const idle = this.sessions.get(sessionId);
-    if (idle === undefined) {
-      this.sessions.set(sessionId, { since: tick, timeoutS, shown });
-      return;
-    }
-    if (shown && !idle.shown) idle.since = tick;
-    idle.shown = shown;
-    idle.timeoutS = timeoutS;
+    this.sessions.set(
+      sessionId,
+      idleAfterDraw(this.sessions.get(sessionId), { tick, shown, timeoutS }),
+    );
   }
 
   // A click of the session landed: a new idle period begins. A session that
   // has not drawn has no menu to count down.
   clicked(sessionId: SessionId, tick: Tick): void {
     const idle = this.sessions.get(sessionId);
-    if (idle !== undefined) idle.since = tick;
+    if (idle !== undefined)
+      this.sessions.set(sessionId, { ...idle, since: tick });
   }
 
   // When the idle period of the menus the session's last draw showed began,
@@ -77,7 +97,7 @@ export class MenuIdle {
   // menu.
   next(busy?: ReadonlySet<SessionId>): Tick | null {
     return earliestOf(
-      [...this.sessions].map(([session, idle]) =>
+      [...this.sessions.entries()].map(([session, idle]) =>
         this.expiryOf(session, idle, busy),
       ),
     );
@@ -104,23 +124,26 @@ export class MenuIdle {
     busy?: ReadonlySet<SessionId>,
   ): Array<{ readonly session: SessionId; readonly idle: IdleSpan }> {
     const due: Array<{ session: SessionId; idle: IdleSpan }> = [];
-    for (const [session, idle] of this.sessions) {
+    for (const [session, idle] of this.sessions.entries()) {
       const expiry = this.expiryOf(session, idle, busy);
       if (expiry === null || expiry > tick) continue;
       due.push({
         session,
         idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS },
       });
-      idle.since = tick;
-      idle.shown = false;
+      this.sessions.set(session, { ...idle, since: tick, shown: false });
     }
     return due;
   }
 
   // The sessions whose period is kept, and those with a menu counting down.
   stats(): MenuIdleStats {
+    let sessions = 0;
     let armed = 0;
-    for (const idle of this.sessions.values()) if (idle.shown) armed++;
-    return { sessions: this.sessions.size, armed };
+    for (const [, idle] of this.sessions.entries()) {
+      sessions++;
+      if (idle.shown) armed++;
+    }
+    return { sessions, armed };
   }
 }

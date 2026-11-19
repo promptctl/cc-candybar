@@ -1,5 +1,4 @@
 import { chainName, originKey, type RenderOrigin } from "../config-hint.js";
-import type { RichText } from "@promptctl/rich-js";
 import {
   compareShallow,
   makeObservable,
@@ -28,8 +27,8 @@ import {
 } from "../config/config-snapshot.js";
 import type { Drawing, LaneSwitches } from "../config/lanes.js";
 import { laneDefaultsAfterReset } from "./lane-handoff.js";
-import type { FrameRecord } from "../render/frame-memory.js";
-import type { RenderedLine } from "../dsl/node-registry.js";
+import { PresentedFrames, type FrameCandidate } from "./presented-frames.js";
+import type { EffectId } from "../renderer-interface/interface.js";
 import {
   loadSnapshot,
   type LoadedChain,
@@ -1022,16 +1021,9 @@ export interface SessionView<
   // What the view draws from: its payload and selections, bound to its
   // store's inputs and slots (`bindView`) when it opened.
   readonly source: S;
-  // [LAW:one-source-of-truth] The record of the last frame each surface kept
-  // of the view (`DrawnFrame.memory`), handed to that surface's next draw:
-  // held here so it goes with the view.
-  readonly frames: Map<
-    Drawing["by"],
-    {
-      readonly record: FrameRecord<RenderedLine>;
-      readonly segments: ReadonlyMap<string, readonly RichText[]>;
-    }
-  >;
+  // [LAW:types-are-the-program] A receipt holds only this identity, so the
+  // view and its registry cannot be kept alive by the transport.
+  readonly presentationTargets: Record<Drawing["by"], symbol>;
   // The view is no session's bar from now on (a successor took it, or it
   // closed): it stops saying what it draws from moved, though a render that
   // holds it still draws from it.
@@ -1172,7 +1164,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     source,
     requested: request.update,
     facts: request.read,
-    frames: new Map(),
+    presentationTargets: { request: Symbol(), feed: Symbol() },
     retire: stopChanged,
     dispose: () => {
       stopChanged();
@@ -1237,17 +1229,13 @@ export class RenderCache<
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = new Map<SessionId, SessionView<S, F>>();
-  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
-  // delivered copies, by the key its copy click names (src/render/
-  // diagnostics.ts), one map per renderer, since a request and a feed frame
-  // list different messages and a click names the surface it came from. Held
-  // by session, not by view, because a frame on screen outlives the view it
-  // was drawn from (a reload's successor); dropped when the session has no
-  // view. No link carries the text it copies.
-  private readonly copies = new Map<
-    SessionId,
-    Map<Drawing["by"], ReadonlyMap<string, string>>
-  >();
+  readonly presentations = new PresentedFrames((session) => {
+    const view = this.views.get(session);
+    if (view !== undefined) {
+      view.presentationTargets.request = Symbol();
+      view.presentationTargets.feed = Symbol();
+    }
+  });
   // Every view the cache serves or served, until reclaimed.
   private readonly viewHolds = new Map<SessionView<S, F>, ViewHold>();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -1680,9 +1668,12 @@ export class RenderCache<
   private retireView(view: SessionView<S, F>, reason: ViewClose): void {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
-    // A session left with no view is closed, and its frames with it; a
-    // successor opened first keeps what is on screen copyable.
-    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
+    const successor = this.views.has(view.sessionId);
+    this.presentations.retireView(
+      view.sessionId,
+      view.presentationTargets,
+      successor,
+    );
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -1705,6 +1696,7 @@ export class RenderCache<
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
+    this.presentations.retire(sessionId);
     this.dropDraft(sessionId);
   }
 
@@ -1810,10 +1802,6 @@ export class RenderCache<
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
-    let passages = 0;
-    for (const view of this.views.values())
-      for (const { record } of view.frames.values())
-        passages += record.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -1822,7 +1810,7 @@ export class RenderCache<
       views: this.views.size,
       pinned: this.pins.size,
       retiredViews,
-      passages,
+      passages: this.presentations.stats().passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes(),
     };
@@ -2028,16 +2016,13 @@ export class RenderCache<
     return [...this.views.values()].at(-1) ?? null;
   }
 
-  // The renderer `by` delivered a frame of the session's bar listing
-  // `copies`. A session with no view is closed: nothing it delivers is kept.
-  delivered(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    copies: ReadonlyMap<string, string>,
-  ): void {
-    if (!this.views.has(sessionId)) return;
-    const drawn = this.copies.get(sessionId) ?? new Map();
-    this.copies.set(sessionId, drawn.set(by, copies));
+  // [LAW:single-enforcer] Receipt targets live as long as their view and
+  // surface do. The owner accepts only an observation from the current one.
+  acceptFrame(id: EffectId, candidate: FrameCandidate) {
+    const { session, by, target } = candidate;
+    return this.views.get(session)?.presentationTargets[by] === target
+      ? this.presentations.accept(id, candidate)
+      : null;
   }
 
   // What the diagnostic under `key` copies in the frame renderer `by` last
@@ -2048,15 +2033,14 @@ export class RenderCache<
     by: Drawing["by"],
     key: string,
   ): string | undefined {
-    return this.copies.get(sessionId)?.get(by)?.get(key);
+    return this.presentations.copy(sessionId, by, key);
   }
 
-  // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale, and the surface's next
-  // frame, if it opens again, is a first frame that fades nothing in.
+  // Closing a feed retires that surface's presentation and the receipts
+  // still on their way to it.
   stopDrawing(sessionId: SessionId, by: Drawing["by"]): void {
-    this.copies.get(sessionId)?.delete(by);
-    this.views.get(sessionId)?.frames.delete(by);
+    const view = this.views.get(sessionId);
+    if (view !== undefined) view.presentationTargets[by] = Symbol();
+    this.presentations.stopDrawing(sessionId, by);
   }
 }

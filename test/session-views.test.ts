@@ -13,7 +13,17 @@ import {
 import type { ViewFacts } from "../src/renderer-interface/request-context";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
-import { instantOf } from "../src/utils/instant";
+import { instantOf, type Tick } from "../src/utils/instant";
+import type { EffectId } from "../src/renderer-interface/interface";
+import {
+  describeWarning,
+  frameWarnings,
+} from "../src/renderer/render-warnings";
+import {
+  PresentedFrames,
+  type DrawSurface,
+  type FrameCandidate,
+} from "../src/renderer/presented-frames";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
@@ -158,30 +168,31 @@ function configure(cwd: string, edition = 0): void {
   answerRepo(cwd);
 }
 
-const drawn = (
+const drawViewFrame = (
   view: SessionView,
   sid: string = view.sessionId,
   at = new Date(),
-): string =>
-  textOf(
-    drawPayload(
-      view.state.config,
-      view.state.compiled,
-      view.store,
-      view.registry,
-      { session_id: sid, workspace: { project_dir: dir } },
-      instantOf(at),
-      {
-        endcaps: "plain",
-        colorCompatibility: "none",
-        wrap: true,
-        padding: 1,
-        width: 300,
-      },
-      undefined,
-      runsOf(view).readings,
-    ).frame,
+) =>
+  drawPayload(
+    view.state.config,
+    view.state.compiled,
+    view.store,
+    view.registry,
+    { session_id: sid, workspace: { project_dir: dir } },
+    instantOf(at),
+    {
+      endcaps: "plain",
+      colorCompatibility: "none",
+      wrap: true,
+      padding: 1,
+      width: 300,
+    },
+    undefined,
+    runsOf(view).readings,
   );
+
+const drawn = (view: SessionView, sid?: string, at?: Date) =>
+  textOf(drawViewFrame(view, sid, at).frame);
 
 // One render of session `sid` from `cwd`, as the daemon draws one: through the
 // session's view, held for the render, then every run its view names settled.
@@ -509,14 +520,42 @@ test("a config load starts no view's source, and still names a session value tha
   expect(shells).toBe(5);
 });
 
+function copyCandidate(
+  cache: RenderCache,
+  view: SessionView,
+  by: DrawSurface,
+  text: string,
+): FrameCandidate {
+  const drawn = drawViewFrame(view, view.sessionId);
+  return {
+    session: view.sessionId,
+    by,
+    target: view.presentationTargets[by],
+    frame: {
+      layout: { record: drawn.memory.record, segments: drawn.segments },
+      motion: drawn.memory.motion,
+      diagnostics: frameWarnings([], []),
+      copies: new Map([["7", text]]),
+      menu: { shown: false, tick: 0 as Tick, timeoutS: 30 },
+      config: cache.presentations.configOf(view.state.config),
+    },
+  };
+}
+
 test("a copy click reads the frame its own renderer last delivered, not another's", async () => {
   configure(dir);
   const { cache } = makeCache();
-  await render(cache, "s-copy");
+  const { view } = await render(cache, "s-copy");
   // One key, two surfaces whose frames list it with different text: the
   // statusline's answer from before a fix, the feed's from after.
-  cache.delivered(S_COPY, "request", new Map([["7", "before the fix"]]));
-  cache.delivered(S_COPY, "feed", new Map([["7", "after the fix"]]));
+  cache.acceptFrame(
+    1 as EffectId,
+    copyCandidate(cache, view, "request", "before the fix"),
+  );
+  cache.acceptFrame(
+    2 as EffectId,
+    copyCandidate(cache, view, "feed", "after the fix"),
+  );
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("before the fix");
   expect(cache.drawnCopy(S_COPY, "feed", "7")).toBe("after the fix");
   expect(cache.drawnCopy(S_COPY, "request", "8")).toBeUndefined();
@@ -529,16 +568,87 @@ test("a copy click reads the frame its own renderer last delivered, not another'
 test("a frame on screen stays copyable across a reload's successor view, and goes when the session closes", async () => {
   configure(dir);
   const { cache } = makeCache();
-  await render(cache, "s-copy");
-  cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
+  const { view } = await render(cache, "s-copy");
+  const message = copyCandidate(cache, view, "request", "the message");
+  const warning = describeWarning({
+    kind: "segment",
+    placement: "row",
+    message: "the warning",
+  });
+  const delivered = {
+    ...message,
+    frame: { ...message.frame, diagnostics: frameWarnings([warning], []) },
+  };
+  const delayed = copyCandidate(
+    cache,
+    view,
+    "request",
+    "late from the retired view",
+  );
+  cache.acceptFrame(1 as EffectId, delivered);
   configure(dir, 1);
   cache.configs.again();
+  expect(cache.acceptFrame(2 as EffectId, delayed)).toBeNull();
+  expect(cache.presentations.diagnostics(S_COPY, "request")).toBe(
+    delivered.frame.diagnostics,
+  );
+  expect(
+    cache.presentations.layout(S_COPY, "request", delivered.target),
+  ).toBeUndefined();
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("the message");
   // The host retires the session: its view closes, and its frames.
   cache.retireSession(S_COPY);
   expect(cache.stats.views).toBe(0);
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBeUndefined();
   // A session with no view keeps nothing it delivers.
-  cache.delivered(S_COPY, "request", new Map([["7", "the message"]]));
+  expect(cache.acceptFrame(3 as EffectId, delivered)).toBeNull();
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBeUndefined();
+});
+
+test("the bounded presentation owner evicts a session as one record", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  const { view: a } = await render(cache, "s-a");
+  const { view: b } = await render(cache, "s-b");
+  const evicted: string[] = [];
+  const frames = new PresentedFrames((session) => evicted.push(session), 1);
+  const request = copyCandidate(cache, a, "request", "request copy");
+  const feed = copyCandidate(cache, a, "feed", "feed copy");
+  const next = copyCandidate(cache, b, "request", "next");
+  frames.accept(1 as EffectId, request);
+  frames.accept(2 as EffectId, feed);
+  expect(frames.diagnostics(a.sessionId, "feed")?.warnings).toEqual([]);
+  frames.accept(3 as EffectId, next);
+  expect(evicted).toEqual([a.sessionId]);
+  expect(frames.diagnostics(a.sessionId, "request")).toBeUndefined();
+  expect(frames.diagnostics(a.sessionId, "feed")).toBeUndefined();
+  expect(frames.copy(a.sessionId, "feed", "7")).toBeUndefined();
+  expect(frames.layout(a.sessionId, "request", request.target)).toBeUndefined();
+  expect(frames.stats().effects.sessions).toBe(1);
+});
+
+test("menu expiry and an actual click outlive unmatched draws", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  const { view } = await render(cache, "s-copy");
+  const base = copyCandidate(cache, view, "request", "menu");
+  const observed = (tick: number) => ({
+    ...base,
+    frame: {
+      ...base.frame,
+      menu: { shown: true, tick: tick as Tick, timeoutS: 10 },
+    },
+  });
+  cache.acceptFrame(1 as EffectId, observed(1));
+  const menu = cache.presentations.menuIdle;
+  menu.clicked(view.sessionId, 5 as Tick);
+  cache.acceptFrame(2 as EffectId, observed(3));
+  expect(menu.next()).toBe(15);
+  expect(menu.due(15 as Tick)).toEqual([
+    { session: view.sessionId, idle: { idleS: 10, timeoutS: 10 } },
+  ]);
+  cache.acceptFrame(3 as EffectId, observed(14));
+  expect(menu.next()).toBeNull();
+  cache.acceptFrame(4 as EffectId, observed(16));
+  expect(menu.next()).toBe(26);
 });

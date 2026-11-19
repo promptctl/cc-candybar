@@ -1,28 +1,3 @@
-// What each renderer's draw could not honour, kept between its frames
-// (src/dsl/render.ts RenderWarning). A render warning is only known after the
-// walk, but the indicator that counts it is drawn by the walk, so a draw shows
-// the warnings its renderer recorded and the record follows the frames.
-//
-// [LAW:one-source-of-truth] One record per session and renderer (a request's
-// answer, the feed's frames): they draw at their own widths and roots, so each
-// owns its own and neither overwrites the other's. The session's warnings are
-// every renderer's together, in one fixed order, so every surface counts and
-// pages the same list and a viewer opened on one surface finds its message on
-// the other. The drawing renderer reads its own last frame's record whatever
-// it was drawn from: the turn that drew this frame replaces it, and a record
-// emptied first would make a warning still met look gone for one frame,
-// closing an open viewer and reopening it on the next. Another renderer's
-// record counts only while drawn from the same config, since that renderer
-// may have stopped drawing and nothing would ever replace it. A config is
-// named by a generation number, never held, so a record does not keep a
-// retired config alive.
-//
-// [LAW:no-silent-failure] Every frame's warnings are the record's next value,
-// compared by value: a warning that starts or stops while nothing else about
-// the frame moved is counted, or cleared, by the renderer's next frame.
-
-import type { SessionId } from "../daemon/foundations/session-id.js";
-import type { Drawing } from "../config/lanes.js";
 import type { RenderWarning } from "../dsl/render.js";
 import {
   faultsNote,
@@ -30,124 +5,93 @@ import {
   type Fault,
 } from "../renderer-interface/noted-faults.js";
 
-// The same bound session state and effect memory keep, so an idle session's
-// record goes when they would.
-const MAX_RECORDS = 512;
-
-// What a walk's warnings are a function of, beside the values it read.
-export interface RecordScope {
-  readonly config: object;
+interface DescribedWarning {
+  readonly warning: RenderWarning;
+  readonly tag: string;
+  readonly subject: string;
+  readonly key: string;
 }
 
-interface WarningRecord {
-  readonly generation: number;
-  readonly warnings: readonly RenderWarning[];
-  // Every fault the frame met, its walk's warnings among them, spelled as its
-  // turn record noted them: what the renderer's next record is compared with.
+export interface FrameWarnings {
+  readonly warnings: readonly DescribedWarning[];
   readonly faults: string;
 }
 
-// Every renderer, in the order the session's list takes them.
-const RENDERERS: ReadonlyArray<Drawing["by"]> = ["request", "feed"];
-
-export interface PreparedWarnings {
-  readonly record: WarningRecord;
-  readonly moved: boolean;
-  readonly faultsNote: string;
+// [LAW:single-enforcer] One projection of a walk warning, reused in the
+// turn's brief tag and fault subject and in the diagnostics identity.
+export function describeWarning(warning: RenderWarning): DescribedWarning {
+  const { kind, message } = warning;
+  let subject: string;
+  switch (kind) {
+    case "rule":
+      subject = warning.slot;
+      break;
+    case "refresh":
+      subject = warning.variable;
+      break;
+    case "segment":
+      subject = warning.placement;
+      break;
+    case "when":
+      subject = warning.where;
+      break;
+  }
+  // [LAW:one-source-of-truth] A tuple gives equal warnings the same identity
+  // regardless of the producer's object field order.
+  return {
+    warning,
+    subject,
+    tag: kind === "when" ? kind : `${kind}:${subject}`,
+    key: JSON.stringify([
+      kind,
+      subject,
+      message,
+      "error" in warning ? warning.error : null,
+    ]),
+  };
 }
 
-// [LAW:no-shared-mutable-globals] Single owner, hard cap, least recently drawn
-// evicted first.
-export class RenderWarningRecords {
-  private readonly records = new Map<string, WarningRecord>();
-  private readonly generations = new WeakMap<object, number>();
-  private nextGeneration = 0;
+export function frameWarnings(
+  warnings: readonly DescribedWarning[],
+  faults: readonly Fault[],
+): FrameWarnings {
+  return { warnings, faults: spelledFaults(faults) };
+}
 
-  constructor(private readonly maxRecords: number = MAX_RECORDS) {}
+// Both draw notes and a confirmed feed use the last accepted baseline. A
+// missing baseline has no fault list, even when this frame has no faults.
+export function warningChanges(
+  next: FrameWarnings,
+  prior: FrameWarnings | undefined,
+) {
+  const warnings = prior?.warnings ?? [];
+  return {
+    moved:
+      warnings.length !== next.warnings.length ||
+      warnings.some(({ key }, i) => key !== next.warnings[i]?.key),
+    faults: faultsNote(next.faults, prior?.faults),
+  };
+}
 
-  private generationOf(config: object): number {
-    const held = this.generations.get(config);
-    if (held !== undefined) return held;
-    const next = this.nextGeneration++;
-    this.generations.set(config, next);
-    return next;
-  }
-
-  // An empty list is a delivered clean frame. A missing record has no
-  // baseline, including after eviction.
-  of(sessionId: SessionId, by: Drawing["by"]): readonly RenderWarning[] | undefined {
-    return this.records.get(keyOf(sessionId, by))?.warnings;
-  }
-
-  // The session's warnings as `by` draws them in `scope`: its own record, and
-  // every other renderer's drawn from the same config, each warning once
-  // across renderers (a warning two renderers met is one fact).
-  ofSession(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    scope: RecordScope,
-  ): readonly RenderWarning[] {
-    const generation = this.generationOf(scope.config);
-    const listed: RenderWarning[] = [];
-    for (const renderer of RENDERERS) {
-      const held = this.records.get(keyOf(sessionId, renderer));
-      const own =
-        renderer === by
-          ? held?.warnings ?? []
-          : held?.generation === generation
-            ? held.warnings
-            : [];
-      // Each earlier renderer's warning absorbs one equal warning here.
-      const earlier = listed.map((w) => JSON.stringify(w));
-      for (const w of own) {
-        const at = earlier.indexOf(JSON.stringify(w));
-        if (at === -1) listed.push(w);
-        else earlier.splice(at, 1);
+// [LAW:single-enforcer] Merge surfaces in display order. A warning repeated
+// on one surface keeps its occurrences. An equal warning from another
+// surface consumes one such occurrence.
+export function combinedWarnings(
+  records: readonly FrameWarnings[],
+): readonly DescribedWarning[] {
+  const listed: DescribedWarning[] = [];
+  const seen = new Map<string, number>();
+  for (const record of records) {
+    const earlier = new Map(seen);
+    for (const warning of record.warnings) {
+      const { key } = warning;
+      const count = earlier.get(key) ?? 0;
+      if (count > 0) earlier.set(key, count - 1);
+      else {
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+        listed.push(warning);
       }
     }
-    return listed;
   }
-
-  // Whether a frame that warned `warnings` changes what the renderer's next
-  // frame shows.
-  prepare(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    scope: RecordScope,
-    warnings: readonly RenderWarning[],
-    faults: readonly Fault[],
-  ): PreparedWarnings {
-    const prior = this.records.get(keyOf(sessionId, by));
-    const spelled = spelledFaults(faults);
-    return {
-      record: {
-        generation: this.generationOf(scope.config),
-        warnings,
-        faults: spelled,
-      },
-      moved: JSON.stringify(prior?.warnings ?? []) !== JSON.stringify(warnings),
-      faultsNote: faultsNote(spelled, prior?.faults),
-    };
-  }
-
-  // [LAW:single-enforcer] Only a delivered frame supplies the baseline
-  // for the next frame's warnings and fault comparison.
-  keep(
-    sessionId: SessionId,
-    by: Drawing["by"],
-    prepared: PreparedWarnings,
-  ): string | null {
-    const key = keyOf(sessionId, by);
-    const changed = this.records.get(key)?.faults !== prepared.record.faults;
-    this.records.delete(key);
-    this.records.set(key, prepared.record);
-    for (const oldest of this.records.keys()) {
-      if (this.records.size <= this.maxRecords) break;
-      this.records.delete(oldest);
-    }
-    return changed ? prepared.record.faults : null;
-  }
+  return listed;
 }
-
-const keyOf = (sessionId: SessionId, by: Drawing["by"]): string =>
-  `${by}\0${sessionId}`;

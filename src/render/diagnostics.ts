@@ -186,21 +186,28 @@ export function collectDiagnostics(
   // A message's key depends on the whole list (which occurrence it is), so
   // its first line's click is minted once the list stands.
   const seen = new Map<number, number>();
-  const minted: readonly ListedMessage[] = list.map((message, i): ListedMessage => {
-    const id = identityOf(message);
-    const occurrence = seen.get(id) ?? 0;
-    seen.set(id, occurrence + 1);
-    const stop = id * OCCURRENCES + Math.min(occurrence, OCCURRENCES - 1);
-    if (!plain.has(message)) return { ...message, stop };
-    return {
-      ...message,
-      stop,
-      lines: [
-        [diagnosticSpan(message.lines[0][0].text, copyLink(sessionId, by, pageKey(stop, 0), i + 1))],
-        ...message.lines.slice(1),
-      ],
-    };
-  });
+  const minted: readonly ListedMessage[] = list.map(
+    (message, i): ListedMessage => {
+      const id = identityOf(message);
+      const occurrence = seen.get(id) ?? 0;
+      seen.set(id, occurrence + 1);
+      const stop = id * OCCURRENCES + Math.min(occurrence, OCCURRENCES - 1);
+      if (!plain.has(message)) return { ...message, stop };
+      return {
+        ...message,
+        stop,
+        lines: [
+          [
+            diagnosticSpan(
+              message.lines[0][0].text,
+              copyLink(sessionId, by, pageKey(stop, 0), i + 1),
+            ),
+          ],
+          ...message.lines.slice(1),
+        ],
+      };
+    },
+  );
   // [LAW:parse-dont-validate] The stamp: the list was just sorted worst first.
   return minted as DiagnosticList;
 }
@@ -224,8 +231,12 @@ function plainMessage(
 
 // [LAW:one-source-of-truth] The key a copy click names each message by: the
 // key the viewer opens it at, so one identity names a message for both.
-export function diagnosticCopies(list: DiagnosticList): ReadonlyMap<string, string> {
-  return new Map(list.map((message) => [pageKey(message.stop, 0), message.copy]));
+export function diagnosticCopies(
+  list: DiagnosticList,
+): ReadonlyMap<string, string> {
+  return new Map(
+    list.map((message) => [pageKey(message.stop, 0), message.copy]),
+  );
 }
 
 // [LAW:single-enforcer] The one click that copies a message, for ⧉ and its
