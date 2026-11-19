@@ -150,9 +150,13 @@ export interface TimeOptions {
 // [LAW:one-source-of-truth] state vars read through to SessionState; the
 // reactive contract is owned by SessionState's internal atom. The computed
 // reads the bound view's session and dispatches through SessionStateReader.get.
+//
+// `read` is the variable's view of what the session holds at `key` (null:
+// nothing): a plain `state` variable's stored value over its default, a
+// setting's fold. null reads as the registry's empty value.
 export interface StateOptions {
   readonly key: string;
-  readonly varDefault?: string;
+  readonly read: (raw: string | null) => string | null;
 }
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
@@ -918,13 +922,18 @@ export class SourceRegistry {
       );
     }
     const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(undefined);
+    const empty = this.stringInitial(undefined);
     this.store.defineComputed(name, "string", () => {
       // [LAW:parse-dont-validate] The view's checked session, the same one
       // the payload hands `session.id`.
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
+      return opts.read(sessionState.get(this.session(), opts.key)) ?? empty;
     });
+  }
+
+  // What the bound view's session holds at `key`, as its `state` variables
+  // read it. A registry with no session state holds nothing.
+  held(key: string): string | null {
+    return this.sessionState?.get(this.session(), key) ?? null;
   }
 
   // [LAW:one-source-of-truth] The revision of the session state this render's

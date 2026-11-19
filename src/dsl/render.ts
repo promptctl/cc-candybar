@@ -26,7 +26,8 @@ import {
   type SettingValue,
   type SourceDefault,
   parseArm,
-  placementSetting,
+  settingSpelling,
+  type DraftSlot,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -89,6 +90,19 @@ import {
   type ActionRuntime,
 } from "../render/action.js";
 import { SESSION_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
+import {
+  placementFold,
+  placementRow,
+  settingTable,
+  type PlacementRow,
+} from "../config/setting-table.js";
+import { SETTING_NAMES } from "../config/setting-projections.js";
+import type { SettingName, ValuedField } from "../config/globals-fields.js";
+import {
+  staleWarnings,
+  type StalePick,
+  type StaleWarning,
+} from "./stale-warnings.js";
 import { disclosureCloseFragment } from "../render/disclosure-close.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { pickerFuncs } from "../render/picker.js";
@@ -367,9 +381,20 @@ function declareOne(
     case "state":
       registry.declareState(name, {
         key: decl.key,
-        ...(decl.default !== undefined && { varDefault: decl.default }),
+        read: (raw) => raw ?? decl.default ?? null,
       });
       break;
+
+    // [LAW:one-source-of-truth] A placement's setting reads its fold, the one
+    // every reader of its key shares (src/config/setting-table.ts).
+    case "setting": {
+      const row = placementRow(decl.slot);
+      registry.declareState(name, {
+        key: decl.slot.key,
+        read: (raw) => settingSpelling(placementFold(row, raw).value),
+      });
+      break;
+    }
   }
 }
 
@@ -561,6 +586,10 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   const stateKeyToVar = new Map<string, string>();
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in variables) stateKeyToVar.set(key, name);
+  }
+  // A placement's setting reads back through its fold, for the same reason.
+  for (const [name, decl] of Object.entries(variables)) {
+    if (decl.kind === "setting") stateKeyToVar.set(decl.slot.key, name);
   }
   // Segment-local state vars read the same SessionState keys under their
   // namespaced `segName.varName` (the form the store + scope use); a global
@@ -847,26 +876,35 @@ export function compileDslConfig({
   // its segment's declaration: the loader proved every value it sets is
   // declared and in its domain, so resolution is a fill of the defaults.
   // [LAW:one-source-of-truth] A setting configure mode can change reads
-  // through its draft variable (SegmentNode.drafts), whose default IS the
-  // value filled here — so the render shows a session's unsaved pick the
-  // moment it lands, and the file's value while there is none. A pick the
-  // declaration no longer admits parses to nothing and reads as no pick.
+  // through its draft variable (SegmentNode.drafts), which holds the
+  // setting's fold — so the render shows a session's unsaved pick the moment
+  // it lands, and the value beneath it while there is none or the pick is
+  // stale. The variable spells a member of the domain, so it folds to itself.
+  const foldedRead = (draft: DraftSlot, name: string) => {
+    const row = placementRow(draft);
+    return (): SettingValue =>
+      placementFold(
+        row,
+        String(
+          renderBinding(actionRuntime, `setting ${name}`).store.read(
+            draft.variable,
+          ),
+        ),
+      ).value;
+  };
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.
     const declared = settingsOf(config.segments[node.name]!);
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(declared)) {
+      const draft = node.drafts?.[name];
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: () =>
-          placementSetting(node, name, decl, (draft) =>
-            String(
-              renderBinding(actionRuntime, `setting ${name}`).store.read(
-                draft.variable,
-              ),
-            ),
-          ),
+        get:
+          draft === undefined
+            ? () => node.settings?.[name] ?? decl.default
+            : foldedRead(draft, name),
       });
     }
     // settingsOf always declares `theme` and `effect`, over domains whose
@@ -1242,7 +1280,10 @@ export type RenderWarning =
       readonly variable: string;
       readonly error: string;
       readonly message: string;
-    };
+    }
+  // A session's pick its setting cannot hold, which decided what the frame
+  // wears, so the bar wears what lies beneath it (src/dsl/stale-warnings.ts).
+  | StaleWarning;
 
 // [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
 // down — the values that are neither config (compiled once) nor payload (input
@@ -1256,14 +1297,11 @@ export type RenderWarning =
 // resolves (see EffectiveGlobals for how): a Pick, not a restatement, so the
 // selection cannot hold a field the resolution does not, and every one is
 // required — a caller hands over the whole resolution.
+// The valued settings and which rung decided each setting are here so the
+// frame can say which stale pick it wears beneath (src/dsl/stale-warnings.ts).
 export type DrawSelection = Pick<
   EffectiveGlobals,
-  | "preset"
-  | "variation"
-  | "shade"
-  | "transitions"
-  | "animationSpeed"
-  | "menuTimeout"
+  ValuedField | "preset" | "decidedBy"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
   // own t = 0) and the effects already made for its rows. The daemon hands
@@ -1335,6 +1373,8 @@ export function drawDsl(
 ): DrawnFrame {
   const warnings: RenderWarning[] = [];
   const warn = (warning: RenderWarning): void => void warnings.push(warning);
+  // The settings of each placement the walk draws.
+  const drawnSlots: PlacementRow[] = [];
   const segments = new Map<string, readonly RichText[]>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
@@ -1561,7 +1601,10 @@ export function drawDsl(
       // affordance's URL does.
       closeDisclosure: (key) =>
         disclosureCloseFragment(registry.session(), key),
-      placed: (id, lines) => record.placed(id, motion.placed(id, lines)),
+      placed: (node, lines) => {
+        if (lines.length > 0) drawnSlots.push(...node.slots);
+        return record.placed(node.id, motion.placed(node.id, lines));
+      },
       lastDrawn: (id) => last?.placements.get(id),
       waited: (variable) => waited.add(variable),
       decorations: (node, palette) =>
@@ -1644,6 +1687,46 @@ export function drawDsl(
     : armed()
       ? "can-move"
       : "still";
+  // [LAW:one-source-of-truth] The picks that decided this frame and that
+  // their settings cannot hold: each globals setting's fold answer, and each
+  // drawn placement's.
+  const table = settingTable(config);
+  const worn = (name: SettingName): string => {
+    switch (name) {
+      case "theme":
+        return theme.name;
+      case "style":
+        return style.name;
+      case "effect":
+        return effect.name;
+      case "preset":
+        return preset;
+      default:
+        return settingSpelling(selection[name]);
+    }
+  };
+  const stale: StalePick[] = [
+    ...SETTING_NAMES.flatMap((name) => {
+      const decided = selection.decidedBy[name];
+      return decided.kind === "stale"
+        ? [{ row: table.globals[name], raw: decided.raw, wears: worn(name) }]
+        : [];
+    }),
+    ...drawnSlots.flatMap((row) => {
+      const folded = placementFold(row, registry.held(row.key));
+      return folded.decidedBy.kind === "stale"
+        ? [
+            {
+              row,
+              raw: folded.decidedBy.raw,
+              wears: settingSpelling(folded.value),
+            },
+          ]
+        : [];
+    }),
+  ];
+  for (const warning of staleWarnings(stale, () => configOptionDomains(config)))
+    warn(warning);
   // Read after the walk: the payload this render pushed is what a key reads.
   for (const [variable, fault] of registry.cachePolicyFaults())
     warn({

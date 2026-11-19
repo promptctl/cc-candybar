@@ -56,6 +56,10 @@ A draft is derived, never flagged. It's a setting whose session value differs fr
 
 Save's write and the picks it releases land together, so no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
 
+Every save releases every pick that is no draft against the config it wrote, so a save needs no case for a pick its setting can't hold: that pick is never written and never a draft. A save is the user deciding what the bar draws, so after one the bar keeps what was saved even when the stale pick's domain returns. Without a save the stale pick stays stored, so a reinstalled theme comes back.
+
+A stale pick is not an unset one. The bar wears what lies beneath it and a ⚠ names it, but only when the pick decided the frame: a staged value above it, or a placement the frame doesn't draw, decides nothing. A `state` variable can't read a setting's key, because it would show the raw pick the setting reads as stale.
+
 Reset deletes the setting at every layer: the globals, every bundled preset's globals, and every theme's default. A preset the user wrote keeps its pinned value, because that pin is the user's own content.
 
 ## Undo, and edit mode

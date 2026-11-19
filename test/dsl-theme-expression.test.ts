@@ -37,7 +37,11 @@ import { bindRender, renderLook } from "../src/render/action";
 import { lastBinding } from "./helpers/render-binding";
 import { SessionState } from "../src/renderer/session-state";
 import { ConfigError } from "../src/config/dsl-loader";
-import { decideThemeName, resolveThemeSelection, THEME_FLOOR } from "../src/themes";
+import {
+  decideThemeName,
+  resolveThemeSelection,
+  THEME_FLOOR,
+} from "../src/themes";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import {
   EDIT_MODE_ARRANGE,
@@ -92,7 +96,12 @@ interface Painted {
 // The bar these tests draw: a rig over `source`, drawn at a context percentage,
 // with the render warnings it raised and each segment's own colour read back.
 function themeBar(source = src(RULE)) {
-  const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({
+    source,
+    label: "<theme-expr>",
+    palettes: ALLOWED,
+    sessionId: SID,
+  });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): Painted => {
     const drawn = rig.draw({ payload: { session_id: SID, ctx: { pct } } });
@@ -101,7 +110,8 @@ function themeBar(source = src(RULE)) {
     const bgs = new Map(
       [...drawn.segments].map(([name, cells]) => [
         name,
-        (cells[0] && resolvedStyle(cells[0].style).bgcolor?.value?.hex) ?? "(no bg)",
+        (cells[0] && resolvedStyle(cells[0].style).bgcolor?.value?.hex) ??
+          "(no bg)",
       ]),
     );
     return {
@@ -240,7 +250,9 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
       const bad = rt.render(90);
       expect(bad.bg("plain")).toBe(byName(THEME_FLOOR));
       expect(textOf(bad.frame)).toContain(`T=${THEME_FLOOR}`);
-      expect(rt.warnings.map((w) => [w.kind, w.kind === "rule" && w.slot])).toEqual([["rule", "palette"]]);
+      expect(
+        rt.warnings.map((w) => [w.kind, w.kind === "rule" && w.slot]),
+      ).toEqual([["rule", "palette"]]);
       expect(rt.warnings[0]!.message).toContain("globals.palette");
       expect(rt.warnings[0]!.message).toContain("gruvbux-dark");
       expect(rt.warnings[0]!.message).toContain(THEME_FLOOR);
@@ -300,12 +312,11 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // repaint every compile-only render (`cc-candybar check`, tests).
     const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
       const drawn = drawPayload(
         config,
         compiled,
@@ -317,7 +328,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         undefined,
       );
       const out = drawn.frame;
-      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style).bgcolor!.value!.hex;
+      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style)
+        .bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("nord"));
       expect(textOf(out)).toContain("T=nord");
     } finally {
@@ -328,12 +340,11 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
     const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
       const drawn = drawPayload(
         config,
         compiled,
@@ -345,7 +356,8 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
         undefined,
       );
       const out = drawn.frame;
-      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style).bgcolor!.value!.hex;
+      const plainBg = resolvedStyle(drawn.segments.get("plain")![0]!.style)
+        .bgcolor!.value!.hex;
       expect(plainBg).toBe(byName("dracula"));
     } finally {
       registry.dispose();
@@ -393,14 +405,11 @@ describe("globals.palette as an expression — loader", () => {
       ALLOWED,
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
-      expect(() => registerDslConfig(config, registry, { cwd: process.cwd() })).toThrow(
-        /globals\.palette is not a valid template/,
-      );
+      expect(() =>
+        registerDslConfig(config, registry, { cwd: process.cwd() }),
+      ).toThrow(/globals\.palette is not a valid template/);
     } finally {
       registry.dispose();
     }
@@ -409,7 +418,7 @@ describe("globals.palette as an expression — loader", () => {
 
 describe("resolveThemeSelection", () => {
   test("a plain name decides, carrying both the name and the palette it denotes", () => {
-    expect(resolveThemeSelection(undefined, null, "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, null, "nord").value).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -417,7 +426,7 @@ describe("resolveThemeSelection", () => {
   });
 
   test("a session pick naming no installed theme falls through to the config rung", () => {
-    expect(resolveThemeSelection(undefined, "dark", "nord")).toEqual({
+    expect(resolveThemeSelection(undefined, "dark", "nord").value).toEqual({
       kind: "decided",
       name: "nord",
       value: getThemePalette("nord"),
@@ -425,15 +434,15 @@ describe("resolveThemeSelection", () => {
   });
 
   test("an expression is undecided only when no higher rung decided", () => {
-    expect(resolveThemeSelection(undefined, null, RULE)).toEqual({
+    expect(resolveThemeSelection(undefined, null, RULE).value).toEqual({
       kind: "expression",
       source: RULE,
     });
-    expect(resolveThemeSelection(undefined, "nord", RULE)).toMatchObject({
+    expect(resolveThemeSelection(undefined, "nord", RULE).value).toMatchObject({
       kind: "decided",
       name: "nord",
     });
-    expect(resolveThemeSelection("dracula", null, RULE)).toMatchObject({
+    expect(resolveThemeSelection("dracula", null, RULE).value).toMatchObject({
       kind: "decided",
       name: "dracula",
     });
@@ -444,16 +453,18 @@ describe("resolveThemeSelection", () => {
     // installs rode straight through to paletteForThemeName's throw. It now falls
     // through like every other field's — and the rung it falls to is the
     // expression, which is still the CONFIG's rung and must not be skipped.
-    expect(resolveThemeSelection(undefined, "no-such-theme", RULE)).toEqual({
+    expect(
+      resolveThemeSelection(undefined, "no-such-theme", RULE).value,
+    ).toEqual({
       kind: "expression",
       source: RULE,
     });
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", "nord"),
+      resolveThemeSelection(undefined, "no-such-theme", "nord").value,
     ).toMatchObject({ kind: "decided", name: "nord" });
     // Nothing left below: the floor.
     expect(
-      resolveThemeSelection(undefined, "no-such-theme", undefined),
+      resolveThemeSelection(undefined, "no-such-theme", undefined).value,
     ).toMatchObject({ kind: "decided", name: THEME_FLOOR });
   });
 });
@@ -461,7 +472,9 @@ describe("resolveThemeSelection", () => {
 describe("decideThemeName", () => {
   test("an installed name decides and reports nothing", () => {
     const said: string[] = [];
-    expect(decideThemeName("nord", "globals.palette", (m) => said.push(m))).toMatchObject({
+    expect(
+      decideThemeName("nord", "globals.palette", (m) => said.push(m)),
+    ).toMatchObject({
       kind: "decided",
       name: "nord",
     });
@@ -470,7 +483,9 @@ describe("decideThemeName", () => {
 
   test("an unresolvable name yields the floor and reports once, naming the slot, the value and the consequence", () => {
     const said: string[] = [];
-    const decided = decideThemeName("nope", "globals.palette", (m) => said.push(m));
+    const decided = decideThemeName("nope", "globals.palette", (m) =>
+      said.push(m),
+    );
     expect(decided).toMatchObject({ kind: "decided", name: THEME_FLOOR });
     expect(said).toHaveLength(1);
     expect(said[0]).toContain("globals.palette");
@@ -491,8 +506,7 @@ describe("decideThemeName", () => {
 // through `resolveEffectiveGlobals`, the daemon's own chain, because the preset
 // rung is exactly what the file-level tests above never reach.
 describe("a rule inside a preset's globals", () => {
-  const STYLE_RULE =
-    "{{ if ge (int .ctx.pct) 80 }}hot{{ else }}none{{ end }}";
+  const STYLE_RULE = "{{ if ge (int .ctx.pct) 80 }}hot{{ else }}none{{ end }}";
   const presetSrc = (palette: string, look = STYLE_RULE): string => `{
     globals: { palette: '${THEME_FLOOR}' },
     styles: { none: {}, hot: { hueShift: 180 } },
@@ -527,7 +541,9 @@ describe("a rule inside a preset's globals", () => {
 
   test("the active preset's rule is evaluated per render, for both the theme and the style", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
       const effective = resolveEffectiveGlobals(
         config,
         (key) => (key === "preset" ? "ruled" : null),
@@ -545,7 +561,10 @@ describe("a rule inside a preset's globals", () => {
           effective,
         );
         const cells = drawn.segments.get("plain")!;
-        return { frame: drawn.frame, bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex };
+        return {
+          frame: drawn.frame,
+          bg: resolvedStyle(cells[0]!.style).bgcolor!.value!.hex,
+        };
       };
       const hot = render(90);
       expect(textOf(hot.frame)).toContain("T=dracula L=hot");
@@ -575,7 +594,9 @@ describe("a rule inside a preset's globals", () => {
 
   test("a caller picking only a preset renders the ACTIVE preset's rule, not the config's top-level palette", () => {
     withRegistry(presetSrc(RULE), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
       const frame = drawPayload(
         config,
         compiled,
@@ -594,7 +615,9 @@ describe("a rule inside a preset's globals", () => {
     withRegistry(
       presetSrc("{{ if true }}no-such-theme{{ end }}"),
       (config, registry, store) => {
-        const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+        const compiled = registerDslConfig(config, registry, {
+          cwd: process.cwd(),
+        });
         const said = drawPayload(
           config,
           compiled,
@@ -606,7 +629,13 @@ describe("a rule inside a preset's globals", () => {
           selectionFor(config, {}, picked({ preset: "ruled" })),
         ).warnings;
         expect(said).toEqual([
-          { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
+          {
+            kind: "rule",
+            slot: "palette",
+            message: expect.stringMatching(
+              /^presets\.ruled\.globals\.palette rendered /,
+            ),
+          },
         ]);
       },
     );
@@ -615,7 +644,9 @@ describe("a rule inside a preset's globals", () => {
   test("one text written in both slots is two rules — the theme report names only the palette", () => {
     const shared = "{{ if true }}none{{ end }}";
     withRegistry(presetSrc(shared, shared), (config, registry, store) => {
-      const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+      const compiled = registerDslConfig(config, registry, {
+        cwd: process.cwd(),
+      });
       const said = drawPayload(
         config,
         compiled,
@@ -627,7 +658,13 @@ describe("a rule inside a preset's globals", () => {
         selectionFor(config, {}, picked({ preset: "ruled" })),
       ).warnings;
       expect(said).toEqual([
-        { kind: "rule", slot: "palette", message: expect.stringMatching(/^presets\.ruled\.globals\.palette rendered /) },
+        {
+          kind: "rule",
+          slot: "palette",
+          message: expect.stringMatching(
+            /^presets\.ruled\.globals\.palette rendered /,
+          ),
+        },
       ]);
     });
   });
@@ -635,7 +672,9 @@ describe("a rule inside a preset's globals", () => {
   test("a style NAME in a preset's globals or in editGlobals must be a declared style", () => {
     expect(() =>
       parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),
-    ).toThrow(/presets\.ruled\.globals\.style "vivd" does not match any declared style/);
+    ).toThrow(
+      /presets\.ruled\.globals\.style "vivd" does not match any declared style/,
+    );
     const staged = `{
       editGlobals: { style: 'dimm' },
       segments: { plain: { template: 'x' } },
@@ -652,9 +691,9 @@ describe("a rule inside a preset's globals", () => {
       segments: { plain: { template: 'x' } },
       root: { v: ['plain'] },
     }`;
-    expect(() => parseAndValidate("<theme-expr-staged>", staged, ALLOWED)).toThrow(
-      /editGlobals\.palette: a rule is not allowed here/,
-    );
+    expect(() =>
+      parseAndValidate("<theme-expr-staged>", staged, ALLOWED),
+    ).toThrow(/editGlobals\.palette: a rule is not allowed here/);
     const stagedStyle = staged.replace("palette:", "style:");
     expect(() =>
       parseAndValidate("<theme-expr-staged>", stagedStyle, ALLOWED),

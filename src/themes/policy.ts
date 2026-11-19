@@ -48,13 +48,39 @@ const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ["light", "textual-light"],
 ]);
 
+// The theme a retired name was renamed to, if it was.
+export function successorOf(name: string): string | undefined {
+  return RETIRED_THEMES.get(name);
+}
+
 // The sentence appended to an unknown-theme refusal — empty for a name that
 // was never installed, so every refusal site spells it the same way.
 export function retiredThemeNote(name: unknown): string {
-  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : undefined;
+  const to = typeof name === "string" ? successorOf(name) : undefined;
   return to === undefined
     ? ""
     : ` — "${name as string}" was retired; write "${to}", the same palette`;
+}
+
+// A domain longer than this reads in a message as its name, its size and a
+// few of its members: an error naming every installed theme is a wall of text
+// that buries the rest of the message in the diagnostics viewer.
+const LISTED_MEMBERS = 8;
+const SAMPLED_MEMBERS = 3;
+
+// [LAW:single-enforcer] THE spelling of a listed domain in a message, capped:
+// `one of "a", "b"`, or past the cap `one of the 40 "themes" names, such as
+// "a", "b", "c"`. `named` is the domain's name, when it has one.
+export function oneOf(members: readonly string[], named?: string): string {
+  const quoted = members.map((m) => JSON.stringify(m));
+  if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+  const name = named === undefined ? "" : ` "${named}"`;
+  return `one of the ${members.length}${name} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+}
+
+// The installed themes, in a message.
+export function installedThemesNote(): string {
+  return oneOf([...listResolvablePaletteNames()].sort(), "themes");
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
@@ -74,43 +100,89 @@ export const THEME_FLOOR = "textual-dark";
 // preset, endcaps, autoWrap and padding are all this function with different
 // arguments, so the precedence order cannot land on one field and miss another.
 //
-// [LAW:dataflow-not-control-flow] The `??` chain IS the precedence; there is no
-// "does this session have one" branch. A session that has never clicked passes
-// null and lands on the config default by the same code path a session that
-// clicked lands on its pick.
-//
-// [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
-// SessionState string and this field's domain: it returns the typed value or
-// null, and null means "no session pick" — indistinguishable, on purpose, from
-// never having clicked. That is what makes a stale entry from a prior config's
-// vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
-// default rather than throw or render something the label disagrees with
-// [LAW:no-silent-failure] — the caller publishes what this returns as
-// `<field>.effective`, so bar and label always trace to one value.
+// [LAW:parse-dont-validate] `parse` is the boundary between an untyped
+// SessionState string and this setting's domain, and its answer keeps all
+// three facts apart: nothing held, a member held, or a spelling held that the
+// domain does not admit (a theme since retired, a style the config dropped, a
+// number past a narrowed range). A stale pick is not "no pick": the bar wears
+// what lies beneath it and says so (src/render/stale-warnings.ts), and the
+// session keeps it, so it comes back when its domain does.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
 // chain documented in src/config/presets.ts — a fragment some transient MODE of
 // the bar puts on top while it is on (today: edit mode's `editGlobals`). It
 // outranks even the session pick because it is decided LATER: a user picks a
-// style, then afterwards enters edit mode. That is the same lifetime rule that
-// forced the preset's own position, applied one rung further along, which is
-// why it is a parameter of THIS function rather than a check at any call site —
-// a chain with a rung missing from one field is exactly the drift a single
-// resolver exists to prevent.
-//
-// [LAW:dataflow-not-control-flow] Absent ⇒ `undefined`, which the `??` chain
-// skips by the same code path a session that never clicked skips its own rung.
-// There is no "is edit mode on" branch anywhere below this line; the mode is
-// carried entirely by whether this argument has a value.
+// style, then afterwards enters edit mode. A pick it outranks decided nothing,
+// stale or not, which is why the answer names the rung that decided.
+export type Held<T> =
+  | { readonly kind: "unset" }
+  | { readonly kind: "held"; readonly value: T }
+  | { readonly kind: "stale"; readonly raw: string };
+
+const UNSET: Held<never> = { kind: "unset" };
+
+// A session's raw spelling, read through one setting's parse.
+export function heldBy<T>(
+  raw: string | null,
+  parse: (raw: string) => T | null,
+): Held<T> {
+  if (raw === null) return UNSET;
+  const value = parse(raw);
+  return value === null ? { kind: "stale", raw } : { kind: "held", value };
+}
+
+// [LAW:types-are-the-program] The rung that decided a setting's value: the
+// staged fragment, the session's pick, a pick its domain does not hold (the
+// value is then the rung beneath's), or the rung beneath.
+export type DecidedBy =
+  | { readonly kind: "staged" }
+  | { readonly kind: "picked" }
+  | { readonly kind: "stale"; readonly raw: string }
+  | { readonly kind: "beneath" };
+
+// A setting's value and the rung that decided it. Every question about whether
+// a stale pick matters reads `decidedBy`; nothing else repeats the precedence.
+export interface Folded<T> {
+  readonly value: T;
+  readonly decidedBy: DecidedBy;
+}
+
+// [LAW:one-type-per-behavior] THE precedence every setting folds through, a
+// globals field and a placement's setting alike: the staged fragment over the
+// session's pick over what lies beneath them (the config default over the
+// floor, or the placement's saved value).
+export function foldSetting<T>(
+  staged: T | null | undefined,
+  held: Held<T>,
+  beneath: T,
+): Folded<T> {
+  if (staged !== null && staged !== undefined) {
+    return { value: staged, decidedBy: { kind: "staged" } };
+  }
+  switch (held.kind) {
+    case "held":
+      return { value: held.value, decidedBy: { kind: "picked" } };
+    case "stale":
+      return { value: beneath, decidedBy: { kind: "stale", raw: held.raw } };
+    case "unset":
+      return { value: beneath, decidedBy: { kind: "beneath" } };
+  }
+}
+
+// The fold for a field whose rungs hold one type: beneath the pick lies the
+// config default, then the floor.
 export function effectiveGlobal<T>(
   staged: T | null | undefined,
   sessionPick: string | null,
   configDefault: T | null | undefined,
   floor: T,
   parseSession: (raw: string) => T | null,
-): T {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor;
+): Folded<T> {
+  return foldSetting(
+    staged,
+    heldBy(sessionPick, parseSession),
+    configDefault ?? floor,
+  );
 }
 
 // [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
@@ -121,6 +193,18 @@ export function effectiveGlobal<T>(
 // palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
 export function listResolvablePaletteNames(): readonly string[] {
   return listThemePalettes();
+}
+
+// [LAW:single-enforcer] THE answer to "is this theme installed": the
+// registry's names, asked by name, so the answer never builds a palette and a
+// theme that cannot be built is refused where it is built, loudly. The
+// installed themes are fixed for the life of the process, so the set is built
+// once, on first ask — never at import, so a module's import never depends on
+// the registry. Returns the name it was asked, or null.
+let installedThemes: ReadonlySet<string> | undefined;
+export function installedTheme(name: string): string | null {
+  installedThemes ??= new Set(listResolvablePaletteNames());
+  return installedThemes.has(name) ? name : null;
 }
 
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold
@@ -135,21 +219,17 @@ export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
 }
 
-// Membership in `placementThemeNames`, which the render asks of every
-// placement's `theme` each render. The installed themes are fixed for the
-// life of the process, so the set is built once.
-let placementThemeSet: ReadonlySet<string> | undefined;
+// Membership in `placementThemeNames`.
 export function isPlacementThemeName(name: string): boolean {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
+  return name === FOLLOW_BAR || installedTheme(name) !== null;
 }
 
 // --- Per-config member selection ---
 
-// The `effectiveGlobal` instance for every selection whose domain is PER-CONFIG
-// (declared in the config, not a registry-static list). `styles` and `presets`
-// are both exactly this — what differs between them is only the floor name and
-// which map holds the members, i.e. DATA.
+// The `effectiveGlobal` instance for a selection whose domain is PER-CONFIG
+// (declared in the config, not a registry-static list): the preset's. What
+// differs from another such domain is only the floor name and the membership
+// parse, `member`, i.e. DATA.
 //
 // The config default runs through the SAME membership parse the session pick
 // does, one layer down: a `style:`/`preset:` naming a member the config no longer
@@ -161,17 +241,15 @@ export function isPlacementThemeName(name: string): boolean {
 // bundled stdlib ships it and merge-by-name cannot remove it.
 //
 // The staged rung runs through the SAME membership parse the other two do: a
-// fragment naming a member the config does not declare is no more a pick than a
-// stale session entry is, and collapses one rung onward rather than throwing.
+// fragment naming a member the config does not declare collapses one rung
+// onward rather than throwing.
 export function effectiveMemberName(
   stagedName: string | undefined,
   sessionPick: string | null,
   configDefault: string | undefined,
   floor: string,
-  declared: Readonly<Record<string, unknown>>,
-): string {
-  const member = (raw: string): string | null =>
-    Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+  member: (raw: string) => string | null,
+): Folded<string> {
   return effectiveGlobal(
     stagedName === undefined ? null : member(stagedName),
     sessionPick,
@@ -257,10 +335,9 @@ export function resolveSelection<T>(
   globalsValue: string | undefined,
   floor: Decided<T>,
   named: (raw: string) => Decided<T> | null,
-): Selection<T> {
+): Folded<Selection<T>> {
   // [LAW:dataflow-not-control-flow] The expression is a VALUE occupying the
-  // config-default rung, so `effectiveGlobal`'s `??` chain enforces the
-  // precedence — there is no "is there an expression?" branch anywhere deciding
+  // config-default rung, so the fold enforces the precedence — there is no "is there an expression?" branch anywhere deciding
   // whether the rungs above it are honoured.
   const configRung: Selection<T> | null = isExpression(globalsValue)
     ? { kind: "expression", source: globalsValue }
@@ -310,7 +387,7 @@ export type DecidedStyle = Decided<ThemeKey>;
 // [LAW:polishing-by-subtraction] The map lookup IS the membership test; asking
 // `hasOwnProperty` first and then looking the key up would be the same question
 // twice, and the second answer could only ever restate the first.
-function namedStyle(
+export function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
@@ -357,7 +434,7 @@ export function resolveStyleSelection(
   sessionStyle: string | null,
   globalsStyle: string | undefined,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
-): StyleSelection {
+): Folded<StyleSelection> {
   return resolveSelection(
     stagedStyle,
     sessionStyle,
@@ -441,7 +518,7 @@ export const PLACEMENT_EFFECTS: readonly PlacementEffect[] = Object.freeze([
 export type EffectSelection = Selection<EffectName>;
 export type DecidedEffect = Decided<EffectName>;
 
-function namedEffect(name: string): DecidedEffect | null {
+export function namedEffect(name: string): DecidedEffect | null {
   const value = EFFECT_NAMES.find((member) => member === name);
   return value === undefined ? null : { kind: "decided", name, value };
 }
@@ -466,7 +543,7 @@ export function resolveEffectSelection(
   stagedEffect: string | undefined,
   sessionEffect: string | null,
   globalsEffect: string | undefined,
-): EffectSelection {
+): Folded<EffectSelection> {
   return resolveSelection(
     stagedEffect,
     sessionEffect,

@@ -763,13 +763,16 @@ export interface PlacementValue {
   readonly value: SettingValue;
 }
 
-/** `save`'s write: every value key and every placement setting, as ONE tracked write. */
+/**
+ * `save`'s write: every value key and every placement setting, as ONE tracked
+ * write. Returns the config the written file loads as.
+ */
 export function writeDrafts(
   store: EditStore,
   layer: WriteLayer,
   pairs: ReadonlyArray<readonly [key: string, raw: string]>,
   placements: readonly PlacementValue[],
-): void {
+): DslConfig {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
   const under = inheritedOf(into);
@@ -783,7 +786,7 @@ export function writeDrafts(
       ),
     before ?? "",
   );
-  commit(
+  return commit(
     store,
     into,
     before,
@@ -936,8 +939,8 @@ function freePresetName(
 
 /**
  * Save as preset: declare `presets.<name>` as ONE tracked write and return the
- * name — a copy of preset `from`: the root it stages, as the file spells it
- * (comments included) or as the bundled preset's authored text, and its
+ * name and the config the written file loads as — a copy of preset `from`: the
+ * root it stages, as the file spells it (comments included) or as the bundled preset's authored text, and its
  * `globals`; then each `presets.<name>.globals.<field>` of `picks` over them.
  * A preset that stages the config's own root carries no root, and one with
  * nothing to pin is `{}`: the name alone is the declaration.
@@ -949,7 +952,7 @@ export function writePreset(
   globals: Globals,
   picks: ReadonlyArray<readonly [field: keyof Globals, raw: string]>,
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
-): string {
+): { readonly name: string; readonly config: DslConfig } {
   const into = seenBy(layer, (file) => store.read(file));
   const before = requireLayerText(into.path, store.read(into.path));
   const doc = docOf(before ?? "");
@@ -994,8 +997,7 @@ export function writePreset(
       ownRow,
     ),
   );
-  commit(store, into, before, placed, refuseHidden);
-  return name;
+  return { name, config: commit(store, into, before, placed, refuseHidden) };
 }
 
 /**
