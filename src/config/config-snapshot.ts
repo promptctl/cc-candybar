@@ -32,14 +32,22 @@ export interface Layer {
   // Where the layer lives: messages, the directory its `run` actions start
   // in, and the menu's link to the file. A write names the role, never this.
   readonly path: string;
-  readonly content:
-    | { readonly kind: "text"; readonly text: string }
-    | { readonly kind: "absent" } // not written yet: a write creates it
-    | { readonly kind: "unreadable"; readonly error: string }; // maybe there, and not read: a failed load naming it, and no write
+  readonly content: LayerContent;
   // The definitions the layer's `plugins` list names, by each entry as
   // written. Discovery reads that one key, as a preprocessor reads its
   // includes.
   readonly listed: Readonly<Record<string, PluginFile>>;
+}
+
+// [LAW:types-are-the-program] Missing and unreadable layers have different
+// consequences. A write may create an absent layer.
+export type LayerContent =
+  | { readonly kind: "text"; readonly text: string }
+  | { readonly kind: "absent" }
+  | { readonly kind: "unreadable"; readonly error: string };
+
+export function contentOfText(text: string | null): LayerContent {
+  return text === null ? { kind: "absent" } : { kind: "text", text };
 }
 
 // [LAW:single-enforcer] Whether a click may write a layer holding `content`:

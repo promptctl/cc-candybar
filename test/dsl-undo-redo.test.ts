@@ -600,7 +600,7 @@ describe("settings history: a step lands whole, and records only what landed", (
     ): void => {
       const journal = history.begin({
         ...NO_LAYERS,
-        read: () => null,
+        read: () => ({ kind: "absent" }),
         land: () => {},
         roleOf: (f) => (f === "/a" ? "user" : "project"),
       });

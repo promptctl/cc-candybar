@@ -13,10 +13,11 @@ const origin: RenderOrigin = {
 const sid = sessionIdOf("editing");
 const other = sessionIdOf("peer");
 
+const userText = "{ globals: { padding: 1 } }";
 const user: Layer = {
   role: "user",
   path: "/home/config.json5",
-  content: { kind: "text", text: "{ globals: { padding: 1 } }" },
+  content: { kind: "text", text: userText },
   listed: {},
 };
 const project: Layer = {
@@ -53,7 +54,7 @@ test("the draft keeps its edits but follows live repository trust", () => {
   edits.open(sid, origin, snapshot("approved"));
   const turn = edits.draft(sid)!.begin(() => {});
   const edited = "{ globals: { padding: 2 } }";
-  turn.journal.file(sid, user.path, turn.files.read(user.path), edited);
+  turn.journal.file(sid, user.path, userText, edited);
   turn.journal.sessionState.set(sid, "theme", "nord");
   turn.commit();
 

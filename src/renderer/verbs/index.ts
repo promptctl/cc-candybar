@@ -128,7 +128,12 @@ import {
   clickSessionOf,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
-import type { ConfigWrites, Landed } from "../config-writes";
+import {
+  requireLayerText,
+  type ConfigWrites,
+  type Landed,
+} from "../config-writes";
+import type { LayerContent } from "../../config/config-snapshot.js";
 import type {
   ActRequest,
   Effect,
@@ -236,7 +241,7 @@ export type Journaled<C extends DaemonContext> = C & {
   readonly session: SessionId | null;
   readonly context: SessionContext | null;
   readonly journal: Journal;
-  readonly readConfigFile: (file: string) => string | null;
+  readonly readConfigFile: (file: string) => LayerContent;
   readonly finishEdit: (finish: EditFinish) => void;
   readonly navigating: SessionStateRW;
 };
@@ -636,7 +641,7 @@ function proveLoadsAsLayer(
   origin: RenderOrigin | null,
   file: string,
   text: string | null,
-  read: (file: string) => string | null,
+  read: (file: string) => LayerContent,
 ): void {
   const layer =
     origin === null
@@ -784,7 +789,10 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(store.read(into.path), landing.key);
+  const stored = readValue(
+    requireLayerText(into.path, store.read(into.path)),
+    landing.key,
+  );
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
