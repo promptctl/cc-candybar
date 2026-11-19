@@ -44,6 +44,7 @@ function rig(
     readonly subscriptions?: () => void;
     readonly prune?: () => void;
     readonly push?: (say: DaemonLogger) => void;
+    readonly rendererClock?: () => number;
   } = {},
 ) {
   const clock = heldClock(new Date(0));
@@ -108,7 +109,7 @@ function rig(
   });
   const lines: RendererLine[] = [];
   const receive = serveRenderer({
-    renderer: timed(renderer, clock.monotonic),
+    renderer: timed(renderer, fault.rendererClock ?? clock.monotonic),
     send: (line) => {
       const crossed = JSON.parse(JSON.stringify(line)) as RendererLine;
       lines.push(crossed);
@@ -156,6 +157,7 @@ function rig(
     journalTheme,
     lines,
     logged,
+    renderer,
     say,
     setTheme,
     stored,
@@ -200,6 +202,55 @@ test("a failed body keeps its classification and the writes already drained", as
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
     [{ store: "session-state", key: SESSION, value: { theme: "dracula" } }],
     [],
+  ]);
+});
+
+test("a failed end-clock read leaves the completed answer and its diagnostics intact", async () => {
+  let reads = 0;
+  const fixture = rig({
+    rendererClock: () => {
+      if (++reads === 2) throw new Error("end clock failed");
+      return 0;
+    },
+  });
+  const result = await fixture.due(() => {
+    fixture.say("info", "menu opened");
+    fixture.setTheme("nord");
+  });
+  expect(result).toMatchObject({ kind: "answered", turnMs: null });
+  expect(fixture.stored).toEqual([
+    [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
+  ]);
+  expect(fixture.logged).toEqual([
+    { level: "info", line: "menu opened" },
+    { level: "warn", line: expect.stringContaining("end clock failed") },
+  ]);
+  expect(await fixture.due()).toMatchObject({ kind: "answered", turnMs: 0 });
+  expect(fixture.logged).toHaveLength(2);
+});
+
+test("a nested input refusal preserves the active turn's clock and diagnostics", async () => {
+  const fixture = rig();
+  let nested: Promise<void> | undefined;
+  const result = await fixture.due(() => {
+    const readings = readingsAt(fixture.clock);
+    fixture.say("info", "outer work began");
+    nested = expect(
+      fixture.renderer.answer({
+        ...readings,
+        kind: "event",
+        event: { kind: "due" },
+      }),
+    ).rejects.toThrow("renderer diagnostics already in scope");
+    expect(fixture.time.at).toBe(readings.at);
+    expect(fixture.time.tick).toBe(readings.tick);
+    fixture.say("info", "outer work ended");
+  });
+  await nested;
+  expect(result).toMatchObject({ kind: "answered" });
+  expect(fixture.logged).toEqual([
+    { level: "info", line: "outer work began" },
+    { level: "info", line: "outer work ended" },
   ]);
 });
 

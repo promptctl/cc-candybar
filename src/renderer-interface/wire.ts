@@ -16,6 +16,7 @@ import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
+import type { LogLine } from "../utils/logger.js";
 import {
   rendererOf,
   type AdapterInput,
@@ -85,6 +86,39 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
   };
 }
 
+// [LAW:parse-dont-validate] A corrupt optional diagnostic batch has its
+// own fault. It cannot poison the answer or be passed to the host log.
+export function rendererDiagnosticsFrom(
+  raw: unknown,
+  fault: () => void,
+): RendererDiagnostics["diagnostics"] {
+  if (raw === undefined) return undefined;
+  if (Array.isArray(raw) && raw.length > 0) {
+    let lines: [LogLine, ...LogLine[]] | undefined;
+    const values: readonly unknown[] = raw;
+    for (const value of values) {
+      if (!isPlainObject(value)) {
+        fault();
+        return undefined;
+      }
+      const { level, line } = value;
+      if (
+        (level !== "info" && level !== "warn" && level !== "error") ||
+        typeof line !== "string"
+      ) {
+        fault();
+        return undefined;
+      }
+      const diagnostic = { level, line } as const;
+      if (lines === undefined) lines = [diagnostic];
+      else lines.push(diagnostic);
+    }
+    return lines;
+  }
+  fault();
+  return undefined;
+}
+
 type Answer = Timed<RendererOutput | AdapterOutput>;
 type WireAnswer<T extends Answer = Answer> = T extends Answer
   ? Omit<T, "subscriptions"> & { readonly subscriptions?: Subscriptions }
@@ -119,6 +153,7 @@ export type RendererLine =
     })
   | (RendererDiagnostics & {
       readonly kind: "refused";
+      readonly wireVersion: RendererWireVersion;
       readonly failure: Failure;
     })
   | {
@@ -235,7 +270,10 @@ export interface RendererOverLines {
   // came.
   readonly heapSnapshot: (write: (chunk: string) => void) => Promise<void>;
   readonly heard: (line: RendererLine) => void;
-  readonly ended: (why: Error) => void;
+  readonly ended: (why: Error) => ReadonlyArray<{
+    readonly n: number;
+    readonly input: RendererInput;
+  }>;
 }
 
 export function rendererOverLines(deps: {
@@ -252,6 +290,7 @@ export function rendererOverLines(deps: {
     number,
     {
       readonly what: string;
+      readonly input?: RendererInput;
       readonly settle: (line: RendererLine) => boolean;
       readonly fail: (why: Error) => void;
     }
@@ -300,14 +339,23 @@ export function rendererOverLines(deps: {
       };
     return subscriptions;
   };
-  const received = (output: WireAnswer): Answer | null => {
+  const received = (output: WireAnswer, n: number): Answer | null => {
     const declared =
       output.subscriptions === undefined
         ? subscriptions
         : hold(output.subscriptions);
-    return declared === undefined
-      ? null
-      : { ...output, subscriptions: declared };
+    if (declared === undefined) return null;
+    if (output.diagnostics === undefined)
+      return { ...output, subscriptions: declared };
+    const { diagnostics: raw, ...fields } = output;
+    const diagnostics = rendererDiagnosticsFrom(raw, () =>
+      deps.fault(`renderer output ${n} has invalid diagnostics`),
+    );
+    return {
+      ...fields,
+      subscriptions: declared,
+      ...(diagnostics === undefined ? {} : { diagnostics }),
+    };
   };
   let next = 0;
   let gone: Error | null = null;
@@ -320,6 +368,7 @@ export function rendererOverLines(deps: {
       resolve: (value: T) => void,
       reject: (why: Error) => void,
     ) => boolean,
+    input?: RendererInput,
   ): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       if (gone !== null) {
@@ -329,6 +378,7 @@ export function rendererOverLines(deps: {
       const n = ++next;
       owed.set(n, {
         what,
+        ...(input === undefined ? {} : { input }),
         settle: (heard) => settle(heard, resolve, reject),
         fail: reject,
       });
@@ -342,7 +392,11 @@ export function rendererOverLines(deps: {
       (n) => ({ kind: "input", n, input }),
       (heard, resolve, reject) => {
         if (heard.kind === "output") {
-          const output = received(heard.output);
+          if (!isPlainObject(heard.output)) {
+            reject(new Error(`renderer output ${heard.n} is not an object`));
+            return true;
+          }
+          const output = received(heard.output, heard.n);
           if (output === null)
             reject(
               new Error("renderer reused subscriptions before declaring them"),
@@ -353,6 +407,7 @@ export function rendererOverLines(deps: {
         else return false;
         return true;
       },
+      input,
     );
   const renderer = rendererOf({
     // [LAW:types-are-the-program] exception: the renderer answers each input
@@ -449,10 +504,18 @@ export function rendererOverLines(deps: {
     heard,
     ended: (why) => {
       gone ??= why;
-      const waiting = [...owed.values()];
+      const waiting = [...owed];
       owed.clear();
       chunks.clear();
-      for (const each of waiting) each.fail(why);
+      const interrupted: Array<{ n: number; input: RendererInput }> = [];
+      for (const [n, each] of waiting) {
+        each.fail(why);
+        // The same pending table that settles the reply tells the host
+        // which actual inputs had no answer. Pings and snapshots are neither.
+        if (each.input !== undefined)
+          interrupted.push({ n, input: each.input });
+      }
+      return interrupted;
     },
   };
 }

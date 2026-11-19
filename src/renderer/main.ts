@@ -663,7 +663,7 @@ export function mainRenderer(
   };
 
   const during = <T extends object>(input: RendererInput, answer: () => T) =>
-    time.during(input, () => turnLog.during(answer));
+    turnLog.during(() => time.during(input, answer));
 
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input

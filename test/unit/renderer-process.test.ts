@@ -200,6 +200,7 @@ describe("a renderer process's start", () => {
             }
           : {
               kind,
+              wireVersion: RENDERER_WIRE_VERSION,
               failure: failureOf(new Error("refused by fixture")),
               diagnostics: [diagnostic],
             };
@@ -262,8 +263,9 @@ describe("a renderer process's start", () => {
       const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
         "renderer wire version mismatch",
       );
+      const diagnostics = [{ level: "warn", line: "diagnostics in an unaccepted protocol" }];
       child.opts.heard.stdout(
-        `${JSON.stringify({ kind: "started", pid: 9001, ...fields })}\n`,
+        `${JSON.stringify({ kind: "started", pid: 9001, diagnostics, ...fields })}\n`,
       );
       // A later acknowledgment cannot rescue the rejected process during teardown.
       child.say(startedLine(9001));
@@ -272,6 +274,7 @@ describe("a renderer process's start", () => {
       expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
       const mismatch = `renderer wire version mismatch (renderer sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`;
       expect(logs).toContainEqual(expect.stringContaining(mismatch));
+      expect(logs).not.toContain(diagnostics[0]?.line);
       expect(ends[0]?.text).toContain(mismatch);
       clock.advance(BACKOFF_FIRST_MS - 1);
       expect(children).toHaveLength(1);
@@ -319,6 +322,7 @@ describe("a renderer process's start", () => {
     link.arm();
     children[0]!.say({
       kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
       failure: failureOf(new Error("the session state cannot be read")),
     });
     children[0]!.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
@@ -330,6 +334,100 @@ describe("a renderer process's start", () => {
     ]);
   });
 
+  test.each([
+    ["boot", null],
+    ["output", "not a diagnostic batch"],
+    ["output", [{ level: "verbose", line: "discard this" }]],
+    ["output", [{ level: "info", line: 12 }]],
+  ])(
+    "a malformed %s diagnostic leaves the valid answer usable",
+    async (at, diagnostics) => {
+      const { link, children, inputs, logs } = rig();
+      link.arm();
+      const child = children[0]!;
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          ...startedLine(9001),
+          ...(at === "boot" ? { diagnostics } : {}),
+        })}\n`,
+      );
+      const answered = link.renderer.answer(pin);
+      const [sent] = inputs(child);
+      child.opts.heard.stdout(
+        `${JSON.stringify({
+          kind: "output",
+          n: sent!.n,
+          output: { ...PINNED, ...(at === "output" ? { diagnostics } : {}) },
+        })}\n`,
+      );
+      await expect(answered).resolves.toEqual(PINNED);
+      expect(
+        logs.filter((line) => line.includes("invalid diagnostics")),
+      ).toHaveLength(1);
+      expect(logs).not.toContain("discard this");
+    },
+  );
+
+  test("a refused boot after readiness cannot change this link or write its diagnostics", async () => {
+    const { link, children, inputs, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    child.say(startedLine(9001));
+    child.say({
+      kind: "refused",
+      wireVersion: RENDERER_WIRE_VERSION,
+      failure: failureOf(new Error("obsolete refusal")),
+      diagnostics: [{ level: "warn", line: "obsolete log" }],
+    });
+    const answered = link.renderer.answer(pin);
+    child.say({ kind: "output", n: inputs(child)[0]!.n, output: PINNED });
+    await expect(answered).resolves.toEqual(PINNED);
+    expect(child.opts.signal?.aborted).toBe(false);
+    expect(logs.join("\n")).not.toContain("obsolete");
+  });
+
+  test.each([
+    [
+      { kind: "started", pid: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid pid",
+    ],
+    [
+      { kind: "refused", failure: null, wireVersion: RENDERER_WIRE_VERSION },
+      "invalid refusal",
+    ],
+  ])(
+    "a malformed required boot field refuses the worker immediately",
+    async (raw, why) => {
+      const { link, children } = rig();
+      link.arm();
+      const child = children[0]!;
+      const refused = expect(link.renderer.answer(pin)).rejects.toThrow(why);
+      child.opts.heard.stdout(`${JSON.stringify(raw)}\n`);
+      await refused;
+      expect(child.opts.signal?.aborted).toBe(true);
+      expect(child.written.map(({ kind }) => kind)).toEqual(["boot"]);
+    },
+  );
+
+  test("an incompatible refusal can explain the version without publishing its diagnostics", async () => {
+    const { link, children, logs } = rig();
+    link.arm();
+    const child = children[0]!;
+    const refused = expect(link.renderer.answer(pin)).rejects.toThrow(
+      "incompatible boot",
+    );
+    child.opts.heard.stdout(
+      `${JSON.stringify({
+        kind: "refused",
+        wireVersion: RENDERER_WIRE_VERSION - 1,
+        failure: failureOf(new Error("incompatible boot")),
+        diagnostics: [{ level: "info", line: "foreign diagnostic" }],
+      })}\n`,
+    );
+    child.exit({ ...CRASHED, reason: "non-zero", exitCode: 1 });
+    await refused;
+    expect(logs.join("\n")).not.toContain("foreign diagnostic");
+  });
   test("a booting renderer counts as its process, and writes no heap until it is live", async () => {
     const { link } = rig();
     link.arm();

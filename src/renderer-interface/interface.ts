@@ -10,7 +10,7 @@
 
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { AdmittedClick } from "../click/wire";
-import type { Failure } from "../daemon/foundations/verb-error";
+import { failureOf, type Failure } from "../daemon/foundations/verb-error";
 import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
@@ -70,7 +70,8 @@ export type Renderer = Answering<RendererOutput, AdapterOutput>;
 // An output as its transport hands it to the host, with how long the turn
 // took, measured around `answer` on the clock of the process it ran in: the
 // renderer reads none, and the host tells the hop's cost from the turn's.
-export type Timed<O> = O & { readonly turnMs: number };
+// A completed answer whose timing read failed carries no duration.
+export type Timed<O> = O & { readonly turnMs: number | null };
 
 // What the host holds of a renderer: its answers, each timed by its transport.
 export type TimedRenderer = Answering<
@@ -102,10 +103,26 @@ export function timed(
   renderer: Renderer,
   monotonic: () => number,
 ): TimedRenderer {
-  const time = async <O>(answer: () => Promise<O>): Promise<Timed<O>> => {
+  const time = async <O extends RendererDiagnostics>(
+    answer: () => Promise<O>,
+  ): Promise<Timed<O>> => {
     const from = monotonic();
     const output = await answer();
-    return { ...output, turnMs: Math.round(monotonic() - from) };
+    try {
+      return { ...output, turnMs: Math.round(monotonic() - from) };
+    } catch (thrown) {
+      // [LAW:no-silent-failure] Measuring a completed turn must not discard
+      // its effects, writes or diagnostics.
+      const missed: LogLine = {
+        level: "warn",
+        line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
+      };
+      const diagnostics: [LogLine, ...LogLine[]] =
+        output.diagnostics === undefined
+          ? [missed]
+          : [...output.diagnostics, missed];
+      return { ...output, turnMs: null, diagnostics };
+    }
   };
   return rendererOf({
     event: (input) => time(() => renderer.answer(input)),
@@ -119,6 +136,28 @@ export function timed(
 export interface EventInput extends Readings {
   readonly kind: "event";
   readonly event: Event;
+}
+
+// [LAW:one-source-of-truth] The same event session is held while the turn
+// runs and named in the host's records, even if its worker never answers.
+export function sessionOfEvent(event: Event): SessionId | null {
+  switch (event.kind) {
+    case "context":
+    case "request":
+      return event.context.hookData.session_id;
+    case "world-state":
+      return event.worldState.session;
+    case "click":
+      return event.click.scope === "session" ? event.click.session : null;
+    case "retire":
+    case "effect-done":
+      return event.session;
+    case "start":
+    case "config":
+    case "viewers":
+    case "due":
+      return null;
+  }
 }
 
 // A session's context as its newest request names it, and the world state read
@@ -398,8 +437,8 @@ export type Effect = Present | ConfigChange | Act;
 export type TurnRecord = readonly Field[];
 
 export interface RendererDiagnostics {
-  // [LAW:nothing-unseen] Boot and turn results carry diagnostic lines in
-  // order, including on failure. Silence carries no payload.
+  // [LAW:nothing-unseen] Boot and completed answers carry diagnostic lines
+  // in order, including typed failures. Silence carries no payload.
   readonly diagnostics?: readonly [LogLine, ...LogLine[]];
 }
 

@@ -18,6 +18,10 @@ import {
 import { RENDERER_WIRE_VERSION, type HostLine } from "../../../src/renderer-interface/wire";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
+import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
+import { RendererDown } from "../../../src/daemon/foundations/verb-error";
+import { systemLauncher } from "../../../src/proc/system-launcher";
+import { systemTimekeeper } from "../../../src/time";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import {
   DISCLOSURE_CLOSED,
@@ -46,6 +50,8 @@ import {
   oversizedSession,
 } from "../../helpers/oversized-renderer-history";
 import type { Instant, Tick } from "../../../src/utils/instant";
+import { fieldsOf } from "../../../src/utils/logfmt";
+import { inertHost } from "../../helpers/renderer-parts";
 
 jest.setTimeout(30_000);
 
@@ -181,6 +187,92 @@ describe("the renderer wire handshake", () => {
     ]);
     expect(lines[1]?.output).not.toHaveProperty("diagnostics");
   });
+});
+
+test("the supervisor names the unanswered input when its built worker is killed", async () => {
+  const cancel = new AbortController();
+  const launcher = systemLauncher(
+    { inherited: process.env, signal: cancel.signal },
+    systemTimekeeper,
+  );
+  const ready = Promise.withResolvers<void>();
+  const sent = Promise.withResolvers<number>();
+  const logged: string[] = [];
+  const session = sessionIdOf("interrupted-session");
+  const readings = { at: 0 as Instant, tick: 0 as Tick };
+  const link: RendererLink = processRenderer({
+    launcher: {
+      launchChannel: (options) => {
+        const channel = launcher.launchChannel(options);
+        return {
+          ...channel,
+          write: (text) => {
+            channel.write(text);
+            const line = JSON.parse(text) as HostLine;
+            if (
+              line.kind === "input" &&
+              line.input.kind === "event" &&
+              line.input.event.kind === "retire" &&
+              line.input.event.session === session
+            )
+              sent.resolve(line.n);
+          },
+        };
+      },
+    },
+    clock: systemTimekeeper,
+    name: MAIN_RENDERER,
+    entry: path.join(process.cwd(), "dist", "index.mjs"),
+    cwd: process.cwd(),
+    heapCapMb: 256,
+    node: [process.execPath],
+    boot: () => COMPATIBLE_BOOT.boot,
+    reaches: inertHost(),
+    log: (_level, line) => void logged.push(line),
+    ended: (event) => ready.reject(new Error(event.text)),
+    start: async () => {
+      const answer = await link.renderer.answer({
+        kind: "event",
+        ...readings,
+        event: { kind: "start", sessions: [], viewers: {}, configs: [] },
+      });
+      if (answer.kind !== "answered") throw new Error(answer.failure.detail);
+      ready.resolve();
+    },
+  });
+  try {
+    link.arm();
+    await ready.promise;
+    const child = link.process();
+    if (child === null) throw new Error("renderer lost after its START");
+    process.kill(child.pid, "SIGSTOP");
+    const unanswered = expect(
+      link.renderer.answer({
+        kind: "event",
+        ...readings,
+        event: { kind: "retire", session },
+      }),
+    ).rejects.toThrow(RendererDown);
+    const n = await sent.promise;
+    process.kill(child.pid, "SIGKILL");
+    await unanswered;
+    const interrupted = logged.filter((line) =>
+      line.startsWith("renderer input interrupted "),
+    );
+    expect(interrupted).toHaveLength(1);
+    expect(Object.fromEntries(fieldsOf(interrupted[0]!))).toEqual({
+      renderer: MAIN_RENDERER,
+      generation: "1",
+      wire: String(n),
+      input: "retire",
+      sid: session,
+      error: "killed by SIGKILL",
+    });
+  } finally {
+    await link.close();
+    cancel.abort();
+    await launcher.settled();
+  }
 });
 
 // Every renderer start the daemon logged, by pid, in order.

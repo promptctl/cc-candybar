@@ -26,6 +26,7 @@
 // landing left.
 
 import {
+  sessionOfEvent,
   type ConfigChange,
   type Effect,
   type EffectOutcome,
@@ -34,6 +35,7 @@ import {
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
+  type Timed,
   type TurnFailure,
   type TurnOutcome,
   type Subscriptions,
@@ -182,6 +184,7 @@ const THREW_AS = {
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
 interface Slotted {
+  readonly received: boolean;
   readonly turn: TakenTurn;
   readonly settled: Promise<readonly EffectOutcome[]>;
 }
@@ -339,6 +342,7 @@ export function rendererHost(
   // A turn no renderer answered: nothing of it was taken, so the
   // subscriptions last taken stand.
   const unanswered = (failure: Failure, queuedMs: number): Slotted => ({
+    received: false,
     turn: {
       kind: "threw",
       failure,
@@ -361,9 +365,9 @@ export function rendererHost(
   ): Promise<Slotted> => {
     if (input.event.kind === "start") generation++;
     const receipt = receiptFor(generation);
-    const session = sessionOf(input.event);
+    const session = sessionOfEvent(input.event);
     let release = (): void => {};
-    let output: RendererOutput & { readonly turnMs: number };
+    let output: Timed<RendererOutput>;
     let sentAt: Monotonic;
     try {
       if (session !== null) release = collector.holding(session);
@@ -389,6 +393,7 @@ export function rendererHost(
       turnMs,
       ...answer
     } = output;
+    recordDiagnostics(diagnostics);
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -399,13 +404,18 @@ export function rendererHost(
       settlePresentation: receipt,
       queuedMs,
       turnMs,
-      hopMs: elapsedMs(clock, sentAt) - turnMs,
+      hopMs:
+        turnMs === null
+          ? null
+          : recordTaken(
+              "renderer round-trip timing",
+              () => elapsedMs(clock, sentAt) - turnMs,
+            ),
     };
     if (input.event.kind === "start")
       endedStart(
         turn.kind === "threw" ? turn : { kind: "answered", event: input.event },
       );
-    recordDiagnostics(diagnostics);
     recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
@@ -414,6 +424,7 @@ export function rendererHost(
       receipt,
     );
     return {
+      received: true,
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled.finally(
         () => void recordTaken("session release", release),
@@ -752,7 +763,7 @@ export function rendererHost(
         settled: Promise.resolve([{ kind: "failed", reason: made.message }]),
       };
     const input = stamped(made);
-    const { turn, settled } = await inSlot(input, 0);
+    const { received, turn, settled } = await inSlot(input, 0);
     record(input.event, [["why", why]], turn);
     // A `config` turn that threw failed whatever waited on it, as its own
     // turn would have: a waiting click's bad request is still the user's.
@@ -766,7 +777,7 @@ export function rendererHost(
           ]
         : [];
     const outcomes = settled.then((outcomes) => [...threw, ...outcomes]);
-    return turn.kind === "threw" && turn.turnMs === null
+    return turn.kind === "threw" && !received
       ? { kind: "unreceived", failure: turn.failure, settled: outcomes }
       : {
           kind: "received",
@@ -855,7 +866,7 @@ export function rendererHost(
     about: TurnRecord,
     delivered: TakenTurn,
   ): void => {
-    const session = event === null ? null : sessionOf(event);
+    const session = event === null ? null : sessionOfEvent(event);
     const head: TurnRecord = [
       ["renderer", name],
       ["input", event?.kind ?? "-"],
@@ -871,8 +882,8 @@ export function rendererHost(
           log("info", eventLine("turn", [...head, ...delivered.record]));
         return;
       case "threw":
-        // [LAW:single-enforcer] No renderer was live to take it: the
-        // supervisor says that once, with the count it refused.
+        // [LAW:single-enforcer] The supervisor identifies interrupted
+        // inputs and counts those refused while no worker was live.
         if (delivered.failure.kind === "down") return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
@@ -1142,31 +1153,3 @@ const stampedOf =
     event: made.event,
     ...readingsAt(clock),
   });
-
-// [LAW:one-source-of-truth] The session an event names: what a turn holds,
-// and what its line's `sid` says. A click naming none, or one whose id failed
-// its checkpoint, names none.
-function sessionOf(event: Event): SessionId | null {
-  switch (event.kind) {
-    // A start is every session's: it holds none of them alone.
-    case "start":
-      return null;
-    case "context":
-    case "request":
-      return event.context.hookData.session_id;
-    // An origin's config is every session's there.
-    case "config":
-      return null;
-    case "world-state":
-      return event.worldState.session;
-    case "click":
-      return event.click.scope === "session" ? event.click.session : null;
-    case "retire":
-    case "effect-done":
-      return event.session;
-    // Every watched session's, or the renderer's own.
-    case "viewers":
-    case "due":
-      return null;
-  }
-}

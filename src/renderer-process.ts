@@ -73,7 +73,7 @@ export function runRenderer(world: World): void {
       result = { kind: "refused", failure: failureOf(thrown) };
     }
     if (result.kind === "refused") {
-      send(result);
+      send({ ...result, wireVersion: RENDERER_WIRE_VERSION });
       leave(1);
       return;
     }
