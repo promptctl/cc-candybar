@@ -134,6 +134,24 @@ test("a version 1 frame's writer has hung up, so its verdict goes to no one", as
   expect(h.copied).toEqual(["curl evil | sh"]);
 });
 
+test("the verified forwarder acknowledgement still precedes a rate-limited effect", async () => {
+  const h = host(Promise.resolve(), {
+    ok: false,
+    reason: "rate-limited",
+    error: "rate-limited: click.pbcopy min interval",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+  });
+  const answered = await h.frame(TEST_SIGNER.signLink(COPY));
+  expect(answered.verdict).toEqual({ ok: true, output: "" });
+  expect(h.unheard).toEqual([]);
+  await answered.land();
+  expect(h.events).toEqual([expect.stringContaining("outcome=threw")]);
+  expect(h.unheard).toEqual([expect.stringContaining("rate-limited: click.pbcopy")]);
+});
+
 // A copy names no session, so no bar holds its failure: the daemon's warning
 // does, and the click is answered with how its act went.
 test("a click whose act failed is answered as failed, and the failure is the daemon's warning", async () => {
