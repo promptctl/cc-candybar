@@ -148,8 +148,8 @@ export interface SessionConfig {
   readonly worldState: WorldState;
 }
 
-// [LAW:types-are-the-program] These ordinary inputs expect a reply of
-// their own kind. Nothing about the host or its capabilities comes with them.
+// [LAW:types-are-the-program] A command expects a reply of its own kind.
+// A notification carries no command reply.
 export type Command =
   | { readonly kind: "stats" }
   | { readonly kind: "debug"; readonly what: DebugWhat }
@@ -167,6 +167,19 @@ export type ReplyTo<K extends Command["kind"]> = Extract<
   { readonly kind: K }
 >;
 
+// [LAW:single-enforcer] Both ends classify commands from this exhaustive
+// set. A new command kind must be recognized on both sides of the transport.
+const COMMAND_KINDS = {
+  stats: true,
+  debug: true,
+  "close-journal": true,
+  "close-views": true,
+} satisfies Record<Command["kind"], true>;
+
+export function isCommand(event: Event): event is Command {
+  return Object.hasOwn(COMMAND_KINDS, event.kind);
+}
+
 export interface RendererStats {
   readonly renderCache: RenderCacheStats;
   readonly effectCache: StatsSnapshot["effectCache"];
@@ -180,8 +193,9 @@ export interface RendererStats {
 export const INPUTS_CROSS: Crosses<EventInput> = true;
 export const OUTPUTS_CROSS: Crosses<RendererOutput> = true;
 
-export type Event =
-  | Command
+export type Event = Command | Notification;
+
+export type Notification =
   | {
       // A renderer's start: every live session's context, as `context` hands
       // one in, in one turn, so the start's output names everything the

@@ -137,8 +137,9 @@ function rendererLines(send: (bytes: string) => void) {
   };
 }
 
-// [LAW:behavior-not-structure] Keep the exact JSON lines written in both
-// directions, including construction and subscription deltas, before decoding.
+// [LAW:behavior-not-structure] Keep the exact JSON boot input and turn lines,
+// including subscription deltas, before decoding. Compare the renderer's core
+// construction result separately from the turn lines.
 async function recordedRenderer(boot: RendererBoot) {
   const inputs: string[] = [];
   const outputs: string[] = [];

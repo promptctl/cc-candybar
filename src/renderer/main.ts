@@ -82,13 +82,16 @@ import {
   type Failure,
 } from "../daemon/foundations/verb-error.js";
 import {
+  isCommand,
+  type Command,
   type Effect,
-  type CommandReply,
   type TurnFailure,
   type TurnFinalizer,
   type EffectId,
   type Event,
+  type Notification,
   type PushedFrame,
+  type ReplyTo,
   type Renderer,
   type RendererBoot,
   type RendererConstruction,
@@ -116,6 +119,12 @@ type ParkedClick = {
 
 // How a turn ended, apart from what it returned.
 type Ended<T> = { readonly kind: "answered"; readonly value: T } | TurnFailure;
+
+type CommandKind = Command["kind"];
+type CommandByKind = {
+  [K in CommandKind]: Extract<Command, { readonly kind: K }>;
+};
+type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
 
 type StoreDrains = Readonly<
   Record<StoreWrite["store"], () => readonly StoreWrite[]>
@@ -224,50 +233,60 @@ export function mainRenderer(
   const parkedClickSessions = (): Set<SessionId> =>
     new Set(parked.get().map((click) => click.session));
 
+  // [LAW:types-are-the-program] Every command has a handler with its own
+  // input and required reply. Notification handlers cannot answer a command.
+  const commands: {
+    readonly [K in CommandKind]: (event: CommandByKind[K]) => ReplyByKind[K];
+  } = {
+    stats: () => ({
+      kind: "stats",
+      stats: {
+        renderCache: parts.renderCache.stats,
+        effectCache: parts.renderCache.presentations.stats().effects,
+        sessionState: parts.sessionStats(),
+        menuIdle: menuIdle.stats(),
+        rendererTurns: {
+          parked: opening.size + parked.get().length,
+          presents: deliveries.size,
+          deferrals: time.deferrals(),
+        },
+        framesDrawn: feeds.drawn(),
+      },
+    }),
+    debug: ({ what }) => ({
+      kind: "debug",
+      snapshot: debugOf(parts.renderCache, what),
+    }),
+    // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+    // runs whole, so none is in flight.
+    "close-journal": () => {
+      parts.configWrites.close();
+      return { kind: "close-journal" };
+    },
+    "close-views": () => {
+      // The feeds release their pins before the corresponding views close.
+      feeds.closeAll(time.tick);
+      parts.renderCache.close();
+      return { kind: "close-views" };
+    },
+  };
+  const command = <K extends CommandKind>(
+    event: CommandByKind[K] & { readonly kind: K },
+  ): ReplyByKind[K] => commands[event.kind](event);
+
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
   // click's changes are owed their `effect-done` however its handler ended.
   // [LAW:no-ambient-temporal-coupling] A turn runs whole: it awaits nothing,
   // so the host's mailbox, which sends the next input only once this one has
   // answered, is the one order of the renderer's turns.
-  const turn = (
-    event: Event,
+  const notify = (
+    event: Notification,
     record: RequestFacts,
     effects: Effect[],
     frames: PushedFrame[],
-  ): CommandReply | void => {
+  ): void => {
     switch (event.kind) {
-      case "stats":
-        return {
-          kind: "stats",
-          stats: {
-            renderCache: parts.renderCache.stats,
-            effectCache: parts.renderCache.presentations.stats().effects,
-            sessionState: parts.sessionStats(),
-            menuIdle: menuIdle.stats(),
-            rendererTurns: {
-              parked: opening.size + parked.get().length,
-              presents: deliveries.size,
-              deferrals: time.deferrals(),
-            },
-            framesDrawn: feeds.drawn(),
-          },
-        };
-      case "debug":
-        return {
-          kind: "debug",
-          snapshot: debugOf(parts.renderCache, event.what),
-        };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
-      // runs whole, so none is in flight.
-      case "close-journal":
-        parts.configWrites.close();
-        return { kind: "close-journal" };
-      case "close-views":
-        // The feeds release their pins before the corresponding views close.
-        feeds.closeAll(time.tick);
-        parts.renderCache.close();
-        return { kind: "close-views" };
       case "start": {
         const configs = new Map(
           event.configs.map((offer) => [originKey(offer.origin), offer]),
@@ -295,7 +314,7 @@ export function mainRenderer(
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(({ context, worldState }) => () => {
             offered(context.requested);
-            turn(
+            notify(
               { kind: "context", context, worldState },
               record,
               effects,
@@ -686,8 +705,11 @@ export function mainRenderer(
           const record: RequestFacts = [];
           const effects: Effect[] = [];
           const frames: PushedFrame[] = [];
-          const { outcome, ...declaration } = ending(input.event, () =>
-            turn(input.event, record, effects, frames),
+          const { event } = input;
+          const { outcome, ...declaration } = ending(event, () =>
+            isCommand(event)
+              ? command(event)
+              : notify(event, record, effects, frames),
           );
           return {
             ...(outcome.kind === "answered"
