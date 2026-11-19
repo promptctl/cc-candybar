@@ -3,11 +3,8 @@
 // installs a destination as state and never invokes the action that drew it.
 
 import { observable, runInAction } from "mobx";
-import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode.js";
-import { isConfirmKey } from "../config/confirm-step";
-import { isSettingKey } from "../renderer-interface/history-storage";
-import { DIAGNOSTICS_VIEWING } from "../config/door";
-import type { DisclosureNest, StateWrite } from "../config/disclosure-nest";
+import { isEditModeKey, isNavigationKey } from "../config/session-key";
+import type { StateWrite } from "../config/disclosure-nest";
 import type { SessionStateRW } from "../renderer-interface/session-state";
 import type { Gate } from "../daemon/foundations/validator-registry";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
@@ -18,18 +15,25 @@ import type { SessionId } from "../daemon/foundations/session-id";
 // page cursors use the same representation as built-in menus.
 export interface MenuContext {
   readonly gate: Gate;
-  readonly nest: () => DisclosureNest;
-  readonly edit: symbol | null;
 }
 
 interface MenuView {
   readonly values: ReadonlyMap<string, string>;
-  readonly edit: MenuContext["edit"];
 }
 
 interface Visit {
   readonly from: MenuView;
   readonly to: MenuView;
+}
+
+// The visits a turn ended, one per session.
+export type EndedVisits = ReadonlyMap<SessionId, Visit>;
+
+function followedBy(timeline: Timeline, visit: Visit): Timeline {
+  const visits = [...timeline.visits.slice(0, timeline.cursor), visit].slice(
+    -MAX_VISITS,
+  );
+  return { visits, cursor: visits.length };
 }
 
 interface Timeline {
@@ -44,24 +48,17 @@ const EMPTY: Timeline = { visits: [], cursor: 0 };
 const MAX_VISITS = 20;
 const MAX_SESSIONS = 32;
 
-// [LAW:one-source-of-truth] The gate supplies the menu's keys. Settings,
-// transaction lifecycle, confirmations and independently owned UI state
-// cannot be restored by visiting a prior menu.
-const isMenuKey = (key: string): boolean =>
-  key !== EDIT_MODE_KEY &&
-  !isSettingKey(key) &&
-  !isConfirmKey(key) &&
-  key !== DIAGNOSTICS_VIEWING;
-
+// [LAW:one-source-of-truth] The gate supplies the menu's keys, and a key's
+// kind says which of them Back restores.
 const menuKeys = new WeakMap<Gate, readonly string[]>();
 function capture(
   store: SessionStateRW,
   sid: SessionId,
-  { gate, edit }: MenuContext,
+  { gate }: MenuContext,
 ): MenuView {
   let keys = menuKeys.get(gate);
   if (keys === undefined) {
-    keys = gate.listKeys().filter(isMenuKey);
+    keys = gate.listKeys().filter(isNavigationKey);
     menuKeys.set(gate, keys);
   }
   const values = new Map<string, string>();
@@ -69,7 +66,7 @@ function capture(
     const value = store.get(sid, key);
     if (value !== null) values.set(key, value);
   }
-  return { values, edit };
+  return { values };
 }
 
 function movedKeys(from: MenuView, to: MenuView): string[] {
@@ -78,25 +75,11 @@ function movedKeys(from: MenuView, to: MenuView): string[] {
   );
 }
 
-// An edit-only member is reachable only in the same open transaction.
-// A member on the same key outside edit mode keeps its ordinary meaning.
-function inView(
-  view: MenuView,
-  context: MenuContext,
-  key: string,
-): string | undefined {
-  const value = view.values.get(key);
-  if (value === undefined || view.edit === context.edit) return value;
-  const nested = context
-    .nest()
-    .inside(EDIT_MODE_REF)
-    .find((at) => at.key === key);
-  return nested === undefined || nested.outside.has(value) ? value : undefined;
-}
-
+// [LAW:types-are-the-program] A closed edit's steps are never destinations,
+// by construction: edit mode's state lives only in its open edit, so no view
+// outside it holds the value such a step went to.
 // [LAW:single-enforcer] The search supplies both Back and its displayed
 // depth. An overwritten control or an invalid destination skips its visit.
-// Values that belong to a different edit draft leave this projection.
 function previous(
   timeline: Timeline,
   current: MenuView,
@@ -114,8 +97,8 @@ function previous(
     const visit = timeline.visits[cursor]!;
     const keys = movedKeys(visit.from, visit.to);
     const step = keys.flatMap((key) => {
-      const from = inView(visit.from, context, key);
-      const to = inView(visit.to, context, key);
+      const from = visit.from.values.get(key);
+      const to = visit.to.values.get(key);
       return from === to ? [] : [{ key, from, to }];
     });
     if (
@@ -133,7 +116,7 @@ function previous(
       if (from === undefined) values.delete(key);
       else values.set(key, from);
     }
-    destination ??= { values: new Map(values), edit: context.edit };
+    destination ??= { values: new Map(values) };
     depth++;
   }
   return { destination, depth, invalid };
@@ -154,7 +137,7 @@ export interface NavigationTurn {
     context: () => MenuContext,
   ): void;
   back(sessionId: SessionId, context: MenuContext): RestoredView;
-  commit(): void;
+  commit(): EndedVisits;
 }
 
 export class NavigationHistory {
@@ -185,6 +168,7 @@ export class NavigationHistory {
       { readonly view: MenuView; readonly context: MenuContext }
     >();
     const next = new Map<SessionId, Timeline>();
+    const ended = new Map<SessionId, Visit>();
     const timelineOf = (sid: SessionId) =>
       next.get(sid) ?? this.timelines.get(sid) ?? EMPTY;
 
@@ -192,19 +176,21 @@ export class NavigationHistory {
       const start = before.get(sid);
       if (start === undefined) return;
       before.delete(sid);
-      const to = capture(store, sid, start.context);
-      if (movedKeys(start.view, to).length === 0) return;
-      const { visits, cursor } = timelineOf(sid);
-      const followed = [
-        ...visits.slice(0, cursor),
-        { from: start.view, to },
-      ].slice(-MAX_VISITS);
-      next.set(sid, { visits: followed, cursor: followed.length });
+      const visit = {
+        from: start.view,
+        to: capture(store, sid, start.context),
+      };
+      if (movedKeys(visit.from, visit.to).length === 0) return;
+      ended.set(sid, visit);
+      next.set(sid, followedBy(timelineOf(sid), visit));
     };
 
     return {
       choose: (sid, writes, contextOf) => {
-        if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
+        if (
+          !before.has(sid) &&
+          writes.some(({ key }) => isNavigationKey(key))
+        ) {
           const context = contextOf();
           before.set(sid, { view: capture(store, sid, context), context });
         }
@@ -245,8 +231,25 @@ export class NavigationHistory {
         for (const sid of before.keys()) endVisit(sid);
         this.publish(next);
         next.clear();
+        return ended;
       },
     };
+  }
+
+  // [LAW:one-source-of-truth] The visit of a click that ends an edit, as its
+  // writes land: outside the edit, without edit mode's keys, which end with
+  // it. Every other visit the edit held ends with it.
+  landOutsideEdit(visits: EndedVisits): void {
+    const outside = (view: MenuView): MenuView => ({
+      values: new Map([...view.values].filter(([key]) => !isEditModeKey(key))),
+    });
+    const next = new Map<SessionId, Timeline>();
+    for (const [sid, visit] of visits) {
+      const landed = { from: outside(visit.from), to: outside(visit.to) };
+      if (movedKeys(landed.from, landed.to).length > 0)
+        next.set(sid, followedBy(this.timelines.get(sid) ?? EMPTY, landed));
+    }
+    this.publish(next);
   }
 
   private publish(timelines: ReadonlyMap<SessionId, Timeline>): void {

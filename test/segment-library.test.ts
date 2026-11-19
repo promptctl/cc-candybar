@@ -17,7 +17,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { menuPageKey } from "../src/config/menu-keys";
+import { menuOfKey, menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_NS } from "../src/config/reserved-names";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
@@ -94,7 +94,8 @@ function rig(width: number, userSegments = "") {
       .find(
         (e) =>
           e.verb === VERB_SET_STATE &&
-          e.args[3] === menuPageKey(e.args[1] ?? "") &&
+          menuOfKey(e.args[1] ?? "")?.page === false &&
+          e.args[3] === menuPageKey(e.args[1]!) &&
           e.args[2] !== DISCLOSURE_CLOSED &&
           e.args[2]!.startsWith(EDIT_NS),
       );

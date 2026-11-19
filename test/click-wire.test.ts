@@ -36,6 +36,11 @@ import {
   type Effect,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/click/wire";
+import {
+  menuPageKey,
+  menuStateKey,
+  sharedMenuStateKey,
+} from "../src/config/menu-keys";
 import { linkClick } from "./helpers/click";
 import { BadVerbArgs } from "../src/renderer/verbs";
 import { SessionState } from "../src/renderer/session-state";
@@ -122,20 +127,40 @@ describe("a link says in words what its click does", () => {
       "close candybar.tab",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "menus.pickers", "apply.theme"] },
+      {
+        verb: VERB_SET_STATE,
+        args: [SID, sharedMenuStateKey("candybar.pickers"), "apply.theme"],
+      },
       "open apply.theme",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "menus.pickers", "closed"] },
-      "close pickers",
+      {
+        verb: VERB_SET_STATE,
+        args: [SID, sharedMenuStateKey("candybar.pickers"), "closed"],
+      },
+      "close candybar.pickers",
+    ],
+    [
+      {
+        verb: VERB_SET_STATE,
+        args: [SID, menuStateKey("clock-a1", "pick.style", undefined), "open"],
+      },
+      "open pick.style on clock-a1",
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
       "open candybar.menu",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "edit.menus.x", "closed"] },
-      "close edit.menus.x",
+      {
+        verb: VERB_SET_STATE,
+        args: [SID, sharedMenuStateKey("edit.d.configure.clock"), "closed"],
+      },
+      "close edit.d.configure.clock",
+    ],
+    [
+      { verb: VERB_SET_STATE, args: [SID, "edit.configure", "closed"] },
+      "close edit.configure",
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "prFilter", "closed"] },
@@ -150,8 +175,15 @@ describe("a link says in words what its click does", () => {
       "close diagnostics",
     ],
     [
-      { verb: VERB_SET_STATE, args: [SID, "menupages.menus.pickers", "2"] },
-      "turn pickers to page 3",
+      {
+        verb: VERB_SET_STATE,
+        args: [
+          SID,
+          menuPageKey(sharedMenuStateKey("candybar.pickers")),
+          "2",
+        ],
+      },
+      "turn candybar.pickers to page 3",
     ],
     [
       { verb: VERB_SET_STATE, args: [SID, "candybar.diagnostics", "2583095"] },
@@ -511,7 +543,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(VERB_NAMES).toContain(VERB_DISPATCH);
   });
 
-  test("per-effect errors are written to click.error in session state for bar display", async () => {
+  test("per-effect errors are written to candybar.clickError in session state for bar display", async () => {
     const sessionState = new SessionState();
     // Two effects: first valid, second bad. Dispatch throws but also writes
     // per-effect errors to session state so the next render shows them.
@@ -539,7 +571,7 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(lastClickError(sessionState, SID)?.text).toMatch(/delete-preset:/);
   });
 
-  test("click.error is not written when no session-bearing effect exists", async () => {
+  test("candybar.clickError is not written when no session-bearing effect exists", async () => {
     const sessionState = new SessionState();
     // copy-only dispatch with an unknown verb — no session ID available.
     const url = "cc-candybar://dispatch/e=dispatch%2Fwhatever";

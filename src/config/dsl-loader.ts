@@ -72,6 +72,7 @@ import {
   synthesizePlacementMenus,
 } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
+import { refuseMintedKeys } from "./loader/authored-keys.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
 import { synthesizeSettingsMenu } from "./settings-menu.js";
 import { resolveActionLayer } from "./action.js";
@@ -1202,11 +1203,12 @@ function validateTopLevel(
   // cycle action + toggle segment into the raw sections (so they merge over the
   // default and cross-ref like any user declaration), and user names under the
   // reserved namespace are rejected against the fully-parsed sections.
-  synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] The `menus.` reservation and every `{{ menu }}`
   // call's shape, checked where the author wrote them; the keys each placement
-  // derives are minted after merge (validateRenderable).
-  checkMenuDecls(ctx, out);
+  // derives are minted after merge (validateRenderable). Then the authored
+  // keys, before any synthesis writes a minted key into these sections.
+  refuseMintedKeys(ctx, out, checkMenuDecls(ctx, out));
+  synthesizeGroupDecls(ctx, out);
   // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
   // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger

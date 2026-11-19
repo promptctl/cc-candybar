@@ -16,7 +16,6 @@ import {
   type SettingOrderProblem,
   type SettingValue,
   type SettingDecl,
-  freePlacementId,
   placementId,
   placementIds,
   walkNodes,
@@ -361,11 +360,9 @@ export function validateCrossReferences(
     }
     for (const [id, nodes] of byId) {
       if (nodes.length < 2) continue;
-      const seg = nodes[1]!.name;
-      const free = freePlacementId(seg, new Set(byId.keys()));
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each its own: { seg: "${seg}", id: "${free}" }. A placement without an "id" takes its segment's name.`,
+        message: `${layoutKey} has ${nodes.length} placements with the id "${id}" — an id names one placement (its settings, its menus' open state, and edit mode all address it), so give each placement a distinct id. A placement without an "id" takes its segment's name.`,
         line: layoutLine,
       });
     }

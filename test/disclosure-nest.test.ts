@@ -20,11 +20,12 @@ import { disclosureNest } from "../src/config/disclosure-nest";
 import { insertGap } from "../src/config/edit-chrome";
 import { closingView } from "../src/renderer/closing-view";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
-const PICKERS = "menus.candybar_pickers";
-const GEAR_PICKERS = "menus.candybar_gearPickers";
+const PICKERS = sharedMenuStateKey("candybar.pickers");
+const GEAR_PICKERS = sharedMenuStateKey("candybar.gearPickers");
 const PAYLOAD = {
   session_id: SID,
   tmux: { pane: "%0" },
@@ -62,7 +63,7 @@ function nestBar(src: string) {
   };
   // What the session reads: a cleared key holds its state variable's default.
   const held = (key: string): string =>
-    sessionState.get(SID, key) ?? disclosureNest(config).defaultOf(key);
+    ctx.edits.view.get(SID, key) ?? disclosureNest(config).defaultOf(key);
   return { config, sessionState, render, clickWriting, held, logged, ctx };
 }
 
@@ -133,7 +134,9 @@ test("case 3: a lane's (?) closes with 🧪 toggles", async () => {
   await rt.clickWriting("candybar.help.experimentalStatusline", "open");
   await rt.clickWriting(PICKERS, DISCLOSURE_CLOSED);
   await rt.clickWriting(PICKERS, "toggles");
-  expect(rt.held("candybar.help.experimentalStatusline")).toBe(DISCLOSURE_CLOSED);
+  expect(rt.held("candybar.help.experimentalStatusline")).toBe(
+    DISCLOSURE_CLOSED,
+  );
 });
 
 describe("cases 4 and 5: what edit mode opened closes when it is left", () => {
@@ -200,6 +203,21 @@ test("Back reopens the door after an edit closes without carrying old edit menus
   expect(rt.ctx.edits.draft(SID)).toBeNull();
   await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
   expect(rt.held(gap.stateKey)).toBe(DISCLOSURE_CLOSED);
+});
+
+test("Back past a closed edit skips the views only its own state told apart", async () => {
+  const rt = nestBar(BUNDLED);
+  await openDoor(rt);
+  await rt.clickWriting(EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+  const gap = insertGap("default", "directory", "before");
+  await rt.clickWriting(gap.stateKey, gap.apply);
+  await rt.clickWriting(SETTINGS_ANCHOR, DISCLOSURE_CLOSED);
+  await CLICK_VERBS.get("back")!(SID, rt.ctx);
+  expect(rt.held(SETTINGS_ANCHOR)).toBe("open");
+  // The views between differ only in the closed edit's own state, which no
+  // longer exists, so the next Back is the one before the door opened.
+  await CLICK_VERBS.get("back")!(SID, rt.ctx);
+  expect(rt.held(SETTINGS_ANCHOR)).toBe(DISCLOSURE_CLOSED);
 });
 
 test("the close is logged with what it folded", async () => {

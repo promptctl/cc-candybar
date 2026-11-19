@@ -61,11 +61,8 @@ import type {
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
-import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
-import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
-import { disclosureNest } from "../config/disclosure-nest.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
@@ -598,20 +595,20 @@ export function mainRendererOf(
   const now = () => time.at;
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
-  const sessionState = new SessionState(inputs.stored.sessions);
-  // A legacy edit-mode flag has no draft after a restart.
-  for (const sid of Object.keys(inputs.stored.sessions))
-    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
-  const edits = new EditTransactions(sessionState, log);
+  const store = new SessionState(inputs.stored.sessions);
+  const edits = new EditTransactions(store, log);
+  // [LAW:one-source-of-truth] Every reader takes the session as its open
+  // edit shows it.
+  const sessionState = edits.view;
   const settingsHistory = new SettingsHistory(
-    sessionState,
+    store,
     log,
     inputs.stored.history,
   );
   // [LAW:one-source-of-truth] What the turn moved of every store, in the
   // order each store's entries last moved.
   const drained = (): StoreWrite[] => [
-    ...sessionState.drain(),
+    ...store.drain(),
     ...settingsHistory.drain(),
   ];
   let minted = 0;
@@ -644,11 +641,13 @@ export function mainRendererOf(
         history: (sessionId) => edits.depth(sessionId, settingsHistory),
         // Measured against the gate of the config the view draws with.
         navigation: (sessionId, config) =>
-          navigationHistory.depth(sessionId, sessionState, {
-            gate: gates.state.gateFor(config),
-            nest: () => disclosureNest(config),
-            edit: edits.draft(sessionId)?.navigationScope ?? null,
-          }),
+          (edits.draft(sessionId)?.navigation ?? navigationHistory).depth(
+            sessionId,
+            sessionState,
+            {
+              gate: gates.state.gateFor(config),
+            },
+          ),
       }),
     },
     {
@@ -752,9 +751,9 @@ export function mainRendererOf(
             renderCache: renderCache.stats,
             effectCache: renderCache.presentations.stats().effects,
             sessionState: {
-              sessions: sessionState.size(),
-              observers: sessionState.observers(),
-              revision: sessionState.latestRevision(),
+              sessions: store.size(),
+              observers: store.observers(),
+              revision: store.latestRevision(),
             },
             menuIdle: menuIdle.stats(),
             rendererTurns,

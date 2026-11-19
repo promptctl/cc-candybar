@@ -22,6 +22,12 @@ export const EDIT_NS = "edit.";
 // live under that name.
 export const SETTINGS_NS = "candybar.";
 
+// Whether edit mode is open, and the namespace every placement's unsaved
+// setting value lives under (edit-mode.ts). No scalar is declared at
+// `edit.draft`, so nothing under it can be shadowed by one.
+export const EDIT_MODE_KEY = `${EDIT_NS}mode`;
+export const PLACEMENT_DRAFT_NS = `${EDIT_NS}draft.`;
+
 export const RESERVED_NAMESPACES = [
   GROUP_NS,
   MENU_NS,
@@ -30,11 +36,17 @@ export const RESERVED_NAMESPACES = [
   SETTINGS_NS,
 ] as const;
 
-// A name a user can never author: every synthesized artifact lives under one
-// of the prefixes above, so membership alone proves "synthesized, not
-// declared" — the fact edit chrome (structural, not removable content), the
-// delta-able segment set (a delta targets an authorable name), and the test
-// helpers all read from here rather than re-spelling the prefix list.
+// The namespace a name sits in, spelled as written: every artifact a
+// synthesis pass names lives under one of the prefixes above, so membership
+// proves a segment, variable or action "synthesized, not declared" — the fact
+// edit chrome (structural, not removable content), the delta-able segment set
+// (a delta targets an authorable name) and the test helpers read from here
+// rather than re-spelling the prefix list. What a session key is, the session
+// state's readers ask of session-key.ts.
+export function reservedNamespaceOf(name: string): string | undefined {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+}
+
 export function isReservedName(name: string): boolean {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return reservedNamespaceOf(name) !== undefined;
 }

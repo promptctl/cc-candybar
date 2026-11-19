@@ -20,6 +20,7 @@ import type {
 } from "../../renderer-interface/session-state.js";
 import type { Instant } from "../../utils/instant.js";
 import type { Drawing } from "../../config/lanes.js";
+import { SETTINGS_NS } from "../../config/reserved-names.js";
 import {
   answeredBy,
   eventHoldAt,
@@ -27,7 +28,9 @@ import {
   type HeldEvent,
 } from "../../utils/event-hold.js";
 
-const KEY = "click.error";
+// [LAW:one-source-of-truth] In the bar's own namespace, as every key it
+// mints is, so no authored key reaches it.
+const KEY = `${SETTINGS_NS}clickError`;
 
 // Seconds every render shows a click's errors: several of Claude Code's
 // fastest reruns (`statusLine.refreshInterval: 1`), and long enough to read.
@@ -75,11 +78,7 @@ export function answeredClickError(
 }
 
 // [LAW:parse-dont-validate] The session's last click error, whether or not a
-// render still shows it. Session state outlives a daemon: a record with no
-// `answered` is one a daemon from before it wrote, which cleared each once a
-// request past its hold had shown it, so it reads as unanswered; bare text was
-// written before the hold was a time, so its hold is long over, and it reads
-// as none.
+// render still shows it.
 export function lastClickError(
   state: SessionStateReader,
   sessionId: SessionId,
@@ -102,18 +101,17 @@ export function clickErrorAt(
   return kind === "over" ? { kind } : { kind, error: last };
 }
 
-function recordOf(raw: string): ClickErrorRecord | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof value !== "object" || value === null) return null;
-  const { text, at, answered } = value as Record<string, unknown>;
-  return typeof text === "string" &&
-    typeof at === "number" &&
-    (answered === undefined || typeof answered === "boolean")
-    ? { text, at: at as Instant, answered: answered === true }
-    : null;
+// [LAW:no-silent-failure] Only this module writes the key, and no authored
+// key reaches the namespace it sits in, so a record that does not parse is
+// this module's bug, said.
+function recordOf(raw: string): ClickErrorRecord {
+  const value: unknown = JSON.parse(raw);
+  const { text, at, answered } = (value ?? {}) as Record<string, unknown>;
+  if (
+    typeof text !== "string" ||
+    typeof at !== "number" ||
+    typeof answered !== "boolean"
+  )
+    throw new Error(`click error record ${raw} is not one this build writes`);
+  return { text, at: at as Instant, answered };
 }

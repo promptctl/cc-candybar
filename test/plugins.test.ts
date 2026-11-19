@@ -321,6 +321,20 @@ describe("a plugin that does not load is dropped alone", () => {
       "Dependency cycle: plugins.x.a → plugins.x.b → plugins.x.a",
     ));
 
+  // A plugin's `{{ menu }}` keys are authored as a file's are, and refused by
+  // the same check.
+  test("a menu joining the settings menu's own accordion", () =>
+    dropped(
+      `{ actions: { pick: { set: "k", from: "themes" } }, segments: { s: { template: '{{ menu "plugins.x.pick" "▸" "▾" (dict "key" "candybar.pickers") }}' } } }`,
+      `session key "candybar.pickers" names the settings menu's own accordion, in the "candybar." namespace`,
+    ));
+
+  test("a menu keyed in edit mode's namespace", () =>
+    dropped(
+      `{ actions: { pick: { set: "k", from: "themes" } }, segments: { s: { template: '{{ menu "plugins.x.pick" "▸" "▾" (dict "key" "edit.live") }}' } } }`,
+      `session key "edit.live" names an accordion in the "edit." namespace`,
+    ));
+
   test("a definition that is not there", () =>
     dropped(
       `{ data: "./d.json", segments: {} }`.replace(/.*/s, "{ "),

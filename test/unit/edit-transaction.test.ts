@@ -51,7 +51,7 @@ function snapshot(standing: Standing): ConfigSnapshot {
 test("the draft keeps its edits but follows live repository trust", () => {
   const committed = new SessionState();
   const edits = new EditTransactions(committed, () => {});
-  edits.open(sid, origin, snapshot("approved"));
+  edits.open(sid, origin, snapshot("approved"), new Map());
   const turn = edits.draft(sid)!.begin(() => {});
   const edited = "{ globals: { padding: 2 } }";
   turn.journal.file(sid, user.path, userText, edited);

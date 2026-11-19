@@ -16,7 +16,7 @@ import type { Frame } from "../src/render/frame";
 import { linksOf } from "../src/click/read";
 import { linkUrls } from "./helpers/frame";
 import { selectionFor } from "./helpers/selection";
-import { configurePlacement } from "./helpers/configure";
+import { arrange, configurePlacement } from "./helpers/configure";
 import type { Palette, RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { bindRender } from "../src/render/action";
@@ -34,10 +34,12 @@ import { type VerbContext } from "../src/renderer/verbs";
 import { stateGate } from "./helpers/gates";
 import {
   configureMember,
+  EDIT_CONFIGURE_KEY,
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
 } from "../src/config/loader/edit-mode";
-import { placementDraftKey } from "../src/config/edit-chrome";
+import { EDIT_LIVE_KEY, placementDraftKey } from "../src/config/edit-chrome";
+import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
@@ -79,7 +81,7 @@ function themeBar(src: string) {
     source: src,
     sessionId: SID,
     sessionState,
-    history: durable.historyFor(sessionState),
+    history: durable.historyFor,
     host: durable.host,
   });
   const { config } = rig;
@@ -219,7 +221,7 @@ describe("configure mode picks a placement's theme", () => {
   test("a pick from the theme picker recolours that placement alone, its options told apart by their swatches, and save writes it", async () => {
     durable.write(TWO);
     const rt = themeBar(TWO);
-    configurePlacement(rt.sessionState, SID, "default", "tag");
+    configurePlacement(rt.ctx, SID, "default", "tag");
     const key = placementDraftKey("default", "tag", "theme");
     // The control is the theme picker, `theme ▀▀▀` (brandon-theme-swatch-
     // 8v9r); its label opens the row of swatches. The open click is the one
@@ -274,7 +276,9 @@ describe("configure mode picks a placement's theme", () => {
 
     const pinnedBefore = rt.bgOf("pinned");
     await rt.click(writing(first!)[0]!);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, "closed");
+    // Back to the live bar, the pick still unsaved in the edit.
+    rt.ctx.sessionState.set(SID, EDIT_CONFIGURE_KEY, DISCLOSURE_CLOSED);
+    rt.ctx.sessionState.set(SID, EDIT_LIVE_KEY, "open");
     rt.render(BAR_A);
     const following = themeBar(
       configWith("{ template: 'x' }", `'tag', { seg: 'tag', id: 'pinned' }`),
@@ -289,9 +293,10 @@ describe("configure mode picks a placement's theme", () => {
       log: (_level, message) => logged.push(message),
     });
     // The save's one event names the theme it wrote.
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toContain(`default/tag.settings.theme=${first}`);
-    expect(rt.sessionState.get(SID, key)).toBeNull();
+    const saves = logged.filter((l) => l.startsWith("save:"));
+    expect(saves).toHaveLength(1);
+    expect(saves[0]).toContain(`default/tag.settings.theme=${first}`);
+    expect(rt.ctx.edits.view.get(SID, key)).toBeNull();
     expect(durable.text()).toContain(
       `{ seg: "tag", settings: { theme: "${first}" } }`,
     );
@@ -308,7 +313,7 @@ describe("configure mode over a placement several presets share", () => {
       root: { v: [{ h: ['tag'] }] },
       presets: { zzz: { root: { v: [{ h: ['tag'] }] } } },
     }`);
-    configurePlacement(rt.sessionState, SID, "default", "tag");
+    configurePlacement(rt.ctx, SID, "default", "tag");
     // The theme picker's label: the click opening its swatches.
     const controls = linkUrls(rt.render(BAR_A)).filter((u) =>
       effectsOf(u).some((e) => (e.args[2] ?? "").endsWith(".theme")),
@@ -342,11 +347,11 @@ describe("the layout preview while arranging", () => {
 
   test("a pinned placement keeps its theme, and an unsaved pick shows", () => {
     const rt = themeBar(TWO);
-    rt.sessionState.set(SID, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    arrange(rt.ctx, SID);
     const drawn = previewPalette(rt, "tag");
     expect(drawn).toHaveLength(2);
     expect(drawn).toContain(paletteForThemeName(PIN));
-    rt.sessionState.set(
+    rt.ctx.sessionState.set(
       SID,
       placementDraftKey("default", "tag", "theme"),
       BAR_B,

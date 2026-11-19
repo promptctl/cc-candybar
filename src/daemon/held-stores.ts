@@ -11,9 +11,11 @@ import type {
 } from "../renderer-interface/history-storage.js";
 import { runEach } from "../utils/run-each.js";
 import {
+  withoutEditModeKeys,
   type StoredState,
   type StoreWrite,
 } from "../renderer-interface/stored-state.js";
+import type { DaemonLogger } from "../utils/logger.js";
 
 // Where a profile's stores are kept: its files, or nowhere.
 export interface ProfileStorage {
@@ -35,13 +37,16 @@ export class HeldStores {
   private history = new Map<SessionId, SessionHistory>();
   private closed = false;
 
-  constructor(private readonly storage: ProfileStorage) {}
+  constructor(
+    private readonly storage: ProfileStorage,
+    private readonly log: DaemonLogger,
+  ) {}
 
   // [LAW:no-ambient-temporal-coupling] Read once the daemon serves, so a
   // daemon that won the socket reads what the one before it flushed in its
   // close.
   load(): void {
-    this.sessions = new Map(this.storage.session.load());
+    this.sessions = withoutEditModeKeys(this.storage.session.load(), this.log);
     this.history = new Map(this.storage.history.load());
   }
 

@@ -574,12 +574,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
       opts(),
     ).frame;
   const ctx: VerbContext = verbContextWith(
-    testVerbContext(
-      sessionState,
-      durable.historyFor(sessionState),
-      undefined,
-      durable.host,
-    ),
+    testVerbContext(sessionState, durable.historyFor, undefined, durable.host),
     {
       // The daemon's own lookup and reload: a click is gated by the config as
       // the last click left it, and an insertion mints its id against it.
@@ -608,6 +603,9 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   };
   return { config, store, render, click, log };
 }
+
+// An inserted placement's id: its segment's name and a fresh random suffix.
+const FRESH = (seg: string): RegExp => new RegExp(`^${seg}-[0-9a-f]{6}$`);
 
 describe("apply-layout-op click → the config file", () => {
   beforeEach(() => {
@@ -667,7 +665,15 @@ describe("apply-layout-op click → the config file", () => {
     await click(urls[0]!); // remove directory
     await click(urls[1]!); // insert gitPr after git
     expect(durable.parsed().root).toEqual({
-      v: [{ h: ["git", "gitPr"] }, "bar"],
+      v: [
+        {
+          h: [
+            "git",
+            { seg: "gitPr", id: expect.stringMatching(FRESH("gitPr")) },
+          ],
+        },
+        "bar",
+      ],
     });
     expect(durable.history().past).toHaveLength(2);
   });
@@ -688,22 +694,18 @@ describe("apply-layout-op click → the config file", () => {
     const again = ownUrls(render())[3]!;
     await click(again);
     await click(again);
-    expect(durable.parsed().root).toEqual({
-      v: [
-        {
-          h: [
-            "directory",
-            "git",
-            { seg: "git", id: "git-3" },
-            { seg: "git", id: "git-2" },
-          ],
-        },
-        "bar",
-      ],
-    });
+    const row = (durable.parsed().root as { v: [{ h: unknown[] }] }).v[0].h;
+    expect(row).toEqual([
+      "directory",
+      "git",
+      { seg: "git", id: expect.stringMatching(FRESH("git")) },
+      { seg: "git", id: expect.stringMatching(FRESH("git")) },
+    ]);
+    const [, , second, first] = row as { id: string }[];
+    expect(second!.id).not.toBe(first!.id);
     expect(log.filter((l) => l.startsWith("apply-layout-op:"))).toEqual([
-      expect.stringContaining(`placed={"seg":"git","id":"git-2"}`),
-      expect.stringContaining(`placed={"seg":"git","id":"git-3"}`),
+      expect.stringContaining(`placed={"seg":"git","id":"${first!.id}"}`),
+      expect.stringContaining(`placed={"seg":"git","id":"${second!.id}"}`),
     ]);
   });
 
@@ -814,7 +816,7 @@ describe("apply-layout-op click → the config file", () => {
     durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
-      durable.historyFor(sessionState),
+      durable.historyFor,
       config,
       durable.host,
     );
@@ -1079,12 +1081,7 @@ function originCtx(
 ): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
   const ctx = verbContextWith(
-    testVerbContext(
-      sessionState,
-      durable.historyFor(sessionState),
-      undefined,
-      durable.host,
-    ),
+    testVerbContext(sessionState, durable.historyFor, undefined, durable.host),
     {
       // The daemon's own wiring (daemon.ts): the config a session renders with
       // is its cache entry's, and a click that must not act on the old config
@@ -1347,11 +1344,17 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         anchor: "sidebar",
         relation: "after",
       });
+      const clock = { seg: "clock", id: expect.stringMatching(FRESH("clock")) };
       expect(durable.parsed().presets).toEqual({
-        compact: { root: { h: ["sidebar", "clock"] } },
+        compact: { root: { h: ["sidebar", clock] } },
       });
+      const placed = (
+        durable.parsed().presets as {
+          compact: { root: { h: [unknown, { id: string }] } };
+        }
+      ).compact.root.h[1].id;
       await fire({ op: "remove", target: "sidebar" });
-      await fire({ op: "remove", target: "clock" });
+      await fire({ op: "remove", target: placed });
       expect(durable.parsed().presets).toEqual({
         compact: { root: { h: [] } },
       });
@@ -1395,7 +1398,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "presets.default.root",
         INSERT_GITPR_AFTER_GIT,
       );
-      expect(durable.parsed().root).toEqual({ h: ["git", "gitPr"] });
+      expect(durable.parsed().root).toEqual({
+        h: ["git", { seg: "gitPr", id: expect.stringMatching(FRESH("gitPr")) }],
+      });
     } finally {
       for (const fn of cleanups) fn();
     }

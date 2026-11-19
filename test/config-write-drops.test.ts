@@ -30,12 +30,18 @@ test("a click that would leave a new undeclared placement is refused, and the fi
   const text = `{ segments: { a: { template: "a" } }, root: { h: ["a"] } }`;
   const home = homeWith(text);
   expect(() =>
-    applyLayoutOp(store, home, "presets.default.root", {
-      op: "insert",
-      segment: "ghost",
-      anchor: "a",
-      relation: "after",
-    }),
+    applyLayoutOp(
+      store,
+      home,
+      "presets.default.root",
+      {
+        op: "insert",
+        segment: "ghost",
+        anchor: "a",
+        relation: "after",
+      },
+      () => "x1",
+    ),
   ).toThrow(/refused: this click would leave[\s\S]*"ghost" does not match/);
   expect(fs.readFileSync(home.path, "utf8")).toBe(text);
 });
@@ -44,12 +50,18 @@ test("a file that already drops a placement still takes a click", () => {
   const home = homeWith(
     `{ segments: { a: { template: "a" }, b: { template: "b" } }, root: { h: ["a", "gti"] } }`,
   );
-  applyLayoutOp(store, home, "presets.default.root", {
-    op: "insert",
-    segment: "b",
-    anchor: "a",
-    relation: "after",
-  });
+  applyLayoutOp(
+    store,
+    home,
+    "presets.default.root",
+    {
+      op: "insert",
+      segment: "b",
+      anchor: "a",
+      relation: "after",
+    },
+    () => "x1",
+  );
   expect(fs.readFileSync(home.path, "utf8")).toContain('"b"');
 });
 

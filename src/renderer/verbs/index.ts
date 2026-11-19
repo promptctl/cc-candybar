@@ -1,4 +1,9 @@
-import type { EditFinish, EditTransactions } from "../edit-transaction.js";
+import {
+  heldAside,
+  routedWrites,
+  type EditFinish,
+  type EditTransactions,
+} from "../edit-transaction.js";
 import {
   EDIT_MODE_ARRANGE,
   EDIT_MODE_KEY,
@@ -69,24 +74,18 @@ import {
   type SettingsHistory,
 } from "../settings-history";
 import type {
+  EndedVisits,
   MenuContext,
   NavigationHistory,
   NavigationTurn,
 } from "../navigation-history";
 import {
-  placementId,
   settingSpelling,
-  walkNodes,
   type DslConfig,
   type Globals,
-  type SegmentNode,
 } from "../../config/dsl-types";
 import { THEME_DEFAULT_FIELDS } from "../../config/globals-fields";
-import {
-  configureMember,
-  EDIT_CONFIGURE_KEY,
-  PLACEMENT_DRAFT_NS,
-} from "../../config/loader/edit-mode";
+import { isEditModeKey, sessionKeyKind } from "../../config/session-key";
 import {
   durableLanding,
   placementDrafts,
@@ -95,14 +94,14 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
+  unsavedCount,
   themeDefaultSave,
 } from "../setting-drafts";
 import {
   SETTING_PROJECTIONS,
   SETTINGS,
 } from "../../config/setting-projections";
-import { decodeLayoutOp } from "../../config/layout-ops";
-import { presetNames, presetRoot } from "../../config/presets";
+import { decodeLayoutOp, randomSuffix } from "../../config/layout-ops";
 import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
@@ -471,7 +470,10 @@ function refuseDisorderedPicks(
   verb: string,
   writes: ReadonlyArray<{ readonly key: string; readonly value: string }>,
 ): void {
-  const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
+  const picks = writes.filter((w) => {
+    const kind = sessionKeyKind(w.key);
+    return kind.kind === "edit" && kind.part === "draft";
+  });
   if (picks.length === 0) return;
   const problems = placementPickProblems(
     sessionConfig(ctx),
@@ -605,8 +607,6 @@ function menuContext(
 ): MenuContext {
   return {
     gate: ctx.gates.state.gateFor(config),
-    nest: () => disclosureNest(config),
-    edit: ctx.edits.draft(sid)?.navigationScope ?? null,
   };
 }
 
@@ -975,47 +975,6 @@ const resetConfig: VerbHandler = (args, ctx) => {
   );
 };
 
-// Every placement an edit ended: a (preset, id) the config held before the
-// edit and no longer holds after it. Measured over every preset, since a row
-// can be shared — an edit made in one preset's layout can end a placement
-// another renders. [LAW:dataflow-not-control-flow] No branch on the op: an
-// insertion ends nothing, and the comparison says so.
-function endedPlacements(
-  before: DslConfig,
-  after: DslConfig,
-): ReadonlyArray<{ readonly member: string; readonly node: SegmentNode }> {
-  const placed = (config: DslConfig, preset: string) =>
-    [...walkNodes(presetRoot(config, preset).node)].filter(
-      (n): n is SegmentNode => n.kind === "segment",
-    );
-  const survivors = new Set(
-    presetNames(after.presets).flatMap((preset) =>
-      placed(after, preset).map((n) => configureMember(preset, placementId(n))),
-    ),
-  );
-  return presetNames(before.presets).flatMap((preset) =>
-    placed(before, preset)
-      .map((node) => ({
-        member: configureMember(preset, placementId(node)),
-        node,
-      }))
-      .filter(({ member }) => !survivors.has(member)),
-  );
-}
-
-// What an ended placement leaves in the session: its unsaved values, and the
-// configure key while it names that placement — a later placement that takes
-// its id is a new instance, and must inherit neither.
-function endedSessionKeys(
-  ended: ReturnType<typeof endedPlacements>,
-  configuring: string | null,
-): readonly string[] {
-  return ended.flatMap(({ member, node }) => [
-    ...Object.values(node.drafts ?? {}).map((slot) => slot.key),
-    ...(member === configuring ? [EDIT_CONFIGURE_KEY] : []),
-  ]);
-}
-
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
 // the validated op token is applied ONCE, to the authored tree in the
 // session's config file (config-file-store.ts over json5-edit.ts), so the
@@ -1033,8 +992,7 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     args: [key = "", opToken = ""],
   } = configArgs("apply-layout-op", args);
   const origin = sessionOrigin(ctx);
-  const before = ctx.configFor(origin);
-  const gate = ctx.gates.config.gateFor(before);
+  const gate = ctx.gates.config.gateFor(ctx.configFor(origin));
   if (!key) {
     throw new BadVerbArgs(
       `apply-layout-op: <key>/<op> is required (have: ${gate.listKeys().join(", ")})`,
@@ -1049,26 +1007,19 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
     );
   }
   const into = heldLayer(ctx, origin, role);
-  const { placed, config } = applyLayoutOpToFile(
+  // [LAW:effects-at-boundaries] The click draws the new placement's suffix.
+  const placed = applyLayoutOpToFile(
     editStore(ctx, sid),
     into,
     key,
     op,
+    randomSuffix,
   );
-  // A removed placement's session state ends with it (endedSessionKeys).
-  // Measured on the config the write's own load proved, and released in the
-  // same click, so its undo brings the placement and its drafts back.
-  // The session state the edit discards — the fact its log line carries.
-  const released = endedSessionKeys(
-    endedPlacements(before, config),
-    ctx.sessionState.get(sid, EDIT_CONFIGURE_KEY),
-  ).filter((key) => ctx.sessionState.get(sid, key) !== null);
-  for (const key of released) ctx.sessionState.clear(sid, key);
   // The placement an insertion wrote — its id minted here, at click time — is
   // the one fact of the edit the op token does not already carry.
   ctx.log(
     "info",
-    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} released=${JSON.stringify(released)} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${into.path} placed=${JSON.stringify(placed)} (session=${sid})`,
   );
 };
 
@@ -1077,7 +1028,7 @@ const applyLayoutOp: VerbHandler = (args, ctx) => {
 // session or in a config file. No key, no value: the history owns which step
 // moves and what it restores; this handler is plumbing between the wire and
 // it. [LAW:no-silent-failure] An empty stack and a stale target are loud
-// BAD_REQUESTs, surfaced as a transient click.error.
+// BAD_REQUESTs, surfaced as a transient candybar.clickError.
 const undo: VerbHandler = (_args, ctx) => {
   const sid = ctx.session;
   const step = ctx.journal.undo(sid);
@@ -1314,20 +1265,36 @@ function journaled<C extends DaemonContext>(
     proveLoadsAsLayer(scoped, origin, file, text, read),
   );
   const journal = edit?.journal ?? ctx.history.begin(files);
+  // [LAW:single-enforcer] The click's session writes pass the one router,
+  // over its journal: a click in an open edit writes the edit's journal, and
+  // any other holds edit mode's keys aside, for the edit it may open.
+  const click =
+    edit === undefined
+      ? { kind: "outside" as const, aside: heldAside() }
+      : { kind: "edit" as const, edit };
+  const writes =
+    click.kind === "edit"
+      ? journal.sessionState
+      : routedWrites(
+          journal.sessionState,
+          (s) => ctx.edits.draftWrites(s),
+          click.aside,
+        );
   const requested: { finish?: EditFinish } = {};
   const failures: unknown[] = [];
   const sessionState = closingView(
-    journal.sessionState,
+    writes,
     (target) => (target === sid ? nestOf(scoped, origin) : NO_NEST),
     (line) => ctx.log("info", line),
   );
   // [LAW:single-enforcer] Choosing a menu uses the same disclosure rules as
   // any state write. Back receives the bare journal so it can install an
-  // already computed view without applying new closure rules to it.
-  const navigation = ctx.navigation.begin(
-    journal.sessionState,
-    sessionState.setBatch,
-  );
+  // already computed view without applying new closure rules to it. An open
+  // edit holds its own Back steps, which end with it; outside one, Back sees
+  // the journal, which no edit-mode key reaches.
+  const navigation = (
+    click.kind === "edit" ? click.edit.navigation : ctx.navigation
+  ).begin(journal.sessionState, sessionState.setBatch);
   try {
     handler({
       ...scoped,
@@ -1364,28 +1331,46 @@ function journaled<C extends DaemonContext>(
   const consequence = (): void => {
     if (requested.finish === "save" && saved === null) return;
     const failed: unknown[] = [];
+    let visits: EndedVisits = new Map();
     try {
-      navigation.commit();
+      visits = navigation.commit();
     } catch (e) {
       failed.push(e);
     }
     try {
-      const writes = journal.writes(sid);
-      const mode = writes?.get(EDIT_MODE_KEY);
-      let moved = false;
-      if (edit === undefined) journal.commit();
-      else if (saved !== null) saved.commit();
-      else moved = edit.commit();
-      if (origin !== null) {
-        if (
-          edit !== undefined &&
-          (saved !== null || (mode !== undefined && mode !== EDIT_MODE_ARRANGE))
-        ) {
-          ctx.edits.close(sid);
+      if (click.kind === "outside") {
+        const clicked = new Map([
+          ...(journal.commit().get(sid) ?? []),
+          ...click.aside.held(sid),
+        ]);
+        const entering =
+          clicked.get(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE && origin !== null;
+        const edited = new Map(
+          [...clicked].filter(([key]) => isEditModeKey(key)),
+        );
+        // [LAW:no-silent-failure] A click outside an edit that opens none
+        // (one drawn before its edit closed) has no edit for those writes to
+        // mean anything in.
+        if (entering) {
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin), edited);
           ctx.editViewChanged(sid);
-        } else if (edit === undefined && mode === EDIT_MODE_ARRANGE) {
-          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
-          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+        } else if (edited.size > 0)
+          ctx.log(
+            "warn",
+            `edit: dropped ${[...edited.keys()].join(",")} — no edit is open (session=${sid})`,
+          );
+      } else if (saved !== null) {
+        saved.commit();
+        ctx.navigation.landOutsideEdit(visits);
+        ctx.edits.close(sid);
+        ctx.editViewChanged(sid);
+      } else {
+        const { moved, clicked } = click.edit.commit();
+        const mode = clicked.get(EDIT_MODE_KEY);
+        if (mode !== undefined && mode !== EDIT_MODE_ARRANGE) {
+          click.edit.leave(clicked);
+          ctx.navigation.landOutsideEdit(visits);
+          ctx.edits.close(sid);
           ctx.editViewChanged(sid);
         } else if (moved) {
           ctx.edits.changed(sid);
@@ -1459,8 +1444,15 @@ export function closeIdleMenus(
 ): void {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
     const nest = nestOf(c, c.context?.durable.origin ?? null);
+    // [LAW:one-source-of-truth] An edit's work is what the save cell counts:
+    // the files it changed and the drafts a save would write.
     const depth = c.edits.draft(sid)?.depth();
-    const hasWork = depth !== undefined && depth.sinceEdit + depth.redo > 0;
+    const hasWork =
+      depth !== undefined &&
+      depth.sinceEdit +
+        depth.redo +
+        unsavedCount(sessionConfig(c), (key) => c.sessionState.get(sid, key)) >
+        0;
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key))
       // [LAW:no-ambient-temporal-coupling] A timer cannot abandon an
       // edit with work to keep or redo. Other disclosures still time out.

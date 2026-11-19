@@ -96,7 +96,7 @@ export const EDIT_LIVE_DISPLAY = ["☐ live", "☑ live"] as const;
 export const EDIT_DONE_SEG = `${EDIT_NS}done`;
 // `↩ cancel` discards the draft and leaves edit mode.
 export const EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-// How many targets differ from when edit mode opened (HistoryDepth.sinceEdit)
+// How many files differ from when edit mode opened (HistoryDepth.sinceEdit)
 // — the daemon's own count, read by the cells' labels and gates; a ref, never
 // a second counter. How many settings are unsaved is the settings menu's own
 // `unsaved` variable.
@@ -357,12 +357,12 @@ function configureParts(
   const member = configureMember(ctx.preset, id);
   ctx.configured.push(member);
   const enter = `${prefix}.configure.${placement}`;
-  // A shared `{{ menu }}` key's spelling: `ident`-normalized under `menus.`, so
-  // it is a template path no other variable owns. Entering configure folds
-  // it, so each visit starts with every list closed.
+  // A shared `{{ menu }}` key's spelling, in edit mode's own namespace since
+  // `enter` is. Entering configure folds it, so each visit starts with every
+  // list closed.
   // [LAW:single-enforcer] exception: closing configure folds this list too
-  // (disclosure-nest.ts), but a layout edit releases configure on the
-  // reloaded config, where the removed placement's member nests nothing.
+  // (disclosure-nest.ts), but a placement a layout edit removed nests
+  // nothing on the reloaded config.
   const listKey = sharedMenuStateKey(enter);
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
@@ -941,8 +941,8 @@ function spliceEditChromeForPreset(
 // back to it only when a preset declares no root of its own, and every name
 // now does). The synthesized variables/actions/segments merge additively —
 // nothing here can collide with user data, since every name it mints lives
-// under the `edit.`/`menus.` namespaces `synthesizeEditModeToggle` and
-// `checkMenuDecls` already reserve unconditionally at parse time.
+// under the `edit.` namespace `synthesizeEditModeToggle` reserves
+// unconditionally at parse time.
 //
 // Unconditional: the settings menu, synthesized into every config just before
 // this pass, ensures `edit.toggle` and puts `✎ arrange` in its body, so every bar
@@ -1001,10 +1001,10 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   };
   artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   // [LAW:dataflow-not-control-flow] Hidden by data, not by a branch: with
-  // nothing changed there is nothing to discard.
+  // nothing to keep there is nothing to discard.
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "↩ cancel" }}`,
-    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`,
+    when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${TO_KEEP} }}`,
   };
   const lead: LayoutNode[] = [
     { kind: "segment", name: EDIT_DONE_SEG },

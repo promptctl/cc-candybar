@@ -609,7 +609,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     reported: string,
     entry: string,
   ) {
-    const stores = new HeldStores(inputs.profile(name, log));
+    const stores = new HeldStores(inputs.profile(name, log), log);
     // [LAW:one-source-of-truth] Each start reads the latest held profile.
     const boot = (): RendererBoot => ({
       stored: stores.current(),

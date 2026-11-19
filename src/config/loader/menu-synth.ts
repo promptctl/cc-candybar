@@ -41,7 +41,6 @@ import {
   menuPageKey,
   menuStateKey,
   parseMenuOptions,
-  sharedMenuStateKey,
   type MenuOptions,
 } from "../menu-keys.js";
 import {
@@ -61,11 +60,9 @@ import {
 import { presetNames, presetRoot } from "../presets.js";
 import type { ConfigIssue } from "./diagnostics.js";
 import { findKeyLine } from "./diagnostics.js";
-import {
-  reservedNamespaceCollisions,
-  reservedNamespaceOf,
-} from "./reserved-namespace.js";
+import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 import { MENU_NS, MENU_PAGE_NS } from "../reserved-names.js";
+import type { AuthoredKey } from "./authored-keys.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -182,30 +179,6 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   } catch (e) {
     return issue(`with invalid options — ${(e as Error).message}`);
   }
-  // [LAW:no-silent-failure] An accordion key is the one authored name that never
-  // becomes a declaration, so `reservedNamespaceCollisions` cannot see it — and
-  // `menuStateKey` collapses it through `ident()`, which is where a reserved
-  // namespace leaks: every spelling of `candybar.pickers` collapses to the state
-  // key the settings menu's picker accordion mints, and a shared key joining an
-  // accordion is the mechanism BY DESIGN, so the join was silent (brandon-menus-du8).
-  // Gated here, at load, because this pass sees exactly the AUTHORED menus: the
-  // settings menu synthesizes its own artifacts in `validateRenderable`, after this
-  // pass has run, so its own reserved key is never asked to pass its own gate.
-  // The render side re-reads these options but re-checks nothing — a config that
-  // loaded holds no reserved key [LAW:parse-dont-validate].
-  const sharedKey = options.key;
-  if (sharedKey !== undefined) {
-    const reserved = reservedNamespaceOf(sharedKey);
-    if (reserved !== undefined) {
-      return issue(
-        `whose accordion key "${sharedKey}" lands in the reserved "${reserved}" namespace — ` +
-          `a key is collapsed to an identifier (${JSON.stringify(sharedKey)} becomes ` +
-          `"${sharedMenuStateKey(sharedKey)}"), so it would share one open-state key with the ` +
-          `synthesized accordion that owns that namespace instead of grouping only your own menus. ` +
-          `Name the group without the reserved prefix`,
-      );
-    }
-  }
   return { kind: "ok", apply: applyArg.value, options };
 }
 
@@ -267,10 +240,13 @@ function menuIssue(ctx: ValidateCtx, path: string, message: string): void {
   ctx.issues.push({ path, message, line: findKeyLine(ctx.source, ["root"]) });
 }
 
+// Returns the accordion keys the file's `{{ menu }}` calls author, each at
+// the segment that writes it, for the load's one check of authored keys
+// (authored-keys.ts).
 export function checkMenuDecls(
   ctx: ValidateCtx,
   out: Readonly<RawDslConfig>,
-): void {
+): AuthoredKey[] {
   // [LAW:single-enforcer] The `menus.` namespace is reserved UNCONDITIONALLY — a
   // user name under it is rejected whether or not any menu is placed this load, so
   // the reservation is a stable contract ("you never author menus.*"), not a rule
@@ -361,6 +337,7 @@ export function checkMenuDecls(
   // it is checked here, where the author wrote it. The keys a call derives
   // are a fact about each PLACEMENT, so they are minted after merge
   // (synthesizePlacementMenus below), over the trees that render.
+  const keys: AuthoredKey[] = [];
   for (const [segName, { template }] of Object.entries(segments)) {
     // A delta inheriting its template declares no menus of its own: the
     // bundled template's were checked when the bundled default parsed.
@@ -368,6 +345,11 @@ export function checkMenuDecls(
     const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
+      if (call.kind === "ok" && call.options.key !== undefined)
+        keys.push({
+          path: `segments.${segName}.template`,
+          key: call.options.key,
+        });
       const message =
         call.kind === "issue" ? call.message : identityIssue(call.apply);
       if (message !== undefined) {
@@ -379,6 +361,7 @@ export function checkMenuDecls(
       }
     }
   }
+  return keys;
 }
 
 // [LAW:types-are-the-program] The two apply names that cannot be a member. An
@@ -432,19 +415,6 @@ export function synthesizePlacementMenus(
   // function of the identity alone, so the union over trees is the same
   // declaration however many trees mint it.
   for (const preset of presetNames(config.presets)) {
-    // [LAW:types-are-the-program] A synthesized key is `ident()`-normalized
-    // so it carries no separators; that normalization is lossy (`a-b` and
-    // `a_b` collapse), so two DISTINCT declarations could map to one key and
-    // silently share state (an unintended accordion). Track the raw "owner"
-    // each synthesized name (state key AND its derived page key) legitimately
-    // belongs to — a shared key is owned by its raw key string (every sibling
-    // agrees); an independent menu by its raw (placement, apply). A second
-    // owner on the same name is a collision, rejected so it is unrepresentable
-    // [LAW:no-silent-failure] rather than corrupting grouping. Registering the
-    // page key too closes the cross-shape aliasing corner (e.g. an apply
-    // action named "page" in placement "s" vs the page cursor of a shared
-    // key "s").
-    const ownerBySynthKey = new Map<string, string>();
     // Two menus claiming one identity (same key + same member) cannot be
     // addressed distinctly: for independent menus that is the literal same
     // `{{ menu }}` twice in a segment; for shared-key menus it is two menus
@@ -470,23 +440,6 @@ export function synthesizePlacementMenus(
         const member = menuMember(apply);
         const stateKey = menuStateKey(id, apply, options.key);
         const pageKey = menuPageKey(stateKey);
-        const owner =
-          options.key !== undefined
-            ? `key ${options.key}`
-            : `ind ${id} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
-          const prior = ownerBySynthKey.get(k);
-          return prior !== undefined && prior !== owner;
-        });
-        if (clashKey !== undefined) {
-          issue(
-            node.name,
-            `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
-          );
-          continue;
-        }
-        ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
         const identity = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity);

@@ -60,7 +60,12 @@ import {
   type Address,
 } from "../src/themes/decor";
 import { resolvedStyle } from "../src/render/rich-theme.js";
-import { menuPageKey } from "../src/config/menu-keys";
+import {
+  menuActionName,
+  menuPageKey,
+  menuStateKey,
+  sharedMenuStateKey,
+} from "../src/config/menu-keys";
 
 import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
 
@@ -276,11 +281,10 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
-  test("two menus whose names normalize to the same state key are rejected (lossy ident)", () => {
-    // segment "s" with apply actions "a-b" and "a_b" both normalize to
-    // menus.s.a_b; without the collision guard they would silently share open
-    // state (an unintended accordion). It must be a loud load error.
-    const src = `{
+  test("two menus whose names differ only in punctuation keep two open states", () => {
+    // Apply actions "a-b" and "a_b": every part of a key is spelled
+    // injectively, so the two never share open state.
+    const config = parseAndValidate("<test>", `{
       globals: {},
       actions: {
         'a-b': { set: 'theme', from: 'themes' },
@@ -288,16 +292,12 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       },
       segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
-    }`;
-    try {
-      parseAndValidate("<test>", src, ALLOWED);
-      throw new Error("expected ConfigError");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(
-        /normalize to the same state key/,
-      );
-    }
+    }`, ALLOWED);
+    expect(menuStateKey("s", "a-b", undefined)).not.toBe(
+      menuStateKey("s", "a_b", undefined),
+    );
+    expect(config.variables[menuStateKey("s", "a-b", undefined)]).toBeDefined();
+    expect(config.variables[menuStateKey("s", "a_b", undefined)]).toBeDefined();
   });
 
   test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {
@@ -838,16 +838,16 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
   test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", async () => {
     const { config, render, clickToggle } =
       menuBar(ACCORDION_SRC);
-    expect(config.actions["menus.pickers.applyTheme"]).toEqual({
-      set: "menus.pickers",
+    expect(config.actions[menuActionName(sharedMenuStateKey("pickers"), "applyTheme")]).toEqual({
+      set: sharedMenuStateKey("pickers"),
       cycle: ["closed", "applyTheme"],
     });
-    expect(config.actions["menus.pickers.applyEndcaps"]).toEqual({
-      set: "menus.pickers",
+    expect(config.actions[menuActionName(sharedMenuStateKey("pickers"), "applyEndcaps")]).toEqual({
+      set: sharedMenuStateKey("pickers"),
       cycle: ["closed", "applyEndcaps"],
     });
     const gate = deriveActionValidators(config).find(
-      (g) => g.key === "menus.pickers",
+      (g) => g.key === sharedMenuStateKey("pickers"),
     );
     expect(gate?.spec).toEqual({
       kind: "allow-list",
@@ -855,19 +855,19 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     });
     // One page cursor per disclosure key: the accordion holds at most one open
     // body, so its one cursor is exact — and every toggle resets it to 0.
-    expect(config.variables[menuPageKey("menus.pickers")]).toEqual({
+    expect(config.variables[menuPageKey(sharedMenuStateKey("pickers"))]).toEqual({
       kind: "state",
-      key: menuPageKey("menus.pickers"),
+      key: menuPageKey(sharedMenuStateKey("pickers")),
       default: "0",
     });
 
-    await clickToggle(render(), "menus.pickers", "applyTheme");
+    await clickToggle(render(), sharedMenuStateKey("pickers"), "applyTheme");
     let out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸");
     // endcapsMenu renders closed (current "applyTheme" is outside its cycle), so
     // its click writes "applyEndcaps" — opening it auto-closes the theme.
-    await clickToggle(render(), "menus.pickers", "applyEndcaps");
+    await clickToggle(render(), sharedMenuStateKey("pickers"), "applyEndcaps");
     out = textOf(render());
     expect(out).toContain("T ▸");
     expect(out).toContain("S ▾");
