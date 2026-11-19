@@ -9,8 +9,9 @@
 // [LAW:behavior-not-structure] Each case drives the host's driver over a fake
 // renderer: a value whose turns are scripted, and nothing that records calls.
 
-import { checkoutLocation } from "../../src/utils/git-root";
-import { TEST_ENVIRONMENT } from "../helpers/session-environment";
+import { TEST_ENV, TEST_ENVIRONMENT } from "../helpers/session-environment";
+import { checkRenderRequest } from "../../src/daemon/render-checkpoint";
+import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 import {
   eventRenderer,
   hearingEvents,
@@ -40,19 +41,37 @@ import {
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { WorldState } from "../../src/facts/world-state";
-import type { CheckedRenderRequest } from "../../src/renderer-interface/request-context";
 import type { Monotonic } from "../../src/time";
 
 const SESSION = sessionIdOf("a-session");
 const REQUEST = 3 as RequestId;
 const FRAME = renderFailedFrame("the bar");
-// What the host reads of a checked request: its session, its encoding, and a
-// hook naming no directory, so no checkout is read for it.
-const REQ = {
-  encoding: "frame",
-  deadline: { kind: "unstated" },
-  hookData: { session_id: SESSION },
-} as unknown as CheckedRenderRequest;
+const CHECKED = checkRenderRequest(
+  {
+    v: PROTOCOL_VERSION,
+    kind: "render",
+    args: ["cc-candybar"],
+    cwd: "/project",
+    encoding: "frame",
+    env: TEST_ENV,
+    hookData: {
+      hook_event_name: "Status",
+      session_id: SESSION,
+      transcript_path: "/project/transcript.jsonl",
+      cwd: "/project",
+      model: { id: "m", display_name: "M" },
+      workspace: { current_dir: "/project", project_dir: "/project" },
+    },
+  },
+  { firstSightOfUnknownHookField: () => false },
+  () => {},
+  "/home/test",
+);
+if (!CHECKED.ok) throw new Error(CHECKED.problems.join("; "));
+const REQ = CHECKED.req;
+const LOCATION = { main: "", worktree: "", subpath: "", noRepo: true };
+const locate = () => LOCATION;
+const CONTEXT = { ...REQ, hookData: { ...REQ.hookData, location: LOCATION } };
 // The world state the collector reads at the request's keys.
 const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
 const NO_SUBSCRIPTIONS: Subscriptions = {
@@ -196,7 +215,7 @@ async function answer(
     CLOCK,
     meets.closing ?? NOT_CLOSING,
     (_level, line) => logged.push(line),
-    checkoutLocation,
+    locate,
     REQ,
     TEST_ENVIRONMENT,
     REQUEST,
@@ -438,9 +457,11 @@ test("the session's context reaches the renderer first, with the world state rea
     subscribed,
   );
   expect(contexts).toEqual([
-    { kind: "context", context: REQ, worldState: WORLD },
+    { kind: "context", context: CONTEXT, worldState: WORLD },
   ]);
-  expect(requests).toEqual([{ kind: "request", id: REQUEST, context: REQ }]);
+  expect(requests).toEqual([
+    { kind: "request", id: REQUEST, context: CONTEXT },
+  ]);
   expect(subscribed).toEqual([opened, drawn]);
 });
 
@@ -575,7 +596,7 @@ describe("the request's wait, between its context and its request", () => {
       CLOCK,
       NOT_CLOSING,
       () => {},
-      checkoutLocation,
+      locate,
       REQ,
       TEST_ENVIRONMENT,
       REQUEST,

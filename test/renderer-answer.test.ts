@@ -58,7 +58,7 @@ import {
 } from "./helpers/session-rig";
 import { ok } from "../src/utils/outcome";
 import { fakeTmux } from "./helpers/payload-owners";
-import { rendererHost } from "../src/daemon/renderer-host";
+import { rendererHost, type HostWorld } from "../src/daemon/renderer-host";
 import type {
   MainRendererParts,
   RendererVerbs,
@@ -673,6 +673,61 @@ describe("the world state the host hands in", () => {
   });
 });
 
+// The real host/renderer ordering with the test's config discovery on the
+// host side. A barrier finishes any acknowledgement queued by the caller.
+function productionAnswer(
+  t: ReturnType<typeof renderer>,
+  seen: Event[],
+  override: Partial<Pick<HostWorld["configs"], "follow" | "snapshotOf">> = {},
+  closing = new AbortController().signal,
+) {
+  const { discovery } = t.rig.cache.configs;
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      hearingEvents(t.r, ({ event }) => {
+        if (event.kind !== "viewers") seen.push(event);
+      }),
+    ),
+    () => {},
+    unfollowedCollector(t.rig.served.collector),
+    {
+      ...NO_ACTS,
+      unheard: (text) => void t.logged.push(text),
+      configs: {
+        ...NO_ACTS.configs,
+        follow: discovery.follow.bind(discovery),
+        snapshotOf: discovery.snapshotOf.bind(discovery),
+        ...override,
+      },
+    },
+  );
+  return Object.assign(
+    () =>
+      answerStatusline(
+        host,
+        t.rig.served.collector,
+        systemTimekeeper,
+        closing,
+        () => {},
+        checkoutLocation,
+        checked(),
+        TEST_ENVIRONMENT,
+        REQUEST,
+        systemTimekeeper.monotonic() + 5000,
+        [],
+      ),
+    {
+      drain: () =>
+        host.answer(() => ({
+          kind: "event",
+          event: { kind: "viewers", viewers: {} },
+        })),
+    },
+  );
+}
+
 describe("the session's config, ahead of its request", () => {
   test("opens the session's view and names what it reads, with no effect", async () => {
     const t = renderer();
@@ -734,6 +789,149 @@ describe("the session's config, ahead of its request", () => {
     // context the opening was for carried.
     expect(facts[0]).toEqual(["sid", SESSION]);
     expect(new Map(facts).get("badArgs")).toMatch(/--bogus/);
+  });
+
+  test("a cold render waits for config in its context slot, then owns one present and acknowledgement", async () => {
+    const t = renderer();
+    const seen: Event[] = [];
+    const ask = productionAnswer(t, seen);
+    const reply = await ask();
+    expect(reply.resp.ok).toBe(true);
+
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "config",
+      "request",
+    ]);
+    expect(seen.at(-1)).toMatchObject({ id: REQUEST });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.filter((event) => event.kind === "effect-done")).toEqual([
+      expect.objectContaining({
+        kind: "effect-done",
+        session: SESSION,
+        outcome: { kind: "ok" },
+      }),
+    ]);
+    expect(t.recorded).toHaveLength(1);
+  });
+
+  test("a failed config ends the original cold render before it waits or draws", async () => {
+    const t = renderer();
+    t.rig.cache.configure = () => {
+      throw new Error("config load broke");
+    };
+    const waits = jest.spyOn(t.rig.served.collector, "settled");
+    const seen: Event[] = [];
+    const ask = productionAnswer(t, seen);
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: its config turn: config load broke",
+    });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual(["context", "config"]);
+    expect(waits).not.toHaveBeenCalled();
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("closing during preparation ends the request without a present", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    const closing = new AbortController();
+    const ask = productionAnswer(
+      t,
+      seen,
+      {
+        snapshotOf: (origin) => {
+          closing.abort();
+          return discovery.snapshotOf(origin);
+        },
+      },
+      closing.signal,
+    );
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: the daemon closed: render refused",
+    });
+    reply.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual(["context", "config"]);
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("a config discovery failure answers the first request and the next request can configure", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    let first = true;
+    const ask = productionAnswer(t, seen, {
+      follow: (origins) => {
+        if (first) {
+          first = false;
+          throw new Error("config discovery broke");
+        }
+        discovery.follow(origins);
+      },
+    });
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error: "renderer main: its config turn: config discovery broke",
+    });
+    expect(seen.map((event) => event.kind)).toEqual(["context"]);
+    const ready = await ask();
+    expect(ready.resp.ok).toBe(true);
+    ready.settled(false);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "context",
+      "config",
+      "request",
+      "effect-done",
+    ]);
+    expect(t.recorded).toEqual([]);
+  });
+
+  test("a snapshot that never reached the renderer can be served at the next context", async () => {
+    const t = renderer();
+    const { discovery } = t.rig.cache.configs;
+    const seen: Event[] = [];
+    let attempts = 0;
+    const ask = productionAnswer(t, seen, {
+      snapshotOf: (origin) => {
+        if (++attempts === 1) {
+          throw new Error("config snapshot could not be sent");
+        }
+        return discovery.snapshotOf(origin);
+      },
+    });
+    const reply = await ask();
+    expect(reply.resp).toMatchObject({
+      ok: false,
+      error:
+        "renderer main: its config turn: config snapshot could not be sent",
+    });
+    expect(seen.map((event) => event.kind)).toEqual(["context"]);
+    await ask.drain();
+    expect(attempts).toBe(1);
+    const ready = await ask();
+    expect(ready.resp.ok).toBe(true);
+    ready.settled(true);
+    await ask.drain();
+    expect(seen.map((event) => event.kind)).toEqual([
+      "context",
+      "context",
+      "config",
+      "request",
+      "effect-done",
+    ]);
+    expect(attempts).toBe(2);
+    expect(t.recorded).toHaveLength(1);
   });
 
   test("a request with no config before it is refused, naming the session", async () => {
@@ -855,6 +1053,7 @@ describe("two requests of one session at different keys", () => {
     );
     t.rig.providers.tmuxService.declare = tmux.declare as never;
     const requests: WorldState[] = [];
+    const drawings: RequestId[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
       systemTimekeeper,
@@ -862,6 +1061,7 @@ describe("two requests of one session at different keys", () => {
         hearingEvents(t.r, (input) => {
           if (input.event.kind === "context")
             requests.push(input.event.worldState);
+          if (input.event.kind === "request") drawings.push(input.event.id);
         }),
       ),
       () => {},
@@ -878,7 +1078,7 @@ describe("two requests of one session at different keys", () => {
         new AbortController().signal,
         () => {},
         checkoutLocation,
-        checked(pane),
+        checked(pane, `${id}.json5`),
         TEST_ENVIRONMENT,
         id as RequestId,
         systemTimekeeper.monotonic() + 10_000,
@@ -905,7 +1105,11 @@ describe("two requests of one session at different keys", () => {
     expect(firstAnswered).toBe(false);
     landings.get("%2")!();
     const answered = await Promise.all([first, second]);
-    for (const { resp } of answered) expect(resp).toMatchObject({ ok: true });
+    for (const answer of answered) {
+      expect(answer.resp).toMatchObject({ ok: true });
+      answer.settled(true);
+    }
+    expect([...drawings].sort()).toEqual([1, 2]);
     const view = viewOf(t.rig)!;
     expect(view.facts().hints.tmux?.pane).toBe("%2");
     expect(view.source.facts().builtins.tmux).toMatchObject({
