@@ -34906,10 +34906,63 @@ function stampFailureOf(document) {
 // src/daemon/source-runs.ts
 init_globals();
 
+// src/daemon/source-files.ts
+init_globals();
+
 // site/shims/fs-promises.ts
 init_globals();
 var p = fs.promises;
 var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/daemon/source-files.ts
+var SourceFiles = class {
+  constructor(readUtf8 = (file, signal) => readFile(file, { encoding: "utf8", signal })) {
+    this.readUtf8 = readUtf8;
+  }
+  readUtf8;
+  queued = /* @__PURE__ */ new Map();
+  // [LAW:single-enforcer] Every request queued for this path before dispatch
+  // shares one read. A request after dispatch may follow a write the earlier
+  // read missed, so it starts a fresh batch.
+  read(file, signal) {
+    const queued = this.queued.get(file);
+    if (queued !== void 0) {
+      queued.callers.add(signal);
+      return queued.result;
+    }
+    const callers = /* @__PURE__ */ new Set([signal]);
+    const result = Promise.resolve().then(() => {
+      this.queued.delete(file);
+      return this.dispatch(file, callers);
+    });
+    this.queued.set(file, { callers, result });
+    return result;
+  }
+  async dispatch(file, callers) {
+    const abort = new AbortController();
+    const cancelled = () => {
+      for (const signal of callers) if (!signal.aborted) return;
+      abort.abort();
+    };
+    for (const signal of callers)
+      signal.addEventListener("abort", cancelled, { once: true });
+    try {
+      cancelled();
+      abort.signal.throwIfAborted();
+      return { kind: "text", text: await this.readUtf8(file, abort.signal) };
+    } catch (error) {
+      const err = error;
+      return {
+        kind: "error",
+        code: typeof err?.code === "string" ? err.code : void 0,
+        message: typeof err?.message === "string" ? err.message : String(error)
+      };
+    } finally {
+      for (const signal of callers)
+        signal.removeEventListener("abort", cancelled);
+    }
+  }
+};
 
 // src/daemon/cache/watchers.ts
 init_globals();
@@ -36231,32 +36284,29 @@ function shellReader(launcher, read2, env2, signal) {
     }
   };
 }
-function fileReader(filePath2, readMode, signal) {
+function fileReader(files, filePath2, readMode, signal) {
   return {
     where: whereOf({ kind: "file", path: filePath2, readMode }),
     read: async () => {
-      try {
-        const raw = await readFile(filePath2, { encoding: "utf8", signal });
+      const read2 = await files.read(filePath2, signal);
+      if (read2.kind === "text")
         return ok(
-          readMode === "first-line" ? raw.split(/\r?\n/)[0] ?? "" : raw
+          readMode === "first-line" ? read2.text.split(/\r?\n/)[0] ?? "" : read2.text
         );
-      } catch (e) {
-        const code2 = e.code ?? String(e);
-        return failed(
-          signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${code2}): ${filePath2}`,
-          "read"
-        );
-      }
+      return failed(
+        signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${read2.code ?? read2.message}): ${filePath2}`,
+        "read"
+      );
     }
   };
 }
-function readerOf(launcher, { run: { identity: identity2 }, env: env2 }, signal) {
+function readerOf(files, launcher, { run: { identity: identity2 }, env: env2 }, signal) {
   const { read: read2 } = identity2;
   switch (read2.kind) {
     case "shell":
       return shellReader(launcher, read2, env2, signal);
     case "file":
-      return fileReader(read2.path, read2.readMode, signal);
+      return fileReader(files, read2.path, read2.readMode, signal);
   }
 }
 function parsed(read2, parser, where) {
@@ -36372,6 +36422,8 @@ var PathWatches = class {
 };
 var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
 var SourceRuns = class {
+  // File-reading policies in the same host share this filesystem edge.
+  files = new SourceFiles();
   byKind;
   watchMgr;
   // Each watching entry's fault, by its run's digest, for the lanes that read
@@ -36397,7 +36449,7 @@ var SourceRuns = class {
       // readers through this one function; text/regex/json are three
       // parsers through it.
       read: async (run3, signal) => {
-        const reader = readerOf(deps.launcher, run3, signal);
+        const reader = readerOf(this.files, deps.launcher, run3, signal);
         return parsed(await reader.read(), run3.run.parser, reader.where);
       },
       every: ({
@@ -68730,6 +68782,7 @@ var jsonParser = (text4) => {
     return failed(`JSON parse failed: ${e.message}`, "parse");
   }
 };
+var jsonDocumentParser = (text4) => text4.trim() === "" ? ABSENT : jsonParser(text4);
 
 // src/config/loader/plugins.ts
 init_globals();
@@ -71612,6 +71665,7 @@ var targetsOf = (folder) => ({
   polled: []
 });
 var ManagedStorage = class {
+  files;
   sessions;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
   // a hold names.
@@ -71642,6 +71696,7 @@ var ManagedStorage = class {
     this.logger = opts.logger;
     this.identityOf = opts.identityOf ?? statIdentity;
     this.fileEvents = opts.fileEvents;
+    this.files = opts.files ?? new SourceFiles();
     this.clock = opts.clock;
     this.unsubscribe = opts.fileEvents.subscribe(
       (notice) => this.noticed(notice)
@@ -71651,7 +71706,7 @@ var ManagedStorage = class {
       scope: "session",
       keyOf: (f) => JSON.stringify([f.folder, f.sessionId]),
       fields: (f) => `file=${valueOf(fileOf(f))}`,
-      read: (f) => this.read(f),
+      read: (f, signal) => this.read(f, signal),
       // [LAW:types-are-the-program] A plugin source has no period: its watch
       // is its trigger, and a hold's return re-reads a kept entry.
       every: () => null,
@@ -71669,8 +71724,9 @@ var ManagedStorage = class {
   // between them.
   hold(id2, folders) {
     this.holds.set(id2, folders);
-    for (const folder of new Set(folders)) this.asked(folder, "hold");
-    this.closeUnheld();
+    const changed = this.reconcile(new Set(folders), "hold");
+    this.closeUnheld(changed);
+    this.refreshFolders(changed);
   }
   // [LAW:single-enforcer] The one way a trigger asks again of a held folder.
   // A generation's folder is read, never made: a stat that fails keeps the
@@ -71687,18 +71743,24 @@ var ManagedStorage = class {
         was.unread = read2.kind === "unreadable" ? read2.reason : null;
         this.watchers.acquire(watchKey(was.key), targetsOf(folder), () => {
         }).release();
-        this.settle(folder);
-        return;
+        return this.settle(folder);
       }
       this.lostAt(was, read2);
-      if (trigger !== "hold") return;
+      if (trigger === "hold") this.moved(folder, this.made(folder));
+      return true;
     }
-    this.moved(folder, this.made(folder));
+    return this.moved(folder, this.made(folder));
+  }
+  reconcile(folders, trigger) {
+    const changed = /* @__PURE__ */ new Set();
+    for (const folder of folders)
+      if (this.asked(folder, trigger)) changed.add(folder);
+    return changed;
   }
   // A render state reclaimed: the folders only it named close.
   release(id2) {
     this.holds.delete(id2);
-    this.closeUnheld();
+    this.refreshFolders(this.closeUnheld());
   }
   // A session's declaration of one session's file: held at (folder, session
   // id) until the session's next declaration takes it no more. A folder no
@@ -71766,10 +71828,17 @@ var ManagedStorage = class {
     return read2.kind === "found" && sameIdentity(read2.identity, was.identity);
   }
   // Closes every folder no hold names.
-  closeUnheld() {
+  closeUnheld(changed = /* @__PURE__ */ new Set()) {
     const named3 = new Set([...this.holds.values()].flat());
-    for (const folder of [...this.folders.keys()])
-      if (!named3.has(folder)) this.moved(folder, void 0);
+    for (const folder of this.folders.keys()) {
+      if (named3.has(folder)) continue;
+      this.moved(folder, void 0);
+      changed.add(folder);
+    }
+    return changed;
+  }
+  refreshFolders(changed) {
+    if (changed.size > 0) this.sessions.changed((f) => changed.has(f.folder));
   }
   // Opens a folder's next generation on the folder a read found.
   opened(folder, identity2) {
@@ -71795,10 +71864,9 @@ var ManagedStorage = class {
     void this.sweep(key);
     return watching;
   }
-  // A folder's state moves: a generation it ends closes, after any next one
-  // opened, and its held files are re-read, since what they read before came
-  // from another folder or from the path unwatched. `undefined`: no hold
-  // names it now.
+  // [LAW:single-enforcer] Each state or fault change makes the folder dirty,
+  // so the caller can refresh it once after reconciling the whole event.
+  // An ended generation closes after its successor opens.
   moved(folder, now2) {
     const was = this.folders.get(folder);
     if (now2 === void 0) this.folders.delete(folder);
@@ -71813,13 +71881,12 @@ var ManagedStorage = class {
       was.handle.release();
     }
     if (now2 === void 0) this.told.delete(folder);
-    this.settle(folder, !sameFolder(was, now2));
+    return this.settle(folder) || !sameFolder(was, now2);
   }
   // [LAW:no-silent-failure] Each fault a folder stands on is logged and
   // counted as it starts and as its reason changes, and logged as it clears,
-  // once each. [LAW:single-enforcer] The one re-read of a folder's held files
-  // on a move of its state or its faults, which they read first.
-  settle(folder, stateMoved = false) {
+  // once each. Whether the faults changed is part of the refresh decision.
+  settle(folder) {
     const was = this.told.get(folder) ?? NO_FAULTS;
     const now2 = faultsOf(this.folders.get(folder));
     let moved2 = false;
@@ -71844,7 +71911,7 @@ var ManagedStorage = class {
     if (SOURCES.every((source) => now2[source] === null))
       this.told.delete(folder);
     else this.told.set(folder, now2);
-    if (moved2 || stateMoved) this.sessions.changed((f) => f.folder === folder);
+    return moved2;
   }
   // [LAW:dataflow-not-control-flow] Routing by what the window named: the
   // held files it names re-read; the folder's own name or an error is judged
@@ -71859,44 +71926,29 @@ var ManagedStorage = class {
     const { folder } = watching.key;
     if (this.folders.get(folder) !== watching) return;
     const inFolder = (f) => f.folder === folder;
-    switch (invalidation.kind) {
-      case "unknown":
-        if (this.judged(watching)) this.sessions.changed(inFolder);
-        return;
-      case "changed": {
-        const { paths: paths2 } = invalidation;
-        if (paths2.includes(import_node_path30.default.join(folder, import_node_path30.default.basename(folder)))) {
-          if (this.judged(watching)) this.sessions.changed(inFolder);
-        } else {
-          this.sessions.changed(
-            (f) => inFolder(f) && paths2.includes(fileOf(f))
-          );
-        }
-        return;
-      }
-      // The watch's fault is the handle's to say (`faultsOf`).
-      case "failed":
-        this.judged(watching);
-        return;
+    if (invalidation.kind === "changed" && !invalidation.paths.includes(import_node_path30.default.join(folder, import_node_path30.default.basename(folder)))) {
+      const paths2 = new Set(invalidation.paths);
+      this.sessions.changed((f) => inFolder(f) && paths2.has(fileOf(f)));
+      return;
     }
+    if (this.judged(watching) || invalidation.kind !== "failed")
+      this.sessions.changed(inFolder);
   }
   // [LAW:one-source-of-truth] Whether the folder is gone is the disk's to
   // say: a chmod, a utimes or an xattr reports the folder's own name exactly
   // as a removal does. Lost only if the path is gone or holds another folder;
-  // a stat that fails keeps the generation. True while it still watches.
+  // a stat that fails keeps the generation. True when readings should move.
   judged(watching) {
     const read2 = this.readAt(watching.key.folder);
     if (read2.kind === "unreadable" || this.present(watching, read2)) {
       watching.unread = read2.kind === "unreadable" ? read2.reason : null;
-      this.settle(watching.key.folder);
-      return true;
+      return this.settle(watching.key.folder);
     }
     this.lostAt(watching, read2);
-    return false;
+    return true;
   }
-  // A generation's folder found gone or replaced: the generation ends, and
-  // its held files are re-read from the path, so no draw shows a value from a
-  // folder no longer there while the next trigger makes it again.
+  // A generation's folder found gone or replaced: the generation ends,
+  // and the event asks for another read from the path.
   lostAt(watching, read2) {
     const { key } = watching;
     this.lost++;
@@ -71915,10 +71967,12 @@ var ManagedStorage = class {
   noticed(notice) {
     switch (notice.kind) {
       case "period":
+        this.refreshFolders(this.reconcile(this.folders.keys(), "period"));
+        return;
       case "caught-up":
-        for (const folder of [...this.folders.keys()])
-          this.asked(folder, notice.kind);
-        if (notice.kind === "caught-up") this.sessions.changed(() => true);
+        for (const folder of this.folders.keys())
+          this.asked(folder, "caught-up");
+        this.sessions.changed(() => true);
         return;
       case "moved":
         this.sessions.changed(() => true);
@@ -71941,19 +71995,14 @@ var ManagedStorage = class {
     const stall = stallReason(this.fileEvents.delivery());
     return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
-  async read(f) {
+  async read(f, signal) {
     const fault = this.standing(f.folder);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
-    let text4;
-    try {
-      text4 = await fs_default.promises.readFile(file, "utf8");
-    } catch (e) {
-      const err = e;
-      return err.code === "ENOENT" ? ABSENT : failed(`${file}: ${err.message}`, "read");
-    }
-    if (text4.trim() === "") return ABSENT;
-    const parsed2 = jsonParser(text4);
+    const read2 = await this.files.read(file, signal);
+    if (read2.kind === "error")
+      return read2.code === "ENOENT" ? ABSENT : failed(`${file}: ${read2.message}`, "read");
+    const parsed2 = jsonDocumentParser(read2.text);
     return parsed2.kind === "failed" ? failed(`${file}: ${parsed2.reason}`, parsed2.failedAt) : parsed2;
   }
   // Removes every `*.json` file nobody has written for 30 days, unless a
@@ -72116,6 +72165,7 @@ function createPayloadProviders(opts) {
       ledger
     }),
     managedStorage: new ManagedStorage({
+      files: opts.sourceRuns.files,
       watchers: opts.watchers,
       fileEvents: opts.fileEvents,
       clock,
@@ -72677,7 +72727,7 @@ function parserOf(parse4) {
     case "regex":
       return capturing(parse4.pattern);
     case "json":
-      return (text4) => text4.trim() === "" ? ABSENT : jsonParser(text4);
+      return jsonDocumentParser;
   }
 }
 function refusalOf2({ identity: { read: read2, refresh } }) {
