@@ -13,7 +13,7 @@ import { diffChanges, type Change } from "../src/config/config-changes.js";
 import {
   performChanges,
   type ApproveRepo,
-  type LayerPlaces,
+  type ConfigWriteFiles,
 } from "../src/daemon/effect-interpreter.js";
 import type { RenderOrigin } from "../src/config-hint.js";
 import type { LayerRole } from "../src/config/layer-role.js";
@@ -22,6 +22,7 @@ import {
   repoConfigsPath,
 } from "../src/daemon/config-discovery/repo-configs.js";
 import type { SessionId } from "../src/daemon/foundations/session-id.js";
+import { readTextIfPresent } from "../src/utils/regular-text.js";
 import type {
   ConfigChange,
   EffectId,
@@ -55,7 +56,7 @@ beforeEach(() => {
   chains = new Map();
   repos = new Map();
 });
-const places: LayerPlaces = {
+const places: ConfigWriteFiles = {
   path: (origin, role) => {
     const chain = chains.get(origin.projectDir);
     return chain === undefined ? undefined : (chain[role] ?? null);
@@ -64,6 +65,7 @@ const places: LayerPlaces = {
     chains.has(origin.projectDir)
       ? (repos.get(origin.projectDir) ?? null)
       : undefined,
+  readText: readTextIfPresent,
 };
 const originAt = (dir: string): RenderOrigin => ({
   projectDir: dir,

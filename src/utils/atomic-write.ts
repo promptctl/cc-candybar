@@ -157,17 +157,6 @@ export function writeAtomic(at: string, text: string, mode?: number): void {
   );
 }
 
-// [LAW:one-source-of-truth] A config file's text, or null when it does not
-// exist: how the renderer and the host both read one.
-export function readConfigText(file: string): string | null {
-  try {
-    return fs.readFileSync(file, "utf8");
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw e;
-  }
-}
-
 // [LAW:single-enforcer] The file a write to `at` lands in: the last hop of
 // its link chain, a dangling link's target included (it is the file a first
 // write creates), so whoever removes what a write created removes the same

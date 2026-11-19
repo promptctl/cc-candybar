@@ -6,6 +6,7 @@ import {
   readFileSync,
   type BigIntStats,
 } from "node:fs";
+import { types } from "node:util";
 import { debug } from "./logger.js";
 
 export interface RegularTextFile {
@@ -39,4 +40,20 @@ export function withRegularTextFile<T>(
 
 export function readRegularTextSync(path: string): string {
   return withRegularTextFile(path, (file) => file.text());
+}
+
+// [LAW:no-silent-failure] Only a missing file can be created as an empty
+// document. Keep every other read failure attached to the intended target.
+export function readTextIfPresent(
+  path: string,
+  read: (path: string) => string = readRegularTextSync,
+): string | null {
+  try {
+    return read(path);
+  } catch (error) {
+    const native = types.isNativeError(error);
+    if (native && "code" in error && error.code === "ENOENT") return null;
+    const detail = native ? error.message : String(error);
+    throw new Error(`${path}: ${detail}`, { cause: error });
+  }
 }

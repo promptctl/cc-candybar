@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { decodeAnsi } from "@promptctl/rich-js";
 import { textOf } from "../../../src/render/frame";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { openFrameStream } from "../../../src/daemon/client-frames";
@@ -20,6 +21,7 @@ import {
   urlsOfAnsi,
 } from "../../helpers/daemon-e2e";
 import { VERB_RUN, VERB_SET_STATE } from "../../../src/click/wire";
+import { linksOf } from "../../../src/click/read";
 import { DISCLOSURE_CLOSED } from "../../../src/config/disclosure";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { until } from "../../helpers/until";
@@ -102,7 +104,7 @@ function readProbe(
     }
     const readFileSync = fs.readFileSync;
     fs.readFileSync = function (file, ...rest) {
-      const payload = tracked.get(file);
+      const payload = typeof file === "string" && wanted[file]?.includes("payload") ? file : tracked.get(file);
       if (payload !== undefined) record(payload, "payload");
       return readFileSync.call(this, file, ...rest);
     };
@@ -159,7 +161,8 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.writeFileSync(
       config,
       `{
-      globals: { experimentalStatusline: true },
+      globals: { experimentalStatusline: true, padding: 1 },
+      actions: { wider: { persist: "padding", min: 0, max: 4, by: 1, layer: "user" } },
       variables: {
         modelName: { kind: "input", path: "model.display_name" },
         expiry: { kind: "input", path: "cache.expiresAt" },
@@ -167,8 +170,9 @@ test("two named renderer processes draw separately and share config, transcript 
       segments: {
         model: { template: "{{ .modelName }}" },
         expiry: { template: "{{ if .expiry }}expiry={{ .expiry }}{{ end }}" },
+        edit: { template: 'padding={{ .padding.effective }} {{ action "wider" "WIDER" }}' },
       },
-      root: { h: ["model", "plugins.shared.marker", "expiry"] },
+      root: { h: ["model", "plugins.shared.marker", "expiry", "edit"] },
     }`,
     );
     for (const transcript of [firstTranscript, secondTranscript])
@@ -349,7 +353,7 @@ test("two named renderer processes draw separately and share config, transcript 
         "statusline",
         (frame) => {
           if (frame.ok && "output" in frame && typeof frame.output === "string")
-            frames.push(frame.output);
+            frames.push(decodeAnsi(frame.output).plain);
         },
         () => {},
       );
@@ -384,15 +388,14 @@ test("two named renderer processes draw separately and share config, transcript 
     // An isolated origin in a different renderer must observe the descriptors
     // afresh while still reusing the payloads read by the layered origin.
     const beforeIsolated = readsOf(reads);
-    const isolatedFrame = textOf(
-      await request("secondary-session", selected, secondTranscript, [
-        "cc-candybar",
-        "--config-only",
-        config,
-      ]),
+    const isolatedFrame = await request(
+      "secondary-session",
+      selected,
+      secondTranscript,
+      ["cc-candybar", "--config-only", config],
     );
-    expect(isolatedFrame).toContain(WORKTREE_MODEL);
-    expect(isolatedFrame).toContain(updatedSource);
+    expect(textOf(isolatedFrame)).toContain(WORKTREE_MODEL);
+    expect(textOf(isolatedFrame)).toContain(updatedSource);
     const distinctOrigins = readsOf(reads);
     for (const file of [config, definition]) {
       expect(count(distinctOrigins, file)).toBe(
@@ -404,6 +407,26 @@ test("two named renderer processes draw separately and share config, transcript 
         ),
       ).toEqual([{ file, operation: "payload", pid: daemon.child.pid }]);
     }
+
+    expect(textOf(isolatedFrame)).toContain("padding=1");
+    const wider = linksOf(isolatedFrame).find((link) => link.text === "WIDER");
+    if (wider === undefined) throw new Error("the worktree did not draw WIDER");
+    await click(isolated.sockPath, wider.url);
+    await until(
+      () => delivered("padding=2"),
+      "both renderers drawing the landed config",
+    );
+    // [LAW:verifiable-goals] One open checks the old revision and one observes
+    // the published revision. Only the published revision needs its bytes read.
+    const pid = daemon.child.pid;
+    const saveReads = readsOf(reads)
+      .slice(distinctOrigins.length)
+      .filter(({ file }) => file === config);
+    expect(saveReads).toEqual([
+      { file: config, operation: "openSync", pid },
+      { file: config, operation: "openSync", pid },
+      { file: config, operation: "payload", pid },
+    ]);
 
     const conflict = await sendDaemonRequest(
       isolated.sockPath,
