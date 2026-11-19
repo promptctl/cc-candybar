@@ -28493,9 +28493,9 @@ var REFUSAL_LINES = {
   positional: (args) => `Unexpected arguments: ${args}`
 };
 function refusedArgsError(refused2) {
-  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why2) => {
-    const args = refused2.filter((r) => r.why === why2).map((r) => r.arg);
-    return args.length === 0 ? [] : [REFUSAL_LINES[why2](args.join(", "))];
+  const lines2 = Object.keys(REFUSAL_LINES).flatMap((why) => {
+    const args = refused2.filter((r) => r.why === why).map((r) => r.arg);
+    return args.length === 0 ? [] : [REFUSAL_LINES[why](args.join(", "))];
   });
   return lines2.length === 0 ? null : lines2.join("\n");
 }
@@ -28569,11 +28569,20 @@ init_globals();
 init_globals();
 var REPO_ANSWERS = ["approved", "declined"];
 function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
+  switch (d.link.kind) {
+    case "linked":
+      return d.link.main;
+    case "unreadable":
+      return null;
+    case "unlinked":
+    case "unproven":
+      return d.dir;
+  }
 }
 var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
 function ruling(answers, d) {
   const key = answerDir(d);
+  if (key === null) return { standing: "unread", under: d.dir };
   if (answers.kind === "failed") return { standing: "unread", under: key };
   const repo2 = answerOf(answers.value, key);
   if (repo2 !== null) return { standing: repo2, under: key };
@@ -28583,7 +28592,8 @@ function ruling(answers, d) {
 var NO_PROJECT_ACCESS = {
   approved: null,
   question: null,
-  unread: null
+  unread: null,
+  unreadIdentity: null
 };
 function projectAccess(answers, project) {
   const unread2 = answers.kind === "failed" ? answers.reason : null;
@@ -28596,7 +28606,8 @@ function projectAccess(answers, project) {
       standing: standing2,
       unproven: project.link.kind === "unproven" ? project.link.reason : null
     } : null,
-    unread: unread2
+    unread: unread2,
+    unreadIdentity: project.link.kind === "unreadable" ? { dir: project.dir, reason: project.link.reason } : null
   };
 }
 function withAnswer(book, dir, answer2, superseded) {
@@ -38858,8 +38869,8 @@ function parseCells(raw, form, part, parseOne) {
   if (!Array.isArray(cells))
     throw new Error(`${where}: ${form} ${part} is not a list of cells`);
   return Object.freeze(cells.map((cell3, i2) => {
-    const refuse4 = (why2) => {
-      throw new Error(`${where}: ${form} ${part}[${i2}] ${why2}`);
+    const refuse4 = (why) => {
+      throw new Error(`${where}: ${form} ${part}[${i2}] ${why}`);
     };
     return typeof cell3 === "object" && cell3 !== null ? parseOne(cell3, refuse4) : refuse4("is not a cell");
   }));
@@ -42022,8 +42033,8 @@ var SLOT_FLOORS = {
   palette: THEME_FLOOR,
   effect: EFFECT_FLOOR
 };
-function ruleFloorMessage(where, slot, why2) {
-  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why2}`;
+function ruleFloorMessage(where, slot, why) {
+  return `${where} rendered "${SLOT_FLOORS[slot]}": ${why}`;
 }
 var EFFECT_NAMES = Object.freeze([
   EFFECT_FLOOR,
@@ -48833,7 +48844,7 @@ function nestedMenuGlyphSpec(subject) {
     (at) => `${at}: ${subject} cannot change the settings menu glyph \u2014 one menu is shared by every preset. Set it in the top-level globals.menuGlyph instead.`
   );
 }
-function nameOnlySpec(spec, subject, why2) {
+function nameOnlySpec(spec, subject, why) {
   return {
     ...spec,
     json: { ...spec.json, not: { pattern: "\\{\\{" } },
@@ -48842,7 +48853,7 @@ function nameOnlySpec(spec, subject, why2) {
       if (typeof v === "string" && isExpression(v)) {
         ctx.issues.push({
           path: `${path31}.${field}`,
-          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why2}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
+          message: `${path31}.${field}: a rule is not allowed here \u2014 ${subject} ${why}, so it names a value. Write the rule in globals.${field} (or a preset's globals.${field}) instead.`,
           line: findKeyLine(ctx.source, [...path31.split("."), field])
         });
         return void 0;
@@ -50063,8 +50074,8 @@ var SHELL_FIELDS = {
   cache: requireCacheSpec("shell"),
   default: sourceDefaultSpec()
 };
-function noCachePolicy(why2) {
-  return { cache: `${why2}, so it takes no cache policy \u2014 delete the key` };
+function noCachePolicy(why) {
+  return { cache: `${why}, so it takes no cache policy \u2014 delete the key` };
 }
 var TEMPLATE_FIELDS = {
   template: requireStringSpec(),
@@ -60163,8 +60174,8 @@ function instantRead(template, basis) {
   }
   for (const { reaches } of basis.reads.ofTemplate(template)) {
     for (const name of reaches) {
-      const why2 = basis.projections.get(name);
-      if (why2 !== void 0) return `reads "${name}", which ${why2}`;
+      const why = basis.projections.get(name);
+      if (why !== void 0) return `reads "${name}", which ${why}`;
     }
   }
   return null;
@@ -60205,18 +60216,18 @@ function foldProjections(config) {
     grew = false;
     for (const [name, decl] of declared) {
       if (decl.kind !== "template" || projections.has(name)) continue;
-      const why2 = instantRead(decl.template, basis);
-      if (why2 !== null) {
-        projections.set(name, why2);
+      const why = instantRead(decl.template, basis);
+      if (why !== null) {
+        projections.set(name, why);
         grew = true;
       }
     }
     for (const slot of EXPRESSION_SLOTS) {
       if (slotReads.has(slot)) continue;
       for (const rule of rules[slot]) {
-        const why2 = instantRead(rule, basis);
-        if (why2 === null) continue;
-        slotReads.set(slot, why2);
+        const why = instantRead(rule, basis);
+        if (why === null) continue;
+        slotReads.set(slot, why);
         grew = true;
         break;
       }
@@ -60225,9 +60236,9 @@ function foldProjections(config) {
       const at = payloadPathOf(name, decl);
       if (at === void 0 || projections.has(name)) continue;
       const slot = slotAt(at);
-      const why2 = slot === void 0 ? void 0 : slotReads.get(slot);
-      if (why2 === void 0) continue;
-      projections.set(name, `reads the ${slot} rule, which ${why2}`);
+      const why = slot === void 0 ? void 0 : slotReads.get(slot);
+      if (why === void 0) continue;
+      projections.set(name, `reads the ${slot} rule, which ${why}`);
       grew = true;
     }
   }
@@ -60958,7 +60969,7 @@ function dataPathOf(data, file, checkout, home, issues) {
     if (checkout === null) {
       issues.push({
         path: "data.checkout",
-        message: `data is read from the session's checkout, and this load has no session`
+        message: `data is read from the session's checkout, and this load has no usable checkout root`
       });
       return void 0;
     }
@@ -61378,11 +61389,11 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
   if (!hasCacheField(v)) return;
   const line = (field) => findKeyLine(ctx.source, [...declPath.split("."), "cache", field]);
   if ("key" in v.cache) {
-    const why2 = instantReadOf(v.cache.key, cfg);
-    if (why2 !== null) {
+    const why = instantReadOf(v.cache.key, cfg);
+    if (why !== null) {
       ctx.issues.push({
         path: `${declPath}.cache.key`,
-        message: `cache.key ${why2}: ${INSTANT_POLICY}`,
+        message: `cache.key ${why}: ${INSTANT_POLICY}`,
         line: line("key")
       });
     }
@@ -61390,11 +61401,11 @@ function checkPolicyInstant(ctx, declPath, v, cfg) {
   if ("depends_on" in v.cache) {
     const projections = projectionsOf(cfg);
     v.cache.depends_on.forEach((target, i2) => {
-      const why2 = projections.get(target);
-      if (why2 === void 0) return;
+      const why = projections.get(target);
+      if (why === void 0) return;
       ctx.issues.push({
         path: `${declPath}.cache.depends_on[${i2}]`,
-        message: `cache.depends_on names "${target}", which ${why2}: ${INSTANT_POLICY}`,
+        message: `cache.depends_on names "${target}", which ${why}: ${INSTANT_POLICY}`,
         line: line("depends_on")
       });
     });
@@ -61432,12 +61443,12 @@ function checkRuleSlotReads(ctx, cfg) {
     return null;
   };
   for (const { at, rule } of authoredRules(cfg)) {
-    const why2 = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
-    if (why2 === null) continue;
+    const why = slotRead(fold.ofTemplate(rule), /* @__PURE__ */ new Set());
+    if (why === null) continue;
     const path31 = at.join(".");
     ctx.issues.push({
       path: path31,
-      message: `${path31} ${why2}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
+      message: `${path31} ${why}: a rule decides that name, so it cannot read it \u2014 read the data the rule is about instead`,
       line: findKeyLine(ctx.source, [...at])
     });
   }
@@ -62227,14 +62238,14 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
           return { ...acc, taken: [...acc.taken, cell3] };
         } catch (err) {
           if (!(err instanceof ConfigError)) throw err;
-          const why2 = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
+          const why = err.issues.filter((issue3) => !own2.has(issue3.message)).map((issue3) => issue3.message).join("; ");
           return {
             ...acc,
             refused: [
               ...acc.refused,
               insertNotice(
                 cell3,
-                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why2}`
+                `${cell3.relation} "${cell3.anchor}", but the bar refuses it there: ${why}`
               )
             ]
           };
@@ -64615,8 +64626,8 @@ var PENDINGS = {
   unread: Object.freeze({ kind: "pending", why: "unread" }),
   superseded: Object.freeze({ kind: "pending", why: "superseded" })
 };
-function pendingOf(why2) {
-  return PENDINGS[why2];
+function pendingOf(why) {
+  return PENDINGS[why];
 }
 function isPending(value) {
   return typeof value === "object" && value !== null && value.kind === "pending";
@@ -64942,24 +64953,19 @@ var VariableStore = class {
   getKind(name) {
     return this.requireNode(name).kind;
   }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
+  // [LAW:one-source-of-truth] A dependant sees the same change a node's own
+  // observers see, with pending blocking a first run and failures counting
+  // as changes. A document key uses the store's own structural comparison.
   changeKey(name) {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(["document", documentKey(doc)]);
     }
     try {
-      return ok(String(node.read()));
+      return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }
   // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
@@ -65519,11 +65525,11 @@ var SourceRegistry = class _SourceRegistry {
       reaction(
         () => this.inputs.get().env(envVar),
         (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
+          this.noteOutcome(name, fact, `env var "${envVar}" is not set`);
+          this.store.setBox(
+            name,
+            fact.kind === "pending" ? fact : orElse(fact, fallback)
+          );
         },
         { fireImmediately: true }
       )
@@ -65862,7 +65868,7 @@ var SourceRegistry = class _SourceRegistry {
       case "depends_on": {
         return this.answeredUnder(name, () => {
           const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value)) : pendingOf("unread");
         });
       }
     }
@@ -65890,7 +65896,7 @@ var SourceRegistry = class _SourceRegistry {
     return () => {
       const now2 = answer2.get();
       if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last2)) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
     };
   }
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -65933,14 +65939,15 @@ var SourceRegistry = class _SourceRegistry {
         });
     });
   }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
+  // [LAW:single-enforcer] The one fold from a source reading to the
+  // variable's error record. A pending or successful read ends an old error.
+  noteOutcome(name, outcome, absentReason = "no value") {
+    if (outcome.kind === "ok" || outcome.kind === "pending")
+      this.lastErrors.delete(name);
     else
       this.recordError(
         name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
+        outcome.kind === "failed" ? outcome.reason : absentReason
       );
   }
 };
@@ -71326,10 +71333,6 @@ function launchFailure(label2, result) {
 function firstLine(s) {
   return s.trim().split("\n", 1)[0] ?? "";
 }
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
 function isMissingCommand(result) {
   return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
 }
@@ -71430,12 +71433,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (isMissingCommand(result)) return ABSENT2;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT2;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
+  return failed(launchFailure(label2, result), "read");
 }
 function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -72440,10 +72438,10 @@ var Refreshes = class {
     if (outcome.kind === "failed") this.tally.failures++;
     const failure2 = outcome.kind === "failed";
     if (!failure2 && !this.lines.has(by)) return;
-    const why2 = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    const why = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
     this.logger(
       failure2 ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why} took=${ms}ms`
     );
   }
   // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
@@ -72987,7 +72985,7 @@ function sourceSummaryOf(names, runs, facts) {
 function sourceFieldsOf(summary) {
   return {
     sources: String(summary.count),
-    sourcesPending: summary.pending.map(({ name, why: why2 }) => `${name}:${why2}`).join(",") || "-",
+    sourcesPending: summary.pending.map(({ name, why }) => `${name}:${why}`).join(",") || "-",
     sourcesFailed: summary.failed.join(",") || "-"
   };
 }
@@ -78134,6 +78132,41 @@ function linkTarget(file) {
 }
 var MAX_LINK_HOPS = 40;
 
+// src/repository-cli.ts
+init_globals();
+var FORGE_CLI = {
+  github: { cli: "gh", repoEnv: "GH_REPO" },
+  gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
+};
+var GIT_LOCAL_ENV = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_IMPLICIT_WORK_TREE",
+  "GIT_GRAFT_FILE",
+  "GIT_INDEX_FILE",
+  "GIT_NO_REPLACE_OBJECTS",
+  "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX",
+  "GIT_SHALLOW_FILE",
+  "GIT_COMMON_DIR"
+];
+var REPOSITORY_SCOPED_ENV = [
+  ...GIT_LOCAL_ENV,
+  ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
+];
+function withoutRepositoryScopedEnv(env2) {
+  return Object.fromEntries(
+    Object.entries(env2).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name)
+    )
+  );
+}
+
 // src/proc/launch.ts
 function spawnErrorText(err, cwd2) {
   if (!types.isNativeError(err)) return String(err);
@@ -78162,7 +78195,9 @@ function checkRateLimit(lastStartAt, category, now2) {
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 function childEnv(scope, opts) {
-  const env2 = { ...opts.environment ?? scope.inherited };
+  const env2 = {
+    ...opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)
+  };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -78273,6 +78308,7 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
@@ -79578,12 +79614,12 @@ init_globals();
 function unread() {
   return observable.box(pending("unread"), { deep: false });
 }
-function pending(why2) {
+function pending(why) {
   let land;
   const landed = new Promise((resolve2) => {
     land = resolve2;
   });
-  return { kind: "pending", why: why2, landed, land };
+  return { kind: "pending", why, landed, land };
 }
 function settle2(source, outcome) {
   const prior = source.reading.get();
@@ -79591,12 +79627,12 @@ function settle2(source, outcome) {
   runInAction(() => source.reading.set(outcome));
   if (prior.kind === "pending") prior.land();
 }
-function renew(source, why2) {
+function renew(source, why) {
   const prior = source.reading.get();
   if (prior.kind !== "pending") {
-    runInAction(() => source.reading.set(pending(why2)));
-  } else if (prior.why !== why2 && why2 === "unread") {
-    runInAction(() => source.reading.set({ ...prior, why: why2 }));
+    runInAction(() => source.reading.set(pending(why)));
+  } else if (prior.why !== why && why === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why }));
   }
 }
 function answerPending(source, outcome) {
@@ -79607,7 +79643,7 @@ function currentOf(source) {
 }
 function waitWithin(work, ms, late, after, closing) {
   const wait = new AbortController();
-  const end = (why2) => () => wait.abort(why2);
+  const end = (why) => () => wait.abort(why);
   const clear = after(Math.max(0, ms), end("deadline"));
   const ended = new Promise((resolve2, reject2) => {
     wait.signal.addEventListener(
@@ -80193,9 +80229,9 @@ var WatcherRegistry = class {
     try {
       take();
     } catch (thrown2) {
-      const why2 = thrown2 instanceof Error ? thrown2.message : String(thrown2);
+      const why = thrown2 instanceof Error ? thrown2.message : String(thrown2);
       const about = key === null ? "batch" : `key=${valueOf(key)}`;
-      this.logger("warn", `watcher invalidate threw ${about}: ${why2}`);
+      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
     }
   }
   makeHandle(slot, holder) {
@@ -81419,7 +81455,42 @@ function todayReading(lane, usage, sessionId2) {
 // src/daemon/statusline-answer.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/request-deadline.ts
+init_globals();
+var REQUEST_TIMEOUT_MS = 200;
+var timeoutResponse = (request2, error = `request exceeded ${REQUEST_TIMEOUT_MS}ms`) => ({
+  ok: false,
+  error,
+  code: "TIMEOUT",
+  daemonV: PROTOCOL_VERSION,
+  request: request2
+});
+var DRAW_RESERVE_MS = 60;
+function parseClientDeadline(raw) {
+  if (raw === void 0) return { kind: "unstated" };
+  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
+    kind: "refused",
+    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
+  };
+}
+function renderDeadlines(deadline, acceptedMonoMs, arrival) {
+  const clientEndsAt = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : null;
+  const sourceEnd = Math.min(
+    acceptedMonoMs + REQUEST_TIMEOUT_MS,
+    clientEndsAt ?? acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS
+  );
+  const waitEndsAt = arrival.monoMs + Math.round(sourceEnd - DRAW_RESERVE_MS - arrival.monoMs);
+  return { waitEndsAt, clientEndsAt };
+}
+
+// src/daemon/statusline-answer.ts
 var NOTHING_TO_SETTLE = (_delivered) => {
+};
+var DRAW_ABANDONED = {
+  kind: "abandoned",
+  message: "the statusline reply has no recipient",
+  detail: "the statusline reply has no recipient"
 };
 function failed2(host, failure2, doing = "") {
   return {
@@ -81429,13 +81500,24 @@ function failed2(host, failure2, doing = "") {
     settled: NOTHING_TO_SETTLE
   };
 }
+var NO_REPOSITORY = {
+  main: "",
+  worktree: "",
+  subpath: "",
+  noRepo: true
+};
 function located(req, locate) {
   const dir = req.hookData.workspace?.current_dir ?? req.cwd;
+  if (dir === void 0 || !import_node_path17.default.isAbsolute(dir)) return { req, error: null };
+  const found2 = locate(dir);
   return {
-    ...req,
-    hookData: {
-      ...req.hookData,
-      ...dir !== void 0 && import_node_path17.default.isAbsolute(dir) && { location: locate(dir) }
+    error: found2.kind === "failed" ? found2.reason : null,
+    req: {
+      ...req,
+      hookData: {
+        ...req.hookData,
+        location: found2.kind === "ok" ? found2.value : found2.kind === "absent" ? NO_REPOSITORY : void 0
+      }
     }
   };
 }
@@ -81443,19 +81525,21 @@ var msOf2 = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
-  const req = located(arrived2, locate);
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, recipient, facts) {
+  const { req, error: checkoutError } = located(arrived2, locate);
   const session = req.hookData.session_id;
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
+  const abandoned = () => !closing.aborted && recipient.gone();
   const worldState = collector.requested(req, environment);
   const release3 = collector.holding(session);
   let configured;
-  let delivered;
+  let delivered = null;
   try {
     configured = await host.answer(
       unlessClosing({ kind: "context", context: req, worldState })
     );
     recorded(facts, configured);
+    if (checkoutError !== null) noteFacts(facts, { checkoutError });
     if (configured.kind === "threw") {
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.failure, "its context turn: ");
@@ -81464,46 +81548,53 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.configFailure, "its config turn: ");
     }
-    const waitFrom = clock.monotonic();
-    const budget = waitEndsAt - waitFrom;
-    noteFacts(facts, {
-      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
-    });
-    const ended = await waitWithin(
-      (signal) => collector.settled(session, signal),
-      budget,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the
-      // daemon.
-      (e, how) => log(
-        "error",
-        `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
-      ),
-      clock.after,
-      closing
-    );
-    noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    delivered = await host.answer(
-      unlessClosing({
-        kind: "request",
-        id: id2,
-        context: req
-      })
-    );
+    if (!abandoned()) {
+      const waitFrom = clock.monotonic();
+      const budget = recipient.waitEndsAt - waitFrom;
+      noteFacts(facts, {
+        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`
+      });
+      const ended = await waitWithin(
+        (signal) => collector.settled(session, signal),
+        budget,
+        // [LAW:no-silent-failure] A late failure belongs to the session.
+        (e, how) => log(
+          "error",
+          `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`
+        ),
+        clock.after,
+        closing
+      );
+      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+      if (!abandoned()) {
+        const draw2 = unlessClosing({ kind: "request", id: id2, context: req });
+        delivered = await host.answer(
+          () => abandoned() ? DRAW_ABANDONED : draw2()
+        );
+      }
+    }
   } finally {
     release3();
   }
-  recorded(facts, delivered);
-  const done = delivered.settlePresentation;
+  if (delivered !== null) recorded(facts, delivered);
+  const drawHop = delivered === null ? 0 : delivered.hopMs;
   noteFacts(facts, {
     configured: msOf2(configured.turnMs),
-    drew: msOf2(delivered.turnMs),
-    mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
-    hop: configured.hopMs === null || delivered.hopMs === null ? "-" : `${configured.hopMs + delivered.hopMs}ms`
+    drew: msOf2(delivered?.turnMs ?? null),
+    mailbox: `${configured.queuedMs + (delivered?.queuedMs ?? 0)}ms`,
+    hop: configured.hopMs === null || drawHop === null ? "-" : `${configured.hopMs + drawHop}ms`,
+    renderer: host.name
   });
+  if (delivered === null || delivered.kind === "threw" && delivered.failure === DRAW_ABANDONED)
+    return {
+      outcome: DRAW_ABANDONED,
+      resp: timeoutResponse(id2, DRAW_ABANDONED.message),
+      seen: "failed",
+      settled: NOTHING_TO_SETTLE
+    };
+  const done = delivered.settlePresentation;
   const { effects } = delivered;
   noteFacts(facts, {
-    renderer: host.name,
     effects: effects.map((e) => e.kind === "present" ? `present:${e.surface}` : e.kind).join(",") || "-"
   });
   let answer2 = null;
@@ -81777,23 +81868,6 @@ var RenderSightings = class {
     }));
   }
 };
-
-// src/daemon/foundations/request-deadline.ts
-init_globals();
-var REQUEST_TIMEOUT_MS = 200;
-var DRAW_RESERVE_MS = 60;
-function parseClientDeadline(raw) {
-  if (raw === void 0) return { kind: "unstated" };
-  return typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? { kind: "stated", at: raw } : {
-    kind: "refused",
-    problem: `request 'deadline' is not epoch milliseconds: ${JSON.stringify(raw)}`
-  };
-}
-function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
-  const clientEnd = deadline.kind === "stated" ? arrival.monoMs + (deadline.at - arrival.epochMs) : acceptedMonoMs + TOTAL_BUDGET_MS - CONNECT_TIMEOUT_MS;
-  const end = Math.min(clientEnd, acceptedMonoMs + REQUEST_TIMEOUT_MS);
-  return Math.round(end - DRAW_RESERVE_MS - arrival.monoMs);
-}
 
 // src/daemon/render-checkpoint.ts
 function parseRenderArgs(args, cwd2, home, configEnv) {
@@ -82312,6 +82386,11 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
+        const { waitEndsAt, clientEndsAt } = renderDeadlines(
+          checked.req.deadline,
+          accepted.at,
+          { epochMs: started2.getTime(), monoMs: t0 }
+        );
         answered = await answerStatusline(
           renderer2,
           parts.publishFrame,
@@ -82326,13 +82405,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           // environment.
           parts.sessionBook.environmentOf(checked.req.hookData.session_id),
           order2,
-          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-          // fixed at its arrival: early enough before its client hangs up to
-          // draw (src/daemon/foundations/request-deadline.ts).
-          t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
-            epochMs: started2.getTime(),
-            monoMs: t0
-          }),
+          {
+            waitEndsAt,
+            // [LAW:no-ambient-temporal-coupling] Loss of the only recipient
+            // comes from the connection's phase or its reply deadline.
+            gone: () => timedOut() || clientLeft() || clientEndsAt !== null && clock.monotonic() >= clientEndsAt
+          },
           facts
         );
         noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
@@ -84421,47 +84499,53 @@ function readTextIfPresent(path31, read2 = readRegularTextSync) {
 }
 
 // src/utils/git-root.ts
-function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path22.default.join(dir, ".git"));
-}
-function ascend(start, entry) {
+function checkoutAt(start, files) {
   let dir = import_node_path22.default.resolve(start);
   for (; ; ) {
-    const found2 = entry(dir);
-    if (found2 !== void 0) return { root: dir, entry: found2 };
+    const found2 = gitEntryAt(dir, files);
+    if (found2.kind === "ok") return ok({ root: dir, entry: found2.value });
+    if (found2.kind === "failed") return found2;
     const parent = import_node_path22.default.dirname(dir);
-    if (parent === dir) return void 0;
+    if (parent === dir) return ABSENT2;
     dir = parent;
   }
 }
-function gitRootOf(start) {
-  return ascend(start, (dir) => holdsGit(dir) ? true : void 0)?.root;
+function gitEntryAt(dir, files = checkoutFiles) {
+  return files.stat(import_node_path22.default.join(dir, ".git"));
+}
+function gitRootOf(start, files = checkoutFiles) {
+  const found2 = checkoutAt(start, files);
+  return found2.kind === "ok" ? ok(found2.value.root) : found2;
 }
 function checkoutOf(cwd2, files = checkoutFiles) {
-  const root = checkoutAt(cwd2, files)?.root;
-  return root === void 0 ? { root: import_node_path22.default.resolve(cwd2), git: false } : { root, git: true };
+  const root = gitRootOf(cwd2, files);
+  switch (root.kind) {
+    case "ok":
+      return ok({ root: root.value, git: true });
+    case "absent":
+      return ok({ root: import_node_path22.default.resolve(cwd2), git: false });
+    case "failed":
+      return root;
+  }
 }
-function probe(read2) {
+function probe(file, read2) {
   try {
     const value = read2();
     return value === void 0 ? ABSENT2 : ok(value);
-  } catch (e) {
-    return e.code === "ENOENT" ? ABSENT2 : failed(e.message, "read");
+  } catch (error) {
+    const native2 = types.isNativeError(error);
+    if (native2 && "code" in error && error.code === "ENOENT") return ABSENT2;
+    const detail = native2 ? error.message : String(error);
+    const named2 = native2 && "path" in error && error.path === file;
+    return failed(named2 ? detail : `${file}: ${detail}`, "read");
   }
 }
 var checkoutFiles = {
-  stat: (file) => probe(() => fs_default.statSync(file, { throwIfNoEntry: false })),
-  lstat: (file) => probe(() => fs_default.lstatSync(file)),
-  realpath: (file) => probe(() => fs_default.realpathSync.native(file)),
-  text: (file) => probe(() => readRegularTextSync(file))
+  stat: (file) => probe(file, () => fs_default.statSync(file, { throwIfNoEntry: false })),
+  lstat: (file) => probe(file, () => fs_default.lstatSync(file)),
+  realpath: (file) => probe(file, () => fs_default.realpathSync.native(file)),
+  text: (file) => probe(file, () => readRegularTextSync(file))
 };
-function checkoutAt(dir, files) {
-  return ascend(dir, (candidate) => {
-    const entry = files.stat(import_node_path22.default.join(candidate, ".git"));
-    return entry.kind === "ok" ? entry.value : void 0;
-  });
-}
-var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
 function gitDirNamed(root, files = checkoutFiles) {
   const text4 = files.text(import_node_path22.default.join(root, ".git"));
   if (text4.kind !== "ok") return text4;
@@ -84470,9 +84554,10 @@ function gitDirNamed(root, files = checkoutFiles) {
 }
 function sharedExcludeOf(root) {
   const dotGit = import_node_path22.default.join(root, ".git");
-  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
-  if (isDir.kind !== "ok") return isDir;
-  if (isDir.value) return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
+  const entry = gitEntryAt(root);
+  if (entry.kind !== "ok") return entry;
+  if (entry.value.isDirectory())
+    return ok(import_node_path22.default.join(dotGit, "info", "exclude"));
   const gitDir = gitDirNamed(root);
   if (gitDir.kind !== "ok") return gitDir;
   const common = commonDirOf(gitDir.value);
@@ -84491,39 +84576,56 @@ var unproven = (reason) => ({
   kind: "unproven",
   reason
 });
+var unreadable = (reason) => ({
+  kind: "unreadable",
+  reason
+});
+function unverified(file, result) {
+  if (result.kind === "absent") return unproven(`${file} is not there`);
+  return result.failedAt === "parse" ? unproven(result.reason) : unreadable(result.reason);
+}
 function worktreeLink(dir, files = checkoutFiles) {
   const found2 = checkoutAt(dir, files);
-  if (found2 === void 0) return UNLINKED;
-  const link = worktreeLinkAt(found2, files);
+  if (found2.kind === "absent") return UNLINKED;
+  if (found2.kind === "failed") return unreadable(found2.reason);
+  const link = worktreeLinkAt(found2.value, files);
   return link.kind === "linked" ? {
     kind: "linked",
-    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.root, dir))
+    main: import_node_path22.default.join(link.main, import_node_path22.default.relative(found2.value.root, dir))
   } : link;
 }
 function worktreeLinkAt({ root, entry }, files) {
   const dotGit = import_node_path22.default.join(root, ".git");
   if (entry.isDirectory()) return UNLINKED;
   const direct = files.lstat(dotGit);
-  if (direct.kind !== "ok") return unproven(why(dotGit, direct));
+  if (direct.kind !== "ok") return unverified(dotGit, direct);
   if (!direct.value.isFile()) return unproven(`${dotGit} is not a file`);
   const named2 = gitDirNamed(root, files);
-  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
+  if (named2.kind !== "ok") return unverified(dotGit, named2);
   const gitDir = files.realpath(named2.value);
-  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
+  if (gitDir.kind !== "ok") return unverified(named2.value, gitDir);
   const common = commonDirOf(gitDir.value, files);
   if (common.kind === "absent") return UNLINKED;
-  if (common.kind === "failed") return unproven(common.reason);
+  if (common.kind === "failed")
+    return unverified(import_node_path22.default.join(gitDir.value, "commondir"), common);
   const realCommon = files.realpath(common.value);
-  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
+  if (realCommon.kind !== "ok") return unverified(common.value, realCommon);
   if (import_node_path22.default.dirname(gitDir.value) !== import_node_path22.default.join(realCommon.value, "worktrees")) {
     return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
   }
   const backFile = import_node_path22.default.join(gitDir.value, "gitdir");
   const back2 = files.text(backFile);
-  if (back2.kind !== "ok") return unproven(why(backFile, back2));
+  if (back2.kind !== "ok") return unverified(backFile, back2);
   const pointer = import_node_path22.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = files.realpath(import_node_path22.default.dirname(pointer));
-  if (import_node_path22.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+  if (import_node_path22.default.basename(pointer) !== ".git") {
+    return unproven(
+      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
+    );
+  }
+  const parent = import_node_path22.default.dirname(pointer);
+  const pointerDir = files.realpath(parent);
+  if (pointerDir.kind !== "ok") return unverified(parent, pointerDir);
+  if (pointerDir.value !== root) {
     return unproven(
       `${gitDir.value} is the worktree at ${pointer}, not ${root}`
     );
@@ -84533,20 +84635,21 @@ function worktreeLinkAt({ root, entry }, files) {
 }
 function checkoutLocation(dir, files = checkoutFiles) {
   const real = files.realpath(dir);
+  if (real.kind === "failed") return real;
   const at = real.kind === "ok" ? real.value : import_node_path22.default.resolve(dir);
   const found2 = checkoutAt(at, files);
-  if (found2 === void 0)
-    return { main: "", worktree: "", subpath: "", noRepo: true };
-  const { root } = found2;
+  if (found2.kind !== "ok") return found2;
+  const { root } = found2.value;
   const sub2 = import_node_path22.default.relative(root, at);
   const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path22.default.sep).join("/")}`;
-  const link = worktreeLinkAt(found2, files);
-  return link.kind === "linked" ? {
+  const link = worktreeLinkAt(found2.value, files);
+  if (link.kind === "unreadable") return failed(link.reason, "read");
+  return link.kind === "linked" ? ok({
     main: link.main,
     worktree: import_node_path22.default.basename(root),
     subpath,
     noRepo: false
-  } : { main: root, worktree: "", subpath, noRepo: false };
+  }) : ok({ main: root, worktree: "", subpath, noRepo: false });
 }
 
 // src/daemon/cache/git-service.ts
@@ -84577,9 +84680,6 @@ var GitService = class {
     this.launcher = launcher;
   }
   launcher;
-  isGitRepo(workingDir) {
-    return holdsGit(workingDir);
-  }
   // [LAW:types-are-the-program] args is a string[] so the boundary type
   // forbids the only-space-free-arguments contract the prior whitespace-split
   // implementation relied on. Returns the full LaunchResult — the typed
@@ -84610,19 +84710,22 @@ var GitService = class {
   // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
   // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
   resolveEffectiveGitDir(workingDir, projectDir) {
-    if (this.isWorktree(workingDir)) return ok(workingDir);
-    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
-    if (this.isGitRepo(workingDir)) return ok(workingDir);
-    return this.findGitRoot(workingDir);
+    const working = gitEntryAt(workingDir);
+    if (working.kind === "failed") return working;
+    if (working.kind === "ok" && working.value.isFile()) return ok(workingDir);
+    if (projectDir && projectDir !== workingDir) {
+      const project = gitEntryAt(projectDir);
+      if (project.kind === "ok") return ok(projectDir);
+      if (project.kind === "failed") return project;
+    }
+    return working.kind === "ok" ? ok(workingDir) : this.findGitRoot(workingDir);
   }
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
   // repoRoot they'd otherwise have to re-derive. `absent` keeps its meaning —
   // "not in a git repository", the everyday domain answer.
   //
-  // [LAW:one-source-of-truth] The repo root is the nearest ancestor `isGitRepo`
-  // accepts: the SAME predicate `resolveEffectiveGitDir` and `computeGitInfo`
-  // already short-circuit on, now asked at every level instead of only at
-  // `workingDir`. Before this, two resolvers answered one question and disagreed
+  // [LAW:one-source-of-truth] The repo root is the nearest directory with a
+  // checked .git entry. Before this, two resolvers answered one question and disagreed
   // — measured on a repo whose config sets `core.worktree = /elsewhere`:
   //
   //   cwd         git's answer   the short-circuit   the old rev-parse
@@ -84648,17 +84751,12 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not honoured either: the ascent reads the
+  // filesystem, never the daemon's environment, which describes whichever
+  // shell spawned the daemon rather than the session being rendered.
   //
-  // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
-  // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
-  // through `classify(…, "absent")` — a state this never produced, so inventing
-  // one here would be a new answer for an unchanged question.
   findGitRoot(workingDir) {
-    const root = gitRootOf(workingDir);
-    return root === void 0 ? ABSENT2 : ok(root);
+    return gitRootOf(workingDir);
   }
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
   // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
@@ -84680,18 +84778,9 @@ var GitService = class {
     }
   }
   async computeGitInfo(workingDir, projectDir) {
-    let gitDir;
-    if (this.isWorktree(workingDir)) {
-      gitDir = workingDir;
-    } else if (projectDir && this.isGitRepo(projectDir)) {
-      gitDir = projectDir;
-    } else if (this.isGitRepo(workingDir)) {
-      gitDir = workingDir;
-    } else {
-      const foundGitRoot = this.findGitRoot(workingDir);
-      if (foundGitRoot.kind !== "ok") return foundGitRoot;
-      gitDir = foundGitRoot.value;
-    }
+    const found2 = this.resolveEffectiveGitDir(workingDir, projectDir);
+    if (found2.kind !== "ok") return found2;
+    const gitDir = found2.value;
     const core = await this.getCoreAsync(gitDir);
     if (core.kind !== "ok") return core;
     const committedAt = await this.committedAt(gitDir, core.value.oid);
@@ -85032,7 +85121,7 @@ var GitService = class {
       return classifyForgePr(
         "gh pr view",
         await this.execForgeAsync(
-          FORGE_CLI.github,
+          FORGE_CLI.github.cli,
           ["pr", "view", "--json", "number,state,url,headRefOid"],
           { cwd: workingDir, timeout: 5e3 }
         ),
@@ -85044,7 +85133,7 @@ var GitService = class {
       return classifyForgePr(
         "glab mr view",
         await this.execForgeAsync(
-          FORGE_CLI.gitlab,
+          FORGE_CLI.gitlab.cli,
           ["mr", "view", "--output", "json"],
           {
             cwd: workingDir,
@@ -85056,17 +85145,6 @@ var GitService = class {
       );
     }
     return ABSENT2;
-  }
-  isWorktree(workingDir) {
-    try {
-      const gitDir = import_node_path23.default.join(workingDir, ".git");
-      if (fs_default.existsSync(gitDir) && fs_default.statSync(gitDir).isFile()) {
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
   }
   // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2
   // --branch` reports branch, short SHA, upstream, ahead/behind, and worktree
@@ -86220,7 +86298,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.5";
+var PACKAGE_VERSION = "1.235.9";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -88962,10 +89040,11 @@ function performChanges(changes, book, files) {
   return { kind: "ok", files: landed };
 }
 function excludeRewrite(file, rewrites, readText) {
-  const root = gitRootOf(import_node_path29.default.dirname(file));
-  if (root === void 0) return ABSENT2;
+  const checkout = gitRootOf(import_node_path29.default.dirname(file));
+  if (checkout.kind !== "ok") return checkout;
+  const root = checkout.value;
   const at = sharedExcludeOf(root);
-  if (at.kind !== "ok") return at.kind === "absent" ? ABSENT2 : at;
+  if (at.kind !== "ok") return at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
   const was = prior === void 0 ? readText(exclude) : prior.was;
@@ -89368,13 +89447,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       detail: `origin ${JSON.stringify(originKey(origin))} is no longer followed`
     } : { kind: "event", event: { kind: "config", origin, config } };
   };
-  const configInSlot = async (origin, why2) => {
+  const configInSlot = async (origin, why) => {
     let made;
     try {
       made = configMade(origin)();
     } catch (thrown2) {
       made = failureOf(thrown2);
-      record2(null, [["why", why2]], unanswered(made, 0).turn);
+      record2(null, [["why", why]], unanswered(made, 0).turn);
     }
     if (made.kind !== "event")
       return {
@@ -89384,7 +89463,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       };
     const input = stamped(made);
     const { turn, settled: settled3 } = await inSlot(input, 0);
-    record2(input.event, [["why", why2]], turn);
+    record2(input.event, [["why", why]], turn);
     const threw2 = turn.kind === "threw" ? [
       {
         kind: THREW_AS[turn.failure.kind],
@@ -90045,11 +90124,13 @@ function sessionPlugins(roots, checkout) {
     for (const name of listed.files)
       strays.push({ path: import_node_path33.default.join(root, name), scope });
   }
+  if (checkout.kind === "failed")
+    notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
     plugins: [...byNs.values()],
     strays,
     notices,
-    checkout
+    checkout: checkout.kind === "ok" ? checkout.value : null
   };
 }
 function layerOf(role, file, content, home, batch = {
@@ -90103,10 +90184,12 @@ function discover(query, shared) {
   const chain2 = places.map(
     (at) => layerOf(at.role, at.path, at.content, locs.home, shared)
   );
+  const { unreadIdentity } = project;
   const notices = [
     configCollisionNotice(locations2),
     configResolutionNotice(resolution),
     repoUnreadNotice(project),
+    unreadIdentity === null ? null : `Repository identity could not be read: ${unreadIdentity.dir} \u2014 ${unreadIdentity.reason}`,
     ...session.notices
   ].filter((n) => n !== null);
   return {
@@ -90273,8 +90356,8 @@ var ConfigDiscovery = class {
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
-  again(why2) {
-    this.heard([...this.followed.keys()], why2);
+  again(why) {
+    this.heard([...this.followed.keys()], why);
   }
   close() {
     if (this.closed) return;
@@ -90286,9 +90369,9 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why2) {
+  heard(keys2, why) {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys2, why2), null);
+    this.publish(this.rediscovered(keys2, why), null);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -90307,7 +90390,7 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why2) {
+  rediscovered(keys2, why) {
     if (keys2.length === 0) return [];
     const shared = this.batch();
     const moved2 = [];
@@ -90324,13 +90407,13 @@ var ConfigDiscovery = class {
       } catch (thrown2) {
         this.deps.log(
           "error",
-          `config discovery why=${why2} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
         );
       }
     }
     this.deps.log(
       "info",
-      `config discovery why=${why2} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
+      `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
     return moved2;
   }
