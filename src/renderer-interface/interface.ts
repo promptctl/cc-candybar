@@ -136,7 +136,7 @@ export interface AdapterInput extends Readings {
 // too (a close ends the views).
 export type AdapterOutput = (
   | { readonly kind: "replied"; readonly reply: AdapterReply }
-  | { readonly kind: "threw"; readonly failure: Failure }
+  | TurnFailure
 ) &
   RendererDeclaration;
 
@@ -445,6 +445,25 @@ export interface PushedFrame {
   readonly frame: FeedFrame;
 }
 
+export type TurnFinalizer =
+  | StoreWrite["store"]
+  | "subscriptions"
+  | "wake"
+  | "release-subscriptions";
+
+interface FinalizationFailure {
+  readonly stage: TurnFinalizer;
+  readonly failure: Failure;
+}
+
+// [LAW:no-silent-failure] Keep the turn's first failure as its outcome and
+// carry every subsequent failed finalizer alongside it.
+export interface TurnFailure {
+  readonly kind: "threw";
+  readonly failure: Failure;
+  readonly secondary?: readonly [FinalizationFailure, ...FinalizationFailure[]];
+}
+
 // How a turn ended, a turn that threw included: its failure as data, a class
 // crossing no process. Either way it carries the record it reached and the
 // effects its acts made, so a click that wrote and then failed still lands
@@ -452,10 +471,7 @@ export interface PushedFrame {
 export type TurnOutcome = {
   readonly record: TurnRecord;
   readonly effects: readonly Effect[];
-} & (
-  | { readonly kind: "answered" }
-  | { readonly kind: "threw"; readonly failure: Failure }
-);
+} & ({ readonly kind: "answered" } | TurnFailure);
 
 // [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
 // output names the open views' subscriptions as they stand after it, however

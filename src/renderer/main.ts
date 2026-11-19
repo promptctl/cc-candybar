@@ -89,6 +89,9 @@ import {
 import {
   rendererOf,
   type Effect,
+  type RendererInput,
+  type TurnFailure,
+  type TurnFinalizer,
   type EffectId,
   type Event,
   type PushedFrame,
@@ -117,9 +120,21 @@ type ParkedClick = {
 );
 
 // How a turn ended, apart from what it returned.
-type Ended<T> =
-  | { readonly kind: "answered"; readonly value: T }
-  | { readonly kind: "threw"; readonly failure: Failure };
+type Ended<T> = { readonly kind: "answered"; readonly value: T } | TurnFailure;
+
+type StoreDrains = Readonly<
+  Record<StoreWrite["store"], () => readonly StoreWrite[]>
+>;
+
+function attempted<T>(run: () => T): Ended<T> {
+  try {
+    return { kind: "answered", value: run() };
+  } catch (thrown) {
+    // [LAW:single-enforcer] Classify the failure where it was thrown. The
+    // answer carries data over the private wire.
+    return { kind: "threw", failure: failureOf(thrown) };
+  }
+}
 
 export function mainRenderer(
   parts: MainRendererParts,
@@ -129,8 +144,8 @@ export function mainRenderer(
     push: AdapterPush,
     turns: RendererStats["rendererTurns"],
   ) => AdapterReply,
-  // What the stores moved since the last turn ended.
-  drained: () => readonly StoreWrite[],
+  // What each store moved since its last successful drain.
+  drains: StoreDrains,
 ): Renderer {
   const { time, feeds, menuIdle } = parts;
   // [LAW:single-enforcer] What each present's frame records once it reached
@@ -535,44 +550,59 @@ export function mainRenderer(
         parts.renderCache.getOrCreate(origin);
       next = declaration.read();
     }
-    const before = subscriptions.configs;
+    if (configOffered || subscriptions.configs !== next.plan.configs)
+      parts.renderCache.prune(new Set(next.plan.configs.map(originKey)));
     observed = next;
     subscriptions = next.plan;
-    if (configOffered || before !== subscriptions.configs)
-      parts.renderCache.prune(new Set(subscriptions.configs.map(originKey)));
   };
 
-  // What the turn that ended last moved of the stores.
-  let stored: readonly StoreWrite[] = [];
   // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
-  // what the renderer needs read, when it next wants a turn, and what it
-  // moved of its stores are read as they stand when it ends, however it
-  // ended: a write before a throw is real. Read as part of the turn, so a
-  // read that throws fails it, and the subscriptions last returned stand.
-  const ending = <T>(run: () => T, configOffered = false): Ended<T> => {
-    try {
-      let value: T;
-      try {
-        value = run();
-      } finally {
-        stored = drained();
-        declare(configOffered);
-        // [LAW:one-source-of-truth] A wake moves independently of what the
-        // renderer needs read. Every answer still carries the latest tick.
-        wake = earliestOf([
-          time.next(),
-          menuIdle.next(
-            parked.get().length === 0 ? undefined : parkedClickSessions(),
-          ),
-          feeds.next(),
-        ]);
+  // each successful store drain belongs to this answer even if another
+  // finalizer throws. Standing declarations advance only after collection.
+  const ending = <T>(input: RendererInput, run: () => T) => {
+    let outcome = attempted(run);
+    const stored: StoreWrite[] = [];
+    const collect = (stage: TurnFinalizer, read: () => void): void => {
+      const taken = attempted(read);
+      if (taken.kind === "answered") return;
+      if (outcome.kind === "answered") outcome = taken;
+      else {
+        const after = { stage, failure: taken.failure };
+        outcome = {
+          ...outcome,
+          secondary:
+            outcome.secondary === undefined
+              ? [after]
+              : [...outcome.secondary, after],
+        };
       }
-      return { kind: "answered", value };
-    } catch (thrown) {
-      // [LAW:single-enforcer] Classified here, where it was thrown: a class
-      // crosses no process.
-      return { kind: "threw", failure: failureOf(thrown) };
-    }
+    };
+
+    collect("session-state", () => stored.push(...drains["session-state"]()));
+    collect("settings-history", () =>
+      stored.push(...drains["settings-history"]()),
+    );
+    collect("subscriptions", () =>
+      declare(input.kind === "event" && input.event.kind === "config"),
+    );
+    // [LAW:one-source-of-truth] The wake has its own collector. A failed
+    // subscription declaration leaves the last one standing and the next
+    // due turn still receives the current tick.
+    collect("wake", () => {
+      wake = earliestOf([
+        time.next(),
+        menuIdle.next(
+          parked.get().length === 0 ? undefined : parkedClickSessions(),
+        ),
+        feeds.next(),
+      ]);
+    });
+    if (input.kind === "adapter" && input.push.kind === "close-views")
+      collect("release-subscriptions", () =>
+        runInAction(() => declaration.release()),
+      );
+
+    return { outcome, subscriptions, wake, stored };
   };
 
   return rendererOf({
@@ -580,22 +610,18 @@ export function mainRenderer(
     // after it lands after its writes.
     adapter: async (input) =>
       time.during(input, () => {
-        const ended = ending(() =>
+        const { outcome, ...declaration } = ending(input, () =>
           pushed(input.push, {
             parked: opening.size + parked.get().length,
             presents: deliveries.size,
             deferrals: time.deferrals(),
           }),
         );
-        if (input.push.kind === "close-views")
-          runInAction(() => declaration.release());
         return {
-          ...(ended.kind === "answered"
-            ? { kind: "replied" as const, reply: ended.value }
-            : ended),
-          subscriptions,
-          wake,
-          stored,
+          ...(outcome.kind === "answered"
+            ? { kind: "replied" as const, reply: outcome.value }
+            : outcome),
+          ...declaration,
         };
       }),
     event: async (input) =>
@@ -603,20 +629,17 @@ export function mainRenderer(
         const record: RequestFacts = [];
         const effects: Effect[] = [];
         const frames: PushedFrame[] = [];
-        const ended = ending(
-          () => turn(input.event, record, effects, frames),
-          input.event.kind === "config",
+        const { outcome, ...declaration } = ending(input, () =>
+          turn(input.event, record, effects, frames),
         );
         return {
-          ...(ended.kind === "answered"
+          ...(outcome.kind === "answered"
             ? { kind: "answered" as const }
-            : ended),
+            : outcome),
           effects,
           record,
-          subscriptions,
-          wake,
           frames,
-          stored,
+          ...declaration,
         };
       }),
   });
@@ -675,12 +698,6 @@ export function mainRendererOf(
     log,
     inputs.stored.history,
   );
-  // [LAW:one-source-of-truth] What the turn moved of every store, in the
-  // order each store's entries last moved.
-  const drained = (): StoreWrite[] => [
-    ...sessionState.drain(),
-    ...settingsHistory.drain(),
-  ];
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
   const configWrites = new ConfigWrites(mint);
@@ -856,7 +873,10 @@ export function mainRendererOf(
       acts,
     },
     pushed,
-    drained,
+    {
+      "session-state": () => sessionState.drain(),
+      "settings-history": () => settingsHistory.drain(),
+    },
   );
 }
 

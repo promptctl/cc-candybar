@@ -414,6 +414,7 @@ One wide event per unit of work, under one correlation id:
 
 - **The host,** per input delivered: renderer, session, input kind, mailbox wait, the renderer's `took`, the effects returned and each outcome, and the world state's `seq` the renderer last held. Per world-state push and per source run, as Proposal 1 §21. Per renderer start and end, with its bundle.
 - **A renderer** writes nothing. Its turn record (the event kind, the state revision it left, what it drew and what it settled for) is part of its output, and the host writes it beside the input's event.
+- **A turn's first failure determines its outcome.** Each store contributes its writes independently. A failed subscription collection keeps the previous declaration while the wake still moves. The host reports later failures alongside the first and takes the writes this turn collected before it serves the next input.
 
 `daemon-stats` reports the number of operations waiting for config, presents awaiting their effect result, and deferrals waiting for their tick under `rendererTurns`.
 

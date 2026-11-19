@@ -34,6 +34,7 @@ import {
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
+  type TurnFailure,
   type TurnOutcome,
   type Subscriptions,
   type TurnRecord,
@@ -88,6 +89,14 @@ type TakenTurn = TurnOutcome & {
   // Failure preparing the origin this context will draw from.
   readonly configFailure?: Failure;
 };
+
+// [LAW:nothing-unseen] The primary failure still determines the outcome.
+// Secondary renderer failures are fields on its turn or push diagnostic.
+const finalizationFields = (secondary: TurnFailure["secondary"]): TurnRecord =>
+  secondary?.map<TurnRecord[number]>(({ stage, failure }) => [
+    `finalize.${stage}`,
+    `${failure.kind}: ${failure.detail}`,
+  ]) ?? [];
 
 // What a caller makes as its input's slot comes up: the event, or why there
 // is none to send, which is the turn's failure. The host stamps it with the
@@ -303,11 +312,16 @@ export function rendererHost(
     const { subscriptions, wake, frames, stored, turnMs, ...answer } = output;
     const turn: TakenTurn = {
       ...answer,
+      record:
+        answer.kind === "threw" && answer.secondary !== undefined
+          ? [...answer.record, ...finalizationFields(answer.secondary)]
+          : answer.record,
       settlePresentation: receipt,
       queuedMs,
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
+    recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled, configFailure } = await landInSlot(
       input.event,
       output,
@@ -334,7 +348,6 @@ export function rendererHost(
     readonly settled: Promise<readonly EffectOutcome[]>;
     readonly configFailure: Failure | null;
   }> => {
-    recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect): effect is ConfigChange => effect.kind === "change",
     );
@@ -738,7 +751,11 @@ export function rendererHost(
       case "threw":
         // [LAW:single-enforcer] No renderer was live to take it: the
         // supervisor says that once, with the count it refused.
-        if (delivered.failure.kind === "down") return;
+        if (
+          delivered.failure.kind === "down" &&
+          delivered.secondary === undefined
+        )
+          return;
         // [LAW:no-silent-failure] No turn's failure is left unhandled.
         log(
           LEVEL[delivered.failure.kind],
@@ -886,10 +903,16 @@ export function rendererHost(
     // The failure keeps its kind, so a push no renderer took reads as one.
     if (output.kind === "threw") {
       const took = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const detail = eventLine(
+        `renderer ${name} push ${push.kind} threw${took}`,
+        finalizationFields(
+          "secondary" in output ? output.secondary : undefined,
+        ),
+      );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took}: ${output.failure.detail}`,
+        detail: `${detail}: ${output.failure.detail}`,
       });
     }
     if (output.reply.kind !== push.kind)
