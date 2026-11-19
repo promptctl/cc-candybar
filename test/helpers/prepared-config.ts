@@ -2,6 +2,7 @@
 import { TEST_SIGNER } from "./link-signer";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { locations } from "../../src/daemon/paths";
+import { createGates, deriveActionGates } from "../../src/daemon/foundations/gates";
 import type { ApprovedRepo } from "../../src/config/loader/repo-gate";
 import {
   installedRoots,
@@ -56,6 +57,7 @@ export interface PreparedConfig {
   readonly layers: readonly string[];
   // Plugins the config lists that did not load.
   readonly droppedPlugins: readonly DroppedPlugin[];
+  readonly droppedPlacements: readonly string[];
   readonly config: ValidatedConfig;
   readonly compiled: CompiledConfig;
   readonly store: VariableStore;
@@ -114,9 +116,8 @@ export function prepareSnapshot(
   const loaded = loadSnapshot(snapshot, world.host.home, DEFAULT_DSL_CONFIG, {
     warned: (w) => warnings.push(...w),
   });
-  if (loaded.dropped.length > 0)
-    throw new Error(loaded.dropped.map((file) => file.message).join("\n"));
   const { config } = loaded;
+  deriveActionGates(createGates(), config);
   const store = new VariableStore(world.clock);
   const sourceRuns = new SourceRuns({
     launcher: world.launcher,
@@ -147,6 +148,7 @@ export function prepareSnapshot(
     warnings.push(...compiled.loadWarnings);
     return {
       layers,
+      droppedPlacements: loaded.dropped.map((issue) => issue.message),
       droppedPlugins: [
         ...loaded.installed.dropped,
         ...loaded.layers.flatMap((l) => l.plugins.dropped),
@@ -164,15 +166,14 @@ export function prepareSnapshot(
   }
 }
 
-// One draw of the prepared config under `effective`, `width` wide, once the
-// runs its payload started have answered: its frame, and each render error it
-// met, by what failed.
+// Draw after the source wait, retaining both the renderer's diagnostics and
+// the names of any sources the collector is still waiting for.
 export async function renderEffective(
   prepared: PreparedConfig,
   effective: EffectiveGlobals,
   width: number,
   at: Instant,
-): Promise<{ rendered: Frame; failures: Map<string, string> }> {
+): Promise<{ rendered: Frame; failures: readonly string[]; pending: readonly string[] }> {
   const { config, compiled, store, registry, runs, layers } = prepared;
   const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);
@@ -188,7 +189,7 @@ export async function renderEffective(
     sessionOfPayload(payload),
     runs.readings,
   );
-  await runs.settled(timeoutSignal(store.clock, SETTLE_MS));
+  const pending = await runs.settled(timeoutSignal(store.clock, SETTLE_MS));
   const { frame, warnings } = drawPayload(
     config,
     compiled,
@@ -200,21 +201,9 @@ export async function renderEffective(
     effective,
     runs.readings,
   );
-  const failures = new Map<string, string>();
-  for (const w of warnings)
-    switch (w.kind) {
-      case "rule":
-        failures.set(`${w.slot} rule`, w.message);
-        break;
-      case "segment":
-        failures.set(`segment "${w.placement}"`, w.message);
-        break;
-      case "when":
-        failures.set(w.where, w.error);
-        break;
-      case "refresh":
-        failures.set(`variable "${w.variable}"`, w.error);
-        break;
-    }
-  return { rendered: frame, failures };
+  return {
+    rendered: frame,
+    failures: [...prepared.droppedPlacements, ...warnings.map((warning) => warning.message)],
+    pending,
+  };
 }

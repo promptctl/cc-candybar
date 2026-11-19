@@ -39,8 +39,3 @@ describe("detectConfigEnv (client-side CC_CANDYBAR_CONFIG probe)", () => {
     expect(hint("~alice/c.json5")).toBe("/work/proj/~alice/c.json5");
   });
 });
-
-// [LAW:single-enforcer] brandon-unfiled-3248.e3r: the one composition `check`
-// and `doctor` judge a config under. An empty argument — `"$CFG"` with CFG
-// unset — is no argument, as it is to the bar's `--config`, so the variable
-// is the target; a named file outranks the variable.

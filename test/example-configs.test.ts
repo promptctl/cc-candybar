@@ -26,8 +26,7 @@ const exampleFiles = fs
   .filter((f) => f.endsWith(".json5"))
   .sort();
 
-// Run one example through the shipped check pipeline; the rendered line for
-// content assertions.
+// Draw a fresh session for assertions about a shipped example's contents.
 async function renderExample(file: string): Promise<Frame> {
   return expectClean(file, await renderConfig(WORLD, path.join(examplesDir, file)))
     .rendered;
@@ -56,8 +55,8 @@ describe("shipped example configs (examples/*.json5)", () => {
       const effective = resolveEffectiveGlobals(
         prepared.config, (key) => key === "preset" ? preset : null, () => false,
       );
-      const { rendered, failures } = await renderEffective(prepared, effective, 200, at);
-      expect({ preset, errors: [...failures] }).toEqual({ preset, errors: [] });
+      const { rendered, failures, pending } = await renderEffective(prepared, effective, 200, at);
+      expect({ preset, failures, pending }).toEqual({ preset, failures: [], pending: [] });
       expect(textOf(rendered).length).toBeGreaterThan(0);
     }
   });
@@ -65,6 +64,28 @@ describe("shipped example configs (examples/*.json5)", () => {
   test("a missing example cannot pass by drawing the bundled default", () => {
     const absent = path.join(examplesDir, "absent-example.json5");
     expect(() => discoverFixture(WORLD, absent, examplesDir)).toThrow(absent);
+  });
+
+  test("an action error in an alternate preset belongs to the draw that selected it", async () => {
+    await withTempConfig(`{
+      globals: { preset: 'a' },
+      presets: { a: {}, b: { root: { h: ['sample', 'broken'] } } },
+      actions: { mode: { set: 'work-mode', cycle: ['focus', 'review', 'debug'] } },
+      segments: {
+        sample: { template: 'sample' },
+        broken: { template: '{{ action "mode" "focus" "review" }}' },
+      },
+      root: { h: ['sample'] },
+    }`, async (file) => {
+      const cwd = path.dirname(file);
+      const { snapshot, warnings } = discoverFixture(WORLD, file, cwd);
+      using prepared = prepareSnapshot(WORLD, snapshot, cwd, warnings);
+      const draw = (preset: string | null) => renderEffective(prepared, resolveEffectiveGlobals(
+        prepared.config, (key) => key === "preset" ? preset : null, () => false,
+      ), 200, instantOf(new Date(WORLD.clock.now())));
+      expect((await draw(null)).failures).toEqual([]);
+      expect((await draw("b")).failures).toEqual([expect.stringContaining("mode")]);
+    });
   });
 
   // [LAW:verifiable-goals] The shipped demonstration of `parse: { json: true }`

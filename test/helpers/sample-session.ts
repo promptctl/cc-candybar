@@ -22,7 +22,7 @@ export const SAMPLE_HINTS = {
   ssh: true,
 } as const satisfies ClientHints;
 
-// The faked session's home. Not the user's: a directory segment abbreviates a
+// [LAW:verifiable-goals] The faked session's home. Not the user's: a directory segment abbreviates a
 // path by what is on disk there, so a real home draws a different bar on every
 // machine. The config is still discovered from the user's own home.
 export const SAMPLE_HOME = "/home/tester";

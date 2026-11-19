@@ -119,20 +119,7 @@ C, from the 8fp variants page, is "base changes per cell, hue changes every few 
 
 Charset and colour depth go: "you can just remove 'charset' and 'colordepth' completely. make users set them in the config file." Both stay as `globals` fields and lose their session halves and menu controls: their `SETTINGS` rows move to `UNCONTROLLED_GLOBALS`, or the generator puts them back. `☐ persist?` is already gone: Save replaced it in #256.
 
-## Widths at 80 columns
-
-`pnpm exec tsx design-docs/settings-menu-map-render.mts` printed these numbers until it stopped running (brandon-menus-sjhy.bc0). The rows brandon-menus-sjhy.ek7 changed were re-measured through `drawDsl` on the bundled default at 200 columns, the others are the script's last output. Widths are at padding 1, and each padding step adds two cells per cell. "Drifted" is every setting resettable, one draft, one undo and one redo step.
-
-| Row | Cells |
-|---|---|
-| Door line 1: fresh / drifted / drifted with `⟲ reset all?` armed | 56 / 80 / 93 |
-| Door line 2: tabs (the open one led by `▾`) / two tabs marked `•` | 64 / 68 |
-| `⚡ session` links / commands | 50 / 52 |
-| `🎨 look` / drifted | 53 / 59 |
-| `📐 layout` | 16 |
-| `⚙ config` / drifted | 61 / 69 |
-| ⚙ gear with `⤓ default for catppuccin-frappe` / drifted | 92 / 98 |
-| Edit mode's save row | 49 |
+The original design recorded the measured terminal widths of its menu rows. [Historical width measurements](https://github.com/promptctl/cc-candybar/blob/2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8/design-docs/SETTINGS-MENU-MAP.md#widths-at-80-columns)
 
 ## Also recorded
 

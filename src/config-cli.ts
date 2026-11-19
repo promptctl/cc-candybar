@@ -6,7 +6,7 @@ import type { CliPlan } from "./cli-plan.js";
 const EXIT_VALID = 0;
 const EXIT_USAGE = 2;
 
-// Read the committed JSON Schema for the config file shape (RawDslConfig),
+// [LAW:one-source-of-truth] Read the committed JSON Schema for the config file shape (RawDslConfig),
 // or null when the artifact is absent. Pure read, folded by `schemaPlan` into a
 // plan that src/cli-plan.ts delivers, so the locate-and-read path is testable.
 export function loadSchemaText(): string | null {

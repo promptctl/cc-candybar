@@ -591,7 +591,7 @@ From `src/config/default-dsl-config.ts`.
 
 At 80 columns the expanded form moves to its own row. Which facts each form shows are the placement's eight settings (see [configure mode](#configure-mode)).
 
-**`autocompact`**, in the default second row. Each control types `/autocompact <tokens|auto>` into this session's Claude Code pane. With the window on `auto` it reads `⇲ auto −`, as in every drawing above; with a window set it reads `⇲ 400.0K − + ↺` (from the in-process render in `design-docs/settings-menu-map-render.mts`, whose payload sets a window).
+**`autocompact`**, in the default second row. Each control types `/autocompact <tokens|auto>` into this session's Claude Code pane. With the window on `auto` it reads `⇲ auto −`, as in every drawing above; with a window set it reads `⇲ 400.0K − + ↺` (drawn with a configured window in `test/autocompact.test.ts`).
 
 `−` and `+` move the window by 100K, within 100K–1M and the model's context window. `↺` returns it to `auto`. A value the daemon cannot read shows `⇲ ⚠ <error>` on the error colour.
 

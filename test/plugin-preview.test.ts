@@ -14,6 +14,7 @@ function withPreview(
   inspect: (
     run: (args: readonly string[]) => ReturnType<typeof captured>,
   ) => void,
+  cold = false,
 ): void {
   const root = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), "ccb-preview-")),
@@ -39,12 +40,16 @@ function withPreview(
       `#!/usr/bin/env bash
 printf '%s\\n' "$@" >> "$PREVIEW_CALLS"
 [[ $# == 1 && $1 == --config-only=* ]] || exit 7
-cat >/dev/null
+cat >> "$PREVIEW_CALLS.payloads"
+if [[ $PREVIEW_COLD == true && ! -f $PREVIEW_CALLS.warm ]]; then
+    touch "$PREVIEW_CALLS.warm"
+    exit 0
+fi
 cat "\${1#*=}"
 `,
       { mode: 0o700 },
     );
-    inspect((args) => captured(root, bin, script, args));
+    inspect((args) => captured(root, bin, script, args, cold));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -55,13 +60,16 @@ function captured(
   bin: string,
   script: string,
   args: readonly string[],
+  cold: boolean,
 ) {
   const calls = path.join(root, "calls");
   const result = spawnSync("bash", [script, ...args], {
     cwd: root,
     env: {
       PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: root,
       PREVIEW_CALLS: calls,
+      PREVIEW_COLD: String(cold),
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
     },
@@ -75,17 +83,36 @@ function captured(
     calls: fs.existsSync(calls)
       ? fs.readFileSync(calls, "utf8").trim().split("\n")
       : [],
+    payloads: fs.existsSync(`${calls}.payloads`)
+      ? fs.readFileSync(`${calls}.payloads`, "utf8").trim().split("\n").map((line) => JSON.parse(line))
+      : [],
     written: path.join(root, FILE),
   };
 }
 
-test("the written config is sent once using the daemon's isolated mode", () => {
+test.each([FILE, `~/${FILE}`])("the written file %s is sent once in isolated mode", (file) => {
   withPreview((run) => {
-    const result = run([`--config-only=${FILE}`]);
+    const result = run([`--config-only=${file}`]);
     expect(result.status).toBe(0);
     expect(result.calls).toEqual([`--config-only=${result.written}`]);
     expect(result.stdout.trim()).toBe(CONTENT);
   });
+});
+
+test("a cold retry shares its payload and each compared config gets its own session", () => {
+  withPreview((run) => {
+    const result = run(["--compare-presets"]);
+    expect(result.status).toBe(0);
+    const [cold, first, ...rest] = result.payloads;
+    expect(cold).toEqual(first);
+    expect(result.calls[0]).toBe(result.calls[1]);
+    expect(first).toMatchObject({ hook_event_name: "Status", session_id: expect.any(String) });
+    expect(rest.length).toBeGreaterThan(0);
+    const distinctConfigs = new Set(result.calls);
+    const sessions = [first, ...rest].map((payload) => payload.session_id);
+    expect(new Set(sessions).size).toBe(distinctConfigs.size);
+    expect(sessions).toHaveLength(distinctConfigs.size);
+  }, true);
 });
 
 test("template choices are substituted and sent once in isolated mode", () => {

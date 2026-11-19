@@ -372,7 +372,7 @@ export class SourceRegistry {
   runSources(): ReadonlyMap<string, SourceRun> {
     return this.runSourcesNow.get();
   }
-  // The runs the request waits on, by variable name.
+  // The named runs declared by this registry, including aliases for a shared run.
   namedRuns(): ReadonlyMap<string, Run> {
     return this.namedNow.get();
   }

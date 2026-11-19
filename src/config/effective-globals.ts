@@ -126,6 +126,7 @@ export function presetOf(
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
 // chain uses the session’s pick and whether the active preset was customized.
+// [LAW:no-mode-explosion] A fresh session supplies empty picks to this same resolver.
 export function resolveEffectiveGlobals(
   config: DslConfig,
   sessionPick: (key: string) => string | null,

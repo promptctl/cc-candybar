@@ -1,3 +1,4 @@
+import { daemonFactsOf } from "./daemon-facts";
 // Sample inputs for the production payload projection. The menu counters exercise
 // reset, Save, Undo, Redo, and Back in the template suites.
 
@@ -57,7 +58,7 @@ export function samplePayload(
     undefined,
     SAMPLE_SESSION,
     readings,
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    daemonFactsOf(),
     at,
   );
   const { term: _term, ...payload } = composePayload(

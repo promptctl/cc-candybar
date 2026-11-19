@@ -1322,19 +1322,13 @@ describe("an installed plugin", () => {
       `{ plugins: ["./deploy/plugin.json5"] }`,
     );
     const warnings: string[] = [];
-    // The loader identifies the drop, naming the placement — never the plugin.
-    await expect(
-      prepareConfig(
-        world,
-        [user, project].map(homeLayer),
-        NO_REPO,
-        dir,
-        warnings,
-        instantOf(new Date()),
-      ),
-    ).rejects.toThrow(
-      /user\.json5[\s\S]*"gti" does not match any declared segment/,
+    using prepared = await prepareConfig(
+      world, [user, project].map(homeLayer), NO_REPO, dir, warnings, instantOf(new Date()),
     );
+    expect(prepared.droppedPlacements).toEqual([
+      expect.stringMatching(/user\.json5[\s\S]*"gti" does not match any declared segment/),
+    ]);
+    expect(prepared.droppedPlugins).toEqual([]);
     expect(warnings.join("\n")).not.toContain("was not loaded");
   });
 

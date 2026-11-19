@@ -430,8 +430,8 @@ function compileHelpers(
  * declare* method for each VariableDecl. Also pre-parses every segment's
  * when/template/bg/fg strings once — drawDsl only evaluates.
  *
- * Call once per config (at startup or hot-reload). The daemon calls this;
- * the render loop calls drawDsl with the returned CompiledConfig.
+ * A fixture with one registry registers every scope here. The daemon calls
+ * registerCompiled with a shared compile and gives each session its own view.
  *
  * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
  * defineBox/defineComputed throws if a variable name is already declared in
@@ -1595,7 +1595,7 @@ export function drawDsl(
   const root = compiled.roots.get(preset);
   if (root === undefined) {
     throw new Error(
-      `Preset "${preset}" has no compiled layout — registerDslConfig compiles ` +
+      `Preset "${preset}" has no compiled layout — the config compiler builds ` +
         `one per declared preset and effectivePresetName collapses unknown ` +
         `names to "${PRESET_FLOOR}"; a miss here is merge/policy drift ` +
         `(have: ${[...compiled.roots.keys()].join(", ")})`,

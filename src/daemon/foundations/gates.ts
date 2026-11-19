@@ -26,6 +26,13 @@ export interface Gates {
   readonly config: Keyspace<DslConfig>;
 }
 
+// [LAW:single-enforcer] Derive both write gates when a config loads. A
+// conflicting action is a config diagnostic before a user ever clicks it.
+export function deriveActionGates(gates: Gates, config: DslConfig): void {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
+}
+
 // [LAW:one-source-of-truth] `held` is the whole daemon-wide contribution at
 // construction: the one place a daemon's gates are said to hold anything beyond
 // what configs derive. Later registrations go through the keyspaces.

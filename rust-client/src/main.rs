@@ -172,7 +172,7 @@ fn native_subcommand(argv: &[String]) -> Option<NativeSubcommand> {
 // Every other subcommand is Node's: a subcommand is structurally a positional
 // first arg (a word, not a flag); the render path is invoked with no args, or
 // flags only, so it never has one. Discriminating on that shape — rather than a
-// hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
+// hand-maintained name list — means a subcommand Node adds (schema/vars/…)
 // works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
 // is injected so this is a pure, testable function.
 //

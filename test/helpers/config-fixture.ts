@@ -81,14 +81,14 @@ export async function renderConfig(
       () => null,
       () => false,
     );
-    const { rendered, failures } = await renderEffective(
+    const { rendered, failures, pending } = await renderEffective(
       prepared,
       effective,
       200,
       instantOf(new Date(world.clock.now())),
     );
-    const errors = [...failures.values()];
-    errors.push(...prepared.droppedPlugins.map(droppedPluginNotice));
+    warnings.push(...pending.map((name) => `source still pending: ${name}`));
+    const errors = [...failures, ...prepared.droppedPlugins.map(droppedPluginNotice)];
     if (errors.length > 0)
       return { kind: "fatal", message: errors.join("\n"), warnings, layers };
     return { kind: "clean", rendered, layers, warnings };

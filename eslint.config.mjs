@@ -158,7 +158,7 @@ const OWNED_IMPORTS = {
   },
   productionMachineEdge: {
     group: ["**/doctor/edge", "**/doctor/edge.js"],
-    owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
+    owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   productionClaudeInputEdge: {
@@ -178,7 +178,7 @@ const OWNED_IMPORTS = {
   },
   fileStorage: {
     group: ["**/file-storage", "**/file-storage.js"],
-    owners: ["src/daemon/production-adapters.ts", "src/doctor/cli.ts"],
+    owners: ["src/daemon/production-adapters.ts"],
     message: "A daemon is handed its adapters (production-adapters.ts).",
   },
   linkSignerFromKeyFile: {
@@ -193,7 +193,6 @@ const OWNED_IMPORTS = {
     owners: [
       "src/daemon/server.ts",
       "src/renderer-process.ts",
-      "src/doctor/cli.ts",
     ],
     message: "A daemon is handed its paths: take the value you are given.",
   },

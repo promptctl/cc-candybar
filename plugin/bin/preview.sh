@@ -20,7 +20,6 @@ ENDCAPS="${ENDCAPS_SHAPES[0]}"
 PRESET="${PRESETS[0]}"
 COMPARE=""
 CONFIG_FILE=""
-HAS_CHOICES=false
 CLIENT=()
 
 # shellcheck disable=SC2329
@@ -59,41 +58,52 @@ make_fixture() {
     printf '{"timestamp":"%s","type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}\n' "${now_iso}" >>"${TRANSCRIPT}"
 }
 
-# One Claude Code status hook payload, shaped like the daemon's required input.
+# Each preview gets a new session. The client can replay a session's last
+# frame while the daemon starts, so only retries of this same preview share it.
 sample_json() {
-    printf '{"hook_event_name":"Status","session_id":"preview-123","transcript_path":"%s","cwd":"%s","workspace":{"current_dir":"%s","project_dir":"%s"},"model":{"id":"claude-opus-4-8","display_name":"Opus 4.8"},"version":"1.0.47","cost":{"total_cost_usd":2.85,"total_duration_ms":16200000,"total_api_duration_ms":480000,"total_lines_added":342,"total_lines_removed":87},"context_window":{"context_window_size":200000,"used_percentage":42,"total_input_tokens":72000,"total_output_tokens":12000,"current_usage":{"input_tokens":72000,"output_tokens":12000,"cache_creation_input_tokens":15000,"cache_read_input_tokens":8000}},"rate_limits":{"five_hour":{"used_percentage":35,"resets_at":%d},"seven_day":{"used_percentage":28,"resets_at":%d}}}' \
-        "${TRANSCRIPT}" "${REPO}" "${REPO}" "${REPO}" \
-        "$(($(date +%s) + 15480))" "$(($(date +%s) + 432000))"
+    node - "${TRANSCRIPT}" "${REPO}" <<'JS'
+const { randomUUID } = require("node:crypto");
+const [transcript, cwd] = process.argv.slice(2);
+const now = Math.floor(Date.now() / 1000);
+process.stdout.write(JSON.stringify({
+    hook_event_name: "Status",
+    session_id: randomUUID(),
+    transcript_path: transcript,
+    cwd,
+    workspace: { current_dir: cwd, project_dir: cwd },
+    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
+    version: "1.0.47",
+    cost: {
+        total_cost_usd: 2.85, total_duration_ms: 16200000,
+        total_api_duration_ms: 480000, total_lines_added: 342, total_lines_removed: 87,
+    },
+    context_window: {
+        context_window_size: 200000, used_percentage: 42,
+        total_input_tokens: 72000, total_output_tokens: 12000,
+        current_usage: {
+            input_tokens: 72000, output_tokens: 12000,
+            cache_creation_input_tokens: 15000, cache_read_input_tokens: 8000,
+        },
+    },
+    rate_limits: {
+        five_hour: { used_percentage: 35, resets_at: now + 15480 },
+        seven_day: { used_percentage: 28, resets_at: now + 432000 },
+    },
+}));
+JS
 }
 
-# The one render request, sent from inside the fixture repo (the daemon reads
-# git state from the client's working directory).
-render_request() {
-    (cd "${REPO}" && sample_json | "${CLIENT[@]}" "$@")
-}
-
-probe_daemon() {
-    { "${CLIENT[@]}" daemon-stats --json >/dev/null; } 2>&1
-}
-
-# [LAW:no-ambient-temporal-coupling] A cold statusline request can start the
-# daemon and return blank. Wait for readiness only after a blank response.
-# The first usable answer is the preview, whether the daemon was warm or cold.
+# A cold statusline request starts the daemon and can return blank. Repeat the
+# same ordinary request until this session's first frame arrives.
 render_config() {
-    local file="$1" frame probe deadline=$((SECONDS + 15))
+    local file="$1" payload frame deadline=$((SECONDS + 15))
+    payload="$(sample_json)" || return
     while ((SECONDS < deadline)); do
-        frame="$(render_request --config-only="${file}")"
+        frame="$(cd "${REPO}" && "${CLIENT[@]}" --config-only="${file}" <<<"${payload}")" || return
         if [[ -n "${frame}" ]]; then
             printf '%s\n\n' "${frame}"
             return 0
         fi
-        until probe="$(probe_daemon)"; do
-            if ((SECONDS >= deadline)); then
-                printf 'preview: the cc-candybar daemon did not start within 15s: %s\n' "${probe}" >&2
-                return 1
-            fi
-            sleep 0.1
-        done
         sleep 0.1
     done
     printf 'preview: the cc-candybar daemon returned no frame within 15s\n' >&2
@@ -143,16 +153,20 @@ render() {
 }
 
 parse_args() {
+    local count=$#
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --theme=*) THEME="${1#*=}"; HAS_CHOICES=true ;;
-            --endcaps=*) ENDCAPS="${1#*=}"; HAS_CHOICES=true ;;
-            --preset=*) PRESET="${1#*=}"; HAS_CHOICES=true ;;
+            --theme=*) THEME="${1#*=}" ;;
+            --endcaps=*) ENDCAPS="${1#*=}" ;;
+            --preset=*) PRESET="${1#*=}" ;;
             --compare-themes) COMPARE="themes" ;;
             --compare-endcaps) COMPARE="endcaps" ;;
             --compare-presets) COMPARE="presets" ;;
             --config-only=) invalid "--config-only needs a path" ;;
-            --config-only=*) CONFIG_FILE="${1#*=}" ;;
+            --config-only=*)
+                ((count == 1)) || invalid "--config-only cannot be combined with template choices"
+                CONFIG_FILE="${1#*=}"
+                ;;
             *) invalid "unknown option: $1" ;;
         esac
         shift
@@ -161,15 +175,12 @@ parse_args() {
 
 main() {
     parse_args "$@"
-    # [LAW:types-are-the-program] A written config is its own preview input.
-    # Template choices describe the other input and cannot modify that file.
     if [[ -n "${CONFIG_FILE}" ]]; then
-        if [[ "${HAS_CHOICES}" == true || -n "${COMPARE}" ]]; then
-            invalid "--config-only cannot be combined with template choices"
-        fi
-        if [[ "${CONFIG_FILE}" != /* ]]; then
-            CONFIG_FILE="${PWD}/${CONFIG_FILE}"
-        fi
+        case "${CONFIG_FILE}" in
+            '~'|'~/'*) CONFIG_FILE="${HOME}${CONFIG_FILE#'~'}" ;;
+            /*) ;;
+            *) CONFIG_FILE="${PWD}/${CONFIG_FILE}" ;;
+        esac
         if [[ ! -f "${CONFIG_FILE}" || ! -r "${CONFIG_FILE}" ]]; then
             invalid "cannot read config file: ${CONFIG_FILE}"
         fi

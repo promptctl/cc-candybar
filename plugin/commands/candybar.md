@@ -225,7 +225,7 @@ Run the command and let the terminal display the result. Tell the user to expand
 "${CLAUDE_PLUGIN_ROOT}/bin/preview.sh" --config-only="${HOME}/.config/cc-candybar/config.json5"
 ```
 
-This draws the file you wrote through the ordinary daemon using a sample session. Show any diagnostic the command or the bar reports. If the command fails or the bar reports a config problem, stop before the installer. Report a successful draw as a preview of the sample session.
+This draws the written file in a sample statusline session. If the command fails, show its error before installing. If the bar shows a ⚠ count, pause installation and ask the user to open the warning in the preview to see its diagnostic. Resolve any config problem before continuing. A successful draw previews the preset this session opens on.
 
 ## Step 9: Install the runtime
 
