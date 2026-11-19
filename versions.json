@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-880",
+      "ref": "refs/pull/880/merge",
+      "sha": "bcefffda4cbefb64ce6c9393844cd3da2ce9d54f",
+      "timestamp": "2026-11-19T14:11:24.292Z",
+      "commits": [
+        {
+          "sha": "bcefffda4cbefb64ce6c9393844cd3da2ce9d54f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:10:19-07:00",
+          "message": "Merge 79c4fad5bac30ad8d26b1309408e1d056976f1de into 4521bf6f3ff8442f1ade1eb3785e9b245dd454e6\n"
+        },
+        {
+          "sha": "79c4fad5bac30ad8d26b1309408e1d056976f1de",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:01:09-07:00",
+          "message": "refactor(config): resolve write layers before rendering\n"
+        }
+      ]
+    },
+    {
       "version": "pr-873",
       "ref": "refs/pull/873/merge",
       "sha": "2d50afc99686cd3bd78ae0e295707fd462dbeee4",
