@@ -81,6 +81,10 @@ import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import { joinedEvent, type HeldEvent } from "../src/utils/event-hold";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
+import { stateDir } from "../src/daemon/paths";
+import { STORAGE_FOLDER } from "../src/config/loader/plugins";
+import { writeStatePlan } from "./helpers/state-file";
 import {
   hearingEvents,
   hostHeld,
@@ -169,6 +173,7 @@ function checked(
   pane?: string,
   file = "config.json5",
   terminal: Pick<ReaderRenderRequest, "termCols" | "termRows"> = {},
+  project = PROJECT,
 ): CheckedRenderRequest {
   const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
@@ -177,9 +182,17 @@ function checked(
     {
       v: PROTOCOL_VERSION,
       kind: "render",
-      hookData,
+      hookData: {
+        ...hookData,
+        cwd: project,
+        workspace: {
+          ...hookData.workspace,
+          current_dir: project,
+          project_dir: project,
+        },
+      },
       args: ["cc-candybar", "--config", configFile, "--bogus"],
-      cwd: PROJECT,
+      cwd: project,
       encoding: "frame",
       env: TEST_ENV,
       ...terminal,
@@ -346,10 +359,76 @@ async function dueFrame(r: Renderer, elapsed = 0) {
   return pushed.frame;
 }
 
+async function restartableRendererHost(context: CheckedRenderRequest) {
+  const prior = renderer();
+  let current = prior;
+  const origin = context.requested;
+  const worldState = prior.rig.served.collector.requested(
+    context,
+    TEST_ENVIRONMENT,
+  );
+  const { discovery } = prior.rig.cache.configs;
+  const published: Subscriptions[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      rendererOf({
+        event: (input) => current.r.answer(input),
+        adapter: (input) => current.r.answer(input),
+      }),
+      systemTimekeeper.monotonic,
+    ),
+    () => {},
+    {
+      subscribed: (subscriptions) => void published.push(subscriptions),
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    { ...NO_ACTS, configs: discovery },
+  );
+  cleanups.push(() => host.closeWake());
+  const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
+  const draw = async () => {
+    const { effects } = await submit({ kind: "request", id: REQUEST, context });
+    return textOf(parseFrame(presentOf(effects).frame));
+  };
+  expect(await submit({ kind: "context", context, worldState })).toMatchObject({
+    kind: "answered",
+  });
+  const reload = async (file: string) => {
+    expect(discovery.landed([file])).toEqual([origin]);
+    const config = discovery.snapshotOf(origin);
+    if (config === null) throw new Error("missing changed config");
+    expect(await submit({ kind: "config", origin, config })).toMatchObject({
+      kind: "answered",
+    });
+  };
+  const replace = async () => {
+    current = renderer();
+    expect(await host.start(
+      () => ({
+        kind: "event",
+        event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
+      }),
+      [],
+    )).toMatchObject({ kind: "answered" });
+  };
+  return {
+    discovery,
+    published,
+    draw,
+    reload,
+    replace,
+    entry: () => current.rig.cache.getOrCreate(origin),
+    hold: () => current.rig.cache.hold(origin),
+  };
+}
+
 describe("a statusline request", () => {
   test("a replacement keeps the selected plugin build and the current error until valid removal", async () => {
-    const prior = renderer();
-    let current = prior;
     const context = checked();
     const origin = context.requested;
     const file = path.join(dir, "config.json5");
@@ -360,30 +439,8 @@ describe("a statusline request", () => {
       segments: { marker: { template: 'VALID-PLUGIN' } }
     }`);
     fs.writeFileSync(file, '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }');
-    const worldState = prior.rig.served.collector.requested(context, TEST_ENVIRONMENT);
-    const { discovery } = prior.rig.cache.configs;
-    const published: Subscriptions[] = [];
-    const host = rendererHost(
-      MAIN_RENDERER,
-      systemTimekeeper,
-      hostHeld(rendererOf({
-        event: (input) => current.r.answer(input),
-        adapter: (input) => current.r.answer(input),
-      }), systemTimekeeper.monotonic),
-      () => {},
-      {
-        subscribed: (subscriptions) => void published.push(subscriptions),
-        frames: () => {}, stored: () => {}, recorded: () => {},
-        holding: () => () => {},
-      },
-      { ...NO_ACTS, configs: discovery },
-    );
-    cleanups.push(() => host.closeWake());
-    const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
-    const draw = async () => textOf(parseFrame(presentOf((await submit({
-      kind: "request", id: REQUEST, context,
-    })).effects).frame));
-    expect(await submit({ kind: "context", context, worldState })).toMatchObject({ kind: "answered" });
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
     expect(await draw()).toContain("VALID-PLUGIN");
     const good = discovery.snapshotOf(origin);
     if (good === null) throw new Error("missing accepted config");
@@ -393,34 +450,77 @@ describe("a statusline request", () => {
       expect.objectContaining({ kind: "plugin", source: "plugins.p.marker" }),
     ]);
 
-    const reload = async (text: string) => {
+    const edit = async (text: string) => {
       fs.writeFileSync(file, text);
-      expect(discovery.landed([file])).toEqual([origin]);
-      const config = discovery.snapshotOf(origin);
-      if (config === null) throw new Error("missing changed config");
-      expect(await submit({ kind: "config", origin, config })).toMatchObject({ kind: "answered" });
+      await reload(file);
     };
-    await reload("{ invalid syntax");
+    await edit("{ invalid syntax");
     expect(await draw()).toContain("VALID-PLUGIN");
     expect(discovery.retainedOf(origin)).toBe(good);
-    const error = current.rig.cache.getOrCreate(origin).lastError;
+    const error = entry().lastError;
     expect(error).not.toBeNull();
 
-    current = renderer();
-    expect(await host.start(() => ({
-      kind: "event",
-      event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
-    }), [])).toMatchObject({ kind: "answered" });
+    await replace();
     expect(published.at(-1)?.sources[SESSION]).toEqual(originalSources);
     expect(await draw()).toContain("VALID-PLUGIN");
-    expect(current.rig.cache.getOrCreate(origin).lastError).toBe(error);
+    expect(entry().lastError).toBe(error);
     expect(discovery.retainedOf(origin)).toBe(good);
 
-    await reload("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
+    await edit("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
     expect(published.at(-1)?.sources[SESSION]).toEqual([]);
     expect(await draw()).toContain("AFTER-REMOVAL");
-    expect(current.rig.cache.getOrCreate(origin).lastError).toBeNull();
+    expect(entry().lastError).toBeNull();
     expect(discovery.retainedOf(origin)).toBe("current");
+  });
+
+  test("withdrawing project approval replaces the live last-good build even while config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'APPROVED-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ root: { h: ["repo.p.marker"] } }');
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const { discovery, published, draw, reload, replace, entry, hold } =
+      await restartableRendererHost(context);
+    expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "approved" });
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    expect(published.at(-1)?.managedFolders).toContain(folder);
+    fs.writeFileSync(file, "{ invalid syntax");
+    await reload(file);
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+
+    {
+      using drawing = hold();
+      expect(writeStatePlan(book.plan(() => ({})))).toMatchObject({ kind: "ok" });
+      await reload(repoConfigsPath(state));
+      expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "awaiting" });
+      expect(published.at(-1)?.managedFolders).toContain(folder);
+      expect(drawing.state.config.segments["repo.p.marker"]).toBeDefined();
+    }
+    const live = await draw();
+    const liveFolders = published.at(-1)?.managedFolders;
+    expect(entry().lastError).toBe(error);
+
+    await replace();
+    expect(await draw()).not.toContain("APPROVED-PLUGIN");
+    expect(entry().lastError).toBe(error);
+    expect(live).not.toContain("APPROVED-PLUGIN");
+    expect(liveFolders).not.toContain(folder);
+
+    fs.writeFileSync(file, "{ segments: { s: { template: 'RECOVERED' } }, root: { h: ['s'] } }");
+    await reload(file);
+    expect(await draw()).toContain("RECOVERED");
+    expect(entry().lastError).toBeNull();
   });
 
   test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {

@@ -6,6 +6,7 @@
 import type { LayerRole } from "./layer-role.js";
 import type { PluginScope } from "./loader/plugin-scope.js";
 import type { Checkout } from "../utils/git-root.js";
+import type { ConfigTarget } from "../config-hint.js";
 
 export type { LayerRole } from "./layer-role.js";
 export type { Checkout } from "../utils/git-root.js";
@@ -81,6 +82,21 @@ export interface RepoQuestion {
   readonly dir: string;
   readonly standing: "approved" | "declined" | "awaiting" | "unread";
   readonly unproven: string | null; // why the directory's worktree link could not be proven
+}
+
+// [LAW:single-enforcer] Both a live load and a replacement can keep a
+// project-backed config only while discovery still admits that project.
+export function retainsConfig(
+  target: ConfigTarget,
+  selected: RepoQuestion | null,
+  current: RepoQuestion | null,
+): boolean {
+  return (
+    selected?.standing !== "approved" ||
+    (target.source !== "argument-only" &&
+      current?.standing === "approved" &&
+      current.dir === selected.dir)
+  );
 }
 
 export interface PluginFile {

@@ -9,9 +9,10 @@
 
 import { originKey, type RenderOrigin } from "../../config-hint.js";
 import type { ConfigSelection } from "../../renderer-interface/interface.js";
-import type {
-  ConfigSnapshot,
-  LayerRole,
+import {
+  retainsConfig,
+  type ConfigSnapshot,
+  type LayerRole,
 } from "../../config/config-snapshot.js";
 import {
   discover,
@@ -289,15 +290,11 @@ export class ConfigDiscovery {
     const old = followed?.selected.get(renderer);
     if (followed === undefined || old === undefined) return undefined;
     if (old === null || old.digest === followed.digest) return "current";
-    // [LAW:one-source-of-truth] The current discovery's project decision
-    // still gates a previously approved input. An isolated origin can only
-    // reconstruct an older input with no project authority of its own.
-    const earlier = old.snapshot.repo;
-    const current = followed.snapshot.repo;
-    return earlier?.standing !== "approved" ||
-      (origin.target.source !== "argument-only" &&
-        current?.standing === "approved" &&
-        current.dir === earlier.dir)
+    return retainsConfig(
+      origin.target,
+      old.snapshot.repo,
+      followed.snapshot.repo,
+    )
       ? old.snapshot
       : "current";
   }
