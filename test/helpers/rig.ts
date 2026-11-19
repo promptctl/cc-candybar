@@ -30,7 +30,6 @@ import {
   type CompileProvider,
   type DrawnFrame,
   type RegisteredConfig,
-  type RenderSelection,
 } from "../../src/dsl/render";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
@@ -53,7 +52,7 @@ import { drawPayload } from "./draw-payload";
 import { sessionOfPayload, TEST_SESSION } from "./payload-session";
 import { unscriptedRuns } from "./fake-launcher";
 import { EMPTY_DEFAULT, parseAndValidate } from "./parse-and-validate";
-import { selectionFor } from "./selection";
+import { selectionFor, type RenderSelection } from "./selection";
 
 export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 

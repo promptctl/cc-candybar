@@ -24,7 +24,6 @@ import {
 import { plainEnvironment } from "../../src/daemon/foundations/session-env";
 import { SourceRuns } from "../../src/daemon/source-runs";
 import {
-  bindPayload,
   registerDslConfig,
   type CompiledConfig,
 } from "../../src/dsl/render";
@@ -37,8 +36,7 @@ import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
 import { samplePayload } from "./sample-payload";
-import { drawPayload } from "./draw-payload";
-import { sessionOfPayload } from "./payload-session";
+import { bindSample } from "./draw-payload";
 import { collectedRuns, type CollectedRuns } from "./held-runs";
 
 // How long a prepare waits for its sources' first runs.
@@ -166,30 +164,19 @@ export async function renderEffective(
   const { config, compiled, store, registry, runs, layers } = prepared;
   const payload = samplePayload(config, effective, layers.at(-1) ?? null, at);
   const opts = renderOptionsOf(effective, width);
-  // A source keyed on an input the payload moved runs once it is bound, so
-  // it is bound before the wait.
-  bindPayload(
-    compiled,
-    store,
-    registry,
-    payload,
-    opts,
-    effective,
-    sessionOfPayload(payload),
-    runs.readings,
-  );
-  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
-  const { frame, warnings } = drawPayload(
+  // Binding tells the collector which runs this sample needs before it waits.
+  const draw = bindSample(
     config,
     compiled,
     store,
     registry,
     payload,
-    at,
     opts,
     effective,
     runs.readings,
   );
+  const pending = await runs.settled(timeoutSignal(store.clock, "test settle deadline", SETTLE_MS));
+  const { frame, warnings } = draw(at);
   return {
     rendered: frame,
     failures: [...prepared.droppedPlacements, ...warnings.map((warning) => warning.message)],

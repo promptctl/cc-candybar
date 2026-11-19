@@ -12,7 +12,10 @@ import {
   resolveEffectiveGlobals,
   type EffectiveGlobals,
 } from "../../src/config/effective-globals";
-import type { RenderSelection } from "../../src/dsl/render";
+import type { DrawSelection } from "../../src/dsl/render";
+import type { Selections } from "../../src/dsl/view-source";
+
+export type RenderSelection = DrawSelection & Selections;
 
 // [LAW:one-source-of-truth] A config's globals as the daemon resolves them
 // for a session (none picked by default): what a fixture hands the payload

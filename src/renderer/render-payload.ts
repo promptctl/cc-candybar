@@ -84,7 +84,7 @@ import type { ViewFacts } from "../renderer-interface/request-context";
 import type { LayerRole } from "../config/layer-role.js";
 
 // The resolved globals as the options drawDsl's joiner and cells read (its
-// selection is the resolution itself — RenderSelection is a Pick of it).
+// selection takes its config values from the same resolution).
 // [LAW:one-source-of-truth] Shared options let a field added to EffectiveGlobals reach every
 // renderer at once and no caller can leave one out — a hand copy of this
 // projection had already dropped `separator` (brandon-menu-ia-zyf).
