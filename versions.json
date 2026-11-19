@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-891",
+      "ref": "refs/pull/891/merge",
+      "sha": "ab9f56df7bcbbbd0c2fcef3aa8248f1367fc3142",
+      "timestamp": "2026-11-19T17:33:15.072Z",
+      "commits": [
+        {
+          "sha": "ab9f56df7bcbbbd0c2fcef3aa8248f1367fc3142",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:31:43Z",
+          "message": "Merge fd0f14b1419a83e52488b846bfb049e29026b366 into e04e83316aabc769ec7d2a322cf9ecc6ff181f44\n"
+        },
+        {
+          "sha": "fd0f14b1419a83e52488b846bfb049e29026b366",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:06:46-07:00",
+          "message": "fix(renderer): recover pinned pane views on config delivery\n"
+        }
+      ]
+    },
+    {
       "version": "pr-890",
       "ref": "refs/pull/890/merge",
       "sha": "5d813e39617906ca724496e4301a7912904dfe53",
