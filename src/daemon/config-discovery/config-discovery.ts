@@ -41,6 +41,7 @@ interface Followed {
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
   readonly watch: HeldWatch;
+  readonly filePaths: readonly string[];
 }
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
@@ -122,11 +123,12 @@ export class ConfigDiscovery {
   // answer, every origin with a repository to ask about, is discovered again.
   // Answers those whose snapshot moved.
   landed(files: readonly string[], answered: boolean): readonly RenderOrigin[] {
+    const changed = new Set(files);
     const touched = [...this.followed]
       .filter(
-        ([, { snapshot }]) =>
+        ([, { snapshot, filePaths }]) =>
           (answered && snapshot.repo !== null) ||
-          snapshot.chain.some((l) => files.includes(l.path)),
+          filePaths.some((file) => changed.has(file)),
       )
       .map(([key]) => key);
     return this.rediscovered(touched, "landed");
@@ -222,7 +224,13 @@ export class ConfigDiscovery {
       ...found.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch }, null),
     };
-    return { origin, snapshot, digest: digestOf(snapshot), watch };
+    return {
+      origin,
+      snapshot,
+      digest: digestOf(snapshot),
+      watch,
+      filePaths: paths.targets.polled,
+    };
   }
 
   // [LAW:nothing-unseen] A rebind is the fact that the target set moved (a

@@ -135,6 +135,22 @@ test("a landing discovers again only the origins whose chain holds a written fil
   expect(discovery.landed([file], false)).toEqual([]);
 });
 
+test("a landing on the resolved target refreshes every origin holding an alias", () => {
+  const { discovery } = discoveryRig();
+  const { file, origin: direct } = named("actual");
+  const dir = project("alias");
+  const alias = path.join(dir, "alias.json5");
+  fs.symlinkSync(file, alias);
+  const linked = originOf(dir, dir, alias);
+  discovery.follow([direct, linked]);
+
+  fs.writeFileSync(file, "{ globals: { padding: 3 } }");
+  expect(discovery.landed([file], false)).toEqual([direct, linked]);
+  expect(textOfLayer(discovery, linked, alias)).toBe(
+    "{ globals: { padding: 3 } }",
+  );
+});
+
 test("a hand edit the origin's watch hears moves that origin", async () => {
   const { discovery, moved } = discoveryRig();
   const { origin, file } = named("a");

@@ -130,51 +130,53 @@ export class RendererWake {
       this.state = { kind: "queued" };
       // [LAW:no-silent-failure] A `due` that rejected failed: the wake
       // hears it as one that threw, so it is said and the wake arms again.
-      void this.deps.due().then(
-        (ended) => this.answered(tick, ended),
-        (thrown: unknown) =>
-          this.answered(tick, {
-            kind: "threw",
-            failure: failureOf(thrown),
-            turnMs: null,
-          }),
+      void this.deliverDue(tick).catch((thrown: unknown) =>
+        this.deps.log(
+          `wake could not record its due: ${failureOf(thrown).detail}`,
+        ),
       );
     });
+  }
+
+  private async deliverDue(tick: Tick): Promise<void> {
+    let ended: DueEnded;
+    try {
+      ended = await this.deps.due();
+    } catch (thrown) {
+      ended = { kind: "threw", failure: failureOf(thrown), turnMs: null };
+    }
+    this.answered(tick, ended);
   }
 
   private answered(tick: Tick, ended: DueEnded): void {
     if (this.state.kind === "closed") return;
     this.state = { kind: "idle" };
-    if (ended.turnMs !== null) {
-      this.dues++;
-      recordMs(this.took, ended.turnMs);
-    }
     const now = tickAt(this.deps.clock);
-    if (now - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
+    let problem: string | null = null;
     if (ended.kind === "answered") {
       this.failing = false;
       this.heldUntil = null;
       this.arm();
-      return;
+    } else if (ended.failure.kind !== "down") {
+      this.failed++;
+      if (!this.failing)
+        problem = `the renderer's due turn failed: ${ended.failure.detail}`;
+      this.failing = true;
+      // [LAW:no-ambient-temporal-coupling] Back off only if the failed turn
+      // left the due work at or before the tick we just delivered.
+      this.heldUntil =
+        this.declared !== null && this.declared <= tick
+          ? ((now + FAILED_DUE_HOLD_S) as Tick)
+          : null;
+      this.arm();
     }
-    // [LAW:single-enforcer] No renderer was live to take it: the supervisor
-    // says so, and the next renderer's start declares its own wake.
-    if (ended.failure.kind === "down") return;
-    this.failed++;
-    if (!this.failing)
-      this.deps.said(`the renderer's due turn failed: ${ended.failure.detail}`);
-    this.failing = true;
-    // [LAW:no-ambient-temporal-coupling] Each owner of a tick moves its own
-    // work on when it fails, so a failed `due` whose turn declares a later
-    // tick is armed for it. One that declares no later tick failed before any
-    // owner moved on, and would be handed in again at once: it is held a
-    // second from when it answered, not from its tick, which a `due` that
-    // waited in the mailbox is already past.
-    this.heldUntil =
-      this.declared !== null && this.declared <= tick
-        ? ((now + FAILED_DUE_HOLD_S) as Tick)
-        : null;
-    this.arm();
+    // The wake is re-armed before handing its summary to observability.
+    if (ended.turnMs !== null) {
+      this.dues++;
+      recordMs(this.took, ended.turnMs);
+    }
+    if (now - this.summarizedAt >= SUMMARY_EVERY_S) this.summarize("running");
+    if (problem !== null) this.deps.said(problem);
   }
 
   // [LAW:one-source-of-truth] The closing summary alone writes the whole

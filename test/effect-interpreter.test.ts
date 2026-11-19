@@ -112,7 +112,7 @@ describe("performChanges", () => {
   test("splices a setting into the file as it stands, keeping every other byte", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     fs.writeFileSync(user, USER.replace("// mine", "// mine, edited"));
-    expect(perform([set], null)).toEqual({ kind: "ok" });
+    expect(perform([set], null)).toMatchObject({ kind: "ok" });
     expect(read(user)).toBe(
       USER.replace("// mine", "// mine, edited").replace(
         "padding: 1",
@@ -166,17 +166,17 @@ describe("performChanges", () => {
   test("a file removed through a link removes its target and keeps the link", () => {
     const link = path.join(dir, "linked.json5");
     fs.symlinkSync("dotfiles.json5", link);
-    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok" });
-    expect(perform([change(link, USER, null)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(link, null, USER)], null)).toEqual({ kind: "ok", files: [path.join(fs.realpathSync(dir), "dotfiles.json5")] });
+    expect(perform([change(link, USER, null)], null)).toMatchObject({ kind: "ok" });
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(dir, "dotfiles.json5"))).toBe(false);
   });
 
   test("creates a file a change creates, and removes one it removes", () => {
     const fresh = path.join(dir, "fresh.json5");
-    expect(perform([change(fresh, null, USER)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(fresh, null, USER)], null)).toMatchObject({ kind: "ok" });
     expect(read(fresh)).toBe(USER);
-    expect(perform([change(fresh, USER, null)], null)).toEqual({ kind: "ok" });
+    expect(perform([change(fresh, USER, null)], null)).toMatchObject({ kind: "ok" });
     expect(fs.existsSync(fresh)).toBe(false);
   });
 
@@ -210,7 +210,7 @@ describe("performChanges", () => {
     const set = change(user, USER, USER.replace("padding: 1", "padding: 3"));
     // Discovery found the role at another file since the change was made.
     chains.set(user, { user: moved });
-    expect(perform([set], null)).toEqual({ kind: "ok" });
+    expect(perform([set], null)).toMatchObject({ kind: "ok" });
     expect(read(user)).toBe(USER);
     expect(read(moved)).toContain("padding: 3");
   });
@@ -242,7 +242,7 @@ describe("performChanges with the trust book", () => {
       [change(user, USER, USER.replace("dusk", "dawn"))],
       { stateDir: state, answers: [answer(dir)], said: (l) => said.push(l) },
     );
-    expect(outcome).toEqual({ kind: "ok" });
+    expect(outcome).toMatchObject({ kind: "ok" });
     expect(read(user)).toContain("dawn");
     expect(repoConfigs(state).read()).toEqual({
       kind: "ok",
@@ -329,7 +329,7 @@ describe("a created local layer is kept out of git", () => {
     const exclude = path.join(root, ".git", "info", "exclude");
     fs.writeFileSync(exclude, "# mine\n*.log");
     const local = path.join(root, ".cc-candybar.local.json5");
-    expect(perform([change(local, null, LOCAL, "local")], null)).toEqual({
+    expect(perform([change(local, null, LOCAL, "local")], null)).toMatchObject({
       kind: "ok",
     });
     expect(read(local)).toBe(LOCAL);
@@ -372,7 +372,7 @@ describe("a created local layer is kept out of git", () => {
     fs.mkdirSync(tree);
     fs.writeFileSync(path.join(tree, ".git"), `gitdir: ${meta}\n`);
     const local = path.join(tree, ".cc-candybar.local.json5");
-    expect(perform([change(local, null, LOCAL, "local")], null)).toEqual({
+    expect(perform([change(local, null, LOCAL, "local")], null)).toMatchObject({
       kind: "ok",
     });
     expect(read(path.join(main, ".git", "info", "exclude"))).toBe(
@@ -400,7 +400,7 @@ describe("a created local layer is kept out of git", () => {
   test("a file named as a local layer that its chain holds as the user's writes no exclude", () => {
     const root = repo();
     const named = path.join(root, ".cc-candybar.local.json5");
-    expect(perform([change(named, null, LOCAL, "user")], null)).toEqual({
+    expect(perform([change(named, null, LOCAL, "user")], null)).toMatchObject({
       kind: "ok",
     });
     expect(fs.existsSync(path.join(root, ".git", "info", "exclude"))).toBe(

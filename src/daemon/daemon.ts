@@ -16,6 +16,7 @@ import {
   type Reply,
   type ReplyRequest,
 } from "./reply.js";
+import { CrossedFailure } from "./foundations/verb-error.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
@@ -539,7 +540,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
-      const { kind } = await parts.renderer.start(() => {
+      const started = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
         return {
@@ -560,7 +561,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       }, [["why", "renderer-start"]]);
       // A start that failed may have opened none of its feeds: the next
       // announcement hands the viewers in again.
-      if (kind !== "answered") frameFeeds.handedIn(null);
+      if (started.kind === "threw") {
+        frameFeeds.handedIn(null);
+        throw new CrossedFailure(started.failure);
+      }
     },
     ended: (event) => {
       rendererEnded = event;

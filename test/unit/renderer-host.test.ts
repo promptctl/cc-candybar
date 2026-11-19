@@ -331,6 +331,68 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
   ]);
 });
 
+test("a failed record and a rejected act leave the answer and both effect acknowledgements intact", async () => {
+  const heard: number[] = [];
+  const performed: string[] = [];
+  const unheard: string[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async ({ event }) => {
+          if (event.kind === "effect-done") heard.push(event.of);
+          return {
+            ...answered(),
+            effects:
+              event.kind === "due"
+                ? [
+                    { kind: "copy", id: 1 as never, session: null, text: "first" },
+                    { kind: "copy", id: 2 as never, session: null, text: "second" },
+                  ]
+                : [],
+          };
+        },
+        adapter: async () => {
+          throw new Error("no push here");
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {
+        throw new Error("record sink failed");
+      },
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      unheard: (text) => void unheard.push(text),
+      perform: async (act) => {
+        if (act.kind !== "copy") throw new Error("unexpected act");
+        performed.push(act.text);
+        if (act.text === "first") throw new Error("copy failed");
+        return { kind: "ok" };
+      },
+    },
+  );
+  const turn = await host.answer(() => ({
+    kind: "event",
+    event: { kind: "due" },
+  }));
+  expect(turn.kind).toBe("answered");
+  expect(turn.settled).toEqual([
+    { kind: "failed", reason: expect.stringContaining("copy failed") },
+    { kind: "ok" },
+  ]);
+  expect(performed).toEqual(["first", "second"]);
+  expect(heard).toEqual([1, 2]);
+  expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
+});
+
 test("a declared wake is handed in as a `due`, and none is made after the wake closes", async () => {
   const fire: Array<() => void> = [];
   const heard: string[] = [];
