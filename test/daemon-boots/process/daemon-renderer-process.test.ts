@@ -129,6 +129,40 @@ describe("the renderer wire handshake", () => {
     );
   });
 
+  test("the packaged renderer boots without discovering the process's home or temp directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-renderer-boot-"));
+    try {
+      const probe = path.join(dir, "refuse-host.cjs");
+      fs.writeFileSync(
+        probe,
+        `const os = require("node:os");
+for (const name of ["homedir", "tmpdir"]) {
+  os[name] = () => { throw new Error("renderer bootstrap read os." + name); };
+}
+require("node:module").syncBuiltinESMExports();`,
+      );
+      // [LAW:behavior-not-structure] The real CLI entry can start from its
+      // boot message alone while process-level location reads are refused.
+      const child = spawnSync(
+        process.execPath,
+        ["--require", probe, path.resolve("dist/index.mjs"), "renderer"],
+        {
+          encoding: "utf8",
+          timeout: 10_000,
+          input: `${JSON.stringify({ kind: "boot", ...COMPATIBLE_BOOT })}\n`,
+        },
+      );
+      expect(child.stderr).toBe("");
+      expect(child.status).toBe(0);
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: "started",
+        wireVersion: RENDERER_WIRE_VERSION,
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a matching version with no resolved locations refuses before readiness", () => {
     const child = bootChild({
       ...COMPATIBLE_BOOT,
