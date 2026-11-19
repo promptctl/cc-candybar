@@ -28477,6 +28477,84 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
+// src/config/loader/repo-gate.ts
+init_globals();
+var REPO_ANSWERS = ["approved", "declined"];
+function answerDir(d) {
+  return d.link.kind === "linked" ? d.link.main : d.dir;
+}
+var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
+function ruling(answers, d) {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo2 = answerOf(answers.value, key);
+  const own2 = answerOf(answers.value, d.dir);
+  if (repo2 === null) {
+    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
+  }
+  return {
+    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
+    under: key
+  };
+}
+function gateRepos(answers, dirs, project) {
+  const reached = reachedDirs(dirs, project);
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing2 = (s) => ruled.filter((r) => r.standing === s);
+  const repos = (s) => [
+    ...new Set(standing2(s).map((r) => r.under))
+  ];
+  return {
+    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
+    approved: standing2("approved").map((r) => r.dir),
+    awaiting: repos("awaiting"),
+    declined: repos("declined"),
+    unproven: reached.flatMap(
+      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
+    ),
+    unread: answers.kind === "failed" ? answers.reason : null
+  };
+}
+function reachedDirs(dirs, project) {
+  return [
+    ...new Map(
+      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
+    ).values()
+  ];
+}
+function repoQuestion(answers, dirs, project) {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === void 0) return null;
+  const { standing: standing2, under: under2 } = ruling(answers, reached);
+  return {
+    dir: under2,
+    standing: standing2,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+  };
+}
+function withAnswer(book, dir, answer2, superseded) {
+  if (book[dir] === answer2 && superseded.length === 0) return book;
+  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
+  return { ...Object.fromEntries(rest2), [dir]: answer2 };
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  for (const [dir, answer2] of Object.entries(doc)) {
+    if (!REPO_ANSWERS.includes(answer2)) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function repoUnreadNotice(gate2) {
+  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+}
+
 // src/daemon/foundations/verb-error.ts
 init_globals();
 
@@ -28602,6 +28680,14 @@ var VERB_REWIND = "rewind";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
@@ -28757,7 +28843,7 @@ var VERB_NAMES = Object.freeze([
 function isEffectVerb(verb) {
   return Object.hasOwn(SAYS, verb);
 }
-function admitClick(verb, value) {
+function admitClick(verb, value, signer) {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
@@ -28804,13 +28890,24 @@ function admitClick(verb, value) {
       const args = separator === -1 ? [] : decodeWire(
         () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
       );
-      scoped.steps.push({ kind: "session", verb: name, args });
+      scoped.steps.push(
+        name === VERB_REPO_CONFIG ? admitRepoAnswer(scoped.id, args, signer) : { kind: "session", verb: name, args }
+      );
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
   return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+}
+function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
+  const answer2 = REPO_ANSWERS.find((known) => known === value);
+  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
 }
 
 // src/host.ts
@@ -30014,7 +30111,13 @@ init_globals();
 function hrefOfDrawnLink(link) {
   if (typeof link === "string") return link;
   if (link.kind === "href") return link.url;
+  if (link.kind === "repo-answer") return repoAnswerUrl(link, "");
   return effectsUrl([link.effect]);
+}
+function repoAnswerUrl({ session, dir, answer: answer2 }, proof) {
+  return effectsUrl([
+    { verb: VERB_REPO_CONFIG, args: [session, dir, answer2, proof] }
+  ]);
 }
 
 // src/click/link-signer.ts
@@ -30482,6 +30585,13 @@ var import_node_path5 = __toESM(require_path_browserify(), 1);
 // src/daemon/foundations/renderer-name.ts
 init_globals();
 var MAIN_RENDERER = "main";
+function rendererNameOf(raw) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+    throw new Error(
+      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
+    );
+  return raw;
+}
 
 // src/daemon/paths.ts
 function xdgEnv(env2, name) {
@@ -39700,10 +39810,10 @@ function anchored(timeline, host, time, rate) {
 }
 function played(animation, { origin, time, rate }) {
   const mapped = (host) => time + rate * (host - origin);
-  const forward = rate > 0;
-  const ahead = forward ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
-  const behind = forward ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
-  const past = forward ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
+  const forward2 = rate > 0;
+  const ahead = forward2 ? (t2) => animation.nextChange(t2) : (t2) => animation.lastChange(t2);
+  const behind = forward2 ? (t2) => animation.lastChange(t2) : (t2) => animation.nextChange(t2);
+  const past = forward2 ? (t2, edge) => t2 >= edge : (t2, edge) => t2 < edge;
   const hostOf = (edge) => {
     const sum2 = origin + (edge - time) / rate;
     return Number.isFinite(sum2) ? firstReaching(sum2, (host) => past(mapped(host), edge)) : sum2;
@@ -41080,14 +41190,14 @@ var CellJoiner = class {
         const hasLeft = left !== null && (!reads.seam.left || leftBg !== void 0);
         const hasRight = right !== null && (!reads.seam.right || rightBg !== void 0);
         const leads = hasRight && (!reads.lead || rightBg !== void 0);
-        const tails = hasLeft && (!reads.tail || leftBg !== void 0);
+        const tails2 = hasLeft && (!reads.tail || leftBg !== void 0);
         const neighbours = { left, right };
         const styled = (part) => cells[part].map(({ cell: cell3, parts }, at) => {
           const joined = new JoinedCell(cell3, parts, neighbours, edges, options);
           return new Segment(pickGlyph(cell3, part, index, at), joined.style.withAnchor({ owner: joined, row: 0, col: 0, inner: void 0 }));
         });
         if (!hasLeft || !hasRight) {
-          if (leads || tails)
+          if (leads || tails2)
             yield* styled(leads ? "lead" : "tail");
           return;
         }
@@ -47139,7 +47249,7 @@ var LinkProof = class {
         verb: target.effect.verb,
         args: Object.freeze([...target.effect.args])
       })
-    }) : Object.freeze({ kind: "href", url: target.url });
+    }) : Object.freeze({ ...target });
     this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
   }
 };
@@ -49910,7 +50020,7 @@ function parseClick(url, delivery, links) {
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value),
+      click: admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery
     };
@@ -49975,14 +50085,42 @@ var Limiter = class {
   }
 };
 
+// src/utils/single-flight.ts
+init_globals();
+var SingleFlight = class {
+  inflight = /* @__PURE__ */ new Map();
+  run(key, factory) {
+    return this.inflight.get(key) ?? this.start(key, factory);
+  }
+  start(key, factory) {
+    const promise = factory();
+    this.inflight.set(key, promise);
+    const deregister = () => {
+      if (this.inflight.get(key) === promise) this.inflight.delete(key);
+    };
+    promise.then(deregister, deregister);
+    return promise;
+  }
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
+  get size() {
+    return this.inflight.size;
+  }
+};
+
 // src/utils/transcript-fs.ts
 function statStamp(filePath2) {
   if (!filePath2) return "";
   try {
-    return stampOf(statSync(filePath2));
+    const stat3 = statSync(filePath2, { bigint: true });
+    return stat3.isFile() ? transcriptVersion(stat3) : "";
   } catch {
     return "";
   }
+}
+function transcriptVersion(stat3) {
+  return `${stat3.dev}:${stat3.ino}:${stat3.mtimeNs}:${stat3.ctimeNs}:${stat3.size}`;
 }
 function stampOf(st) {
   return `${st.mtimeMs}:${st.size}`;
@@ -50021,24 +50159,84 @@ async function readAppended(path31, prior, until2) {
     });
   });
 }
-function decodeLines(read2, decode) {
-  var _stack = [];
-  try {
-    const lent = __using(_stack, read2);
-    return decode(lent.lines);
-  } catch (_) {
-    var _error = _, _hasError = true;
-  } finally {
-    __callDispose(_stack, _error, _hasError);
+var Observations = class {
+  pending = new SingleFlight();
+  recent = /* @__PURE__ */ new Map();
+  async read(path31, range, read2) {
+    const stamp2 = statStamp(path31);
+    if (stamp2 === "") return observedValue(await read2());
+    const key = `${stamp2}|${range}`;
+    const recent = this.recent.get(key);
+    if (recent !== void 0) {
+      this.recent.delete(key);
+      this.recent.set(key, recent);
+      return ok(recent);
+    }
+    const { observed, originalPath } = await this.pending.run(key, async () => {
+      const observed2 = await read2();
+      if (observed2.kind === "ok" && observed2.value.stamp === stamp2 && observed2.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed2.value.value);
+        if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
+          const oldest = this.recent.keys().next();
+          if (!oldest.done) this.recent.delete(oldest.value);
+        }
+      }
+      return { observed: observed2, originalPath: path31 };
+    });
+    return observedValue(
+      originalPath === path31 || observed.kind === "ok" && observed.value.stamp === stamp2 ? observed : await read2()
+    );
   }
+};
+function observedValue(found2) {
+  return found2.kind === "ok" ? ok(found2.value.value) : found2;
+}
+var forward = new Observations();
+var tails = new Observations();
+function readAppendedText(path31, prior, until2) {
+  const range = JSON.stringify([prior?.offset, prior?.ino, until2]);
+  return forward.read(path31, range, async () => {
+    var _stack = [];
+    try {
+      const read2 = await readAppended(path31, prior, until2);
+      if (read2.kind !== "ok") return read2;
+      const lent = __using(_stack, read2.value);
+      const { lines: lines2, [Symbol.dispose]: _dispose, ...info } = lent;
+      const bytes = lines2.length;
+      return ok({
+        stamp: info.stamp,
+        bytes,
+        value: { ...info, bytes, text: lines2.toString("utf8") }
+      });
+    } catch (_) {
+      var _error = _, _hasError = true;
+    } finally {
+      __callDispose(_stack, _error, _hasError);
+    }
+  });
+}
+function readTailText(path31, maxBytes) {
+  return tails.read(path31, String(maxBytes), async () => {
+    const read2 = await readTail(path31, maxBytes);
+    if (read2.kind !== "ok") return read2;
+    const { stamp: stamp2, fromStart, buf } = read2.value;
+    return ok({
+      stamp: stamp2,
+      bytes: buf.length,
+      value: { text: buf.toString("utf8"), fromStart }
+    });
+  });
 }
 async function readWholeLines(path31, prior, until2, window2) {
   let fh = null;
   try {
-    fh = await open(path31, "r");
-    const st = await fh.stat();
-    const { size, ino } = st;
-    const stamp2 = stampOf(st);
+    fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+    const st = await fh.stat({ bigint: true });
+    if (!st.isFile())
+      return failed(`readAppended ${path31}: not a regular file`, "read");
+    const size = Number(st.size);
+    const ino = Number(st.ino);
+    const stamp2 = transcriptVersion(st);
     const reset = prior !== void 0 && (ino !== prior.ino || size < prior.offset);
     const start = reset || prior === void 0 ? 0 : prior.offset;
     const end = reset || until2 === void 0 ? size : Math.min(size, until2);
@@ -50113,12 +50311,16 @@ async function readTail(path31, maxBytes) {
   return gate.run(async () => {
     let fh = null;
     try {
-      fh = await open(path31, "r");
-      const { size } = await fh.stat();
+      fh = await open(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+      const stat3 = await fh.stat({ bigint: true });
+      if (!stat3.isFile())
+        return failed(`readTail ${path31}: not a regular file`, "read");
+      const size = Number(stat3.size);
       const start = Math.max(0, size - maxBytes);
       return ok({
         buf: await readInto(fh, import_buffer.Buffer.alloc(size - start), start),
-        fromStart: start === 0
+        fromStart: start === 0,
+        stamp: transcriptVersion(stat3)
       });
     } catch (e) {
       if (e.code === "ENOENT") return ABSENT;
@@ -50174,7 +50376,7 @@ function perLane(value) {
   );
 }
 var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 function parseLane(raw) {
   return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
 }
@@ -50407,6 +50609,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       try {
         const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        const renderer2 = parts.rendererFor?.(checked.req, checked.environment, order2) ?? parts.renderer;
         sighted(checked.req, "drawing");
         frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
@@ -50414,7 +50617,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
         answered = await answerStatusline(
-          parts.renderer,
+          renderer2,
           parts.publishFrame,
           parts.collector,
           clock,
@@ -52234,18 +52437,14 @@ async function findAgentTranscripts(sessionId2, projectPath, verified) {
         paths2.push(filePath2);
         continue;
       }
-      const read2 = await readAppended(filePath2, void 0, void 0);
+      const read2 = await readAppendedText(filePath2, void 0, void 0);
       if (read2.kind !== "ok") {
         debug(`Failed to check agent file ${filePath2}`);
         continue;
       }
       longLines = longLinesWith(longLines, filePath2, read2.value);
-      const line = jsonLine(
-        decodeLines(
-          read2.value,
-          (b) => b.subarray(0, Math.max(0, b.indexOf(10))).toString("utf-8")
-        )
-      );
+      const { text: text4 } = read2.value;
+      const line = jsonLine(text4.slice(0, Math.max(0, text4.indexOf("\n"))));
       if (line.kind === "object" && line.value.sessionId === sessionId2) {
         paths2.push(filePath2);
       }
@@ -52368,7 +52567,7 @@ async function foldAppended(filePath2, prior, empty2, step4) {
   let value = prior?.value ?? empty2;
   let end;
   for (; ; ) {
-    const read2 = await readAppended(
+    const read2 = await readAppendedText(
       filePath2,
       cursor === void 0 ? void 0 : { offset: cursor.offset, ino: cursor.ino },
       end?.size
@@ -52380,11 +52579,8 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next2 = window2.start + window2.lines.length;
-    value = await step4(
-      value,
-      decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
-    );
+    const next2 = window2.start + window2.bytes;
+    value = await step4(value, parseJsonlLines(window2.text));
     cursor = {
       offset: next2,
       stamp: end.stamp,
@@ -52393,30 +52589,6 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (window2.atEnd) return ok({ folded: { cursor, value }, longLines });
   }
 }
-
-// src/utils/single-flight.ts
-init_globals();
-var SingleFlight = class {
-  inflight = /* @__PURE__ */ new Map();
-  run(key, factory) {
-    return this.inflight.get(key) ?? this.start(key, factory);
-  }
-  start(key, factory) {
-    const promise = factory();
-    this.inflight.set(key, promise);
-    const deregister = () => {
-      if (this.inflight.get(key) === promise) this.inflight.delete(key);
-    };
-    promise.then(deregister, deregister);
-    return promise;
-  }
-  // Number of computations currently in flight — a read-only observability
-  // surface for tests asserting the coalescing contract (one in-flight entry
-  // per key). Never read as control flow.
-  get size() {
-    return this.inflight.size;
-  }
-};
 
 // src/var-system/store.ts
 init_globals();
@@ -53517,8 +53689,8 @@ var SessionUsageStore = class {
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
           const filePath2 = (0, import_node_path16.join)(dir, file);
-          const st = await unlessGone(stat2(filePath2));
-          if (st === void 0 || st.mtimeMs < cutoff) continue;
+          const st = await unlessGone(stat2(filePath2, { bigint: true }));
+          if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
           if (!id2.ok) {
             this.log(
@@ -53530,7 +53702,7 @@ var SessionUsageStore = class {
           candidates.push({
             sessionId: id2.id,
             path: filePath2,
-            stamp: stampOf(st)
+            stamp: transcriptVersion(st)
           });
         }
       }
@@ -55449,18 +55621,17 @@ async function cacheExpiresAt(transcriptPath) {
 }
 async function findLastCacheActivityTs(transcriptPath) {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
-    const tail = await readTail(transcriptPath, maxBytes);
+    const tail = await readTailText(transcriptPath, maxBytes);
     if (tail.kind !== "ok") return tail;
-    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    const ts = scanLastCacheTs(tail.value.text, tail.value.fromStart);
     if (ts != null) return ok(ts);
     if (tail.value.fromStart) return ABSENT;
   }
   return ABSENT;
 }
-function scanBufferForLastCacheTs(buf, bufStartsAtFileBeginning) {
-  const text4 = buf.toString("utf8");
+function scanLastCacheTs(text4, fromStart) {
   const lines2 = text4.split("\n");
-  const start = bufStartsAtFileBeginning ? 0 : 1;
+  const start = fromStart ? 0 : 1;
   for (let i2 = lines2.length - 1; i2 >= start; i2--) {
     const line = lines2[i2];
     if (!line || !CACHE_HIT_RE.test(line)) continue;
@@ -65955,7 +66126,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.2";
+var PACKAGE_VERSION = "1.234.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -67613,7 +67784,7 @@ var FrameFeeds = class {
   send(watched, sub2) {
     const follower = watched.followers.get(sub2);
     if (watched.last === null || follower === void 0) return;
-    const json2 = answerOf(watched.last, sub2.lane);
+    const json2 = answerOf2(watched.last, sub2.lane);
     if (follower.sent === json2) return;
     follower.sent = json2;
     this.pushed++;
@@ -68371,7 +68542,12 @@ function publishingFrames(signer) {
         ...row,
         runs: row.runs.map(({ link, ...run3 }) => {
           if (link === void 0) return run3;
-          const href = hrefOfDrawnLink(link);
+          const href = typeof link !== "string" && link.kind === "repo-answer" ? repoAnswerUrl(
+            link,
+            signer.sign(
+              repoAnswerFields(link.session, link.dir, link.answer)
+            )
+          ) : hrefOfDrawnLink(link);
           return {
             ...run3,
             link: isBarLink(href) ? signer.signLink(href) : href
@@ -68564,84 +68740,6 @@ function addressText(at) {
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
 var import_node_path24 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/repo-gate.ts
-init_globals();
-var REPO_ANSWERS = ["approved", "declined"];
-function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
-}
-var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
-function ruling(answers, d) {
-  const key = answerDir(d);
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf2(answers.value, key);
-  const own2 = answerOf2(answers.value, d.dir);
-  if (repo2 === null) {
-    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
-  }
-  return {
-    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
-    under: key
-  };
-}
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
-  return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
-  };
-}
-function withAnswer(book, dir, answer2, superseded) {
-  if (book[dir] === answer2 && superseded.length === 0) return book;
-  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
-  return { ...Object.fromEntries(rest2), [dir]: answer2 };
-}
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
-}
 
 // src/utils/presence.ts
 init_globals();
@@ -70196,7 +70294,7 @@ var ISSUE_INDENT = " ";
 function channelRows(message2, opts, trailing) {
   const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link) => link === null ? base : base.withLink(link);
+  const styled = (link) => link === null ? base : styleWithLink(base, link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message2.lines.flatMap((line, i2) => {
     const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
@@ -70209,33 +70307,17 @@ function channelRows(message2, opts, trailing) {
 }
 
 // src/config/repo-question.ts
-function repoAnswerFields(sessionId2, dir, answer2) {
-  return {
-    sessionId: sessionId2,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer2
-  };
-}
-function repoQuestions(question, sessionId2, signer) {
+function repoQuestions(question, sessionId2) {
   const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
   return awaiting.map((dir) => {
     const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
-      (answer2) => diagnosticSpan(
-        `[${answer2 === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
-          {
-            verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId2,
-              dir,
-              answer2,
-              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
-            ]
-          }
-        ])
-      )
+      (answer2) => diagnosticSpan(`[${answer2 === "approved" ? "approve" : "decline"}]`, {
+        kind: "repo-answer",
+        session: sessionId2,
+        dir,
+        answer: answer2
+      })
     );
     const line = [diagnosticSpan(message2, null), ...answers];
     return {
@@ -82548,7 +82630,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds) {
-  const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
+  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
   const idleSince = menuIdle.since(sessionId2, readings);
@@ -82568,7 +82650,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const questions = repoQuestions(entry.snapshot.repo, sessionId2, linkSigner2);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const errors2 = [
@@ -83115,7 +83197,7 @@ function sameDraw(previous2, next2, lane) {
   if (next2.kind === "failed")
     return previous2?.kind === "failed" && previous2.message === next2.message;
   if (previous2?.kind !== "drawn") return false;
-  const forLane = ({ bar, handoff }) => answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const forLane = ({ bar, handoff }) => answerOf2({ resp: bar, statusline: handoff ?? bar }, lane);
   const before = forLane(previous2);
   const after = forLane(next2);
   return before.depth === after.depth && before.rows.length === after.rows.length && before.rows.every(
@@ -85639,17 +85721,6 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
   };
 }
 var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
-var repoConfig = (args, ctx) => {
-  const [dir = "", answer2 = "", mac = ""] = args;
-  const sid = ctx.session;
-  const answered = REPO_ANSWERS.find((known) => known === answer2);
-  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  ctx.configWrites.answer(dir, answered);
-};
 var SESSION_HANDLERS = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
@@ -85667,7 +85738,6 @@ var SESSION_HANDLERS = {
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
   [VERB_RUN]: run2,
-  [VERB_REPO_CONFIG]: repoConfig,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 function foldEffects(steps2, log, perform, recordErrors) {
@@ -85822,8 +85892,17 @@ function runClick(click2, ctx) {
         click2.steps,
         c.log,
         (step4) => {
-          if (step4.kind === "global") globalAct(step4, c, sid);
-          else SESSION_HANDLERS[step4.verb](step4.args, c);
+          switch (step4.kind) {
+            case "global":
+              globalAct(step4, c, sid);
+              break;
+            case "session":
+              SESSION_HANDLERS[step4.verb](step4.args, c);
+              break;
+            case "repo-answer":
+              c.configWrites.answer(step4.dir, step4.answer);
+              break;
+          }
         },
         (message2) => holdClickError(c.sessionState, sid, message2, c.now())
       );
@@ -88550,7 +88629,6 @@ function mainRendererOf(inputs, host) {
   const parts = {
     ...host,
     time,
-    linkSigner: linkSigner2,
     sessionState: edits.view,
     renderCache,
     worldStates,
@@ -89417,33 +89495,20 @@ function createDaemon(inputs) {
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
-  const preparedRenderer = inputs.renderer({
-    name: inputs.rendererName,
-    build: (reaches2) => mainRendererOf(
-      {
-        stored: stores.current(),
-        linkSigner: linkSigner2,
-        locations: locs,
-        home: host.home,
-        gates,
-        memoryLimitBytes: memoryLimitBytes2
-      },
-      reaches2
-    ),
-    // The key crosses in base64, so the boot crosses as a line.
-    boot: () => {
-      const key = inputs.linkKey();
-      return {
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes: memoryLimitBytes2,
-        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
-      };
-    },
-    node: bundle.node
-  });
+  const primaryPrepared = prepareRenderer(
+    inputs.rendererName,
+    bundle.path,
+    inputs.rendererEntry ?? bundle.path
+  );
+  const renderers = /* @__PURE__ */ new Map();
+  const routes = /* @__PURE__ */ new Map();
+  const nameOf2 = (session) => routes.get(session)?.name ?? inputs.rendererName;
+  const viewersOf = (name, viewers) => Object.fromEntries(
+    Object.entries(viewers).filter(
+      ([session]) => nameOf2(session) === name
+    )
+  );
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -89455,7 +89520,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => serving() ? link.process() : null
+    renderer: () => serving() ? primary.link.process() : null
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
@@ -89522,10 +89587,23 @@ function createDaemon(inputs) {
     publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
-    deliver: (make) => parts.renderer.deliver(
-      () => ({ kind: "event", event: { kind: "viewers", viewers: make() } }),
-      []
-    ),
+    deliver: async (make) => {
+      const sent = await Promise.all(
+        [...renderers.values()].map(
+          ({ renderer }) => renderer.deliver(
+            () => ({
+              kind: "event",
+              event: {
+                kind: "viewers",
+                viewers: viewersOf(renderer.name, make())
+              }
+            }),
+            []
+          )
+        )
+      );
+      return sent.find((turn) => turn.kind === "threw") ?? { kind: "answered" };
+    },
     log
   });
   const paneVisibility = new PaneVisibility({
@@ -89565,7 +89643,15 @@ function createDaemon(inputs) {
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
-    deliver: (event) => parts.renderer.deliver(() => ({ kind: "event", event }), []),
+    deliver: (event) => {
+      const session = event.kind === "retire" ? event.session : event.worldState.session;
+      const route = routes.get(session);
+      const renderer = (renderers.get(nameOf2(session)) ?? primary).renderer;
+      return renderer.deliver(() => ({ kind: "event", event }), []).finally(() => {
+        if (event.kind === "retire" && routes.get(session) === route)
+          routes.delete(session);
+      });
+    },
     log
   });
   const reaches = {
@@ -89585,50 +89671,202 @@ function createDaemon(inputs) {
       release: (id2) => managedStorage.release(id2)
     }
   };
-  const link = preparedRenderer.start({
-    reaches,
-    log,
-    clock,
-    // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session gets the context of its latest stamp,
-    // all in the one `start` turn, so
-    // its output names every session it serves; and who watches each, so its
-    // feeds open. All through the host's one path to the renderer, each turn
-    // recorded there.
-    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
-    // every input after it finds its sessions handed in.
-    start: async () => {
-      if (!serving()) return;
-      const started2 = await parts.renderer.start(() => {
-        const viewers = frameFeeds.viewers();
-        frameFeeds.handedIn(viewers);
-        return {
-          kind: "event",
-          event: {
-            kind: "start",
-            viewers,
-            sessions: collector.liveSessions()
-          }
-        };
-      }, [["why", "renderer-start"]]);
-      if (started2.kind === "threw") {
-        frameFeeds.handedIn(null);
-        throw new CrossedFailure(started2.failure);
-      }
-    },
-    ended: (event) => {
-      rendererEnded = event;
-      restateFaults();
-    }
-  });
-  const configRenderers = /* @__PURE__ */ new Map();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     log,
-    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins)
+    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
+  const declared = /* @__PURE__ */ new Map();
+  const aggregate = () => {
+    const sources = {};
+    const lanes = {};
+    for (const [name, subscription2] of declared) {
+      for (const [id2, values2] of Object.entries(subscription2.sources))
+        if (nameOf2(id2) === name) sources[id2] = values2;
+      for (const [id2, values2] of Object.entries(subscription2.lanes))
+        if (nameOf2(id2) === name) lanes[id2] = values2;
+    }
+    collector.subscribed({ sources });
+    frameFeeds.switched(lanes);
+    declaredBarPanes.declare(lanes);
+  };
+  function prepareRenderer(name, reported, entry) {
+    const stores = new HeldStores(inputs.profile(name, log));
+    const prepared = inputs.renderer({
+      name,
+      entry,
+      build: (hostReaches) => mainRendererOf(
+        {
+          stored: stores.current(),
+          linkSigner: linkSigner2,
+          locations: locs,
+          home: host.home,
+          gates,
+          memoryLimitBytes: memoryLimitBytes2
+        },
+        hostReaches
+      ),
+      boot: () => {
+        const key = inputs.linkKey();
+        return {
+          stored: stores.current(),
+          host: { ...host, env: plainEnvironment(host.env) },
+          memoryLimitBytes: memoryLimitBytes2,
+          linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+        };
+      },
+      node: bundle.node
+    });
+    return { name, reported, entry, stores, prepared };
+  }
+  const connectRenderer = ({
+    name,
+    reported,
+    entry,
+    stores,
+    prepared
+  }) => {
+    const link = prepared.start({
+      reaches,
+      log,
+      clock,
+      // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
+      // mailbox and only rebuilds the sessions currently routed to it.
+      start: async () => {
+        if (!serving()) return;
+        const started2 = await renderer.start(() => {
+          const viewers = frameFeeds.viewers();
+          if (renderers.size === 1) frameFeeds.handedIn(viewers);
+          return {
+            kind: "event",
+            event: {
+              kind: "start",
+              viewers: viewersOf(name, viewers),
+              sessions: collector.liveSessions().filter(
+                ({ worldState }) => nameOf2(worldState.session) === name
+              )
+            }
+          };
+        }, [["why", "renderer-start"]]);
+        if (started2.kind === "threw") {
+          frameFeeds.handedIn(null);
+          throw new CrossedFailure(started2.failure);
+        }
+        if (renderers.size > 1) frameFeeds.announce();
+      },
+      ended: (event) => {
+        rendererEnded = event;
+        restateFaults();
+      }
+    });
+    const renderer = rendererHost(
+      name,
+      clock,
+      link.renderer,
+      log,
+      {
+        subscribed: (subscriptions) => {
+          declared.set(name, {
+            sources: subscriptions.sources,
+            lanes: subscriptions.lanes
+          });
+          aggregate();
+        },
+        frames: (frames) => frameFeeds.took(
+          frames.filter(({ session }) => nameOf2(session) === name)
+        ),
+        stored: (writes) => stores.take(writes),
+        holding: (session) => collector.holding(session),
+        recorded: () => {
+        }
+      },
+      {
+        perform: (act) => acts.perform(act),
+        stateDir: paths2.state,
+        configs: configDiscovery.forRenderer(name),
+        closing: cancelling,
+        unheard: (text4) => {
+          actFailed = joinedEvent(actFailed, text4, instant());
+          restateFaults();
+        }
+      }
+    );
+    return { reported, entry, stores, link, renderer };
+  };
+  const primary = connectRenderer(primaryPrepared);
+  renderers.set(inputs.rendererName, primary);
+  const canonicalEntry = (name, bundlePath) => {
+    try {
+      if (inputs.rendererEntryOf === void 0)
+        throw new Error("this host has no process entry resolver");
+      return inputs.rendererEntryOf(bundlePath);
+    } catch (error) {
+      throw new BadVerbArgs(
+        `renderer ${name} bundle ${JSON.stringify(bundlePath)}: ${String(error)}`
+      );
+    }
+  };
+  const rendererFor = (request2, environment, order2) => {
+    const session = request2.hookData.session_id;
+    const route = routes.get(session);
+    const asked = environment.kind === "ok" ? variableOf(environment.value, "CC_CANDYBAR_NAME") : null;
+    const client = request2.hints.client;
+    let name = client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
+    if (asked?.kind === "ok") {
+      try {
+        name = rendererNameOf(asked.value);
+      } catch (error) {
+        throw new BadVerbArgs(`CC_CANDYBAR_NAME: ${String(error)}`);
+      }
+    }
+    if (route !== void 0 && route.name !== name && route.order > order2)
+      throw new BadVerbArgs(
+        `session ${session} has already moved to renderer ${route.name}`
+      );
+    let target = renderers.get(name);
+    const binding = asked?.kind === "ok" ? client?.bundle : void 0;
+    if (target === void 0) {
+      if (binding === void 0)
+        throw new BadVerbArgs(
+          `renderer ${name} needs a statusline client's bundle`
+        );
+      target = connectRenderer(
+        prepareRenderer(name, binding, canonicalEntry(name, binding))
+      );
+      target.stores.load();
+      target.link.serve();
+      renderers.set(name, target);
+      if (phase.kind === "armed") target.link.arm();
+    } else if (binding !== void 0 && binding !== target.reported && binding !== target.entry && canonicalEntry(name, binding) !== canonicalEntry(name, target.entry)) {
+      throw new BadVerbArgs(
+        `renderer ${name} is bound to ${JSON.stringify(target.entry)}`
+      );
+    }
+    if (route === void 0 || order2 >= route.order) {
+      routes.set(session, { name, order: order2 });
+      if (route !== void 0 && route.name !== name) {
+        const former = renderers.get(route.name);
+        if (former !== void 0)
+          void former.renderer.deliver(
+            () => ({
+              kind: "event",
+              event: { kind: "retire", session }
+            }),
+            [["why", "renderer-moved"]]
+          ).catch((error) => {
+            log(
+              "error",
+              `renderer ${former.renderer.name} retire ${session}: ${String(error)}`
+            );
+          });
+        frameFeeds.handedIn(null);
+        frameFeeds.announce();
+      }
+    }
+    return target.renderer;
+  };
   const parts = {
     closing: cancelWork.signal,
     home: host.home,
@@ -89652,39 +89890,9 @@ function createDaemon(inputs) {
     frameFeeds,
     limits,
     collector,
-    renderer: rendererHost(
-      inputs.rendererName,
-      clock,
-      link.renderer,
-      log,
-      {
-        subscribed: (subscriptions) => {
-          collector.subscribed(subscriptions);
-          frameFeeds.switched(subscriptions.lanes);
-          declaredBarPanes.declare(subscriptions.lanes);
-        },
-        frames: (frames) => frameFeeds.took(frames),
-        stored: (writes) => stores.take(writes),
-        holding: (session) => collector.holding(session),
-        // The daemon waits on no turn's note.
-        recorded: () => {
-        }
-      },
-      {
-        perform: (act) => acts.perform(act),
-        stateDir: paths2.state,
-        configs: configDiscovery.forRenderer(inputs.rendererName),
-        closing: cancelling,
-        // [LAW:no-silent-failure] Joined to the last while it is owed, by the
-        // one rule for events that follow each other.
-        unheard: (text4) => {
-          actFailed = joinedEvent(actFailed, text4, instant());
-          restateFaults();
-        }
-      }
-    )
+    renderer: primary.renderer,
+    rendererFor
   };
-  configRenderers.set(parts.renderer.name, parts.renderer);
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
       case "period":
@@ -89742,7 +89950,7 @@ function createDaemon(inputs) {
       fileEvents.start(paths2.watchProbe);
       binaryWatch.arm();
       limits.arm();
-      link.arm();
+      for (const { link } of renderers.values()) link.arm();
     }
   };
   phase = { kind: "built" };
@@ -89752,10 +89960,10 @@ function createDaemon(inputs) {
     const starting = { kind: "starting" };
     phase = starting;
     try {
-      stores.load();
+      primary.stores.load();
       sessionBook.load();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
-      link.serve();
+      primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       phase = { kind: "serving" };
       return served;
@@ -89774,18 +89982,31 @@ function createDaemon(inputs) {
     return done;
   }
   async function tearDown(wasServing, done) {
-    const rendererStep = (kind) => () => wasServing ? parts.renderer.ask({ kind }) : void 0;
+    const rendererSteps = (kind) => wasServing ? [...renderers.values()].map(({ renderer }) => [
+      `${renderer.name} ${kind}`,
+      () => renderer.ask({ kind })
+    ]) : [];
     const teardown = [
       // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
       // ends is not started again, so no step below waits on a fresh boot.
       // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
       // from here, so no turn the renderer holds for later runs into the
       // close's.
-      ["renderer wake close", () => parts.renderer.closeWake()],
-      ["renderer close begins", () => link.beginClose()],
+      [
+        "renderer wakes close",
+        () => {
+          for (const { renderer } of renderers.values()) renderer.closeWake();
+        }
+      ],
+      [
+        "renderer close begins",
+        () => {
+          for (const { link } of renderers.values()) link.beginClose();
+        }
+      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
-      ["renderer journal close", rendererStep("close-journal")],
+      ...rendererSteps("close-journal"),
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.
@@ -89804,7 +90025,7 @@ function createDaemon(inputs) {
       // Before the views close: a `config` made after it finds its origin
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
-      ["renderer views close", rendererStep("close-views")],
+      ...rendererSteps("close-views"),
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close
@@ -89814,9 +90035,19 @@ function createDaemon(inputs) {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ["stores close", () => stores.close()],
+      ...[...renderers.values()].map(
+        ({ renderer, stores }) => [
+          `${renderer.name} stores close`,
+          () => stores.close()
+        ]
+      ),
       ["sessionBook close", () => sessionBook.close()],
-      ["renderer process close", () => link.close()]
+      ...[...renderers.values()].map(
+        ({ renderer, link }) => [
+          `${renderer.name} renderer close`,
+          () => link.close()
+        ]
+      )
     ];
     await runTeardown(teardown, log);
     phase = { kind: "closed", done };
@@ -90633,6 +90864,11 @@ function productionAdapters(paths2, daemonLog, machine) {
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
+    rendererEntryOf: (reported) => {
+      const entry = fs_default.realpathSync.native(reported);
+      if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
+      return entry;
+    },
     stat: fs_default.statSync
   };
 }
