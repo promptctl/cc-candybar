@@ -14,7 +14,6 @@ import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { FailureOutcome } from "../daemon/client-transport";
 import type { PermanentOutcome } from "../daemon/foundations/protocol";
-import { obtainDaemonKick } from "../daemon/acquire";
 import { APP_NAME, URL_SCHEME } from "../click/wire";
 import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
@@ -455,18 +454,8 @@ export function runInstallUrlHandler(bundle: string, world: World): void {
   installUrlHandler(forwarder, world);
 }
 
-// [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
-// the click request to the daemon, exit. There is NO in-process verb
-// dispatch and NO direct disk mutation. The daemon is the only writer of
-// click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
-// daemon on a transient failure is the only recovery, and it's
-// fire-and-forget so the next click hits a warm daemon. Terminal links use
-// the URL handler app, which forwards them directly.
-//
-// A `permanent` daemon outcome (BAD_REQUEST for an unknown verb,
-// VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
-// error message so the failure is visible — never silently swallowed by a
-// local fallback that would diverge from the daemon's truth.
+// [LAW:single-enforcer] The URL handler sends the raw link to the host and
+// reports its outcome. Automatic startup belongs to the statusline client.
 export async function runUrlHandle(
   rawUrl: string | undefined,
   world: World,
@@ -484,20 +473,15 @@ export async function runUrlHandle(
   }
 
   const plan = urlHandlePlan(outcome);
-  // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
-  // is lost (no daemon answered it), but the next click hits a warm daemon.
-  // Mirrors the render-path's transient recovery.
-  if (plan.kick) obtainDaemonKick(world);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);
 }
 
 // [LAW:effects-at-boundaries] What a failed click does, as data: the stderr
-// line, the exit code, and whether to kick a daemon. runUrlHandle performs it.
+// line and the exit code. runUrlHandle performs it.
 export interface UrlHandlePlan {
   readonly stderr: string;
   readonly code: 0 | 1;
-  readonly kick: boolean;
 }
 
 export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
@@ -512,20 +496,18 @@ export function urlHandlePlan(outcome: FailureOutcome): UrlHandlePlan {
       return {
         stderr: `url-handle: daemon busy (${outcome.message})\n`,
         code: outcome.phase === "connect" ? 1 : 0,
-        kick: false,
       };
     case "transient":
       return {
         stderr: `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
         code: 1,
-        kick: true,
       };
     // [LAW:dataflow-not-control-flow] Format each permanent cause from its
     // own typed payload, not by probing for "message" on a generic outcome.
     // The PermanentOutcome union already discriminates by `cause`; the switch
     // mirrors that discriminator one-to-one and pulls the right fields.
     case "permanent":
-      return { stderr: formatPermanent(outcome) + "\n", code: 1, kick: false };
+      return { stderr: formatPermanent(outcome) + "\n", code: 1 };
   }
 }
 

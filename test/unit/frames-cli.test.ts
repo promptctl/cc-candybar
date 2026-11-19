@@ -9,7 +9,7 @@ import { parseStdinLine, runFrames } from "../../src/frames-cli";
 import { REFUSED } from "../helpers/session-id-refused";
 import { afterStreamEnd } from "../../src/daemon/frame-follow";
 
-test("a reconnect says why: a daemon from before subscribe restarts on the new build, an absent one is named", () => {
+test("a reconnect says why: a daemon without subscribe support and a missing daemon are distinct", () => {
   expect(
     afterStreamEnd({
       kind: "refused",
@@ -23,15 +23,13 @@ test("a reconnect says why: a daemon from before subscribe restarts on the new b
   ).toEqual({
     kind: "reconnect",
     reason:
-      "the daemon does not take subscribe (BAD_REQUEST said); it restarts on the new build",
-    kick: false,
+      "the daemon does not take subscribe (BAD_REQUEST said)",
   });
   expect(
     afterStreamEnd({ kind: "failed", error: new Error("ENOENT") }),
   ).toEqual({
     kind: "reconnect",
     reason: "stream failed (ENOENT)",
-    kick: true,
   });
 });
 

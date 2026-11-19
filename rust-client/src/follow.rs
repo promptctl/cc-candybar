@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::{obtain_daemon_kick, read_frame, socket_path, write_frame, PROTOCOL_VERSION};
+use crate::{read_frame, socket_path, write_frame, PROTOCOL_VERSION};
 
 // [LAW:one-source-of-truth] Mirrors LANES in src/config/lanes.ts.
 const LANE_NAMES: [&str; 2] = ["statusline", "pane"];
@@ -133,34 +133,35 @@ enum StreamEnd {
 
 #[derive(Debug, PartialEq)]
 enum AfterEnd {
-    Reconnect { reason: String, kick: bool },
+    Reconnect(String),
     Off,
     Exit(String),
 }
 
 // Mirrors afterStreamEnd in src/daemon/frame-follow.ts.
 fn after_stream_end(end: &StreamEnd) -> AfterEnd {
-    let reconnect = |reason: String, kick: bool| AfterEnd::Reconnect { reason, kick };
     match end {
-        StreamEnd::Failed(why) => reconnect(format!("stream failed ({why})"), true),
-        StreamEnd::ClosedThere => reconnect("daemon closed the stream".into(), false),
+        StreamEnd::Failed(why) => AfterEnd::Reconnect(format!("stream failed ({why})")),
+        StreamEnd::ClosedThere => AfterEnd::Reconnect("daemon closed the stream".into()),
         StreamEnd::Refused(r, _) => match r.code.as_str() {
             "SWITCHED_OFF" => AfterEnd::Off,
-            "TIMEOUT" => reconnect(
-                format!("the daemon was too busy to open the stream ({})", r.error),
-                false,
-            ),
-            "BAD_REQUEST" => reconnect(
-                format!(
-                    "the daemon does not take subscribe ({}); it restarts on the new build",
-                    r.error
-                ),
-                false,
-            ),
-            "VERSION_MISMATCH" if r.daemon_v.is_some_and(|v| v < u64::from(PROTOCOL_VERSION)) => {
-                reconnect(format!("the daemon is older than this client ({})", r.error), true)
+            "TIMEOUT" => AfterEnd::Reconnect(format!(
+                "the daemon was too busy to open the stream ({})",
+                r.error
+            )),
+            "BAD_REQUEST" => {
+                AfterEnd::Reconnect(format!("the daemon does not take subscribe ({})", r.error))
             }
-            _ => AfterEnd::Exit(format!("the daemon refused the stream: {}: {}", r.code, r.error)),
+            "VERSION_MISMATCH" if r.daemon_v.is_some_and(|v| v < u64::from(PROTOCOL_VERSION)) => {
+                AfterEnd::Reconnect(format!(
+                    "the daemon is older than this client ({})",
+                    r.error
+                ))
+            }
+            _ => AfterEnd::Exit(format!(
+                "the daemon refused the stream: {}: {}",
+                r.code, r.error
+            )),
         },
     }
 }
@@ -215,7 +216,12 @@ fn say(line: &str) {
 
 fn emit(body: &[u8]) {
     let mut out = io::stdout().lock();
-    if out.write_all(body).and_then(|()| out.write_all(b"\n")).and_then(|()| out.flush()).is_err() {
+    if out
+        .write_all(body)
+        .and_then(|()| out.write_all(b"\n"))
+        .and_then(|()| out.flush())
+        .is_err()
+    {
         std::process::exit(0);
     }
 }
@@ -253,7 +259,9 @@ impl Follower {
         loop {
             let body = match read_frame(&mut sock) {
                 Ok(b) => b,
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return StreamEnd::ClosedThere,
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                    return StreamEnd::ClosedThere
+                }
                 Err(e) => return StreamEnd::Failed(e.to_string()),
             };
             let head: Head = match serde_json::from_slice(&body) {
@@ -263,7 +271,11 @@ impl Follower {
             match classify(head) {
                 Message::Refusal(r) => return StreamEnd::Refused(r, body),
                 Message::Frame { ok } => {
-                    let event = if ok { RetryEvent::FrameOk } else { RetryEvent::FrameFailed };
+                    let event = if ok {
+                        RetryEvent::FrameOk
+                    } else {
+                        RetryEvent::FrameFailed
+                    };
                     self.retry_ms = next_retry_ms(self.retry_ms, event);
                     // The bytes read are the line, as the daemon sent them.
                     self.tell(Said::Frame, || emit(&body));
@@ -407,9 +419,7 @@ mod tests {
             };
             let then = &case["then"];
             match (after_stream_end(&end), then["kind"].as_str().unwrap()) {
-                (AfterEnd::Reconnect { kick, .. }, "reconnect") => {
-                    assert_eq!(kick, then["kick"].as_bool().unwrap(), "{case}")
-                }
+                (AfterEnd::Reconnect(_), "reconnect") => {}
                 (AfterEnd::Off, "off") | (AfterEnd::Exit(_), "exit") => {}
                 (got, _) => panic!("{case}: got {got:?}"),
             }

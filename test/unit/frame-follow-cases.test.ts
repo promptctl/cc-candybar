@@ -31,7 +31,7 @@ interface Cases {
           readonly code: string;
           readonly daemonV?: Version;
         };
-    readonly then: { readonly kind: string; readonly kick?: boolean };
+    readonly then: { readonly kind: string };
   }[];
   readonly worthSaying: readonly {
     readonly last: Said;
@@ -97,10 +97,7 @@ test.each(CASES.message)(
 
 test.each(CASES.streamEnd)("stream end %j", ({ end, then }) => {
   const next = afterStreamEnd(endOf(end));
-  expect({
-    kind: next.kind,
-    ...(next.kind === "reconnect" && { kick: next.kick }),
-  }).toEqual(then);
+  expect({ kind: next.kind }).toEqual(then);
 });
 
 test.each(CASES.worthSaying)("worth saying %j", ({ last, next, says }) => {

@@ -16,7 +16,6 @@ import { parseArgs as parseCliArgs } from "node:util";
 import { renderOutcomeOf, trySessionInPane } from "../daemon/client";
 import { describeFailure } from "../daemon/client-transport";
 import { followFrames, type FrameFollower } from "../daemon/frame-follow";
-import { obtainDaemonKick } from "../daemon/acquire";
 import { socketPath } from "../daemon/paths";
 import { planOutcome } from "../outcome-plan";
 import { detectTmuxHint, type TmuxHint } from "../tmux-hint";
@@ -286,11 +285,6 @@ async function drawBarPane(
             ? `waiting for pane ${pane}'s statusline to render on ${socketPath(world.host)}`
             : `waiting for pane ${pane}'s bar`;
       } else {
-        if (found.kind === "transient") {
-          obtainDaemonKick(world);
-          // The kick may say why on stderr, which is this pane.
-          painted = "";
-        }
         status = describeFailure(found);
       }
     }

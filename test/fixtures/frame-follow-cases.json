@@ -11,12 +11,12 @@
     { "resp": { "error": "says no ok" }, "refusal": true }
   ],
   "streamEnd": [
-    { "end": { "kind": "failed" }, "then": { "kind": "reconnect", "kick": true } },
-    { "end": { "kind": "closed-there" }, "then": { "kind": "reconnect", "kick": false } },
+    { "end": { "kind": "failed" }, "then": { "kind": "reconnect" } },
+    { "end": { "kind": "closed-there" }, "then": { "kind": "reconnect" } },
     { "end": { "kind": "refused", "code": "SWITCHED_OFF" }, "then": { "kind": "off" } },
-    { "end": { "kind": "refused", "code": "TIMEOUT" }, "then": { "kind": "reconnect", "kick": false } },
-    { "end": { "kind": "refused", "code": "BAD_REQUEST" }, "then": { "kind": "reconnect", "kick": false } },
-    { "end": { "kind": "refused", "code": "VERSION_MISMATCH", "daemonV": "older" }, "then": { "kind": "reconnect", "kick": true } },
+    { "end": { "kind": "refused", "code": "TIMEOUT" }, "then": { "kind": "reconnect" } },
+    { "end": { "kind": "refused", "code": "BAD_REQUEST" }, "then": { "kind": "reconnect" } },
+    { "end": { "kind": "refused", "code": "VERSION_MISMATCH", "daemonV": "older" }, "then": { "kind": "reconnect" } },
     { "end": { "kind": "refused", "code": "VERSION_MISMATCH", "daemonV": "newer" }, "then": { "kind": "exit" } },
     { "end": { "kind": "refused", "code": "VERSION_MISMATCH" }, "then": { "kind": "exit" } }
   ],

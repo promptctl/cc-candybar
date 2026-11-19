@@ -1,11 +1,9 @@
 // A session's frames, kept flowing for whoever draws them: the follower every
 // consumer of the daemon's push runs (`cc-candybar frames`, the tmux bar pane).
 // One stream is one connection (src/daemon/client-frames.ts); a follower opens
-// the next when one ends — across daemon restarts, spawning a daemon when none
-// answers — and keeps asking while the session's toggle for its lane is off,
-// so turning the toggle on resumes the frames.
+// the next when one ends, including across daemon restarts. It checks the
+// lane again at a slower rate while the session has disabled it.
 
-import { obtainDaemonKick } from "./acquire";
 import type { World } from "../host";
 import {
   openFrameStream,
@@ -42,19 +40,13 @@ export function nextRetryMs(retryMs: number, event: RetryEvent): number {
   }
 }
 
-// [LAW:effects-at-boundaries] What a stream the daemon ended calls for: a
-// reconnect — kicking a daemon into existence when none answered, or when the
-// one that answered speaks an older protocol (it exits on that answer so a
-// respawn runs the newer build); the lane's toggle off, the stream's state
-// until it is on; or, when the daemon speaks a newer protocol than this
-// client, which it will do however often it is asked, the end of the
-// follower. A BAD_REQUEST is from a daemon too old to take subscribe (this
-// client's own subscribe is well formed); it restarts itself on the new build.
+// [LAW:effects-at-boundaries] A follower retries a recoverable end, waits
+// while its lane is disabled, or exits after a permanent refusal. Activation
+// remains with the statusline command that sends the session's data.
 export type AfterEnd =
   | {
       readonly kind: "reconnect";
       readonly reason: string;
-      readonly kick: boolean;
     }
   | { readonly kind: "off"; readonly resp: Refusal }
   | { readonly kind: "exit"; readonly reason: string };
@@ -67,13 +59,11 @@ export function afterStreamEnd(
       return {
         kind: "reconnect",
         reason: `stream failed (${end.error.message})`,
-        kick: true,
       };
     case "closed-there":
       return {
         kind: "reconnect",
         reason: "daemon closed the stream",
-        kick: false,
       };
     case "refused":
       if (end.resp.code === "SWITCHED_OFF")
@@ -82,13 +72,11 @@ export function afterStreamEnd(
         return {
           kind: "reconnect",
           reason: `the daemon was too busy to open the stream (${end.resp.error})`,
-          kick: false,
         };
       if (end.resp.code === "BAD_REQUEST")
         return {
           kind: "reconnect",
-          reason: `the daemon does not take subscribe (${end.resp.error}); it restarts on the new build`,
-          kick: false,
+          reason: `the daemon does not take subscribe (${end.resp.error})`,
         };
       if (
         end.resp.code === "VERSION_MISMATCH" &&
@@ -98,7 +86,6 @@ export function afterStreamEnd(
         return {
           kind: "reconnect",
           reason: `the daemon is older than this client (${end.resp.error})`,
-          kick: true,
         };
       return {
         kind: "exit",
@@ -175,7 +162,6 @@ export function followFrames(
             return;
           case "reconnect": {
             follow.fault(next.reason, retryMs);
-            if (next.kick) obtainDaemonKick(world);
             const wait = retryMs;
             retryMs = nextRetryMs(retryMs, "fault");
             reopenAfter(wait, true);
