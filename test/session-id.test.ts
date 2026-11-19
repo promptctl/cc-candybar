@@ -53,16 +53,16 @@ describe("the session-id checkpoint", () => {
 });
 
 describe("a click's session id", () => {
-  const applyUpdate = CLICK_VERBS.get("apply-update")!;
+  const undo = CLICK_VERBS.get("undo")!;
   const setState = CLICK_VERBS.get("set-state")!;
   const stepState = CLICK_VERBS.get("step-state")!;
 
   test.each(REFUSED)("refuses %s", async (_, raw, problem) => {
     const ctx = testVerbContext(new SessionState());
-    expect(() => applyUpdate(encodeURIComponent(raw), ctx)).toThrow(
+    expect(() => undo(encodeURIComponent(raw), ctx)).toThrow(
       BadVerbArgs,
     );
-    expect(() => applyUpdate(encodeURIComponent(raw), ctx)).toThrow(problem);
+    expect(() => undo(encodeURIComponent(raw), ctx)).toThrow(problem);
     expect(() => stepState(encodeSegments([raw, "k", "1"]), ctx)).toThrow(
       problem,
     );

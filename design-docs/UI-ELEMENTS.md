@@ -36,7 +36,7 @@ pnpm bar --links 🍫                             # …and list what every link 
 | [Configure mode](#configure-mode) | Change one placement's settings | Edit mode's `🔧` | Synthesized |
 | [Bundled segments with clicks](#bundled-segments-with-clicks) | Git detail, autocompact, trays, theme switcher, PR link | Default rows and opt-in | `segments:` in the default config |
 | [State-showing segments](#state-showing-segments) | Colour or glyph that tracks a value | Default rows and opt-in | `bg:` ramps, `cascade`, `gauge`, `sparkline` |
-| [Diagnostics](#diagnostics) | Errors, warnings, update notice, repository questions: one indicator and a viewer | Any bar with something to say | The door's own cell; the viewer composed by the daemon |
+| [Diagnostics](#diagnostics) | Errors, warnings, repository questions: one indicator and a viewer | Any bar with something to say | The door's own cell; the viewer composed by the daemon |
 
 ## Beside the pickers proposal
 
@@ -112,7 +112,7 @@ A [cycle action](#action-region) with one display per member. A click writes the
 |---|---|
 | The glyph and label | session key ← the next member |
 
-- **Use cases:** boolean settings (`wrap`, `update notice`), edit mode's `☐ live`, the git segment's `▸`/`◂`, every disclosure trigger (a disclosure is a two-member cycle, `closed` and open).
+- **Use cases:** boolean settings such as `wrap`, edit mode's `☐ live`, the git segment's `▸`/`◂`, every disclosure trigger (a disclosure is a two-member cycle, `closed` and open).
 - **Authored as:** `{ set: k, cycle: [a, b] }` and `{{ action "name" "☐ x" "☑ x" }}`. `src/render/action.ts`; the per-state displays are chosen by `pickCycleDisplay` in `src/config/disclosure.ts`.
 
 ### Stepper
@@ -480,10 +480,8 @@ The style ring also carries the theme preview; the variation ring carries the la
 **`⚙ config`:**
 
 ```
- ✕  🔣 unicode ▸ ↺  🌈 truecolor ▸ ↺  ☑ update notice ↺
+ ✕  ☑ wrap  ◀ padding 1 ▶  🧪 toggles
 ```
-
-Charset and colour depth are rings; update notice is a toggle.
 
 **`🧰 tools`:**
 
@@ -660,7 +658,7 @@ Every other bundled segment (`directory`, `model`, `version`, `sessionId`, `sess
 
 ## Diagnostics
 
-Every error, warning, update notice and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline, in every lane, and in the tmux status line. `src/render/diagnostics.ts`.
+Every error, warning and repository question is one message, and they reach the screen one way. The settings door's own cell carries an indicator after its glyph: `⚠ N`, red when any message is an error, amber when none is, absent when there are none; past nine it reads `⚠ 9+`. Because it is the door's cell, it sits beside the door wherever the door is placed, in the statusline, in every lane, and in the tmux status line. `src/render/diagnostics.ts`.
 
 ```
  🍫 ⚠ 2  polled  ~/c/cc-candybar  ⎇ main
@@ -683,18 +681,6 @@ settings menu cannot edit this file until it is fixed
 
 A config that fails to load draws the bundled default under its error, so the settings menu is still there. A placement of a segment nothing declares drops only that cell; the rest of the bar draws, and the drop is an error message. While a lane draws the bar elsewhere, Claude Code's statusline is the handoff line alone, so a message shows once, on the lane's bar.
 
-**Update notice.** A message whose clicks work inside the viewer. It shows when the code rendering the bar is older than the source checkout beside it, or than the latest release. That condition is not reproduced here; this is from `updateNotice` in `src/daemon/update-notice.ts`:
-
-```
-⬆ Newer source: 1.48.0 [abc1234]. You're on 1.47.0 [def5678]. [rebuild] [dismiss] [disable]
-```
-
-| Region | Click |
-|---|---|
-| `[rebuild]` / `[upgrade]` | rebuilds the checkout, or installs the release; reads `[rebuilding…]` while it runs. A failure adds a row `rebuild failed: <reason>` |
-| `[dismiss]` | hides it for this session, until something newer appears |
-| `[disable]` | turns the notice off in the config file and the session |
-
 **Failure glyph.** When the client cannot get a render at all, it prints one line with no link: `⚠ cc-candybar: protocol mismatch` (or `daemon rejected request`, `render failed`, `malformed daemon response`). `src/render/error-glyph.ts`.
 
 ## Click verbs
@@ -704,8 +690,8 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | Verb | Emitted by |
 |---|---|
 | `dispatch` | every rendered click: the wrapper around the list below |
-| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, `[dismiss]`, the diagnostics indicator and viewer |
-| `set-config`, `step-config` | `persist` actions (author configs); `[disable]` |
+| `set-state`, `step-state` | toggles, steppers, pickers, menus, carousels, disclosures, `✕`, the diagnostics indicator and viewer |
+| `set-config`, `step-config` | `persist` actions (author configs) |
 | `reset-config` | every `↺`, `⟲ reset all`, `↺ reset layout` |
 | `save` | `💾 save`, `✓ save` |
 | `save-preset`, `delete-preset` | `+ preset`, `🚮 delete` |
@@ -714,7 +700,6 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
 | `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
-| `apply-update` | `[rebuild]` / `[upgrade]` |
 
 ## Gaps and overlaps
 

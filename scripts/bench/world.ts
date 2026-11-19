@@ -188,8 +188,6 @@ export async function startWorld(
     XDG_DATA_DIRS: dirs.data,
     CLAUDE_CONFIG_DIR: dirs.claude,
     CC_CANDYBAR_SOCKET: socket,
-    // No update notice reaches the network: the registry is a closed port.
-    CC_CANDYBAR_REGISTRY_URL: "http://127.0.0.1:1",
     // The daemon dies with this process, however this process ends.
     [PARENT_PID_ENV]: String(process.pid),
     ...HERMETIC_GIT_ENV,

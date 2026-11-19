@@ -53,7 +53,6 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `redo` | same | same | same | P, CF, SH; L | config | Same |
 | `rewind` | same | same | same | P, CF, SH; L | config | Same. It does not close edit mode; a sibling effect does |
 | `repo-config` | `links`, `reloadConfig`, `dlog` | `<state>/repo-configs/repo-configs.json` | none directly; see reload | No listed target except OS: the answers watcher reloads every entry; L | config (nearest; a per-user trust book, not the config file) | Own book. If Facts runs sources for it, a dev approval must not approve them for the live side |
-| `apply-update` | `applyUpdate` | `<state>/update-act/<key>/<n>/{record.json,stdout,stderr,status}` | `pnpm build`, or `pnpm dlx <PACKAGE_NAME>@<ver> install`; the job outlives the daemon | MA, later a daemon restart | machine | Refused visibly |
 | `doctor-run` | `doctor`, `doctorStores`, `clients`, `serving`, `bundle`, `dlog`, `arrival` | `session-state.json` (report keys); `doctor-clicked-terminals.json` if via link and terminal seen | `tmux display`, `ps`, `git`, `gh auth token` or `glab --version`, `osascript` or `fc-match`, each only when its branch applies | P; reloads config; reads settings chain and transcript; L possible | picks (nearest) | Report on its own copy. Probes need a read message to Facts |
 | `doctor-fix` | as above | `claude-settings` fix: a Claude settings file, setting `env.<TMUX_TRUECOLOR_VAR>` or `statusLine.refreshInterval`; `post-mortems-read` fix: `doctor-post-mortems-read.json`; report in `session-state.json` | same | MA, P; the file changes take effect in live Claude Code sessions | machine | Refused visibly |
 | `doctor-mark` | as above | `doctor-marks.json`, `session-state.json`, possibly `doctor-clicked-terminals.json` | same | P, per-user store | picks (nearest) | Own store and report; probes go to Facts |
@@ -112,7 +111,7 @@ the repo root = `/Users/bmf/code/cc-candybar/.claude/worktrees/synthetic-zooming
 | `renderSightings` | Facts | What each request's client reported |
 | `handlerProbes` | Facts (tentative) | Read through daemon-stats |
 | `DOCTOR_STORES` | Unclear | Per-user files under state; neither side of your split names them |
-| `binaryWatch`, `updateWatch` | **Unclear; both** | Each is tied to one bundle, and Facts and a dev Draw run different bundles. The watch also registers a validator Draw's gate reads |
+| `binaryWatch` | Host | Restarts the host when the installed bundle changes |
 | `stats`, `inFlight`, `shuttingDown`, `limits`, `budgetBytes`, `myStartTime`, `breakerRegistryPath` | Per-process | Each process needs its own |
 | `verbCtx` | Not state; an aggregate | Its fields fall on both sides |
 
@@ -128,7 +127,6 @@ Other points:
 | Any lane-moving click | Draw to Facts: `lanesMoved{sid, before, after}`, live Draw only. Facts to Draw: `setupFailed{sid, text}` |
 | `slash` | Draw to Facts: `typeSlash{sid, line}`, with the pane hint held by Facts |
 | `run` | Draw to Facts: `run{RunRequest}`, Facts to Draw: `runFailed{sid, text}`. Storage keys come from Draw's config, and `supersede` runs in Facts |
-| `apply-update` | Draw to Facts: `applyUpdate`. Facts to Draw: update facts for the notice and the dismiss gate |
 | Doctor verbs | Draw to Facts: `gatherDoctorFacts{sid, origin, needs}`. `doctor-fix` also sends `writeClaudeSettings`, live Draw only |
 | `copy`, `copy-diagnostic`, `open-vscode`, plain URLs | Draw to Facts: `host{copy|open}`, if Facts owns all programs |
 | `tmux-status-click` | Facts to Draw: `linkClicked{url, via}`, sent to the Draw that drew the frame |
@@ -158,7 +156,6 @@ Other points:
 - `src/config/repo-configs.ts`
 - `src/daemon/runs.ts`
 - `src/daemon/update-notice.ts`
-- `src/daemon/update-act.ts`
 - `src/daemon/tmux-status.ts`
 - `src/renderer/render-cache.ts`
 - `src/doctor/edge.ts`

@@ -373,7 +373,7 @@ interface DaemonWideKey {
 
 export interface Keyspace<C extends object> {
   // A key every session may write whatever config it renders — the daemon's
-  // own links (the update notice's), drawn above any config's bar — and the
+  // own links, drawn above any config's bar — and the
   // values they write to it. An empty list holds the key with nothing
   // writable yet; a later registration of the same key adds its members.
   register(key: string, allowed: readonly string[]): () => void;

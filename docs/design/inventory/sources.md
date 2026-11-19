@@ -192,9 +192,7 @@ All are composed in `drawRender` (`src/daemon/server.ts`).
 |---|---|---|
 | `errors`: refused args, `hintsError` | Request checkpoint | Facts |
 | `errors`: `entry.lastError`, `state.dropped` | Load | Draw |
-| `errors`: `updateWatch.error()` | Act files | Facts |
 | `errors`: `clickShown` | `clickErrorAt` | Facts-stored, shown per Draw |
-| `updates` | `updateNotice(update, act, ctx)`: pure fold over facts, `dismissed`, `enabled` | Facts publish `update` and `act`; Draw folds |
 | `questions` | `repoQuestions(entry.repos, …)` signed | Draw, since awaiting depends on its chain |
 | Standing `file-events`, `lifeline`, `launch-pipes` | `fileEventsWarnings`; `launcherWarnings(at, by)` in `src/proc/launch.ts`, whose pipe event shows by the event hold | Facts |
 | Standing `config-watch`, `load` | Entry | Draw (watch fault arrives from Facts if Facts holds it) |
@@ -206,7 +204,7 @@ All are composed in `drawRender` (`src/daemon/server.ts`).
 
 `collectDiagnostics` and `diagnosticsProjection` (`src/render/diagnostics.ts`) are pure and stay in Draw. Note the feed path: `feedsOf` counts sends, and I found no design for how a dev Draw's frames are delivered, so ownership of `feeds` is undecided.
 
-**Recommendation:** add `facts.diagnostics: [{about, level, text, copy}]` to the payload, covering file events, lifeline, update-act and request refusals. Add per-source reading and fault. Draw merges them into its one list, so a dev Draw's indicator shows Facts faults through the existing fold. Being payload, they also wake feeds through the `changed` reaction. Keys cannot read `diagnostics`, because it is a refused projection, so this adds no policy path. A failed source reaches the indicator only if it is a policy fault or ⚠ cell; the indicator does not count failed scalars today.
+**Recommendation:** add `facts.diagnostics: [{about, level, text, copy}]` to the payload, covering file events, lifeline and request refusals. Add per-source reading and fault. Draw merges them into its one list, so a dev Draw's indicator shows Facts faults through the existing fold. Being payload, they also wake feeds through the `changed` reaction. Keys cannot read `diagnostics`, because it is a refused projection, so this adds no policy path. A failed source reaches the indicator only if it is a policy fault or ⚠ cell; the indicator does not count failed scalars today.
 
 ## 7. Blocking
 

@@ -11,7 +11,6 @@ import {
   encodeSegments,
   decodeSegments,
   VERB_APPLY_LAYOUT_OP,
-  VERB_APPLY_UPDATE,
   VERB_BACK,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
@@ -213,7 +212,6 @@ describe("a link says in words what its click does", () => {
     [{ verb: VERB_REDO, args: [SID] }, "redo"],
     [{ verb: VERB_BACK, args: [SID] }, "go back"],
     [{ verb: VERB_REWIND, args: [SID] }, "cancel edits"],
-    [{ verb: VERB_APPLY_UPDATE, args: [SID] }, "update cc-candybar"],
     [{ verb: VERB_DOCTOR_RUN, args: [SID] }, "run doctor"],
     [{ verb: VERB_DOCTOR_FIX, args: [SID, "hooks"] }, "fix hooks"],
     [

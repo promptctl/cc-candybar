@@ -68,7 +68,6 @@ import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
 import { DoctorRuns } from "./doctor.js";
-import { UpdateGate } from "./update-gate.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
@@ -472,9 +471,6 @@ export function mainRendererOf(
   // [LAW:single-enforcer] What each session's renderers could not honour, as
   // their frames recorded it (src/renderer/render-warnings.ts).
   const renderWarnings = new RenderWarningRecords();
-  // [LAW:one-source-of-truth] The dismiss gate follows the update fact the
-  // host's documents carry: the gates are this renderer's own.
-  const updateGate = new UpdateGate(gates);
   // [LAW:single-enforcer] Each session's doctor run, whose report is
   // written once the host's reading of it arrives in a world state.
   const doctorRuns = new DoctorRuns({
@@ -485,7 +481,6 @@ export function mainRendererOf(
   });
   // The world states the host hands the renderer, which its views read.
   const worldStates = new WorldStates((document, record) => {
-    updateGate.took(document.daemon.update.newer);
     doctorRuns.took(document, record);
   });
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(

@@ -109,7 +109,7 @@ export function forwarderExecutable(app: string): string {
 
 // The forwarder binary: a checkout's own build (`just install-url-handler`),
 // or the one the darwin platform package ships, by the running bundle's
-// provenance — the same reading the update notice and the doctor make
+// provenance — the same reading the doctor makes
 // (sourceCheckoutOf). [LAW:no-silent-failure] Neither present is an error
 // naming the path and how to make it exist; no applet is built in its place.
 function resolveForwarder(sourceDist: string): string {

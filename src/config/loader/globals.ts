@@ -15,6 +15,7 @@ import { isExpression, retiredThemeNote } from "../../themes/policy.js";
 import {
   describeType,
   isPlainObject,
+  optionalBooleanSpec,
   record,
   recordJson,
   type FieldSpec,
@@ -32,9 +33,29 @@ import { settingMenuPath } from "../menu-places.js";
 // the preset-scoped one below are built from this map, so a field added there
 // is automatically settable from a preset — there is no second list to
 // remember to grow.
-const GLOBALS_FIELDS = Object.fromEntries(
+const LIVE_GLOBALS_FIELDS = Object.fromEntries(
   Object.entries(GLOBAL_FIELDS).map(([field, row]) => [field, row.spec]),
 ) as FieldSpecMap<Globals>;
+
+// [LAW:parse-dont-validate] Accept the retired field in old configs and discard
+// it at the config boundary. It cannot enter the Globals used by the renderer.
+const legacyUpdateNotice = optionalBooleanSpec();
+const ignoredUpdateNotice: FieldSpec<never> = {
+  ...legacyUpdateNotice,
+  json: {
+    ...legacyUpdateNotice.json,
+    deprecated: true,
+    description: "Obsolete. Candybar no longer offers updates in the bar.",
+  },
+  parse(ctx, path, field, raw) {
+    legacyUpdateNotice.parse(ctx, path, field, raw);
+    return undefined;
+  },
+};
+const GLOBALS_FIELDS = {
+  ...LIVE_GLOBALS_FIELDS,
+  updateNotice: ignoredUpdateNotice,
+};
 
 // The domain a control changing `field` from the bar ranges, as its row
 // declares it beside the field's spec — `text` for a field no control shape

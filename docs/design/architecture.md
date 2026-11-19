@@ -63,7 +63,7 @@ From the state `createDaemon` builds in `src/daemon/daemon.ts`:
 | Goes to | State |
 |---|---|
 | Gather | `payloadProviders` and its services, `watcherRegistry` for sources, `fileEvents`, `refreshLedger`, source registries, plugin storage, the tmux connections that replace `paneVisibility` |
-| Renderer | `sessionState`, `settingsHistory`, `navigationHistory`, `effectSessions`, `renderWarnings`, `menuIdle`, `linkSigner`, `frameFeeds`, `tmuxStatusLines`, `laneSetups`, `runs`, `renderSightings`, `updateWatch`, doctor stores |
+| Renderer | `sessionState`, `settingsHistory`, `navigationHistory`, `effectSessions`, `renderWarnings`, `menuIdle`, `linkSigner`, `frameFeeds`, `tmuxStatusLines`, `laneSetups`, `runs`, `renderSightings`, doctor stores |
 | Split | `renderCache`: config, compile and views go to the renderer, source registries and storage to Gather. It's the hardest piece |
 | One per process | `stats`, `limits`, `binaryWatch`, shutdown state |
 

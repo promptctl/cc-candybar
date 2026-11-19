@@ -9,7 +9,7 @@
 // whose entries a test lands by hand, and reads what it handed in and what
 // the owners hold; no renderer is built.
 
-import { daemonFactsOf } from "./helpers/daemon-facts";
+import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
 import { observable, runInAction } from "mobx";
 import { TEST_SIGNER } from "./helpers/link-signer";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
@@ -32,8 +32,7 @@ import {
 } from "../src/daemon/foundations/session-id";
 import { declareLanes, type KeyedOwners } from "../src/daemon/readings";
 import { type ViewFacts } from "../src/renderer-interface/request-context";
-import type { Fact } from "../src/facts/fact";
-import type { Update, WorldState } from "../src/facts/world-state";
+import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import type { Subscriptions } from "../src/renderer-interface/interface";
 import type { DoctorAsk } from "../src/doctor/gather";
 import { type GitRead, type PullRequest } from "../src/segments/git";
@@ -127,11 +126,11 @@ const ANSWERED = { kind: "answered" } as const;
 function collectorOver(
   owners: FixtureOwners,
   {
-    update = () => pendingOf("unread"),
+    fileEvents = () => [],
     watched = new Set<SessionId>(),
     retired = async () => ANSWERED,
   }: {
-    readonly update?: () => Fact<Update>;
+    readonly fileEvents?: () => DaemonFacts["fileEvents"];
     readonly watched?: ReadonlySet<SessionId>;
     readonly retired?: () => Promise<unknown>;
   } = {},
@@ -142,7 +141,7 @@ function collectorOver(
   const laned = withTranscriptLanes(owners, clock);
   const collector = new Collector({
     owners: laned,
-    daemon: () => daemonFactsOf(update()),
+    daemon: () => daemonFactsOf(fileEvents()),
     clock,
     watched: (session) => watched.has(session),
     deliver: async (event) => {
@@ -395,7 +394,7 @@ describe("a stamp that throws", () => {
 describe("owners that keep failing to read", () => {
   test("leave the daemon's facts current: a move of them hands in a document carrying it, still saying what failed", () => {
     const broken = observable.box(false);
-    const newer = observable.box<Fact<Update>>(pendingOf("unread"));
+    const warnings = observable.box<DaemonFacts["fileEvents"]>([]);
     const { owners: base } = handLanded();
     const failing = (): Lane<string> => ({
       current: () => {
@@ -408,15 +407,15 @@ describe("owners that keep failing to read", () => {
       hostService: { declareName: failing, declareUser: failing },
     } satisfies FixtureOwners;
     const { collector, handedIn } = collectorOver(owners, {
-      update: () => newer.get(),
+      fileEvents: () => warnings.get(),
     });
     collector.requested(requestAt("/a"), TEST_ENVIRONMENT);
     runInAction(() => broken.set(true));
     expect(handedIn).toHaveLength(1);
-    runInAction(() => newer.set(pendingOf("superseded")));
+    runInAction(() => warnings.set(FILE_EVENTS_STALLED));
     expect(handedIn).toHaveLength(2);
     const doc = (handedIn[1] as { worldState: WorldState }).worldState;
-    expect(doc.daemon.update.newer).toEqual(pendingOf("superseded"));
+    expect(doc.daemon.fileEvents).toEqual(FILE_EVENTS_STALLED);
     expect(stampFailureOf(doc)).toContain("host read exploded");
   });
 });

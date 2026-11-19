@@ -13,7 +13,6 @@ import { clickActing, clickUrl, testVerbContext,
   verbContextWith } from "./helpers/click";
 import {
   effectsUrl,
-  VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_COPY_DIAGNOSTIC,
 } from "../src/click/wire";
@@ -91,12 +90,14 @@ test("a copy in a click that names a session fails on that session's bar", async
   const ctx = testVerbContext(state);
   const outcomes = await clickActing(
     effectsUrl([
-      { verb: VERB_APPLY_UPDATE, args: [SID] },
+      { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "key"] },
       { verb: VERB_COPY, args: ["x"] },
     ]),
-    ctx,
+    verbContextWith(ctx, { diagnosticCopy: () => PROMPT }),
     {
-      launch: async () => ({
+      launch: async (opts) => opts.stdinInput === PROMPT
+        ? { ok: true, exitCode: 0, stdout: "", stderr: "" }
+        : ({
         ok: false,
         reason: "non-zero",
         stdout: "",
@@ -104,7 +105,6 @@ test("a copy in a click that names a session fails on that session's bar", async
         exitCode: 1,
         signal: null,
       }),
-      applyUpdate: async () => {},
     },
   );
   expect(outcomes).toEqual([
@@ -128,7 +128,6 @@ test("a step the daemon's close cut off keeps its class, and holds nothing on th
   });
   const clicked = clickUrl(
     effectsUrl([
-      { verb: VERB_APPLY_UPDATE, args: [SID] },
       { verb: VERB_COPY_DIAGNOSTIC, args: [SID, "request", "k"] },
     ]),
     verbContextWith(testVerbContext(state), {

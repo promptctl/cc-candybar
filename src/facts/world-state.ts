@@ -67,7 +67,7 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself, by whose it is: the update, whether file events are heard,
+// daemon itself: whether file events are heard,
 // and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
 // and for whom it draws, src/utils/event-hold.ts), how the last renderer
@@ -75,7 +75,6 @@ export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 // (one no session asked for, or one whose renderer had ended), each held the
 // same way: null while none has.
 export interface DaemonFacts {
-  readonly update: UpdateState;
   readonly fileEvents: readonly FileEventsWarning[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
@@ -122,31 +121,6 @@ export interface WorldState {
   readonly doctor: Fact<DoctorReading>;
   readonly daemon: DaemonFacts;
   readonly diagnostics: readonly FactsDiagnostic[];
-}
-
-// [LAW:types-are-the-program] The act on an update as every daemon sees it.
-// `succeeded` is its own arm, not `idle`, so a daemon watching an act end can
-// tell a rebuilt bundle from nothing having happened.
-export type ActState =
-  | { readonly kind: "idle" }
-  | { readonly kind: "running"; readonly act: number }
-  | { readonly kind: "succeeded"; readonly act: number }
-  | {
-      readonly kind: "failed";
-      readonly act: number;
-      readonly identity: string;
-      readonly reason: string;
-    };
-
-export const IDLE: ActState = { kind: "idle" };
-
-// What the update notice is folded from: what is newer than the running code,
-// the act on it as its files were last read, and why those files could not be
-// read (null when they could).
-export interface UpdateState {
-  readonly newer: Fact<Update>;
-  readonly act: ActState;
-  readonly actsError: string | null;
 }
 
 // [LAW:one-source-of-truth] One observation of the active session's cumulative
@@ -216,40 +190,6 @@ export const REFRESH_LANES = [
 ] as const;
 
 export type RefreshLane = (typeof REFRESH_LANES)[number];
-
-// [LAW:types-are-the-program] What is newer than the running code. `source`
-// is a checkout whose tree no longer matches the bundle; `release` is an
-// install behind the registry. Each carries both sides of the comparison
-// under one name pair, so the sentence reads the same fields off either.
-export type Update =
-  | {
-      readonly kind: "source";
-      readonly root: string;
-      readonly newer: SourceStamp;
-      readonly running: SourceStamp;
-    }
-  | {
-      readonly kind: "release";
-      readonly newer: Version;
-      readonly running: Version;
-    };
-
-// [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
-// semantic-release on `main` mints nothing else, and the ordering the currency
-// verdict needs is total only over that shape — so the parser refuses anything
-// else rather than admitting a prerelease it could not order.
-export type Version = readonly [major: number, minor: number, patch: number];
-
-export function formatVersion(v: Version): string {
-  return v.join(".");
-}
-
-// What identifies a build to a person: the version it reports and the
-// digest of the source it was built from.
-export interface SourceStamp {
-  readonly version: string;
-  readonly digest: string;
-}
 
 // How much of a digest a person is shown: seven hex characters, the length
 // git abbreviates a commit to, so the identifier reads as the familiar

@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { checkConfig } from "../src/check";
-import { daemonGates } from "../src/daemon/foundations/update-keys";
+import { createGates } from "../src/daemon/foundations/gates";
 import { mainRendererOf } from "../src/renderer/main";
 import { rendererOf } from "../src/renderer-interface/interface";
 import type { RendererBuilder } from "../src/daemon/local-bar";
@@ -63,7 +63,7 @@ test("a render that throws under one preset is reported with that preset, beside
       root: { h: ['broken'] },
     }`,
   );
-  const outcome = await checkConfig(world, daemonGates(), p, dir, undefined, breaksUnderB);
+  const outcome = await checkConfig(world, createGates(), p, dir, undefined, breaksUnderB);
   expect(outcome.kind).toBe("fatal");
   const message = outcome.kind === "fatal" ? outcome.message : "";
   expect(message).toContain("config renders with 2 render errors");
