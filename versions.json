@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-893",
+      "ref": "refs/pull/893/merge",
+      "sha": "58cd846a37957c69e2958467a6aca4b51a87f47a",
+      "timestamp": "2026-11-19T18:18:14.151Z",
+      "commits": [
+        {
+          "sha": "58cd846a37957c69e2958467a6aca4b51a87f47a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:17:15-07:00",
+          "message": "Merge b2262c76cbac416243c113c6680c1ec88cb43378 into b430a64a7ab7be113b28a91192cf47cb2e26835f\n"
+        },
+        {
+          "sha": "b2262c76cbac416243c113c6680c1ec88cb43378",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:40:36-07:00",
+          "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b430a64a7ab7be113b28a91192cf47cb2e26835f",
@@ -172,28 +194,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:49:05-07:00",
           "message": "fix(renderer): use one outcome for each config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-893",
-      "ref": "refs/pull/893/merge",
-      "sha": "d5d3fde241fa183772bad988eb49c5e4065eb75e",
-      "timestamp": "2026-11-19T17:44:33.285Z",
-      "commits": [
-        {
-          "sha": "d5d3fde241fa183772bad988eb49c5e4065eb75e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:43:20-07:00",
-          "message": "Merge 9050472d1450dcc91253e1794e890da4bb4f1f04 into 1b747e5500b197edd1e1a626e5634c0f35723f44\n"
-        },
-        {
-          "sha": "9050472d1450dcc91253e1794e890da4bb4f1f04",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:40:36-07:00",
-          "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
         }
       ]
     },
