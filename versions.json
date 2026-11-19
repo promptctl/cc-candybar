@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-841",
+      "ref": "refs/pull/841/merge",
+      "sha": "9e1dd9c9b2bdc8af715de6fc2df921a60aab9b76",
+      "timestamp": "2026-11-19T10:02:07.575Z",
+      "commits": [
+        {
+          "sha": "9e1dd9c9b2bdc8af715de6fc2df921a60aab9b76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:00:25-07:00",
+          "message": "Merge a97d8e9843595e8360804a126a8b8a1fb60b05d1 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "a97d8e9843595e8360804a126a8b8a1fb60b05d1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:58:38-07:00",
+          "message": "fix(plugin): recognize filesystem errors across Node realms\n"
+        },
+        {
+          "sha": "33b64d2dc0ff98beeade1606ef504d90c80687d9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:57:08-07:00",
+          "message": "refactor(plugin): share host file reads and coalesce storage refreshes (pvx)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-840",
       "ref": "refs/pull/840/merge",
       "sha": "63bdeeee5310105cee39226a8320ae7d262c5719",
