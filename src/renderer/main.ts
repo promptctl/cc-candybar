@@ -809,18 +809,12 @@ function debugOf(
 ): DebugSnapshot {
   const view = cache.latestView();
   const frame =
-    view === null
-      ? undefined
-      : (cache.presentations.layout(
+    what === "segments" && view !== null
+      ? cache.presentations.latestLayout(
           view.sessionId,
-          "request",
-          view.presentationTargets.request,
-        ) ??
-        cache.presentations.layout(
-          view.sessionId,
-          "feed",
-          view.presentationTargets.feed,
-        ));
+          view.presentationTargets,
+        )
+      : undefined;
   return buildDebugSnapshot(
     what,
     view === null
@@ -831,7 +825,7 @@ function debugOf(
           config: view.state.config,
           compiled: view.state.compiled,
           lastRenderBySegment:
-            what === "segments" && frame !== undefined
+            frame !== undefined
               ? serializeSegmentCells(
                   frame.segments,
                   view.state.config.globals.colorCompatibility ??

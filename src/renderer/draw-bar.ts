@@ -546,10 +546,9 @@ export function drawRender(
   ];
   // [LAW:one-source-of-truth] ONE list per draw, built before it: the door's
   // indicator reads it as the `diagnostics` projection and the viewer pages
-  // the same object, so the two cannot disagree within a frame. The render
-  // warnings are this renderer's recorded ones — known only after a walk, so
-  // the frame before this one's — with every other renderer's for the
-  // session (src/renderer/render-warnings.ts).
+  // the same object, so the two cannot disagree within a frame. Walk warnings
+  // come from the session's accepted frame on this surface and the other
+  // surface's accepted frame on the same config.
   const config = presentations.configOf(state.config);
   const target = view.presentationTargets[drawing.by];
   const diagnostics = collectDiagnostics(

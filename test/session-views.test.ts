@@ -565,6 +565,22 @@ test("a copy click reads the frame its own renderer last delivered, not another'
   expect(cache.drawnCopy(S_COPY, "request", "7")).toBe("before the fix");
 });
 
+test("the segment inspector reads the newest delivered layout still in the view", async () => {
+  configure(dir);
+  const { cache } = makeCache();
+  const { view } = await render(cache, "s-copy");
+  const request = copyCandidate(cache, view, "request", "request");
+  const feed = copyCandidate(cache, view, "feed", "feed");
+  const inspected = () =>
+    cache.presentations.latestLayout(view.sessionId, view.presentationTargets);
+
+  cache.acceptFrame(2 as EffectId, feed);
+  cache.acceptFrame(1 as EffectId, request);
+  expect(inspected()).toBe(feed.frame.layout);
+  cache.stopDrawing(view.sessionId, "feed");
+  expect(inspected()).toBe(request.frame.layout);
+});
+
 test("a frame on screen stays copyable across a reload's successor view, and goes when the session closes", async () => {
   configure(dir);
   const { cache } = makeCache();

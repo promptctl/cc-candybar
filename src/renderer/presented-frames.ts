@@ -62,7 +62,7 @@ interface SessionFrames {
   readonly idle?: Idle;
 }
 
-const latestOf = ({ surfaces: { request, feed } }: SessionFrames) =>
+const latestOf = ({ request, feed }: SessionFrames["surfaces"]) =>
   request !== undefined && (feed === undefined || request.id > feed.id)
     ? request
     : feed;
@@ -135,7 +135,7 @@ export class PresentedFrames {
     const prior = this.sessions.get(session) ?? { surfaces: {} };
     const previous = prior.surfaces[by];
     if (previous !== undefined && id <= previous.id) return null;
-    const latest = latestOf(prior);
+    const latest = latestOf(prior.surfaces);
     const { motion, menu, ...surface } = frame;
     const next: AcceptedFrame = { ...surface, id, target };
     const newer = latest === undefined || id > latest.id;
@@ -162,6 +162,22 @@ export class PresentedFrames {
   ): FrameLayout | undefined {
     const held = this.on(session, by);
     return held?.target === target ? (held.layout ?? undefined) : undefined;
+  }
+
+  latestLayout(
+    session: SessionId,
+    targets: Readonly<Record<DrawSurface, symbol>>,
+  ): FrameLayout | undefined {
+    const drawn = (by: DrawSurface) => {
+      const frame = this.on(session, by);
+      return frame?.target === targets[by] && frame.layout !== null
+        ? frame
+        : undefined;
+    };
+    return (
+      latestOf({ request: drawn("request"), feed: drawn("feed") })?.layout ??
+      undefined
+    );
   }
 
   diagnostics(session: SessionId, by: DrawSurface): FrameWarnings | undefined {
