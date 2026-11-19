@@ -20,6 +20,9 @@ import {
 } from "../src/config/dsl-loader";
 import type { ConfigSnapshot } from "../src/config/config-snapshot";
 import { loadFile } from "./helpers/discovered-load";
+import { hostOf } from "./helpers/host";
+import { discover, readShared } from "../src/daemon/config-discovery/discover";
+import { locations, stateDir } from "../src/daemon/paths";
 import { presenceOf } from "../src/config/loader/unplaced";
 import { SETTINGS_ANCHOR } from "../src/config/door";
 import {
@@ -2517,8 +2520,21 @@ describe("a file's load — editability advisory", () => {
     );
   });
 
-  test("no file earns no advisory", () => {
-    expect(loadFile(null, DEFAULT_DSL_CONFIG, NO_PROJECT).warnings).toEqual([]);
+  test("an absent user layer leaves the bundled config ready without an advisory", () => {
+    const host = hostOf({}, { home: dir });
+    const { snapshot } = discover(
+      { kind: "file", path: path.join(dir, "missing.json5"), cwd: dir },
+      readShared({ locations: locations(host), stateDir: stateDir(host) }),
+    );
+    const warnings: string[] = [];
+    const loaded = loadSnapshot(snapshot, dir, DEFAULT_DSL_CONFIG, {
+      warned: (lines) => warnings.push(...lines),
+    });
+    expect(loaded.layers).toEqual([]);
+    expect(loaded.config.segments.directory).toMatchObject({
+      template: expect.any(String),
+    });
+    expect(warnings).toEqual([]);
   });
 });
 
