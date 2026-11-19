@@ -173,6 +173,8 @@ test("a click in either session uses its environment for desktop tools and both 
     },
   });
   const draw = async (session: string, pane: string, marker: string) => {
+    const cwd = path.join(project, session);
+    fs.mkdirSync(cwd, { recursive: true });
     const reported = {
       SESSION_MARKER: marker,
       TMUX: paneOf(pane).socket + ",123,0",
@@ -183,7 +185,7 @@ test("a click in either session uses its environment for desktop tools and both 
       kind: "render-session",
       envKey: environmentKey(reported),
       hookData: hookData(session, project),
-      cwd: project,
+      cwd,
       args: ["cc-candybar", "--config-only", config],
       termCols: 120,
     };
@@ -222,6 +224,7 @@ test("a click in either session uses its environment for desktop tools and both 
       await click(daemon, linkTo(frame, "TOOLS"));
       expect(launches.map((launch) => launch.category)).toEqual(categories);
       for (const launch of launches) {
+        expect(launch.cwd).toBe(path.join(project, session));
         expect(launch.environment).toMatchObject({
           SESSION_MARKER: marker,
           CLAUDE_CODE_SESSION_ID: session,

@@ -25,7 +25,7 @@ export function environmentKey(env: Environment): string {
 }
 
 // A full report that the host has verified for this session. The projection
-// can be reused until a hook or a change of cwd changes a session fact.
+// can be reused while the session's project and Claude Code directories agree.
 export interface RegisteredEnvironment {
   readonly key: string;
   readonly reported: Environment;

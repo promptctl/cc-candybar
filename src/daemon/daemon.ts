@@ -419,12 +419,11 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       // Fixed desktop tools also serve sessionless links, old clients and
       // links opened before a restarted host hears from the session again.
       // Runs and SourceRuns require a report for user-configured programs.
-      const heard =
-        session === null ? undefined : sessionBook.environmentOf(session);
-      if (heard?.kind !== "ok") return desktopPrograms;
+      const context =
+        session === null ? null : sessionBook.programContextOf(session);
+      if (context === null) return desktopPrograms;
       return programs({
-        launch: (options) =>
-          launcher.launch({ ...options, environment: heard.value }),
+        launch: (options) => launcher.launch({ ...options, ...context }),
       });
     },
     run: (run) => runs.start(run),

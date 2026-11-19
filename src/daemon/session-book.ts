@@ -17,6 +17,7 @@ import {
 import type { SessionId } from "./foundations/session-id.js";
 import {
   NOT_HEARD,
+  type Environment,
   type RegisteredEnvironment,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
@@ -136,6 +137,18 @@ export class SessionBook {
   environmentOf(session: SessionId): SessionEnvironment {
     const held = this.environments.get(session) ?? NOT_HEARD;
     return "execution" in held ? { kind: "ok", value: held.execution } : held;
+  }
+
+  // A desktop tool or tmux command inherits the working directory and
+  // environment of the same reported session. Only the directory is durable.
+  programContextOf(
+    session: SessionId,
+  ): { readonly cwd: string; readonly environment: Environment } | null {
+    const durable = this.book.get(session);
+    const environment = this.environmentOf(session);
+    return durable !== undefined && environment.kind === "ok"
+      ? { cwd: durable.origin.cwd, environment: environment.value }
+      : null;
   }
 
   reportedFor(session: SessionId, key: string): RegisteredEnvironment | null {
