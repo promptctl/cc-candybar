@@ -15,11 +15,15 @@ import {
   type StreamEnd,
 } from "../../../src/daemon/client-frames";
 import type { Response } from "../../../src/daemon/foundations/protocol";
+import { RENDERER_WIRE_VERSION } from "../../../src/renderer-interface/wire";
+import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
+import { LINK_KEY_BYTES } from "../../../src/click/link-signer";
 import {
   click,
   drawnLink,
   render,
   renderUntil,
+  runRealClient,
   urlWriting,
 } from "../../helpers/daemon-e2e";
 import {
@@ -29,6 +33,78 @@ import {
 import { until } from "../../helpers/until";
 
 jest.setTimeout(30_000);
+
+const COMPATIBLE_BOOT = {
+  wireVersion: RENDERER_WIRE_VERSION,
+  boot: {
+    digest: "another-worktree-build",
+    stored: EMPTY_STORED_STATE,
+    host: { home: "/home", tmp: os.tmpdir(), env: {} },
+    memoryLimitBytes: 1,
+    linkKey: {
+      kind: "ok",
+      value: Buffer.alloc(LINK_KEY_BYTES).toString("base64"),
+    },
+  },
+};
+
+function bootChild(...lines: readonly object[]) {
+  return runRealClient(
+    ["renderer"],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      input: lines
+        .map((line) => `${JSON.stringify({ kind: "boot", ...line })}\n`)
+        .join(""),
+    },
+    1,
+  );
+}
+
+describe("the renderer wire handshake", () => {
+  test.each([
+    ["no version", {}, "no version"],
+    [
+      "a different version",
+      { wireVersion: RENDERER_WIRE_VERSION + 1 },
+      `version ${RENDERER_WIRE_VERSION + 1}`,
+    ],
+  ])(
+    "the built child refuses %s before reading its boot payload",
+    (_name, version, sent) => {
+      // Only an old digest is present. Building the renderer would fail for a
+      // missing key before it could report the actual version mismatch.
+      const child = bootChild(
+        { ...version, boot: { digest: "old-build" } },
+        COMPATIBLE_BOOT,
+      );
+      expect(child.status).toBe(1);
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: "refused",
+        failure: {
+          message: `renderer wire version mismatch (host sent ${sent}, expected version ${RENDERER_WIRE_VERSION})`,
+        },
+      });
+    },
+  );
+
+  test("the built child starts with a compatible version and unrelated build identity", () => {
+    const child = bootChild(COMPATIBLE_BOOT);
+    expect(child.status).toBe(0);
+    expect(
+      child.stdout
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "started",
+        wireVersion: RENDERER_WIRE_VERSION,
+      }),
+    );
+  });
+});
 
 // Every renderer start the daemon logged, by pid, in order.
 function rendererStarts(handle: IsolatedDaemonHandle): number[] {

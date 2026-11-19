@@ -36,6 +36,8 @@ import type { MemorySizes } from "./foundations/memory-limit.js";
 import {
   lineSplitter,
   rendererOverLines,
+  rendererWireVersionProblem,
+  RENDERER_WIRE_VERSION,
   type HostLine,
   type RendererBoot,
   type RendererLine,
@@ -389,7 +391,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       }),
     };
     phase = { kind: "starting", link, queued: [] };
-    write(channel, { kind: "boot", boot: own.boot() });
+    write(channel, {
+      kind: "boot",
+      wireVersion: RENDERER_WIRE_VERSION,
+      boot: own.boot(),
+    });
     // [LAW:no-ambient-temporal-coupling] The start heads the queue: it heads
     // the host's mailbox (src/daemon/renderer-host.ts), so every input after
     // this is queued behind the state it changes.
@@ -424,6 +430,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   };
 
   const heard = (link: Link, start: Promise<boolean>, text: string): void => {
+    if (link.refusal !== null) return;
     let line: RendererLine;
     try {
       line = JSON.parse(text) as RendererLine;
@@ -434,24 +441,40 @@ export function processRenderer(own: ProcessOwner): RendererLink {
     }
     switch (line.kind) {
       case "started":
-        started(link, start);
+        started(link, start, line.wireVersion);
         return;
-      // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log;
-      // the stack is the log's alone.
       case "refused":
-        link.refusal = line.failure.message;
-        log(
-          "error",
-          `renderer ${name}[${link.generation}] refused its boot: ${line.failure.detail}`,
-        );
+        refusedBoot(link, line.failure.message, line.failure.detail);
         return;
       default:
         link.lines.heard(line);
     }
   };
 
-  const started = (link: Link, start: Promise<boolean>): void => {
+  // [LAW:no-silent-failure] Its end says why, on the ⚠ as in the log.
+  // The stack is the log's alone, and the first refusal owns the reason.
+  const refusedBoot = (link: Link, reason: string, detail = reason): void => {
+    link.refusal = reason;
+    log(
+      "error",
+      `renderer ${name}[${link.generation}] refused its boot: ${detail}`,
+    );
+  };
+
+  const started = (
+    link: Link,
+    start: Promise<boolean>,
+    version: unknown,
+  ): void => {
     if (phase.kind !== "starting" || phase.link !== link) return;
+    // [LAW:parse-dont-validate] The wire's attestation admits this link.
+    // Queued input and pings wait for that agreement.
+    const mismatch = rendererWireVersionProblem("renderer", version);
+    if (mismatch !== null) {
+      refusedBoot(link, mismatch);
+      link.kill.abort(new Error(mismatch));
+      return;
+    }
     const { queued } = phase;
     phase = { kind: "live", link };
     // [LAW:nothing-unseen] The start, with what was refused while none ran.

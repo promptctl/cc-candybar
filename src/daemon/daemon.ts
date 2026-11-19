@@ -329,7 +329,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       const key = inputs.linkKey();
       return {
         stored: stores.current(),
-        digest: bundle.digest,
         host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes,
         linkKey:
