@@ -28689,6 +28689,13 @@ function repoAnswerFields(sessionId2, dir, answer2) {
   };
 }
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
+function runLinkFields({
+  session,
+  action: action2,
+  declaration
+}, evaluated2) {
+  return { sessionId: session, action: action2, declaration, evaluated: evaluated2 };
+}
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
 function sayWrite(key, value) {
@@ -28848,6 +28855,7 @@ function admitClick(verb, value, signer) {
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
   const global2 = [];
+  const runEvidence = [];
   let scoped;
   for (const step4 of batchAdjacentWrites(raw)) {
     const name = step4.verb;
@@ -28890,15 +28898,32 @@ function admitClick(verb, value, signer) {
       const args = separator === -1 ? [] : decodeWire(
         () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
       );
-      scoped.steps.push(
-        name === VERB_REPO_CONFIG ? admitRepoAnswer(scoped.id, args, signer) : { kind: "session", verb: name, args }
-      );
+      switch (name) {
+        case VERB_REPO_CONFIG:
+          scoped.steps.push(admitRepoAnswer(scoped.id, args, signer));
+          break;
+        case VERB_RUN: {
+          const [action2 = "", evaluated2 = "", mac = ""] = args;
+          const capture4 = runEvidence.length;
+          runEvidence.push({ session: scoped.id, action: action2, evaluated: evaluated2, mac });
+          scoped.steps.push({
+            kind: "run",
+            verb: name,
+            action: action2,
+            capture: capture4
+          });
+          break;
+        }
+        default:
+          scoped.steps.push({ kind: "session", verb: name, args });
+      }
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
-  return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+  const click2 = scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+  return { click: click2, runEvidence };
 }
 function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
   const answer2 = REPO_ANSWERS.find((known) => known === value);
@@ -30022,24 +30047,24 @@ function spawn(cmd, args = [], opts = {}) {
       child.emit("error", enoent(cmd));
       return;
     }
-    const run3 = program(args, opts.cwd);
-    if (run3 === RESIDENT) return;
-    if (run3.stdout) child.stdout.chunk(run3.stdout);
-    if (run3.stderr) child.stderr.chunk(run3.stderr);
-    child.exitCode = run3.code;
+    const run2 = program(args, opts.cwd);
+    if (run2 === RESIDENT) return;
+    if (run2.stdout) child.stdout.chunk(run2.stdout);
+    if (run2.stderr) child.stderr.chunk(run2.stderr);
+    child.exitCode = run2.code;
     child.stdout.emit("end");
     child.stderr.emit("end");
-    child.emit("exit", run3.code, null);
-    child.emit("close", run3.code, null);
+    child.emit("exit", run2.code, null);
+    child.emit("close", run2.code, null);
   }, 0);
   return child;
 }
 function spawnSync(cmd, args = [], opts = {}) {
   const program = programs.get(cmd.split("/").pop());
   if (program === void 0) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [], error: enoent(cmd) };
-  const run3 = program(args, opts.cwd);
-  if (run3 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
-  return { pid: nextPid++, status: run3.code, signal: null, stdout: run3.stdout, stderr: run3.stderr ?? "", output: [null, run3.stdout, run3.stderr ?? ""] };
+  const run2 = program(args, opts.cwd);
+  if (run2 === RESIDENT) throw new Error(`${cmd} runs as long as the page does; a sync run of it would never return`);
+  return { pid: nextPid++, status: run2.code, signal: null, stdout: run2.stdout, stderr: run2.stderr ?? "", output: [null, run2.stdout, run2.stderr ?? ""] };
 }
 
 // src/proc/spawner.ts
@@ -30108,16 +30133,51 @@ init_globals();
 
 // src/render/drawn-link.ts
 init_globals();
-function hrefOfDrawnLink(link) {
-  if (typeof link === "string") return link;
-  if (link.kind === "href") return link.url;
-  if (link.kind === "repo-answer") return repoAnswerUrl(link, "");
-  return effectsUrl([link.effect]);
+function actionTarget(effects, description) {
+  return {
+    kind: "action",
+    effects,
+    ...description === void 0 ? {} : { description }
+  };
 }
-function repoAnswerUrl({ session, dir, answer: answer2 }, proof) {
-  return effectsUrl([
-    { verb: VERB_REPO_CONFIG, args: [session, dir, answer2, proof] }
-  ]);
+function hrefOfDrawnLink(link) {
+  return drawnHref(link, () => "");
+}
+function publishedHref(link, proof) {
+  return drawnHref(link, proof);
+}
+function drawnHref(link, proof) {
+  if (typeof link === "string") return link;
+  switch (link.kind) {
+    case "href":
+      return link.url;
+    case "repo-answer": {
+      const { session, dir, answer: answer2 } = link;
+      return effectsUrl([
+        {
+          verb: VERB_REPO_CONFIG,
+          args: [
+            session,
+            dir,
+            answer2,
+            proof(repoAnswerFields(session, dir, answer2))
+          ]
+        }
+      ]);
+    }
+    case "action":
+      return effectsUrl(
+        link.effects.map((effect) => emitted(effect, proof)),
+        link.description
+      );
+  }
+}
+function emitted(effect, proof) {
+  if ("verb" in effect) return effect;
+  const { session, action: action2 } = effect;
+  const evaluated2 = JSON.stringify(effect.evaluated);
+  const mac = proof(runLinkFields(effect, evaluated2));
+  return { verb: VERB_RUN, args: [session, action2, evaluated2, mac] };
 }
 
 // src/click/link-signer.ts
@@ -30221,7 +30281,7 @@ function linkSignerOver(key) {
 function linksOf({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
-    for (const { link, text: text4 } of runs.filter((run3) => run3.text !== "")) {
+    for (const { link, text: text4 } of runs.filter((run2) => run2.text !== "")) {
       const url = link === void 0 ? void 0 : hrefOfDrawnLink(link);
       const last2 = stretches.at(-1);
       if (last2 !== void 0 && last2.url === url) last2.text += text4;
@@ -30504,41 +30564,41 @@ var Runs = class {
   // Start one run; resolves with how it ended. Every source it refreshes
   // reads pending from now until the program has exited, and then is read
   // fresh.
-  start(run3) {
+  start(run2) {
     if (this.closed) throw new Error("run owner used after close");
-    const environment = this.deps.environmentOf(run3.session);
+    const environment = this.deps.environmentOf(run2.session);
     if (environment.kind === "failed") {
       this.refused++;
       const reason = `not run: ${environment.reason}`;
       return Promise.resolve({
         outcome: { kind: "failed", reason },
-        said: `program=${valueOf(run3.program)} ended=refused \u2014 ${reason}`
+        said: `program=${valueOf(run2.program)} ended=refused \u2014 ${reason}`
       });
     }
-    const resumes = run3.refreshes.map(
-      (r) => this.deps.supersede(r.folder, run3.session)
+    const resumes = run2.refreshes.map(
+      (r) => this.deps.supersede(r.folder, run2.session)
     );
     const abort = new AbortController();
     this.inFlight.add(abort);
     this.started++;
-    const { program, args } = run3;
+    const { program, args } = run2;
     const startedAt = this.deps.clock.monotonic();
     return this.deps.launch({
       // [LAW:types-are-the-program] A relative program path is the
       // declaring file's, as the directory it runs in is; a bare name is
       // looked up on PATH.
-      bin: program.includes("/") ? import_node_path4.default.resolve(run3.cwd, program) : program,
+      bin: program.includes("/") ? import_node_path4.default.resolve(run2.cwd, program) : program,
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
       environment: environment.value,
-      envOverlay: run3.env,
-      cwd: run3.cwd,
+      envOverlay: run2.env,
+      cwd: run2.cwd,
       timeoutMs: this.timeoutMs,
       signal: abort.signal,
       category: "click.run"
     }).then(
-      (result) => this.ended(run3, result, elapsedMs(this.deps.clock, startedAt))
+      (result) => this.ended(run2, result, elapsedMs(this.deps.clock, startedAt))
     ).finally(() => {
       this.inFlight.delete(abort);
       for (const resume of resumes) resume();
@@ -30561,9 +30621,9 @@ var Runs = class {
   }
   // [LAW:single-enforcer] How the run ended, said on its act's line
   // (src/daemon/acts.ts), the one line an act's outcome has.
-  ended(run3, result, took) {
+  ended(run2, result, took) {
     const ended = outcomeOf(result);
-    const said2 = `program=${valueOf(run3.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run3.refreshes.map((r) => r.name).join(",") || "-"}`;
+    const said2 = `program=${valueOf(run2.program)} ended=${ended} exit=${exitOf(result)} took=${took} refreshed=${run2.refreshes.map((r) => r.name).join(",") || "-"}`;
     if (ended === "timeout") this.timedOut++;
     if (result.ok) return { outcome: { kind: "ok" }, said: said2 };
     if (ended === "aborted")
@@ -38753,11 +38813,11 @@ function drawsNothing(options) {
   return cellCount(options.maxWidth) < 1;
 }
 var active;
-function runIn(phase, run3) {
+function runIn(phase, run2) {
   const outer = active;
   active = phase;
   try {
-    return run3();
+    return run2();
   } finally {
     active = outer;
   }
@@ -41392,17 +41452,17 @@ var Recolored = class {
         runs.push({ text: glyph, cells: cellLen(glyph), colors, attributes: now2.attributes, drawn: writes });
       }
     }
-    if (runs.every((run3) => writesAlike(run3.drawn, wire) && sameAttributes(run3.attributes, attributes))) {
+    if (runs.every((run2) => writesAlike(run2.drawn, wire) && sameAttributes(run2.attributes, attributes))) {
       yield segment;
       return;
     }
     let offset = 0;
-    for (const run3 of runs) {
+    for (const run2 of runs) {
       const placed2 = base.shiftedBy(offset);
-      const shifted = sameAttributes(run3.attributes, attributes) ? placed2 : placed2.withAttributes(cellAttributes(run3.attributes));
-      const style = writesAlike(run3.drawn, wire) ? shifted : shifted.add(Style.fromColor(run3.drawn.color, run3.drawn.bgcolor));
-      yield new Segment(run3.text, style);
-      offset += run3.cells;
+      const shifted = sameAttributes(run2.attributes, attributes) ? placed2 : placed2.withAttributes(cellAttributes(run2.attributes));
+      const style = writesAlike(run2.drawn, wire) ? shifted : shifted.add(Style.fromColor(run2.drawn.color, run2.drawn.bgcolor));
+      yield new Segment(run2.text, style);
+      offset += run2.cells;
     }
   }
   /**
@@ -47239,18 +47299,27 @@ var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
 init_globals();
 var PROOF = /* @__PURE__ */ Symbol("Candybar link target");
 var MARKER = "candybar-span:";
+function capture2(effect) {
+  if ("verb" in effect)
+    return Object.freeze({ ...effect, args: Object.freeze([...effect.args]) });
+  const { run: run2, env: env2 } = effect.evaluated;
+  return Object.freeze({
+    ...effect,
+    evaluated: Object.freeze({
+      run: Object.freeze([...run2]),
+      env: Object.freeze({ ...env2 })
+    })
+  });
+}
 var LinkProof = class {
   marker;
   target;
   constructor(target) {
     this.target = target.kind === "action" ? Object.freeze({
-      kind: "action",
-      effect: Object.freeze({
-        verb: target.effect.verb,
-        args: Object.freeze([...target.effect.args])
-      })
+      ...target,
+      effects: Object.freeze(target.effects.map(capture2))
     }) : Object.freeze({ ...target });
-    this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
+    this.marker = MARKER + encodeURIComponent(JSON.stringify(this.target));
   }
 };
 function styleWithLink(style, link) {
@@ -47369,7 +47438,7 @@ function composeBar(frame2) {
   return ansiOf(frame2) + "\n";
 }
 function plainOf2(runs) {
-  return runs.map((run3) => run3.text).join("");
+  return runs.map((run2) => run2.text).join("");
 }
 
 // src/daemon/foundations/render-answers.ts
@@ -49055,16 +49124,16 @@ var SourceRuns = class {
     const source = (kind) => new KeyedSource({
       name: `source.${kind}`,
       scope: "daemon",
-      keyOf: (run3) => run3.digest,
+      keyOf: (run2) => run2.digest,
       // [LAW:nothing-unseen] Its declaration's digest beside its own, so
       // the entry is found from the session's subscriptions that name it.
-      fields: ({ digest: digest2, run: run3 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run3.digest)} where=${valueOf(whereOf(run3.identity.read))} sharedBy=${holders}`,
+      fields: ({ digest: digest2, run: run2 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run2.digest)} where=${valueOf(whereOf(run2.identity.read))} sharedBy=${holders}`,
       // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
       // readers through this one function; text/regex/json are three
       // parsers through it.
-      read: async (run3, signal) => {
-        const reader = readerOf(this.files, deps.launcher, run3, signal);
-        return parsed(await reader.read(), run3.run.parser, reader.where);
+      read: async (run2, signal) => {
+        const reader = readerOf(this.files, deps.launcher, run2, signal);
+        return parsed(await reader.read(), run2.run.parser, reader.where);
       },
       every: ({
         run: {
@@ -49106,12 +49175,12 @@ var SourceRuns = class {
   // hold is refused the same way: the host's own is never a session's.
   declare(holds2, judged, environment) {
     const { digest: digest2 } = judged;
-    const run3 = sessionRunOf(judged, environment);
-    if (run3.kind === "failed") {
-      const lane2 = settledLane(failed(run3.reason, "read"));
-      return { digest: digest2, current: () => lane2.current(), fault: () => run3.reason };
+    const run2 = sessionRunOf(judged, environment);
+    if (run2.kind === "failed") {
+      const lane2 = settledLane(failed(run2.reason, "read"));
+      return { digest: digest2, current: () => lane2.current(), fault: () => run2.reason };
     }
-    const held = run3.value;
+    const held = run2.value;
     const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
     return {
       digest: digest2,
@@ -49144,10 +49213,10 @@ function declareRuns(sourceRuns, holds2, runs, environment, take) {
 function sessionRunOf(judged, environment) {
   if (judged.kind === "refused")
     return { kind: "failed", reason: `refused: ${judged.reason}` };
-  const { run: run3 } = judged;
-  const { read: read2 } = run3.identity;
+  const { run: run2 } = judged;
+  const { read: read2 } = run2.identity;
   if (read2.kind === "file")
-    return { kind: "ok", value: { digest: run3.digest, run: run3, env: {} } };
+    return { kind: "ok", value: { digest: run2.digest, run: run2, env: {} } };
   if (environment.kind === "failed")
     return { kind: "failed", reason: `not run: ${environment.reason}` };
   const session = environment.value;
@@ -49159,7 +49228,7 @@ function sessionRunOf(judged, environment) {
   );
   return {
     kind: "ok",
-    value: { digest: digestOf({ run: run3.digest, env: env2 }), run: run3, env: env2 }
+    value: { digest: digestOf({ run: run2.digest, env: env2 }), run: run2, env: env2 }
   };
 }
 
@@ -49417,7 +49486,7 @@ var msOf = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts, inspectDraw) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
   const req = located(arrived2, locate);
   const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
@@ -49473,8 +49542,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
       unlessClosing({
         kind: "request",
         id: id2,
-        context: req,
-        ...inspectDraw === true ? { inspect: true } : {}
+        context: req
       })
     );
   } finally {
@@ -49536,133 +49604,22 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
-    ...presented.inspection === void 0 ? {} : { inspection: presented.inspection },
     settled: (took) => done(presented, took ? null : "the client did not take the answer")
   };
 }
 
-// src/utils/git-root.ts
-init_globals();
-var import_node_path10 = __toESM(require_path_browserify(), 1);
-function holdsGit(dir) {
-  return fs_default.existsSync(import_node_path10.default.join(dir, ".git"));
-}
-function gitRootOf(start) {
-  let dir = import_node_path10.default.resolve(start);
-  for (; ; ) {
-    if (holdsGit(dir)) return dir;
-    const parent = import_node_path10.default.dirname(dir);
-    if (parent === dir) return void 0;
-    dir = parent;
-  }
-}
-function checkoutOf(cwd2) {
-  const root = gitRootOf(cwd2);
-  return root === void 0 ? { root: import_node_path10.default.resolve(cwd2), git: false } : { root, git: true };
-}
-function probe(read2) {
-  try {
-    return ok(read2());
-  } catch (e) {
-    return e.code === "ENOENT" ? ABSENT : failed(e.message, "read");
-  }
-}
-var realDir = (p2) => probe(() => fs_default.realpathSync.native(p2));
-var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
-function gitDirNamed(root) {
-  const text4 = probe(() => fs_default.readFileSync(import_node_path10.default.join(root, ".git"), "utf-8"));
-  if (text4.kind !== "ok") return text4;
-  const named2 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-  return named2 === void 0 ? failed(`${import_node_path10.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path10.default.resolve(root, named2));
-}
-function sharedExcludeOf(root) {
-  const dotGit = import_node_path10.default.join(root, ".git");
-  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
-  if (isDir.kind !== "ok") return isDir;
-  if (isDir.value) return ok(import_node_path10.default.join(dotGit, "info", "exclude"));
-  const gitDir = gitDirNamed(root);
-  if (gitDir.kind !== "ok") return gitDir;
-  const common = commonDirOf(gitDir.value);
-  if (common.kind === "failed") return common;
-  const shared = common.kind === "ok" ? common.value : gitDir.value;
-  return ok(import_node_path10.default.join(shared, "info", "exclude"));
-}
-function commonDirOf(gitDir) {
-  const text4 = probe(
-    () => fs_default.readFileSync(import_node_path10.default.join(gitDir, "commondir"), "utf-8")
-  );
-  if (text4.kind !== "ok") return text4;
-  const common = text4.value.trim();
-  return common === "" ? failed(`${import_node_path10.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path10.default.resolve(gitDir, common));
-}
-var UNLINKED = { kind: "unlinked" };
-var unproven = (reason) => ({
-  kind: "unproven",
-  reason
-});
-function worktreeLink(dir) {
-  const root = gitRootOf(dir);
-  if (root === void 0) return UNLINKED;
-  const dotGit = import_node_path10.default.join(root, ".git");
-  const followed = probe(() => fs_default.statSync(dotGit));
-  if (followed.kind === "ok" && followed.value.isDirectory()) return UNLINKED;
-  const entry = probe(() => fs_default.lstatSync(dotGit));
-  if (entry.kind !== "ok") return unproven(why(dotGit, entry));
-  if (!entry.value.isFile()) return unproven(`${dotGit} is not a file`);
-  const named2 = gitDirNamed(root);
-  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
-  const gitDir = realDir(named2.value);
-  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
-  const common = commonDirOf(gitDir.value);
-  if (common.kind === "absent") return UNLINKED;
-  if (common.kind === "failed") return unproven(common.reason);
-  const realCommon = realDir(common.value);
-  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
-  if (import_node_path10.default.dirname(gitDir.value) !== import_node_path10.default.join(realCommon.value, "worktrees")) {
-    return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
-  }
-  const backFile = import_node_path10.default.join(gitDir.value, "gitdir");
-  const back2 = probe(() => fs_default.readFileSync(backFile, "utf-8"));
-  if (back2.kind !== "ok") return unproven(why(backFile, back2));
-  const pointer = import_node_path10.default.resolve(gitDir.value, back2.value.trim());
-  const pointerDir = realDir(import_node_path10.default.dirname(pointer));
-  if (import_node_path10.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
-    return unproven(
-      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
-    );
-  }
-  const main = import_node_path10.default.basename(realCommon.value) === ".git" ? import_node_path10.default.dirname(realCommon.value) : realCommon.value;
-  return { kind: "linked", main: import_node_path10.default.join(main, import_node_path10.default.relative(root, dir)) };
-}
-function checkoutLocation(dir) {
-  const real = realDir(dir);
-  const at = real.kind === "ok" ? real.value : import_node_path10.default.resolve(dir);
-  const root = gitRootOf(at);
-  if (root === void 0)
-    return { main: "", worktree: "", subpath: "", noRepo: true };
-  const sub2 = import_node_path10.default.relative(root, at);
-  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path10.default.sep).join("/")}`;
-  const link = worktreeLink(at);
-  return link.kind === "linked" ? {
-    main: import_node_path10.default.resolve(link.main, import_node_path10.default.relative(at, root)),
-    worktree: import_node_path10.default.basename(root),
-    subpath,
-    noRepo: false
-  } : { main: root, worktree: "", subpath, noRepo: false };
-}
-
 // src/daemon/render-checkpoint.ts
 init_globals();
-var import_node_path12 = __toESM(require_path_browserify(), 1);
+var import_node_path11 = __toESM(require_path_browserify(), 1);
 
 // src/utils/user-path.ts
 init_globals();
-var import_node_path11 = __toESM(require_path_browserify(), 1);
+var import_node_path10 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
   return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
-  return import_node_path11.default.resolve(base, expandHome(p2, home));
+  return import_node_path10.default.resolve(base, expandHome(p2, home));
 }
 function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
@@ -49928,13 +49885,13 @@ function checkRenderRequest(req, stats, log, home) {
   if (!sessionId2.ok) {
     wireProblems.push(`field 'session_id' ${sessionId2.problem}`);
   }
-  if (typeof req.cwd !== "string" || !(0, import_node_path12.isAbsolute)(req.cwd)) {
+  if (typeof req.cwd !== "string" || !(0, import_node_path11.isAbsolute)(req.cwd)) {
     wireProblems.push(
       `request 'cwd' is not an absolute path: ${JSON.stringify(req.cwd)}`
     );
   }
   const projectDir = req.hookData?.workspace?.project_dir;
-  if (typeof projectDir === "string" && !(0, import_node_path12.isAbsolute)(projectDir)) {
+  if (typeof projectDir === "string" && !(0, import_node_path11.isAbsolute)(projectDir)) {
     wireProblems.push(
       `field 'workspace.project_dir' is not an absolute path: ${JSON.stringify(projectDir)}`
     );
@@ -50022,7 +49979,7 @@ function parseClick(url, delivery, links) {
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value, links),
+      ...admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery
     };
@@ -50174,19 +50131,19 @@ var Observations = class {
       this.recent.set(key, recent);
       return ok(recent);
     }
-    const { observed, originalPath } = await this.pending.run(key, async () => {
-      const observed2 = await read2();
-      if (observed2.kind === "ok" && observed2.value.stamp === stamp2 && observed2.value.bytes <= FOLD_WINDOW_BYTES) {
-        this.recent.set(key, observed2.value.value);
+    const { observed: observed2, originalPath } = await this.pending.run(key, async () => {
+      const observed3 = await read2();
+      if (observed3.kind === "ok" && observed3.value.stamp === stamp2 && observed3.value.bytes <= FOLD_WINDOW_BYTES) {
+        this.recent.set(key, observed3.value.value);
         if (this.recent.size > TRANSCRIPT_FS_CONCURRENCY) {
           const oldest = this.recent.keys().next();
           if (!oldest.done) this.recent.delete(oldest.value);
         }
       }
-      return { observed: observed2, originalPath: path31 };
+      return { observed: observed3, originalPath: path31 };
     });
     return observedValue(
-      originalPath === path31 || observed.kind === "ok" && observed.value.stamp === stamp2 ? observed : await read2()
+      originalPath === path31 || observed2.kind === "ok" && observed2.value.stamp === stamp2 ? observed2 : await read2()
     );
   }
 };
@@ -50625,7 +50582,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
           clock,
           parts.closing,
           parts.log,
-          checkoutLocation,
+          parts.checkoutLocation,
           checked.req,
           // [LAW:one-source-of-truth] The book's, the newest request's, so a
           // request that arrived behind a newer one runs nothing in its older
@@ -50732,7 +50689,7 @@ function sourceSnapshots(parts, cache2) {
     }
   };
 }
-async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
+async function clickEvent(parts, accepted, timedOut, clientLeft, run2) {
   const { clock } = parts;
   const t0 = clock.monotonic();
   const facts = [
@@ -50742,7 +50699,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run3(facts, click2).catch(failureOf);
+  const outcome = await run2(facts, click2).catch(failureOf);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -50810,14 +50767,14 @@ async function ranClick(parts, read2, facts, click2) {
       noteFacts(facts, { link: read2.link });
       return handleClick(
         parts,
-        read2.click,
+        read2,
         { via: "link", delivery: read2.delivery },
         facts,
         click2
       );
   }
 }
-async function handleClick(parts, admitted, arrival, facts, click2) {
+async function handleClick(parts, { click: admitted, runEvidence }, arrival, facts, click2) {
   const { verb } = admitted;
   const session = admitted.scope === "session" ? admitted.session : null;
   noteFacts(facts, { verb, sid: session ?? "-" });
@@ -50826,6 +50783,7 @@ async function handleClick(parts, admitted, arrival, facts, click2) {
     session,
     () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
+      runEvidence,
       event: {
         kind: "click",
         click: admitted,
@@ -50953,7 +50911,7 @@ init_globals();
 
 // src/daemon/cache/git.ts
 init_globals();
-var import_node_path13 = __toESM(require_path_browserify(), 1);
+var import_node_path12 = __toESM(require_path_browserify(), 1);
 
 // src/segments/git.ts
 init_globals();
@@ -51307,8 +51265,8 @@ function holdKey(root) {
 }
 function watchSpec(gitDir, commonDir) {
   return specOf({
-    dirs: [{ path: import_node_path13.default.join(commonDir, "refs", "heads"), recursive: true }],
-    polled: [import_node_path13.default.join(gitDir, "HEAD"), import_node_path13.default.join(gitDir, "index")]
+    dirs: [{ path: import_node_path12.default.join(commonDir, "refs", "heads"), recursive: true }],
+    polled: [import_node_path12.default.join(gitDir, "HEAD"), import_node_path12.default.join(gitDir, "index")]
   });
 }
 function branchOf(outcome) {
@@ -51748,7 +51706,7 @@ var GitDataProvider = class {
 
 // src/daemon/cache/session-usage-store.ts
 init_globals();
-var import_node_path16 = __toESM(require_path_browserify(), 1);
+var import_node_path15 = __toESM(require_path_browserify(), 1);
 
 // src/segments/pricing.ts
 init_globals();
@@ -51776,18 +51734,18 @@ init_url();
 
 // src/utils/cache.ts
 init_globals();
-var import_node_path14 = __toESM(require_path_browserify(), 1);
+var import_node_path13 = __toESM(require_path_browserify(), 1);
 var CacheManager = class {
   // [LAW:one-source-of-truth] Every method takes the cache's root directory
   // (the host's `cacheDir`), so the layout under it is derived here alone.
   static usageDir(root) {
-    return import_node_path14.default.join(root, "usage");
+    return import_node_path13.default.join(root, "usage");
   }
   static locksDir(root) {
-    return import_node_path14.default.join(root, "locks");
+    return import_node_path13.default.join(root, "locks");
   }
   static isLocked(root, name) {
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     if (!fs_default.existsSync(lockFile)) {
       return false;
     }
@@ -51820,7 +51778,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
     await this.ensureCacheDirectories(root);
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     const startTime = clock.monotonic();
     const lockContent = String(process.pid);
     while (clock.monotonic() - startTime < timeout) {
@@ -51842,7 +51800,7 @@ var CacheManager = class {
     return false;
   }
   static async releaseLock(root, name) {
-    const lockFile = import_node_path14.default.join(this.locksDir(root), name);
+    const lockFile = import_node_path13.default.join(this.locksDir(root), name);
     try {
       await fs_default.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
@@ -51871,7 +51829,7 @@ var CacheManager = class {
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
     await this.ensureCacheDirectories(root);
-    const cachePath = import_node_path14.default.join(this.usageDir(root), `${cacheType}.json`);
+    const cachePath = import_node_path13.default.join(this.usageDir(root), `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
     for (let attempt4 = 0; attempt4 < MAX_RETRIES; attempt4++) {
       const isCurrentlyLocked = this.isLocked(root, lockName);
@@ -51926,7 +51884,7 @@ var CacheManager = class {
     }
     try {
       await this.ensureCacheDirectories(root);
-      const cachePath = import_node_path14.default.join(this.usageDir(root), `${cacheType}.json`);
+      const cachePath = import_node_path13.default.join(this.usageDir(root), `${cacheType}.json`);
       const cacheTimestamp = latestMtime || clock.now();
       const cacheEntry = {
         data,
@@ -52325,7 +52283,7 @@ var PricingService = class {
 
 // src/utils/claude.ts
 init_globals();
-var import_node_path15 = __toESM(require_path_browserify(), 1);
+var import_node_path14 = __toESM(require_path_browserify(), 1);
 
 // src/utils/transcript-activity.ts
 init_globals();
@@ -52399,19 +52357,19 @@ function entryActivity(parsed2, userEntry) {
 // src/utils/claude.ts
 function getClaudePaths(detected, homeDir) {
   if (detected !== void 0) return [detected];
-  return [(0, import_node_path15.join)(homeDir, ".config", "claude"), (0, import_node_path15.join)(homeDir, ".claude")].filter(
+  return [(0, import_node_path14.join)(homeDir, ".config", "claude"), (0, import_node_path14.join)(homeDir, ".claude")].filter(
     (dir) => existsSync(dir)
   );
 }
 async function findProjectPaths(claudePaths) {
   const projectPaths = [];
   for (const claudePath of claudePaths) {
-    const projectsDir = (0, import_node_path15.join)(claudePath, "projects");
+    const projectsDir = (0, import_node_path14.join)(claudePath, "projects");
     const entries = await unlessGone(
       readdir2(projectsDir, { withFileTypes: true })
     );
     for (const entry of entries ?? []) {
-      if (entry.isDirectory()) projectPaths.push((0, import_node_path15.join)(projectsDir, entry.name));
+      if (entry.isDirectory()) projectPaths.push((0, import_node_path14.join)(projectsDir, entry.name));
     }
   }
   return projectPaths;
@@ -52427,14 +52385,14 @@ async function unlessGone(read2) {
 async function findAgentTranscripts(sessionId2, projectPath, verified) {
   const paths2 = [];
   let longLines = [];
-  const subagentsDir = (0, import_node_path15.join)(projectPath, sessionId2, "subagents");
+  const subagentsDir = (0, import_node_path14.join)(projectPath, sessionId2, "subagents");
   try {
     const files = await readdir2(subagentsDir);
     const agentFileNames = files.filter(
       (f) => f.startsWith("agent-") && f.endsWith(".jsonl")
     );
     for (const fileName2 of agentFileNames) {
-      const filePath2 = (0, import_node_path15.join)(subagentsDir, fileName2);
+      const filePath2 = (0, import_node_path14.join)(subagentsDir, fileName2);
       if (verified?.has(filePath2)) {
         paths2.push(filePath2);
         continue;
@@ -53530,9 +53488,9 @@ var SessionUsageStore = class {
       ring.sort((a, b) => a.atMs - b.atMs);
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
       if (ring.at(-1) === cur) slot.sampledAt = stamp2;
-      const observed = ok({ samples: [...ring] });
-      answer(slot.speed, observed);
-      return observed;
+      const observed2 = ok({ samples: [...ring] });
+      answer(slot.speed, observed2);
+      return observed2;
     });
   }
   // The session's speed as its last refresh observed it, for a draw: a frame
@@ -53620,7 +53578,7 @@ var SessionUsageStore = class {
     const key = claudePaths.join("\0");
     const known = this.daySets.get(key);
     if (known !== void 0) return known;
-    const roots = claudePaths.map((dir) => (0, import_node_path16.join)(dir, "projects") + import_node_path16.sep);
+    const roots = claudePaths.map((dir) => (0, import_node_path15.join)(dir, "projects") + import_node_path15.sep);
     const set2 = {
       roots,
       sums: new Kept(
@@ -53641,7 +53599,7 @@ var SessionUsageStore = class {
   async refold(sessionId2, transcriptPath, prior) {
     const agents = await findAgentTranscripts(
       sessionId2,
-      (0, import_node_path16.dirname)(transcriptPath),
+      (0, import_node_path15.dirname)(transcriptPath),
       prior === void 0 ? void 0 : new Set(prior.files.keys())
     );
     for (const line of longLineLog(agents.longLines)) this.log("info", line);
@@ -53690,7 +53648,7 @@ var SessionUsageStore = class {
         const files = await unlessGone(readdir2(dir));
         for (const file of files ?? []) {
           if (!file.endsWith(".jsonl")) continue;
-          const filePath2 = (0, import_node_path16.join)(dir, file);
+          const filePath2 = (0, import_node_path15.join)(dir, file);
           const st = await unlessGone(stat2(filePath2, { bigint: true }));
           if (st === void 0 || Number(st.mtimeMs) < cutoff) continue;
           const id2 = parseSessionId(file.slice(0, -".jsonl".length));
@@ -53785,6 +53743,162 @@ var SessionUsageStore = class {
 // src/daemon/cache/git-service.ts
 init_globals();
 var import_node_path17 = __toESM(require_path_browserify(), 1);
+
+// src/utils/git-root.ts
+init_globals();
+var import_node_path16 = __toESM(require_path_browserify(), 1);
+
+// src/utils/regular-text.ts
+init_globals();
+function withRegularTextFile(path31, use) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const stat3 = () => fstatSync(fd, { bigint: true });
+    const observed2 = stat3();
+    if (!observed2.isFile()) throw new Error("not a file");
+    return use({ observed: observed2, stat: stat3, text: () => readFileSync(fd, "utf8") });
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+function readRegularTextSync(path31) {
+  return withRegularTextFile(path31, (file) => file.text());
+}
+
+// src/utils/git-root.ts
+function holdsGit(dir) {
+  return fs_default.existsSync(import_node_path16.default.join(dir, ".git"));
+}
+function ascend(start, entry) {
+  let dir = import_node_path16.default.resolve(start);
+  for (; ; ) {
+    const found2 = entry(dir);
+    if (found2 !== void 0) return { root: dir, entry: found2 };
+    const parent = import_node_path16.default.dirname(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+}
+function gitRootOf(start) {
+  return ascend(start, (dir) => holdsGit(dir) ? true : void 0)?.root;
+}
+function checkoutOf(cwd2, files = checkoutFiles) {
+  const root = checkoutAt(cwd2, files)?.root;
+  return root === void 0 ? { root: import_node_path16.default.resolve(cwd2), git: false } : { root, git: true };
+}
+function probe(read2) {
+  try {
+    const value = read2();
+    return value === void 0 ? ABSENT : ok(value);
+  } catch (e) {
+    return e.code === "ENOENT" ? ABSENT : failed(e.message, "read");
+  }
+}
+var checkoutFiles = {
+  stat: (file) => probe(() => fs_default.statSync(file, { throwIfNoEntry: false })),
+  lstat: (file) => probe(() => fs_default.lstatSync(file)),
+  realpath: (file) => probe(() => fs_default.realpathSync.native(file)),
+  text: (file) => probe(() => readRegularTextSync(file))
+};
+function checkoutAt(dir, files) {
+  return ascend(dir, (candidate) => {
+    const entry = files.stat(import_node_path16.default.join(candidate, ".git"));
+    return entry.kind === "ok" ? entry.value : void 0;
+  });
+}
+var why = (what, o) => o.kind === "absent" ? `${what} is not there` : o.reason;
+function gitDirNamed(root, files = checkoutFiles) {
+  const text4 = files.text(import_node_path16.default.join(root, ".git"));
+  if (text4.kind !== "ok") return text4;
+  const named2 = text4.value.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+  return named2 === void 0 ? failed(`${import_node_path16.default.join(root, ".git")} names no gitdir`, "parse") : ok(import_node_path16.default.resolve(root, named2));
+}
+function sharedExcludeOf(root) {
+  const dotGit = import_node_path16.default.join(root, ".git");
+  const isDir = probe(() => fs_default.statSync(dotGit).isDirectory());
+  if (isDir.kind !== "ok") return isDir;
+  if (isDir.value) return ok(import_node_path16.default.join(dotGit, "info", "exclude"));
+  const gitDir = gitDirNamed(root);
+  if (gitDir.kind !== "ok") return gitDir;
+  const common = commonDirOf(gitDir.value);
+  if (common.kind === "failed") return common;
+  const shared = common.kind === "ok" ? common.value : gitDir.value;
+  return ok(import_node_path16.default.join(shared, "info", "exclude"));
+}
+function commonDirOf(gitDir, files = checkoutFiles) {
+  const text4 = files.text(import_node_path16.default.join(gitDir, "commondir"));
+  if (text4.kind !== "ok") return text4;
+  const common = text4.value.trim();
+  return common === "" ? failed(`${import_node_path16.default.join(gitDir, "commondir")} is empty`, "parse") : ok(import_node_path16.default.resolve(gitDir, common));
+}
+var UNLINKED = { kind: "unlinked" };
+var unproven = (reason) => ({
+  kind: "unproven",
+  reason
+});
+function worktreeLink(dir, files = checkoutFiles) {
+  const found2 = checkoutAt(dir, files);
+  if (found2 === void 0) return UNLINKED;
+  const link = worktreeLinkAt(found2, files);
+  return link.kind === "linked" ? {
+    kind: "linked",
+    main: import_node_path16.default.join(link.main, import_node_path16.default.relative(found2.root, dir))
+  } : link;
+}
+function worktreeLinkAt({ root, entry }, files) {
+  const dotGit = import_node_path16.default.join(root, ".git");
+  if (entry.isDirectory()) return UNLINKED;
+  const direct = files.lstat(dotGit);
+  if (direct.kind !== "ok") return unproven(why(dotGit, direct));
+  if (!direct.value.isFile()) return unproven(`${dotGit} is not a file`);
+  const named2 = gitDirNamed(root, files);
+  if (named2.kind !== "ok") return unproven(why(dotGit, named2));
+  const gitDir = files.realpath(named2.value);
+  if (gitDir.kind !== "ok") return unproven(why(named2.value, gitDir));
+  const common = commonDirOf(gitDir.value, files);
+  if (common.kind === "absent") return UNLINKED;
+  if (common.kind === "failed") return unproven(common.reason);
+  const realCommon = files.realpath(common.value);
+  if (realCommon.kind !== "ok") return unproven(why(common.value, realCommon));
+  if (import_node_path16.default.dirname(gitDir.value) !== import_node_path16.default.join(realCommon.value, "worktrees")) {
+    return unproven(`${gitDir.value} is not a worktree of ${realCommon.value}`);
+  }
+  const backFile = import_node_path16.default.join(gitDir.value, "gitdir");
+  const back2 = files.text(backFile);
+  if (back2.kind !== "ok") return unproven(why(backFile, back2));
+  const pointer = import_node_path16.default.resolve(gitDir.value, back2.value.trim());
+  const pointerDir = files.realpath(import_node_path16.default.dirname(pointer));
+  if (import_node_path16.default.basename(pointer) !== ".git" || pointerDir.kind !== "ok" || pointerDir.value !== root) {
+    return unproven(
+      `${gitDir.value} is the worktree at ${pointer}, not ${root}`
+    );
+  }
+  const main = import_node_path16.default.basename(realCommon.value) === ".git" ? import_node_path16.default.dirname(realCommon.value) : realCommon.value;
+  return { kind: "linked", main };
+}
+function checkoutLocation(dir, files = checkoutFiles) {
+  const real = files.realpath(dir);
+  const at = real.kind === "ok" ? real.value : import_node_path16.default.resolve(dir);
+  const found2 = checkoutAt(at, files);
+  if (found2 === void 0)
+    return { main: "", worktree: "", subpath: "", noRepo: true };
+  const { root } = found2;
+  const sub2 = import_node_path16.default.relative(root, at);
+  const subpath = sub2 === "" ? "" : `/${sub2.split(import_node_path16.default.sep).join("/")}`;
+  const link = worktreeLinkAt(found2, files);
+  return link.kind === "linked" ? {
+    main: link.main,
+    worktree: import_node_path16.default.basename(root),
+    subpath,
+    noRepo: false
+  } : { main: root, worktree: "", subpath, noRepo: false };
+}
+
+// src/daemon/cache/git-service.ts
 function derived2(from, project) {
   if (from.kind !== "ok") return from;
   const value = project(from.value);
@@ -54798,15 +54912,15 @@ var TmuxService = class {
   }
 };
 async function askSessionName(launcher, hint) {
-  const run3 = await runTmuxAsync(launcher, hint, "tmux", [
+  const run2 = await runTmuxAsync(launcher, hint, "tmux", [
     "display-message",
     "-p",
     "-t",
     hint.pane,
     "#S"
   ]);
-  if (run3.kind !== "ok") return failed(run3.reason, "read");
-  const name = run3.stdout.trim();
+  if (run2.kind !== "ok") return failed(run2.reason, "read");
+  const name = run2.stdout.trim();
   return name ? ok(name) : ABSENT;
 }
 
@@ -55409,27 +55523,6 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
-// src/utils/regular-text.ts
-init_globals();
-function withRegularTextFile(path31, use) {
-  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  try {
-    const stat3 = () => fstatSync(fd, { bigint: true });
-    const observed = stat3();
-    if (!observed.isFile()) throw new Error("not a file");
-    return use({ observed, stat: stat3, text: () => readFileSync(fd, "utf8") });
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (error) {
-      debug(`close ${path31}: ${String(error)}`);
-    }
-  }
-}
-function readRegularTextSync(path31) {
-  return withRegularTextFile(path31, (file) => file.text());
-}
-
 // src/claude-settings-read.ts
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
@@ -55976,8 +56069,8 @@ function decorEntryFor(palette, decor, address, drawnAt) {
   return lineAt(palette, decor, row, cell3, drawnAt)[cell3.index - cell3.lineStart];
 }
 function dealtAt(palette, decor, row, cell3, drawnAt) {
-  const { hues, run: run3, keystones } = decor.variation;
-  const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run3);
+  const { hues, run: run2, keystones } = decor.variation;
+  const turn = cell3 === void 0 ? 0 : Math.floor(cell3.index / run2);
   const stepped2 = hues[(rowStart(decor.variation, row) + turn) % hues.length];
   if (stepped2 === void 0) throw new Error("decorEntryFor: empty variation");
   const hue = keystones.some((at) => KEYSTONE_AT[at](row, cell3)) ? KEYSTONE_HUE : stepped2;
@@ -55987,10 +56080,10 @@ function dealtAt(palette, decor, row, cell3, drawnAt) {
   };
 }
 function lineAt(palette, decor, row, cell3, drawnAt) {
-  const { hues, run: run3, keystones, open: open2 } = decor.variation;
+  const { hues, run: run2, keystones, open: open2 } = decor.variation;
   const key = [
     hues.join(","),
-    run3,
+    run2,
     keystones.join(","),
     open2.join(","),
     decor.shade.tones.join(","),
@@ -56619,10 +56712,10 @@ function mapActionTemplates(a, f) {
   if ("preset" in a && a.preset === "delete")
     return { ...a, name: f(a.name, "name") };
   if ("run" in a) {
-    const run3 = a.run.map((item, i2) => f(item, `run.${i2}`));
+    const run2 = a.run.map((item, i2) => f(item, `run.${i2}`));
     return {
       ...a,
-      run: run3,
+      run: run2,
       env: Object.fromEntries(
         Object.entries(a.env).map(([name, value]) => [
           name,
@@ -59161,12 +59254,12 @@ function runArm(home) {
         );
     }
     const before = ctx.issues.length;
-    const run3 = raw.run;
-    if (!Array.isArray(run3) || run3.length === 0 || run3.some((item) => typeof item !== "string") || run3[0] === "") {
+    const run2 = raw.run;
+    if (!Array.isArray(run2) || run2.length === 0 || run2.some((item) => typeof item !== "string") || run2[0] === "") {
       issue2(
         ctx,
         `${path31}.run`,
-        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run3)}`
+        `run must list the program and its arguments, each a template string, the program first and not empty, got ${describeValue(run2)}`
       );
     }
     const env2 = raw.env ?? {};
@@ -59196,7 +59289,7 @@ function runArm(home) {
     }
     if (ctx.issues.length > before || !("dir" in home)) return null;
     return {
-      run: run3,
+      run: run2,
       env: env2,
       refreshes,
       cwd: home.dir
@@ -64791,9 +64884,9 @@ var STORAGE_FOLDER = "session";
 function sessionFileName(sessionId2) {
   return `${sessionId2}.json`;
 }
-function attempt2(run3) {
+function attempt2(run2) {
   try {
-    return { ok: true, value: run3() };
+    return { ok: true, value: run2() };
   } catch (err) {
     return { ok: false, reason: reasonOf(err) };
   }
@@ -66082,9 +66175,9 @@ function createPayloadProviders(opts) {
 init_globals();
 async function runTeardown(steps2, log) {
   const failed3 = [];
-  for (const [name, run3] of steps2) {
+  for (const [name, run2] of steps2) {
     try {
-      await run3();
+      await run2();
     } catch (e) {
       log("warn", `${name} failed: ${inspect(e)}`);
       failed3.push(name);
@@ -66133,7 +66226,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.234.0";
+var PACKAGE_VERSION = "1.234.1";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66506,9 +66599,9 @@ function chargeProbe(launcher, platform3) {
     })
   ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
 }
-function footprintCharge(run3) {
+function footprintCharge(run2) {
   return async (pids, rss) => {
-    const result = await run3([
+    const result = await run2([
       ...pids.flatMap((pid2) => ["-p", String(pid2)]),
       "--noCategories",
       "-f",
@@ -67009,14 +67102,14 @@ function failedStamp(prior, reason, daemon2) {
 init_globals();
 var import_node_path22 = __toESM(require_path_browserify(), 1);
 var MIN_SHELL_TTL_MS = 500;
-function judgeRun(run3) {
-  const parser = parserOf(run3.identity.parse);
-  const reason = typeof parser === "string" ? parser : refusalOf2(run3);
+function judgeRun(run2) {
+  const parser = parserOf(run2.identity.parse);
+  const reason = typeof parser === "string" ? parser : refusalOf2(run2);
   return reason === null ? {
     kind: "accepted",
-    digest: run3.digest,
-    run: { ...run3, parser }
-  } : { kind: "refused", digest: run3.digest, reason };
+    digest: run2.digest,
+    run: { ...run2, parser }
+  } : { kind: "refused", digest: run2.digest, reason };
 }
 function parserOf(parse3) {
   switch (parse3.kind) {
@@ -68111,9 +68204,9 @@ function priorLayout(raw) {
 }
 var RETRY_MS = 6e4;
 var RetiredTmuxStatus = class {
-  constructor(owner, run3, clock, log) {
+  constructor(owner, run2, clock, log) {
     this.owner = owner;
-    this.run = run3;
+    this.run = run2;
     this.clock = clock;
     this.log = log;
   }
@@ -68538,6 +68631,62 @@ var DeclaredBarPanes = class {
   }
 };
 
+// src/daemon/foundations/run-authorization.ts
+init_globals();
+function authorizeRun(signer, pending2, captures) {
+  const { declaration: _declaration, capture: capture4, ...request2 } = pending2;
+  const { action: action2, session } = request2;
+  const evidence = captures[capture4];
+  if (evidence === void 0 || evidence.session !== session || evidence.action !== action2) {
+    return { kind: "failed", reason: "the click did not capture this run" };
+  }
+  const { evaluated: evaluated2, mac } = evidence;
+  let verified;
+  try {
+    verified = signer.verify(runLinkFields(pending2, evaluated2), mac);
+  } catch (error) {
+    return { kind: "failed", reason: failureOf(error).message };
+  }
+  if (!verified)
+    return {
+      kind: "failed",
+      reason: "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn"
+    };
+  let drawn;
+  try {
+    drawn = JSON.parse(evaluated2);
+  } catch {
+    return {
+      kind: "failed",
+      reason: `run ${action2}: what the link carries is not JSON`
+    };
+  }
+  if (drawn === null || typeof drawn !== "object" || !("run" in drawn) || !("env" in drawn) || !Array.isArray(drawn.run) || drawn.env === null || typeof drawn.env !== "object" || Array.isArray(drawn.env)) {
+    return {
+      kind: "failed",
+      reason: `run ${action2}: malformed arguments or environment`
+    };
+  }
+  const argv2 = drawn.run;
+  const env2 = Object.entries(drawn.env);
+  const stringPair = (item) => typeof item[1] === "string";
+  if (!argv2.every((arg) => typeof arg === "string") || !env2.every(stringPair))
+    return {
+      kind: "failed",
+      reason: `run ${action2}: malformed arguments or environment`
+    };
+  const [program, ...args] = argv2;
+  if (program === void 0 || program === "")
+    return {
+      kind: "failed",
+      reason: `run ${action2}: the program evaluated to nothing`
+    };
+  return {
+    kind: "ok",
+    value: { ...request2, program, args, env: Object.fromEntries(env2) }
+  };
+}
+
 // src/daemon/foundations/frame-publication.ts
 init_globals();
 function publishingFrames(signer) {
@@ -68547,16 +68696,11 @@ function publishingFrames(signer) {
       ...frame2,
       rows: frame2.rows.map((row) => ({
         ...row,
-        runs: row.runs.map(({ link, ...run3 }) => {
-          if (link === void 0) return run3;
-          const href = typeof link !== "string" && link.kind === "repo-answer" ? repoAnswerUrl(
-            link,
-            signer.sign(
-              repoAnswerFields(link.session, link.dir, link.answer)
-            )
-          ) : hrefOfDrawnLink(link);
+        runs: row.runs.map(({ link, ...run2 }) => {
+          if (link === void 0) return run2;
+          const href = publishedHref(link, signer.sign);
           return {
-            ...run3,
+            ...run2,
             link: isBarLink(href) ? signer.signLink(href) : href
           };
         })
@@ -69164,7 +69308,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     },
     settled: Promise.resolve([])
   });
-  const inSlot = async (input, queuedMs) => {
+  const inSlot = async (input, queuedMs, captures = []) => {
     const session = sessionOf(input.event);
     let release3 = () => {
     };
@@ -69189,7 +69333,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
     };
-    const { settled: settled3, configFailure } = await landInSlot(input.event, output);
+    const { settled: settled3, configFailure } = await landInSlot(
+      input.event,
+      output,
+      captures
+    );
     return {
       turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled3.finally(
@@ -69197,7 +69345,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output) => {
+  const landInSlot = async (event, output, captures) => {
     recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
@@ -69248,6 +69396,16 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       } else if (effect.kind === "change" || effect.kind === "approve-repo") {
         const outcome = landed.kind === "ok" ? { kind: "ok" } : landed;
         owed.push((await settleInSlot(effect, outcome)).settled);
+      } else if (effect.kind === "run") {
+        const checked = world.authorizeRun(effect, captures);
+        if (checked.kind === "ok") acts.push(checked.value);
+        else
+          owed.push(
+            (await settleInSlot(effect, {
+              kind: "refused",
+              reason: `run: ${checked.reason}`
+            })).settled
+          );
       } else acts.push(effect);
     }
     let before = Promise.resolve();
@@ -69451,7 +69609,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         holds2(made.event.kind);
         return {
           event: made.event,
-          slotted: await inSlot(stamped(made), queuedMs)
+          slotted: await inSlot(
+            stamped(made),
+            queuedMs,
+            made.event.kind === "click" ? made.runEvidence : void 0
+          )
         };
       } finally {
         if (held !== null && --held.count === 0)
@@ -70156,7 +70318,7 @@ function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
 }
 function copyLink(sessionId2, by, key, position) {
-  return effectsUrl(
+  return actionTarget(
     [{ verb: VERB_COPY_DIAGNOSTIC, args: [sessionId2, by, key] }],
     `copy diagnostic ${position}`
   );
@@ -70214,7 +70376,7 @@ function viewerRows(list2, at, sessionId2, by, geometry) {
   const body = channelRows(shown, opts, []);
   const colors = colorsOf(shown.severity);
   const style = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const button = (text4, link) => cell(text4, link === null ? style : style.withLink(link));
+  const button = (text4, link) => cell(text4, link === null ? style : styleWithLink(style, link));
   const step4 = (glyph, to) => to === null ? button(" ", null) : button(
     glyph,
     viewerLink(
@@ -70269,7 +70431,8 @@ function handoffRows(handoff, list2, sessionId2, geometry) {
   const indicator = label2 === "" ? [] : [
     cell(
       label2,
-      new Style({ bgcolor: bg, color: fg }).withLink(
+      styleWithLink(
+        new Style({ bgcolor: bg, color: fg }),
         viewerLink(sessionId2, open2)
       )
     )
@@ -70277,7 +70440,7 @@ function handoffRows(handoff, list2, sessionId2, geometry) {
   return channelRows(handoff, viewerOptions(geometry), indicator);
 }
 function viewerLink(sessionId2, key, says) {
-  return effectsUrl(
+  return actionTarget(
     [{ verb: VERB_SET_STATE, args: [sessionId2, DIAGNOSTICS_VIEWING, key] }],
     says
   );
@@ -71333,12 +71496,12 @@ var SourceRegistry = class _SourceRegistry {
     { deep: false }
   );
   runSourcesNow = computed(
-    () => new Map([...this.runs].map(([name, run3]) => [name, run3.get()]))
+    () => new Map([...this.runs].map(([name, run2]) => [name, run2.get()]))
   );
   namedNow = computed(
     () => new Map(
       [...this.runSourcesNow.get()].flatMap(
-        ([name, run3]) => run3.kind === "ok" ? [[name, run3.value]] : []
+        ([name, run2]) => run2.kind === "ok" ? [[name, run2.value]] : []
       )
     )
   );
@@ -71348,8 +71511,7 @@ var SourceRegistry = class _SourceRegistry {
   runSources() {
     return this.runSourcesNow.get();
   }
-  // The run each source names, by variable name: what a request waits on and
-  // what names `check`'s stragglers.
+  // The named runs declared by this registry, including aliases for a shared run.
   namedRuns() {
     return this.namedNow.get();
   }
@@ -71361,9 +71523,9 @@ var SourceRegistry = class _SourceRegistry {
   subscriptionsNow = computed(
     () => [
       ...new Map(
-        [...this.namedNow.get().values()].map((run3) => [run3.digest, run3])
+        [...this.namedNow.get().values()].map((run2) => [run2.digest, run2])
       )
-    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run3]) => run3)
+    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run2]) => run2)
   );
   subscriptions() {
     return this.subscriptionsNow.get();
@@ -71574,7 +71736,7 @@ var SourceRegistry = class _SourceRegistry {
   declareSource(name, read2, cache2, parse3) {
     const publish = this.publisherFor(name, parse3);
     const refreshOf = this.registerCachePolicy(name, cache2);
-    const run3 = computed(
+    const run2 = computed(
       () => {
         const refresh = refreshOf();
         return refresh.kind === "ok" ? ok(
@@ -71589,7 +71751,7 @@ var SourceRegistry = class _SourceRegistry {
     );
     runInAction(() => {
       this.sourceNames.push(name);
-      this.runs.set(name, run3);
+      this.runs.set(name, run2);
     });
     this.cleanups.push(
       // The run's fault, as the host reads it, is the variable's standing
@@ -71617,8 +71779,8 @@ var SourceRegistry = class _SourceRegistry {
   // The reading of the run `name` names, or nothing while its policy names
   // none (one over values not answered yet).
   runFact(name) {
-    const run3 = this.runs.get(name)?.get();
-    return run3?.kind === "ok" ? this.inputs.get().run(run3.value.digest) : void 0;
+    const run2 = this.runs.get(name)?.get();
+    return run2?.kind === "ok" ? this.inputs.get().run(run2.value.digest) : void 0;
   }
   // [LAW:one-type-per-behavior] One total projection of the parser arm onto
   // the node it publishes: the text arms publish a string box, the json arm a
@@ -71819,10 +71981,10 @@ var SourceRegistry = class _SourceRegistry {
   // both stand, so neither hides the other.
   standingFault(name) {
     const policy = this.policyFaults.get(name);
-    const run3 = this.runFaults.get(name);
-    return policy === void 0 || run3 === void 0 ? policy ?? run3 : {
+    const run2 = this.runFaults.get(name);
+    return policy === void 0 || run2 === void 0 ? policy ?? run2 : {
       timestamp: policy.timestamp,
-      message: `${policy.message}; ${run3.message}`
+      message: `${policy.message}; ${run2.message}`
     };
   }
   // Whether `name` lives in this registry's own store, not its directory's.
@@ -72155,10 +72317,10 @@ function openSegment(ref, segName, placementId2, palette, disclosure, tint, text
   ref.current = active2;
   return active2;
 }
-function inSegment(ref, place, run3) {
+function inSegment(ref, place, run2) {
   return publishing(
     ref,
-    () => run3(
+    () => run2(
       openSegment(
         ref,
         place.segName,
@@ -72171,16 +72333,16 @@ function inSegment(ref, place, run3) {
     )
   );
 }
-function outsideSegments(ref, run3) {
+function outsideSegments(ref, run2) {
   return publishing(ref, () => {
     ref.current = null;
-    return run3();
+    return run2();
   });
 }
-function publishing(ref, run3) {
+function publishing(ref, run2) {
   const prior = ref.current;
   try {
-    return run3();
+    return run2();
   } finally {
     ref.current = prior;
   }
@@ -72645,8 +72807,11 @@ function linkFragment(text4, link, active2, base) {
   rt.end = "";
   return rt;
 }
-function linkOver(cell3, url, current = false) {
-  const link = new Style({ link: url, bold: current ? true : void 0 });
+function linkOver(cell3, target, current = false) {
+  const link = styleWithLink(
+    new Style({ bold: current ? true : void 0 }),
+    target
+  );
   const linked = new RichText(cell3.plain, {
     style: Style.combine([resolvedStyle(cell3.style), link])
   });
@@ -72664,7 +72829,7 @@ function linkOver(cell3, url, current = false) {
 function cycleIndex(c, store) {
   return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
 }
-function realize(c, display, boundValue, store, sessionId2, signer) {
+function realize(c, display, boundValue, store, sessionId2) {
   switch (c.kind) {
     case "set-literal": {
       const current = readVar(store, c.stateVar);
@@ -72847,12 +73012,12 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         active: false
       };
     // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
-    // draw, as copy's text is. The link carries what was evaluated and its
-    // mac, so the click runs what the bar showed and nothing a URL made up.
+    // draw, as copy's text is. The host signs the captured evaluation when it
+    // publishes the frame, so the click runs what the bar showed.
     // Never "active": a run is a one-shot trigger.
     case "run": {
       const scope = buildScope(store);
-      const evaluated2 = JSON.stringify({
+      const evaluated2 = {
         run: c.argv.map((item) => evalTemplate(item, scope)),
         env: Object.fromEntries(
           c.env.map(([variable, value]) => [
@@ -72860,16 +73025,16 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
             evalTemplate(value, scope)
           ])
         )
-      });
-      const mac = signer.sign({
-        sessionId: sessionId2,
-        action: c.name,
-        declaration: c.declaration,
-        evaluated: evaluated2
-      });
+      };
       return {
         effects: [
-          { verb: VERB_RUN, args: [sessionId2, c.name, evaluated2, mac] }
+          {
+            kind: "run",
+            session: sessionId2,
+            action: c.name,
+            declaration: c.declaration,
+            evaluated: evaluated2
+          }
         ],
         active: false
       };
@@ -72891,19 +73056,12 @@ function realize(c, display, boundValue, store, sessionId2, signer) {
         active: false
       };
     case "do": {
-      const head = realize(
-        c.head,
-        display,
-        boundValue,
-        store,
-        sessionId2,
-        signer
-      );
+      const head = realize(c.head, display, boundValue, store, sessionId2);
       return {
         effects: [
           ...head.effects,
           ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
+            (m) => realize(m, display, void 0, store, sessionId2).effects
           )
         ],
         active: head.active
@@ -72973,10 +73131,9 @@ function renderAction(name, displays, runtime) {
     display.plain,
     boundValue,
     store,
-    sessionId2,
-    runtime.signer
+    sessionId2
   );
-  return linkOver(display, effectsUrl(effects), active2);
+  return linkOver(display, actionTarget(effects), active2);
 }
 function actionFuncs(runtime) {
   return {
@@ -73822,15 +73979,6 @@ Subcommands:
                            menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
-  check [--render] [file]  Validate a config on the full render pipeline (parse
-                           \u2192 merge \u2192 validate \u2192 register \u2192 render, under
-                           every preset) with no daemon. With no path, checks
-                           the same layers the daemon would load from here.
-                           Use --config-only PATH to check in isolation. Exit
-                           0 clean (warnings on stderr), 1 invalid, 2
-                           unreadable. --render also prints the bar a fresh
-                           session opens on, so you can read a config without
-                           installing it. "lint" is an alias.
   schema                   Print the JSON Schema for the config file shape
                            (.cc-candybar.json5). Point an editor's $schema at it
                            for autocomplete + structural validation.
@@ -76157,10 +76305,12 @@ function disclosureCloseFragment(sessionId2, key) {
     DISCLOSURE_GLYPH_CLOSE,
     {
       kind: "action",
-      effect: {
-        verb: VERB_SET_STATE,
-        args: [sessionId2, key, DISCLOSURE_CLOSED]
-      }
+      effects: [
+        {
+          verb: VERB_SET_STATE,
+          args: [sessionId2, key, DISCLOSURE_CLOSED]
+        }
+      ]
     },
     false
   );
@@ -76390,7 +76540,7 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   );
   const pageIdx = !Number.isInteger(rawPage) ? 0 : rawPage < 0 ? holding2 : Math.min(rawPage, pages.length - 1);
   const pageSections = pages[pageIdx] ?? [];
-  const pageUrl = (value) => effectsUrl([
+  const pageTarget = (value) => actionTarget([
     { verb: VERB_SET_STATE, args: [sessionId2, page2.key, String(value)] }
   ]);
   const closeWrite = close.kind === "led" ? [] : [
@@ -76400,15 +76550,15 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     }
   ];
   const closeEffects = close.kind === "own" && close.onPick ? closeWrite : [];
-  const optionUrl = (option) => effectsUrl([
-    ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+  const optionTarget = (option) => actionTarget([
+    ...realize(declared, option, option, store, sessionId2).effects,
     ...closeEffects
   ]);
-  const optionCell = (face, i2) => linkOver(face, optionUrl(apply.options[i2]));
+  const optionCell = (face, i2) => linkOver(face, optionTarget(apply.options[i2]));
   const nav = close.kind === "led" ? [] : [
     linkFragment(
       DISCLOSURE_GLYPH_CLOSE,
-      effectsUrl(closeWrite),
+      actionTarget(closeWrite),
       false,
       closeStyle
     )
@@ -76417,8 +76567,8 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     ...steps2.map(
       ({ glyph, option }) => linkFragment(
         glyph,
-        effectsUrl([
-          ...realize(declared, option, option, store, sessionId2, runtime.signer).effects,
+        actionTarget([
+          ...realize(declared, option, option, store, sessionId2).effects,
           {
             verb: VERB_SET_STATE,
             args: [
@@ -76433,9 +76583,9 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
     )
   );
   if (pageIdx > 0) {
-    nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
+    nav.push(linkFragment(PICKER_PREV, pageTarget(pageIdx - 1), false));
   }
-  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
+  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageTarget(pageIdx + 1), false)] : [];
   if (catalogue === void 0) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
@@ -76563,15 +76713,8 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
   if (options.length === 0) return assemble([]);
   const indexAt = ringAround(options, readVar(store, apply.stateVar));
   const ring = (offset) => options[indexAt(offset)];
-  const step4 = (offset) => effectsUrl(
-    realize(
-      declared,
-      ring(offset),
-      ring(offset),
-      store,
-      sessionId2,
-      runtime.signer
-    ).effects
+  const step4 = (offset) => actionTarget(
+    realize(declared, ring(offset), ring(offset), store, sessionId2).effects
   );
   return assemble([
     linkFragment(CAROUSEL_PREV, step4(-1), false),
@@ -76585,14 +76728,13 @@ function renderCarousel(applyName, apply, openName, label2, runtime) {
         ring(0),
         label2
       ),
-      effectsUrl(
+      actionTarget(
         realize(
           runtime.compiled.get(openName),
           ring(0),
           void 0,
           store,
-          sessionId2,
-          runtime.signer
+          sessionId2
         ).effects
       )
     ),
@@ -76918,7 +77060,7 @@ function renderMenu(applyName, displays, options, runtime) {
   const successor = open2 ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
     pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open2 ? 1 : 0),
-    effectsUrl([
+    actionTarget([
       {
         verb: VERB_SET_STATE,
         args: [sessionId2, stateKey, successor, pageKey, "0"]
@@ -77446,7 +77588,7 @@ function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
   }
   return defines;
 }
-var compileAlone = (signer) => (_key, input) => compileDslConfig(input, signer);
+var compileAlone = (_key, input) => compileDslConfig(input);
 function registerCompiled(config, registry, cwd2, compile, scopes = EVERY_SCOPE) {
   const input = compileInputOf(config);
   const key = compileKey(input);
@@ -77502,11 +77644,14 @@ var EVERY_SCOPE = /* @__PURE__ */ new Set([
   "directory",
   "view"
 ]);
-function compileDslConfig({ config, stateReads, projections }, signer) {
+function compileDslConfig({
+  config,
+  stateReads,
+  projections
+}) {
   const actionRuntime = {
     bound: void 0,
-    compiled: /* @__PURE__ */ new Map(),
-    signer
+    compiled: /* @__PURE__ */ new Map()
   };
   const drawnAt = () => renderBinding(actionRuntime, "drawnAt").registry.drawnAt();
   const activeSegment = createActiveSegmentRef(drawnAt);
@@ -77945,7 +78090,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const root = compiled.roots.get(preset);
     if (root === void 0) {
       throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+        `Preset "${preset}" has no compiled layout \u2014 the config compiler builds one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
       );
     }
     const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
@@ -81449,8 +81594,7 @@ var RAW_DEFAULT_DSL_CONFIG = {
   //
   // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
   // 80/120/200 columns against a RICH payload in
-  // test/default-dsl-config.test.ts (over the readings of `check`'s faked
-  // session) — curated by actually rendering each arrangement, not by reading
+  // test/default-dsl-config.test.ts — curated by actually rendering each arrangement, not by reading
   // the segment names off the page.
   // Each bundled theme's default look — data in its own file
   // (src/config/bundled-theme-defaults.ts), since it is chosen theme by theme
@@ -82178,9 +82322,9 @@ function sourceSummaryOf(names, runs, facts) {
   const named2 = [
     ...names.map((name) => [name, sourceFactOf(facts, name)]),
     ...[...runs].map(
-      ([name, run3]) => [
+      ([name, run2]) => [
         name,
-        run3.kind === "ok" ? (facts.runs[run3.value.digest] ?? UNREAD_RUN).reading : run3
+        run2.kind === "ok" ? (facts.runs[run2.value.digest] ?? UNREAD_RUN).reading : run2
       ]
     )
   ];
@@ -82482,7 +82626,7 @@ function handedOffTo(lanes, following) {
 }
 var HANDOFF_BUTTON = "[\u27F2 claude]";
 function laneHandoff(sessionId2, writable2, lanes) {
-  const reset = effectsUrl(
+  const reset = actionTarget(
     writable2.filter((layer) => layer !== "project").map((layer) => ({
       verb: VERB_RESET_CONFIG,
       args: [
@@ -82647,7 +82791,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
     throw e;
   }
 }
-function drawRender(parts, setup, drawing2, feeds, inspect2) {
+function drawRender(parts, setup, drawing2, feeds) {
   const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
@@ -82892,13 +83036,6 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
     eventsShown,
     copies,
     lanes,
-    inspection: inspect2 === true ? {
-      preset: effective.preset,
-      faults,
-      unreadSources: sources.pending.flatMap(
-        ({ name, why: why2 }) => why2 === "unread" ? [name] : []
-      )
-    } : void 0,
     kept: {
       session: sessionId2,
       by: drawing2.by,
@@ -82948,7 +83085,7 @@ function subjectOf(w) {
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
-function answerRequest(parts, req, presentation, facts, inspect2) {
+function answerRequest(parts, req, presentation, facts) {
   var _stack = [];
   try {
     const { time, feeds } = parts;
@@ -82960,12 +83097,11 @@ function answerRequest(parts, req, presentation, facts, inspect2) {
       facts,
       presentation
     ));
-    const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } = drawRender(
+    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
       parts,
       setup,
       ANSWERING,
-      feeds.feedsOf(sessionId2, time.tick),
-      inspect2
+      feeds.feedsOf(sessionId2, time.tick)
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(presentation.client ?? null) === "statusline";
@@ -82976,7 +83112,6 @@ function answerRequest(parts, req, presentation, facts, inspect2) {
     });
     return {
       frame: frame2,
-      inspection,
       delivery: {
         session: sessionId2,
         by: ANSWERING.by,
@@ -83066,8 +83201,8 @@ var TurnTime = class {
   }
   // Holds `run` for the due turn `ms` after this one's tick; what it returns
   // lets go of it.
-  after(ms, run3) {
-    const deferral = { until: this.tick + ms / 1e3, run: run3 };
+  after(ms, run2) {
+    const deferral = { until: this.tick + ms / 1e3, run: run2 };
     this.held.add(deferral);
     return () => void this.held.delete(deferral);
   }
@@ -83096,7 +83231,7 @@ var TurnTime = class {
   // epoch milliseconds, and its held work.
   clock = {
     now: () => this.at * 1e3,
-    after: (ms, run3) => this.after(ms, run3)
+    after: (ms, run2) => this.after(ms, run2)
   };
 };
 
@@ -85701,7 +85836,7 @@ var slash = (args, ctx) => {
     line: action2.slash
   });
 };
-function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
+function runOf3({ action: action2, capture: capture4 }, ctx) {
   const sid = ctx.session;
   const origin = sessionOrigin(ctx);
   const actions = ctx.configFor(origin).actions;
@@ -85711,32 +85846,13 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
       `"${action2}" is not a run action this session's config declares`
     );
   }
-  const declaration = runDeclaration(decl);
-  if (!ctx.links.verify({ sessionId: sid, action: action2, declaration, evaluated: evaluated2 }, mac)) {
-    throw new BadVerbArgs(
-      "the link's signature does not match what it carries: it was not drawn by this daemon, or its action has been edited since it was drawn"
-    );
-  }
-  let drawn;
-  try {
-    drawn = JSON.parse(evaluated2);
-  } catch {
-    throw new BadVerbArgs(`run ${action2}: what the link carries is not JSON`);
-  }
-  const [program, ...args] = drawn.run;
-  if (program === void 0 || program === "") {
-    throw new BadVerbArgs(`run ${action2}: the program evaluated to nothing`);
-  }
   const sources = ctx.sourcesFor(origin);
   return {
     kind: "run",
     session: sid,
     action: action2,
-    program,
-    args,
-    // [LAW:single-enforcer] The action's own variables only: the host lays
-    // them over the session's environment, which no renderer holds.
-    env: drawn.env,
+    declaration: runDeclaration(decl),
+    capture: capture4,
     // The bundled config's runs go in the user's home.
     cwd: decl.cwd ?? ctx.locations.home,
     // The loader proved every name a declared source of this config, whose
@@ -85747,7 +85863,6 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
     }))
   };
 }
-var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
 var SESSION_HANDLERS = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
@@ -85764,7 +85879,6 @@ var SESSION_HANDLERS = {
   [VERB_BACK]: back,
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
-  [VERB_RUN]: run2,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 function foldEffects(steps2, log, perform, recordErrors) {
@@ -85928,6 +86042,9 @@ function runClick(click2, ctx) {
               break;
             case "repo-answer":
               c.configWrites.answer(step4.dir, step4.answer);
+              break;
+            case "run":
+              ask(c, runOf3(step4, c));
               break;
           }
         },
@@ -86204,7 +86321,7 @@ var MAX_VISITS = 20;
 var MAX_SESSIONS6 = 32;
 var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
 var menuKeys = /* @__PURE__ */ new WeakMap();
-function capture2(store, sid, { gate: gate2, edit }) {
+function capture3(store, sid, { gate: gate2, edit }) {
   let keys2 = menuKeys.get(gate2);
   if (keys2 === void 0) {
     keys2 = gate2.listKeys().filter(isMenuKey);
@@ -86262,7 +86379,7 @@ var NavigationHistory = class {
   });
   depth(sessionId2, store, context) {
     const timeline = this.timelines.get(sessionId2);
-    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
+    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture3(store, sessionId2, context), context).depth;
   }
   // [LAW:no-ambient-temporal-coupling] The transition and its navigation
   // cursor are staged alongside the click's settings. A guarded write that
@@ -86275,7 +86392,7 @@ var NavigationHistory = class {
       const start = before.get(sid);
       if (start === void 0) return;
       before.delete(sid);
-      const to = capture2(store, sid, start.context);
+      const to = capture3(store, sid, start.context);
       if (movedKeys(start.view, to).length === 0) return;
       const { visits, cursor } = timelineOf(sid);
       const followed = [
@@ -86288,14 +86405,14 @@ var NavigationHistory = class {
       choose: (sid, writes, contextOf) => {
         if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
           const context = contextOf();
-          before.set(sid, { view: capture2(store, sid, context), context });
+          before.set(sid, { view: capture3(store, sid, context), context });
         }
         choose(sid, writes);
       },
       back: (sid, context) => {
         endVisit(sid);
         const timeline = timelineOf(sid);
-        const at = capture2(store, sid, context);
+        const at = capture3(store, sid, context);
         const { destination, invalid } = previous(timeline, at, context);
         const discarded = invalid.size;
         const cursor = Math.max(0, timeline.cursor - discarded - 1);
@@ -86577,6 +86694,397 @@ function sessionSource(deps) {
 // src/renderer/render-cache.ts
 init_globals();
 
+// src/daemon/foundations/gates.ts
+init_globals();
+
+// src/daemon/foundations/config-validators.ts
+init_globals();
+
+// src/daemon/foundations/validator-registry.ts
+init_globals();
+var INT_RE = /^-?\d+$/;
+function makeAllowListValidator(allowed, label2, wire = "set-state") {
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
+    );
+  }
+  const allowedSet = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
+function makeIntValidator(label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+function makeRangeValidator(min3, max3, label2) {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label2} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+function mergeKeySpecs(key, specs, noun = "state") {
+  const ranges = specs.filter((s) => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap(
+    (s) => s.kind === "allow-list" ? s.allowed : []
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
+    );
+  }
+  if (ranges.length > 0) {
+    const min3 = Math.min(...ranges.map((r) => r.min));
+    const max3 = Math.max(...ranges.map((r) => r.max));
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min3 || n > max3;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
+      );
+    }
+    return { kind: "range", min: min3, max: max3 };
+  }
+  return { kind: "int" };
+}
+function wireForNoun(noun) {
+  return noun === "config" ? "set-config" : "set-state";
+}
+function validatorForSpec(key, spec, noun) {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun)
+  );
+}
+function mergeContributions(contributions, noun = "state") {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
+  }
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeKeySpecs(key, specs, noun)
+  }));
+}
+function createGate(baseline, daemonWide, derived3, noun) {
+  const validators = new Map(Object.entries(baseline));
+  const ranges = /* @__PURE__ */ new Map();
+  const daemonKeys = new Set(daemonWide.map((d) => d.key));
+  for (const { key, spec } of derived3) {
+    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
+      throw new Error(
+        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
+      );
+    }
+  }
+  const contributions = [
+    ...daemonWide.map(({ key, allowed }) => ({
+      key,
+      spec: { kind: "allow-list", allowed }
+    })),
+    ...derived3
+  ];
+  for (const { key, spec } of mergeContributions(contributions, noun)) {
+    if (!key) throw new Error(`${noun} gate: key is required`);
+    if (key.includes("/")) {
+      throw new Error(
+        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
+      );
+    }
+    if (Object.hasOwn(baseline, key)) {
+      throw new Error(
+        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
+      );
+    }
+    validators.set(key, validatorForSpec(key, spec, noun));
+    if (spec.kind === "range") {
+      ranges.set(key, { min: spec.min, max: spec.max });
+    }
+  }
+  return {
+    validate(key, rawValue) {
+      const validator = validators.get(key);
+      if (!validator) {
+        return {
+          ok: false,
+          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
+        };
+      }
+      return validator(rawValue);
+    },
+    listKeys: () => [...validators.keys()],
+    rangeParamsFor: (key) => ranges.get(key) ?? null
+  };
+}
+function createKeyspace(baseline, noun, derive) {
+  const daemonWide = [];
+  let epoch = 0;
+  const gates = /* @__PURE__ */ new WeakMap();
+  return {
+    register(key, allowed) {
+      const contribution = { key, allowed };
+      createGate(baseline, [contribution], [], noun);
+      daemonWide.push(contribution);
+      epoch++;
+      let active2 = true;
+      return () => {
+        if (!active2) return;
+        active2 = false;
+        daemonWide.splice(daemonWide.indexOf(contribution), 1);
+        epoch++;
+      };
+    },
+    gateFor(config) {
+      const held = gates.get(config);
+      if (held?.epoch === epoch) return held.gate;
+      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
+      gates.set(config, { epoch, gate: gate2 });
+      return gate2;
+    }
+  };
+}
+
+// src/daemon/foundations/config-validators.ts
+function makeConfigKeyspace() {
+  return createKeyspace({}, "config", deriveConfigActionValidators);
+}
+function actionKeySpecs(a, perConfigDomains) {
+  if (!("persist" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
+        }
+      }
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          ]
+        }
+      }
+    ];
+  }
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains
+          ).members.map(
+            (segment) => encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation
+            })
+          )
+        }
+      }
+    ];
+  }
+  return [
+    {
+      key: a.persist,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function clearableContributions(config) {
+  const keys2 = /* @__PURE__ */ new Set();
+  for (const a of Object.values(config.actions)) {
+    if ("reset" in a) keys2.add(a.reset);
+    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
+    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
+  }
+  return [...keys2].map((key) => ({
+    key,
+    spec: { kind: "allow-list", allowed: [] }
+  }));
+}
+function actionContributions(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return [
+    ...clearableContributions(config),
+    ...Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs(a, perConfigDomains)
+    )
+  ];
+}
+function deriveConfigActionValidators(config) {
+  return mergeContributions(actionContributions(config), "config");
+}
+
+// src/daemon/foundations/state-validators.ts
+init_globals();
+var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
+var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
+var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
+var validateTheme = (raw) => {
+  if (!raw) return { ok: false, reason: "theme name is required" };
+  if (!RESOLVABLE_THEMES.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var validateEndcaps = (raw) => {
+  if (!raw) return { ok: false, reason: "endcaps name is required" };
+  if (!RESOLVABLE_ENDCAPS.has(raw)) {
+    return {
+      ok: false,
+      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
+    };
+  }
+  return { ok: true, value: raw };
+};
+var BASELINE = {
+  endcaps: validateEndcaps,
+  theme: validateTheme
+};
+function makeStateKeyspace() {
+  return createKeyspace(BASELINE, "state", deriveActionValidators);
+}
+function actionKeySpecs2(a, perConfigDomains) {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(a.from, perConfigDomains).members
+        }
+      }
+    ];
+  }
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  return [
+    {
+      key: a.set,
+      spec: { kind: "range", min: a.min, max: a.max }
+    }
+  ];
+}
+function dropBaselineAllowLists(contributions) {
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
+  );
+}
+function actionContributions2(config) {
+  const perConfigDomains = configOptionDomains(config);
+  return dropBaselineAllowLists(
+    Object.values(config.actions).flatMap(
+      (a) => actionKeySpecs2(a, perConfigDomains)
+    )
+  );
+}
+function deriveActionValidators(config) {
+  return mergeContributions(actionContributions2(config));
+}
+
+// src/daemon/foundations/gates.ts
+function deriveActionGates(gates, config) {
+  gates.state.gateFor(config);
+  gates.config.gateFor(config);
+}
+function createGates(held = { state: [], config: [] }) {
+  const state = makeStateKeyspace();
+  const config = makeConfigKeyspace();
+  for (const { key, allowed } of held.state) state.register(key, allowed);
+  for (const { key, allowed } of held.config) config.register(key, allowed);
+  return { state, config };
+}
+
 // src/config/unused.ts
 init_globals();
 function* variablesOf(cfg) {
@@ -86844,15 +87352,14 @@ function buildRenderState(load, deps) {
       config,
       registry,
       cwd2,
-      deps.compile ?? compileAlone(deps.signer),
+      deps.compile ?? compileAlone,
       DIRECTORY_SCOPE
     );
     warnings.push(...registration.loadWarnings);
     const probe2 = registry.view();
     warnings.push(...declareDslVariables(config, probe2, cwd2, VIEW_SCOPE));
     probe2.dispose();
-    deps.gates.state.gateFor(config);
-    deps.gates.config.gateFor(config);
+    deriveActionGates(deps.gates, config);
   } catch (err) {
     registry.dispose();
     if (err instanceof ConfigError) warnings.push(...err.warnings);
@@ -87032,7 +87539,7 @@ var subscriptionsOf = ({
   ...registrySubscriptions(registry)
 ];
 var registrySubscriptions = (registry) => [
-  ...registry.subscriptions().map((run3) => ({ kind: "run", run: run3 })),
+  ...registry.subscriptions().map((run2) => ({ kind: "run", run: run2 })),
   ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
 ];
 var draftKey = (sessionId2) => `edit:${sessionId2}`;
@@ -87126,7 +87633,7 @@ var RenderCache = class {
   // table learns only when a state carrying it is served, so a load that fails
   // after compiling leaves nothing behind.
   compileOf(key, input) {
-    return this.compiles.get(key) ?? compileDslConfig(input, this.deps.signer);
+    return this.compiles.get(key) ?? compileDslConfig(input);
   }
   // [LAW:one-source-of-truth] Read off the map the cache serves: an entry's
   // own heap, plus each compile its entries carry once, however many share it.
@@ -87982,12 +88489,11 @@ function mainRenderer(parts, pushed, drained) {
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
           );
-        const { frame: frame2, delivery, inspection } = answerRequest(
+        const { frame: frame2, delivery } = answerRequest(
           parts,
           current,
           event.context.hints,
-          record2,
-          event.inspect
+          record2
         );
         const id2 = parts.mint();
         deliveries.set(id2, delivery);
@@ -87997,8 +88503,7 @@ function mainRenderer(parts, pushed, drained) {
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
-          frame: frame2,
-          ...inspection === void 0 ? {} : { inspection }
+          frame: frame2
         });
         return;
       }
@@ -88103,11 +88608,11 @@ function mainRenderer(parts, pushed, drained) {
     };
   };
   let stored = [];
-  const ending = (run3) => {
+  const ending = (run2) => {
     try {
       let value;
       try {
-        value = run3();
+        value = run2();
       } finally {
         stored = drained();
         subscriptions = subscribed();
@@ -88173,7 +88678,7 @@ function closeIdleMenus2(parts, effects, busy) {
   }
 }
 function mainRendererOf(inputs, host) {
-  const { gates, linkSigner: linkSigner2 } = inputs;
+  const { gates } = inputs;
   const time = new TurnTime();
   const now2 = () => time.at;
   const menuIdle = new MenuIdle();
@@ -88209,7 +88714,6 @@ function mainRendererOf(inputs, host) {
       currentRequest: (session) => worldStates.requestOf(session),
       log,
       storage: host.storage,
-      signer: linkSigner2,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its
@@ -88295,7 +88799,6 @@ function mainRendererOf(inputs, host) {
     configFor: (origin, sid) => renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
-    links: linkSigner2,
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
   const pushed = (push, rendererTurns) => {
@@ -88494,6 +88997,21 @@ function isDirectoryLink(root, e) {
 // src/daemon/config-discovery/discovery-files.ts
 init_globals();
 var import_node_path31 = __toESM(require_path_browserify(), 1);
+
+// src/utils/once-per-path.ts
+init_globals();
+function oncePerPath(read2) {
+  const readings = /* @__PURE__ */ new Map();
+  return (file) => {
+    const held = readings.get(file);
+    if (held !== void 0) return held.value;
+    const value = read2(file);
+    readings.set(file, { value });
+    return value;
+  };
+}
+
+// src/daemon/config-discovery/discovery-files.ts
 function textFrom(read2) {
   return (file) => {
     try {
@@ -88527,16 +89045,6 @@ function readNamedText(files, directory, name) {
   const read2 = files.text(physical);
   return read2.kind === "unreadable" ? { ...read2, error: read2.error.replace(`'${physical}'`, () => `'${name}'`) } : read2;
 }
-function oncePerPath(read2) {
-  const readings = /* @__PURE__ */ new Map();
-  return (file) => {
-    const held = readings.get(file);
-    if (held !== void 0) return held;
-    const observed = read2(file);
-    readings.set(file, observed);
-    return observed;
-  };
-}
 function discoveryFiles(files = diskFiles) {
   return {
     presence: oncePerPath(files.presence),
@@ -88555,13 +89063,13 @@ function observeConfigLocations(locations2, files, selectedBase = null) {
     const unchecked = [];
     const candidates = [];
     for (const candidate of location.candidates) {
-      const observed = files.presence(candidate.file);
-      if (observed === "present" && location.role !== "user" && selectedBase !== null && files.realpath(candidate.file) === selectedBase)
+      const observed2 = files.presence(candidate.file);
+      if (observed2 === "present" && location.role !== "user" && selectedBase !== null && files.realpath(candidate.file) === selectedBase)
         continue;
       candidates.push(candidate);
-      if (observed === "absent") continue;
-      if (observed !== "present") {
-        unchecked.push(observed);
+      if (observed2 === "absent") continue;
+      if (observed2 !== "present") {
+        unchecked.push(observed2);
         continue;
       }
       const dir = files.realpath(import_node_path32.default.dirname(candidate.file));
@@ -88903,11 +89411,6 @@ var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
     this.texts = new ConfigText(deps.openText);
-    this.files = {
-      ...diskFiles,
-      text: textFrom((file) => this.texts.read(file)),
-      ...deps.files
-    };
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
@@ -88927,7 +89430,6 @@ var ConfigDiscovery = class {
   watches;
   invalidated = /* @__PURE__ */ new Set();
   texts;
-  files;
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -88963,7 +89465,7 @@ var ConfigDiscovery = class {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = readShared(this.deps, this.files);
+      const shared = this.shared();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -89040,7 +89542,7 @@ var ConfigDiscovery = class {
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = readShared(this.deps, this.files);
+    const shared = this.shared();
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
@@ -89064,6 +89566,15 @@ var ConfigDiscovery = class {
       `config discovery why=${why2} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
     return moved2;
+  }
+  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
+  // one physical-text owner reuses bytes once the descriptor proves its revision.
+  shared() {
+    return readShared(this.deps, {
+      ...diskFiles,
+      text: textFrom((file) => this.texts.read(file)),
+      ...this.deps.files?.()
+    });
   }
   // What discovery finds at `origin` now, with its watch following the
   // targets that finding names, and what that watch cannot hear in the
@@ -89128,6 +89639,73 @@ function watchTargetsFor(found2) {
     ],
     whole: roots
   });
+}
+
+// src/daemon/checkout-observations.ts
+init_globals();
+var CHECKOUT_FRESH_MS = 1e3;
+var MAX_PATHS_PER_PROBE = 512;
+var MAX_RETAINED_CHARACTERS = 8 * 1024;
+function retainMetadata(read2) {
+  switch (read2.kind) {
+    case "ok":
+      return read2.value.length <= MAX_RETAINED_CHARACTERS;
+    case "failed":
+      return read2.reason.length <= MAX_RETAINED_CHARACTERS;
+    case "absent":
+      return true;
+  }
+}
+function observed(read2, clock, retain = () => true) {
+  const paths2 = /* @__PURE__ */ new Map();
+  const refresh = (file) => {
+    const value = read2(file);
+    paths2.delete(file);
+    if (file.length > MAX_RETAINED_CHARACTERS || !retain(value)) return value;
+    paths2.set(file, { value, expires: clock.monotonic() + CHECKOUT_FRESH_MS });
+    if (paths2.size > MAX_PATHS_PER_PROBE) {
+      const oldest = paths2.keys().next();
+      if (!oldest.done) paths2.delete(oldest.value);
+    }
+    return value;
+  };
+  return {
+    // [LAW:no-ambient-temporal-coupling] A redraw never extends freshness.
+    held: (file) => {
+      const seen = paths2.get(file);
+      return seen !== void 0 && clock.monotonic() < seen.expires ? seen.value : refresh(file);
+    },
+    fresh: () => oncePerPath(refresh)
+  };
+}
+function checkoutObservations(files, clock) {
+  const stat3 = observed(files.stat, clock);
+  const lstat2 = observed(files.lstat, clock);
+  const realpath2 = observed(files.realpath, clock, retainMetadata);
+  const text4 = observed(files.text, clock, retainMetadata);
+  const held = {
+    stat: stat3.held,
+    lstat: lstat2.held,
+    realpath: realpath2.held,
+    text: text4.held
+  };
+  return {
+    location: (dir) => checkoutLocation(dir, held),
+    // [LAW:parse-dont-validate] Repository admission gets fresh proof for its
+    // own batch. Its physical observations can warm display, never the reverse.
+    discovery: () => {
+      const fresh = {
+        stat: stat3.fresh(),
+        lstat: lstat2.fresh(),
+        realpath: realpath2.fresh(),
+        text: text4.fresh()
+      };
+      return {
+        checkout: (dir) => checkoutOf(dir, fresh),
+        worktree: (dir) => worktreeLink(dir, fresh)
+      };
+    }
+  };
 }
 
 // src/daemon/daemon.ts
@@ -89251,7 +89829,7 @@ function createDaemon(inputs) {
   const acts = new Acts({
     launch: clickLaunchVia(launcher),
     claudeInput: inputs.claudeInput(launcher),
-    run: (run3) => runs.start(run3),
+    run: (run2) => runs.start(run2),
     barPane: {
       edge: inputs.barPaneEdge(launcher),
       // A bar pane runs this bundle under the node running it now, with the
@@ -89369,10 +89947,12 @@ function createDaemon(inputs) {
       release: (id2) => managedStorage.release(id2)
     }
   };
+  const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
+    files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
@@ -89398,7 +89978,6 @@ function createDaemon(inputs) {
       build: (hostReaches) => mainRendererOf(
         {
           stored: stores.current(),
-          linkSigner: linkSigner2,
           locations: locs,
           home: host.home,
           gates,
@@ -89406,15 +89985,11 @@ function createDaemon(inputs) {
         },
         hostReaches
       ),
-      boot: () => {
-        const key = inputs.linkKey();
-        return {
-          stored: stores.current(),
-          host: { ...host, env: plainEnvironment(host.env) },
-          memoryLimitBytes: memoryLimitBytes2,
-          linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
-        };
-      },
+      boot: () => ({
+        stored: stores.current(),
+        host: { ...host, env: plainEnvironment(host.env) },
+        memoryLimitBytes: memoryLimitBytes2
+      }),
       node: bundle.node
     });
     return { name, reported, entry, stores, prepared };
@@ -89481,6 +90056,7 @@ function createDaemon(inputs) {
         }
       },
       {
+        authorizeRun: (request2, captures) => authorizeRun(linkSigner2, request2, captures),
         perform: (act) => acts.perform(act),
         stateDir: paths2.state,
         configs: configDiscovery.forRenderer(name),
@@ -89571,6 +90147,7 @@ function createDaemon(inputs) {
     launcher,
     log,
     clock,
+    checkoutLocation: checkouts.location,
     bundle: bundle.path,
     sourceDigest: bundle.digest,
     sessionBook,
@@ -89605,7 +90182,7 @@ function createDaemon(inputs) {
         return;
     }
   });
-  const admit2 = (run3, refuse4) => serving() ? run3() : refuse4();
+  const admit2 = (run2, refuse4) => serving() ? run2() : refuse4();
   const served = {
     stats,
     launcher,
@@ -89752,393 +90329,6 @@ function createDaemon(inputs) {
     return { settled: launcher.settled() };
   }
   return { launcher, close, serve };
-}
-
-// src/daemon/foundations/gates.ts
-init_globals();
-
-// src/daemon/foundations/config-validators.ts
-init_globals();
-
-// src/daemon/foundations/validator-registry.ts
-init_globals();
-var INT_RE = /^-?\d+$/;
-function makeAllowListValidator(allowed, label2, wire = "set-state") {
-  const slashOffenders = allowed.filter((v) => v.includes("/"));
-  if (slashOffenders.length > 0) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): values contain "/" \u2014 the ${wire} wire shape splits values on "/" so slash-bearing options cannot be addressed. Offending values: ${slashOffenders.join(", ")}`
-    );
-  }
-  if (allowed.includes("")) {
-    throw new Error(
-      `makeAllowListValidator(${label2}): empty string is not a writable option \u2014 the validator rejects empty input before the allow-list check, so an "" in the allowed list could be rendered but never delivered. Remove "" from the allowed list.`
-    );
-  }
-  const allowedSet = new Set(allowed);
-  const allowedList = [...allowed];
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!allowedSet.has(raw)) {
-      return {
-        ok: false,
-        reason: `unknown ${label2} "${raw}" (have: ${allowedList.join(", ")})`
-      };
-    }
-    return { ok: true, value: raw };
-  };
-}
-function makeIntValidator(label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const neg = raw[0] === "-";
-    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
-    if (digits === "") return { ok: true, value: "0" };
-    return { ok: true, value: neg ? `-${digits}` : digits };
-  };
-}
-function makeRangeValidator(min3, max3, label2) {
-  return (raw) => {
-    if (!raw) return { ok: false, reason: `${label2} value is required` };
-    if (!INT_RE.test(raw)) {
-      return { ok: false, reason: `${label2} must be an integer, got "${raw}"` };
-    }
-    const clamped = Math.max(min3, Math.min(max3, parseInt(raw, 10)));
-    return { ok: true, value: String(clamped) };
-  };
-}
-function mergeKeySpecs(key, specs, noun = "state") {
-  const ranges = specs.filter((s) => s.kind === "range");
-  const hasInt = specs.some((s) => s.kind === "int");
-  const allowed = specs.flatMap(
-    (s) => s.kind === "allow-list" ? s.allowed : []
-  );
-  if (ranges.length === 0 && !hasInt) {
-    return { kind: "allow-list", allowed: [...new Set(allowed)] };
-  }
-  const nonInt = allowed.filter((v) => !INT_RE.test(v));
-  if (nonInt.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is an integer spec (a paged cursor or a bounded value) but a click writes non-integer value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key shape \u2014 point that click at a distinct key, or write an integer.`
-    );
-  }
-  if (hasInt && ranges.length > 0) {
-    throw new Error(
-      `${noun} action table: key "${key}" is declared as both a paged cursor (int) and a bounded value (range) \u2014 a ${noun} key has one key shape. Use distinct keys.`
-    );
-  }
-  if (ranges.length > 0) {
-    const min3 = Math.min(...ranges.map((r) => r.min));
-    const max3 = Math.max(...ranges.map((r) => r.max));
-    const outOfRange = allowed.filter((v) => {
-      const n = parseInt(v, 10);
-      return n < min3 || n > max3;
-    });
-    if (outOfRange.length > 0) {
-      throw new Error(
-        `${noun} action table: key "${key}" is a bounded range [${min3},${max3}] but a click writes out-of-range value(s) to it (${outOfRange.join(", ")}). The range gate would clamp them, storing a different value than the click renders \u2014 write an in-range integer, or point that click at a distinct key.`
-      );
-    }
-    return { kind: "range", min: min3, max: max3 };
-  }
-  return { kind: "int" };
-}
-function wireForNoun(noun) {
-  return noun === "config" ? "set-config" : "set-state";
-}
-function validatorForSpec(key, spec, noun) {
-  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(
-    spec.allowed,
-    `${noun} "${key}"`,
-    wireForNoun(noun)
-  );
-}
-function mergeContributions(contributions, noun = "state") {
-  const byKey = /* @__PURE__ */ new Map();
-  for (const { key, spec } of contributions) {
-    const specs = byKey.get(key);
-    if (specs) specs.push(spec);
-    else byKey.set(key, [spec]);
-  }
-  return [...byKey].map(([key, specs]) => ({
-    key,
-    spec: mergeKeySpecs(key, specs, noun)
-  }));
-}
-function createGate(baseline, daemonWide, derived3, noun) {
-  const validators = new Map(Object.entries(baseline));
-  const ranges = /* @__PURE__ */ new Map();
-  const daemonKeys = new Set(daemonWide.map((d) => d.key));
-  for (const { key, spec } of derived3) {
-    if (daemonKeys.has(key) && spec.kind !== "allow-list") {
-      throw new Error(
-        `${noun} gate: key "${key}" is written by the daemon's own links as one of a list of values, and cannot be declared as ${spec.kind === "int" ? "a paged cursor (int)" : "a bounded value (range)"}. Use a distinct key.`
-      );
-    }
-  }
-  const contributions = [
-    ...daemonWide.map(({ key, allowed }) => ({
-      key,
-      spec: { kind: "allow-list", allowed }
-    })),
-    ...derived3
-  ];
-  for (const { key, spec } of mergeContributions(contributions, noun)) {
-    if (!key) throw new Error(`${noun} gate: key is required`);
-    if (key.includes("/")) {
-      throw new Error(
-        `${noun} gate: key "${key}" contains "/" \u2014 the wire shape splits on "/" so a slash-bearing key cannot be addressed. Use a slash-free key.`
-      );
-    }
-    if (Object.hasOwn(baseline, key)) {
-      throw new Error(
-        `${noun} gate: key "${key}" is a built-in ${noun} key and cannot be re-claimed (built-in keys: ${Object.keys(baseline).join(", ")})`
-      );
-    }
-    validators.set(key, validatorForSpec(key, spec, noun));
-    if (spec.kind === "range") {
-      ranges.set(key, { min: spec.min, max: spec.max });
-    }
-  }
-  return {
-    validate(key, rawValue) {
-      const validator = validators.get(key);
-      if (!validator) {
-        return {
-          ok: false,
-          reason: `unknown ${noun} key "${key}" (have: ${[...validators.keys()].join(", ")})`
-        };
-      }
-      return validator(rawValue);
-    },
-    listKeys: () => [...validators.keys()],
-    rangeParamsFor: (key) => ranges.get(key) ?? null
-  };
-}
-function createKeyspace(baseline, noun, derive) {
-  const daemonWide = [];
-  let epoch = 0;
-  const gates = /* @__PURE__ */ new WeakMap();
-  return {
-    register(key, allowed) {
-      const contribution = { key, allowed };
-      createGate(baseline, [contribution], [], noun);
-      daemonWide.push(contribution);
-      epoch++;
-      let active2 = true;
-      return () => {
-        if (!active2) return;
-        active2 = false;
-        daemonWide.splice(daemonWide.indexOf(contribution), 1);
-        epoch++;
-      };
-    },
-    gateFor(config) {
-      const held = gates.get(config);
-      if (held?.epoch === epoch) return held.gate;
-      const gate2 = createGate(baseline, daemonWide, derive(config), noun);
-      gates.set(config, { epoch, gate: gate2 });
-      return gate2;
-    }
-  };
-}
-
-// src/daemon/foundations/config-validators.ts
-function makeConfigKeyspace() {
-  return createKeyspace({}, "config", deriveConfigActionValidators);
-}
-function actionKeySpecs(a, perConfigDomains) {
-  if (!("persist" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  if ("removeSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })]
-        }
-      }
-    ];
-  }
-  if ("insertSegment" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: [
-            encodeLayoutOp({
-              op: "insert",
-              segment: a.insertSegment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          ]
-        }
-      }
-    ];
-  }
-  if ("insertSegmentFrom" in a) {
-    return [
-      {
-        key: a.persist,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(
-            a.insertSegmentFrom,
-            perConfigDomains
-          ).members.map(
-            (segment) => encodeLayoutOp({
-              op: "insert",
-              segment,
-              anchor: a.anchor,
-              relation: a.relation
-            })
-          )
-        }
-      }
-    ];
-  }
-  return [
-    {
-      key: a.persist,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function clearableContributions(config) {
-  const keys2 = /* @__PURE__ */ new Set();
-  for (const a of Object.values(config.actions)) {
-    if ("reset" in a) keys2.add(a.reset);
-    const target = "persist" in a ? parsePersistTarget(a.persist) : null;
-    if (target?.scope === "preset-root") keys2.add(presetRootKey(target.preset));
-  }
-  return [...keys2].map((key) => ({
-    key,
-    spec: { kind: "allow-list", allowed: [] }
-  }));
-}
-function actionContributions(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return [
-    ...clearableContributions(config),
-    ...Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs(a, perConfigDomains)
-    )
-  ];
-}
-function deriveConfigActionValidators(config) {
-  return mergeContributions(actionContributions(config), "config");
-}
-
-// src/daemon/foundations/state-validators.ts
-init_globals();
-var RESOLVABLE_THEMES_LIST = listResolvablePaletteNames();
-var RESOLVABLE_THEMES = new Set(RESOLVABLE_THEMES_LIST);
-var RESOLVABLE_ENDCAPS = new Set(ENDCAPS_SHAPES);
-var validateTheme = (raw) => {
-  if (!raw) return { ok: false, reason: "theme name is required" };
-  if (!RESOLVABLE_THEMES.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var validateEndcaps = (raw) => {
-  if (!raw) return { ok: false, reason: "endcaps name is required" };
-  if (!RESOLVABLE_ENDCAPS.has(raw)) {
-    return {
-      ok: false,
-      reason: `unknown endcaps "${raw}" (have: ${ENDCAPS_SHAPES.join(", ")})`
-    };
-  }
-  return { ok: true, value: raw };
-};
-var BASELINE = {
-  endcaps: validateEndcaps,
-  theme: validateTheme
-};
-function makeStateKeyspace() {
-  return createKeyspace(BASELINE, "state", deriveActionValidators);
-}
-function actionKeySpecs2(a, perConfigDomains) {
-  if (!("set" in a)) return [];
-  if ("to" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
-  }
-  if ("from" in a) {
-    return [
-      {
-        key: a.set,
-        spec: {
-          kind: "allow-list",
-          allowed: resolveOptionDomain(a.from, perConfigDomains).members
-        }
-      }
-    ];
-  }
-  if ("int" in a) {
-    return [{ key: a.set, spec: { kind: "int" } }];
-  }
-  if ("cycle" in a) {
-    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
-  }
-  return [
-    {
-      key: a.set,
-      spec: { kind: "range", min: a.min, max: a.max }
-    }
-  ];
-}
-function dropBaselineAllowLists(contributions) {
-  return contributions.filter(
-    (c) => c.spec.kind !== "allow-list" || !Object.hasOwn(BASELINE, c.key)
-  );
-}
-function actionContributions2(config) {
-  const perConfigDomains = configOptionDomains(config);
-  return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap(
-      (a) => actionKeySpecs2(a, perConfigDomains)
-    )
-  );
-}
-function deriveActionValidators(config) {
-  return mergeContributions(actionContributions2(config));
-}
-
-// src/daemon/foundations/gates.ts
-function createGates(held = { state: [], config: [] }) {
-  const state = makeStateKeyspace();
-  const config = makeConfigKeyspace();
-  for (const { key, allowed } of held.state) state.register(key, allowed);
-  for (const { key, allowed } of held.config) config.register(key, allowed);
-  return { state, config };
 }
 
 // src/daemon/log.ts
@@ -90626,12 +90816,12 @@ init_globals();
 var THEN = ";";
 var BUFFER = "cc-candybar-slash";
 async function tmux(launcher, hint, category, args, stdinInput) {
-  const run3 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
-  if (run3.kind === "failed") throw new Error(run3.reason);
-  return run3;
+  const run2 = await runTmuxAsync(launcher, hint, category, args, stdinInput);
+  if (run2.kind === "failed") throw new Error(run2.reason);
+  return run2;
 }
 async function read(launcher, hint) {
-  const run3 = await tmux(launcher, hint, "claude-input.read", [
+  const run2 = await tmux(launcher, hint, "claude-input.read", [
     "display",
     "-p",
     "-t",
@@ -90643,8 +90833,8 @@ async function read(launcher, hint) {
     "-t",
     hint.pane
   ]);
-  if (run3.kind === "rate-limited") throw new Error(run3.reason);
-  const [mode = "", ...screen] = run3.stdout.split("\n");
+  if (run2.kind === "rate-limited") throw new Error(run2.reason);
+  const [mode = "", ...screen] = run2.stdout.split("\n");
   return { inMode: mode !== "0", screen };
 }
 function pasteLineArgs(pane, buffer, before) {
@@ -90670,16 +90860,16 @@ function pasteLineArgs(pane, buffer, before) {
   ];
 }
 async function type2(launcher, hint, line) {
-  const run3 = await tmux(
+  const run2 = await tmux(
     launcher,
     hint,
     "claude-input.type",
     pasteLineArgs(hint.pane, BUFFER, ["C-s"]),
     line
   );
-  return run3.kind === "ok" ? { kind: "typed" } : {
+  return run2.kind === "ok" ? { kind: "typed" } : {
     kind: "refused",
-    reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run3.reason})`
+    reason: `cc-candybar typed a command moments ago \u2014 click again in a second (${run2.reason})`
   };
 }
 function productionClaudeInputEdge(launcher) {
@@ -90783,9 +90973,9 @@ function fileStorage(paths2, log, clock) {
 // src/daemon/lane-edge.ts
 init_globals();
 async function tmux2(launcher, hint, args) {
-  const run3 = await runTmuxAsync(launcher, hint, "lane.tmux", args);
-  if (run3.kind !== "ok") throw new Error(run3.reason);
-  return run3.stdout;
+  const run2 = await runTmuxAsync(launcher, hint, "lane.tmux", args);
+  if (run2.kind !== "ok") throw new Error(run2.reason);
+  return run2.stdout;
 }
 var PANE_STARTS_FORMAT = "#{pane_id} #{pane_start_command}";
 var BAR_PANE_START = /(?:^|\s)bar-pane\s+["'\\]*(%\d+)["']*\s*$/;
@@ -90954,7 +91144,8 @@ function productionAdapters(paths2, daemonLog, machine) {
       if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
       return entry;
     },
-    stat: fs_default.statSync
+    stat: fs_default.statSync,
+    checkoutFiles
   };
 }
 

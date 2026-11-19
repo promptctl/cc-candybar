@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-873",
+      "ref": "refs/pull/873/merge",
+      "sha": "2d50afc99686cd3bd78ae0e295707fd462dbeee4",
+      "timestamp": "2026-11-19T14:11:18.150Z",
+      "commits": [
+        {
+          "sha": "2d50afc99686cd3bd78ae0e295707fd462dbeee4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:10:12Z",
+          "message": "Merge 2ff234bda88865af858c52ba305f35f76be85922 into 4521bf6f3ff8442f1ade1eb3785e9b245dd454e6\n"
+        },
+        {
+          "sha": "2ff234bda88865af858c52ba305f35f76be85922",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:30:05-07:00",
+          "message": "perf(config): share regular file bytes across discovery batches (ibyq.ysf)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "4521bf6f3ff8442f1ade1eb3785e9b245dd454e6",
@@ -137,28 +159,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-873",
-      "ref": "refs/pull/873/merge",
-      "sha": "0452bc2d1204793beb158e78b2d8b5303f6b890c",
-      "timestamp": "2026-11-19T13:32:29.228Z",
-      "commits": [
-        {
-          "sha": "0452bc2d1204793beb158e78b2d8b5303f6b890c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:30:58-07:00",
-          "message": "Merge 03c9ffd1f5934f9b97dc6cd7ca9e4b1064dae10e into 6125487488e90cbd9bd119f83430408afd97f01f\n"
-        },
-        {
-          "sha": "03c9ffd1f5934f9b97dc6cd7ca9e4b1064dae10e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:30:05-07:00",
-          "message": "perf(config): share regular file bytes across discovery batches (ibyq.ysf)\n"
         }
       ]
     },
