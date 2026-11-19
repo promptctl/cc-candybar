@@ -1,8 +1,8 @@
-// The environment a test's session reports: the test process's own, as a
-// client started by Claude Code reports the one Claude Code gave it.
+// [LAW:effects-at-boundaries] A fixture reports its own environment, separate
+// from the daemon's or the Jest worker's. A case that tests an environment
+// variable names it in that session's request.
 
 import {
-  plainEnvironment,
   variableOf,
   type Environment,
   type SessionEnvironment,
@@ -10,7 +10,8 @@ import {
 import { NOTHING_READ, type HostReadings } from "../../src/dsl/view-source";
 import { instantOf } from "../../src/utils/instant";
 
-export const TEST_ENV: Environment = plainEnvironment(process.env);
+// The shell fixtures use system tools such as cat and wc on Linux and macOS.
+export const TEST_ENV = Object.freeze({ PATH: "/usr/bin:/bin" });
 
 export const TEST_ENVIRONMENT: SessionEnvironment = {
   kind: "ok",

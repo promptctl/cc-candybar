@@ -267,7 +267,7 @@ function rig(launch: Launcher["launch"] = processLauncher.launch): Rig {
     environmentOf: () => ({
       kind: "ok",
       value: sessionEnvironment(
-        { PATH: TEST_ENV.PATH! },
+        TEST_ENV,
         { sessionId: SID, projectDir: dir, claudeConfigDir: "/u/.claude-x" },
       ),
     }),
