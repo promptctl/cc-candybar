@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-863",
+      "ref": "refs/pull/863/merge",
+      "sha": "11fc07066409baa994a18a184b645ab5712ee51b",
+      "timestamp": "2026-11-19T12:40:31.198Z",
+      "commits": [
+        {
+          "sha": "11fc07066409baa994a18a184b645ab5712ee51b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:39:14Z",
+          "message": "Merge bb014f47ded748d244cf629f4be4fa28b4b34ae6 into 21b8abaab0b95c9b35518fcd7a840b2d54aa052b\n"
+        },
+        {
+          "sha": "bb014f47ded748d244cf629f4be4fa28b4b34ae6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:10:16-07:00",
+          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-869",
       "ref": "refs/pull/869/merge",
       "sha": "8b713dbd53e87f2435516f15da4ac15c4e522f45",
@@ -78,28 +100,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T12:36:55Z",
           "message": "chore(release): set `package.json` to 1.233.1\n\n## [1.233.1](https://github.com/promptctl/cc-candybar/compare/v1.233.0...v1.233.1) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** restore live sessions on renderer restart (ibyq.fqw) ([#862](https://github.com/promptctl/cc-candybar/issues/862)) ([2ea914d](https://github.com/promptctl/cc-candybar/commit/2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-863",
-      "ref": "refs/pull/863/merge",
-      "sha": "8144df661544d8d2e2efb239d6c077e36fe57f1e",
-      "timestamp": "2026-11-19T12:32:58.366Z",
-      "commits": [
-        {
-          "sha": "8144df661544d8d2e2efb239d6c077e36fe57f1e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:30:56Z",
-          "message": "Merge 76a69cfefe75a7e7836a60e68eb7099635b1628e into 2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8\n"
-        },
-        {
-          "sha": "76a69cfefe75a7e7836a60e68eb7099635b1628e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:10:16-07:00",
-          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
         }
       ]
     },
