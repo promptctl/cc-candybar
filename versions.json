@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-844",
+      "ref": "refs/pull/844/merge",
+      "sha": "9da9745959d472116fdb671826fcda19b33676ce",
+      "timestamp": "2026-11-19T10:13:22.708Z",
+      "commits": [
+        {
+          "sha": "9da9745959d472116fdb671826fcda19b33676ce",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:12:28Z",
+          "message": "Merge a5618522ca878015245477d00dbf265f38c18d00 into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "a5618522ca878015245477d00dbf265f38c18d00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:12:21-07:00",
+          "message": "test(daemon): cover failed starts and wake reporting\n"
+        },
+        {
+          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:46-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-845",
       "ref": "refs/pull/845/merge",
       "sha": "6a9566c48ff1ebefd760574044de0705727bbc77",
@@ -71,28 +100,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:59:02-07:00",
           "message": "refactor: remove in-bar update offers and workers\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-844",
-      "ref": "refs/pull/844/merge",
-      "sha": "d3796148d0fdf0dc59352bb4b9a1f4576bf1e1c7",
-      "timestamp": "2026-11-19T10:11:19.409Z",
-      "commits": [
-        {
-          "sha": "d3796148d0fdf0dc59352bb4b9a1f4576bf1e1c7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:10:09-07:00",
-          "message": "Merge 3da5befb66b28d5d85cae0924d6bececa98a80dd into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:46-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
         }
       ]
     },
