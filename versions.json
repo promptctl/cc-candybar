@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-882",
+      "ref": "refs/pull/882/merge",
+      "sha": "bb51d9a48f4b656850d18928381e96ed3ee6d5e4",
+      "timestamp": "2026-11-19T15:53:29.880Z",
+      "commits": [
+        {
+          "sha": "bb51d9a48f4b656850d18928381e96ed3ee6d5e4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T15:52:22Z",
+          "message": "Merge 2da7e94cf81c8fbce473611320010c073b1ccf0e into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
+        },
+        {
+          "sha": "2da7e94cf81c8fbce473611320010c073b1ccf0e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:13:12-07:00",
+          "message": "fix(daemon): seal renders and pane acts when drain starts\n"
+        },
+        {
+          "sha": "19b9b1d36e8a4e3c7343814995c79e4aadc8446b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:42:39-07:00",
+          "message": "fix(daemon): drain live renderers before closing links\n"
+        }
+      ]
+    },
+    {
       "version": "pr-885",
       "ref": "refs/pull/885/merge",
       "sha": "176b3c4d2e5c376ca3f745ec5ed9eafa71ca0667",
@@ -206,35 +235,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-882",
-      "ref": "refs/pull/882/merge",
-      "sha": "6d2f1829ca6ed9e3808298e9956af67566490f55",
-      "timestamp": "2026-11-19T15:18:19.444Z",
-      "commits": [
-        {
-          "sha": "6d2f1829ca6ed9e3808298e9956af67566490f55",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:16:57Z",
-          "message": "Merge c75711da8933703aca4faf8b2de73951b6d44027 into f10951d9400d761190b757a8dd55db47ac30e372\n"
-        },
-        {
-          "sha": "c75711da8933703aca4faf8b2de73951b6d44027",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:13:12-07:00",
-          "message": "fix(daemon): seal renders and pane acts when drain starts\n"
-        },
-        {
-          "sha": "4773b460887015dcbef70e4be867268db8fca84c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:42:39-07:00",
-          "message": "fix(daemon): drain live renderers before closing links\n"
         }
       ]
     },
