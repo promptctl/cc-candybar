@@ -68,7 +68,7 @@ export const renderFailure = (failure: Failure): Failure =>
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names
 // its answer here or fails to compile.
 export const RENDER_ANSWERS: Readonly<
-  Record<RenderEncoding, (frame: Frame) => Response>
+  Record<RenderEncoding, (frame: Frame<string>) => Response>
 > = {
   ansi: (frame) => ({ ok: true, output: composeBar(frame) }),
   frame: (frame) => ({ ok: true, frame }),

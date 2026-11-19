@@ -405,7 +405,14 @@ describe("the viewer and the handoff line at every colour depth", () => {
         segmentsToString(
           runs.map(
             ({ text, link }) =>
-              new Segment(text, new Style({ color: fg, bgcolor: bg, link })),
+              new Segment(
+                text,
+                new Style({
+                  color: fg,
+                  bgcolor: bg,
+                  link: typeof link === "string" ? link : undefined,
+                }),
+              ),
           ),
           resolveDestination(depth),
         ),

@@ -9,7 +9,8 @@ import path from "node:path";
 import { decodeAnsi, Style } from "@promptctl/rich-js";
 
 import { textOf } from "../../../src/render/frame";
-import { linksOf } from "../../../src/click/read";
+import { effectsOf, linksOf } from "../../../src/click/read";
+import { VERB_OPEN_VSCODE } from "../../../src/click/wire";
 import {
   openFrameStream,
   type StreamEnd,
@@ -18,13 +19,15 @@ import type { Response } from "../../../src/daemon/foundations/protocol";
 import { RENDERER_WIRE_VERSION } from "../../../src/renderer-interface/wire";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { LINK_KEY_BYTES } from "../../../src/click/link-signer";
+import { DISCLOSURE_GLYPH_CLOSE } from "../../../src/config/disclosure";
 import {
   click,
   drawnLink,
   render,
+  renderBody,
+  renderRequest,
   renderUntil,
   runRealClient,
-  urlWriting,
 } from "../../helpers/daemon-e2e";
 import {
   spawnIsolatedDaemon,
@@ -167,18 +170,22 @@ describe("the daemon's renderer process", () => {
 
   test("publishes identical clickable addresses for a request and the tmux pane feed", async () => {
     const external = "https://example.test/page#section";
+    const authored = "cc-candybar://open-vscode/fixture";
     const config = path.join(projectDir, "links.json5");
     fs.writeFileSync(
       config,
       `{
       globals: { experimentalPane: true },
-      variables: { face: { kind: "state", key: "face", default: "shut" } },
-      actions: { flip: { set: "face", cycle: ["shut", "open"] } },
       segments: {
-        door: { template: '{{ action "flip" "door shut" "door open" }}' },
+        body: { template: 'DISCLOSURE-BODY' },
         external: { template: '{{ link "${external}" "external" }}' },
+        authored: { template: '{{ link "${authored}" "authored" }}' },
       },
-      root: { h: ['door', 'external'] },
+      root: { h: [
+        { kind: 'group', name: 'details', label: 'details', open: true, children: ['body'] },
+        'external',
+        'authored',
+      ] },
     }`,
     );
     const session = "rproc-links";
@@ -194,8 +201,32 @@ describe("the daemon's renderer process", () => {
       url: external,
       text: "external",
     });
-    const requestLink = urlWriting(request, "face", "open");
+    const requestLink = linksOf(request).find(
+      ({ text }) => text === DISCLOSURE_GLYPH_CLOSE,
+    )?.url;
+    if (requestLink === undefined)
+      throw new Error("request has no disclosure close");
+    expect(textOf(request)).toContain("DISCLOSURE-BODY");
     expect(requestLink).toBe(drawnLink(handle.sockPath, requestLink));
+    const authoredLink = linksOf(request).find(
+      ({ text }) => text === "authored",
+    )?.url;
+    if (authoredLink === undefined) throw new Error("request has no authored link");
+    expect(authoredLink).toBe(drawnLink(handle.sockPath, authored));
+    expect(effectsOf(authoredLink)).toEqual([
+      { verb: VERB_OPEN_VSCODE, args: ["fixture"] },
+    ]);
+    const urlsOfAnsi = (output: string): string[] =>
+      decodeAnsi(output).spans.flatMap(({ style }) =>
+        style instanceof Style && style.link !== undefined ? [style.link] : [],
+      );
+    const ansi = await renderRequest(
+      handle.sockPath,
+      renderBody(session, projectDir, {}, args),
+    );
+    expect(urlsOfAnsi(ansi)).toEqual(
+      expect.arrayContaining([requestLink, external, authoredLink]),
+    );
 
     const frames: Response[] = [];
     let ended: StreamEnd | null = null;
@@ -218,12 +249,12 @@ describe("the daemon's renderer process", () => {
         throw new Error(
           `the pane drew no bar: ${JSON.stringify(frame ?? ended)}`,
         );
-      const urls = decodeAnsi(frame.output).spans.flatMap(({ style }) =>
-        style instanceof Style && style.link !== undefined ? [style.link] : [],
-      );
+      const urls = urlsOfAnsi(frame.output);
       const paneLink = urls.find((url) => url === requestLink);
       expect(paneLink).toBe(requestLink);
       expect(urls).toContain(external);
+      expect(urls).toContain(authoredLink);
+      expect(decodeAnsi(frame.output).plain).toContain("DISCLOSURE-BODY");
       await click(handle.sockPath, paneLink!);
       await until(
         () =>
@@ -231,7 +262,7 @@ describe("the daemon's renderer process", () => {
             (reply) =>
               reply.ok &&
               "output" in reply &&
-              decodeAnsi(reply.output).plain.includes("door open"),
+              !decodeAnsi(reply.output).plain.includes("DISCLOSURE-BODY"),
           ),
         "the pane after its click",
       );

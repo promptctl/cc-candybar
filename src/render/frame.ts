@@ -12,6 +12,8 @@ import {
   type ColorSpec,
 } from "@promptctl/rich-js";
 import type { ColorCompatibility } from "../themes/policy.js";
+import { compareStructural } from "mobx";
+import { hrefOfDrawnLink, type DrawnLink } from "./drawn-link.js";
 import {
   DIAGNOSTIC_ERROR_COLORS,
   type DiagnosticColors,
@@ -20,6 +22,7 @@ import { sanitizeText } from "./diagnostic-text.js";
 import type { DrawnMotion } from "./drawn-motion.js";
 import type { RowKind } from "./effect.js";
 import { permanentGlyphText } from "./error-glyph.js";
+import { linkFromStyle } from "./link-style.js";
 
 export type Attribute = keyof Attributes;
 
@@ -28,23 +31,20 @@ export type Attribute = keyof Attributes;
 // each: a hex for a drawn truecolor colour, else `color(n)`, so runs drawn alike
 // are one look and a standard colour stays the terminal's at truecolor too.
 // `attrs` holds only the attributes that are on. At depth `none` a run has no
-// look and keeps its link, which is what the encoder writes there.
-// [LAW:single-enforcer] `link` is clean as RichText admitted it. That admission
-// is the only check on a link a lane writes past rich-js's encoder, so a run
-// comes only from segments a RichText drew.
-export interface Run {
+// look and keeps its link. The host turns drawn links into published hrefs.
+export interface Run<Link = DrawnLink> {
   readonly text: string;
   readonly fg?: string;
   readonly bg?: string;
   readonly attrs?: readonly Attribute[];
-  readonly link?: string;
+  readonly link?: Link;
 }
 
 // One line on screen. A row FlexStrip wrapped is one Row per line.
-export interface Row {
+export interface Row<Link = DrawnLink> {
   // A row of the bar, or of what stands in its place, which no motion reaches.
   readonly kind: RowKind | "diagnostic";
-  readonly runs: readonly Run[];
+  readonly runs: ReadonlyArray<Run<Link>>;
 }
 
 // [LAW:types-are-the-program] A drawn bar (brandon-doctor-v62x.tgp): its rows
@@ -55,10 +55,10 @@ export interface Row {
 // render — a `globals.effect` rule, placements that fade as they come and go,
 // or a placement wearing its own effect that is not drawn now (hidden by its
 // `when`, or in a closed body) — which no still cell can say.
-export interface Frame {
+export interface Frame<Link = DrawnLink> {
   // The depth the colours were drawn at.
   readonly depth: ColorCompatibility;
-  readonly rows: readonly Row[];
+  readonly rows: ReadonlyArray<Row<Link>>;
   // The moment, in wall seconds, the frame next changes without new data, or
   // Infinity: what a feed drawing it waits for (src/daemon/frame-feed.ts).
   readonly nextChange: number;
@@ -68,13 +68,13 @@ export interface Frame {
 }
 
 // A Frame as it crosses the wire: JSON writes Infinity as null.
-export type WireFrame = Omit<Frame, "nextChange"> & {
+export type WireFrame<Link = DrawnLink> = Omit<Frame<Link>, "nextChange"> & {
   readonly nextChange: number | null;
 };
 
 // [LAW:parse-dont-validate] The receiving edge of a Frame. A reply that never
 // crossed a socket holds its Infinity, and reads the same way.
-export function parseFrame(wire: WireFrame): Frame {
+export function parseFrame<Link>(wire: WireFrame<Link>): Frame<Link> {
   return { ...wire, nextChange: wire.nextChange ?? Infinity };
 }
 
@@ -167,10 +167,11 @@ function lookOf(style: Style, depth: ColorDepth): Omit<Run, "text" | "link"> {
 }
 
 function runOf({ text, style }: Segment, depth: ColorDepth | null): Run {
+  const link = style === undefined ? undefined : linkFromStyle(style);
   return {
     text,
     ...(style !== undefined && depth !== null && lookOf(style, depth)),
-    ...(style?.link !== undefined && { link: style.link }),
+    ...(link !== undefined && { link }),
   };
 }
 
@@ -194,7 +195,7 @@ function segmentOf({ text, fg, bg, attrs = [], link }: Run): Segment {
     new Style({
       color: fg,
       bgcolor: bg,
-      link,
+      link: link === undefined ? undefined : hrefOfDrawnLink(link),
       ...Object.fromEntries(attrs.map((name) => [name, true])),
     }),
   );
@@ -228,7 +229,7 @@ export function composeBar(frame: Pick<Frame, "depth" | "rows">): string {
 const sameLook = (a: Run, b: Run): boolean =>
   a.fg === b.fg &&
   a.bg === b.bg &&
-  a.link === b.link &&
+  compareStructural(a.link, b.link) &&
   a.attrs?.join() === b.attrs?.join();
 
 // A row with neighbouring runs of one look joined, for a lane that draws runs

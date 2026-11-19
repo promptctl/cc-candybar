@@ -463,7 +463,7 @@ export type Request =
 export type Response =
   | { ok: true; output: string }
   // A render asked for as `encoding: "frame"`, read through `parseFrame`.
-  | { ok: true; frame: WireFrame }
+  | { ok: true; frame: WireFrame<string> }
   | { ok: true; stats: StatsSnapshot }
   // [LAW:types-are-the-program] DebugSnapshot is itself a discriminated union
   // on `what`, so the response type carries the requested kind through to the

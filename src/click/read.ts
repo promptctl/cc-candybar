@@ -4,6 +4,7 @@
 // browser (site/) read links through here, the one same way.
 
 import type { Frame } from "../render/frame";
+import { hrefOfDrawnLink } from "../render/drawn-link.js";
 import {
   decodeSegments,
   parseEffects,
@@ -36,9 +37,10 @@ export function linksOf({ rows }: Pick<Frame, "rows">): DrawnLink[] {
   return rows.flatMap(({ runs }) => {
     const stretches: Array<{ url: string | undefined; text: string }> = [];
     for (const { link, text } of runs.filter((run) => run.text !== "")) {
+      const url = link === undefined ? undefined : hrefOfDrawnLink(link);
       const last = stretches.at(-1);
-      if (last !== undefined && last.url === link) last.text += text;
-      else stretches.push({ url: link, text });
+      if (last !== undefined && last.url === url) last.text += text;
+      else stretches.push({ url, text });
     }
     return stretches.flatMap(({ url, text }) =>
       url === undefined ? [] : [{ url, text: text.trim() }],
