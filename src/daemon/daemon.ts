@@ -67,8 +67,6 @@ import {
   joinedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
-import { located } from "./statusline-answer.js";
-import { checkoutLocation } from "../utils/git-root.js";
 import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
@@ -490,7 +488,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // it hands in alone goes through the host's one path to the renderer, which
   // the parts below hold; a delivery is first asked for by an owner landing
   // after a request, so the parts exist by then.
-  const collector = new Collector({
+  const collector = new Collector<CheckedRenderRequest>({
     owners: payloadProviders,
     daemon: () => daemonFaults.get(),
     clock,
@@ -525,8 +523,8 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     log,
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session whose newest request the host holds
-    // gets its context with its latest stamp, all in the one `start` turn, so
+    // request would: every live session gets the context of its latest stamp,
+    // all in the one `start` turn, so
     // its output names every session it serves; and who watches each, so its
     // feeds open. All through the host's one path to the renderer, each turn
     // recorded there.
@@ -544,14 +542,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
           event: {
             kind: "start",
             viewers,
-            sessions: [...collector.liveDocuments()].flatMap(
-              ([sessionId, worldState]) => {
-                const req = frameFeeds.latest(sessionId);
-                return req === null
-                  ? []
-                  : [{ context: located(req, checkoutLocation), worldState }];
-              },
-            ),
+            sessions: collector.liveSessions(),
           },
         };
       }, [["why", "renderer-start"]]);

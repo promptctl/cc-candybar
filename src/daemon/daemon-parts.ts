@@ -54,5 +54,5 @@ export interface DaemonParts {
   readonly closing: AbortSignal;
   // [LAW:single-enforcer] The host's one reader of every session's world
   // (src/daemon/collector.ts).
-  readonly collector: Collector;
+  readonly collector: Collector<CheckedRenderRequest>;
 }
