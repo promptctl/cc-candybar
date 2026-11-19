@@ -22,28 +22,18 @@ import { LAYER_ROLES, type LayerRole } from "../layer-role.js";
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
-// One place a config file can be: its role, and its path without extension.
-interface ConfigLocation {
-  readonly role: LayerRole;
-  readonly base: string;
+// A candidate carries its own extension; an explicit file is read under
+// exactly the path it names.
+export interface ConfigCandidate {
+  readonly file: string;
+  readonly extension: string | null;
 }
 
-// [LAW:dataflow-not-control-flow] The locations, highest precedence first, as
-// the search reads them. The chain is user, project and local, as Claude
-// Code's own settings are: a working directory names no layer, so a config in
-// a subdirectory of the project, or in any other directory a session moves
-// to, is not read.
-function configLocations(
-  locs: Locations,
-  projectDir: string | undefined,
-): readonly ConfigLocation[] {
-  const project: readonly ConfigLocation[] = projectDir
-    ? [
-        { role: "local", base: path.join(projectDir, PROJECT_BASES.local) },
-        { role: "project", base: path.join(projectDir, PROJECT_BASES.project) },
-      ]
-    : [];
-  return [...project, { role: "user", base: xdgConfigBase(locs) }];
+// [LAW:types-are-the-program] A location owns its ordered candidates and
+// assigns each the same layer role. No consumer groups them by filename.
+export interface ConfigLocation {
+  readonly role: LayerRole;
+  readonly candidates: readonly ConfigCandidate[];
 }
 
 // What a session's config search starts from: its project, and the explicit
@@ -53,17 +43,40 @@ export interface ConfigQuery {
   readonly configFile?: string;
 }
 
-// Each candidate file and the role its location gives it, highest precedence
-// first. An explicit `configFile` is the user layer and the only candidate.
-export function configCandidates(
+// Highest precedence first. The chain's bases are separate locations even
+// when they share a directory. The extensions break ties within each base.
+export function configLocations(
   locs: Locations,
   { projectDir, configFile }: ConfigQuery,
-): ReadonlyArray<{ readonly file: string; readonly role: LayerRole }> {
-  // [LAW:dataflow-not-control-flow] An explicit override is the ONLY
-  // candidate — the precedence chain collapses to one entry.
-  if (configFile !== undefined) return [{ file: configFile, role: "user" }];
-  return configLocations(locs, projectDir).flatMap(({ role, base }) =>
-    CONFIG_EXTENSIONS.map((ext) => ({ file: `${base}.${ext}`, role })),
+  extensions: readonly [string, ...string[]] = CONFIG_EXTENSIONS,
+): readonly ConfigLocation[] {
+  if (configFile !== undefined)
+    return [
+      {
+        role: "user",
+        candidates: [{ file: configFile, extension: null }],
+      },
+    ];
+  const project = projectDir
+    ? [
+        {
+          role: "local" as const,
+          base: path.join(projectDir, PROJECT_BASES.local),
+        },
+        {
+          role: "project" as const,
+          base: path.join(projectDir, PROJECT_BASES.project),
+        },
+      ]
+    : [];
+  return [...project, { role: "user" as const, base: xdgConfigBase(locs) }].map(
+    ({ role, base }) => ({
+      role,
+      candidates: extensions.map((extension) => ({
+        file: `${base}.${extension}`,
+        extension,
+      })),
+    }),
   );
 }
 
@@ -92,7 +105,9 @@ export function dslConfigCandidatePaths(
   locs: Locations,
   query: ConfigQuery,
 ): readonly string[] {
-  return configCandidates(locs, query).map(({ file }) => file);
+  return configLocations(locs, query).flatMap(({ candidates }) =>
+    candidates.map(({ file }) => file),
+  );
 }
 
 // [LAW:one-source-of-truth] The base names a project's config files carry: the
@@ -150,7 +165,7 @@ export function homeLayer(path: string): ConfigLayer {
  *   • `unreadable` — an explicit file was named and stat could not see it
  *     (an unsearchable directory, a symlink loop); the errno rides the arm.
  * Every arm carries `home`: the user layer's file, where a durable click to
- * the user role writes. `chain` carries `unchecked`: locations stat could not
+ * the user role writes. Every arm carries `unchecked`: locations stat could not
  * see past; the search never stops on a guess, and the notice names each.
  *
  * Every arm carries `repos`: what the session's repositories contribute,
@@ -163,12 +178,14 @@ export function homeLayer(path: string): ConfigLayer {
  * The path rides on `missing` so the message and the durable-write target
  * both name it without re-deriving it from the inputs.
  */
-export type ConfigResolution = { readonly repos: RepoGate } & (
+export type ConfigResolution = {
+  readonly repos: RepoGate;
+  readonly unchecked: readonly Unchecked[];
+} & (
   | {
       readonly kind: "chain";
       readonly layers: readonly ConfigLayer[];
       readonly home: string;
-      readonly unchecked: readonly Unchecked[];
     }
   | { readonly kind: "missing"; readonly path: string; readonly home: string }
   | {
@@ -253,15 +270,20 @@ export function chainPlaces(
 export function configResolutionNotice(
   resolution: ConfigResolution,
 ): string | null {
-  return noticeLines(resolution).join("\n") || null;
+  return (
+    [
+      ...noticeLines(resolution),
+      ...resolution.unchecked.map(
+        (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
+      ),
+    ].join("\n") || null
+  );
 }
 
 function noticeLines(resolution: ConfigResolution): readonly string[] {
   switch (resolution.kind) {
     case "chain":
-      return resolution.unchecked.map(
-        (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
-      );
+      return [];
     case "missing":
       return [
         `Config file not found: ${resolution.path} — rendering the bundled default until it appears`,
