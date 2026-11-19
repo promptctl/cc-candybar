@@ -1,6 +1,6 @@
-// The live terminal observations, and the hints a host derives from the
-// session's reported environment. A client calls the same derivation when
-// sending a full request compatible with an older daemon.
+// [LAW:single-enforcer] The host and the older daemon's Node relay use the
+// same derivation of hints from a session environment. Terminal dimensions
+// are observed on the client because the host has no access to its tty.
 
 import type { Host } from "./host";
 import type { UserHome } from "./utils/user-path";
