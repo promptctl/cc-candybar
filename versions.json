@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "4cf51b4d27acfcbb333b283cbbf330de687e5ded",
+      "timestamp": "2026-11-19T09:47:12.841Z",
+      "commits": [
+        {
+          "sha": "4cf51b4d27acfcbb333b283cbbf330de687e5ded",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:45:59-07:00",
+          "message": "Merge a19ec2b1c69b3c896acfca239817b62ce6900f64 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:38:14-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "664f8da27681e8e52d2e98d26bbd7dd358214e5e",
