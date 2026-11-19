@@ -61,7 +61,7 @@ import {
 import { outlives, type HostAct } from "./acts.js";
 import { RendererWake } from "./renderer-wake.js";
 import { originKey, type RenderOrigin } from "../config-hint.js";
-import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
+import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 
 import type { RendererName } from "./foundations/renderer-name.js";
 
@@ -95,10 +95,7 @@ export type Made = MadeEvent | Failure;
 export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
-  readonly configs: Pick<
-    ConfigDiscovery,
-    "follow" | "snapshotOf" | "landed" | "path" | "repoDir"
-  >;
+  readonly configs: RendererConfigs;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }

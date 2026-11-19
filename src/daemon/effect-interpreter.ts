@@ -22,7 +22,7 @@ import type {
 } from "../renderer-interface/interface.js";
 import type { RenderOrigin } from "../config-hint.js";
 import { answeredBook } from "./config-discovery/repo-configs.js";
-import type { ConfigDiscovery } from "./config-discovery/config-discovery.js";
+import type { RendererConfigs } from "./config-discovery/config-discovery.js";
 import { gitRootOf, sharedExcludeOf } from "../utils/git-root.js";
 import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import path from "node:path";
@@ -66,7 +66,7 @@ export interface TrustBook {
 // [LAW:single-enforcer] Where a change naming an origin's layer lands, and
 // which repository an answer may be given for: config discovery's, so a
 // renderer names a role and never a path.
-export type LayerPlaces = Pick<ConfigDiscovery, "path" | "repoDir">;
+export type LayerPlaces = Pick<RendererConfigs, "path" | "repoDir">;
 
 export type ConfigLanding =
   | { readonly kind: "ok"; readonly files: readonly string[] }
