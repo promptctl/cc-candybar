@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-888",
+      "ref": "refs/pull/888/merge",
+      "sha": "bb5acf840b05a6df400fd6430526bff30374ee77",
+      "timestamp": "2026-11-19T17:00:50.533Z",
+      "commits": [
+        {
+          "sha": "bb5acf840b05a6df400fd6430526bff30374ee77",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:59:39Z",
+          "message": "Merge d746498ca325f26caec46b1ab92606b6fa871b16 into d02a3142e7089783533bf3bcfb9a1f0025c1b8b7\n"
+        },
+        {
+          "sha": "d746498ca325f26caec46b1ab92606b6fa871b16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:22:01-07:00",
+          "message": "refactor(renderer): keep one origin and config layer projection\n"
+        }
+      ]
+    },
+    {
       "version": "pr-879",
       "ref": "refs/pull/879/merge",
       "sha": "24a99fce9c7428199a15d60626331177298739f2",
@@ -115,28 +137,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T09:39:56-07:00",
           "message": "test(daemon): assert source values in delivered pane frames\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-888",
-      "ref": "refs/pull/888/merge",
-      "sha": "b03354fe6f305fb25008b2eef9e70b6dfb6c7cbc",
-      "timestamp": "2026-11-19T16:24:01.225Z",
-      "commits": [
-        {
-          "sha": "b03354fe6f305fb25008b2eef9e70b6dfb6c7cbc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:22:46-07:00",
-          "message": "Merge f2f088027221ca297b42f3cf60829c54fbe3d28d into bcc3f89dc35c1a9482586ed4a130a627b6c7962e\n"
-        },
-        {
-          "sha": "f2f088027221ca297b42f3cf60829c54fbe3d28d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:22:01-07:00",
-          "message": "refactor(renderer): keep one origin and config layer projection\n"
         }
       ]
     },
