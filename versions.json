@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-861",
+      "ref": "refs/pull/861/merge",
+      "sha": "7706aea3472e58fb1b181866b103f5aa35e9d966",
+      "timestamp": "2026-11-19T12:00:45.319Z",
+      "commits": [
+        {
+          "sha": "7706aea3472e58fb1b181866b103f5aa35e9d966",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:59:42Z",
+          "message": "Merge a8e2711a3ccfb7493bc97a37f7f6f4b586672656 into 8cd4ef708ff060a06d84d6ed558441d903a07806\n"
+        },
+        {
+          "sha": "a8e2711a3ccfb7493bc97a37f7f6f4b586672656",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:55:09-07:00",
+          "message": "feat(config): offer layered and isolated file selection (ibyq.grv)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "8cd4ef708ff060a06d84d6ed558441d903a07806",
