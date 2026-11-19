@@ -8,6 +8,7 @@ import type { Instant, Tick } from "../../src/utils/instant";
 const boot: RendererBoot = {
   stored: EMPTY_STORED_STATE,
   locations: { home: "/home/u", configHome: "/config", dataHome: "/data", dataDirs: [] },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1024,
 };
 const input: EventInput = { kind: "event", at: 0 as Instant, tick: 0 as Tick, event: { kind: "due" } };

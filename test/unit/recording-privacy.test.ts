@@ -53,6 +53,7 @@ const BOOT: RendererBoot = {
     dataHome: "/nowhere/data",
     dataDirs: [],
   },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1024 * 1024 * 1024,
 };
 const SELECTED = "CANDYBAR_CAPTURE_SELECTED";

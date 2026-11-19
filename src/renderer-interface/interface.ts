@@ -43,12 +43,14 @@ import type { LayerRole } from "../config/layer-role";
 import type { ConfigSnapshot } from "../config/config-snapshot";
 import type { Locations } from "../config/loader/chain-places";
 import type { StoredState, StoreWrite } from "./stored-state";
+import type { RegionalSettings } from "../utils/region.js";
 
 // [LAW:one-source-of-truth] Every renderer starts from locations the host
 // resolved and the stored values it holds at the moment the renderer starts.
 export interface RendererBoot {
   readonly stored: StoredState;
   readonly locations: Locations;
+  readonly region: RegionalSettings;
   readonly memoryLimitBytes: number;
 }
 

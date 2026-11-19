@@ -9,6 +9,7 @@ import type { Instant, Tick } from "../../src/utils/instant";
 const settings: RendererBoot = {
   stored: EMPTY_STORED_STATE,
   locations: { home: "/offline", configHome: "/offline/config", dataHome: "/offline/data", dataDirs: [] },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1024 * 1024 * 1024,
 };
 const boot = {

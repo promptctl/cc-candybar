@@ -303,6 +303,7 @@ describe("a renderer's boot line", () => {
   const boot = {
     locations,
     stored,
+    region: { locale: "en-US", timeZone: "UTC" },
     memoryLimitBytes: Number.MAX_SAFE_INTEGER * 1024 * 1024,
   };
   const read = (value: unknown) =>
@@ -327,6 +328,9 @@ describe("a renderer's boot line", () => {
       { ...boot, locations: { ...locations, dataDirs: [1] } },
       "invalid resolved locations",
     ],
+    [{ ...boot, region: null }, "locale and time zone"],
+    [{ ...boot, region: { locale: "not valid", timeZone: "UTC" } }, "unsupported locale or time zone"],
+    [{ ...boot, region: { locale: "en-US", timeZone: "invented" } }, "unsupported locale or time zone"],
     [{ ...boot, memoryLimitBytes: -1 }, "memoryLimitBytes"],
     [{ ...boot, stored: {} }, "stored.sessions"],
     [

@@ -86,6 +86,7 @@ const bootOf = (stored = EMPTY_STORED_STATE): RendererBoot => ({
     dataHome: "/nowhere/data",
     dataDirs: [],
   },
+  region: { locale: "en-US", timeZone: "UTC" },
   memoryLimitBytes: 1024 * 1024 * 1024,
 });
 

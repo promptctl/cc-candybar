@@ -257,17 +257,14 @@ export const relativeTimeFuncs: ClockFactory = (clock) => ({
   },
 });
 
-export function formatterFuncs(): FuncMap {
+export function formatterFuncs(locale?: string): FuncMap {
+  const numbers = new Intl.NumberFormat(locale);
   return {
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
-    // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
-    // (not migrated to a DSL helper). toLocaleString reads the host locale the
-    // daemon inherits, so grouping is locale-correct (en_US "50,000" /
-    // de_DE "50.000"). A regex helper would be a second, locale-blind producer
-    // of grouping policy — same parsing/formatting boundary that keeps
-    // formatModelName here.
+    // [LAW:one-source-of-truth] Group numbers using the host's locale. The
+    // engine shares its formatter between all the templates it evaluates.
     formatInteger: {
-      fn: (n: number) => formatInteger(n),
+      fn: (n: number) => formatInteger(n, numbers),
       // [LAW:types-are-the-program] Integer grouping is meaningful only for an
       // integer; `int` rejects a fractional/precision-losing carrier at the gate.
       argTypes: ["int"],

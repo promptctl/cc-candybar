@@ -306,7 +306,7 @@ describe("the daemon is a value", () => {
     open = built.daemon;
     openLogs.push(built.daemonLog);
     expect(boots.map((boot) => Object.keys(boot).sort())).toEqual([
-      ["locations", "memoryLimitBytes", "stored"],
+      ["locations", "memoryLimitBytes", "region", "stored"],
     ]);
     expect(boots).toMatchObject([
       {

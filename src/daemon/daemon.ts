@@ -152,6 +152,7 @@ export interface DaemonAdapters {
 // What a daemon takes from the process that runs it: where its files are, what
 // it does to the machine, and the numbers it runs by.
 export interface DaemonInputs extends DaemonAdapters {
+  readonly region: RendererBoot["region"];
   // The composition root selects the renderer transport.
   readonly renderer: RendererPort;
   readonly bundle: RunningBundle;
@@ -644,6 +645,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     const boot = (): RendererBoot => ({
       stored: stores.current(),
       locations: locs,
+      region: inputs.region,
       memoryLimitBytes,
     });
     const prepared = inputs.renderer({

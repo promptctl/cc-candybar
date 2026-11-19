@@ -33,7 +33,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 12;
+export const RENDERER_WIRE_VERSION = 13;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -78,8 +78,26 @@ export function rendererBootFrom(raw: unknown): RendererBoot {
     throw new Error(
       "renderer boot memoryLimitBytes must be a finite nonnegative number",
     );
+  const region = boot.region;
+  if (
+    !isPlainObject(region) ||
+    typeof region.locale !== "string" ||
+    typeof region.timeZone !== "string"
+  )
+    throw new Error("renderer boot has no resolved locale and time zone");
+  const { locale, timeZone } = region;
+  // [LAW:parse-dont-validate] Named locales must be supported on the peer.
+  // Intl otherwise silently substitutes the machine's own default locale.
+  try {
+    if (!Intl.NumberFormat.supportedLocalesOf([locale]).length)
+      throw new RangeError();
+    new Intl.DateTimeFormat(locale, { timeZone });
+  } catch {
+    throw new Error("renderer boot has an unsupported locale or time zone");
+  }
   return {
     locations: { home, configHome, dataHome, dataDirs },
+    region: { locale, timeZone },
     memoryLimitBytes,
     stored: storedStateOf(boot.stored),
   };

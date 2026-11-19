@@ -70,6 +70,7 @@ const COMPATIBLE_BOOT = {
       dataHome: "/home/.local/share",
       dataDirs: [],
     },
+    region: { locale: "en-US", timeZone: "UTC" },
     memoryLimitBytes: 1,
   },
 } satisfies Omit<Extract<HostLine, { kind: "boot" }>, "kind">;

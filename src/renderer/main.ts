@@ -803,6 +803,7 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     {
       clock: time.clock,
       locations: inputs.locations,
+      region: inputs.region,
       sessionState: edits.view,
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),

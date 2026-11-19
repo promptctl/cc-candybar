@@ -37,6 +37,7 @@
 //    budget AND duration/time-remaining formatters moved to DSL helper templates
 //    — see DEFAULT_DSL_CONFIG.helpers.)
 
+import { systemRegion, type RegionalSettings } from "../utils/region.js";
 import {
   createEngine,
   type Engine,
@@ -255,11 +256,12 @@ const DEPTH_BINDINGS = { readableOn: readableOnFunc } as const;
 // depth nobody stated. It carries no terminal: the detached daemon cannot see
 // the client's.
 export function createCcCandybarEngine(opts: {
+  readonly region?: RegionalSettings;
   readonly drawnAt: () => ColorDepth;
   readonly extraFuncs?: FuncMap;
   readonly clockFuncs?: readonly ClockFactory[];
 }): Engine<RichText> {
-  const { drawnAt, extraFuncs } = opts;
+  const { drawnAt, extraFuncs, region = systemRegion() } = opts;
   const depth = (): DrawnAt => ({ depth: drawnAt() });
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
@@ -287,6 +289,25 @@ export function createCcCandybarEngine(opts: {
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...SPRIG_DATE_FUNCS,
+      // [LAW:effects-at-boundaries] Local date functions use the zone supplied
+      // by the host, through the library’s existing explicitly zoned variants.
+      date: {
+        ...SPRIG_DATE_FUNCS.date!,
+        fn: (layout: string, value: unknown) =>
+          Reflect.apply(SPRIG_DATE_FUNCS.dateInZone!.fn, undefined, [
+            layout,
+            value,
+            region.timeZone,
+          ]),
+      },
+      htmlDate: {
+        ...SPRIG_DATE_FUNCS.htmlDate!,
+        fn: (value: unknown) =>
+          Reflect.apply(SPRIG_DATE_FUNCS.htmlDateInZone!.fn, undefined, [
+            value,
+            region.timeZone,
+          ]),
+      },
       ...authoredLinks(richTextFuncs(depth)),
       ...Object.fromEntries(
         Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
@@ -307,7 +328,7 @@ export function createCcCandybarEngine(opts: {
       // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
       // registered last so the domain meaning wins (revisited by the bdi
       // cleanup ticket).
-      ...formatterFuncs(),
+      ...formatterFuncs(region.locale),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
       // paths do not). Last so a feature can override on collision.
