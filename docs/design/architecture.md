@@ -71,6 +71,8 @@ Today's daemon is therefore closer to a renderer than to Gather, and most of its
 
 The host maintains the tmux pane from effective settings. The ordinary statusline and tmux pane both deliver clicks through the link handler.
 
+`createDaemon` prepares the shared host. In production the socket owner calls `serve()` to load the stores and obtain the request-capable daemon, then arms the background work. Shutdown seals admission, drains the renderer journal, and cancels remaining work before releasing the shared resources.
+
 `docs/design/inventory/verbs.md` classifies some of this differently, because it was written for an earlier cut. This table overrides it.
 
 ## Areas

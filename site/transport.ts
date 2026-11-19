@@ -64,9 +64,7 @@ const onClock = ({ headAt, ...rest }: Partial<ScenarioRepo>): Partial<RepoState>
   headAt === undefined ? rest : { ...rest, headTime: Math.floor(clockAt(headAt)) };
 
 seedWorld(onClock(INITIAL_REPO) as RepoState);
-// The daemon the page runs has the limits a daemon has, so the doctor can ask
-// it what it holds; it is never armed, so nothing counts its memory, as no
-// socket was won. Nothing it holds outlives the page.
+// The simulated page serves without arming production socket resources.
 // The page is a process main of its own: it reads the machine it runs on (the
 // simulated one, under the node shims) once.
 const WORLD = processWorld();
@@ -98,9 +96,7 @@ const pageDaemon = createDaemon({
   exit: (code) => {
     throw new Error(`the page's daemon asked to exit ${code}`);
   },
-});
-// It serves without arming: it won no socket, so it watches nothing.
-pageDaemon.serve();
+}).serve();
 
 function lines(entry: Entry, at: number): object[] {
   const base = { timestamp: new Date(clockAt(at) * 1000).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };

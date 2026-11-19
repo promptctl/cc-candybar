@@ -22,7 +22,7 @@ import path from "node:path";
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
 import type { RenderOrigin } from "../../../src/config-hint";
 import { LANES } from "../../../src/config/lanes";
-import type { Daemon } from "../../../src/daemon/daemon";
+import type { ServedDaemon } from "../../../src/daemon/daemon";
 import { systemTimekeeper, type Timekeeper } from "../../../src/time";
 import { processProbe } from "../../helpers/host";
 import {
@@ -40,7 +40,7 @@ import { parseFrame, textOf, type Frame } from "../../../src/render/frame";
 import { PACKAGE_VERSION } from "../../../src/version";
 import { clickBody, hookData } from "../../helpers/daemon-e2e";
 import { linkUrls } from "../../helpers/frame";
-import { buildDaemon, bundleAt, statsOf } from "../../helpers/in-worker-daemon";
+import { buildDaemon, bundleAt, prepareDaemon, statsOf } from "../../helpers/in-worker-daemon";
 import type { DaemonLog } from "../../../src/daemon/log";
 import { until } from "../../helpers/until";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
@@ -88,7 +88,7 @@ describe("the daemon is a value", () => {
   let root: string;
   let projectDir: string;
   let config: string;
-  let open: Daemon | null = null;
+  let open: ServedDaemon | null = null;
   // Every log the case opened: a case that builds a second daemon ends both.
   const openLogs: DaemonLog[] = [];
 
@@ -110,7 +110,7 @@ describe("the daemon is a value", () => {
       digest?: string;
       profile?: () => never;
     } = {},
-  ): Daemon => {
+  ): ServedDaemon => {
     const { profile } = inputs;
     const { daemon, daemonLog } = buildDaemon({
       host: hostNow(),
@@ -127,7 +127,7 @@ describe("the daemon is a value", () => {
     return daemon;
   };
 
-  const close = async (daemon: Daemon): Promise<void> => {
+  const close = async (daemon: ServedDaemon): Promise<void> => {
     await (
       await daemon.close()
     ).settled;
@@ -153,8 +153,8 @@ describe("the daemon is a value", () => {
   });
 
   const reply = async (
-    daemon: Daemon,
-    req: Parameters<Daemon["reply"]>[0],
+    daemon: ServedDaemon,
+    req: Parameters<ServedDaemon["reply"]>[0],
   ): Promise<Response> => {
     const handled = await daemon.handle(
       classifyInbound(req),
@@ -170,7 +170,7 @@ describe("the daemon is a value", () => {
 
   // A render's answer.
   const answer = async (
-    daemon: Daemon,
+    daemon: ServedDaemon,
     req: ReaderRenderRequest,
   ): Promise<Frame> => {
     const resp = await reply(daemon, req);
@@ -179,7 +179,7 @@ describe("the daemon is a value", () => {
     return parseFrame(resp.frame);
   };
 
-  const clickLink = (daemon: Daemon, url: string): Promise<Response> =>
+  const clickLink = (daemon: ServedDaemon, url: string): Promise<Response> =>
     reply(daemon, clickBody(url));
 
   const writeConfig = (text: string): void => writeFileSync(config, text);
@@ -225,38 +225,64 @@ describe("the daemon is a value", () => {
   }`;
   const width = (bar: Frame): number => textOf(bar).trimEnd().length;
 
-  test("a closed daemon refuses what reaches it, and a click writes nothing", async () => {
+  test("only serving opens ingress, and a prepared daemon can close before it serves", async () => {
+    const { daemon, daemonLog } = prepareDaemon({
+      host: hostNow(),
+      paths: daemonPaths(hostNow()),
+    });
+    openLogs.push(daemonLog);
+    expect(daemon).not.toHaveProperty("handle");
+    expect(daemon).not.toHaveProperty("reply");
+    expect(daemon).not.toHaveProperty("subscribe");
+    const closing = daemon.close();
+    expect(daemon.close()).toBe(closing);
+    expect(() => daemon.serve()).toThrow("the daemon closed");
+    await expect((await closing).settled).resolves.toEqual({ unreaped: [] });
+  });
+
+  test("closing refuses requests and subscriptions without throwing or writing a click", async () => {
     writeConfig(PADDED);
     const daemon = construct();
     await answer(daemon, renderRequest("value-refused"));
-    await close(daemon);
-    const closed = "the daemon closed";
-
-    await expect(
-      answer(daemon, renderRequest("value-refused")),
-    ).rejects.toThrow(closed);
-    await expect(
-      clickLink(
-        daemon,
-        drawnHere(
-          effectsUrl([
-            { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
-          ]),
-        ),
-      ),
-    ).rejects.toThrow(closed);
-    expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
+    const click = clickBody(drawnHere(effectsUrl([
+      { verb: VERB_SET_STATE, args: ["value-refused", "a.key", "on"] },
+    ])));
+    const closing = daemon.close();
+    expect(daemon.close()).toBe(closing);
+    const accepted = daemon.stats.accept();
+    const render = await daemon.handle(
+      classifyInbound(renderRequest("value-refused")),
+      () => false,
+      accepted,
+      () => false,
+    );
+    expect(render).toMatchObject({ kind: "reply", resp: {
+      ok: false,
+      error: "the daemon closed: render refused",
+    } });
+    const clicked = await daemon.reply(click, () => false, daemon.stats.accept(), () => false);
+    expect(clicked.resp).toMatchObject({ ok: false, error: "the daemon closed: click refused" });
     const refused = jest.fn();
-    expect(() =>
-      daemon.subscribe(VALUE_REFUSED, {
-        lane: "statusline",
-        frame: () => {},
-        refused,
-        drawing: () => true,
-      }),
-    ).toThrow(closed);
-    expect(() => daemon.arm()).toThrow(closed);
-    expect(() => daemon.rediscover()).toThrow(closed);
+    const unsubscribe = daemon.subscribe(VALUE_REFUSED, {
+      lane: "statusline",
+      frame: () => {},
+      refused,
+      drawing: () => true,
+    });
+    unsubscribe();
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(refused).toHaveBeenCalledWith(expect.objectContaining({
+      error: "the daemon closed: subscribe refused",
+    }));
+    expect(() => daemon.arm()).toThrow("the daemon closed");
+    await close(daemon);
+    expect(existsSync(settingsHistoryPath(hostNow()))).toBe(false);
+    await Promise.all(openLogs.map((log) => log.drained()));
+    const lines = readFileSync(daemonPaths(hostNow()).log, "utf8").split("\n");
+    const event = lines.filter((line) => line.includes(` render req=${accepted.id} `));
+    expect(event).toHaveLength(1);
+    expect(event[0]).toContain("[info]");
+    expect(event[0]).toContain(" outcome=closing ");
   });
 
   // [LAW:no-shared-mutable-globals] What a daemon's loads accept is its own

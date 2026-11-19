@@ -491,6 +491,7 @@ describe("the request's wait, between its context and its request", () => {
       closing: closing.signal,
     });
     expect(facts.get("ended")).toBe("closed");
+    expect(answered.outcome.kind).toBe("closing");
     expect(contexts).toHaveLength(1);
     expect(requests).toHaveLength(0);
     expect(answered.resp).toMatchObject({
