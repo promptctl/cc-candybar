@@ -75,12 +75,24 @@ export class MenuIdle {
 
   // The earliest tick a session's menus close at, or null when none shows a
   // menu.
-  next(): Tick | null {
+  next(busy?: ReadonlySet<SessionId>): Tick | null {
     return earliestOf(
-      [...this.sessions.values()].map((idle) =>
-        idle.shown ? closesAt(idle.since, idle.timeoutS) : null,
+      [...this.sessions].map(([session, idle]) =>
+        this.expiryOf(session, idle, busy),
       ),
     );
+  }
+
+  // [LAW:single-enforcer] A pending click can restart the idle period. Until
+  // it lands, the renderer neither takes nor schedules that session's close.
+  private expiryOf(
+    session: SessionId,
+    idle: Idle,
+    busy?: ReadonlySet<SessionId>,
+  ): Tick | null {
+    return idle.shown && !busy?.has(session)
+      ? closesAt(idle.since, idle.timeoutS)
+      : null;
   }
 
   // The sessions whose idle period has run out by `tick`, each taken as
@@ -89,10 +101,12 @@ export class MenuIdle {
   // once, and a session that stops drawing is never closed again.
   due(
     tick: Tick,
+    busy?: ReadonlySet<SessionId>,
   ): Array<{ readonly session: SessionId; readonly idle: IdleSpan }> {
     const due: Array<{ session: SessionId; idle: IdleSpan }> = [];
     for (const [session, idle] of this.sessions) {
-      if (!idle.shown || closesAt(idle.since, idle.timeoutS) > tick) continue;
+      const expiry = this.expiryOf(session, idle, busy);
+      if (expiry === null || expiry > tick) continue;
       due.push({
         session,
         idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS },

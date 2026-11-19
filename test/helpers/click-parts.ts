@@ -14,7 +14,7 @@ import type { DaemonParts } from "../../src/daemon/daemon-parts";
 import { rendererHost, type HostWorld } from "../../src/daemon/renderer-host";
 import type { ActsOnTheirWay } from "../../src/renderer/acts";
 import { mainRenderer } from "../../src/renderer/main";
-import { systemTimekeeper } from "../../src/time";
+import { systemTimekeeper, type Timekeeper } from "../../src/time";
 import { TurnTime } from "../../src/renderer/turn-time";
 import { MenuIdle } from "../../src/renderer/menu-idle";
 import {
@@ -47,6 +47,7 @@ export function clickParts(
     closing: () => false,
     unheard: () => {},
   },
+  clock: Timekeeper = systemTimekeeper,
 ): Pick<DaemonParts, "renderer" | "linkSigner"> & {
   collector: Pick<Collector, "holding" | "clicked">;
   sessionBook: Pick<SessionBook, "heard" | "contextOf">;
@@ -114,8 +115,8 @@ export function clickParts(
   );
   const renderer = rendererHost(
     MAIN_RENDERER,
-    systemTimekeeper,
-    hostHeld(held.renderer),
+    clock,
+    hostHeld(held.renderer, clock.monotonic),
     () => {},
     {
       subscribed: () => {},

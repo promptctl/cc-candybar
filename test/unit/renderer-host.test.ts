@@ -6,6 +6,8 @@
 
 import { rendererHost } from "../../src/daemon/renderer-host";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
+import { sessionIdOf } from "../../src/daemon/foundations/session-id";
+import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
 import {
   failureOf,
   type Failure,
@@ -558,7 +560,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
   await settled();
 });
 
-test("a `due` waits behind every input that arrives while it waits, so a click that has arrived lands before an idle close", async () => {
+test("a scheduled turn gives a short burst of queued input its turn first", async () => {
   const fire: Array<() => void> = [];
   const heard: string[] = [];
   const read = { wall: 0, mono: 0 };
@@ -617,10 +619,76 @@ test("a `due` waits behind every input that arrives while it waits, so a click t
   await settled();
   read.mono = 1000;
   fire[0]!();
-  // Arrives after the `due` joined the mailbox, as a click would.
-  const behind = retire("click");
+  // Arrives after the `due` joined the mailbox and keeps its ordinary slot.
+  const behind = retire("next");
   open();
   await Promise.all([long, behind]);
   await settled();
-  expect(heard).toEqual(["retire:first", "retire:long", "retire:click", "due"]);
+  expect(heard).toEqual(["retire:first", "retire:long", "retire:next", "due"]);
+});
+
+
+test("a scheduled frame is published while ordinary renderer turns replenish the mailbox", async () => {
+  const fire: Array<() => void> = [];
+  const read = { wall: 0, mono: 0 };
+  let open = (): void => {};
+  const heldTurn = new Promise<void>((resolve) => (open = resolve));
+  let end = (): void => {};
+  const done = new Promise<void>((resolve) => (end = resolve));
+  let traffic = 0;
+  const receivedAt: number[] = [];
+  const session = sessionIdOf("frame-viewer");
+  const host = rendererHost(
+    MAIN_RENDERER,
+    {
+      ...clockAt(read),
+      after: (_ms, run) => {
+        fire.push(run);
+        return () => {};
+      },
+    },
+    held(rendererOf({
+      event: async ({ event }) => {
+        if (event.kind === "due") return {
+          ...answered(),
+          frames: [{ session, answers: { resp: "frame", statusline: "frame" } }],
+        };
+        if (event.kind === "retire") await heldTurn;
+        if (event.kind === "viewers") {
+          traffic++;
+          if (traffic < 3 * FOREGROUND_BURST) void submit();
+          else end();
+        }
+        return {
+          ...answered(),
+          subscriptions: { ...NONE, wake: traffic === 0 ? (1 as Tick) : null },
+        };
+      },
+      adapter: async () => { throw new Error("no push here"); },
+    })),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: (frames) => {
+        if (frames.some((frame) => frame.session === session)) receivedAt.push(traffic);
+      },
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    NO_ACTS,
+  );
+  const submit = () => host.deliver(
+    () => ({ kind: "event", event: { kind: "viewers", viewers: {} } }),
+    [],
+  );
+  await host.start(() => ({ kind: "event", event: { kind: "start", viewers: {}, sessions: [] } }), []);
+  const blocked = host.deliver(() => ({ kind: "event", event: { kind: "retire", session } }), []);
+  read.mono = 1000;
+  fire[0]!();
+  const first = submit();
+  open();
+  await Promise.all([blocked, first, done]);
+  expect(receivedAt).toEqual([FOREGROUND_BURST]);
+  expect(traffic).toBe(3 * FOREGROUND_BURST);
 });

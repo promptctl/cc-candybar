@@ -13,11 +13,12 @@ import type { Monotonic } from "../../src/time";
 import type { Tick } from "../../src/utils/instant";
 import type { Failure } from "../../src/daemon/foundations/verb-error";
 
-const answered: DueEnded = { kind: "answered", turnMs: 2 };
+const answered: DueEnded = { kind: "answered", queuedMs: 0, turnMs: 2 };
 
 const failure = (kind: Failure["kind"]): DueEnded => ({
   kind: "threw",
   failure: { kind, message: "it broke", detail: "it broke" },
+  queuedMs: 0,
   turnMs: kind === "down" ? null : 2,
 });
 
@@ -46,7 +47,7 @@ function rig(
     due: async () => {
       clock.ms += waits;
       dues.push(clock.ms / 1000);
-      return ends();
+      return { ...ends(), queuedMs: waits };
     },
     said: (text) => void said.push(text),
     log: (text) => {
@@ -191,8 +192,8 @@ test("a `due` no renderer was live to take leaves the wake idle for the next ren
   expect(r.said).toEqual([]);
 });
 
-test("a closed wake arms nothing, a timer it held is let go, and its summary counts every due", async () => {
-  const r = rig();
+test("a closed wake cancels its timer and summarizes the due's turn and mailbox time", async () => {
+  const r = rig(() => answered, 200);
   r.wake.declare(tick(1));
   await r.fire();
   r.wake.close();
@@ -202,7 +203,7 @@ test("a closed wake arms nothing, a timer it held is let go, and its summary cou
   expect(r.live()).toEqual([]);
   expect(r.logged).toEqual([
     expect.stringMatching(
-      /^wake closed for=1s dues=1 failed=0 took=n:1,.* tookHistogram=\S+$/,
+      /^wake closed for=1s dues=1 failed=0 took=n:1,.* queuedMaxMs=200 tookHistogram=\S+$/,
     ),
   ]);
 });
