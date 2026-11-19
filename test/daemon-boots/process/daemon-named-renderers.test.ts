@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { textOf } from "../../../src/render/frame";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
 import { frameRequest, hookData, renderBody } from "../../helpers/daemon-e2e";
@@ -111,6 +113,7 @@ test("two named renderer processes draw separately and share config, transcript 
     fs.writeFileSync(
       config,
       `{
+      globals: { experimentalStatusline: true },
       variables: { modelName: { kind: "input", path: "model.display_name" } },
       segments: { model: { template: "{{ .modelName }}" } },
       root: { h: ["model", "plugins.shared.marker"] },
@@ -178,6 +181,42 @@ test("two named renderer processes draw separately and share config, transcript 
     expect(count(before, secondTranscript)).toBe(0);
 
     const selected = { name: "worktree", bundle: alternate };
+    const push = spawn(
+      process.execPath,
+      [alternate, "frames", "--lane", "statusline", "--config", config],
+      {
+        cwd: root,
+        env: { ...isolated.env, CC_CANDYBAR_NAME: selected.name },
+        stdio: "pipe",
+      },
+    );
+    const pushEnded = once(push, "exit");
+    let pushed = "";
+    let pushErrors = "";
+    push.stdout.setEncoding("utf8").on("data", (text: string) => {
+      pushed += text;
+    });
+    push.stderr.setEncoding("utf8").on("data", (text: string) => {
+      pushErrors += text;
+    });
+    try {
+      push.stdin.write(
+        JSON.stringify({
+          ...hookData("secondary-session", root),
+          transcript_path: secondTranscript,
+        }) + "\n",
+      );
+      await until(
+        () =>
+          pushed.includes(WORKTREE_MODEL) &&
+          pushed.includes("one-shared-plugin-read"),
+        () => `the named statusline feed: ${pushed || pushErrors}`,
+        8000,
+      );
+    } finally {
+      push.stdin.end();
+      await pushEnded;
+    }
     const worktree = textOf(await request("secondary-session", selected));
     expect(worktree).toContain(WORKTREE_MODEL);
     expect(worktree).toContain("one-shared-plugin-read");

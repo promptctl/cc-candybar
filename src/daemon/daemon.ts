@@ -715,8 +715,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       environment.kind === "ok"
         ? variableOf(environment.value, "CC_CANDYBAR_NAME")
         : null;
+    const client = request.hints.client;
+    // A frames client can forward Claude Code's input itself. An explicit
+    // name selects a renderer as on any statusline request; an unnamed
+    // frames client continues drawing the session it is following.
     let name =
-      request.hints.client?.kind === "frames" && route !== undefined
+      client?.kind === "frames" && route !== undefined
         ? route.name
         : inputs.rendererName;
     if (asked?.kind === "ok") {
@@ -732,12 +736,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       );
 
     let target = renderers.get(name);
-    // A frames client presents an existing session but never selects its code.
-    const client = request.hints.client;
-    const binding =
-      asked?.kind === "ok" && client?.kind !== "frames"
-        ? client?.bundle
-        : undefined;
+    const binding = asked?.kind === "ok" ? client?.bundle : undefined;
     if (target === undefined) {
       if (binding === undefined)
         throw new BadVerbArgs(
