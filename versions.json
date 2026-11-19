@@ -2,46 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-894",
-      "ref": "refs/pull/894/merge",
-      "sha": "da1a5b3e8d4e344e4f6166c19b4fc7aeb8aee90f",
-      "timestamp": "2026-11-19T20:19:47.238Z",
-      "commits": [
-        {
-          "sha": "da1a5b3e8d4e344e4f6166c19b4fc7aeb8aee90f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T20:18:43Z",
-          "message": "Merge 811c93c884e77b9a549b1450967647accade8461 into 98df29e0562517e9beb1e1386c47a4f552e80236\n"
-        },
-        {
-          "sha": "811c93c884e77b9a549b1450967647accade8461",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:04:44-07:00",
-          "message": "test(renderer): supply current config delivery in click rig\n"
-        },
-        {
-          "sha": "03e1d11524e1cedf528ae4886ded73a587a8032c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:49:05-07:00",
-          "message": "fix(renderer): use one outcome for each config delivery\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "98df29e0562517e9beb1e1386c47a4f552e80236",
-      "timestamp": "2026-11-19T20:18:56.979Z",
+      "sha": "f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81",
+      "timestamp": "2026-11-19T20:25:27.949Z",
       "commits": [
         {
-          "sha": "98df29e0562517e9beb1e1386c47a4f552e80236",
+          "sha": "f9d55e5632c0657f9c2a41c2e6fc3530acdd4a81",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:17:50-07:00",
-          "message": "fix(config): select plugin definitions before reading them (#906)"
+          "timestamp": "2026-11-19T13:24:24-07:00",
+          "message": "fix(renderer): use one outcome for each config delivery (#894)\n\n* fix(renderer): use one outcome for each config delivery\n\n* test(renderer): supply current config delivery in click rig"
         }
       ]
     },
