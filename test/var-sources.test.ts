@@ -48,8 +48,15 @@ import { SessionState } from "../src/renderer/session-state";
 import { systemLauncher } from "../src/proc/system-launcher";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
-import { pendingOf } from "../src/utils/outcome";
+import { ABSENT, ok, pendingOf, type Reading } from "../src/utils/outcome";
 import { drawingAt } from "./helpers/test-engine";
+import { drawPayload } from "./helpers/draw-payload";
+import { parseAndValidate } from "./helpers/parse-and-validate";
+import { registerDslConfig } from "../src/dsl/render";
+import { NOTHING_READ } from "../src/dsl/view-source";
+import { textOf } from "../src/render/frame";
+import { restamp } from "../src/facts/fact";
+import { instantOf } from "../src/utils/instant";
 import { buildScope } from "../src/template-engine/scope";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -292,6 +299,57 @@ describe("SourceRegistry — env", () => {
     registry.declareEnv("myvar", VAR);
     expect(registry.getLastError("myvar")).toBeUndefined();
   });
+
+  it.each([
+    { prior: "a value", reading: ok("previous"), text: "previous" },
+    { prior: "confirmed absence", reading: ABSENT, text: "fallback" },
+  ])(
+    "draws a new pending fact after $prior, then recovers",
+    ({ reading, text }) => {
+      const store = new VariableStore(systemTimekeeper);
+      const registry = registryOver(store, "", new SessionState());
+      const config = parseAndValidate(
+        "<test>",
+        `{
+      variables: { sample: { kind: "env", name: "${VAR}", default: "fallback" } },
+      segments: { sample: { template: "env={{ .sample }}" } },
+      root: "sample",
+    }`,
+      );
+      const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+      const at = instantOf(new Date(0));
+      const draw = (observation: Reading<string>) =>
+        drawPayload(
+          config,
+          compiled,
+          store,
+          registry,
+          { session_id: S1 },
+          at,
+          {
+            endcaps: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 0,
+            width: 80,
+          },
+          undefined,
+          { ...NOTHING_READ, env: () => restamp(undefined, observation, at) },
+        ).frame;
+
+      expect(textOf(draw(reading))).toContain(`env=${text}`);
+      if (reading.kind === "absent")
+        expect(registry.getLastError("sample")?.message).toContain("not set");
+      const pending = draw(pendingOf("superseded"));
+      expect(registry.getLastError("sample")).toBeUndefined();
+      expect(pending.pending).toContain("sample");
+      expect(textOf(pending)).not.toContain(`env=${text}`);
+
+      const fresh = draw(ok("current"));
+      expect(fresh.pending).toEqual([]);
+      expect(textOf(fresh)).toContain("env=current");
+    },
+  );
 });
 
 // ─── input ───────────────────────────────────────────────────────────────────
@@ -2822,6 +2880,73 @@ describe("SourceRegistry — time: the draw's instant, formatted", () => {
 // ─── depends_on cache policy ──────────────────────────────────────────────────
 
 describe("SourceRegistry — depends_on cache policy", () => {
+  it.each([
+    {
+      transition: "two tuples with their comma in different values",
+      names: ["a", "b"],
+      start(store: VariableStore) {
+        store.defineBox("a", "string", "a,b");
+        store.defineBox("b", "string", "c");
+      },
+      move(store: VariableStore) {
+        store.runInAction(() => {
+          store.setBox("a", "a");
+          store.setBox("b", "b,c");
+        });
+      },
+    },
+    {
+      transition: "literal text matching the dependency's failure",
+      names: ["dependency"],
+      start(store: VariableStore) {
+        store.defineBox("healthy", "boolean", true);
+        store.defineComputed("dependency", "string", (read) => {
+          if (!read("healthy")) throw new Error("unavailable");
+          return " failed:unavailable";
+        });
+      },
+      move(store: VariableStore) {
+        store.setBox("healthy", false);
+      },
+    },
+  ])(
+    "runs once for a changed observation: $transition",
+    async ({ names, start, move }) => {
+      const clock = heldClock(new Date(0));
+      const { launcher, spawner, started } = fakeLauncher(clock);
+      const store = new VariableStore(clock);
+      const registry = registryOver(
+        store,
+        "",
+        undefined,
+        undefined,
+        undefined,
+        runsOver({ launcher, clock }),
+      );
+      const command = "read-dependencies";
+      start(store);
+      spawner.program(shell(command), exits(0, "previous"));
+      registry.declareShell("val", command, {
+        cwd: "/work",
+        env: SHELL_ENV,
+        parse: TEXT,
+        cache: { kind: "depends_on", varNames: names },
+      });
+      clock.advance(0);
+      await turns();
+      await ran(registry);
+      expect(store.read("val")).toBe("previous");
+
+      spawner.program(shell(command), exits(0, "current"));
+      move(store);
+      clock.advance(0);
+      await turns();
+      await ran(registry);
+      expect(store.read("val")).toBe("current");
+      expect(started()).toHaveLength(2);
+    },
+  );
+
   it("triggers shell re-run when a named dependency changes", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {

@@ -458,7 +458,7 @@ describe("VariableStore — documents", () => {
     expect(store.changeKey("d")).toEqual(before);
     store.setDocument("d", ok({ ...doc(), a: 2 }));
     expect(store.changeKey("d")).not.toEqual(before);
-    expect(store.changeKey("n")).toEqual(ok("7"));
+    expect(store.changeKey("n")).toEqual(ok(["scalar", "number", "7"]));
   });
 
   // brandon-var-system-1tl. The defect: the document box compared by Object.is

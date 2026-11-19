@@ -150,6 +150,12 @@ variable, a template calling `now`, or a variable reading either — is refused
 at load: to re-run on time, use `ttl` (see "A cache key that reads the clock"
 under Mistakes).
 
+`depends_on` compares the listed observations in order. A dependency's read
+failure can trigger a run, and recovery can trigger another. A dependency
+that is still pending cannot supply a first key. An `env` variable draws as
+pending while the host has no current answer for it. Its fallback applies
+when the host confirms absence or reports a read failure.
+
 A source runs only when its cache policy says so. Drawing the bar never runs
 one: while the bar moves it is redrawn up to 30 times a second between
 statusline requests, and each of those frames reads the value the source last
