@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-902",
+      "ref": "refs/pull/902/merge",
+      "sha": "33e37f14320d82787cff0a2e52b5912fa1b05f5d",
+      "timestamp": "2026-11-19T18:48:03.978Z",
+      "commits": [
+        {
+          "sha": "33e37f14320d82787cff0a2e52b5912fa1b05f5d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:46:51-07:00",
+          "message": "Merge ff66095e8d5e444c9dceaaf199a69de512a8fa87 into 059ece30eb17a3358d9abdd230f2cd671892624c\n"
+        },
+        {
+          "sha": "ff66095e8d5e444c9dceaaf199a69de512a8fa87",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:44:16-07:00",
+          "message": "fix(daemon): skip abandoned statusline draws\n"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "e08e2b6223f321c876fdfc6de568dc8262c99621",
