@@ -412,7 +412,7 @@ var require_events = __commonJS({
       return ret;
     }
     function once2(emitter2, name) {
-      return new Promise(function(resolve, reject2) {
+      return new Promise(function(resolve2, reject2) {
         function errorListener(err) {
           emitter2.removeListener(name, resolver);
           reject2(err);
@@ -421,7 +421,7 @@ var require_events = __commonJS({
           if (typeof emitter2.removeListener === "function") {
             emitter2.removeListener("error", errorListener);
           }
-          resolve([].slice.call(arguments));
+          resolve2([].slice.call(arguments));
         }
         ;
         eventTargetAgnosticAddListener(emitter2, name, resolver, { once: true });
@@ -2496,7 +2496,7 @@ var require_path_browserify = __commonJS({
     }
     var posix = {
       // path.resolve([from ...], to)
-      resolve: function resolve() {
+      resolve: function resolve2() {
         var resolvedPath = "";
         var resolvedAbsolute = false;
         var cwd2;
@@ -3809,11 +3809,11 @@ function __metadata(metadataKey, metadataValue) {
 }
 function __awaiter2(thisArg, _arguments, P2, generator) {
   function adopt(value) {
-    return value instanceof P2 ? value : new P2(function(resolve) {
-      resolve(value);
+    return value instanceof P2 ? value : new P2(function(resolve2) {
+      resolve2(value);
     });
   }
-  return new (P2 || (P2 = Promise))(function(resolve, reject2) {
+  return new (P2 || (P2 = Promise))(function(resolve2, reject2) {
     function fulfilled(value) {
       try {
         step4(generator.next(value));
@@ -3829,7 +3829,7 @@ function __awaiter2(thisArg, _arguments, P2, generator) {
       }
     }
     function step4(result) {
-      result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected);
+      result.done ? resolve2(result.value) : adopt(result.value).then(fulfilled, rejected);
     }
     step4((generator = generator.apply(thisArg, _arguments || [])).next());
   });
@@ -4020,14 +4020,14 @@ function __asyncValues(o) {
   }, i2);
   function verb(n) {
     i2[n] = o[n] && function(v) {
-      return new Promise(function(resolve, reject2) {
-        v = o[n](v), settle3(resolve, reject2, v.done, v.value);
+      return new Promise(function(resolve2, reject2) {
+        v = o[n](v), settle3(resolve2, reject2, v.done, v.value);
       });
     };
   }
-  function settle3(resolve, reject2, d, v) {
+  function settle3(resolve2, reject2, d, v) {
     Promise.resolve(v).then(function(v2) {
-      resolve({ value: v2, done: d });
+      resolve2({ value: v2, done: d });
     }, reject2);
   }
 }
@@ -6653,14 +6653,14 @@ var require_util2 = __commonJS({
       return filepath;
     };
     exports2.unixify = unixify;
-    var resolve = (filename, base = process_1.default.cwd()) => resolveCrossPlatform(base, filename);
-    exports2.resolve = resolve;
+    var resolve2 = (filename, base = process_1.default.cwd()) => resolveCrossPlatform(base, filename);
+    exports2.resolve = resolve2;
     if (exports2.isWin) {
-      const _resolve = resolve;
-      exports2.resolve = resolve = (filename, base) => (0, exports2.unixify)(_resolve(filename, base));
+      const _resolve = resolve2;
+      exports2.resolve = resolve2 = (filename, base) => (0, exports2.unixify)(_resolve(filename, base));
     }
     var filenameToSteps = (filename, base) => {
-      const fullPath = resolve(filename, base);
+      const fullPath = resolve2(filename, base);
       const fullPathSansSlash = fullPath.substring(1);
       if (!fullPathSansSlash)
         return [];
@@ -8315,11 +8315,11 @@ var require_util3 = __commonJS({
       return fs_core_1.createWatchError;
     } });
     function promisify(fs2, fn, getResult = (input) => input) {
-      return (...args) => new Promise((resolve, reject2) => {
+      return (...args) => new Promise((resolve2, reject2) => {
         fs2[fn].bind(fs2)(...args, (error, result) => {
           if (error)
             return reject2(error);
-          return resolve(getResult(result));
+          return resolve2(getResult(result));
         });
       });
     }
@@ -8356,9 +8356,9 @@ var require_util3 = __commonJS({
     }
     function streamToBuffer(stream) {
       const chunks = [];
-      return new Promise((resolve, reject2) => {
+      return new Promise((resolve2, reject2) => {
         stream.on("data", (chunk3) => chunks.push(chunk3));
-        stream.on("end", () => resolve(buffer_1.Buffer.concat(chunks)));
+        stream.on("end", () => resolve2(buffer_1.Buffer.concat(chunks)));
         stream.on("error", reject2);
       });
     }
@@ -8398,7 +8398,7 @@ var require_glob = __commonJS({
     var glob_to_regex_js_1 = require_lib();
     var util_1 = require_util3();
     var Dirent_1 = require_Dirent();
-    var { basename, dirname: dirname2, isAbsolute: isAbsolute4, join: join4, relative, resolve } = path_1.posix;
+    var { basename, dirname: dirname2, isAbsolute: isAbsolute4, join: join4, relative, resolve: resolve2 } = path_1.posix;
     var internalAssertionError = () => (0, argErrors_1.withCode)(new Error("This is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n"), "ERR_INTERNAL_ASSERTION");
     var validateStringArrayOrFunction = (value, name) => {
       if (Array.isArray(value)) {
@@ -8543,7 +8543,7 @@ var require_glob = __commonJS({
     var createExcludeMatcher = (patterns, root) => {
       const regexes = [];
       for (let i2 = 0; i2 < patterns.length; i2++)
-        regexes.push((0, glob_to_regex_js_1.toRegex)(resolve(root, patterns[i2].replace(/\\/g, "/")), OPTS));
+        regexes.push((0, glob_to_regex_js_1.toRegex)(resolve2(root, patterns[i2].replace(/\\/g, "/")), OPTS));
       return (value) => {
         for (let i2 = 0; i2 < regexes.length; i2++)
           if (regexes[i2].test(value))
@@ -8790,7 +8790,7 @@ var require_glob = __commonJS({
       addSubpattern(path31, pattern2) {
         if (this.isExcluded(path31))
           return;
-        const fullpath = resolve(this.root, path31);
+        const fullpath = resolve2(this.root, path31);
         if (this.isExcluded(fullpath + "/") && this.cache.statSync(fullpath)?.isDirectory())
           return;
         const exclude = this.exclude;
@@ -8811,7 +8811,7 @@ var require_glob = __commonJS({
       accept(path31) {
         if (this.results.has(path31))
           return false;
-        if (this.isExcluded(resolve(this.root, path31)))
+        if (this.isExcluded(resolve2(this.root, path31)))
           return false;
         this.results.add(path31);
         return true;
@@ -8820,7 +8820,7 @@ var require_glob = __commonJS({
         if (this.cache.add(path31, pattern2))
           return;
         const cache2 = this.cache;
-        const fullpath = resolve(this.root, path31);
+        const fullpath = resolve2(this.root, path31);
         const stat3 = cache2.statSync(fullpath);
         const last2 = pattern2.last;
         const isDirectory = this.isDirectory(fullpath, stat3, pattern2);
@@ -9534,25 +9534,25 @@ var require_util4 = __commonJS({
         };
       },
       createDeferredPromise: function() {
-        let resolve;
+        let resolve2;
         let reject2;
         const promise = new Promise((res, rej) => {
-          resolve = res;
+          resolve2 = res;
           reject2 = rej;
         });
         return {
           promise,
-          resolve,
+          resolve: resolve2,
           reject: reject2
         };
       },
       promisify(fn) {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           fn((err, ...args) => {
             if (err) {
               return reject2(err);
             }
-            return resolve(...args);
+            return resolve2(...args);
           });
         });
       },
@@ -10339,7 +10339,7 @@ var require_end_of_stream = __commonJS({
         validateBoolean(opts.cleanup, "cleanup");
         autoCleanup = opts.cleanup;
       }
-      return new Promise2((resolve, reject2) => {
+      return new Promise2((resolve2, reject2) => {
         const cleanup = eos(stream, opts, (err) => {
           if (autoCleanup) {
             cleanup();
@@ -10347,7 +10347,7 @@ var require_end_of_stream = __commonJS({
           if (err) {
             reject2(err);
           } else {
-            resolve();
+            resolve2();
           }
         });
       });
@@ -11522,7 +11522,7 @@ var require_readable = __commonJS({
         error = this.readableEnded ? null : new AbortError();
         this.destroy(error);
       }
-      return new Promise2((resolve, reject2) => eos(this, (err) => err && err !== error ? reject2(err) : resolve(null)));
+      return new Promise2((resolve2, reject2) => eos(this, (err) => err && err !== error ? reject2(err) : resolve2(null)));
     };
     Readable.prototype.push = function(chunk3, encoding) {
       return readableAddChunk(this, chunk3, encoding, false);
@@ -12066,12 +12066,12 @@ var require_readable = __commonJS({
     }
     async function* createAsyncIterator(stream, options) {
       let callback = nop;
-      function next2(resolve) {
+      function next2(resolve2) {
         if (this === stream) {
           callback();
           callback = nop;
         } else {
-          callback = resolve;
+          callback = resolve2;
         }
       }
       stream.on("readable", next2);
@@ -13125,7 +13125,7 @@ var require_duplexify = __commonJS({
       );
     };
     function fromAsyncGen(fn) {
-      let { promise, resolve } = createDeferredPromise();
+      let { promise, resolve: resolve2 } = createDeferredPromise();
       const ac = new AbortController2();
       const signal = ac.signal;
       const value = fn(
@@ -13140,7 +13140,7 @@ var require_duplexify = __commonJS({
               throw new AbortError(void 0, {
                 cause: signal.reason
               });
-            ({ promise, resolve } = createDeferredPromise());
+            ({ promise, resolve: resolve2 } = createDeferredPromise());
             yield chunk3;
           }
         })(),
@@ -13151,8 +13151,8 @@ var require_duplexify = __commonJS({
       return {
         value,
         write(chunk3, encoding, cb) {
-          const _resolve = resolve;
-          resolve = null;
+          const _resolve = resolve2;
+          resolve2 = null;
           _resolve({
             chunk: chunk3,
             done: false,
@@ -13160,8 +13160,8 @@ var require_duplexify = __commonJS({
           });
         },
         final(cb) {
-          const _resolve = resolve;
-          resolve = null;
+          const _resolve = resolve2;
+          resolve2 = null;
           _resolve({
             done: true,
             cb
@@ -13616,7 +13616,7 @@ var require_pipeline = __commonJS({
           callback();
         }
       };
-      const wait = () => new Promise2((resolve, reject2) => {
+      const wait = () => new Promise2((resolve2, reject2) => {
         if (error) {
           reject2(error);
         } else {
@@ -13624,7 +13624,7 @@ var require_pipeline = __commonJS({
             if (error) {
               reject2(error);
             } else {
-              resolve();
+              resolve2();
             }
           };
         }
@@ -14270,8 +14270,8 @@ var require_operators = __commonJS({
                 next2 = null;
               }
               if (!done && (queue.length >= highWaterMark || cnt >= concurrency)) {
-                await new Promise2((resolve) => {
-                  resume = resolve;
+                await new Promise2((resolve2) => {
+                  resume = resolve2;
                 });
               }
             }
@@ -14305,8 +14305,8 @@ var require_operators = __commonJS({
               queue.shift();
               maybeResume();
             }
-            await new Promise2((resolve) => {
-              next2 = resolve;
+            await new Promise2((resolve2) => {
+              next2 = resolve2;
             });
           }
         } finally {
@@ -14565,7 +14565,7 @@ var require_promises = __commonJS({
     var { finished } = require_end_of_stream();
     require_stream();
     function pipeline(...streams) {
-      return new Promise2((resolve, reject2) => {
+      return new Promise2((resolve2, reject2) => {
         let signal;
         let end;
         const lastArg = streams[streams.length - 1];
@@ -14580,7 +14580,7 @@ var require_promises = __commonJS({
             if (err) {
               reject2(err);
             } else {
-              resolve(value);
+              resolve2(value);
             }
           },
           {
@@ -14839,8 +14839,8 @@ var require_FileHandle = __commonJS({
             this.closePromise = null;
           });
         } else {
-          this.closePromise = new Promise((resolve, reject2) => {
-            this.closeResolve = resolve;
+          this.closePromise = new Promise((resolve2, reject2) => {
+            this.closeResolve = resolve2;
             this.closeReject = reject2;
           }).finally(() => {
             this.closePromise = null;
@@ -15014,12 +15014,12 @@ var require_util5 = __commonJS({
         throw new TypeError('The "original" argument must be of type function');
       }
       return function(...args) {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           fn.call(this, ...args, (err, result) => {
             if (err) {
               reject2(err);
             } else {
-              resolve(result);
+              resolve2(result);
             }
           });
         });
@@ -15606,9 +15606,9 @@ var require_FsPromises = __commonJS({
         }
         this.eventQueue.push(event);
         if (this.resolveQueue.length > 0) {
-          const { resolve } = this.resolveQueue.shift();
+          const { resolve: resolve2 } = this.resolveQueue.shift();
           const nextEvent = this.eventQueue.shift();
-          resolve({ value: nextEvent, done: false });
+          resolve2({ value: nextEvent, done: false });
         }
       }
       finish(error) {
@@ -15628,11 +15628,11 @@ var require_FsPromises = __commonJS({
         }
         const delivered = error && this.resolveQueue.length > 0;
         while (this.resolveQueue.length > 0) {
-          const { resolve, reject: reject2 } = this.resolveQueue.shift();
+          const { resolve: resolve2, reject: reject2 } = this.resolveQueue.shift();
           if (error) {
             reject2(error);
           } else {
-            resolve({ value: void 0, done: true });
+            resolve2({ value: void 0, done: true });
           }
         }
         if (delivered)
@@ -15651,8 +15651,8 @@ var require_FsPromises = __commonJS({
           const event = this.eventQueue.shift();
           return { value: event, done: false };
         }
-        return new Promise((resolve, reject2) => {
-          this.resolveQueue.push({ resolve, reject: reject2 });
+        return new Promise((resolve2, reject2) => {
+          this.resolveQueue.push({ resolve: resolve2, reject: reject2 });
         });
       }
       async return() {
@@ -15672,11 +15672,11 @@ var require_FsPromises = __commonJS({
         this.fs = fs2;
         this.FileHandle = FileHandle;
         this.constants = fs_node_utils_1.constants;
-        this.cp = (src, dest, options) => new Promise((resolve, reject2) => {
-          this.fs.cp(src, dest, (0, cp_1.getCpOptions)(options), (error) => error ? reject2(error) : resolve());
+        this.cp = (src, dest, options) => new Promise((resolve2, reject2) => {
+          this.fs.cp(src, dest, (0, cp_1.getCpOptions)(options), (error) => error ? reject2(error) : resolve2());
         });
-        this.copyFile = (src, dest, mode) => new Promise((resolve, reject2) => {
-          this.fs.copyFile(src, dest, mode, (error) => error ? reject2(error) : resolve());
+        this.copyFile = (src, dest, mode) => new Promise((resolve2, reject2) => {
+          this.fs.copyFile(src, dest, mode, (error) => error ? reject2(error) : resolve2());
         });
         this.opendir = (0, util_1.promisify)(this.fs, "opendir");
         this.statfs = (0, util_1.promisify)(this.fs, "statfs");
@@ -19382,12 +19382,12 @@ var require_Dir = __commonJS({
         this.levels.push({ entries: link.children[Symbol.iterator](), path: path31, parentPath: path31 });
       }
       readPromise() {
-        return new Promise((resolve, reject2) => {
+        return new Promise((resolve2, reject2) => {
           this.readImpl((err, entry) => {
             if (err)
               reject2(err);
             else
-              resolve(entry ?? null);
+              resolve2(entry ?? null);
           });
         });
       }
@@ -19441,12 +19441,12 @@ var require_Dir = __commonJS({
         if (callback === void 0) {
           if (this.closed)
             return Promise.reject(dirClosed());
-          return new Promise((resolve, reject2) => {
+          return new Promise((resolve2, reject2) => {
             this.close((err) => {
               if (err)
                 reject2(err);
               else
-                resolve();
+                resolve2();
             });
           });
         }
@@ -28282,6 +28282,10 @@ function isPending(value) {
 init_globals();
 var import_node_path = __toESM(require_path_browserify(), 1);
 var CLAUDE_CONFIG_DIR_ENV = "CLAUDE_CONFIG_DIR";
+function detectClaudeConfigDir(env2, cwd2) {
+  const first2 = (env2[CLAUDE_CONFIG_DIR_ENV] ?? "").split(",")[0].trim();
+  return first2 === "" ? void 0 : import_node_path.default.resolve(cwd2, first2);
+}
 function claudeConfigDir(detected, home) {
   return detected ?? import_node_path.default.join(home, ".claude");
 }
@@ -28353,6 +28357,14 @@ function canonical(value) {
 }
 
 // src/daemon/foundations/session-env.ts
+function environmentKey(env2) {
+  const entries = Object.entries(env2).map((pair) => ({
+    name: import_buffer.Buffer.from(pair[0]),
+    pair
+  }));
+  entries.sort((a, b) => a.name.compare(b.name));
+  return digestOf(entries.map(({ pair }) => pair));
+}
 function plainEnvironment(env2) {
   return Object.fromEntries(
     Object.entries(env2).flatMap(
@@ -29028,7 +29040,7 @@ var systemTimekeeper = {
   }
 };
 function sleep(clock, ms, signal) {
-  return new Promise((resolve, reject2) => {
+  return new Promise((resolve2, reject2) => {
     const aborted = () => Object.assign(new Error("The operation was aborted"), {
       name: "AbortError",
       code: "ABORT_ERR",
@@ -29044,7 +29056,7 @@ function sleep(clock, ms, signal) {
     };
     const cancel = clock.after(ms, () => {
       signal?.removeEventListener("abort", onAbort);
-      resolve();
+      resolve2();
     });
     signal?.addEventListener("abort", onAbort, { once: true });
   });
@@ -29224,8 +29236,11 @@ var FORGE_CLI = {
   github: { cli: "gh", repoEnv: "GH_REPO" },
   gitlab: { cli: "glab", repoEnv: "GITLAB_REPO" }
 };
-var GIT_LOCATING_ENV = [
+var GIT_LOCAL_ENV = [
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_CONFIG",
+  "GIT_CONFIG_PARAMETERS",
+  "GIT_CONFIG_COUNT",
   "GIT_OBJECT_DIRECTORY",
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -29239,7 +29254,7 @@ var GIT_LOCATING_ENV = [
   "GIT_COMMON_DIR"
 ];
 var REPOSITORY_SCOPED_ENV = [
-  ...GIT_LOCATING_ENV,
+  ...GIT_LOCAL_ENV,
   ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv)
 ];
 
@@ -29574,7 +29589,7 @@ async function launchPiped(state, opts, pipes) {
   if (refused2 !== null) return refused2;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const { spawner } = state;
     let child;
     try {
@@ -29586,7 +29601,7 @@ async function launchPiped(state, opts, pipes) {
       });
     } catch (err) {
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
-      resolve({
+      resolve2({
         ok: false,
         reason: "spawn-error",
         stdout: "",
@@ -29652,7 +29667,7 @@ async function launchPiped(state, opts, pipes) {
         hold(state, opts.category, input, inputEnd);
       deliver2();
     };
-    const settle3 = (r) => finish(() => resolve(r));
+    const settle3 = (r) => finish(() => resolve2(r));
     const signal = (pid2, sig) => {
       try {
         spawner.signalGroup(pid2, sig);
@@ -30483,7 +30498,19 @@ var SessionBook = class {
   // [LAW:one-source-of-truth] The environment a program the host runs for
   // the session starts from: its newest request's, or why the host has none.
   environmentOf(session) {
-    return this.environments.get(session) ?? NOT_HEARD;
+    const held = this.environments.get(session) ?? NOT_HEARD;
+    return "execution" in held ? { kind: "ok", value: held.execution } : held;
+  }
+  // A desktop tool or tmux command inherits the working directory and
+  // environment of the same reported session. Only the directory is durable.
+  programContextOf(session) {
+    const durable = this.book.get(session);
+    const environment = this.environmentOf(session);
+    return durable !== void 0 && environment.kind === "ok" ? { cwd: durable.origin.cwd, environment: environment.value } : null;
+  }
+  reportedFor(session, key) {
+    const held = this.environments.get(session);
+    return held && "key" in held && held.key === key ? held : null;
   }
   close() {
     this.phase = "closed";
@@ -30788,6 +30815,14 @@ var TERMINAL_ENV_VARS = [
   // Where a terminal that reads a config file (Alacritty) finds it.
   "XDG_CONFIG_HOME"
 ];
+function detectTerminalEnv(env2) {
+  return Object.fromEntries(
+    TERMINAL_ENV_VARS.flatMap((name) => {
+      const value = env2[name] ?? "";
+      return value === "" ? [] : [[name, value]];
+    })
+  );
+}
 
 // src/client-hint.ts
 init_globals();
@@ -30795,6 +30830,9 @@ var CLIENT_KINDS = ["native", "node", "frames"];
 
 // src/daemon/foundations/protocol.ts
 var PROTOCOL_VERSION = 3;
+var SESSION_RENDER_KIND = "render-session";
+var ENVIRONMENT_NEEDED = "environment";
+var UNKNOWN_REQUEST_KIND = "unknown kind";
 var CONNECT_TIMEOUT_MS = 50;
 var TOTAL_BUDGET_MS = 150;
 var RENDER_ENCODINGS = ["ansi", "frame"];
@@ -45286,7 +45324,7 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
     const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
     let rejector;
     let pendingPromise = void 0;
-    const promise = new Promise(function(resolve, reject2) {
+    const promise = new Promise(function(resolve2, reject2) {
       let stepId = 0;
       rejector = reject2;
       function onFulfilled(res3) {
@@ -45315,7 +45353,7 @@ var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
           return;
         }
         if (ret.done) {
-          return resolve(ret.value);
+          return resolve2(ret.value);
         }
         pendingPromise = Promise.resolve(ret.value);
         return pendingPromise.then(onFulfilled, onRejected);
@@ -45506,9 +45544,9 @@ function whenPromise(predicate, opts) {
   }
   let cancel;
   let abort;
-  const res = new Promise((resolve, reject2) => {
+  const res = new Promise((resolve2, reject2) => {
     var _opts$signal2;
-    let disposer = _when(predicate, resolve, assign({}, opts, {
+    let disposer = _when(predicate, resolve2, assign({}, opts, {
       onError: reject2
     }));
     cancel = () => {
@@ -47516,8 +47554,8 @@ function unread() {
 }
 function pending(why2) {
   let land;
-  const landed = new Promise((resolve) => {
-    land = resolve;
+  const landed = new Promise((resolve2) => {
+    land = resolve2;
   });
   return { kind: "pending", why: why2, landed, land };
 }
@@ -47545,15 +47583,15 @@ function waitWithin(work, ms, late, after, closing) {
   const wait = new AbortController();
   const end = (why2) => () => wait.abort(why2);
   const clear = after(Math.max(0, ms), end("deadline"));
-  const ended = new Promise((resolve, reject2) => {
+  const ended = new Promise((resolve2, reject2) => {
     wait.signal.addEventListener(
       "abort",
-      () => resolve(wait.signal.reason)
+      () => resolve2(wait.signal.reason)
     );
     closing.addEventListener("abort", end("closed"), { signal: wait.signal });
     if (closing.aborted) end("closed")();
     void work(wait.signal).then(
-      () => resolve("answered"),
+      () => resolve2("answered"),
       // [LAW:no-silent-failure] Every rejection is reported: the wait's own
       // while it listens, its owner's after. Work that answered never
       // rejects, so a wait aborted before it ended at its deadline or close.
@@ -49651,7 +49689,7 @@ var import_node_path11 = __toESM(require_path_browserify(), 1);
 init_globals();
 var import_node_path10 = __toESM(require_path_browserify(), 1);
 function expandHome(p2, home) {
-  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? home + p2.slice(1) : p2;
+  return p2 === "~" || p2.startsWith("~/") || p2.startsWith("~\\") ? (typeof home === "function" ? home() : home) + p2.slice(1) : p2;
 }
 function resolveUserPath(base, p2, home) {
   return import_node_path10.default.resolve(base, expandHome(p2, home));
@@ -49660,8 +49698,15 @@ function explicitConfigPath(base, p2, home) {
   return typeof p2 === "string" && p2 !== "" ? resolveUserPath(base, p2, home) : void 0;
 }
 
+// src/client-hints.ts
+init_globals();
+
 // src/config-hint.ts
 init_globals();
+var CONFIG_ENV = "CC_CANDYBAR_CONFIG";
+function detectConfigEnv({ env: env2, home }, cwd2) {
+  return explicitConfigPath(cwd2, env2[CONFIG_ENV], home);
+}
 var CONFIG_FLAGS = {
   config: { type: "string" },
   "config-only": { type: "string" }
@@ -49684,6 +49729,78 @@ function originKey({ projectDir, cwd: cwd2, target }) {
 }
 function chainName(paths2, none2 = "bundled default (no config file loaded)") {
   return paths2.join(" < ") || none2;
+}
+
+// src/term-extent.ts
+init_globals();
+function detectTermExtent(envValue, ttyExtent) {
+  if (envValue !== void 0 && /^\+?\d+$/.test(envValue)) {
+    const n = Number(envValue);
+    if (n > 0 && n <= 4294967295) return n;
+  }
+  if (ttyExtent && ttyExtent > 0) return ttyExtent;
+  return void 0;
+}
+
+// src/tmux-hint.ts
+init_globals();
+var TMUX_ENV = {
+  // `socket,server-pid,session-id` — the socket is the part before the first
+  // comma, and it is what `tmux -S <socket>` needs to reach THIS server.
+  socket: "TMUX",
+  pane: "TMUX_PANE",
+  // Claude Code's own switch: when this is truthy in ITS environment, it stops
+  // re-encoding the statusline at 256 colours inside tmux (verified against the
+  // 2.1.259 binary: `if (env.CLAUDE_CODE_TMUX_TRUECOLOR) return false`).
+  truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR"
+};
+var paneKey = ({
+  socket,
+  pane
+}) => JSON.stringify([socket, pane]);
+function detectTmuxHint(env2) {
+  const tmux3 = env2[TMUX_ENV.socket] ?? "";
+  const pane = env2[TMUX_ENV.pane] ?? "";
+  if (tmux3 === "" || pane === "") return null;
+  const truecolor = env2[TMUX_ENV.truecolor] ?? "";
+  return {
+    socket: tmux3.split(",")[0],
+    pane,
+    truecolor: truecolor === "" ? null : truecolor
+  };
+}
+
+// src/client-hints.ts
+var SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+function terminalObservation(env2, tty) {
+  return {
+    termCols: detectTermExtent(env2.COLUMNS, tty.columns),
+    termRows: detectTermExtent(env2.LINES, tty.rows)
+  };
+}
+function detectClientHints(host, cwd2, tty) {
+  const { env: env2 } = host;
+  return {
+    ...terminalObservation(env2, tty),
+    // [LAW:dataflow-not-control-flow] A fold over the vocabulary — adding a
+    // name is a data edit. TOTAL, unlike the extents: "no SSH var set" is the
+    // affirmative answer "local", so an ABSENT `ssh` hint on the daemon side
+    // means only "this client is too old to answer".
+    ssh: SSH_ENV_VARS.some((name) => (env2[name] ?? "") !== ""),
+    // Total like ssh: `null` is the affirmative "not in tmux", so an absent
+    // hint on the daemon side means only "client too old".
+    tmux: detectTmuxHint(env2),
+    // Conditional like termCols: absent IS "no override", so the daemon
+    // resolves the precedence chain. The daemon reads no env of its own.
+    configEnv: detectConfigEnv(host, cwd2),
+    // Conditional too: absent is the default directory. The daemon reads
+    // settings.json from THIS session's Claude Code directory.
+    claudeConfigDir: detectClaudeConfigDir(env2, cwd2),
+    // Total like tmux: always an object, so an absent hint means only "client
+    // too old". The doctor reads which terminal draws the bar from these
+    // (src/doctor/terminal.ts).
+    terminalEnv: detectTerminalEnv(env2)
+  };
 }
 
 // src/utils/schema-validator.ts
@@ -49907,7 +50024,7 @@ function parseRenderEncoding(raw) {
     problem: `request 'encoding' is not one of ${RENDER_ENCODINGS.join(", ")}: ${JSON.stringify(raw)}`
   };
 }
-function checkRenderRequest(req, stats, log, home) {
+function checkRenderRequest(req, stats, log, home, lookup2) {
   const { report: report2 } = validateHookData(req.hookData);
   const wireProblems = [];
   for (const path31 of report2.missingRequired) {
@@ -49936,8 +50053,8 @@ function checkRenderRequest(req, stats, log, home) {
       `request 'args' is not a list of strings: ${JSON.stringify(req.args)}`
     );
   }
-  const env2 = parseReportedEnv(req.env);
-  if (env2.kind === "refused") wireProblems.push(env2.problem);
+  const presented = readEnvironment(req);
+  if (presented.kind === "refused") wireProblems.push(presented.problem);
   const encoding = parseRenderEncoding(req.encoding);
   if (!encoding.ok) wireProblems.push(encoding.problem);
   const deadline = parseClientDeadline(
@@ -49945,10 +50062,36 @@ function checkRenderRequest(req, stats, log, home) {
   );
   if (deadline.kind === "refused")
     return { ok: false, problems: [...wireProblems, deadline.problem] };
-  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || env2.kind === "refused")
+  if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || presented.kind === "refused")
     return { ok: false, problems: wireProblems };
-  const hints = parseClientHints(req);
-  const parsedArgs = parseRenderArgs(req.args, req.cwd, home, hints.configEnv);
+  let env2;
+  if (presented.kind === "reference") {
+    const previous2 = lookup2?.reportedFor(sessionId2.id, presented.key);
+    if (!previous2) return { need: ENVIRONMENT_NEEDED };
+    env2 = {
+      kind: "reported",
+      env: previous2.reported,
+      key: previous2.key,
+      previous: previous2
+    };
+  } else {
+    env2 = presented;
+  }
+  const keyed = env2.kind === "reported" && env2.key !== void 0 ? env2.env : void 0;
+  const clientHome = keyed ? keyed.HOME ? (0, import_node_path11.resolve)(req.cwd, keyed.HOME) : lookup2?.accountHome ?? home : home;
+  const rawHints = keyed ? {
+    ...detectClientHints({ env: keyed, home: clientHome }, req.cwd, {}),
+    ...req.termCols !== void 0 && { termCols: req.termCols },
+    ...req.termRows !== void 0 && { termRows: req.termRows },
+    client: req.client
+  } : req;
+  const hints = parseClientHints(rawHints);
+  const parsedArgs = parseRenderArgs(
+    req.args,
+    req.cwd,
+    clientHome,
+    hints.configEnv
+  );
   if ("problem" in parsedArgs)
     return { ok: false, problems: [parsedArgs.problem] };
   const { target, refusedArgs } = parsedArgs;
@@ -49960,19 +50103,24 @@ function checkRenderRequest(req, stats, log, home) {
       );
     }
   }
-  const { env: _env, ...rest2 } = req;
   return {
     ok: true,
-    environment: env2.kind === "absent" ? { kind: "failed", reason: UNREPORTED } : {
-      kind: "ok",
-      value: sessionEnvironment(env2.env, {
-        sessionId: sessionId2.id,
-        projectDir: req.hookData.workspace.project_dir,
-        claudeConfigDir: hints.claudeConfigDir
-      })
-    },
+    ...environmentForSession(env2, {
+      sessionId: sessionId2.id,
+      projectDir: req.hookData.workspace.project_dir,
+      claudeConfigDir: hints.claudeConfigDir
+    }),
     req: {
-      ...rest2,
+      v: req.v,
+      kind: "render",
+      cwd: req.cwd,
+      args: req.args,
+      ...hints,
+      // Existing workers show a diagnostic for an explicitly refused hint.
+      // Forward only the declared fields they need for that diagnostic.
+      ...Object.fromEntries(
+        refusedHints(rawHints, hints).map(({ hint, sent }) => [hint, sent])
+      ),
       hookData: { ...req.hookData, session_id: sessionId2.id },
       deadline,
       encoding: encoding.encoding,
@@ -49988,14 +50136,56 @@ function checkRenderRequest(req, stats, log, home) {
   };
 }
 var UNREPORTED = "this session's client sent no environment, so it is older than the daemon; update cc-candybar so its programs can run";
-function parseReportedEnv(raw) {
+var validKey = (key) => typeof key === "string" && key.length === 64 && !/[^a-f0-9]/.test(key);
+function environmentForSession(env2, facts) {
+  if (env2.kind === "absent")
+    return {
+      environment: { kind: "failed", reason: UNREPORTED },
+      registration: null
+    };
+  const { previous: previous2 } = env2;
+  if (previous2 && previous2.projectDir === facts.projectDir && previous2.claudeConfigDir === facts.claudeConfigDir)
+    return {
+      environment: { kind: "ok", value: previous2.execution },
+      registration: previous2
+    };
+  const execution = sessionEnvironment(env2.env, facts);
+  const registration = env2.key === void 0 ? null : {
+    key: env2.key,
+    reported: env2.env,
+    projectDir: facts.projectDir,
+    claudeConfigDir: facts.claudeConfigDir,
+    execution
+  };
+  return { environment: { kind: "ok", value: execution }, registration };
+}
+function readEnvironment(req) {
+  const key = req.envKey;
+  if ((req.kind !== "render" || key !== void 0) && !validKey(key))
+    return {
+      kind: "refused",
+      problem: "request 'envKey' is not a SHA-256 digest"
+    };
+  if (req.kind !== "render") return { kind: "reference", key: req.envKey };
+  const raw = req.env;
+  if (key !== void 0 && raw === void 0)
+    return {
+      kind: "refused",
+      problem: "request 'envKey' has no accompanying environment"
+    };
   if (raw === void 0) return { kind: "absent" };
   if (typeof raw !== "object" || raw === null || Array.isArray(raw) || !Object.values(raw).every((value) => typeof value === "string"))
     return {
       kind: "refused",
       problem: "request 'env' is not an object of strings"
     };
-  return { kind: "reported", env: raw };
+  const env2 = raw;
+  if (key !== void 0 && environmentKey(env2) !== key)
+    return {
+      kind: "refused",
+      problem: "request 'envKey' does not match its environment"
+    };
+  return { kind: "reported", env: env2, key };
 }
 
 // src/daemon/click-reading.ts
@@ -50396,7 +50586,7 @@ function renderRecord(rendered) {
 }
 var replied = (reply) => ({ kind: "reply", ...reply });
 function closingResponse(parts, rawKind, accepted) {
-  const kind = rawKind === "render" || rawKind === "click" ? rawKind : "request";
+  const kind = rawKind === SESSION_RENDER_KIND ? "render" : rawKind === "render" || rawKind === "click" ? rawKind : "request";
   const failure2 = failureOf(new DaemonClosing(kind));
   if (kind === "render" || kind === "click") {
     if (kind === "render") {
@@ -50427,6 +50617,7 @@ function refuseClosingInbound(parts, inbound, accepted) {
 }
 var REPLY_KINDS = {
   render: true,
+  [SESSION_RENDER_KIND]: true,
   "pane-session": true,
   shutdown: true,
   stats: true,
@@ -50487,7 +50678,7 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
   }
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
-    return refuse("BAD_REQUEST", "unknown kind");
+    return refuse("BAD_REQUEST", UNKNOWN_REQUEST_KIND);
   return replied(await replyTo(parts, req, timedOut, accepted, clientLeft));
 }
 async function replyTo(parts, req, timedOut, accepted, clientLeft) {
@@ -50556,13 +50747,12 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       })
     });
   }
-  if (req.kind === "render") {
+  if (req.kind === "render" || req.kind === SESSION_RENDER_KIND) {
     const started2 = new Date(clock.now());
     const at = instantOf(started2);
     const t0 = clock.monotonic();
     const queuedMs = spanMs(accepted.at, t0);
     const facts = [];
-    stats.requestsTotal++;
     const order2 = accepted.id;
     const sighted = (req2, frame2) => renderSightings.see(
       req2.hookData.session_id,
@@ -50598,16 +50788,41 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.log(level, line);
       return reply;
     };
+    const failedDraw = (error) => {
+      const failure2 = renderFailure(failureOf(error));
+      return renderRecord({
+        outcome: failure2,
+        resp: failedWith(failure2.message),
+        settled: NOTHING_TO_SETTLE
+      });
+    };
+    let checked;
+    try {
+      checked = checkRenderRequest(req, stats, parts.log, parts.home, {
+        reportedFor: (session, key) => parts.sessionBook.reportedFor(session, key),
+        accountHome: parts.accountHome
+      });
+    } catch (error) {
+      stats.requestsTotal++;
+      return recorded2(failedDraw(error));
+    }
+    if ("need" in checked) {
+      stats.environmentMisses++;
+      return stay({ ok: true, need: ENVIRONMENT_NEEDED });
+    }
+    stats.requestsTotal++;
     const draw2 = async () => {
       let answered;
       try {
-        const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
         const renderer2 = parts.rendererFor?.(checked.req, checked.environment, order2) ?? parts.renderer;
         sighted(checked.req, "drawing");
         frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-          parts.sessionBook.heard(checked.req, checked.environment);
+          parts.sessionBook.heard(
+            checked.req,
+            checked.registration ?? checked.environment
+          );
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
         answered = await answerStatusline(
@@ -50642,12 +50857,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         return rendered;
       } catch (error) {
         answered?.settled(false);
-        const failure2 = renderFailure(failureOf(error));
-        return renderRecord({
-          outcome: failure2,
-          resp: failedWith(failure2.message),
-          settled: NOTHING_TO_SETTLE
-        });
+        return failedDraw(error);
       }
     };
     return recorded2(await draw2());
@@ -51111,12 +51321,7 @@ function classifyForgePr(label2, result, noPrPattern, parse3) {
   if (isMissingCommand(result)) return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
+  return failed(launchFailure(label2, result), "read");
 }
 function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -52073,7 +52278,7 @@ var PricingService = class {
     await CacheManager.setUsageCache(cacheRoot, clock, "pricing", data);
   }
   static async fetchPricingData() {
-    return new Promise((resolve) => {
+    return new Promise((resolve2) => {
       const parsedUrl = new U(this.GITHUB_PRICING_URL);
       const request2 = get(
         {
@@ -52088,7 +52293,7 @@ var PricingService = class {
         (response) => {
           if (response.statusCode !== 200) {
             debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
-            resolve(null);
+            resolve2(null);
             return;
           }
           let data = "";
@@ -52100,7 +52305,7 @@ var PricingService = class {
             if (size > MAX_SIZE) {
               debug("Response too large");
               request2.destroy();
-              resolve(null);
+              resolve2(null);
               return;
             }
             data += chunk3;
@@ -52121,30 +52326,30 @@ var PricingService = class {
                   `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
                 );
                 debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-                resolve(pricingData);
+                resolve2(pricingData);
               } else {
                 debug("Invalid pricing data structure");
-                resolve(null);
+                resolve2(null);
               }
             } catch (error) {
               debug("Failed to parse JSON:", error);
-              resolve(null);
+              resolve2(null);
             }
           });
           response.on("error", (error) => {
             debug("Response error:", error);
-            resolve(null);
+            resolve2(null);
           });
         }
       );
       request2.on("error", (error) => {
         debug("Request error:", error);
-        resolve(null);
+        resolve2(null);
       });
       request2.on("timeout", () => {
         debug("Request timeout");
         request2.destroy();
-        resolve(null);
+        resolve2(null);
       });
       request2.end();
     });
@@ -54894,13 +55099,6 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
     args
   );
 }
-
-// src/tmux-hint.ts
-init_globals();
-var paneKey = ({
-  socket,
-  pane
-}) => JSON.stringify([socket, pane]);
 
 // src/daemon/cache/tmux.ts
 var NAME_PERIOD_MS = 3e4;
@@ -66257,7 +66455,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.234.2";
+var PACKAGE_VERSION = "1.234.3";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66280,6 +66478,7 @@ var RuntimeStats = class _RuntimeStats {
   clock;
   startedAt;
   requestsTotal = 0;
+  environmentMisses = 0;
   requestsErrored = 0;
   requestsTimedOut = 0;
   inFlight = 0;
@@ -66527,6 +66726,7 @@ var RuntimeStats = class _RuntimeStats {
       arrayBuffersBytes: mem.arrayBuffers,
       requests: {
         total: this.requestsTotal,
+        environmentMisses: this.environmentMisses,
         errored: this.requestsErrored,
         timedOut: this.requestsTimedOut,
         inFlight: this.inFlight,
@@ -68426,10 +68626,10 @@ function next(waiting) {
 var KeyedSerialQueue = class {
   waiting = /* @__PURE__ */ new Map();
   run(key, task, at = "last") {
-    return new Promise((resolve, reject2) => {
+    return new Promise((resolve2, reject2) => {
       const entry = async () => {
         try {
-          resolve(await task());
+          resolve2(await task());
         } catch (e) {
           reject2(e);
         }
@@ -68498,7 +68698,7 @@ var Acts = class {
     this.deps = deps;
     this.performers = {
       copy: (act) => clickLaunch(
-        deps.launch,
+        deps.programsFor(act.session).launch,
         {
           bin: "/usr/bin/pbcopy",
           stdinInput: act.text,
@@ -68508,7 +68708,7 @@ var Acts = class {
         "copied"
       ),
       open: (act) => clickLaunch(
-        deps.launch,
+        deps.programsFor(act.session).launch,
         {
           bin: "/usr/bin/open",
           args: ["-a", "Visual Studio Code", act.target],
@@ -68518,7 +68718,7 @@ var Acts = class {
         `opened ${act.target}`
       ),
       "type-slash": async (act) => {
-        const typed = await this.typed(act.pane, act.line);
+        const typed = await this.typed(act);
         return typed.kind === "typed" ? did(`typed into ${typed.pane}`) : not({ kind: "refused", reason: typed.reason });
       },
       run: (act) => deps.run(act)
@@ -68544,10 +68744,13 @@ var Acts = class {
       () => on2 ? paneOn(pane, host, edge) : paneOff(pane, edge)
     );
   }
-  typed(pane, line) {
+  typed(act) {
     return this.inPaneTurn(
-      pane,
-      () => typeInPane(this.deps.claudeInput)(pane, line)
+      act.pane,
+      () => typeInPane(this.deps.programsFor(act.session).claudeInput)(
+        act.pane,
+        act.line
+      )
     );
   }
   // [LAW:dataflow-not-control-flow] One act, by its kind's performer. A
@@ -72460,8 +72663,8 @@ function themeFloor() {
 
 // src/config/option-domain.ts
 var _GLOBAL_OPTION_DOMAINS = /* @__PURE__ */ new Map();
-function registerBuiltinDomain(name, resolve, facets = {}) {
-  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve, ...facets });
+function registerBuiltinDomain(name, resolve2, facets = {}) {
+  _GLOBAL_OPTION_DOMAINS.set(name, { permanent: true, resolve: resolve2, ...facets });
 }
 registerBuiltinDomain("themes", () => listResolvablePaletteNames(), {
   paletteOf: (option) => paletteForThemeName(option)
@@ -89857,9 +90060,19 @@ function createDaemon(inputs) {
     environmentOf: (session) => sessionBook.environmentOf(session),
     clock
   });
+  const programs2 = (edge) => ({
+    launch: clickLaunchVia(edge),
+    claudeInput: inputs.claudeInput(edge)
+  });
+  const desktopPrograms = programs2(launcher);
   const acts = new Acts({
-    launch: clickLaunchVia(launcher),
-    claudeInput: inputs.claudeInput(launcher),
+    programsFor: (session) => {
+      const context = session === null ? null : sessionBook.programContextOf(session);
+      if (context === null) return desktopPrograms;
+      return programs2({
+        launch: (options) => launcher.launch({ ...options, ...context })
+      });
+    },
     run: (run2) => runs.start(run2),
     barPane: {
       edge: inputs.barPaneEdge(launcher),
@@ -90173,6 +90386,7 @@ function createDaemon(inputs) {
     return target.renderer;
   };
   const parts = {
+    accountHome: inputs.accountHome,
     closing: cancelWork.signal,
     home: host.home,
     launcher,
@@ -90375,10 +90589,10 @@ function idOf3(st) {
 }
 function writeAt(fd, bytes) {
   return new Promise(
-    (resolve, reject2) => fs_default.write(
+    (resolve2, reject2) => fs_default.write(
       fd,
       bytes,
-      (err, written3) => err === null ? resolve(written3) : reject2(err)
+      (err, written3) => err === null ? resolve2(written3) : reject2(err)
     )
   );
 }
@@ -90470,7 +90684,7 @@ var DaemonLog = class {
   // unwritable).
   drained() {
     if (!this.flushing) return Promise.resolve();
-    return new Promise((resolve) => this.drainedWaiters.push(resolve));
+    return new Promise((resolve2) => this.drainedWaiters.push(resolve2));
   }
   // What is waiting, written now, synchronously: for a caller about to block
   // the loop on the way to a death that may come with no exit event (a heap
@@ -90517,16 +90731,16 @@ var DaemonLog = class {
     this.closeSink();
     await fs_default.promises.mkdir(import_node_path34.default.dirname(this.filePath), { recursive: true });
     const fd = await new Promise(
-      (resolve, reject2) => fs_default.open(
+      (resolve2, reject2) => fs_default.open(
         this.filePath,
         "a",
-        (err, opened2) => err === null ? resolve(opened2) : reject2(err)
+        (err, opened2) => err === null ? resolve2(opened2) : reject2(err)
       )
     );
     const opened = await new Promise(
-      (resolve, reject2) => fs_default.fstat(
+      (resolve2, reject2) => fs_default.fstat(
         fd,
-        (err, stats) => err === null ? resolve(stats) : reject2(err)
+        (err, stats) => err === null ? resolve2(stats) : reject2(err)
       )
     );
     this.sink = { path: this.filePath, fd, id: idOf3(opened) };
@@ -90555,7 +90769,7 @@ var DaemonLog = class {
     } finally {
       this.flushing = false;
       if (this.disposed) this.closeSink();
-      for (const resolve of this.drainedWaiters.splice(0)) resolve();
+      for (const resolve2 of this.drainedWaiters.splice(0)) resolve2();
     }
   }
   // Everything waiting, after the count of the lines dropped before it.
@@ -90649,6 +90863,7 @@ var DaemonLog = class {
 
 // src/daemon/production-adapters.ts
 init_globals();
+init_os();
 
 // src/daemon/session-state-file.ts
 init_globals();
@@ -91152,7 +91367,9 @@ function inProcessRenderer(name, build2, reaches, clock) {
 
 // src/daemon/production-adapters.ts
 function productionAdapters(paths2, daemonLog, machine) {
+  let accountHome;
   return {
+    accountHome: () => accountHome ??= userInfo().homedir,
     daemonLog,
     launcher: (own2) => systemLauncher(own2, machine),
     profile: (name, log) => fileStorage(profilePaths(paths2, name), log, machine),
