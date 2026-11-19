@@ -1,179 +1,262 @@
-// [LAW:one-source-of-truth] The one back history over what a session has OPEN:
-// its menu, tab, pickers, page cursors, edit mode and the placement it
-// configures. It is the settings history's twin (src/renderer/settings-history.ts)
-// over the keys that one deliberately leaves out, so `↶` steps what a session
-// SET and `◁` steps what it LOOKED AT, and neither can reach the other's keys.
-//
-// A STEP is one navigating click: what the `set-state`, `step-state` and
-// toolbar verbs wrote to navigation keys (isNavigationKey). Those three verbs are the
-// navigating ones by construction — they are how every disclosure, cursor and
-// mode click lands — while the session keys other paths write (a doctor
-// report, a click's error, the client's own hints) never pass through them.
-// `back` writes each change's `before`; the history is held in memory only, so
-// a daemon restart starts every session with nothing to go back to.
+// A menu visit has a source view and a destination view in one session.
+// [LAW:effects-at-boundaries] The cursor moves between these views. Back
+// installs a destination as state and never invokes the action that drew it.
 
+import { observable, runInAction } from "mobx";
+import { EDIT_MODE_KEY, EDIT_MODE_REF } from "../config/loader/edit-mode.js";
 import { isConfirmKey } from "../config/confirm-step";
 import { isSettingKey } from "../renderer-interface/history-storage";
 import { DIAGNOSTICS_VIEWING } from "../config/door";
-import { observable, runInAction } from "mobx";
-import { recordingView } from "./session-state";
-import { type SessionStateRW } from "../renderer-interface/session-state";
+import type { DisclosureNest, StateWrite } from "../config/disclosure-nest";
+import type { SessionStateRW } from "../renderer-interface/session-state";
 import type { Gate } from "../daemon/foundations/validator-registry";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import type { SessionId } from "../daemon/foundations/session-id";
 
-export interface NavigationChange {
-  readonly key: string;
-  readonly before: string | null;
-  readonly after: string | null;
+// [LAW:types-are-the-program] A complete view of the configured menu keys.
+// An absent key follows its config default. Config-authored disclosures and
+// page cursors use the same representation as built-in menus.
+export interface MenuContext {
+  readonly gate: Gate;
+  readonly nest: () => DisclosureNest;
+  readonly edit: symbol | null;
 }
 
-export type NavigationStep = readonly NavigationChange[];
+interface MenuView {
+  readonly values: ReadonlyMap<string, string>;
+  readonly edit: MenuContext["edit"];
+}
 
-// [LAW:carrying-cost] Bounded per session and in sessions; over the session
-// bound, the session that navigated least recently goes first.
-const MAX_STEPS = 20;
+interface Visit {
+  readonly from: MenuView;
+  readonly to: MenuView;
+}
+
+interface Timeline {
+  readonly visits: readonly Visit[];
+  readonly cursor: number;
+}
+
+const EMPTY: Timeline = { visits: [], cursor: 0 };
+
+// [LAW:carrying-cost] Bound both the visits of one session and the
+// number of sessions. A configuration can only contribute its gate's keys.
+const MAX_VISITS = 20;
 const MAX_SESSIONS = 32;
 
-// [LAW:one-source-of-truth] The keys going back restores: everything those
-// verbs write except a DECISION — a setting (undo's) or a confirmation's
-// arming, which would come back one click from firing —
-// and the diagnostics viewer, which is paged and closed by its own ‹ › ✕, so
-// a step through the messages never fills the history ◁ walks.
-const isNavigationKey = (key: string): boolean =>
-  !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
+// [LAW:one-source-of-truth] The gate supplies the menu's keys. Settings,
+// transaction lifecycle, confirmations and independently owned UI state
+// cannot be restored by visiting a prior menu.
+const isMenuKey = (key: string): boolean =>
+  key !== EDIT_MODE_KEY &&
+  !isSettingKey(key) &&
+  !isConfirmKey(key) &&
+  key !== DIAGNOSTICS_VIEWING;
 
-// Records one click's navigation. Writes through `sessionState` land in the
-// store it wraps and are recorded; `commit` turns them into one step.
-export interface NavigationJournal {
-  readonly sessionState: SessionStateRW;
+const menuKeys = new WeakMap<Gate, readonly string[]>();
+function capture(
+  store: SessionStateRW,
+  sid: SessionId,
+  { gate, edit }: MenuContext,
+): MenuView {
+  let keys = menuKeys.get(gate);
+  if (keys === undefined) {
+    keys = gate.listKeys().filter(isMenuKey);
+    menuKeys.set(gate, keys);
+  }
+  const values = new Map<string, string>();
+  for (const key of keys) {
+    const value = store.get(sid, key);
+    if (value !== null) values.set(key, value);
+  }
+  return { values, edit };
+}
+
+function movedKeys(from: MenuView, to: MenuView): string[] {
+  return [...new Set([...from.values.keys(), ...to.values.keys()])].filter(
+    (key) => from.values.get(key) !== to.values.get(key),
+  );
+}
+
+// An edit-only member is reachable only in the same open transaction.
+// A member on the same key outside edit mode keeps its ordinary meaning.
+function inView(
+  view: MenuView,
+  context: MenuContext,
+  key: string,
+): string | undefined {
+  const value = view.values.get(key);
+  if (value === undefined || view.edit === context.edit) return value;
+  const nested = context
+    .nest()
+    .inside(EDIT_MODE_REF)
+    .find((at) => at.key === key);
+  return nested === undefined || nested.outside.has(value) ? value : undefined;
+}
+
+// [LAW:single-enforcer] The search supplies both Back and its displayed
+// depth. An overwritten control or an invalid destination skips its visit.
+// Values that belong to a different edit draft leave this projection.
+function previous(
+  timeline: Timeline,
+  current: MenuView,
+  context: MenuContext,
+): {
+  readonly destination: MenuView | null;
+  readonly depth: number;
+  readonly invalid: ReadonlySet<Visit>;
+} {
+  const invalid = new Set<Visit>();
+  const values = new Map(current.values);
+  let destination: MenuView | null = null;
+  let depth = 0;
+  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
+    const visit = timeline.visits[cursor]!;
+    const keys = movedKeys(visit.from, visit.to);
+    const step = keys.flatMap((key) => {
+      const from = inView(visit.from, context, key);
+      const to = inView(visit.to, context, key);
+      return from === to ? [] : [{ key, from, to }];
+    });
+    if (
+      step.length === 0 ||
+      !step.every(
+        ({ key, from, to }) =>
+          values.get(key) === to &&
+          (from === undefined || context.gate.validate(key, from).ok),
+      )
+    ) {
+      invalid.add(visit);
+      continue;
+    }
+    for (const { key, from } of step) {
+      if (from === undefined) values.delete(key);
+      else values.set(key, from);
+    }
+    destination ??= { values: new Map(values), edit: context.edit };
+    depth++;
+  }
+  return { destination, depth, invalid };
+}
+
+interface RestoredView {
+  readonly writes: ReadonlyArray<{
+    readonly key: string;
+    readonly value: string | null;
+  }>;
+  readonly discarded: number;
+}
+
+export interface NavigationTurn {
+  choose(
+    sessionId: SessionId,
+    writes: readonly StateWrite[],
+    context: () => MenuContext,
+  ): void;
+  back(sessionId: SessionId, context: MenuContext): RestoredView;
   commit(): void;
 }
 
 export class NavigationHistory {
-  // Observable, so a view's payload over a session's depth (`◁`) is
-  // recomputed in the turn a step lands.
-  private readonly past = observable.map<SessionId, readonly NavigationStep[]>(
-    undefined,
-    { deep: false },
-  );
+  private readonly timelines = observable.map<SessionId, Timeline>(undefined, {
+    deep: false,
+  });
 
-  // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
-  // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId: SessionId, store: SessionStateRW, gate: Gate): number {
-    return this.restorable(sessionId, store, gate).length;
-  }
-
-  // The steps going back would restore, oldest first: walking down from the
-  // newest over the state as each restore would leave it, a step is restored
-  // while every key it changed still holds what it left there and every value
-  // it would write back passes `gate` — the session's config's, as it reads
-  // now. Any other step is over a
-  // view that is gone — rewritten since (a layout edit releasing the placement
-  // it configured), or no longer one the config admits (that placement
-  // removed, a group renamed) — and is discarded rather than replayed.
-  private restorable(
+  depth(
     sessionId: SessionId,
     store: SessionStateRW,
-    gate: Gate,
-  ): readonly NavigationStep[] {
-    const state = new Map<string, string | null>();
-    const read = (key: string): string | null =>
-      state.has(key) ? state.get(key)! : store.get(sessionId, key);
-    const kept: NavigationStep[] = [];
-    for (const step of [...(this.past.get(sessionId) ?? [])].reverse()) {
-      const holds = step.every(
-        (c) =>
-          read(c.key) === c.after &&
-          (c.before === null || gate.validate(c.key, c.before).ok),
-      );
-      if (!holds) continue;
-      kept.unshift(step);
-      for (const c of step) state.set(c.key, c.before);
-    }
-    return kept;
+    context: MenuContext,
+  ): number {
+    const timeline = this.timelines.get(sessionId);
+    return timeline === undefined || timeline.cursor === 0
+      ? 0
+      : previous(timeline, capture(store, sessionId, context), context).depth;
   }
 
-  // `store` is the click's own view of session state — the settings journal's,
-  // so a navigating click that also picks a setting still records the pick
-  // where undo reaches it.
-  begin(store: SessionStateRW): NavigationJournal {
-    // Keyed by session, then key: a click that writes one key twice records
-    // one change from its first `before` to its last `after`.
-    const pending = new Map<SessionId, Map<string, NavigationChange>>();
-    const sessionState = recordingView(
-      store,
-      isNavigationKey,
-      (sessionId, key, before, after) => {
-        const changes = pending.get(sessionId) ?? new Map();
-        const first: NavigationChange | undefined = changes.get(key);
-        changes.set(key, { key, before: first ? first.before : before, after });
-        pending.set(sessionId, changes);
-      },
-    );
+  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
+  // cursor are staged alongside the click's settings. A guarded write that
+  // does not land publishes neither.
+  begin(
+    store: SessionStateRW,
+    choose: SessionStateRW["setBatch"],
+  ): NavigationTurn {
+    const before = new Map<
+      SessionId,
+      { readonly view: MenuView; readonly context: MenuContext }
+    >();
+    const next = new Map<SessionId, Timeline>();
+    const timelineOf = (sid: SessionId) =>
+      next.get(sid) ?? this.timelines.get(sid) ?? EMPTY;
+
+    const endVisit = (sid: SessionId): void => {
+      const start = before.get(sid);
+      if (start === undefined) return;
+      before.delete(sid);
+      const to = capture(store, sid, start.context);
+      if (movedKeys(start.view, to).length === 0) return;
+      const { visits, cursor } = timelineOf(sid);
+      const followed = [
+        ...visits.slice(0, cursor),
+        { from: start.view, to },
+      ].slice(-MAX_VISITS);
+      next.set(sid, { visits: followed, cursor: followed.length });
+    };
+
     return {
-      sessionState,
-      commit: () => {
-        for (const [sessionId, changes] of pending) {
-          // A click that changed nothing on screen is no step: going back
-          // over it would visibly do nothing.
-          const step = [...changes.values()].filter(
-            (c) => c.before !== c.after,
-          );
-          if (step.length > 0) this.push(sessionId, step);
+      choose: (sid, writes, contextOf) => {
+        if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
+          const context = contextOf();
+          before.set(sid, { view: capture(store, sid, context), context });
         }
-        pending.clear();
+        choose(sid, writes);
+      },
+      back: (sid, context) => {
+        endVisit(sid);
+        const timeline = timelineOf(sid);
+        const at = capture(store, sid, context);
+        const { destination, invalid } = previous(timeline, at, context);
+        const discarded = invalid.size;
+        const cursor = Math.max(0, timeline.cursor - discarded - 1);
+        next.set(sid, {
+          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
+          cursor,
+        });
+        if (destination === null)
+          throw new BadVerbArgs(
+            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`,
+          );
+        const writes = movedKeys(at, destination).map((key) => ({
+          key,
+          value: destination.values.get(key) ?? null,
+        }));
+        runInAction(() => {
+          store.setBatch(
+            sid,
+            writes.flatMap(({ key, value }) =>
+              value === null ? [] : [{ key, value }],
+            ),
+          );
+          for (const { key, value } of writes)
+            if (value === null) store.clear(sid, key);
+        });
+        return { writes, discarded };
+      },
+      commit: () => {
+        for (const sid of before.keys()) endVisit(sid);
+        this.publish(next);
+        next.clear();
       },
     };
   }
 
-  // Restores the newest restorable step into `store` as one transaction and
-  // returns it, with how many steps it discarded (restorable). Written through
-  // the bare store, never a navigation journal, so going back is not itself a
-  // step.
-  back(
-    sessionId: SessionId,
-    store: SessionStateRW,
-    gate: Gate,
-  ): { readonly step: NavigationStep; readonly discarded: number } {
-    const all = this.past.get(sessionId) ?? [];
-    const steps = this.restorable(sessionId, store, gate);
-    const step = steps.at(-1);
-    const discarded = all.length - steps.length;
-    if (step === undefined) {
-      this.put(sessionId, steps);
-      throw new BadVerbArgs(
-        `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`,
-      );
-    }
-    // [LAW:no-ambient-temporal-coupling] One reactive transaction: no
-    // observer sees the door reopened with its tab still folded.
+  private publish(timelines: ReadonlyMap<SessionId, Timeline>): void {
     runInAction(() => {
-      const restored = step.flatMap(({ key, before }) =>
-        before === null ? [] : [{ key, value: before }],
-      );
-      if (restored.length > 0) store.setBatch(sessionId, restored);
-      for (const { key, before } of step) {
-        if (before === null) store.clear(sessionId, key);
+      for (const [sid, timeline] of timelines) {
+        this.timelines.delete(sid);
+        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
       }
-    });
-    this.put(sessionId, steps.slice(0, -1));
-    return { step, discarded };
-  }
-
-  private push(sessionId: SessionId, step: NavigationStep): void {
-    const steps = this.past.get(sessionId) ?? [];
-    this.put(sessionId, [...steps, step].slice(-MAX_STEPS));
-  }
-
-  // Move-to-end keeps insertion order as recency.
-  private put(sessionId: SessionId, steps: readonly NavigationStep[]): void {
-    runInAction(() => {
-      this.past.delete(sessionId);
-      if (steps.length > 0) this.past.set(sessionId, steps);
-      while (this.past.size > MAX_SESSIONS) {
-        this.past.delete(this.past.keys().next().value!);
-      }
+      while (this.timelines.size > MAX_SESSIONS)
+        this.timelines.delete(this.timelines.keys().next().value!);
     });
   }
 }

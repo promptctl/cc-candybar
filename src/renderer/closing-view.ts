@@ -2,9 +2,9 @@
 // inside the disclosure it closes (brandon-menus-sjhy.9p6): a view of a
 // session store whose every write also clears each disclosure inside a
 // closed one, in the same transaction. Every verb writes
-// through it (`journaled`, src/renderer/verbs/index.ts) — a click, ◁ back, a
-// layout edit's release — and anything else that closes a menu (a timer that
-// closes the door) gets the rule by writing through it too.
+// through it (`journaled`, src/renderer/verbs/index.ts), including a layout
+// edit's release. Back installs a prior view directly because that view
+// already includes the result of closing its nested menus.
 
 import { runInAction } from "mobx";
 import {

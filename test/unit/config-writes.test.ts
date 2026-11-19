@@ -6,6 +6,7 @@
 
 import {
   ConfigWrites,
+  requireLayerText,
   type ClickLayers,
 } from "../../src/renderer/config-writes";
 import type { RenderOrigin } from "../../src/config-hint";
@@ -45,10 +46,10 @@ const LAYERS: ClickLayers = {
 };
 
 // A click open over the origin's layers.
-function writes() {
+function writes(layers = LAYERS) {
   let minted = 0;
   const w = new ConfigWrites(() => ++minted as EffectId);
-  w.begin("click", () => LAYERS);
+  w.begin("click", () => layers);
   return w;
 }
 
@@ -69,9 +70,27 @@ describe("a click's config writes", () => {
   test("a click reads its own writes, and its origin's snapshot for the rest", () => {
     const w = writes();
     w.land("/a.json5", DISK["/a.json5"]!, "{ a: 2 }\n");
-    expect(w.read("/a.json5")).toBe("{ a: 2 }\n");
-    expect(w.read("/b.json5")).toBe(DISK["/b.json5"]);
-    expect(w.read("/c.json5")).toBeNull();
+    expect(w.read("/a.json5")).toEqual({ kind: "text", text: "{ a: 2 }\n" });
+    expect(w.read("/b.json5")).toEqual({ kind: "text", text: DISK["/b.json5"] });
+    expect(w.read("/c.json5")).toEqual({ kind: "absent" });
+  });
+
+  test("an unreadable layer remains a read error rather than an absent file", () => {
+    const path = "/c.json5";
+    const failure = { kind: "unreadable", error: "EACCES" } as const;
+    const w = writes({
+      origin: ORIGIN,
+      chain: [
+        layer("user", "/a.json5"),
+        layer("project", "/b.json5"),
+        { ...layer("local", path), content: failure },
+      ],
+    });
+    const read = w.read(path);
+    expect(read).toEqual(failure);
+    expect(() => requireLayerText(path, read)).toThrow(
+      "/c.json5 could not be read (EACCES)",
+    );
   });
 
   test("a file its origin's chain does not hold is no file the click reads", () => {

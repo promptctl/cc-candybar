@@ -224,7 +224,17 @@ export function buildRig(init: RigInit = {}): Rig {
   const drawn = (init.narrow ?? ((whole) => whole))(config);
   const sessionState = init.sessionState ?? new SessionState();
   const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState, null);
+  const ctx = testVerbContext(sessionState, init.history, config, init.host);
+  // A fixture can set up a disclosure directly. Use the production view
+  // once a real click opens an edit transaction.
+  const view = {
+    ...ctx.edits.view,
+    get: (sid: SessionId, key: string) =>
+      ctx.edits.draft(sid) === null
+        ? sessionState.get(sid, key)
+        : ctx.edits.view.get(sid, key),
+  };
+  const registry = new SourceRegistry(store, "", view, null);
   const readings = readingsIn(init.env ?? {});
   const registered = registerCompiled(
     drawn,
@@ -242,7 +252,6 @@ export function buildRig(init: RigInit = {}): Rig {
   if (bookedContext(sessionState, sessionId) === null) {
     recordRender(sessionState, sessionId, cwd);
   }
-  const ctx = testVerbContext(sessionState, init.history, config, init.host);
   return {
     config,
     compiled,
@@ -266,7 +275,7 @@ export function buildRig(init: RigInit = {}): Rig {
         );
       const selection =
         draw.selection ??
-        selectionFor(config, {}, (key) => sessionState.get(sessionId, key));
+        selectionFor(config, {}, (key) => view.get(sessionId, key));
       return {
         ...drawPayload(
           drawn,

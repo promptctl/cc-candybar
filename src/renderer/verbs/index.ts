@@ -1,3 +1,8 @@
+import type { EditFinish, EditTransactions } from "../edit-transaction.js";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../../config/loader/edit-mode.js";
 // [LAW:single-enforcer] One registry that maps click verb names to their
 // handlers. Adding a new verb is one entry — no branching in the click turn
 // (src/renderer/click.ts), which does table lookup only; verb semantics live
@@ -59,10 +64,15 @@ import {
 } from "../config-file-store";
 import {
   describeStep,
+  type ConfigFiles,
   type Journal,
   type SettingsHistory,
 } from "../settings-history";
-import type { NavigationHistory } from "../navigation-history";
+import type {
+  MenuContext,
+  NavigationHistory,
+  NavigationTurn,
+} from "../navigation-history";
 import {
   placementId,
   settingSpelling,
@@ -122,7 +132,12 @@ import {
   clickSessionOf,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
-import type { ConfigWrites, Landed } from "../config-writes";
+import {
+  requireLayerText,
+  type ConfigWrites,
+  type Landed,
+} from "../config-writes";
+import type { LayerContent } from "../../config/config-snapshot.js";
 import type {
   ActRequest,
   Effect,
@@ -177,6 +192,8 @@ export interface DaemonContext {
   // (src/renderer/settings-history.ts). The verb table opens a journal on it
   // around each click, so a handler records by writing, never by remembering.
   readonly history: SettingsHistory;
+  readonly edits: EditTransactions;
+  readonly editViewChanged: (sid: SessionId) => void;
   // [LAW:one-source-of-truth] The one back history over what a session has
   // open (src/renderer/navigation-history.ts), journaled around each click
   // beside the settings history.
@@ -187,7 +204,7 @@ export interface DaemonContext {
   // [LAW:effects-at-boundaries] The config a session renders with, looked up
   // by the inputs its last render resolved from (the render cache owns it), so
   // `save` compares the session against the same config the bar was drawn from.
-  readonly configFor: (origin: RenderOrigin) => DslConfig;
+  readonly configFor: (origin: RenderOrigin, editing?: SessionId) => DslConfig;
   // [LAW:single-enforcer] Where every click's config writes go: changes its
   // turn returns, and its consequence held until they land
   // (src/renderer/config-writes.ts).
@@ -228,13 +245,14 @@ export type Journaled<C extends DaemonContext> = C & {
   readonly session: SessionId | null;
   readonly context: SessionContext | null;
   readonly journal: Journal;
-  readonly navigating: SessionStateRW;
+  readonly readConfigFile: (file: string) => LayerContent;
+  readonly finishEdit: (finish: EditFinish) => void;
+  readonly menu: NavigationTurn;
 };
 
 // What a handler runs with: the daemon's context, with `sessionState` the
 // click's journaling view of it and `journal` where its file writes report.
-// `navigating` is the view the navigating verbs write through: the same store,
-// with what they change on screen recorded for `back` as well.
+// `menu` applies the click's navigational transitions in that same turn.
 export type ClickContext = Journaled<VerbContext>;
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
@@ -355,7 +373,8 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // escape in any segment is bad input, not a handler failure (decodeWire).
   const [sessionId = "", ...rest] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId);
-  const gate = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
+  const config = sessionConfig(ctx, sid);
+  const gate = ctx.gates.state.gateFor(config);
   if (rest.length === 0)
     throw new BadVerbArgs(
       `set-state: <key>/<value> is required (have keys: ${gate.listKeys().join(", ")})`,
@@ -400,7 +419,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // observers fire, so an autorun never sees half-applied batch state.
   // Partial application is unrepresentable: validation already passed,
   // and the seam guarantees the writes ship as one transaction.
-  ctx.navigating.setBatch(sid, validated);
+  ctx.menu.choose(sid, validated, () => menuContext(ctx, sid, config));
   const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
@@ -482,7 +501,9 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
-  ctx.navigating.set(sid, key, result.value);
+  ctx.menu.choose(sid, [{ key, value: result.value }], () =>
+    menuContext(ctx, sid, config),
+  );
   ctx.log(
     "info",
     `step-state: ${key} ${clamped}→${result.value} (by ${by}, session=${sid})`,
@@ -626,7 +647,7 @@ function proveLoadsAsLayer(
   origin: RenderOrigin | null,
   file: string,
   text: string | null,
-  read: (file: string) => string | null,
+  read: (file: string) => LayerContent,
 ): void {
   const layer =
     origin === null
@@ -642,8 +663,23 @@ function proveLoadsAsLayer(
 // [LAW:one-source-of-truth] The config a session renders — what its clicks
 // read, and what gates them: a session's gate is its own config's, never a
 // merge of every config the daemon holds.
-function sessionConfig(ctx: VerbContext, sid: SessionId): DslConfig {
+function sessionConfig(
+  ctx: Pick<VerbContext, "configFor" | "context">,
+  sid: SessionId,
+): DslConfig {
   return ctx.configFor(sessionOrigin(ctx, sid));
+}
+
+function menuContext(
+  ctx: Pick<DaemonContext, "gates" | "edits">,
+  sid: SessionId,
+  config: DslConfig,
+): MenuContext {
+  return {
+    gate: ctx.gates.state.gateFor(config),
+    nest: () => disclosureNest(config),
+    edit: ctx.edits.draft(sid)?.navigationScope ?? null,
+  };
 }
 
 // What the session's config nests; a session the context names nothing of
@@ -694,7 +730,7 @@ function configWire(
 
 function editStore(ctx: ClickContext, sid: SessionId): EditStore {
   return {
-    read: (file) => ctx.configWrites.read(file),
+    read: ctx.readConfigFile,
     record: (file, before, after) => ctx.journal.file(sid, file, before, after),
   };
 }
@@ -774,7 +810,10 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     key,
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(store.read(into.path), landing.key);
+  const stored = readValue(
+    requireLayerText(into.path, store.read(into.path)),
+    landing.key,
+  );
   const current =
     typeof stored === "number"
       ? clampTo(params, stored)
@@ -819,6 +858,7 @@ const save: VerbHandler = (value, ctx) => {
   // a recorded no-op, never a failure the bar reports.
   if (drafts.length + placements.length === 0) {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
+    ctx.finishEdit("save");
     return;
   }
   const gate = ctx.gates.state.gateFor(config);
@@ -836,6 +876,7 @@ const save: VerbHandler = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
+  ctx.finishEdit("save");
   ctx.log(
     "info",
     `save: ${[
@@ -1118,32 +1159,28 @@ const undo: VerbHandler = (value, ctx) => {
   ctx.log("info", `undo: restored ${describeStep(step)} (session=${sid})`);
 };
 
-// [LAW:single-enforcer] Back restores through the click's settings view, never
-// a navigation journal, so going back is not itself a step it could return to.
 const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const { step, discarded } = ctx.navigation.back(
+  const { writes, discarded } = ctx.menu.back(
     sid,
-    ctx.sessionState,
-    ctx.gates.state.gateFor(sessionConfig(ctx, sid)),
+    menuContext(ctx, sid, sessionConfig(ctx, sid)),
   );
-  const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
+  const restored = writes
+    .map(({ key, value }) => `${key}=${value ?? "∅"}`)
+    .join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 
-// [LAW:single-enforcer] Cancel for edit mode. The history owns what changed
-// since edit mode opened and how to put it back (SettingsHistory.rewind); this
-// handler is plumbing between the wire and it, and says what it put back.
-// [LAW:no-silent-failure] A session with no savepoint is a loud BAD_REQUEST
-// with nothing written; a target changed since is one too, raised after every
-// other target was put back, naming the target it kept.
+// [LAW:effects-at-boundaries] Cancel drops the transaction in the
+// click's consequence. It emits no reverse writes.
 const rewind: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const restored = ctx.journal.rewind(sid);
-  ctx.log(
-    "info",
-    `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`,
-  );
+  if (ctx.edits.draft(sid) === null)
+    throw new BadVerbArgs(
+      "rewind: edit mode has no transaction — nothing to cancel",
+    );
+  ctx.finishEdit("cancel");
+  ctx.log("info", `rewind: discarded draft (session=${sid})`);
 };
 
 // undo's mirror — steps the same history forward one click.
@@ -1427,45 +1464,111 @@ function journaled<C extends DaemonContext>(
       );
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
-  const journal = ctx.history.begin({
+  const files: ConfigFiles = {
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
     roleOf: (file) => ctx.configWrites.roleOf(file),
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text, read) =>
       proveLoadsAsLayer(ctx, origin, file, text, read),
-  });
-  const navigation = ctx.navigation.begin(journal.sessionState);
+  };
+  const draft =
+    sid === null || origin === null || ctx.edits.snapshot(origin, sid) === null
+      ? null
+      : ctx.edits.draft(sid);
+  const scoped =
+    draft === null || sid === null
+      ? ctx
+      : {
+          ...ctx,
+          snapshotFor: (of: RenderOrigin) =>
+            ctx.edits.snapshot(of, sid) ?? ctx.snapshotFor(of),
+          configFor: (of: RenderOrigin) => ctx.configFor(of, sid),
+        };
+  const edit = draft?.begin((file, text, read) =>
+    proveLoadsAsLayer(scoped, origin, file, text, read),
+  );
+  const journal = edit?.journal ?? ctx.history.begin(files);
+  const requested: { finish?: EditFinish } = {};
   const failures: unknown[] = [];
-  // Both views close what a write closes, the navigating one above its
-  // recording, so ◁ back restores a closed menu with what was open in it.
-  const closing = (store: SessionStateRW): SessionStateRW =>
-    closingView(
-      store,
-      (sid) => nestOf(ctx, context, sid),
-      (line) => ctx.log("info", line),
-    );
+  const sessionState = closingView(
+    journal.sessionState,
+    (sid) => nestOf(scoped, context, sid),
+    (line) => ctx.log("info", line),
+  );
+  // [LAW:single-enforcer] Choosing a menu uses the same disclosure rules as
+  // any state write. Back receives the bare journal so it can install an
+  // already computed view without applying new closure rules to it.
+  const navigation = ctx.navigation.begin(
+    journal.sessionState,
+    sessionState.setBatch,
+  );
   try {
     handler({
-      ...ctx,
+      ...scoped,
       session: sid,
       context,
-      sessionState: closing(journal.sessionState),
+      sessionState,
       journal,
-      navigating: closing(navigation.sessionState),
+      readConfigFile: (edit?.files ?? files).read,
+      finishEdit: (finish) => {
+        if (edit === undefined || sid === null) return;
+        requested.finish = finish;
+        sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+      },
+      menu: navigation,
     });
   } catch (e) {
     failures.push(e);
   }
-  // Each commit runs whatever the other did: both record what landed.
-  const consequence = (): void => {
-    const failed: unknown[] = [];
-    for (const step of [navigation, journal]) {
-      try {
-        step.commit();
-      } catch (e) {
-        failed.push(e);
+  let saved: Journal | null = null;
+  if (requested.finish === "save" && edit !== undefined && origin !== null) {
+    try {
+      if (failures.length === 0) {
+        const destination = ctx.history.begin(files);
+        edit.save(destination, files, ctx.snapshotFor(origin));
+        saved = destination;
       }
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  // [LAW:no-ambient-temporal-coupling] Save releases the draft only in the
+  // host's successful acknowledgement turn. Conflict and failure keep the
+  // original draft and its undo and redo history.
+  const consequence = (): void => {
+    if (requested.finish === "save" && saved === null) return;
+    const failed: unknown[] = [];
+    try {
+      navigation.commit();
+    } catch (e) {
+      failed.push(e);
+    }
+    try {
+      const writes = sid === null ? null : journal.writes(sid);
+      const mode = writes?.get(EDIT_MODE_KEY);
+      let moved = false;
+      if (edit === undefined) journal.commit();
+      else if (saved !== null) saved.commit();
+      else moved = edit.commit();
+      if (sid !== null && origin !== null) {
+        if (
+          edit !== undefined &&
+          (saved !== null || (mode !== undefined && mode !== EDIT_MODE_ARRANGE))
+        ) {
+          ctx.edits.close(sid);
+          ctx.editViewChanged(sid);
+        } else if (edit === undefined && mode === EDIT_MODE_ARRANGE) {
+          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+          ctx.editViewChanged(sid);
+        } else if (moved) {
+          ctx.edits.changed(sid);
+          ctx.editViewChanged(sid);
+        }
+      }
+    } catch (e) {
+      failed.push(e);
     }
     throwAll(failed);
   };
@@ -1511,15 +1614,9 @@ export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),
 ]) as readonly string[];
 
-// [LAW:single-enforcer] The idle close (brandon-menus-sjhy.my3) takes
-// a click's own path: the journals the verb table opens — so an exit from edit
-// mode releases its savepoint, and ◁ back can reopen what it closed — and the
-// closing view, which folds everything open inside what closes. It writes
-// `closed` to each menu open at the top, the write its ✕ makes. No URL names
-// it: it is not in VERBS. It runs in a `due` turn, so a click lands wholly
-// before it or after it, and a `due` waits behind every input that arrives
-// while it waits, so a click that has arrived lands before it: it restarts
-// the idle period, and the close is not due.
+// [LAW:single-enforcer] A menu's idle close goes through the same
+// disclosure transition as its ✕. It runs in a due turn after any click
+// already in the mailbox has restarted the idle period.
 export function closeIdleMenus(
   sid: SessionId,
   context: SessionContext | null,
@@ -1528,12 +1625,21 @@ export function closeIdleMenus(
   effects: Effect[],
 ): void {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
-    const roots = openRoots(nestOf(c, context, sid), (key) =>
-      c.navigating.get(sid, key),
-    );
-    c.navigating.setBatch(
+    const nest = nestOf(c, context, sid);
+    const depth = c.edits.draft(sid)?.depth();
+    const hasWork = depth !== undefined && depth.sinceEdit + depth.redo > 0;
+    const roots = openRoots(nest, (key) => c.sessionState.get(sid, key))
+      // [LAW:no-ambient-temporal-coupling] A timer cannot abandon an
+      // edit with work to keep or redo. Other disclosures still time out.
+      .filter(
+        (root) =>
+          !hasWork ||
+          !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY),
+      );
+    c.menu.choose(
       sid,
       roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      () => menuContext(c, sid, sessionConfig(c, sid)),
     );
     c.log(
       "info",

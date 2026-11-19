@@ -13,7 +13,6 @@ import {
   type Change,
   type Step,
   type SessionHistory,
-  type Savepoint,
   type HistoryStorage,
   holdsNothing,
   isSettingKey,
@@ -42,32 +41,22 @@ function isSteps(v: unknown): v is Step[] {
   );
 }
 
-function isSavepoint(v: unknown): v is Savepoint {
-  if (v === null || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  return (
-    Number.isInteger(o.at) &&
-    (o.at as number) >= 0 &&
-    Array.isArray(o.net) &&
-    o.net.every(isChange) &&
-    isSteps(o.below)
-  );
-}
-
-// [LAW:parse-dont-validate] A session's history as its file spelled it, or
-// the field that is not what a history holds.
+// [LAW:parse-dont-validate] Import only committed steps. A historical
+// savepoint described disk writes that already landed, so it cannot become
+// a live edit transaction on restart.
 function parseSessionHistory(v: unknown): Asked<SessionHistory> {
   if (!isPlainObject(v)) return { kind: "failed", reason: "is not an object" };
-  const problem = !isSteps(v.past)
-    ? "has a 'past' that is not a list of steps"
-    : !isSteps(v.future)
-      ? "has a 'future' that is not a list of steps"
-      : v.savepoint !== undefined && !isSavepoint(v.savepoint)
-        ? "has a 'savepoint' that is not a savepoint"
-        : null;
-  return problem === null
-    ? { kind: "ok", value: v as unknown as SessionHistory }
-    : { kind: "failed", reason: problem };
+  if (!isSteps(v.past))
+    return {
+      kind: "failed",
+      reason: "has a 'past' that is not a list of steps",
+    };
+  if (!isSteps(v.future))
+    return {
+      kind: "failed",
+      reason: "has a 'future' that is not a list of steps",
+    };
+  return { kind: "ok", value: { past: v.past, future: v.future } };
 }
 
 // [LAW:types-are-the-program] A session change is a change to a SETTING key —
@@ -76,8 +65,7 @@ function parseSessionHistory(v: unknown): Asked<SessionHistory> {
 // names nothing a render reads, so undoing it would spend a click restoring
 // nothing. Those changes alone leave, and the keys they named come back with
 // what stays; every other change, and every other session, stays undoable. A
-// step left empty leaves too, and the savepoint's `at` counts only the steps
-// below it that remain.
+// step left empty leaves too.
 interface Stripped {
   readonly history: SessionHistory;
   readonly retired: ReadonlySet<string>;
@@ -91,20 +79,8 @@ function withoutRetiredKeys(history: SessionHistory): Stripped {
   };
   const steps = (list: readonly Step[]): Step[] =>
     list.map((step) => step.filter(keep)).filter((step) => step.length > 0);
-  const { savepoint } = history;
-  const past = steps(history.past);
-  const future = steps(history.future);
-  if (savepoint === undefined) return { history: { past, future }, retired };
   return {
-    history: {
-      past,
-      future,
-      savepoint: {
-        at: steps(history.past.slice(0, savepoint.at)).length,
-        net: savepoint.net.filter(keep),
-        below: steps(savepoint.below),
-      },
-    },
+    history: { past: steps(history.past), future: steps(history.future) },
     retired,
   };
 }
@@ -127,7 +103,7 @@ const HISTORY_FILE: Pick<SessionFileKind<Stripped>, "name" | "parse"> = {
       reason:
         stripped.retired.size > 0
           ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting`
-          : "holds nothing to undo, redo or cancel",
+          : "holds nothing to undo or redo",
     };
   },
 };

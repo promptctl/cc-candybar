@@ -1,3 +1,4 @@
+import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // Test helpers for the click wire. A rendered click URL is `dispatch/does=…&e=…`
 // (an ordered effect list after the verb's `/`); these decode it to its behavioral
 // content and drive it through the REAL daemon path, so assertions track "what
@@ -289,6 +290,8 @@ export function testVerbContext(
     locations: locations(host),
     sessionState,
     history,
+    edits: new EditTransactions(sessionState, () => {}),
+    editViewChanged: () => {},
     navigation: new NavigationHistory(),
     context: null,
     clickLanded: () => {},

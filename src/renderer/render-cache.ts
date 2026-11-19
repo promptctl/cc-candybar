@@ -148,6 +148,10 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // (StateDeps).
   locations: Locations;
   sessionState: SessionStateRW;
+  editSnapshot?: (
+    origin: RenderOrigin,
+    session: SessionId,
+  ) => ConfigSnapshot | null;
   // The host's storage owner, which holds the folders each served state's
   // latest load named (`holdFolders`), from its first load to its reclaim.
   storage: AdapterToHost["storage"];
@@ -385,7 +389,9 @@ export interface Teardown {
 
 // [LAW:types-are-the-program] Why an entry loaded: its first load, or a
 // `config` turn that handed in a snapshot that moved.
-export type LoadCause = { readonly kind: "open" } | { readonly kind: "config" };
+export interface LoadCause {
+  readonly kind: "open" | "config" | "edit";
+}
 
 // [LAW:nothing-unseen] Every (re)load's outcome, success and failure alike:
 // why it ran, whether it built a state or kept the one served, the files it
@@ -1157,6 +1163,8 @@ export const registrySubscriptions = (
     .map((name): Subscription => ({ kind: "env", name })),
 ];
 
+const draftKey = (sessionId: SessionId): string => `edit:${sessionId}`;
+
 export class RenderCache<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
@@ -1288,18 +1296,45 @@ export class RenderCache<
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(origin: RenderOrigin): CacheEntry {
-    const key = originKey(origin);
+  getOrCreate(origin: RenderOrigin, editing?: SessionId): CacheEntry {
+    // [LAW:one-source-of-truth] The shared entry is still keyed by origin.
+    // An active draft branches that input for one session inside the renderer.
+    let key = originKey(origin);
+    let draft: ConfigSnapshot | null = null;
+    if (editing !== undefined) {
+      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
+      if (draft !== null) key = draftKey(editing);
+    }
     const existing = this.entries.get(key);
-    if (existing) {
-      // Move to end (most recently used) for LRU eviction.
+    const priorRepo = existing?.snapshot.repo;
+    // [LAW:types-are-the-program] A draft can fall back to its last good
+    // render only while that render's repository approval still holds.
+    const lostApproval =
+      draft !== null &&
+      priorRepo?.standing === "approved" &&
+      (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
+    if (
+      existing !== undefined &&
+      !lostApproval &&
+      originKey(existing.origin) === originKey(origin)
+    ) {
       this.entries.delete(key);
       this.entries.set(key, existing);
+      if (draft !== null && existing.snapshot !== draft)
+        this.reloadInto(
+          existing,
+          { snapshot: draft, digest: digestOf(draft) },
+          { kind: "edit" },
+        );
       return existing;
     }
+    if (existing !== undefined) this.drop(key, existing, "evict");
 
     const { projectDir, cwd } = origin;
-    const { snapshot, digest } = this.held(origin);
+    const { snapshot, digest } =
+      draft === null
+        ? this.held(origin)
+        : { snapshot: draft, digest: digestOf(draft) };
     const loaded = this.load(cwd, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
@@ -1384,7 +1419,8 @@ export class RenderCache<
   // view draws by it from here, opened (openView) or kept (`requested`), so
   // no view is drawn for another request.
   holdSession(origin: RenderOrigin, facts: F): SessionHold<S, F> {
-    const held = this.hold(origin);
+    const entry = this.getOrCreate(origin, facts.hookData.session_id);
+    const held = this.holdState(entry, entry.state);
     let view: SessionView<S, F>;
     let lease: ViewHold;
     try {
@@ -1398,6 +1434,27 @@ export class RenderCache<
       throw err;
     }
     return this.holdViewOf(held, view, lease);
+  }
+
+  // The edit turn switched the session's config input. Move its existing
+  // view now so pushed frames and click validation see the same draft.
+  refreshEditedView(sessionId: SessionId): void {
+    const view = this.views.get(sessionId);
+    if (view === undefined) return;
+    const { origin } = this.leaseOf(view).entry;
+    const requested = view.facts();
+    const entry = this.getOrCreate(origin, sessionId);
+    if (this.views.get(sessionId)?.state !== entry.state)
+      this.viewOf(entry, entry.state, requested, "reload");
+    if (this.deps.editSnapshot?.(origin, sessionId) == null)
+      this.dropDraft(sessionId);
+    this.observers.onViewChanged?.(sessionId);
+  }
+
+  private dropDraft(sessionId: SessionId): void {
+    const key = draftKey(sessionId);
+    const entry = this.entries.get(key);
+    if (entry !== undefined) this.drop(key, entry, "evict");
   }
 
   // [LAW:single-enforcer] A frame's door: the session's current view, held
@@ -1564,6 +1621,7 @@ export class RenderCache<
     this.openFailures.delete(sessionId);
     const view = this.views.get(sessionId);
     if (view !== undefined) this.retireView(view, "idle");
+    this.dropDraft(sessionId);
   }
 
   // [LAW:one-source-of-truth] What every session's open view needs read: the
@@ -1576,7 +1634,13 @@ export class RenderCache<
   // config is held as long as an entry at it lives, not as long as a session:
   // a session retires when idle while its entry stays to draw it again.
   origins(): readonly RenderOrigin[] {
-    return [...this.entries.values()].map((e) => e.origin);
+    return [
+      ...new Map(
+        [...this.entries.values()].map(
+          ({ origin }) => [originKey(origin), origin] as const,
+        ),
+      ).values(),
+    ];
   }
 
   subscriptions(): Pick<Subscriptions, "sources"> {

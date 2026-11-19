@@ -35,35 +35,10 @@ export type Step = readonly Change[];
 export interface SessionHistory {
   readonly past: readonly Step[];
   readonly future: readonly Step[];
-  // The savepoint edit mode opened at. Present exactly while edit mode is
-  // open.
-  readonly savepoint?: Savepoint;
 }
 
-// [LAW:types-are-the-program] What cancelling edit mode needs, as one value.
-// `net` is the change since edit mode opened, one Change per target: from the
-// value it held when edit mode opened to the value this history last wrote
-// there — whichever clicks, undos and redos got it there. Cancel is applying
-// `net` backwards, through the same all-or-nothing `apply` a `↶` takes, so it
-// does not depend on how the stack moved meanwhile: the cap trimming steps
-// made in edit mode, a `↶` below where it opened, a fresh step abandoning the
-// redo stack. `at` and `below` give the stack back the shape it had: `at` is
-// how many steps of `past` were there when edit mode opened, and `below` the
-// steps from before it that a fresh step in edit mode abandoned off the redo
-// stack after a `↶` took them back — in order, right above `at`.
-export interface Savepoint {
-  readonly at: number;
-  readonly net: Step;
-  readonly below: readonly Step[];
-}
-
-// [LAW:one-source-of-truth] A history with nothing to undo, redo or cancel,
-// which no store keeps: it would hold a session's place in the bound for
-// nothing.
-export const holdsNothing = (history: SessionHistory): boolean =>
-  history.past.length === 0 &&
-  history.future.length === 0 &&
-  history.savepoint === undefined;
+export const holdsNothing = ({ past, future }: SessionHistory): boolean =>
+  past.length + future.length === 0;
 
 export type HistoryState = Readonly<Record<SessionId, SessionHistory>>;
 

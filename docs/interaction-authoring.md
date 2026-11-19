@@ -97,7 +97,8 @@ declares exactly one value source:
 | `{ reset: field }` | return the setting to the bundled default: delete `globals.<field>` (and the field in a bundled preset's fragment and, for `shade`, `variation` or `style`, in every theme's default) from your config file and clear this session's pick of it |
 | `{ undo: true }` | step this session's settings history one click back — restores whatever a PRIOR settings click changed (a session pick, a `persist`/`reset`/layout edit), any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
-| `{ rewind: true }` | put back everything this session changed since edit mode opened (layout edits, setting picks, configure-mode picks) and leave nothing to redo — edit mode's `↩ cancel`. Refused when edit mode is not open (so fire it before anything that closes edit mode); a file edited since by anything else is kept as it is, everything else is put back, and the refusal names the file |
+| `{ back: true }` | restore the previous available menu view for this session. Closed edit transactions, removed menus, and changed settings stay as they are |
+| `{ rewind: true }` | discard the current edit draft and leave edit mode. This is edit mode's `↩ cancel` |
 | `{ save: true, layer }` | write every setting this session renders differently from your config to the layer `layer` names, in one edit, and drop those picks from the session. `layer` defaults to `"user"`; `"ask"` has each link bind the layer as its value — see below |
 | `{ preset: "save" }` | keep the bar this session renders as a new preset `custom-N` in your config file, and switch the session to it — see below |
 | `{ preset: "delete", name: "template" }` | delete the preset the evaluated template names from your config file; refused for a bundled preset or one the file does not declare |
@@ -1177,16 +1178,12 @@ synthesizes:
   bar) puts the live output back; a segment with no cell right now —
   hidden, or rendering nothing — then has no `✖` either, so find it in the
   names view (a failing segment keeps its `✖` and `🔧` on its `⚠` cell).
-- A row above the bar, led by the ways out, so they are found without reopening
-  the menu edit mode was entered from: `✓ save` (`✓ done` while there is
-  nothing to keep) writes this session's unsaved settings — a placement's
-  configure-mode values among them — and leaves, `↩ cancel` (shown only while
-  something differs from when edit mode opened) puts everything back and
-  leaves, `↺ reset layout` (only while the config file authors this preset's
-  layout) restores the bundled layout, and `☐ live` is the view toggle. Every
-  layout click is written to the config file as it is made and is one step of
-  the session's undo history; opening edit mode records what each thing it
-  goes on to change held then, and cancel puts those values back in one step.
+- The row above the bar shows `✓ save`, or `✓ done` when there is nothing to
+  keep. Save commits the layout and unsaved settings, including placement settings,
+  and leaves edit mode. `↩ cancel` discards the draft. Undo and redo preview each
+  edit within the draft. `↺ reset layout` restores the bundled layout when the file
+  authors its own layout for the active preset. `☐ live` switches to the live view.
+  The menu's idle timeout leaves an edit draft with changes available.
 
 **Every bar has it.** The global settings menu (below) is in every config, and
 its `✎ arrange` entry fires the same switch (through a `do` that also closes the

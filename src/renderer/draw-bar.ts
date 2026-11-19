@@ -38,7 +38,10 @@ import type { RichText } from "@promptctl/rich-js";
 import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
-import { laneSwitches } from "../config/effective-globals.js";
+import {
+  laneSwitches,
+  resolveEffectiveGlobals,
+} from "../config/effective-globals.js";
 import {
   type PassageFrame,
   type EffectSessions,
@@ -85,7 +88,7 @@ import {
   type RequestFacts,
 } from "../daemon/foundations/request-event.js";
 
-import type { SessionState } from "./session-state";
+import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { RecordScope, RenderWarningRecords } from "./render-warnings.js";
 import type { RenderedLine } from "../dsl/node-registry.js";
 import { signingFrames, type LinkSigner } from "../click/link-signer.js";
@@ -103,7 +106,7 @@ import {
 export interface RendererState {
   // The turn's time, handed in by the host: no draw reads a clock.
   readonly time: TurnTime;
-  readonly sessionState: SessionState;
+  readonly sessionState: SessionStateRW;
   readonly renderCache: RenderCache<SessionSource, CheckedRenderRequest>;
   readonly worldStates: WorldStates;
   readonly renderWarnings: RenderWarningRecords;
@@ -208,16 +211,31 @@ export function renderFrame(
   }
 }
 
-// The lanes the session's settings switch on now, as its view draws them, or
-// null while it has no view: a pure read of the view a frame finds, which
-// opens nothing (`holdView`).
+// The committed lane settings for a session with a live view. The draft
+// can replace what the view draws while the host follows committed config.
 export function viewLanes(
   parts: RendererParts,
   sessionId: SessionId,
+  committed: SessionStateRW,
+  editing: boolean,
 ): LaneSwitches | null {
   const { renderCache } = parts;
   using hold = renderCache.holdView(sessionId);
-  return hold === null ? null : laneSwitches(hold.view.source.effective());
+  if (hold === null) return null;
+  if (!editing) return laneSwitches(hold.view.source.effective());
+
+  // [LAW:effects-at-boundaries] Only committed settings declare a live
+  // host surface. A draft changes the bar's preview until Save lands.
+  const { config, authoredRoots } = renderCache.getOrCreate(
+    hold.entry.origin,
+  ).state;
+  return laneSwitches(
+    resolveEffectiveGlobals(
+      config,
+      (key) => committed.get(sessionId, key),
+      (preset) => authoredRoots.has(preset),
+    ),
+  );
 }
 
 // What a render of a checked request draws with, resolved once and held for

@@ -15,6 +15,7 @@ import type { RenderOrigin } from "../../src/config-hint";
 import { LAYER_ROLES, type LayerRole } from "../../src/config/layer-role";
 import { locations } from "../../src/daemon/paths";
 import { discoveryNow } from "./click";
+import { contentOfText } from "../../src/config/config-snapshot";
 import { readConfigText } from "../../src/utils/atomic-write";
 import type {
   ConfigFiles,
@@ -31,7 +32,7 @@ export function inPlace(
   layers: Partial<Record<LayerRole, string>>,
 ): ConfigFiles {
   return {
-    read: readConfigText,
+    read: (file) => contentOfText(readConfigText(file)),
     land: (file, _before, after) =>
       after === null
         ? rmSync(file, { force: true })
@@ -53,7 +54,7 @@ export const NO_LAYERS: ConfigFiles = inPlace({});
 // A config writer's store with no click around it: it reads the disk, and
 // what it records lands at once.
 export const EDITS_IN_PLACE: EditStore = {
-  read: readConfigText,
+  read: (file) => contentOfText(readConfigText(file)),
   record: (file, _before, after) => writeFileSync(file, after),
 };
 
@@ -123,9 +124,3 @@ export const redoOf = (
   sid: SessionId,
   files: ConfigFiles,
 ): Step => clickOf(history, files, (journal) => journal.redo(sid));
-
-export const rewindOf = (
-  history: SettingsHistory,
-  sid: SessionId,
-  files: ConfigFiles,
-): Step => clickOf(history, files, (journal) => journal.rewind(sid));

@@ -19,11 +19,9 @@
 //      tree is fixed; only which `when` predicates pass differs.
 //   5. `-` (removeSegment) and `+` (insertSegmentFrom via `{{ menu }}`) click
 //      through to the REAL daemon handler exactly like a hand-authored
-//      layout-op action, rewriting the tree at "presets.<name>.root" IN THE
-//      SESSION'S CONFIG FILE (candybar-config-dqe) — so undo/redo (2gc.2's
-//      history of whole-file snapshots) covers an edit-mode click for free.
-//   6. Remove, then add (picked from the menu), then undo twice returns the
-//      file to its original bytes.
+//      layout-op action, stepping the draft's authored layout.
+//   6. Remove, add, undo and redo update the preview without writing the
+//      file. Save and Cancel end the transaction.
 //   7. Edit chrome is ordinary segment/action data — it renders through the
 //      SAME padding/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
@@ -44,6 +42,8 @@ import { SessionState } from "../src/renderer/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import {
+  bookedContext,
+  clickUrl,
   testVerbContext,
   verbContextWith,
   effectsOf,
@@ -176,48 +176,52 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
-  const store = new VariableStore(systemTimekeeper);
-  const registry = new SourceRegistry(store, "", sessionState);
-  const compiled = registerDslConfig(config, registry, {
+  let store = new VariableStore(systemTimekeeper);
+  const history = durable.historyFor(sessionState);
+  const base = testVerbContext(sessionState, history, undefined, durable.host);
+  const context = bookedContext(sessionState, sessionId)!;
+  const draftText = () =>
+    base.edits.snapshot(context.durable.origin, sessionId)?.chain
+      .find((layer) => layer.role === "user")?.content;
+  let loaded = src;
+  let authored = config;
+  let registry = new SourceRegistry(store, "", base.edits.view);
+  let compiled = registerDslConfig(config, registry, {
     signer: TEST_SIGNER,
     cwd: process.cwd(),
   });
-  const basePalette = getThemePalette("textual-dark"!);
-  // The daemon publishes the session's history depth into every render's
-  // payload (`history.sinceEdit` is what edit mode's save cell counts).
-  const history = durable.historyFor(sessionState);
+  const effective = () => {
+    const draft = draftText();
+    const text = draft?.kind === "text" ? draft.text : durable.text() ?? "{}";
+    if (text !== loaded) {
+      loaded = text;
+      authored = parseAndValidate("<test>", text, ALLOWED);
+      registry.dispose();
+      store = new VariableStore(systemTimekeeper);
+      registry = new SourceRegistry(store, "", base.edits.view);
+      compiled = registerDslConfig(authored, registry, {
+        signer: TEST_SIGNER,
+        cwd: process.cwd(),
+      });
+    }
+    return authored;
+  };
   const render = (width?: number): Frame =>
     drawPayload(
-      config,
+      effective(),
       compiled,
       store,
       registry,
       {
         session_id: sessionId,
         project_dir: "/tmp/proj",
-        history: history.depth(sessionId),
+        history: base.edits.depth(sessionId, history),
       },
       instantOf(new Date()),
       opts(width),
     ).frame;
-  const ctx: VerbContext = verbContextWith(
-    testVerbContext(sessionState, history, undefined, durable.host),
-    {
-      // The config this bar rendered with, which gates every click and which an
-      // insertion mints its id against — the daemon's own lookup.
-      configFor: () => config,
-    },
-  );
-  const click = async (url: string): Promise<void> => {
-    const { verb, value } = linkClick(url);
-    const effects =
-      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
-    for (const e of effects) {
-      const handler = CLICK_VERBS.get(e.verb);
-      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
-      await handler(e.value, ctx);
-    }
-  };
+  const ctx: VerbContext = verbContextWith(base, { configFor: effective });
+  const click = (url: string): Promise<void> => clickUrl(url, ctx);
   return { config, store, render, click, ctx, history, sessionState };
 }
 
@@ -584,9 +588,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     expect(first).toContain("✓ done");
     expect(first).not.toMatch(/directory|git|trigger/);
     const done = ownUrls(render()).find((u) =>
-      effectsOf(u).some(
-        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
-      ),
+      effectsOf(u).some((e) => e.verb === "save"),
     );
     expect(done).toBeDefined();
     await click(done!);
@@ -788,7 +790,7 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    ctx.sessionState.set(S1, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
+    await CLICK_VERBS.get("set-state")!(`${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`, ctx);
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -859,9 +861,16 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     expect(textOf(render())).not.toContain("-");
   });
 
-  test("remove → insert (picked via menu) → undo × 2 returns the file to its original bytes", async () => {
+  test("remove, insert, undo twice and redo twice preview each step without writing the file", async () => {
     const { render, click, ctx } = buildEditRuntime(BASE);
     const original = durable.text()!;
+    const placed = (target: string) =>
+      ownUrls(render()).some((url) =>
+        effectsOf(url).some((effect) =>
+          effect.verb === "apply-layout-op" &&
+          effect.args[3] === encodeLayoutOp({ op: "remove", target }),
+        ),
+      );
 
     // Open edit mode.
     const openUrl = ownUrls(render()).find((u) =>
@@ -882,15 +891,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     expect(removeUrl).toBeDefined();
     await click(removeUrl);
     // The file's own root is the edited tree, in the authoring grammar.
-    expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
-    expect(durable.history().past).toHaveLength(1);
+    expect(placed("directory")).toBe(false);
+    expect(ctx.history.history(S1).past).toHaveLength(0);
 
-    // Open every `+` menu, then pick "gitPr" from the one anchored on "git".
-    // [LAW:no-silent-failure] This harness compiles ONE tree and never
-    // reloads it from the file, so the `+` beside "directory" is still
-    // rendered though "directory" is gone from the file — clicking THAT one
-    // is exactly the stale-bar case the store refuses loudly (see
-    // dsl-layout-edit.test.ts). Anchor on a segment the file still holds.
+    // Open each remaining insertion menu and pick gitPr beside git.
     for (const menuOpenUrl of ownUrls(render()).filter((u) =>
       effectsOf(u).some(
         (e) => e.verb === "set-state" && String(e.args[1]).startsWith("menus."),
@@ -908,25 +912,19 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     )!;
     expect(pickUrl).toBeDefined();
     await click(pickUrl);
-    // The insert composed onto the tree the remove left behind.
-    const afterInsert = JSON.stringify(durable.parsed().root);
-    expect(afterInsert).toContain('"gitPr"');
-    expect(afterInsert).not.toContain('"directory"');
-    expect(durable.history().past).toHaveLength(2);
+    expect(placed("gitPr")).toBe(true);
+    expect(placed("directory")).toBe(false);
 
-    // Undo the insert, undo the remove — two clicks through the REAL undo
-    // verb handler (2gc.2's history of whole-file snapshots, entirely unaware
-    // either write came from edit-mode chrome). `undo`/`redo` need no
-    // declared action to invoke — per the epic's own premise correction, edit
-    // mode wires ONE static undo/redo pair rather than synthesizing one per
-    // position, so BASE deliberately declares neither; drive the verb
-    // directly, exactly as dsl-undo-redo.test.ts does.
     const undo = CLICK_VERBS.get("undo")!;
-    await undo(encodeURIComponent("s1"), ctx);
-    expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "trigger"] });
-    await undo(encodeURIComponent("s1"), ctx);
-    // Byte-identical: the file IS the layout, so "back to the original
-    // layout" and "back to the original bytes" are one fact.
+    const redo = CLICK_VERBS.get("redo")!;
+    await undo("s1", ctx);
+    expect(placed("gitPr")).toBe(false);
+    await undo("s1", ctx);
+    expect(placed("directory")).toBe(true);
+    await redo("s1", ctx);
+    await redo("s1", ctx);
+    expect(placed("gitPr")).toBe(true);
+    expect(placed("directory")).toBe(false);
     expect(durable.text()).toBe(original);
   });
 });
@@ -985,11 +983,8 @@ describe("edit chrome is ordinary segment data — no special-cased render path"
 
 // ─── save and cancel (brandon-menu-ia-q30.3y8) ──────────────────────────────
 //
-// Every layout click is already written and already one step of the session's
-// settings history, so edit mode's cancel is that history stepped back to where
-// edit mode opened, and its save is only leaving. Driven through the real verb
-// table: the clicks are the rendered links, and the assertions are on the file
-// the clicks wrote.
+// Preview, undo, redo, cancel and save use the real click table. A draft
+// changes the rendering inputs without writing the live config file.
 
 describe("edit mode's save and cancel", () => {
   const find = (
@@ -1013,17 +1008,7 @@ describe("edit mode's save and cancel", () => {
     rt: ReturnType<typeof buildEditRuntime>,
   ): Promise<void> => await rt.click(find(rt, (e) => e.verb === "rewind"));
   const done = async (rt: ReturnType<typeof buildEditRuntime>): Promise<void> =>
-    await rt.click(
-      ownUrls(rt.render()).find((u) => {
-        const effects = effectsOf(u);
-        return (
-          !effects.some((e) => e.verb === "rewind") &&
-          effects.some(
-            (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "closed",
-          )
-        );
-      })!,
-    );
+    await rt.click(find(rt, (e) => e.verb === "save"));
   const topRow = (rt: ReturnType<typeof buildEditRuntime>): string =>
     textOf(rt.render()).split("\n")[0]!;
 
@@ -1043,12 +1028,12 @@ describe("edit mode's save and cancel", () => {
     expect(rows.at(-1)).not.toContain("live");
   });
 
-  test("cancel restores the file byte for byte, leaves edit mode, and leaves nothing to redo", async () => {
+  test("cancel leaves the file byte for byte, leaves edit mode, and leaves nothing to redo", async () => {
     const rt = buildEditRuntime(BASE);
     const original = durable.text();
     await open(rt);
     await removeGit(rt);
-    expect(durable.text()).not.toBe(original);
+    expect(durable.text()).toBe(original);
     await cancel(rt);
     expect(durable.text()).toBe(original);
     expect(rt.sessionState.get(S1, EDIT_MODE_KEY)).not.toBe(EDIT_MODE_ARRANGE);
@@ -1065,9 +1050,9 @@ describe("edit mode's save and cancel", () => {
     const original = durable.text();
     await open(rt);
     await removeGit(rt);
-    const edited = durable.text();
+    expect(durable.text()).toBe(original);
     await done(rt);
-    expect(durable.text()).toBe(edited);
+    const edited = durable.text();
     expect(edited).not.toBe(original);
     expect(rt.history.depth(S1)).toEqual({
       undo: 1,
@@ -1076,6 +1061,18 @@ describe("edit mode's save and cancel", () => {
     });
     await open(rt);
     expect(topRow(rt)).toContain("✓ done");
+  });
+
+  test("a conflicting save retains the draft and its undo step", async () => {
+    const rt = buildEditRuntime(BASE);
+    await open(rt);
+    await removeGit(rt);
+    const changed = BASE.replace("['directory', 'git']", "['gitPr', 'git']");
+    durable.write(changed);
+    await expect(done(rt)).rejects.toThrow(/changed while editing/);
+    expect(durable.text()).toBe(changed);
+    expect(topRow(rt)).toContain("✓ save");
+    expect(rt.ctx.edits.depth(S1, rt.history).undo).toBe(1);
   });
 
   test("cancel takes back only what edit mode did, and undoing afterwards does not resurrect it", async () => {
@@ -1104,10 +1101,10 @@ describe("edit mode's save and cancel", () => {
     });
   });
 
-  test("rewind says what it put back, and a session with no savepoint is refused loudly", async () => {
+  test("cancel records the discard and refuses when there is no transaction", async () => {
     const rt = buildEditRuntime(BASE);
     expect(() => CLICK_VERBS.get("rewind")!("s1", rt.ctx)).toThrow(
-      /no savepoint/,
+      /no transaction/,
     );
     await open(rt);
     await removeGit(rt);
@@ -1117,7 +1114,7 @@ describe("edit mode's save and cancel", () => {
       log: (_level, message) => logs.push(message),
     });
     expect(logs.join("\n")).toMatch(
-      /rewind: put back .* as edit mode found it \(session=s1\)/,
+      /rewind: discarded draft \(session=s1\)/,
     );
   });
 });

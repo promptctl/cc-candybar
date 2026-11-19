@@ -16,7 +16,7 @@ import type { Frame } from "../../../src/render/frame";
 import { textOf } from "../../../src/render/frame";
 import { linksOf } from "../../../src/click/read";
 import { linkUrls, boldUrls } from "../../helpers/frame";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -26,6 +26,7 @@ import {
   prepareIsolatedDaemonEnv,
 } from "../../helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../../../src/config/settings-menu";
+import { encodeLayoutOp } from "../../../src/config/layout-ops";
 import { EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
 import {
   DOOR_CLOSE_GLYPH,
@@ -43,10 +44,9 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
     // The acceptance config, written where the DAEMON resolves it.
     const configDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");
     mkdirSync(configDir, { recursive: true });
-    writeFileSync(
-      path.join(configDir, "config.json5"),
-      JSON.stringify({ root: { h: ["directory", "model"] } }),
-    );
+    const file = path.join(configDir, "config.json5");
+    const original = JSON.stringify({ root: { h: ["directory", "model"] } });
+    writeFileSync(file, original);
     const projectDir = mkdtempSync(
       path.join(os.tmpdir(), "cc-candybar-settings-e2e-project-"),
     );
@@ -83,6 +83,28 @@ describe("candybar-settings-ui-aok.1: a daemon, a real user config", () => {
         linkUrls(editing).filter((u) => u.includes("apply-layout-op"))
           .length,
       ).toBeGreaterThan(0);
+      const removesModel = (frame: Frame) =>
+        linkUrls(frame).find((url) => effectsOf(url).some((effect) =>
+          effect.verb === "apply-layout-op" &&
+          effect.args[3] === encodeLayoutOp({ op: "remove", target: "model" }),
+        ));
+      const affordance = (frame: Frame, verb: string) =>
+        linkUrls(frame).find((url) => effectsOf(url).some((effect) => effect.verb === verb));
+      const bar = () => render(daemon, SID, projectDir);
+      await click(daemon, removesModel(editing)!);
+      const draft = await bar();
+      expect(removesModel(draft)).toBeUndefined();
+      expect(readFileSync(file, "utf8")).toBe(original);
+      await click(daemon, affordance(draft, "undo")!);
+      const undone = await bar();
+      expect(removesModel(undone)).toBeDefined();
+      await click(daemon, affordance(undone, "redo")!);
+      const redone = await bar();
+      expect(removesModel(redone)).toBeUndefined();
+      expect(readFileSync(file, "utf8")).toBe(original);
+      await click(daemon, affordance(redone, "save")!);
+      expect(JSON.parse(readFileSync(file, "utf8")).root).toEqual({ h: ["directory"] });
+      expect(textOf(await bar())).not.toContain("✓ save");
     } finally {
       await daemon.stop();
       removeTmpDirs();

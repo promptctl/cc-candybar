@@ -36,7 +36,9 @@ import {
   writable,
   type ConfigSnapshot,
   type Layer,
+  type LayerContent,
 } from "../config/config-snapshot.js";
+import { requireLayerText } from "./config-writes.js";
 import { LAYER_ROLES, type LayerRole } from "../config/layer-role.js";
 import { ConfigError } from "../config/loader/diagnostics.js";
 import type {
@@ -428,7 +430,7 @@ function requireValueTarget(key: string): ValueTarget {
 // turn returns. A click reads a file as its own writes left it. This module
 // writes no file and keeps no history.
 export interface EditStore {
-  readonly read: (file: string) => string | null;
+  readonly read: (file: string) => LayerContent;
   readonly record: (file: string, before: string | null, after: string) => void;
 }
 
@@ -483,13 +485,10 @@ type HeldLayer = Layer & { readonly text: string };
 
 const rank = (role: LayerRole): number => LAYER_ROLES.indexOf(role);
 
-function seenBy(
-  layer: WriteLayer,
-  read: (file: string) => string | null,
-): Seen {
+function seenBy(layer: WriteLayer, read: (file: string) => LayerContent): Seen {
   const held = (layers: readonly Layer[]): HeldLayer[] =>
     layers.flatMap((l) => {
-      const text = read(l.path);
+      const text = requireLayerText(l.path, read(l.path));
       return text === null ? [] : [heldLayer(l, text)];
     });
   const { chain } = layer.snapshot;
@@ -684,7 +683,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function proveLoads(
   layer: WriteLayer,
   text: string | null,
-  read: (file: string) => string | null,
+  read: (file: string) => LayerContent,
 ): void {
   loadOrRefuse(seenBy(layer, read), text);
 }
@@ -771,7 +770,7 @@ export function writeDrafts(
   placements: readonly PlacementValue[],
 ): void {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const under = inheritedOf(into);
   const valued = pairs.reduce(
     (text, [key, raw]) =>
@@ -889,7 +888,7 @@ export function deleteValues(
 ): void {
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys.map(requireTarget);
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   if (before === null) return;
   const under = inheritedOf(into);
   const after = targets.reduce(
@@ -951,7 +950,7 @@ export function writePreset(
   placements: ReadonlyArray<Omit<PlacementValue, "preset">>,
 ): string {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const doc = docOf(before ?? "");
   const under = inheritedOf(into);
   const name = freePresetName(doc, under, into);
@@ -1013,7 +1012,7 @@ export function writeThemeDefault(
   look: Readonly<Record<ThemeDefaultField, string>>,
 ): DslConfig {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme],
@@ -1044,7 +1043,7 @@ export function deletePreset(
     );
   }
   const own: ConfigPath = ["presets", name];
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own) === undefined) {
     throw new BadVerbArgs(
@@ -1085,7 +1084,7 @@ export function applyLayoutOp(
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under = inheritedOf(into);
   const placement = writtenOnly(into, () =>

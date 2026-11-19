@@ -1,3 +1,4 @@
+import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // The main renderer's parts over a test's own render cache, session state,
 // world states and owners (src/renderer/draw-bar.ts RendererParts), with an
 // inert host (`AdapterToHost`, src/renderer-interface/adapter.ts) for what its
@@ -90,6 +91,7 @@ export function rendererParts({
     effectSessions: new EffectSessions(),
     // A rig's sessions have no lane switched, so no setup is owed.
     verbs,
+    edits: new EditTransactions(sessionState, () => {}),
     mint: minter(),
     // A rig's verbs ask no act, so no `effect-done` is an act's.
     acts: { done: () => false },

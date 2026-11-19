@@ -17,6 +17,9 @@ import {
   effectsUrl,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
+import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../../../src/config/loader/edit-mode";
+import { SETTINGS_ANCHOR, SETTINGS_OPEN } from "../../../src/config/door";
+import { linksOf } from "../../../src/click/read";
 import { LANES, type Lane } from "../../../src/config/lanes";
 import { GLOBAL_FIELDS } from "../../../src/config/globals-fields";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
@@ -24,6 +27,7 @@ import {
   click,
   render,
   drawnLink,
+  urlWriting,
 } from "../../helpers/daemon-e2e";
 import { logLines, renderLines } from "../../helpers/daemon-log";
 import {
@@ -159,6 +163,28 @@ esac
     );
   });
 
+  test("a draft pane preference reaches the host only after Save", async () => {
+    const sid = "lane-draft";
+    const file = path.join(projectDir, "pane-draft.json5");
+    const bar = () => render(daemon, sid, projectDir, inTmux(sid), [
+      "cc-candybar", "--config", file,
+    ]);
+    const held = path.join(projectDir, `lane-e2e-${sid}.split`);
+    writeFileSync(file, CONFIG);
+    await click(daemon, urlWriting(await bar(), SETTINGS_ANCHOR, SETTINGS_OPEN));
+    await click(daemon, urlWriting(await bar(), EDIT_MODE_KEY, EDIT_MODE_ARRANGE));
+    await switchLanes(sid, true, "pane");
+    const draft = await bar();
+    expect(readFileSync(file, "utf8")).toBe(CONFIG);
+    expect(existsSync(held)).toBe(false);
+
+    const save = linksOf(draft).find((link) => link.text === "✓ save");
+    expect(save).toBeDefined();
+    await click(daemon, save!.url);
+    await until(() => existsSync(held), "the saved bar pane to open");
+    expect(readFileSync(file, "utf8")).toContain("experimentalPane: true");
+  });
+
   test("a first off declaration closes a split left by a previous host", async () => {
     const sid = "lane-pane-previous";
     const held = path.join(projectDir, `lane-e2e-${sid}.split`);
@@ -192,6 +218,12 @@ esac
   // leave the file changed before the rewrite.
   test("a lane switch's click reloads no entry; the config's own rewrite reloads each one", async () => {
     const sid = "lane-no-reload";
+    const landedDiscoveries = () =>
+      logLines(env).filter((line) =>
+        line.includes("config discovery why=landed"),
+      );
+    const before = landedDiscoveries();
+
     const root = realpathSync(
       mkdtempSync(path.join(os.tmpdir(), "cc-candybar-lane-reload-")),
     );
@@ -256,9 +288,7 @@ esac
         expect(opened).toBe("open");
         expect(new Set(reloads)).toEqual(new Set(["config"]));
       }
-      expect(
-        logLines(env).filter((l) => l.includes("config discovery why=landed")),
-      ).toEqual([]);
+      expect(landedDiscoveries()).toEqual(before);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

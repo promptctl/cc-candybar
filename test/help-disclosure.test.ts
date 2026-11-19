@@ -70,7 +70,7 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
     palettes: ALLOWED,
     sessionId: SID,
   });
-  const { config, sessionState, click } = rig;
+  const { config, ctx, click } = rig;
 
   // [LAW:one-source-of-truth] The daemon's own globals resolution, called the
   // way the daemon calls it — so edit mode's staged look (plain joiner, " | "
@@ -79,7 +79,7 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
   const render = (width: number): Frame => {
     const effective = resolveEffectiveGlobals(
       config,
-      (key) => sessionState.get(SID, key),
+      (key) => ctx.edits.view.get(SID, key),
       () => false,
     );
     return rig.draw({
