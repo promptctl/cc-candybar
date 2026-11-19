@@ -301,14 +301,11 @@ impl Follower {
                     self.tell(Said::Off, || emit(&body));
                     thread::sleep(Duration::from_millis(SWITCHED_OFF_RETRY_MS));
                 }
-                AfterEnd::Reconnect { reason, kick } => {
+                AfterEnd::Reconnect(reason) => {
                     let wait = self.retry_ms;
                     self.tell(Said::Fault(reason.clone()), || {
                         say(&format!("{reason}; reconnecting in {wait}ms"))
                     });
-                    if kick {
-                        obtain_daemon_kick();
-                    }
                     self.retry_ms = next_retry_ms(wait, RetryEvent::Fault);
                     thread::sleep(Duration::from_millis(wait));
                 }
