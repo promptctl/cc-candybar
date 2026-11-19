@@ -1,3 +1,9 @@
+## [1.235.5](https://github.com/promptctl/cc-candybar/compare/v1.235.4...v1.235.5) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** recover pinned pane views on config delivery ([#891](https://github.com/promptctl/cc-candybar/issues/891)) ([da639d7](https://github.com/promptctl/cc-candybar/commit/da639d74bdb0798ffa62eec23cd0beee4614be6f))
+
 ## [1.235.4](https://github.com/promptctl/cc-candybar/compare/v1.235.3...v1.235.4) (2026-11-19)
 
 ### Bug Fixes
