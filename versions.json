@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-881",
+      "ref": "refs/pull/881/merge",
+      "sha": "b713c4cca82d11534d630d5f2788737565c0c890",
+      "timestamp": "2026-11-19T14:36:04.491Z",
+      "commits": [
+        {
+          "sha": "b713c4cca82d11534d630d5f2788737565c0c890",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:35:06-07:00",
+          "message": "Merge 311ab2757062f55ba719d223f555f9c9b9b5c71b into 37d262840eafee4764958df49f0086054dabe007\n"
+        },
+        {
+          "sha": "311ab2757062f55ba719d223f555f9c9b9b5c71b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:31:32-07:00",
+          "message": "fix(edit): edit chrome and placement state end with what they serve\n\nEdit-mode controls (the insert libraries and their pages, the configure\nlist, the help pane) kept their open state after their placement was\ngone, and a placement re-added under the same id reopened with it. An\nauthor's own menu on a removed placement did the same.\n\nChrome is now a property of the key: every key edit mode mints sits in\none namespace no author spelling reaches, menu and accordion keys are\nspelled injectively, and one classifier decides every read and write.\nEvery session write passes one router: chrome goes to the open edit,\nbeside its drafts and outside undo, or is dropped and logged with no\nedit open, so it dies with the edit by any route, a restart included.\n\nA placement's own state is released only by the click whose layout\nwrite dropped it, comparing the config the click acted on with the\nconfig its write loaded, through that click's journal so undo restores\nit. A refresh releases nothing.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-878",
       "ref": "refs/pull/878/merge",
       "sha": "cb30788dcb560ff11e66f0796738faedce16c956",
