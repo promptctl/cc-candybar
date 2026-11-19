@@ -67,7 +67,6 @@ async function bar(
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['commands', 'autocompact'] } }`,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const deps = {

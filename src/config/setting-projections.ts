@@ -99,8 +99,8 @@ export const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map(
   ]),
 );
 
-// registerDslConfig seeds its key → read-back map from this, ahead of any
-// `state` variable over the same key: an unpicked session has no pick, yet the
+// registerDslConfig seeds its key → read-back map from this, and no `state`
+// variable may take one of these keys: an unpicked session has no pick, yet the
 // bar still wears a theme (brandon-theme-picker-bgw.exj).
 export const SESSION_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> =
   new Map(SETTING_PROJECTIONS.map((p) => [p.sessionKey, p.effectiveVar]));

@@ -26,7 +26,8 @@ import {
   type SettingValue,
   type SourceDefault,
   parseArm,
-  placementSetting,
+  settingVarDecls,
+  settingVarValue,
   settingsOf,
   stateVarDecls,
 } from "../config/dsl-types.js";
@@ -42,7 +43,7 @@ import {
   type CachePolicy,
 } from "../var-system/sources.js";
 import type { SourceParse } from "../var-system/parse.js";
-import type { JsonValue } from "../var-system/types.js";
+import type { JsonValue, VarType } from "../var-system/types.js";
 import {
   type BuildLineOptions,
   drawStripCells,
@@ -370,8 +371,27 @@ function declareOne(
         ...(decl.default !== undefined && { varDefault: decl.default }),
       });
       break;
+
+    // [LAW:one-source-of-truth] A placement setting reads its stored pick
+    // through the setting's one parse, typed as its value is, so `.settings`,
+    // its control and a step all read one value.
+    case "setting":
+      registry.declareStored(
+        name,
+        decl.key,
+        settingVarType(decl.saved),
+        (raw) => settingVarValue(decl, raw),
+      );
+      break;
   }
 }
+
+const settingVarType = (value: SettingValue): VarType =>
+  typeof value === "string"
+    ? "string"
+    : typeof value === "number"
+      ? "number"
+      : "boolean";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -552,9 +572,10 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   // `state` variable over it.
   //
   // A settings key the daemon resolves per render (theme, style, preset, …)
-  // reads back through its `.effective` projection FIRST, ahead of any `state`
-  // variable over the same key: the current value of a setting is the one the
-  // bar is rendering with, so a carousel over `{ set: "theme", from: "themes" }`
+  // reads back through its `.effective` projection — no `state` variable may
+  // take its key (the loader refuses one): the current value of a setting is
+  // the one the bar is rendering with, a stale pick's fallback included, so a
+  // carousel over `{ set: "theme", from: "themes" }`
   // centres on the theme the bar wears even when the session never picked one
   // — the same read-back the settings menu's controls get, so a bar control
   // and the menu cannot disagree (brandon-theme-picker-bgw.exj).
@@ -562,11 +583,15 @@ export function compileInputOf(config: ValidatedConfig): CompileInput {
   for (const [key, name] of SESSION_KEY_TO_EFFECTIVE_VAR) {
     if (name in variables) stateKeyToVar.set(key, name);
   }
-  // Segment-local state vars read the same SessionState keys under their
-  // namespaced `segName.varName` (the form the store + scope use); a global
-  // wins on key collision (yielded first) — the value is the same key
-  // regardless, so either reads correctly.
-  for (const [name, decl] of stateVarDecls(config)) {
+  // A placement setting's key reads back through its setting variable, for
+  // the same reason. Segment-local state vars read the same SessionState keys
+  // under their namespaced `segName.varName` (the form the store + scope
+  // use); a global wins on key collision (yielded first) — the value is the
+  // same key regardless, so either reads correctly.
+  for (const [name, decl] of [
+    ...settingVarDecls(config),
+    ...stateVarDecls(config),
+  ]) {
     if (!stateKeyToVar.has(decl.key)) stateKeyToVar.set(decl.key, name);
   }
   return {
@@ -846,27 +871,26 @@ export function compileDslConfig({
   // [LAW:parse-dont-validate] A placement's settings, resolved once against
   // its segment's declaration: the loader proved every value it sets is
   // declared and in its domain, so resolution is a fill of the defaults.
-  // [LAW:one-source-of-truth] A setting configure mode can change reads
-  // through its draft variable (SegmentNode.drafts), whose default IS the
-  // value filled here — so the render shows a session's unsaved pick the
-  // moment it lands, and the file's value while there is none. A pick the
-  // declaration no longer admits parses to nothing and reads as no pick.
+  // [LAW:one-source-of-truth] A setting configure mode can change reads its
+  // setting variable (SegmentNode.drafts): the session's pick through the
+  // setting's one parse, else the value filled here — so the render shows an
+  // unsaved pick the moment it lands, and the file's value while there is
+  // none or the pick is stale.
   const resolvedSettings = (node: SegmentNode): PlacementSettings => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.
     const declared = settingsOf(config.segments[node.name]!);
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(declared)) {
+      const draft = node.drafts?.[name];
       Object.defineProperty(out, name, {
         enumerable: true,
         get: () =>
-          placementSetting(node, name, decl, (draft) =>
-            String(
-              renderBinding(actionRuntime, `setting ${name}`).store.read(
+          draft === undefined
+            ? (node.settings?.[name] ?? decl.default)
+            : renderBinding(actionRuntime, `setting ${name}`).store.read(
                 draft.variable,
               ),
-            ),
-          ),
       });
     }
     // settingsOf always declares `theme` and `effect`, over domains whose
@@ -1241,6 +1265,16 @@ export type RenderWarning =
       readonly kind: "refresh";
       readonly variable: string;
       readonly error: string;
+      readonly message: string;
+    }
+  // A setting whose stored pick its domain no longer holds (a theme not
+  // installed, a style the config no longer declares, a value past its
+  // range), so the bar wears `wears` instead and the pick stays stored.
+  | {
+      readonly kind: "stale";
+      readonly setting: string;
+      readonly stored: string;
+      readonly wears: string;
       readonly message: string;
     };
 

@@ -62,19 +62,20 @@ import {
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { menuPageKey } from "../src/config/menu-keys";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
 /** The address of the segment named `name` in a compiled tree, or throw. */
 function addressOf(root: CompiledNode, name: string): Address {
   const walk = (node: CompiledNode, address: Address): Address | undefined => {
-    if (node.kind === "segment") return node.name === name ? address : undefined;
+    if (node.kind === "segment")
+      return node.name === name ? address : undefined;
     for (const [index, child] of node.children.entries()) {
-      const found = walk(child, [
-        ...address,
-        childStep(node, index),
-      ]);
+      const found = walk(child, [...address, childStep(node, index)]);
       if (found !== undefined) return found;
     }
     return undefined;
@@ -135,7 +136,8 @@ function expectSwatched(
   );
 }
 // The ground a rendered line is drawn on: its own background.
-const groundOf = (line: RichText): Ground => resolvedStyle(line.style).bgcolor!.value!;
+const groundOf = (line: RichText): Ground =>
+  resolvedStyle(line.style).bgcolor!.value!;
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -145,7 +147,7 @@ function ownUrls(rendered: Frame): string[] {
 }
 
 function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
-  const rig = buildRig({ source: src, palettes: ALLOWED, sessionId });
+  const rig = buildRig({ source: src, sessionId });
   const palette = getThemePalette("textual-dark");
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
@@ -163,7 +165,11 @@ function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
     latest = drawn.segments;
     return drawn.frame;
   };
-  const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
+  const clickToggle = async (
+    out: Frame,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = ownUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -197,7 +203,7 @@ const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
-    const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", MENU_SRC);
     expect(config.variables[TKEY]).toEqual({
       kind: "state",
       key: TKEY,
@@ -233,7 +239,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['plain'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -251,7 +257,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -268,7 +274,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -290,7 +296,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -307,7 +313,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -324,7 +330,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -342,7 +348,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -358,7 +364,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -376,7 +382,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { rows: { r: { h: ['s'], when: '{{ menu "applyTheme" "▸" "▾" }}' } } },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -394,7 +400,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -413,14 +419,13 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       segments: { depthControl: { template: '{{ menu "applyDepth" "▸" "▾" }}' } },
       root: { rows: { terminal: { h: ['depthControl'] } } },
     }`,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
 
   test("a `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected — counted over the tree that renders", () => {
     const src = `{ root: { rows: { extra: { h: ['depthControl'] } } } }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
+      parseAndValidate("<test>", src, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -433,7 +438,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a preset's `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected at the preset", () => {
     const src = `{ presets: { wide: { root: { rows: { extra: { h: ['depthControl'] } } } } } }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
+      parseAndValidate("<test>", src, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -453,7 +458,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -480,10 +485,9 @@ const srcFor = (segTemplate: string, extraVars = ""): string => `{
 const load =
   (segTemplate: string, extraVars = ""): (() => void) =>
   () =>
-    parseAndValidate("<test>", srcFor(segTemplate, extraVars), ALLOWED);
+    parseAndValidate("<test>", srcFor(segTemplate, extraVars));
 
 describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
-
   test("the full old positional form fails load naming the new form (acceptance)", () => {
     try {
       load('{{ menu "applyTheme" "themePage" false true }}')();
@@ -582,7 +586,9 @@ describe("the options dict and the trigger displays cannot be confused", () => {
     // expr is provably the dict and BOTH displays may be dynamic — the parity
     // with a cycle {{ action }}'s free displays is preserved, not traded away.
     expect(
-      load('{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}'),
+      load(
+        '{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}',
+      ),
     ).not.toThrow();
   });
 
@@ -619,8 +625,7 @@ describe("toggle round trip + drop stacking", () => {
   });
 
   test("click opens: ▾ + body dropped BELOW the row; row 0 keeps the neighbor", async () => {
-    const { render, clickToggle, sessionState } =
-      menuBar(MENU_SRC);
+    const { render, clickToggle, sessionState } = menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     expect(sessionState.get(S1, TKEY)).toBe("applyTheme");
     const lines = textOf(render()).split("\n");
@@ -643,7 +648,12 @@ describe("toggle round trip + drop stacking", () => {
       return new Map(
         [...segments().entries()].map(([name, cells]) => [
           name,
-          cells.map((c) => `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`).join("\n"),
+          cells
+            .map(
+              (c) =>
+                `${c.plain}|${resolvedStyle(c.style).bgcolor?.value?.hex}|${resolvedStyle(c.style).color?.value?.hex}`,
+            )
+            .join("\n"),
         ]),
       );
     };
@@ -678,8 +688,7 @@ describe("toggle round trip + drop stacking", () => {
   // to "closed" + page reset, one atomic write — not the standalone picker's
   // page=-1 idiom (which cannot close a disclosure-keyed menu).
   test("the dropped body's ✕ closes the disclosure (and resets the page)", async () => {
-    const { render, click, clickToggle, sessionState } =
-      menuBar(MENU_SRC);
+    const { render, click, clickToggle, sessionState } = menuBar(MENU_SRC);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     expect(textOf(open).split("\n")).toHaveLength(2);
@@ -706,8 +715,7 @@ describe("toggle round trip + drop stacking", () => {
       '{{ menu "applyTheme" "▸" "▾" }}',
       '{{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true) }}',
     );
-    const { render, click, clickToggle, sessionState } =
-      menuBar(src);
+    const { render, click, clickToggle, sessionState } = menuBar(src);
     await clickToggle(render(), TKEY, "applyTheme");
     const open = render();
     const pickUrl = ownUrls(open).find((u) => {
@@ -794,8 +802,7 @@ const INDEPENDENT_SRC = `{
 
 describe("independent default (no shared key)", () => {
   test("two menus have distinct keys (and page cursors); both can be open at once", async () => {
-    const { config, render, clickToggle } =
-      menuBar(INDEPENDENT_SRC);
+    const { config, render, clickToggle } = menuBar(INDEPENDENT_SRC);
     // Distinct keys — neither click writes the other's key — and each key
     // brings its own synthesized page cursor.
     expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
@@ -812,7 +819,11 @@ describe("independent default (no shared key)", () => {
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸"); // style still closed — independence
     // Open style too: theme stays open (NOT mutually exclusive).
-    await clickToggle(render(), "menus.endcapsMenu.applyEndcaps", "applyEndcaps");
+    await clickToggle(
+      render(),
+      "menus.endcapsMenu.applyEndcaps",
+      "applyEndcaps",
+    );
     out = textOf(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▾"); // both open
@@ -836,8 +847,7 @@ const ACCORDION_SRC = `{
 
 describe("opt-in accordion (shared key, one open at a time)", () => {
   test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", async () => {
-    const { config, render, clickToggle } =
-      menuBar(ACCORDION_SRC);
+    const { config, render, clickToggle } = menuBar(ACCORDION_SRC);
     expect(config.actions["menus.pickers.applyTheme"]).toEqual({
       set: "menus.pickers",
       cycle: ["closed", "applyTheme"],
@@ -884,7 +894,7 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
       root: { h: ['a', 'b'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -909,7 +919,7 @@ const TESTER_SRC = `{
 
 describe('the "theme tester" — N menus in one segment', () => {
   test("each menu is a DISTINCT addressable disclosure (no identity collision)", () => {
-    const config = parseAndValidate("<test>", TESTER_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", TESTER_SRC);
     expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
     expect(config.variables["menus.tester.applyEndcaps"]).toBeDefined();
     expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
@@ -1139,9 +1149,9 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
   // display count is statically known, so three displays on a two-state
   // disclosure is a load error in the rule's own words.
   test("three displays on a two-state disclosure is a load error", () => {
-    expect(() =>
-      parseAndValidate("<test>", BOTH("", `"a" "b" "c"`), ALLOWED),
-    ).toThrow(/cycles 2 members; bind one display per member \(2\)/);
+    expect(() => parseAndValidate("<test>", BOTH("", `"a" "b" "c"`))).toThrow(
+      /cycles 2 members; bind one display per member \(2\)/,
+    );
   });
 });
 
@@ -1174,7 +1184,15 @@ describe("a menu's `distribution` option places its band", () => {
     await clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(
+      palette,
+      {
+        kind: "bar",
+        decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] },
+        address,
+      },
+      ColorDepth.TRUECOLOR,
+    );
     const body = segments().get("themepicker")![1]!;
     const options = [...WORDS];
     const optionSpans = body.spans.filter(
@@ -1189,11 +1207,21 @@ describe("a menu's `distribution` option places its band", () => {
       const style = resolvedStyle(span.style);
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }, ColorDepth.TRUECOLOR).hex,
+        bandItemFor(
+          palette,
+          disclosure,
+          { ...step, distribution: DISTRIBUTIONS.monotonic },
+          ColorDepth.TRUECOLOR,
+        ).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] }, ColorDepth.TRUECOLOR).hex
+        bandItemFor(
+          palette,
+          disclosure,
+          { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+          ColorDepth.TRUECOLOR,
+        ).hex
       )
         differsFromDefault++;
     }
@@ -1201,13 +1229,17 @@ describe("a menu's `distribution` option places its band", () => {
   });
 
   test("an unknown distribution name is a load error naming the five", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distribution" "spiral"'), ALLOWED)).toThrow(
+    expect(() =>
+      parseAndValidate("<test>", WITH('"distribution" "spiral"')),
+    ).toThrow(
       /"distribution" must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
     );
   });
 
   test("the unknown-option error lists `distribution` in the vocabulary", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED)).toThrow(
+    expect(() =>
+      parseAndValidate("<test>", WITH('"distributon" "uniform"')),
+    ).toThrow(
       /unknown \{\{ menu \}\} option "distributon".*"distribution" \(one of "van-der-corput"/,
     );
   });
@@ -1342,8 +1374,11 @@ describe("a picker over a colour-valued domain paints what picking would apply",
   });
 
   test("every style option's swatch is the BASE palette under that style, not the bar's already-styled one", async () => {
-    const { render, segments, config, palette, clickToggle } =
-      menuBar(BOTH_PICKERS_SRC, S1, "dim");
+    const { render, segments, config, palette, clickToggle } = menuBar(
+      BOTH_PICKERS_SRC,
+      S1,
+      "dim",
+    );
     render();
     await clickToggle(render(), LKEY, "applyStyle");
     render();
@@ -1446,16 +1481,29 @@ describe("a picker over a colour-valued domain paints what picking would apply",
     await clickToggle(render(), TKEY, "applyTheme");
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
-    const { disclosure } = decorationFor(palette, { kind: "bar", decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] }, address }, ColorDepth.TRUECOLOR);
+    const { disclosure } = decorationFor(
+      palette,
+      {
+        kind: "bar",
+        decor: { variation: VARIATIONS["accent"], shade: SHADES["middle"] },
+        address,
+      },
+      ColorDepth.TRUECOLOR,
+    );
     const cells = optionCells(segments(), "themepicker", WORDS);
     expect(cells.length).toBe(WORDS.length);
     for (const cell of cells) {
       expect(cell.bg).toBe(
-        bandItemFor(palette, disclosure, {
+        bandItemFor(
+          palette,
+          disclosure,
+          {
             index: WORDS.indexOf(cell.name),
             count: WORDS.length,
             distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-          }, ColorDepth.TRUECOLOR).hex,
+          },
+          ColorDepth.TRUECOLOR,
+        ).hex,
       );
     }
   });

@@ -46,7 +46,7 @@ const FILE = "/tmp/test.json5";
 // declares `globals.palette`.
 const ALL_PALETTES = new Set(listResolvablePaletteNames());
 function validateAgainstDefault(source: string) {
-  return parseAndValidate(FILE, source, ALL_PALETTES, DEFAULT_DSL_CONFIG);
+  return parseAndValidate(FILE, source, DEFAULT_DSL_CONFIG);
 }
 
 // Convenience builder for vertical stacks of horizontal rows.
@@ -715,7 +715,7 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       },
     );
     expectIssue(
-      `{ variables: { t: { kind: "state", key: "theme", fallback: "x" } } }`,
+      `{ variables: { t: { kind: "state", key: "picked", fallback: "x" } } }`,
       {
         path: "variables.t.fallback",
         message:
@@ -755,12 +755,28 @@ describe("loadDslConfig — unknown keys on a variable declaration", () => {
       `{ kind: "shell", command: "echo", cache: { never: true } }`,
       `{ kind: "template", template: "x" }`,
       `{ kind: "time", layout: "15:04" }`,
-      `{ kind: "state", key: "theme" }`,
+      `{ kind: "state", key: "picked" }`,
     ]) {
       expect(
         parseAndValidate(FILE, `{ variables: { x: ${decl} } }`).variables.x,
       ).toMatchObject({ kind: expect.any(String) });
     }
+  });
+
+  test.each([
+    ["variables.t", `{ variables: { t: { kind: "state", key: "theme" } } }`],
+    [
+      "segments.s.vars.t",
+      `{ segments: { s: { template: "x", vars: { t: { kind: "state", key: "padding" } } } } }`,
+    ],
+  ])("a state variable at %s may not take a setting's key", (at, source) => {
+    // A raw reader of a setting's key would show a stored pick the bar does
+    // not wear; the setting's own value is the one to read.
+    const setting = at === "variables.t" ? "theme" : "padding";
+    expectIssue(source, {
+      path: `${at}.key`,
+      message: `${at}: "${setting}" is the key of the "${setting}" setting, which owns it — read its value as "${setting}.effective", or give this variable a key of its own`,
+    });
   });
 
   test("a specific message about a key REPLACES the generic one", () => {
@@ -952,7 +968,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       {
         source: "",
         issues,
-        allowedPalettes: new Set(),
         groups: [],
         unplaced: [],
         inherited: [],
@@ -1111,7 +1126,7 @@ describe("loadDslConfig — segments", () => {
   // the inherited set may omit its template, any other name may not.
   test("a delta over an inherited name may omit its template; any other name may not", () => {
     const parse = (source: string) =>
-      parseDslConfig("<test>", source, new Set(["nord"]), new Set(["cwd"]));
+      parseDslConfig("<test>", source, new Set(["cwd"]));
     expect(
       parse(`{ segments: { cwd: { palette: "nord" } } }`).segments,
     ).toEqual({
@@ -1194,10 +1209,6 @@ describe("loadDslConfig — segments", () => {
 // ─── Per-segment palette switch (3rq.2) ──────────────────────────────────────
 
 describe("loadDslConfig — palette switch", () => {
-  // Inject a tiny set so validation behavior is independent of registry
-  // contents; "real" names (gruvbox/monokai/nord) exercise the default path.
-  const ALLOWED = new Set(["gruvbox", "monokai", "solar"]);
-
   test("globals.palette is preserved when a known name", () => {
     const cfg = parseAndValidate(
       FILE,
@@ -1221,14 +1232,14 @@ describe("loadDslConfig — palette switch", () => {
   test("unknown globals palette fails loudly at load", () => {
     expectIssue(`{ globals: { palette: "nope" } }`, {
       path: "globals.palette",
-      message: 'Unknown palette "nope"',
+      message: '"nope" is not an installed theme',
     });
   });
 
   test("unknown per-segment palette fails loudly at load", () => {
     expectIssue(`{ segments: { x: { template: "t", palette: "nope" } } }`, {
       path: "segments.x.palette",
-      message: 'Unknown palette "nope"',
+      message: '"nope" is not an installed theme',
     });
   });
 
@@ -1243,29 +1254,6 @@ describe("loadDslConfig — palette switch", () => {
       path: "globals.palette",
       message: "globals.palette must be a string",
     });
-  });
-
-  test("injected allowed set overrides the default registry", () => {
-    // A name in the injected set passes even though it is not a real theme.
-    const ok = parseAndValidate(
-      FILE,
-      `{ globals: { palette: "solar" } }`,
-      ALLOWED,
-    );
-    expect(ok.globals.palette).toBe("solar");
-
-    // A real theme name fails when the injected set excludes it — proving the
-    // injected set is authoritative, not merely additive.
-    const err = (() => {
-      try {
-        parseAndValidate(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
-      } catch (e) {
-        if (e instanceof ConfigError) return e;
-        throw e;
-      }
-      throw new Error("expected ConfigError");
-    })();
-    expect(err.issues.some((i) => i.path === "globals.palette")).toBe(true);
   });
 });
 

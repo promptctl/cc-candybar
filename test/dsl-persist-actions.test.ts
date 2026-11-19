@@ -39,8 +39,10 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { listResolvablePaletteNames } from "../src/themes/policy";
-import { resolveThemeSelection } from "../src/themes/palette-resolvers";
+import {
+  resolveThemeSelection,
+  themePick,
+} from "../src/themes/palette-resolvers";
 import { ConfigError } from "../src/config/dsl-loader";
 import { testVerbContext, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { linkClick } from "./helpers/click";
@@ -73,8 +75,6 @@ import { DiscoveringCache, originOf } from "./helpers/config-host";
 
 const S1 = sessionIdOf("s1");
 const S2_NO_PICK = sessionIdOf("s2-no-pick");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
@@ -174,7 +174,6 @@ describe("config-validators gate", () => {
           segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
           root: 's',
         }`,
-        ALLOWED,
       ),
     );
 
@@ -195,7 +194,6 @@ describe("config-validators gate", () => {
         segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 's',
       }`,
-      ALLOWED,
     );
     const contributions = ownValidators(
       config,
@@ -253,7 +251,6 @@ describe("config-validators gate", () => {
         segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 's',
       }`,
-      ALLOWED,
     );
     expect(() =>
       configGate({
@@ -281,7 +278,6 @@ describe("persist/reset action loader shape", () => {
     const config = parseAndValidate(
       "<test>",
       base(`{ applyTheme: { persist: 'palette', from: 'themes' } }`),
-      ALLOWED,
     );
     expect(config.actions.applyTheme).toEqual({
       persist: "palette",
@@ -298,7 +294,6 @@ describe("persist/reset action loader shape", () => {
         b: { persist: 'padding', min: 0, max: 16, by: 1 },
         c: { persist: 'autoWrap', cycle: ['true', 'false'] },
       }`),
-      ALLOWED,
     );
     expect(config.actions.a).toEqual({
       persist: "style",
@@ -324,7 +319,6 @@ describe("persist/reset action loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'palette', int: true } }`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -333,7 +327,6 @@ describe("persist/reset action loader shape", () => {
     const config = parseAndValidate(
       "<test>",
       base(`{ undo: { reset: 'palette' } }`),
-      ALLOWED,
     );
     expect(config.actions.undo).toEqual({ reset: "palette", layer: "user" });
   });
@@ -343,7 +336,6 @@ describe("persist/reset action loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ undo: { reset: 'palette', to: 'nord' } }`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -356,14 +348,13 @@ describe("persist/reset action loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'pallete', to: 'nord' } }`),
-        ALLOWED,
       ),
     ).toThrow(/"pallete" is not a config globals field \(have: /);
   });
 
   test("reset targeting a non-Globals field is a load error naming the real fields", () => {
     expect(() =>
-      parseAndValidate("<test>", base(`{ a: { reset: 'pallete' } }`), ALLOWED),
+      parseAndValidate("<test>", base(`{ a: { reset: 'pallete' } }`)),
     ).toThrow(/"pallete" is not a config globals field \(have: /);
   });
 
@@ -372,7 +363,7 @@ describe("persist/reset action loader shape", () => {
       `{ a: { persist: 'charset', to: 'unicode' } }`,
       `{ a: { reset: 'charset' } }`,
     ]) {
-      expect(() => parseAndValidate("<test>", base(action), ALLOWED)).toThrow(
+      expect(() => parseAndValidate("<test>", base(action))).toThrow(
         /the globals field "charset" was removed: the bar always draws Nerd Font glyphs/,
       );
     }
@@ -383,7 +374,6 @@ describe("persist/reset action loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'colorCompatibility', to: 'truecolor' } }`),
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -401,7 +391,7 @@ function buildPersistRuntime(
   drawOpts: Partial<ReturnType<typeof opts>> = {},
 ) {
   durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
+  const config = parseAndValidate("<test>", src, dflt);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore(systemTimekeeper);
@@ -547,7 +537,7 @@ describe("persist action click → the config file", () => {
       root: 'bar',
     }`;
     durable.write(src);
-    const config = parseAndValidate("<test>", src, ALLOWED);
+    const config = parseAndValidate("<test>", src);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
     const store = new VariableStore(systemTimekeeper);
@@ -679,10 +669,7 @@ describe("persist action click → the config file", () => {
     presets: { roomy: { globals: { padding: 4, autoWrap: true } } },
   }`;
   const barUnder = (preset: string, dflt: DslConfig = EMPTY_DEFAULT) =>
-    presetGlobals(
-      parseAndValidate("<test>", durable.text()!, ALLOWED, dflt),
-      preset,
-    );
+    presetGlobals(parseAndValidate("<test>", durable.text()!, dflt), preset);
 
   test("a persist stepper under a preset that pins its field steps and writes that preset's globals", async () => {
     const { render, click, sessionState } =
@@ -787,7 +774,6 @@ describe("persist action click → the config file", () => {
         segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 's',
       }`,
-      ALLOWED,
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
@@ -862,7 +848,6 @@ describe("a durable click lands in the file the next reload reads", () => {
       `{
         actions: { pin: { persist: "palette", from: "themes" } },
       }`,
-      ALLOWED,
     );
     const sessionState = new SessionState();
     const named = join(durable.projectDir, "named.json5");
@@ -901,7 +886,6 @@ describe("a durable click lands in the file the next reload reads", () => {
       `{
         actions: { pin: { persist: "palette", from: "themes" } },
       }`,
-      ALLOWED,
     );
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, S1);
@@ -1067,7 +1051,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get(S1, "theme"),
+          themePick(sessionState.get(S1, "theme")),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "dracula" });
@@ -1075,7 +1059,7 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(
         resolveThemeSelection(
           undefined,
-          sessionState.get(S2_NO_PICK, "theme"),
+          themePick(sessionState.get(S2_NO_PICK, "theme")),
           entry.state.config.globals.palette,
         ),
       ).toMatchObject({ kind: "decided", name: "nord" });

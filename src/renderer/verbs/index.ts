@@ -33,7 +33,7 @@ import {
 import type { SessionStateRW } from "../../renderer-interface/session-state";
 import { holdClickError } from "../../daemon/foundations/click-error";
 import type { Instant } from "../../utils/instant";
-import { stateKeySeed, configKeySeed } from "./key-seeds";
+import { stateKeyShows, configKeySeed, STEP_INT_RE } from "./key-seeds";
 import {
   disclosureNest,
   NO_NEST,
@@ -95,6 +95,7 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
+  staleSettingKeys,
   themeDefaultSave,
 } from "../setting-drafts";
 import {
@@ -377,13 +378,6 @@ const setState: VerbHandler = (rest, ctx) => {
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
 
-// [LAW:single-enforcer] One integer-shape boundary, mirroring the range
-// validator's canonical `^-?\d+$`: the `by` delta and a stored current value are
-// integers or they are not values. Only an integer-shaped stored value is a
-// current value; absence (or a non-integer) is the genuine "unset" state, which
-// steps from what the session's config shows (stepFrom).
-const STEP_INT_RE = /^-?\d+$/;
-
 // [LAW:no-ambient-temporal-coupling] A step that would pass a bound STOPS on it,
 // and only a step taken FROM the bound wraps to the other end — so a stride
 // wider than 1 (a setting's `step`) still reaches both ends, and one click past
@@ -407,11 +401,12 @@ function stepWithin(
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
 // snapshot), so the SAME link string fires every render and N rapid clicks each
 // re-read live state and accumulate — the idempotent absolute-write bug is gone.
-// The absolute target is computed HERE: read the live value (an unset key
-// steps from what the session's config shows, NOT silently from min), wrap by
-// the signed delta against the bounds the session's own config declares, then
-// route the result through its gate so the one range gate owns the [min,max]
-// clamp and the canonical decimal form that persists.
+// The absolute target is computed HERE: read what the key shows (an unset or
+// stale setting steps from what the bar draws, NOT silently from min or from
+// the stored spelling the bar does not wear), wrap by the signed delta against
+// the bounds the session's own config declares, then route the result through
+// its gate so the one range gate owns the [min,max] clamp and the canonical
+// decimal form that persists.
 const stepState: VerbHandler = (args, ctx) => {
   const [key = "", byRaw = ""] = args;
   const sid = ctx.session;
@@ -438,16 +433,12 @@ const stepState: VerbHandler = (args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  const stored = ctx.sessionState.get(sid, key);
-  const clamped =
-    stored && STEP_INT_RE.test(stored)
-      ? clampTo(params, parseInt(stored, 10))
-      : stepFrom(
-          "step-state",
-          key,
-          params,
-          stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key),
-        );
+  const clamped = stepFrom(
+    "step-state",
+    key,
+    params,
+    stateKeyShows(config, (k) => ctx.sessionState.get(sid, k), key),
+  );
   const next = stepWithin(clamped, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
@@ -487,24 +478,23 @@ function clampTo(params: RangeParams, n: number): number {
   return Math.max(params.min, Math.min(params.max, n));
 }
 
-// [LAW:no-defensive-null-guards] "unset" is a real state: an unset key steps
-// from the value its session's config shows before any click (`declared`,
-// resolved from the session's picks). A key whose config shows nothing steps from `min`; one that shows a
-// non-integer is a stepper over a value that is no number, refused loudly
-// rather than stepped from a guess.
+// [LAW:no-defensive-null-guards] A key steps from the value it `shows`,
+// resolved from the session's picks. A key that shows nothing steps from
+// `min`; one that shows a non-integer is a stepper over a value that is no
+// number, refused loudly rather than stepped from a guess.
 function stepFrom(
   verb: string,
   key: string,
   params: RangeParams,
-  declared: string | null,
+  shows: string | null,
 ): number {
-  if (declared === null) return params.min;
-  if (!STEP_INT_RE.test(declared)) {
+  if (shows === null) return params.min;
+  if (!STEP_INT_RE.test(shows)) {
     throw new BadVerbArgs(
-      `${verb}: "${key}" shows ${JSON.stringify(declared)} before any click, not an integer to step`,
+      `${verb}: "${key}" shows ${JSON.stringify(shows)}, not an integer to step`,
     );
   }
-  return clampTo(params, parseInt(declared, 10));
+  return clampTo(params, parseInt(shows, 10));
 }
 
 // ─── The durable store: which file, and the history over it ─────────────────
@@ -859,8 +849,15 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
+  // [LAW:one-source-of-truth] A stale pick is no value the preset could
+  // render, so it stays stored for its domain to return to.
+  const stale = staleSettingKeys(config, (key) =>
+    ctx.sessionState.get(sid, key),
+  );
   for (const key of [
-    ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
+    ...SETTING_PROJECTIONS.map((p) => p.sessionKey).filter(
+      (key) => !stale.has(key),
+    ),
     ...snapshot.placements.map((p) => p.key),
   ]) {
     ctx.sessionState.clear(sid, key);
@@ -908,9 +905,10 @@ const saveThemeDefault: VerbHandler = (args, ctx) => {
   const drafted = new Set(
     settingDrafts(written, pick).map((d) => d.sessionKey),
   );
+  const stale = staleSettingKeys(written, pick);
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,
-  ).filter((key) => !drafted.has(key));
+  ).filter((key) => !drafted.has(key) && !stale.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",

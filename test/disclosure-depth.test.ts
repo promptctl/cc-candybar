@@ -36,7 +36,6 @@ import {
   type CompiledNode,
 } from "../src/dsl/node-registry";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DECOR } from "./helpers/decor";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
@@ -73,8 +72,6 @@ import { linkFromStyle } from "../src/render/link-style";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
 const SID = sessionIdOf("s1");
 
@@ -211,7 +208,6 @@ function build(src: string, withDefault = false) {
   const config = parseAndValidate(
     "<test>",
     src,
-    ALLOWED,
     withDefault ? DEFAULT_DSL_CONFIG : undefined,
   );
   const sessionState = new SessionState();

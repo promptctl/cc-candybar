@@ -29,7 +29,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -53,8 +52,6 @@ import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
 const SID = sessionIdOf("s1");
 
@@ -129,7 +126,6 @@ function build(src: string, withDefault: boolean) {
   const config = parseAndValidate(
     "<test>",
     src,
-    ALLOWED,
     withDefault ? DEFAULT_DSL_CONFIG : undefined,
   );
   const sessionState = new SessionState();

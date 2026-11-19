@@ -29,7 +29,6 @@ export function loadFile(
   file: string | null,
   dflt: DslConfig,
   ctx: LoadContext,
-  allowedPalettes?: ReadonlySet<string>,
 ) {
   if (file === null) {
     return {
@@ -41,13 +40,10 @@ export function loadFile(
   }
   const layer = layerOf("user", file, readLayer(file), ctx.home);
   if (layer.content.kind !== "text") throw new Error(layer.content.kind);
-  return loadConfigSource(
-    file,
-    layer.content.text,
-    dflt,
-    { ...ctx, listed: layer.listed },
-    allowedPalettes,
-  );
+  return loadConfigSource(file, layer.content.text, dflt, {
+    ...ctx,
+    listed: layer.listed,
+  });
 }
 
 // A chain whose texts are in hand (`texts`), or read from disk where none is

@@ -43,7 +43,6 @@ import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { existsSync } from "node:fs";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveConfigActionValidators } from "../src/daemon/foundations/config-validators";
 import { configGate } from "./helpers/gates";
 import { writeValues, type EditStore } from "../src/renderer/config-file-store";
@@ -73,8 +72,6 @@ import { SourceRuns } from "../src/daemon/source-runs";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";
 import { DiscoveringCache, originOf } from "./helpers/config-host";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -144,7 +141,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'segments.sidebar.palette', from: 'themes' } }`),
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -154,7 +150,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { reset: 'segments.sidebar.palette' } }`),
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -164,7 +159,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'segments.ghost.palette', from: 'themes' } }`),
-        ALLOWED,
       ),
     ).toThrow(
       /names segment "ghost" which is not declared \(have segments: sidebar\)/,
@@ -176,7 +170,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { reset: 'segments.ghost.palette' } }`),
-        ALLOWED,
       ),
     ).toThrow(/names segment "ghost" which is not declared/);
   });
@@ -188,7 +181,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
         base(
           `{ a: { persist: 'segments.sidebar.palette', min: 0, max: 5, by: 1 } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(
       /"segments\.sidebar\.palette" is a segment palette target and cannot use a bounded stepper/,
@@ -200,7 +192,6 @@ describe("loader: segment-palette persist/reset target validation", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { persist: 'pallete', to: 'nord' } }`),
-        ALLOWED,
       ),
     ).toThrow(/"pallete" is not a config globals field \(have: /);
   });
@@ -218,7 +209,6 @@ describe("config-validators: segment-palette persist keys", () => {
         actions: { applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' } },
         root: 'sidebar',
       }`,
-      ALLOWED,
     );
     const contributions = ownValidators(
       config,
@@ -240,7 +230,6 @@ describe("config-validators: segment-palette persist keys", () => {
           actions: { applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' } },
           root: 'sidebar',
         }`,
-        ALLOWED,
       ),
     );
     expect(gate.validate("segments.sidebar.palette", "nord")).toEqual({

@@ -89,8 +89,14 @@ declares exactly one value source:
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
-default: "…" }`. (The one exception: never declare state for a `{{ menu }}` —
-its state is synthesized, see below.) A `persist` action reads its current
+default: "…" }`. Two exceptions: never declare state for a `{{ menu }}` —
+its state is synthesized, see below — and never for a setting's own key
+(`theme`, `style`, `padding`, …): the setting owns it, a variable over it is a
+load error, and its value reads back as `<setting>.effective`. That is what the
+bar wears, even when the session's stored pick has left the setting's domain
+(an uninstalled theme, a style your config no longer declares): the bar draws
+the next value down, a ⚠ beside the settings door names the pick, and the pick
+stays stored, so it comes back when its theme or style does. A `persist` action reads its current
 value back through whatever variable already projects that `globals` field —
 every persistable field has one, declared by the bundled default: `palette` →
 `theme.effective`, and every other field → `<field>.effective` (`style`,
@@ -604,11 +610,6 @@ control for "just this terminal" beside one for "everywhere":
     // Every session, durably.
     wrapEverywhere: { persist: "autoWrap", cycle: ["true", "false"] },
   },
-  variables: {
-    // The `set: "padding"` stepper seeds an unset key from THIS declaration's
-    // integer default, so the first ◀/▶ click steps from 1 rather than from 0.
-    sessionPadding: { kind: "state", key: "padding", default: "1" },
-  },
   segments: {
     layoutControls: {
       template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}  {{ action "wrapEverywhere" "pin wrap: on" "pin wrap: off" }}',
@@ -659,15 +660,12 @@ one as your default with `globals: { preset: "compact" }`.
 
 ```json5 check:pass
 {
-  variables: {
-    activePreset: { kind: 'state', key: 'preset', default: 'default' },
-  },
   actions: {
     applyPreset: { set: 'preset', from: 'presets' },
   },
   segments: {
     presetControl: {
-      template: '▦ {{ .activePreset }} {{ menu "applyPreset" "▸" "▾" }}',
+      template: '▦ {{ .preset.effective }} {{ menu "applyPreset" "▸" "▾" }}',
     },
   },
   presets: {

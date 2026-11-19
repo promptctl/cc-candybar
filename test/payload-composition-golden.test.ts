@@ -64,7 +64,9 @@ async function drawnUnder(preset: string | null) {
   const unnamed = (text: string): string => text.split(dir).join("<dir>");
   return {
     bar: unnamed(ansiOf(frame)),
-    payload: JSON.parse(unnamed(JSON.stringify(view.source.payload()))) as unknown,
+    payload: JSON.parse(
+      unnamed(JSON.stringify(view.source.payload())),
+    ) as unknown,
   };
 }
 
@@ -84,12 +86,7 @@ describe("a session's view, drawn from fixed owners at a fixed instant", () => {
 });
 
 describe("a sample session payload", () => {
-  const config = parseAndValidate(
-    "<user>",
-    "{}",
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<user>", "{}", DEFAULT_DSL_CONFIG);
 
   test.each(PRESETS)("preset %s: the payload and its day", (preset) => {
     const effective = resolveEffectiveGlobals(
@@ -97,7 +94,12 @@ describe("a sample session payload", () => {
       (key) => (key === "preset" ? preset : null),
       () => false,
     );
-    const { today, speed, ...payload } = samplePayload(config, effective, null, AT);
+    const { today, speed, ...payload } = samplePayload(
+      config,
+      effective,
+      null,
+      AT,
+    );
     expect({ payload, today, speed }).toMatchSnapshot();
   });
 });

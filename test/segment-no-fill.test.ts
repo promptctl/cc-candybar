@@ -35,11 +35,7 @@ const SRC = `{
 }`;
 
 function render() {
-  const config = parseAndValidate(
-    "<test>",
-    SRC,
-    new Set(listResolvablePaletteNames()),
-  );
+  const config = parseAndValidate("<test>", SRC);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
@@ -60,7 +56,8 @@ function render() {
     undefined,
   );
   const out = drawn.frame;
-  const style = (name: string) => resolvedStyle(drawn.segments.get(name)![0]!.style);
+  const style = (name: string) =>
+    resolvedStyle(drawn.segments.get(name)![0]!.style);
   return { out, style, dispose: () => registry.dispose() };
 }
 

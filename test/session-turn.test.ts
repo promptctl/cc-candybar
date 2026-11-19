@@ -259,12 +259,7 @@ describe("what wakes a view", () => {
 });
 
 describe("the all-pending document", () => {
-  const config = parseAndValidate(
-    "<user>",
-    "{}",
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<user>", "{}", DEFAULT_DSL_CONFIG);
   const waiting = {
     kind: "pending",
     why: "unread",

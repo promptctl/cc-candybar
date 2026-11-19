@@ -25,7 +25,6 @@ import type { ActionDecl as ActionDeclType } from "./action.js";
 import {
   mapOpens,
   placementId,
-  settingSpelling,
   settingsOf,
   IMPLIED_SETTINGS,
   walkNodes,
@@ -382,9 +381,10 @@ function configureParts(
     // holds across reloads.
     const variable = `${PLACEMENT_DRAFT_NS}p${ctx.presetIdent}.d${placement}.${name}`;
     ctx.artifacts.variables[variable] = {
-      kind: "state",
+      kind: "setting",
       key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default),
+      decl,
+      saved: node.settings?.[name] ?? decl.default,
     };
     drafts[name] = { id, key, variable };
     const segName = `${prefix}.setting.${placement}.${name}`;

@@ -28,9 +28,6 @@ const BASE_THEME = "textual-dark";
 // inter-cell seam is exactly what the strip style reshapes.
 const SRC = `{
   globals: { palette: '${BASE_THEME}' },
-  variables: {
-    activeStyle: { kind: 'state', key: 'endcaps', default: '' },
-  },
   actions: {
     applyEndcaps: { set: 'endcaps', from: 'endcaps' },
   },
@@ -41,10 +38,8 @@ const SRC = `{
   root: { h: ['a', 'b'] },
 }`;
 
-const ALLOWED = new Set([BASE_THEME]);
-
 function reshapeBar() {
-  const rig = buildRig({ source: SRC, sessionId: SID, palettes: ALLOWED });
+  const rig = buildRig({ source: SRC, sessionId: SID });
   const { config, sessionState } = rig;
 
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
@@ -53,12 +48,17 @@ function reshapeBar() {
   // reshapes. (draw-bar.ts: renderOptionsOf(resolveEffectiveGlobals(...))).
   const render = (): Frame =>
     rig.draw({
-      opts: { endcaps: globalsFor(config, (key) => sessionState.get(SID, key)).endcaps },
+      opts: {
+        endcaps: globalsFor(config, (key) => sessionState.get(SID, key))
+          .endcaps,
+      },
     }).frame;
 
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const clickEndcaps = (style: string): Promise<void> =>
-    rig.click(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]));
+    rig.click(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "endcaps", style] }]),
+    );
 
   return { render, clickEndcaps };
 }
@@ -105,7 +105,7 @@ describe("endcaps resolve session over config over floor", () => {
     picks: Readonly<Record<string, string>>,
   ): string =>
     globalsFor(
-      parseAndValidate("<endcaps>", `{ globals: { ${globals} } }`, ALLOWED),
+      parseAndValidate("<endcaps>", `{ globals: { ${globals} } }`),
       (key) => picks[key] ?? null,
     ).endcaps;
   test("session pick wins over config default and floor", () => {

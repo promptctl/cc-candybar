@@ -10,7 +10,13 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { plainOf, textOf, type Frame, type Row, type Run } from "../src/render/frame";
+import {
+  plainOf,
+  textOf,
+  type Frame,
+  type Row,
+  type Run,
+} from "../src/render/frame";
 import { linkUrls, runAt, runUnder, truecolorOf } from "./helpers/frame";
 import { globalsFor, selectionFor } from "./helpers/selection";
 import {
@@ -36,10 +42,7 @@ import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
-import {
-  getThemePalette,
-  contrastRatio,
-} from "@promptctl/rich-js";
+import { getThemePalette, contrastRatio } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   recordRender,
@@ -49,14 +52,18 @@ import {
 } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../src/config/loader/edit-mode";
 import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { buildRig, type RigFrame } from "./helpers/rig";
 import { samplePayload } from "./helpers/sample-payload";
+import { renderOptionsOf } from "../src/renderer/render-payload";
 import {
-  renderOptionsOf,
-} from "../src/renderer/render-payload";
-import { resolveEffectiveGlobals, type EffectiveGlobals } from "../src/config/effective-globals";
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "../src/config/effective-globals";
 import { TEXT_MIN_CONTRAST } from "../src/themes/decor";
 import { QUIET_MIN_CONTRAST } from "../src/config/quiet-text";
 import { POLLED } from "../src/config/settings-menu";
@@ -201,10 +208,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore(systemTimekeeper);
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     try {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
@@ -223,13 +227,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
           added_dirs: [],
         },
       };
-      const line = drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
-        endcaps: "powerline",
-        colorCompatibility: "truecolor",
-        wrap: true,
-        padding: 1,
-        width: Number.POSITIVE_INFINITY,
-      }).frame;
+      const line = drawPayload(
+        parsed,
+        compiled,
+        store,
+        registry,
+        payload,
+        instantOf(new Date()),
+        {
+          endcaps: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          width: Number.POSITIVE_INFINITY,
+        },
+      ).frame;
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
       expect(textOf(line).length).toBeGreaterThan(0);
@@ -274,10 +286,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         () => false,
       );
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       const compiled = registerDslConfig(config, registry, {
         cwd: process.cwd(),
       });
@@ -382,7 +391,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
     );
     // A default config with `edit` applied to its raw declarations.
     const variant = (
-      edit: (raw: { segments: Record<string, object>; variables: Record<string, object> }) => void,
+      edit: (raw: {
+        segments: Record<string, object>;
+        variables: Record<string, object>;
+      }) => void,
     ) => {
       const raw = structuredClone(RAW_DEFAULT_DSL_CONFIG) as unknown as {
         segments: Record<string, object>;
@@ -470,16 +482,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
             new Set([frames[0]!.ground]),
           );
           expect(
-            contrastRatio(
-              truecolorOf(frames[0]!.ground),
-              cell,
-            ),
+            contrastRatio(truecolorOf(frames[0]!.ground), cell),
           ).toBeGreaterThanOrEqual(EFFORT_BUBBLE_CONTRAST);
           // The bubble's caps sit either side of the climb.
           const plain = plainOf(row({ level: "max" }).runs);
-          expect(plain).toMatch(
-            new RegExp(`${NAME}\u{E0B6}.\u{E0B4}`, "u"),
-          );
+          expect(plain).toMatch(new RegExp(`${NAME}\u{E0B6}.\u{E0B4}`, "u"));
         } finally {
           dispose();
         }
@@ -595,7 +602,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
-          { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
+          {
+            verb: VERB_SET_STATE,
+            args: [SID, "menus.candybar_pickers", "gear"],
+          },
         ]),
         ctx,
       );
@@ -607,7 +617,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(names(afterStyle, "◀ ◐ style ▀▀▀ ▶")).toBe(true);
       expect(
         linkUrls(afterStyle).some((u) =>
-          effectsOf(u).some((e) => e.args[1] === "style" && e.args[2] === after),
+          effectsOf(u).some(
+            (e) => e.args[1] === "style" && e.args[2] === after,
+          ),
         ),
       ).toBe(true);
       expect(afterStyle.rows).not.toEqual(afterTheme.rows);
@@ -631,20 +643,27 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const render = (padding: number): string => {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return textOf(drawPayload(parsed, compiled, store, registry, payload, instantOf(new Date()), {
-          endcaps: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding,
-          width: Number.POSITIVE_INFINITY,
-        }).frame);
+        return textOf(
+          drawPayload(
+            parsed,
+            compiled,
+            store,
+            registry,
+            payload,
+            instantOf(new Date()),
+            {
+              endcaps: "powerline",
+              colorCompatibility: "truecolor",
+              wrap: true,
+              padding,
+              width: Number.POSITIVE_INFINITY,
+            },
+          ).frame,
+        );
       } finally {
         registry.dispose();
       }
@@ -662,20 +681,18 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // a root drawing the very rows of DEFAULT_DSL_CONFIG.root (the
   // canonical container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
-    const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
       { h: ["host","directory","gitaculous"] },
       { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
-    const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
+    const rawA = parseDslConfig("<test>", A_SRC);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
     const configA = validateConfig(
       { config: mergedA, raw: rawA, source: A_SRC },
       "<test>",
-      ALLOWED,
     );
 
-    const configDefault = parseAndValidate("<default>", SERIALIZED, ALLOWED);
+    const configDefault = parseAndValidate("<default>", SERIALIZED);
 
     const payload = {
       hook_event_name: "Status",
@@ -694,14 +711,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
-        return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
+        return drawPayload(
+          cfg,
+          compiled,
+          store,
+          registry,
+          payload,
+          instantOf(new Date()),
+          opts,
+        ).frame;
       } finally {
         registry.dispose();
       }
@@ -714,7 +736,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // and { kind: 'container', direction: 'vertical', children: [...] } must render identically —
   // both are spellings of the same canonical tree.
   test("A-grammar terse form { v:[{ h:[...] }] } is render-equivalent to verbose kind+direction form", () => {
-    const ALLOWED = new Set(listResolvablePaletteNames());
     const SEGMENTS = `{
       sa: { template: ' A ', bg: 'surface', fg: 'foreground' },
       sb: { template: ' B ', bg: 'surface', fg: 'foreground' },
@@ -731,8 +752,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
           children: [{ kind: 'segment', name: 'sc' }, { kind: 'segment', name: 'sd' }] },
       ],
     } }`;
-    const configA = parseAndValidate("<test>", srcA, ALLOWED);
-    const configVerbose = parseAndValidate("<test>", srcVerbose, ALLOWED);
+    const configA = parseAndValidate("<test>", srcA);
+    const configVerbose = parseAndValidate("<test>", srcVerbose);
 
     const payload = {
       hook_event_name: "Status",
@@ -751,14 +772,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): Frame {
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
-        return drawPayload(cfg, compiled, store, registry, payload, instantOf(new Date()), opts).frame;
+        return drawPayload(
+          cfg,
+          compiled,
+          store,
+          registry,
+          payload,
+          instantOf(new Date()),
+          opts,
+        ).frame;
       } finally {
         registry.dispose();
       }
@@ -780,10 +806,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(toolbarOnly, registry, {
           cwd: process.cwd(),
@@ -832,7 +855,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(textOf(line)).toContain("↗ repo");
       // The URL rides an OSC-8 hyperlink, not the visible text — a click
       // target, not a printed URL cluttering the bar.
-      expect(linkUrls(line)).toContain("https://github.com/promptctl/cc-candybar");
+      expect(linkUrls(line)).toContain(
+        "https://github.com/promptctl/cc-candybar",
+      );
     });
 
     test("a repo with no browsable remote renders the tray without the glyph", () => {
@@ -854,7 +879,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(textOf(line)).toContain("⎘ resume");
       expect(textOf(line)).toContain("↗ config");
       const effects = linkUrls(line).flatMap(effectsOf);
-      expect(effects).toContainEqual(expect.objectContaining({ args: [resume] }));
+      expect(effects).toContainEqual(
+        expect.objectContaining({ args: [resume] }),
+      );
       expect(effects).toContainEqual(
         expect.objectContaining({ args: ["/tmp/c.json5"] }),
       );
@@ -883,10 +910,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
@@ -905,22 +929,32 @@ describe("DEFAULT_DSL_CONFIG", () => {
             added_dirs: [],
           },
           home: opts.home,
-          location: { main: opts.main, worktree: "", subpath: "", noRepo: false },
+          location: {
+            main: opts.main,
+            worktree: "",
+            subpath: "",
+            noRepo: false,
+          },
         };
-        const line = drawPayload(dirOnly, compiled, store, registry, payload, instantOf(new Date()), {
-          endcaps: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding: 1,
-          width: Number.POSITIVE_INFINITY,
-        }).frame;
+        const line = drawPayload(
+          dirOnly,
+          compiled,
+          store,
+          registry,
+          payload,
+          instantOf(new Date()),
+          {
+            endcaps: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            width: Number.POSITIVE_INFINITY,
+          },
+        ).frame;
         // Drop the Powerline joiner glyphs
         // (U+E0B0..U+E0BC, the reverse-video lead included) so assertions can probe visible
         // segment text only.
-        return textOf(line).replace(
-          CAPS,
-          "",
-        );
+        return textOf(line).replace(CAPS, "");
       } finally {
         registry.dispose();
       }
@@ -1336,10 +1370,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore(systemTimekeeper);
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
           cwd: process.cwd(),
@@ -1374,10 +1405,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             width: Number.POSITIVE_INFINITY,
           },
         ).frame;
-        return textOf(line).replace(
-          CAPS,
-          "",
-        );
+        return textOf(line).replace(CAPS, "");
       } finally {
         registry.dispose();
       }
@@ -1426,10 +1454,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = narrowToSegment(parsed, "block", { errorAt });
         const store = new VariableStore(systemTimekeeper);
-        const registry = new SourceRegistry(store,
-          "",
-          new SessionState(),
-        );
+        const registry = new SourceRegistry(store, "", new SessionState());
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
             cwd: process.cwd(),
@@ -1453,13 +1478,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
               resetsAt: Math.floor(Date.now() / 1000) + 600,
             },
           };
-          return drawPayload(blockOnly, compiled, store, registry, payload, instantOf(new Date()), {
-            endcaps: "powerline",
-            colorCompatibility: "truecolor",
-            wrap: true,
-            padding: 1,
-            width: Number.POSITIVE_INFINITY,
-          }).frame;
+          return drawPayload(
+            blockOnly,
+            compiled,
+            store,
+            registry,
+            payload,
+            instantOf(new Date()),
+            {
+              endcaps: "powerline",
+              colorCompatibility: "truecolor",
+              wrap: true,
+              padding: 1,
+              width: Number.POSITIVE_INFINITY,
+            },
+          ).frame;
         } finally {
           registry.dispose();
         }
@@ -1503,10 +1536,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // it those two vars silently fail to declare into loadWarnings — harmless
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
-      const registry = new SourceRegistry(store,
-        "",
-        new SessionState(),
-      );
+      const registry = new SourceRegistry(store, "", new SessionState());
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
           cwd: process.cwd(),
@@ -1668,9 +1698,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         effective,
       );
       const segmentErrors = warnings.flatMap((w) =>
-        w.kind === "segment"
-          ? [`segment "${w.placement}": ${w.message}`]
-          : [],
+        w.kind === "segment" ? [`segment "${w.placement}": ${w.message}`] : [],
       );
       return { rendered, segmentErrors };
     } finally {
@@ -1724,7 +1752,10 @@ describe("bundled preset library renders clean at every width — brandon-preset
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     'preset "%s" carries the frame rate right after the door, in edit mode too',
     (name) => {
-      const afterDoor = new RegExp(`${DOOR_GLYPH}[^\\p{L}\\p{N}]*${POLLED}`, "u");
+      const afterDoor = new RegExp(
+        `${DOOR_GLYPH}[^\\p{L}\\p{N}]*${POLLED}`,
+        "u",
+      );
       const plain = renderPreset(name, 120);
       expect(plain.segmentErrors).toEqual([]);
       expect(textOf(plain.rendered)).toMatch(afterDoor);
@@ -1732,7 +1763,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
         renderPreset(name, 120, undefined, editingSession).rendered,
       );
       expect(editing).toMatch(afterDoor);
-      expect(editing).not.toMatch(new RegExp(`${REMOVE_GLYPH}\\s*${POLLED}`, "u"));
+      expect(editing).not.toMatch(
+        new RegExp(`${REMOVE_GLYPH}\\s*${POLLED}`, "u"),
+      );
     },
   );
 
@@ -1810,7 +1843,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
     // The drawn row, not only the resolution: no powerline arrow, and the style
     // recolours the bar — a session that picks `none` over the preset's
     // style draws the same row in other colours.
-    expect(textOf(renderPreset("default", 200).rendered)).toContain(POWERLINE_ARROW);
+    expect(textOf(renderPreset("default", 200).rendered)).toContain(
+      POWERLINE_ARROW,
+    );
     expect(textOf(zen)).not.toContain(POWERLINE_ARROW);
     const undimmed = renderPreset("zen", 200, undefined, (key, preset) =>
       key === "style" ? "none" : freshSession(key, preset),
@@ -1826,7 +1861,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const prLine = lines.find((l) => l.includes("⇆ #181"));
     expect(prLine).toContain("~/c/cc-candybar/src");
     expect(prLine).toContain("⎇ main");
-    expect(prLine!.indexOf("~/c/cc-candybar/src")).toBeLessThan(prLine!.indexOf("⎇ main"));
+    expect(prLine!.indexOf("~/c/cc-candybar/src")).toBeLessThan(
+      prLine!.indexOf("⎇ main"),
+    );
     // What sets it apart from verbose, which also stages gitPr: the status
     // row drops the rate-limit windows the default shows.
     expect(textOf(renderPreset("default", 200).rendered)).toContain("◑ ");
@@ -1863,31 +1900,23 @@ describe("bundled preset library renders clean at every width — brandon-preset
       ...base,
       preset: { effective: "default", customized: true },
     });
-    const editing = textOf(renderPreset(
-      "default",
-      200,
-      withCustomized,
-      editingSession,
-    ).rendered);
+    const editing = textOf(
+      renderPreset("default", 200, withCustomized, editingSession).rendered,
+    );
     expect(editing).toContain("↺ reset layout");
 
     // A hand-authored root is "customized" from its first render; outside
     // edit mode that must not put a one-click reset of it on the bar.
-    const viewing = textOf(renderPreset(
-      "default",
-      200,
-      withCustomized,
-    ).rendered);
+    const viewing = textOf(
+      renderPreset("default", 200, withCustomized).rendered,
+    );
     // The banner's own text, not its glyph: the bar's autocompact control
     // carries a ↺ of its own.
     expect(viewing).not.toContain("↺ reset layout");
 
-    const clean = textOf(renderPreset(
-      "default",
-      200,
-      undefined,
-      editingSession,
-    ).rendered);
+    const clean = textOf(
+      renderPreset("default", 200, undefined, editingSession).rendered,
+    );
     expect(clean).not.toContain("↺ reset layout");
   });
 });

@@ -8,7 +8,12 @@
 
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
-import { plainOf, textOf, type Frame as DrawnFrame, type Run } from "../src/render/frame";
+import {
+  plainOf,
+  textOf,
+  type Frame as DrawnFrame,
+  type Run,
+} from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { selectionFor } from "./helpers/selection";
 
@@ -59,7 +64,6 @@ const config = (gated: "segment" | "container"): ValidatedConfig =>
         { kind: "group", name: "more", label: "more", children: ["extra"] },
       ] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 
@@ -99,7 +103,11 @@ function renderer(cfg: ValidatedConfig, session = new SessionState()) {
         { session_id: "s", shown, dark },
         when,
         { ...opts, width },
-        selectionFor(cfg, { effect: decideEffectName(bar), effects, transitions }),
+        selectionFor(cfg, {
+          effect: decideEffectName(bar),
+          effects,
+          transitions,
+        }),
       ).frame,
     dispose: () => registry.dispose(),
   };
@@ -150,9 +158,7 @@ describe.each(["segment", "container"] as const)(
           // It leaves: its text stays where it was, and so does every other.
           const left = both(leaving(0));
           expect(plainOf(firstRow(left.off))).not.toContain("MIDDLE");
-          expect(plainOf(firstRow(left.on))).toBe(
-            plainOf(firstRow(drawn)),
-          );
+          expect(plainOf(firstRow(left.on))).toBe(plainOf(firstRow(drawn)));
 
           // Mid-dissolve: its cells thin and nothing else moves; the row
           // keeps its width.
@@ -259,7 +265,6 @@ describe("a trigger replays its own row only while nothing hangs open under it",
         { h: ["left", { kind: "group", name: "more", label: "MORE", when: '{{ .shown }}', children: ["extra"] }] },
       ] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
   // Its toggle hidden by data, with the group open or closed since before the
@@ -364,7 +369,6 @@ describe("another width ends every dissolve in flight; another palette does not"
       },
       root: { v: [{ h: ["left", "middle", "right"] }] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 
@@ -404,4 +408,3 @@ describe("another width ends every dissolve in flight; another palette does not"
     expect(textOf(on)).toContain("MIDDLE");
   });
 });
-

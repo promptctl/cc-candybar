@@ -23,28 +23,26 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { mergeWithDefault } from "../src/config/dsl-loader";
 import type { DslConfig, ValidatedConfig } from "../src/config/dsl-types";
-import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import {
+  EDIT_MODE_ARRANGE,
+  EDIT_MODE_KEY,
+} from "../src/config/loader/edit-mode";
 import {
   parsePersistTarget,
   persistPath,
   themeDefaultKey,
 } from "../src/config/loader/persist-target";
-import {
-  renderOptionsOf,
-} from "../src/renderer/render-payload";
+import { renderOptionsOf } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { registerDslConfig } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { systemTimekeeper } from "../src/time";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>
-  parseAndValidate("<user>", source, ALLOWED, DEFAULT_DSL_CONFIG);
+  parseAndValidate("<user>", source, DEFAULT_DSL_CONFIG);
 
 // ─── 1. The loader ───────────────────────────────────────────────────────────
 
@@ -71,7 +69,7 @@ describe("themeDefaults at load", () => {
     [
       "a shade outside the dial",
       `{ themeDefaults: { nord: { shade: 'darkest' } } }`,
-      "themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest, wide, widest, pair, pair-wide; got \"darkest\"",
+      'themeDefaults.nord.shade must be one of: muted, deepest, deeper, middle, brighter, brightest, wide, widest, pair, pair-wide; got "darkest"',
     ],
     [
       "a variation outside the table",
@@ -96,7 +94,7 @@ describe("themeDefaults at load", () => {
     [
       "a reset of a theme default for a theme nothing installs",
       `{ actions: { r: { reset: 'themeDefaults.no-such-theme.shade' } } }`,
-      'actions.r: "themeDefaults.no-such-theme.shade" names theme "no-such-theme" which is not installed',
+      'actions.r: "themeDefaults.no-such-theme.shade" names a theme: "no-such-theme" is not an installed theme',
     ],
     [
       "a reset of a theme default field that is not part of a look",
@@ -118,7 +116,9 @@ describe("themeDefaults at load", () => {
   });
 
   test("a reset may name one theme's default field", () => {
-    const config = load(`{ actions: { r: { reset: 'themeDefaults.nord.shade' } } }`);
+    const config = load(
+      `{ actions: { r: { reset: 'themeDefaults.nord.shade' } } }`,
+    );
     expect(config.actions.r).toEqual({
       reset: "themeDefaults.nord.shade",
       layer: "user",
@@ -146,7 +146,12 @@ describe("themeDefaults merge", () => {
       },
     };
     const merged = mergeWithDefault(
-      { themeDefaults: { nord: { shade: "brightest" }, monokai: { variation: "mono" } } },
+      {
+        themeDefaults: {
+          nord: { shade: "brightest" },
+          monokai: { variation: "mono" },
+        },
+      },
       base,
     );
     expect(merged.themeDefaults).toEqual({
@@ -239,7 +244,11 @@ describe("the theme-default rung", () => {
       presets: { mine: { globals: { variation: 'alt' } } },
       themeDefaults: { nord: { shade: 'deepest', variation: 'duo' } },
     }`);
-    expect(look(config, { preset: "mine" })).toEqual(["deepest", "alt", "none"]);
+    expect(look(config, { preset: "mine" })).toEqual([
+      "deepest",
+      "alt",
+      "none",
+    ]);
   });
 
   test("a theme chosen by a rule contributes no default", () => {
@@ -270,7 +279,11 @@ function cellBg(source: string): { daemon: string; compileOnly: string } {
     return resolvedStyle(cells[0]!.style).bgcolor!.value!.hex;
   };
   try {
-    const effective = resolveEffectiveGlobals(config, () => null, () => false);
+    const effective = resolveEffectiveGlobals(
+      config,
+      () => null,
+      () => false,
+    );
     const at = instantOf(new Date());
     const daemonDrawn = drawPayload(
       config,
@@ -343,7 +356,8 @@ describe("a theme-default key", () => {
     for (const theme of ["nord", "tokyo-night", "solarized.dark"]) {
       const target = parsePersistTarget(themeDefaultKey(theme, "shade"));
       expect(target).toEqual({ scope: "theme-default", theme, field: "shade" });
-      if (target?.scope !== "theme-default") throw new Error(`${theme}: no theme-default target`);
+      if (target?.scope !== "theme-default")
+        throw new Error(`${theme}: no theme-default target`);
       expect(persistPath(target)).toEqual(["themeDefaults", theme, "shade"]);
     }
   });

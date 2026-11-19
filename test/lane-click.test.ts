@@ -14,12 +14,7 @@ import {
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("lane-click");
-const CONFIG = parseAndValidate(
-  "<test>",
-  "{}",
-  new Set(listResolvablePaletteNames()),
-  DEFAULT_DSL_CONFIG,
-);
+const CONFIG = parseAndValidate("<test>", "{}", DEFAULT_DSL_CONFIG);
 
 test.each([true, false])(
   "display controls record settings without sending commands (live=%s)",

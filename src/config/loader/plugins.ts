@@ -32,7 +32,6 @@ import {
   mapActionTemplates,
   type ActionDecl,
 } from "../action.js";
-import { listResolvablePaletteNames } from "../../themes/policy.js";
 import { ConfigError, type ConfigIssue } from "./diagnostics.js";
 import { resolveUserPath } from "../../utils/user-path.js";
 import { type Checkout } from "../../utils/git-root.js";
@@ -690,7 +689,6 @@ function fragmentOf(
   const ctx: ValidateCtx = {
     source,
     issues,
-    allowedPalettes: new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: [],

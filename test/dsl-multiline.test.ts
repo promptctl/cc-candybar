@@ -19,11 +19,9 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { DOOR_GLYPH } from "../src/config/disclosure";
 import { buildRig } from "./helpers/rig";
 
-const ALLOWED_PALETTES = new Set(["textual-dark"]);
-
 // The frame a source draws for an empty payload.
 function multilineFrame(source: string): Frame {
-  return buildRig({ source, palettes: ALLOWED_PALETTES, cwd: "/tmp" }).draw({ payload: {} }).frame;
+  return buildRig({ source, cwd: "/tmp" }).draw({ payload: {} }).frame;
 }
 
 describe("drawDsl — multi-line layout", () => {
@@ -108,9 +106,7 @@ describe("drawDsl — multi-line layout", () => {
       segments: { s: { template: ' x ', bg: 'surface', fg: 'foreground' } },
       layout: [['s']],
     }`;
-    expect(() =>
-      parseAndValidate("<test>", source, ALLOWED_PALETTES),
-    ).toThrow(ConfigError);
+    expect(() => parseAndValidate("<test>", source)).toThrow(ConfigError);
   });
 
   test("hidden-by-when segments are skipped but row structure preserved", () => {

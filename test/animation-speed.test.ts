@@ -180,7 +180,6 @@ describe("a template's frames run at the session's animation speed; realtimeFram
       },
       root: { h: ["anim", "real"] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 

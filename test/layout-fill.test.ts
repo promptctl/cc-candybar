@@ -172,10 +172,7 @@ describe("a fill segment absorbs the row's leftover width", () => {
   test("an unbounded width leaves the cell content-sized", () => {
     const cell = fill("mid");
     const natural = cell.text.cellLength;
-    fitRow(
-      [fixed("left"), cell],
-      opts({ width: Number.POSITIVE_INFINITY }),
-    );
+    fitRow([fixed("left"), cell], opts({ width: Number.POSITIVE_INFINITY }));
     expect(cell.text.cellLength).toBe(natural);
   });
 
@@ -202,16 +199,19 @@ describe("a cell wider than a line wraps across lines", () => {
     }),
   });
 
-  describe.each(ENDCAPS_SHAPES.map((style) => [style] as const))("%s", (endcaps) => {
-    test.each([[10], [20], [30], [67]])("draws within width %i", (width) => {
-      for (const cell of [painted(SENTENCE), fixed(SENTENCE)]) {
-        const lines = serialize([cell], opts({ endcaps, width }));
-        expect(lines.length).toBeGreaterThan(1);
-        expect(lines.filter((line) => cellLen(line) > width)).toEqual([]);
-        expect(squeezed(lines.join(""))).toBe(squeezed(SENTENCE));
-      }
-    });
-  });
+  describe.each(ENDCAPS_SHAPES.map((style) => [style] as const))(
+    "%s",
+    (endcaps) => {
+      test.each([[10], [20], [30], [67]])("draws within width %i", (width) => {
+        for (const cell of [painted(SENTENCE), fixed(SENTENCE)]) {
+          const lines = serialize([cell], opts({ endcaps, width }));
+          expect(lines.length).toBeGreaterThan(1);
+          expect(lines.filter((line) => cellLen(line) > width)).toEqual([]);
+          expect(squeezed(lines.join(""))).toBe(squeezed(SENTENCE));
+        }
+      });
+    },
+  );
 
   test("its lead and trail wrap with it", () => {
     const lines = serialize(
@@ -254,8 +254,14 @@ describe("a cell wider than a line wraps across lines", () => {
   });
 
   test.each([
-    ["a full-width space", "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸"],
-    ["a no-break space", "alpha\u00A0bravo\u00A0charlie\u00A0delta\u00A0echo ▸"],
+    [
+      "a full-width space",
+      "日本語の説明\u3000次の見出し\u3000最後の行まで続く文章 ▸",
+    ],
+    [
+      "a no-break space",
+      "alpha\u00A0bravo\u00A0charlie\u00A0delta\u00A0echo ▸",
+    ],
     ["a wide space", "alpha\u2003bravo\u2003charlie\u2003delta\u2003echo ▸"],
   ])("%s left hanging at a break costs no text", (_, text) => {
     for (const width of [9, 10, 11, 12, 13, 20, 30]) {
@@ -268,7 +274,8 @@ describe("a cell wider than a line wraps across lines", () => {
   });
 
   test("it starts on the line the cell before it left open", () => {
-    const text = " the quick brown fox jumps over the lazy dog again and again ";
+    const text =
+      " the quick brown fox jumps over the lazy dog again and again ";
     const lines = serialize(
       [painted("   "), painted(text)],
       opts({ width: 30 }),
@@ -294,17 +301,18 @@ describe("a cell wider than a line wraps across lines", () => {
       opts({ width: 30, padding: 1 }),
     );
     expect(items.length).toBeGreaterThan(2);
-    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+    items.forEach(({ owner }) =>
+      expect(owner.plain.startsWith(" ")).toBe(true),
+    );
   });
 
   test("a line a piece opens wears the cell's padding", () => {
     const text = " alpha bravo charlie delta echo foxtrot golf hotel india ";
-    const items = fitRow(
-      [painted(text)],
-      opts({ width: 30, padding: 1 }),
-    );
+    const items = fitRow([painted(text)], opts({ width: 30, padding: 1 }));
     expect(items.length).toBeGreaterThan(1);
-    items.forEach(({ owner }) => expect(owner.plain.startsWith(" ")).toBe(true));
+    items.forEach(({ owner }) =>
+      expect(owner.plain.startsWith(" ")).toBe(true),
+    );
     const lines = serialize([painted(text)], opts({ width: 30, padding: 1 }));
     expect(lines.filter((line) => cellLen(line) > 30)).toEqual([]);
   });
@@ -398,13 +406,9 @@ describe("a fill segment fills wherever the walk places it", () => {
         },
         root: ${root},
       }`,
-      new Set(listResolvablePaletteNames()),
     );
     const store = new VariableStore(systemTimekeeper);
-    const registry = new SourceRegistry(store,
-      "",
-      new SessionState(),
-    );
+    const registry = new SourceRegistry(store, "", new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
     const { frame: out, warnings } = drawPayload(
       config,

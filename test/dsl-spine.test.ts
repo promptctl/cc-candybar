@@ -39,7 +39,6 @@ const HOOK_DATA = {
 // validation does not depend on the filesystem — only the bundled registry.
 // [LAW:one-source-of-truth] Names are the source of truth; the resolver is
 // derived from them at render time via getThemePalette.
-const ALLOWED_PALETTES = new Set(["textual-dark", "gruvbox"]);
 
 const FIXTURE_SOURCE = readFileSync(
   join(process.cwd(), "test", "fixtures", "steel-thread.json5"),
@@ -55,14 +54,9 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   // Strip opts are the rig's own (powerline, truecolor, wrap, padding 0, width
   // Infinity) so the committed snapshot stays a single line — wrap behavior is
   // tested in test/strip-flex.test.ts (the renderStripCells wrap path).
-  function spineBar(
-    cwd: string,
-    source: string = FIXTURE_SOURCE,
-    palettes: ReadonlySet<string> = ALLOWED_PALETTES,
-  ) {
+  function spineBar(cwd: string, source: string = FIXTURE_SOURCE) {
     const rig = buildRig({
       source,
-      palettes,
       cwd,
       env: ENV,
       sessionId: SESSION_ID,
@@ -72,9 +66,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
 
   test("parseDslConfig accepts the committed fixture", () => {
     // Validates the fixture is syntactically correct and cross-reference-clean.
-    expect(() =>
-      parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES),
-    ).not.toThrow();
+    expect(() => parseAndValidate("<test>", FIXTURE_SOURCE)).not.toThrow();
   });
 
   test("registerDslConfig populates the store with all declared variables", () => {
@@ -145,7 +137,9 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     // Build two runtimes: one with the fixture (sessionId → gruvbox palette),
     // one with a modified fixture that inherits the base palette for sessionId.
     // Different palettes must draw different rows.
-    const withGruvboxPalette = spineBar(HOOK_DATA.workspace.current_dir).drawHook();
+    const withGruvboxPalette = spineBar(
+      HOOK_DATA.workspace.current_dir,
+    ).drawHook();
 
     // Override: same fixture but sessionId uses the base palette (textual-dark).
     const noSegmentPaletteSource = FIXTURE_SOURCE.replace(
@@ -155,7 +149,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const withBasePaletteOnly = spineBar(
       HOOK_DATA.workspace.current_dir,
       noSegmentPaletteSource,
-      new Set(["textual-dark"]),
     ).drawHook();
 
     expect(withGruvboxPalette.rows).not.toEqual(withBasePaletteOnly.rows);

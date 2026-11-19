@@ -22,13 +22,10 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The powerline arrow, drawn at the lead, between items and at the tail, and
 // U+E0B1, the thin divider, which no join draws.
@@ -39,22 +36,31 @@ const DIVIDER = "\u{E0B1}";
 // joiner walk's output — no width-driven wrap to perturb it.
 const OPTS = {
   endcaps: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+  colorCompatibility: "truecolor" as const,
+  wrap: true,
+  padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
-
 
 function chevronCount(rendered: Pick<Frame, "rows">): number {
   return textOf(rendered).split(CHEVRON).length - 1;
 }
 
 function render(src: string, hookData: Record<string, unknown>): Frame {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  return drawPayload(config, compiled, store, registry, hookData, instantOf(new Date()), OPTS).frame;
+  return drawPayload(
+    config,
+    compiled,
+    store,
+    registry,
+    hookData,
+    instantOf(new Date()),
+    OPTS,
+  ).frame;
 }
 
 describe("segment is the rendering unit (2de.10)", () => {

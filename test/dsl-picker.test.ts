@@ -30,8 +30,6 @@ import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
 // The standard theme picker: a trigger that opens the menu (literal 0 on the
@@ -82,9 +80,7 @@ function pickerBar(source: string, sessionId = S1) {
 
 describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   test("a closed menu (page -1) is absent; opening shows ✕ + a page + active mark", () => {
-    const { render, click, sessionState } = pickerBar(
-      pickerConfig(true, true),
-    );
+    const { render, click, sessionState } = pickerBar(pickerConfig(true, true));
     // Closed: the when-gate (page>=0) drops the row entirely — only the trigger.
     const closed = textOf(render(80));
     expect(closed).toContain("▸");
@@ -92,8 +88,8 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
 
     // Open via the trigger (writes theme-page=0 through the int gate).
     const triggerUrl = linkUrls(render(80)).find((u) =>
-      effectsOf(u).some((e) =>
-        e.args.includes("theme-page") && e.args.includes("0"),
+      effectsOf(u).some(
+        (e) => e.args.includes("theme-page") && e.args.includes("0"),
       ),
     );
     expect(triggerUrl).toBeDefined();
@@ -107,9 +103,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("clicking a theme applies AND closes (closeOnPick=true): adjacent session writes, one batch", () => {
-    const { render, click, sessionState } = pickerBar(
-      pickerConfig(true, true),
-    );
+    const { render, click, sessionState } = pickerBar(pickerConfig(true, true));
     sessionState.set(S1, "theme-page", "0");
     const open = render(80);
     const themeUrl = linkUrls(open).find((u) => {
@@ -132,9 +126,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("closeOnPick=false: a theme click applies only (no page reset)", () => {
-    const { render, sessionState } = pickerBar(
-      pickerConfig(false, true),
-    );
+    const { render, sessionState } = pickerBar(pickerConfig(false, true));
     sessionState.set(S1, "theme-page", "0");
     const themeUrl = linkUrls(render(80)).find((u) => {
       const e = effectsOf(u)[0]!;
@@ -166,9 +158,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("paged: a narrow width slices into pages with → ; clicking → advances the cursor", () => {
-    const { render, click, sessionState } = pickerBar(
-      pickerConfig(true, true),
-    );
+    const { render, click, sessionState } = pickerBar(pickerConfig(true, true));
     sessionState.set(S1, "theme-page", "0");
     const open = render(30); // narrow → forces multiple pages
     const plain = textOf(open);
@@ -188,9 +178,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
   });
 
   test("wrap (paged=false): one page of ALL themes, no ←/→ even when narrow", () => {
-    const { render, sessionState } = pickerBar(
-      pickerConfig(true, false),
-    );
+    const { render, sessionState } = pickerBar(pickerConfig(true, false));
     sessionState.set(S1, "theme-page", "0");
     const plain = textOf(render(30));
     expect(plain).toContain("✕");
@@ -213,7 +201,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
 
 describe("2de.13 — picker gate derivation (int arm)", () => {
   test("derives an apply allow-list + a page int spec from the action table", () => {
-    const config = parseAndValidate("<test>", pickerConfig(true, true), ALLOWED);
+    const config = parseAndValidate("<test>", pickerConfig(true, true));
     const derived = deriveActionValidators(config);
     const byKey = new Map(derived.map((d) => [d.key, d.spec]));
     expect(byKey.get("theme-pick")).toEqual({
@@ -226,7 +214,7 @@ describe("2de.13 — picker gate derivation (int arm)", () => {
   });
 
   test("the int gate accepts any integer (-1 closed, page indices) and rejects non-int", () => {
-    const config = parseAndValidate("<test>", pickerConfig(true, true), ALLOWED);
+    const config = parseAndValidate("<test>", pickerConfig(true, true));
     const gate = stateGate(config);
     expect(gate.validate("theme-page", "-1").ok).toBe(true);
     expect(gate.validate("theme-page", "0").ok).toBe(true);
@@ -243,8 +231,8 @@ describe("2de.13 — picker loader validation", () => {
       segments: { menu: { template: '{{ picker "applyTheme" "nope" true true }}', bg: 'surface', fg: 'foreground' } },
       root: 'menu',
     }`;
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(ConfigError);
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/nope/);
+    expect(() => parseAndValidate("<test>", src)).toThrow(ConfigError);
+    expect(() => parseAndValidate("<test>", src)).toThrow(/nope/);
   });
 
   test("paginate: infinite width yields one page; finite width fills greedily", () => {

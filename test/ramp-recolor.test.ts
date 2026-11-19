@@ -32,8 +32,6 @@ const SRC = `{
   globals: { palette: '${BASE_THEME}' },
   styles: { none: {}, ${PICKED_STYLE}: { chromaScale: 1.6, lightnessShift: 0.08 } },
   variables: {
-    themePick: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
-    look: { kind: 'state', key: 'style', default: 'none' },
     pct: { kind: 'input', path: 'pct', type: 'number', default: 0 },
     stop: { kind: 'input', path: 'stop', default: 'panel' },
   },
@@ -48,8 +46,6 @@ const SRC = `{
   root: { v: ['viaRamp', 'viaName'] },
 }`;
 
-const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
-
 // Each bar's source registry, released after the test that built it.
 const rigs: Rig[] = [];
 afterEach(() => {
@@ -59,7 +55,11 @@ afterEach(() => {
 function rampBar() {
   // The click gate is the config this session renders, so the theme and style
   // clicks travel the road a real click travels.
-  const rig = buildRig({ source: SRC, label: "<ramp-recolor>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({
+    source: SRC,
+    label: "<ramp-recolor>",
+    sessionId: SID,
+  });
   rigs.push(rig);
   const render = (payload: { pct: number; stop: string }): Frame =>
     rig.draw({ payload: { session_id: SID, ...payload } }).frame;

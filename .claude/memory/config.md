@@ -56,6 +56,8 @@ A draft is derived, never flagged. It's a setting whose session value differs fr
 
 Save's write and the picks it releases land together, so no render draws the old file without the picks, a refused write keeps every draft, and a released session follows later changes to the file instead of pinning over them.
 
+A session pick its setting's domain no longer holds (an uninstalled theme, a style or preset the config dropped, a value out of range) stays stored, and the bar draws the next rung down under a warning. No save releases it, because the domain can come back with a reinstall or a config edit, and the pick should come back with it. Every reader takes the one parse of the pick, so the bar never draws one value and steps or marks another. The warning appears only where the pick decides: staging above it hides the miss. A setting's session key is the setting's alone, because a variable reading it raw would show the stale spelling the bar doesn't wear.
+
 Reset deletes the setting at every layer: the globals, every bundled preset's globals, and every theme's default. A preset the user wrote keeps its pinned value, because that pin is the user's own content.
 
 ## Undo, and edit mode

@@ -60,7 +60,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
 import { authoredFragment } from "../src/renderer/config-file-store";
 import {
@@ -122,8 +121,6 @@ import { onLanded } from "./helpers/click";
 
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
-
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
     endcaps: "powerline" as const,
@@ -161,7 +158,6 @@ describe("removeSegment/insertSegment loader shape", () => {
       base(
         `{ rm: { persist: 'presets.default.root', removeSegment: 'directory' } }`,
       ),
-      ALLOWED,
     );
     expect(config.actions.rm).toEqual({
       persist: "presets.default.root",
@@ -176,7 +172,6 @@ describe("removeSegment/insertSegment loader shape", () => {
       base(
         `{ ins: { persist: 'presets.default.root', insertSegment: 'directory', anchor: 'git', relation: 'before' } }`,
       ),
-      ALLOWED,
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
@@ -194,7 +189,6 @@ describe("removeSegment/insertSegment loader shape", () => {
         base(
           `{ ins: { persist: 'presets.default.root', insertSegment: 'directory' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -206,7 +200,6 @@ describe("removeSegment/insertSegment loader shape", () => {
         base(
           `{ ins: { persist: 'presets.default.root', insertSegment: 'directory', anchor: 'git', relation: 'sideways' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -218,7 +211,6 @@ describe("removeSegment/insertSegment loader shape", () => {
         base(
           `{ rm: { persist: 'presets.default.root', removeSegment: 'a:b' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -230,7 +222,6 @@ describe("removeSegment/insertSegment loader shape", () => {
         base(
           `{ rm: { persist: 'presets.default.root', removeSegment: 'a/b' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -242,7 +233,6 @@ describe("removeSegment/insertSegment loader shape", () => {
         base(
           `{ rm: { set: 'presets.default.root', removeSegment: 'directory' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -266,7 +256,6 @@ describe("cross-ref: presets.<name>.root target", () => {
         parseAndValidate(
           "<test>",
           base(`{ rm: { persist: '${key}', removeSegment: 'directory' } }`),
-          ALLOWED,
         ),
       ).toThrow(
         /is not a "presets\.<name>\.root" target — "removeSegment" is a tree op/,
@@ -281,7 +270,6 @@ describe("cross-ref: presets.<name>.root target", () => {
         base(
           `{ rm: { persist: 'presets.bogus.root', removeSegment: 'directory' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(/names preset "bogus" which is not declared/);
   });
@@ -297,7 +285,6 @@ describe("cross-ref: presets.<name>.root target", () => {
         base(
           `{ rm: { persist: 'presets.compact.root', removeSegment: 'nope' } }`,
         ),
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -309,7 +296,6 @@ describe("cross-ref: presets.<name>.root target", () => {
         base(
           `{ ins: { persist: 'presets.compact.root', insertSegment: 'nope', anchor: 'directory', relation: 'after' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(/insertSegment "nope" is not a declared segment/);
   });
@@ -321,7 +307,6 @@ describe("cross-ref: presets.<name>.root target", () => {
         base(
           `{ bad: { persist: 'presets.compact.root', to: 'remove:directory' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(
       /can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"/,
@@ -333,7 +318,6 @@ describe("cross-ref: presets.<name>.root target", () => {
       parseAndValidate(
         "<test>",
         base(`{ undo: { reset: 'presets.compact.root' } }`),
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -350,7 +334,6 @@ describe("authoredFragment — lossless over every own field", () => {
     parseDslConfig(
       "<authored>",
       JSON.stringify({ root: authoredFragment(fragment) }),
-      ALLOWED,
     ).root!;
 
   test("a tree keeps the root's `when`/`distribution` and a row's `distribution`", () => {
@@ -435,7 +418,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
         root: { h: ['directory', 'git'] },
         presets: {},
       }`,
-      ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
     // [LAW:behavior-not-structure] The contract is "this action contributes ITS
@@ -464,7 +446,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
         root: { h: ['directory'] },
         presets: {},
       }`,
-      ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
     // Both actions land on ONE key (the union is the point); membership rather
@@ -495,7 +476,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
         root: { h: ['directory'] },
         presets: {},
       }`,
-      ALLOWED,
     );
     const gate = configGate(config);
     // The declared op passes, so the rejection below is the token's, not the
@@ -529,7 +509,6 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
         root: { h: ['directory'] },
         presets: { empty: {} },
       }`,
-      ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
     const rootEntry = contributions.find((c) => c.key === "presets.empty.root");
@@ -550,7 +529,7 @@ let durable: DurableConfig;
 // edits is the tree the bar rendered — exactly the daemon's own situation.
 function buildLayoutRuntime(src: string, sessionId = S1) {
   if (durable.text() === null) durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   // What the daemon's cache entry holds: the config, re-read from the file
   // each time a click reloads it.
   let current = config;
@@ -591,7 +570,7 @@ function buildLayoutRuntime(src: string, sessionId = S1) {
   // render cache's reload does.
   onLanded(ctx, () => {
     try {
-      current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+      current = parseAndValidate("<test>", durable.text()!);
     } catch (err) {
       if (!(err instanceof ConfigError)) throw err;
     }
@@ -882,7 +861,6 @@ describe("the reset-layout banner survives quote/backslash preset names", () => 
         root: { h: ['directory', 'editControl'] },
         presets: { ${JSON.stringify(presetName)}: {} },
       }`,
-      ALLOWED,
     );
     // The compile itself (parse every synthesized template) must not throw —
     // an unescaped quote would break the Go-template source.
@@ -934,7 +912,6 @@ describe("a preset root's own top-level `when` hides content, not the menu or ba
         root: { h: ['directory', 'editControl'] },
         presets: { gated: { root: { seg: 'directory', when: ${JSON.stringify(rootWhen)} } } },
       }`,
-      ALLOWED,
     );
   }
 

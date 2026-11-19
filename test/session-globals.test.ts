@@ -16,6 +16,7 @@ import { buildRig, type Rig } from "./helpers/rig";
 import { SessionState } from "../src/renderer/session-state";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { resolveStyleSelection } from "../src/themes";
+import { memberPick, stylePick } from "../src/themes/policy";
 import { effectivePresetName } from "../src/config/presets";
 import type { Globals, PresetDecl } from "../src/config/dsl-types";
 import type { ThemeKey } from "@promptctl/rich-js";
@@ -28,7 +29,10 @@ import {
 import type { EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
 
-import { sessionIdOf, type SessionId } from "../src/daemon/foundations/session-id";
+import {
+  sessionIdOf,
+  type SessionId,
+} from "../src/daemon/foundations/session-id";
 
 const S_BYSTANDER = sessionIdOf("s-bystander");
 const S_CLICKER = sessionIdOf("s-clicker");
@@ -38,16 +42,11 @@ const S_OTHER = sessionIdOf("s-other");
 const S_CLEAR = sessionIdOf("s-clear");
 
 const BASE_THEME = "textual-dark";
-const ALLOWED = new Set([BASE_THEME]);
 
 // Two cells in one row. Padding is applied INSIDE each cell's background fill,
 // so a padding change is visible as the rendered line's width.
 const src = (padding: number): string => `{
   globals: { palette: '${BASE_THEME}', padding: ${padding}, autoWrap: true },
-  variables: {
-    sessionPadding: { kind: 'state', key: 'padding', default: '' },
-    sessionWrap: { kind: 'state', key: 'autoWrap', default: '' },
-  },
   actions: {
     padUp: { set: 'padding', min: ${PADDING_RANGE.min}, max: ${PADDING_RANGE.max}, by: 1 },
     toggleWrap: { set: 'autoWrap', cycle: ['true', 'false'] },
@@ -72,7 +71,6 @@ function resolved(
   const config = parseAndValidate(
     "<resolved>",
     JSON.stringify({ globals, ...(staged && { editGlobals: staged }) }),
-    ALLOWED,
   );
   const session: Record<string, string> = staged
     ? { ...picks, [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE }
@@ -91,7 +89,6 @@ function globalsBar(padding: number = CONFIG_PADDING) {
       rig = buildRig({
         source: src(padding),
         label: "<session-globals>",
-        palettes: ALLOWED,
         sessionId: sid,
         sessionState,
       });
@@ -108,14 +105,24 @@ function globalsBar(padding: number = CONFIG_PADDING) {
   const render = (sid: SessionId, width: number): Frame =>
     rigOf(sid).draw({
       payload: { session_id: sid },
-      opts: { wrap: globals(sid).autoWrap, padding: globals(sid).padding, width },
+      opts: {
+        wrap: globals(sid).autoWrap,
+        padding: globals(sid).padding,
+        width,
+      },
     }).frame;
 
   // Drive the real wire end-to-end, the URL a rendered `{{ action }}` emits.
   // The dispatch gates the write by the config the clicking session renders,
   // which the session's rig records.
-  const setState = async (sid: SessionId, key: string, value: string): Promise<void> => {
-    await rigOf(sid).click(effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]));
+  const setState = async (
+    sid: SessionId,
+    key: string,
+    value: string,
+  ): Promise<void> => {
+    await rigOf(sid).click(
+      effectsUrl([{ verb: VERB_SET_STATE, args: [sid, key, value] }]),
+    );
   };
 
   const dispose = (): void => {
@@ -145,9 +152,7 @@ describe("a padding click changes one session's bar", () => {
         textOf(asIfConfigured.render(S_CLICKER, WIDE)),
       );
       // The bystander never clicked, so their bar is byte-identical to before.
-      expect(textOf(clicked.render(S_BYSTANDER, WIDE))).toBe(
-        bystanderBefore,
-      );
+      expect(textOf(clicked.render(S_BYSTANDER, WIDE))).toBe(bystanderBefore);
     } finally {
       clicked.dispose();
       asIfConfigured.dispose();
@@ -189,7 +194,9 @@ describe("an autoWrap click changes one session's bar", () => {
       // a missing one. Resolving with `||` instead of `??` would fall through
       // to the `true` config default and silently keep wrapping.
       expect(textOf(render(S_WRAP, NARROW)).split("\n")).toHaveLength(1);
-      expect(textOf(render(S_OTHER, NARROW)).split("\n")).toHaveLength(wrappedRows);
+      expect(textOf(render(S_OTHER, NARROW)).split("\n")).toHaveLength(
+        wrappedRows,
+      );
     } finally {
       dispose();
     }
@@ -209,9 +216,9 @@ describe("a session value outside the domain is not a session value", () => {
     ["padded digits", " 3 "],
     ["not a number", "wide"],
   ])("padding %s falls through to the config default", (_label, raw) => {
-    expect(resolved({ padding: CONFIG_PADDING }, { padding: raw }).padding).toBe(
-      CONFIG_PADDING,
-    );
+    expect(
+      resolved({ padding: CONFIG_PADDING }, { padding: raw }).padding,
+    ).toBe(CONFIG_PADDING);
   });
 
   it.each([
@@ -284,9 +291,9 @@ describe("a stale session pick falls to the config default, not the floor", () =
   const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
 
   it("variation: the session pick over the configured one, a stale pick falling through", () => {
-    expect(resolved({ variation: "duo" }, { variation: "mono" }).variation).toBe(
-      "mono",
-    );
+    expect(
+      resolved({ variation: "duo" }, { variation: "mono" }).variation,
+    ).toBe("mono");
     expect(
       resolved({ variation: "duo" }, { variation: "accent-primary" }).variation,
     ).toBe("duo");
@@ -322,29 +329,54 @@ describe("a stale session pick falls to the config default, not the floor", () =
 
   it("style: an orphaned name yields the configured style", () => {
     expect(
-      resolveStyleSelection(undefined, "deleted-look", "vivid", STYLES),
+      resolveStyleSelection(
+        undefined,
+        stylePick("deleted-look", STYLES),
+        "vivid",
+        STYLES,
+      ),
     ).toMatchObject({ kind: "decided", name: "vivid" });
     expect(
-      resolveStyleSelection(undefined, "deleted-look", undefined, STYLES),
+      resolveStyleSelection(
+        undefined,
+        stylePick("deleted-look", STYLES),
+        undefined,
+        STYLES,
+      ),
     ).toMatchObject({ kind: "decided", name: "none" });
   });
 
   it("preset: an orphaned name yields the configured preset", () => {
-    expect(effectivePresetName("deleted-preset", "compact", PRESETS)).toBe(
-      "compact",
-    );
-    expect(effectivePresetName("deleted-preset", undefined, PRESETS)).toBe(
-      "default",
-    );
+    expect(
+      effectivePresetName(
+        memberPick("deleted-preset", PRESETS),
+        "compact",
+        PRESETS,
+      ),
+    ).toBe("compact");
+    expect(
+      effectivePresetName(
+        memberPick("deleted-preset", PRESETS),
+        undefined,
+        PRESETS,
+      ),
+    ).toBe("default");
   });
 
   it("a config default that is ITSELF stale still reaches the floor", () => {
     // The per-config domains are the only ones where the loader cannot catch a
     // stale default, so both rungs have to be parsed, not just the session's.
     expect(
-      resolveStyleSelection(undefined, "deleted-look", "also-deleted", STYLES),
+      resolveStyleSelection(
+        undefined,
+        stylePick("deleted-look", STYLES),
+        "also-deleted",
+        STYLES,
+      ),
     ).toMatchObject({ kind: "decided", name: "none" });
-    expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");
+    expect(
+      effectivePresetName(memberPick(null, PRESETS), "also-deleted", PRESETS),
+    ).toBe("default");
   });
 });
 
@@ -354,7 +386,6 @@ describe("padding's bound is one declaration, not three copies", () => {
       parseAndValidate(
         "<over-range>",
         `{ globals: { padding: ${PADDING_RANGE.max + 1} } }`,
-        ALLOWED,
       ),
     ).toThrow(new RegExp(String(PADDING_RANGE.max)));
   });
@@ -363,7 +394,6 @@ describe("padding's bound is one declaration, not three copies", () => {
     const config = parseAndValidate(
       "<at-range>",
       `{ globals: { padding: ${PADDING_RANGE.max} } }`,
-      ALLOWED,
     );
     expect(config.globals.padding).toBe(PADDING_RANGE.max);
   });
@@ -377,7 +407,6 @@ describe("colour depth has no session half", () => {
     const config = parseAndValidate(
       "<no-session-half>",
       `{ globals: { palette: '${BASE_THEME}', colorCompatibility: '256' } }`,
-      ALLOWED,
     );
     const picks: Record<string, string> = {
       colorCompatibility: "none",
@@ -394,7 +423,6 @@ describe("colour depth has no session half", () => {
         parseAndValidate(
           "<set-config-only>",
           `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { set: '${key}', to: 'x' } } }`,
-          ALLOWED,
         ),
       ).toThrow(
         new RegExp(
@@ -409,7 +437,6 @@ describe("colour depth has no session half", () => {
       parseAndValidate(
         "<persist-config-only>",
         `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { persist: 'colorCompatibility', from: 'colorCompatibilities' } } }`,
-        ALLOWED,
       ),
     ).not.toThrow();
   });

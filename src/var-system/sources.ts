@@ -911,6 +911,19 @@ export class SourceRegistry {
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
   declareState(name: string, opts: StateOptions): void {
+    const fallback = opts.varDefault ?? this.stringInitial(undefined);
+    this.declareStored(name, opts.key, "string", (value) => value ?? fallback);
+  }
+
+  // [LAW:one-type-per-behavior] A stored value read through `read`: a plain
+  // `state` variable reads it as stored, a placement's setting through its
+  // setting's one parse (src/config/dsl-types.ts `placementValue`).
+  declareStored(
+    name: string,
+    key: string,
+    type: VarType,
+    read: (stored: string | null) => VarValue,
+  ): void {
     if (!this.sessionState) {
       throw new Error(
         `declareState("${name}"): SourceRegistry was constructed without a SessionState — ` +
@@ -918,13 +931,11 @@ export class SourceRegistry {
       );
     }
     const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(undefined);
-    this.store.defineComputed(name, "string", () => {
-      // [LAW:parse-dont-validate] The view's checked session, the same one
-      // the payload hands `session.id`.
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
-    });
+    // [LAW:parse-dont-validate] The view's checked session, the same one the
+    // payload hands `session.id`.
+    this.store.defineComputed(name, type, () =>
+      read(sessionState.get(this.session(), key)),
+    );
   }
 
   // [LAW:one-source-of-truth] The revision of the session state this render's

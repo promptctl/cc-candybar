@@ -26,7 +26,6 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
@@ -55,14 +54,15 @@ import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import type { ActionDecl } from "../src/config/action";
-import { SETTINGS, SETTING_PROJECTIONS } from "../src/config/setting-projections";
+import {
+  SETTINGS,
+  SETTING_PROJECTIONS,
+} from "../src/config/setting-projections";
 import { walkNodes } from "../src/config/dsl-types";
 
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The lines an open menu stacks over the bar: its two door lines, then the
 // body of the tab a fresh session opens it on (⚡ session: the quick actions,
@@ -105,7 +105,11 @@ function menuBar(
     return rig.draw({ payload }).frame;
   };
   // Click the affordance whose URL writes `value` to `key`, wherever it landed.
-  const clickWriting = async (out: Frame, key: string, value: string): Promise<void> => {
+  const clickWriting = async (
+    out: Frame,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -147,9 +151,7 @@ describe("the global settings menu is reachable from a user config", () => {
   });
 
   test("the toggle opens a body carrying preset switching and the tabs", async () => {
-    const { render, clickWriting } = menuBar(
-      userConfig(TWO_SEGMENT_ROW),
-    );
+    const { render, clickWriting } = menuBar(userConfig(TWO_SEGMENT_ROW));
     const closed = textOf(render());
     expect(closed).not.toContain("⚡ session");
 
@@ -168,9 +170,6 @@ describe("the global settings menu is reachable from a user config", () => {
 
   // brandon-menu-ia-q30.4oj: the menu opens ABOVE the bar and leaves the
   // bar's own rows as they were.
-
-
-
 
   test("edit mode is genuinely reachable: the menu's ✎ writes edit.mode and leaves the menu open", async () => {
     const { render, clickWriting, sessionState, ctx, click } = menuBar(
@@ -207,7 +206,9 @@ describe("the global settings menu is reachable from a user config", () => {
     // a menu the gate did not admit would throw here, not silently no-op.
     const pickerUrl = linkUrls(render()).find((u) =>
       effectsOf(u).some(
-        (e) => e.args[1]?.startsWith("menus.candybar_") && e.args[2] !== DISCLOSURE_CLOSED,
+        (e) =>
+          e.args[1]?.startsWith("menus.candybar_") &&
+          e.args[2] !== DISCLOSURE_CLOSED,
       ),
     );
     expect(pickerUrl).toBeDefined();
@@ -234,7 +235,6 @@ describe("placement is a position, not a mode", () => {
     expect(defaultedLines[0]).toContain(DOOR_GLYPH);
     expect(placedLines[0]).not.toContain(DOOR_GLYPH);
     expect(placedLines[1]).toContain(DOOR_GLYPH);
-
   });
 
   test("a bare-segment root grows the menu beside it", () => {
@@ -246,7 +246,6 @@ describe("placement is a position, not a mode", () => {
     const config = parseAndValidate(
       "<user>",
       userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // Including `compact`, whose whole point is being narrow, and `verbose`.
@@ -268,7 +267,6 @@ describe("placement is a position, not a mode", () => {
           alt: { root: { v: ['${SETTINGS_ANCHOR}', { h: ['model'] }] } },
         },
       }`,
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // The alt preset put the menu FIRST; the splice left it there rather than
@@ -291,7 +289,6 @@ describe("the anchor may be placed at most once", () => {
         userConfig(
           `{ v: [{ h: ['directory', '${SETTINGS_ANCHOR}'] }, '${SETTINGS_ANCHOR}'] }`,
         ),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(ConfigError);
@@ -302,7 +299,6 @@ describe("the anchor may be placed at most once", () => {
       parseAndValidate(
         "<user>",
         userConfig(`{ h: ['${SETTINGS_ANCHOR}', '${SETTINGS_ANCHOR}'] }`),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       );
       throw new Error("expected a ConfigError");
@@ -322,7 +318,6 @@ describe("the anchor may be placed at most once", () => {
           root: { h: ['directory', '${SETTINGS_ANCHOR}'] },
           presets: { wide: { root: { rows: { extra: { h: ['${SETTINGS_ANCHOR}'] } } } } },
         }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       );
       throw new Error("expected a ConfigError");
@@ -342,7 +337,6 @@ describe("the anchor may be placed at most once", () => {
           segments: { '${SETTINGS_NS}mine': { template: 'x' } },
           root: { h: ['directory'] },
         }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(/reserved/);
@@ -364,7 +358,9 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   const tabSeg = (tab: string) => `${TAB_KEY}.${tab}`;
   const bgOf = (cells: readonly RichText[] | undefined): string | undefined => {
     const style = cells?.[0]?.style;
-    return style === undefined ? undefined : resolvedStyle(style).bgcolor?.value?.hex;
+    return style === undefined
+      ? undefined
+      : resolvedStyle(style).bgcolor?.value?.hex;
   };
   // The segments a node renders, a disclosure's body included.
   const deepNames = (node: LayoutNode): string[] =>
@@ -374,26 +370,40 @@ describe("the menu's second line is five tabs, one open at a time", () => {
   // through the config's `formatTokenCount` helper, so an override reaches it
   // exactly as it reaches the ceiling beside it; a window of 0 still reads.
 
-
   test("every setting's control is in exactly one place: the door's first line or one tab", () => {
-    const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), ALLOWED, DEFAULT_DSL_CONFIG);
+    const config = parseAndValidate(
+      "<user>",
+      userConfig(TWO_SEGMENT_ROW),
+      DEFAULT_DSL_CONFIG,
+    );
     const door = [...walkNodes(resolvedRoot(config))].find(
       (n) => n.kind === "segment" && n.name === SETTINGS_ANCHOR,
     );
-    if (door?.kind !== "segment" || door.opens === undefined) throw new Error("no door");
+    if (door?.kind !== "segment" || door.opens === undefined)
+      throw new Error("no door");
     const [line1, line2] = door.opens.body.children;
-    if (line1 === undefined || line2?.kind !== "container") throw new Error("no door lines");
+    if (line1 === undefined || line2?.kind !== "container")
+      throw new Error("no door lines");
     // Where each name renders: the first line, or the tab whose body holds it.
     const places = new Map<string, string[]>();
-    const note = (name: string, place: string) => places.set(name, [...(places.get(name) ?? []), place]);
+    const note = (name: string, place: string) =>
+      places.set(name, [...(places.get(name) ?? []), place]);
     for (const name of deepNames(line1)) note(name, "door");
-    expect(line2.children.map((n: LayoutNode) => (n.kind === "segment" ? n.name : "?"))).toEqual(TABS.map(tabSeg));
+    expect(
+      line2.children.map((n: LayoutNode) =>
+        n.kind === "segment" ? n.name : "?",
+      ),
+    ).toEqual(TABS.map(tabSeg));
     for (const tab of line2.children) {
-      if (tab.kind !== "segment" || tab.opens === undefined) throw new Error("a tab opens a body");
+      if (tab.kind !== "segment" || tab.opens === undefined)
+        throw new Error("a tab opens a body");
       for (const name of deepNames(tab.opens.body)) note(name, tab.name);
     }
     for (const name of Object.keys(SETTINGS)) {
-      expect([name, places.get(`${SETTINGS_NS}${name}`)?.length]).toEqual([name, 1]);
+      expect([name, places.get(`${SETTINGS_NS}${name}`)?.length]).toEqual([
+        name,
+        1,
+      ]);
     }
   });
 });
@@ -440,7 +450,6 @@ describe("the default placement never inherits an author's gate", () => {
     const config = parseAndValidate(
       "<user>",
       withFlag(root),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
@@ -452,7 +461,6 @@ describe("the default placement never inherits an author's gate", () => {
       withFlag(
         `{ v: [{ h: ['directory','model'], when: '${GATE}' }, { h: ['context'] }] }`,
       ),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // Lifting the menu out of the gate must not lift the row out of it too.
@@ -481,7 +489,6 @@ describe("the default placement never inherits an author's gate", () => {
     const config = parseAndValidate(
       "<user>",
       withFlag(root),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
@@ -497,7 +504,6 @@ describe("the default placement never inherits an author's gate", () => {
     expect(bar).toContain("Opus");
   });
 
-
   test("a bar gated away entirely still renders its door", () => {
     const { render } = menuBar(
       `{ globals: {}, root: { h: ['directory','model'], when: '{{ eq "a" "b" }}' } }`,
@@ -512,14 +518,17 @@ describe("the default placement never inherits an author's gate", () => {
       "inside a gated row",
       `{ v: [{ h: ['directory','${SETTINGS_ANCHOR}'], when: '${GATE}' }] }`,
     ],
-    ["with its own gate", `{ h: ['directory', { seg: '${SETTINGS_ANCHOR}', when: '${GATE}' }] }`],
+    [
+      "with its own gate",
+      `{ h: ['directory', { seg: '${SETTINGS_ANCHOR}', when: '${GATE}' }] }`,
+    ],
     [
       "inside a group body",
       `{ h: ['directory', { kind: 'group', name: 'g', label: 'g', children: ['${SETTINGS_ANCHOR}'] }] }`,
     ],
   ])("an author placement %s is a load error", (_label, root) => {
     expect(() =>
-      parseAndValidate("<user>", withFlag(root), ALLOWED, DEFAULT_DSL_CONFIG),
+      parseAndValidate("<user>", withFlag(root), DEFAULT_DSL_CONFIG),
     ).toThrow(/may not be gated/);
   });
 
@@ -557,7 +566,9 @@ describe("the menu in a config that declares no variables", () => {
   const disclosureKeys = (config: DslConfig): Set<string> =>
     new Set(
       Object.values(config.actions).flatMap((a) =>
-        "set" in a && "cycle" in a && a.cycle[0] === DISCLOSURE_CLOSED ? [a.set] : [],
+        "set" in a && "cycle" in a && a.cycle[0] === DISCLOSURE_CLOSED
+          ? [a.set]
+          : [],
       ),
     );
 
@@ -575,7 +586,13 @@ describe("the menu in a config that declares no variables", () => {
       for (const url of linkUrls(render())) {
         const effects = effectsOf(url);
         // The walk explores the menu, so it never takes the click that closes it.
-        if (effects.some((e) => e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED)) continue;
+        if (
+          effects.some(
+            (e) =>
+              e.args[1] === SETTINGS_ANCHOR && e.args[2] === DISCLOSURE_CLOSED,
+          )
+        )
+          continue;
         const opens = effects.filter(
           (e) => keys.has(String(e.args[1])) && e.args[2] !== DISCLOSURE_CLOSED,
         );
@@ -602,18 +619,19 @@ describe("the menu in a config that declares no variables", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello', '${SETTINGS_ANCHOR}'] },
       }`,
-      ALLOWED,
     );
     const placed = segmentNames(resolvedRoot(config));
     for (const name of placed) {
       expect(Object.keys(config.segments)).toContain(name);
     }
     // The author's position holds: the door follows `hello`.
-    expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(placed.indexOf("hello"));
+    expect(placed.indexOf(SETTINGS_ANCHOR)).toBeGreaterThan(
+      placed.indexOf("hello"),
+    );
   });
 
   test("a config declaring nothing is given the payload inputs the chrome reads", () => {
-    const bare = parseAndValidate("<user>", BARE, ALLOWED);
+    const bare = parseAndValidate("<user>", BARE);
     const ensured = Object.keys(bare.variables).filter(
       (name) => !isReservedName(name),
     );
@@ -638,11 +656,9 @@ describe("the menu in a config that declares no variables", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,
-        ALLOWED,
       ).variables.project_dir,
     ).toEqual(PAYLOAD_INPUTS.project_dir);
   });
-
 });
 
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
@@ -668,10 +684,14 @@ describe("a user menu cannot join a synthesized accordion", () => {
   // settings menu's picker accordion mints. Only the first starts with the
   // authored prefix `"candybar."`, which is why a check on the authored spelling
   // closes one case of three and the collapse has to be compared instead.
-  for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
+  for (const key of [
+    "candybar.pickers",
+    "candybar-pickers",
+    "candybar_pickers",
+  ]) {
     test(`the key "${key}" is a load error naming the reserved namespace`, () => {
       try {
-        parseAndValidate("<user>", withKey(key), ALLOWED);
+        parseAndValidate("<user>", withKey(key));
         throw new Error(`expected a ConfigError for key "${key}"`);
       } catch (err) {
         expect(err).toBeInstanceOf(ConfigError);
@@ -690,7 +710,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
   // must not have to remember to extend a second list [LAW:carrying-cost].
   for (const key of ["groups.main", "edit.things", "menus.mine"]) {
     test(`the key "${key}" is refused too — the rule is the one namespace list`, () => {
-      expect(() => parseAndValidate("<user>", withKey(key), ALLOWED)).toThrow(
+      expect(() => parseAndValidate("<user>", withKey(key))).toThrow(
         ConfigError,
       );
     });
@@ -701,7 +721,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
   // accordion key and keeps working.
   for (const key of ["settings", "pickers", "mysettings"]) {
     test(`the ordinary key "${key}" still loads and owns its own state key`, () => {
-      const config = parseAndValidate("<user>", withKey(key), ALLOWED);
+      const config = parseAndValidate("<user>", withKey(key));
       const stateKey = sharedMenuStateKey(key);
       expect(Object.keys(config.variables)).toContain(stateKey);
       // …and it is not the settings pickers' key, which is what "does not share
@@ -715,7 +735,11 @@ describe("a user menu cannot join a synthesized accordion", () => {
     // is the settings pickers' key. If someone ever "simplifies" ident() so this
     // stops holding, the gate above becomes theatre and this test says so.
     const settingsPickers = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
-    for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
+    for (const key of [
+      "candybar.pickers",
+      "candybar-pickers",
+      "candybar_pickers",
+    ]) {
       expect(sharedMenuStateKey(key)).toBe(settingsPickers);
     }
   });
@@ -744,7 +768,6 @@ describe("a user menu cannot join a synthesized accordion", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,
-      ALLOWED,
     );
     const pickerStateKey = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
     expect(Object.keys(config.variables)).toContain(pickerStateKey);
@@ -762,7 +785,6 @@ describe("the menu is chrome-exempt", () => {
     const config = parseAndValidate(
       "<user>",
       userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     const removals = Object.values(config.actions).flatMap((a) =>
@@ -831,9 +853,9 @@ describe("globals.menuGlyph", () => {
       "a preset cannot change the settings menu glyph",
     ],
   ])("%s is a load error", (src, message) => {
-    expect(() =>
-      parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG),
-    ).toThrow(message);
+    expect(() => parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG)).toThrow(
+      message,
+    );
   });
 });
 
@@ -846,7 +868,6 @@ describe("every settings control has a setting projection", () => {
   const config = parseAndValidate(
     "<user>",
     userConfig(TWO_SEGMENT_ROW),
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   // A picker also mints the machinery of its list of options under its apply
@@ -854,7 +875,8 @@ describe("every settings control has a setting projection", () => {
   // which writes navigation, not a setting.
   const LIST_MACHINERY = /\.(toggle|page|page\.first|open|write)$/;
   const controls = Object.entries(config.actions).filter(
-    ([name]) => name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
+    ([name]) =>
+      name.startsWith("candybar.apply.") && !LIST_MACHINERY.test(name),
   );
   // A `do` presents as its head (a lane toggle's write, its setup riding
   // behind it), so a control's key is its head's.
@@ -871,11 +893,14 @@ describe("every settings control has a setting projection", () => {
     );
   });
 
-  test.each(controls)("%s picks the session key of one projection", (_name, a) => {
-    expect(SETTING_PROJECTIONS).toContainEqual(
-      expect.objectContaining({ sessionKey: sessionKey(a) }),
-    );
-  });
+  test.each(controls)(
+    "%s picks the session key of one projection",
+    (_name, a) => {
+      expect(SETTING_PROJECTIONS).toContainEqual(
+        expect.objectContaining({ sessionKey: sessionKey(a) }),
+      );
+    },
+  );
 
   test.each(SETTING_PROJECTIONS.map((p) => [p.effectiveVar]))(
     "%s is declared in the bundled default",

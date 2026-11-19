@@ -25,12 +25,14 @@ import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { ConfigError } from "../src/config/dsl-loader";
 import type { ValidatedConfig } from "../src/config/dsl-types";
-import { EDIT_MODE_KEY, EDIT_MODE_ARRANGE } from "../src/config/loader/edit-mode";
+import {
+  EDIT_MODE_KEY,
+  EDIT_MODE_ARRANGE,
+} from "../src/config/loader/edit-mode";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-edit-look");
 const BASE_THEME = "textual-dark";
-const ALLOWED = new Set([BASE_THEME]);
 
 // Two cells in one row, so a joiner runs BETWEEN them — that inter-cell seam is
 // exactly what the staged style reshapes. `session.id` is declared because any
@@ -60,7 +62,7 @@ function editLookBar(source: string) {
   // derives — the sole authority on what a click may write. The rig records the
   // render and hands the click the config it rendered with, so the set-state
   // calls below travel the same road a real click travels.
-  const rig = buildRig({ source, label: "<edit-look>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({ source, label: "<edit-look>", sessionId: SID });
   const { config, sessionState } = rig;
   rigOf.set(sessionState, rig);
 
@@ -110,7 +112,8 @@ const rigOf = new WeakMap<SessionState, Rig>();
 
 const enterEditMode = async (s: SessionState) =>
   await setState(s, EDIT_MODE_KEY, EDIT_MODE_ARRANGE);
-const leaveEditMode = async (s: SessionState) => await setState(s, EDIT_MODE_KEY, "closed");
+const leaveEditMode = async (s: SessionState) =>
+  await setState(s, EDIT_MODE_KEY, "closed");
 
 describe("edit mode's look — a staged globals fragment", () => {
   test("entering restyles the bar and leaving restores the previous bytes exactly", async () => {
@@ -218,14 +221,12 @@ describe("editGlobals — the loader's contract", () => {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { preset: 'compact' },`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
     try {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { preset: 'compact' },`),
-        ALLOWED,
       );
     } catch (err) {
       expect(String(err)).toContain(
@@ -239,7 +240,6 @@ describe("editGlobals — the loader's contract", () => {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { stripStyle: 'plain' },`),
-        ALLOWED,
       ),
     ).toThrow(/editGlobals key/);
   });
@@ -250,11 +250,12 @@ describe("editGlobals — the loader's contract", () => {
     const config: ValidatedConfig = parseAndValidate(
       "<edit-look>",
       `{ editGlobals: { default_separator: ' ~ ' } }`,
-      undefined,
       DEFAULT_DSL_CONFIG,
     );
     expect(config.editGlobals.default_separator).toBe(" ~ ");
-    expect(config.editGlobals.endcaps).toBe(DEFAULT_DSL_CONFIG.editGlobals.endcaps);
+    expect(config.editGlobals.endcaps).toBe(
+      DEFAULT_DSL_CONFIG.editGlobals.endcaps,
+    );
   });
 });
 

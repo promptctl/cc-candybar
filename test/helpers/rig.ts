@@ -37,7 +37,6 @@ import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
 import type { Host } from "../../src/host";
 import type { BuildLineOptions } from "../../src/render/strip";
-import { listResolvablePaletteNames } from "../../src/themes/policy";
 import { instantOf, type Instant } from "../../src/utils/instant";
 import { systemTimekeeper } from "../../src/time";
 import { SourceRegistry } from "../../src/var-system/sources";
@@ -60,7 +59,6 @@ export { DEFAULT_DSL_CONFIG, EMPTY_DEFAULT };
 // The session a payload naming none draws, so such a payload draws the rig's own.
 const SESSION_ID = TEST_SESSION;
 const CWD = "/tmp/proj";
-const ALL_PALETTES: ReadonlySet<string> = new Set(listResolvablePaletteNames());
 
 /** The strip a test with no opinion on it draws: one row of unbounded width. */
 export const RIG_OPTS: BuildLineOptions = {
@@ -78,7 +76,6 @@ export interface RigInit {
   readonly label?: string;
   /** What `source` merges over: `EMPTY_DEFAULT` (its own slice alone) or `DEFAULT_DSL_CONFIG` (the production cascade). */
   readonly base?: DslConfig;
-  readonly palettes?: ReadonlySet<string>;
   /**
    * The part of the parsed config the rig compiles and draws: the whole of it
    * unless a test narrows it (to one segment, say). The selection is still
@@ -127,9 +124,8 @@ export interface Rig {
   dispose(): void;
 }
 
-// A parse of (label, source) over a base, under a palette set. `base` is a
-// singleton per module registry, so it keys by identity; text and palettes key
-// by content, so a test that builds its palette set afresh still hits.
+// A parse of (label, source) over a base. `base` is a singleton per module
+// registry, so it keys by identity; text keys by content.
 //
 // [LAW:types-are-the-program] The shared config is not frozen: it is `readonly`
 // throughout by type, and a runtime freeze would reach `DEFAULT_DSL_CONFIG`'s
@@ -178,18 +174,12 @@ export function parsedConfig(
   label: string,
   source: string,
   base: DslConfig,
-  palettes: ReadonlySet<string>,
 ): ValidatedConfig {
   const entries = held(parses, base);
-  const key = JSON.stringify([
-    label,
-    source,
-    [...palettes].sort(),
-    registeredDomains(),
-  ]);
+  const key = JSON.stringify([label, source, registeredDomains()]);
   let config = entries.get(key);
   if (config === undefined) {
-    config = parseAndValidate(label, source, palettes, base);
+    config = parseAndValidate(label, source, base);
     entries.set(key, config);
   }
   return config;
@@ -212,7 +202,6 @@ export function buildRig(init: RigInit = {}): Rig {
     init.label ?? "<test>",
     init.source ?? "{}",
     init.base ?? EMPTY_DEFAULT,
-    init.palettes ?? ALL_PALETTES,
   );
   const drawn = (init.narrow ?? ((whole) => whole))(config);
   const sessionState = init.sessionState ?? new SessionState();

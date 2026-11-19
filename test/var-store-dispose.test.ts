@@ -56,12 +56,7 @@ function renderedEntry(
   sessionState: SessionState,
   drawn = true,
 ): SourceRegistry {
-  const config = parseAndValidate(
-    "<test>",
-    "{}",
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<test>", "{}", DEFAULT_DSL_CONFIG);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
@@ -139,12 +134,7 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
     registerDslConfig(
-      parseAndValidate(
-        "<test>",
-        "{}",
-        new Set(listResolvablePaletteNames()),
-        DEFAULT_DSL_CONFIG,
-      ),
+      parseAndValidate("<test>", "{}", DEFAULT_DSL_CONFIG),
       registry,
       { cwd: "/tmp/proj" },
     );

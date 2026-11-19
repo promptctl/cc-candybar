@@ -41,8 +41,6 @@ import {
 } from "../src/click/wire";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
 function ownUrls(rendered: Frame): string[] {
@@ -117,7 +115,7 @@ describe("2de.12 — literal set action", () => {
   });
 
   test("derives an allow-list gate of {to} for the custom key", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "flavor", spec: { kind: "allow-list", allowed: ["chocolate"] } },
     ]);
@@ -156,7 +154,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
   }`;
 
   test("the theme literal reuses the permanent theme validator (no derived spec)", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
   });
 
@@ -191,7 +189,7 @@ describe("2de.12 — option set action", () => {
   });
 
   test("derives an allow-list of the resolved option domain for the custom key", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "sel", spec: { kind: "allow-list", allowed: THEMES } },
     ]);
@@ -272,7 +270,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
   });
 
   test("derives an allow-list gate of exactly the inline values", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "sort-order",
@@ -313,7 +311,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
       root: 'bar',
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -353,7 +351,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
         },
         root: 'bar',
       }`;
-      const config = parseAndValidate("<test>", src, ALLOWED);
+      const config = parseAndValidate("<test>", src);
       expect(ownValidators(config, deriveActionValidators(config))).toEqual([
         {
           key: "fruit",
@@ -444,7 +442,7 @@ describe("2de.12 — bounded set action", () => {
   });
 
   test("two bounded actions on one key merge to a single range gate", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "level", spec: { kind: "range", min: 0, max: 60 } },
     ]);
@@ -530,7 +528,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
   }`;
 
   test("copy/open contribute no validator spec", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
   });
 
@@ -560,7 +558,6 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
         segments: { bar: { template: 'x', bg: 'surface', fg: 'foreground' } },
         root: 'bar',
       }`,
-      ALLOWED,
     );
     const gates = bareGates();
     const validate = (v: string) =>
@@ -599,7 +596,7 @@ describe("2de.12 — same-key specs merge, daemon-wide and derived", () => {
       segments: { bar: { template: '{{ action "wbtn" "W" }} {{ action "abtn" "A" }} {{ action "s1" "1" }} {{ action "s2" "2" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const config = parseAndValidate("<test>", src, ALLOWED);
+    const config = parseAndValidate("<test>", src);
     const merged = Object.fromEntries(
       deriveActionValidators(config).map(({ key, spec }) => [key, spec]),
     );
@@ -626,7 +623,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
 
   const expectIssue = (src: string, re: RegExp | string) => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -648,7 +645,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       segments: { bar: { template: '{{ action "lit" "L" }}{{ action "opt" "O" }}{{ action "bnd" "B" }}{{ action "cp" "C" }}{{ action "op" "P" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
+    expect(() => parseAndValidate("<test>", src)).not.toThrow();
   });
 
   test("a `from` over the addable segments loads, as it renders", () => {
@@ -662,7 +659,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       segments: { bar: { template: 'x' } },
       root: 'bar',
     }`;
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
+    expect(() => parseAndValidate("<test>", src)).not.toThrow();
   });
 
   test("two of set/copy/open is rejected", () => {
@@ -862,7 +859,7 @@ describe("2de.4 — cycle set action", () => {
   });
 
   test("derives an allow-list gate of exactly the members", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "details-open",
@@ -912,7 +909,7 @@ describe("2de.4 — cycle set action", () => {
       segments: { bar: { template: '{{ action "toggleA" "▸A" "▾A" }} {{ action "toggleB" "▸B" "▾B" }}', bg: 'surface', fg: 'foreground' } },
       root: 'bar',
     }`;
-    const config = parseAndValidate("<test>", src, ALLOWED);
+    const config = parseAndValidate("<test>", src);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "menu",
@@ -948,7 +945,7 @@ describe("2de.4 — loader proves the cycle invariants", () => {
 
   const expectIssue = (src: string, re: RegExp | string) => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -961,7 +958,6 @@ describe("2de.4 — loader proves the cycle invariants", () => {
       parseAndValidate(
         "<test>",
         base(`{ a: { set: 'k', cycle: ['0', '1'] } }`),
-        ALLOWED,
       ),
     ).not.toThrow();
   });

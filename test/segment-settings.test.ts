@@ -7,7 +7,6 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -18,8 +17,6 @@ import type { LayoutNode } from "../src/config/dsl-types";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function placementBar(src: string) {
   const rig = buildRig({ source: src, sessionId: S1 });
@@ -128,7 +125,9 @@ describe("two placements of a menu-hosting segment open independently", () => {
     expect(rt.config.variables["menus.second.applyTheme"]).toBeDefined();
     const open = async (key: string): Promise<void> => {
       const url = linkUrls(rt.render()).find((u) =>
-        effectsOf(u).some((e) => e.args[1] === key && e.args[2] === "applyTheme"),
+        effectsOf(u).some(
+          (e) => e.args[1] === key && e.args[2] === "applyTheme",
+        ),
       );
       if (url === undefined) throw new Error(`no toggle for ${key}`);
       await rt.click(url);
@@ -182,7 +181,6 @@ describe("a placement is named by its id", () => {
           b: { root: { h: [{ seg: 'menuB', id: 'picker' }] } },
         },
       }`,
-      ALLOWED,
     );
     expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
   });
@@ -195,15 +193,18 @@ describe("a placement is named by its id", () => {
         segments: { picker: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}' } },
         root: { h: ['picker', { seg: 'picker', id: 'picker-2' }] },
       }`,
-      ALLOWED,
     );
     expect(config.variables["menus.k"]).toBeDefined();
   });
 
   test("edit mode labels each placement with its id", () => {
-    const config = parseAndValidate("<test>", CLOCK_SRC, ALLOWED);
-    expect(config.segments["edit.label:utcClock:clock"]?.template).toBe('{{ "utcClock" }}');
-    expect(config.segments["edit.label:clock:clock"]?.template).toBe('{{ "clock" }}');
+    const config = parseAndValidate("<test>", CLOCK_SRC);
+    expect(config.segments["edit.label:utcClock:clock"]?.template).toBe(
+      '{{ "utcClock" }}',
+    );
+    expect(config.segments["edit.label:clock:clock"]?.template).toBe(
+      '{{ "clock" }}',
+    );
     expect(arrangedSegment("edit.label:utcClock:clock")).toBe("clock");
   });
 });
@@ -217,7 +218,7 @@ describe("load errors", () => {
   const BOOL = `on: { label: 'On', domain: 'bool', default: false }`;
   const refusal = (src: string): string => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       return (e as ConfigError).message;
@@ -231,14 +232,19 @@ describe("load errors", () => {
     );
     expect(
       refusal(
-        withSegment(BOOL, `{ h: [{ seg: 's', id: 'a' }, { seg: 's', id: 'a' }] }`),
+        withSegment(
+          BOOL,
+          `{ h: [{ seg: 's', id: 'a' }, { seg: 's', id: 'a' }] }`,
+        ),
       ),
     ).toContain(`root has 2 placements with the id "a"`);
   });
 
   test("a placement setting its segment does not declare", () => {
     expect(
-      refusal(withSegment(BOOL, `{ h: [{ seg: 's', settings: { off: true } }] }`)),
+      refusal(
+        withSegment(BOOL, `{ h: [{ seg: 's', settings: { off: true } }] }`),
+      ),
     ).toContain(
       `placement "s" of segment "s" sets "off", which segment "s" does not declare (it has: on, theme, effect)`,
     );
@@ -271,14 +277,38 @@ describe("load errors", () => {
   });
 
   test.each([
-    [`on: { label: 'On', domain: 'bool', default: 'no' }`, `default must be true or false, got "no"`],
-    [`on: { label: 'On', domain: [], default: 'a' }`, `a list domain must be a non-empty list of words`],
-    [`on: { label: 'On', domain: { min: 3, max: 1 }, default: 2 }`, `a range domain is { min, max, step?, atLeast? } with integers min ≤ max`],
-    [`on: { domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
-    [`on: { label: 'a\\nb', domain: 'bool', default: true }`, `a setting needs a one-line, non-empty "label"`],
-    [`on: { label: 'On', domain: ['', 'a'], default: 'a' }`, `a list domain's words must be non-empty, slash-free, and newline-free`],
-    [`on: { label: 'On', domain: ['a/b', 'a'], default: 'a' }`, `a list domain's words must be non-empty, slash-free, and newline-free`],
-    [`'show-hash': { label: 'Hash', domain: 'bool', default: true }`, `setting name "show-hash" is read as .settings.show-hash`],
+    [
+      `on: { label: 'On', domain: 'bool', default: 'no' }`,
+      `default must be true or false, got "no"`,
+    ],
+    [
+      `on: { label: 'On', domain: [], default: 'a' }`,
+      `a list domain must be a non-empty list of words`,
+    ],
+    [
+      `on: { label: 'On', domain: { min: 3, max: 1 }, default: 2 }`,
+      `a range domain is { min, max, step?, atLeast? } with integers min ≤ max`,
+    ],
+    [
+      `on: { domain: 'bool', default: true }`,
+      `a setting needs a one-line, non-empty "label"`,
+    ],
+    [
+      `on: { label: 'a\\nb', domain: 'bool', default: true }`,
+      `a setting needs a one-line, non-empty "label"`,
+    ],
+    [
+      `on: { label: 'On', domain: ['', 'a'], default: 'a' }`,
+      `a list domain's words must be non-empty, slash-free, and newline-free`,
+    ],
+    [
+      `on: { label: 'On', domain: ['a/b', 'a'], default: 'a' }`,
+      `a list domain's words must be non-empty, slash-free, and newline-free`,
+    ],
+    [
+      `'show-hash': { label: 'Hash', domain: 'bool', default: true }`,
+      `setting name "show-hash" is read as .settings.show-hash`,
+    ],
   ])("a malformed declaration: %s", (decl, message) => {
     expect(refusal(withSegment(decl, `{ h: ['s'] }`))).toContain(message);
   });
@@ -305,7 +335,9 @@ describe("load errors", () => {
   test("a placement id holding the layout-op delimiter", () => {
     expect(
       refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: 'a:b' }] }`)),
-    ).toContain(`a placement "id" must be a non-empty string without "/" or ":"`);
+    ).toContain(
+      `a placement "id" must be a non-empty string without "/" or ":"`,
+    );
   });
 
   test.each(["candybar.save", "edit.live", "groups.x", "menus.x"])(
@@ -313,7 +345,9 @@ describe("load errors", () => {
     (id) => {
       expect(
         refusal(withSegment(BOOL, `{ h: [{ seg: 's', id: '${id}' }] }`)),
-      ).toContain(`outside the reserved "groups.", "menus.", "menupages.", "edit.", "candybar." namespaces`);
+      ).toContain(
+        `outside the reserved "groups.", "menus.", "menupages.", "edit.", "candybar." namespaces`,
+      );
     },
   );
 });
@@ -322,13 +356,24 @@ describe("edit mode addresses placements by id", () => {
   const tree = (...ids: [string, string?][]): LayoutNode => ({
     kind: "container",
     direction: "horizontal",
-    children: ids.map(([name, id]) => ({ kind: "segment", name, ...(id && { id }) })),
+    children: ids.map(([name, id]) => ({
+      kind: "segment",
+      name,
+      ...(id && { id }),
+    })),
   });
 
   test("an insertion keeps the segment's name as its id while it is free, else mints the next", () => {
-    expect(mintPlacement("git", "dir", [tree(["dir"])])).toEqual({ seg: "git" });
-    expect(mintPlacement("git", "git", [tree(["git"])])).toEqual({ seg: "git", id: "git-2" });
-    expect(mintPlacement("git", "git", [tree(["git"], ["git", "git-2"])])).toEqual({
+    expect(mintPlacement("git", "dir", [tree(["dir"])])).toEqual({
+      seg: "git",
+    });
+    expect(mintPlacement("git", "git", [tree(["git"])])).toEqual({
+      seg: "git",
+      id: "git-2",
+    });
+    expect(
+      mintPlacement("git", "git", [tree(["git"], ["git", "git-2"])]),
+    ).toEqual({
       seg: "git",
       id: "git-3",
     });
@@ -336,12 +381,17 @@ describe("edit mode addresses placements by id", () => {
 
   test("an insertion's id is free in every tree holding its anchor, since the layer it writes can reach other presets", () => {
     expect(
-      mintPlacement("git", "dir", [tree(["dir"], ["git"]), tree(["dir"], ["git", "git-2"])]),
+      mintPlacement("git", "dir", [
+        tree(["dir"], ["git"]),
+        tree(["dir"], ["git", "git-2"]),
+      ]),
     ).toEqual({ seg: "git", id: "git-3" });
     // A tree without the anchor never receives the insertion.
-    expect(mintPlacement("git", "dir", [tree(["dir"]), tree(["git"])])).toEqual({
-      seg: "git",
-    });
+    expect(mintPlacement("git", "dir", [tree(["dir"]), tree(["git"])])).toEqual(
+      {
+        seg: "git",
+      },
+    );
   });
 
   const FILE = `{
@@ -358,7 +408,13 @@ describe("edit mode addresses placements by id", () => {
 
   test("insert writes a minted id as { seg, id }", () => {
     expect(
-      insertSegmentRef(FILE, ["root"], { seg: "git", id: "git-2" }, "dir", "after"),
+      insertSegmentRef(
+        FILE,
+        ["root"],
+        { seg: "git", id: "git-2" },
+        "dir",
+        "after",
+      ),
     ).toBe(`{
   root: { h: ["dir", { seg: "git", id: "git-2" }, "git", { seg: "git", id: "gitFull" }] },
 }

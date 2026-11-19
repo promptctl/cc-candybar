@@ -26,6 +26,7 @@ export type VarScope = "directory" | "view";
 const KIND_SCOPE: Readonly<Record<VariableDecl["kind"], VarScope>> = {
   input: "view",
   state: "view",
+  setting: "view",
   template: "view",
   time: "view",
   source: "view",

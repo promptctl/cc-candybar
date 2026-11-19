@@ -58,7 +58,7 @@ import {
   rootNode,
   type Unplaced,
 } from "./root.js";
-import { effectiveMemberName } from "../themes/policy.js";
+import { effectiveMemberName, type StoredPick } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `styles` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -104,7 +104,7 @@ export function presetNames(
 // so the bar's label and the bar's layout can never disagree
 // [LAW:no-silent-failure].
 export function effectivePresetName(
-  sessionPreset: string | null,
+  sessionPreset: StoredPick<string>,
   globalsPreset: string | undefined,
   declaredPresets: Readonly<Record<string, PresetDecl>>,
 ): string {

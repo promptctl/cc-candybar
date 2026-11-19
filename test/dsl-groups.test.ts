@@ -21,15 +21,12 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // Same real-spine harness as dsl-actions: real loader, real render, clicks
 // dispatched through the real daemon verb handlers against the derived gate.
@@ -39,7 +36,11 @@ function groupsBar(source: string, sessionId = S1) {
   const { click } = rig;
   // Click the toggle whose URL writes `value` to `key` (a group toggle's
   // set-state), regardless of which row it rendered on.
-  const clickToggle = async (out: Frame, key: string, value: string): Promise<void> => {
+  const clickToggle = async (
+    out: Frame,
+    key: string,
+    value: string,
+  ): Promise<void> => {
     const url = linkUrls(out).find((u) =>
       effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value),
     );
@@ -75,8 +76,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
   });
 
   test("click opens: ▾ + body rendered; second click closes", async () => {
-    const { render, clickToggle, sessionState } =
-      groupsBar(DETAILS_SRC);
+    const { render, clickToggle, sessionState } = groupsBar(DETAILS_SRC);
     await clickToggle(render(), "groups.details", "details");
     expect(sessionState.get(S1, "groups.details")).toBe("details");
     const open = textOf(render());
@@ -98,7 +98,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
   });
 
   test("synthesizes var + cycle action + toggle segment under groups.*, and the gate derives", () => {
-    const config = parseAndValidate("<test>", DETAILS_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", DETAILS_SRC);
     expect(config.variables["groups.details"]).toEqual({
       kind: "state",
       key: "groups.details",
@@ -169,7 +169,7 @@ describe("2de.4 — accordion (shared key)", () => {
   });
 
   test("the shared key's gate is the union of the sibling cycles", () => {
-    const config = parseAndValidate("<test>", ACCORDION_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", ACCORDION_SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "menu",
@@ -199,7 +199,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
   }`;
 
   test("nested group synthesizes toggle with depth-derived indent prefix", () => {
-    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    const config = parseAndValidate("<test>", SRC);
     // outer is depth-0: no indent
     expect(config.segments["groups.outer"]?.template).toBe(
       '{{ action "groups.outer" "outer ▸" "outer ▾" }}',
@@ -235,7 +235,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
 describe("2de.4 — loader proves the group invariants", () => {
   const expectIssue = (src: string, re: RegExp) => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -317,7 +317,7 @@ describe("2de.4 — loader proves the group invariants", () => {
       `${group(`name: 'a', label: 'a', key: 'menu', open: true`)},
        ${group(`name: 'b', label: 'b', key: 'menu'`, "bodyB")}`,
     );
-    const config = parseAndValidate("<test>", src, ALLOWED);
+    const config = parseAndValidate("<test>", src);
     expect(config.variables["groups.a"]).toEqual({
       kind: "state",
       key: "menu",

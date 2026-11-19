@@ -52,12 +52,7 @@ export interface SessionBar {
 
 /** The bundled default under `configSource` (JSON5 over it), drawn `cols` wide. */
 export function sessionBar(configSource: string, cols: number): SessionBar {
-  const config = parseAndValidate(
-    "<user>",
-    configSource,
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<user>", configSource, DEFAULT_DSL_CONFIG);
   const session = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", session);

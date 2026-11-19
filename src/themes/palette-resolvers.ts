@@ -19,29 +19,30 @@ import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import { memoPerPalette } from "./palette-memo.js";
 import {
   FOLLOW_BAR,
+  isInstalledTheme,
+  notInstalledTheme,
   resolveSelection,
-  retiredThemeNote,
   ruleFloorMessage,
+  storedPick,
   THEME_FLOOR,
   type Decided,
   type Selection,
+  type StoredPick,
 } from "./policy.js";
 
-const baseCache = new Map<string, Palette>();
-
 /**
- * The Palette for a theme name. Memoized.
+ * The Palette for a theme name; rich-js memoizes each.
  *
  * [LAW:single-enforcer] The one place a theme name becomes a Palette —
  * the per-render base palette and every placement's pinned `theme` both flow
- * through here. A name that does not resolve is registry/resolver drift, never
- * user error: the loader validates `globals.palette` and the set-state verb
- * validates session theme values against the resolvable set, so by the time a
- * name reaches here it must resolve. [LAW:no-defensive-null-guards] the throw is
- * the loud failure for that broken invariant, not a fallback.
+ * through here. Every name reaching it was found installed by the one
+ * authority (`isInstalledTheme`) — the loader, the session gate, the fold over
+ * a stored pick, a rule's result — so a name that does not resolve is
+ * registry drift. [LAW:no-defensive-null-guards] the throw is the loud failure
+ * for that broken invariant, not a fallback.
  */
 export function paletteForThemeName(name: string): Palette {
-  const palette = basePaletteFor(name);
+  const palette = getThemePalette(name);
   if (palette === null) {
     throw new Error(
       `Palette "${name}" did not resolve in the theme registry — allowed ` +
@@ -59,24 +60,6 @@ export function paletteForThemeName(name: string): Palette {
 // would draw.
 export function placementPalette(theme: string, bar: Palette): Palette {
   return theme === FOLLOW_BAR ? bar : paletteForThemeName(theme);
-}
-
-// [LAW:single-enforcer] THE name → base Palette construction, and the one memo
-// over it. Answering null rather than throwing is what lets its two callers
-// differ in the only way they must: a PRE-VALIDATED name (a config default the
-// loader checked, a session pick the set-state gate admitted, a placement's `theme`)
-// treats absence as registry drift and throws above; a name a RULE produced
-// (brandon-themes-dzl) treats it as an author mistake, collapses to the floor and
-// reports. Two absence policies, one construction — a second `getThemePalette`
-// call beside this one would be a second place a theme name becomes a palette.
-function basePaletteFor(name: string): Palette | null {
-  const hit = baseCache.get(name);
-  if (hit !== undefined) return hit;
-
-  const palette = getThemePalette(name);
-  if (palette === null) return null;
-  baseCache.set(name, palette);
-  return palette;
 }
 
 /**
@@ -121,17 +104,15 @@ export type DecidedTheme = Decided<Palette>;
 
 // One rung's contribution: the theme this name selects, or null when it names
 // nothing installed — which is not a pick at all, so the fold moves on.
-//
-// [LAW:polishing-by-subtraction] The construction IS the membership test. The
-// theme domain was described as OPEN, with no membership to check; that was true
-// only because every rung reaching `paletteForThemeName` had been pre-validated
-// elsewhere. `basePaletteFor` answering null is the one membership fact, so
-// asking `listResolvablePaletteNames().includes(...)` first would be the same
-// question twice — and the second answer could only ever restate the first.
 function namedTheme(name: string): DecidedTheme | null {
-  const value = basePaletteFor(name);
-  return value === null ? null : { kind: "decided", name, value };
+  return isInstalledTheme(name)
+    ? { kind: "decided", name, value: paletteForThemeName(name) }
+    : null;
 }
+
+// A stored theme pick, parsed against the installed themes.
+export const themePick = (raw: string | null): StoredPick<DecidedTheme> =>
+  storedPick(raw, namedTheme);
 
 // [LAW:single-enforcer] The membership policy for a theme NAME, wherever the
 // name came from — a config default, a session pick, or an expression's RESULT.
@@ -161,13 +142,7 @@ export function decideThemeName(
 ): DecidedTheme {
   const named = namedTheme(name);
   if (named !== null) return named;
-  onUnresolvable(
-    ruleFloorMessage(
-      where,
-      "palette",
-      `"${name}" names no installed theme${retiredThemeNote(name)}`,
-    ),
-  );
+  onUnresolvable(ruleFloorMessage(where, "palette", notInstalledTheme(name)));
   return themeFloor();
 }
 
@@ -177,7 +152,7 @@ export function decideThemeName(
 // is the ordinary "nothing was declared" answer.
 export function resolveThemeSelection(
   stagedPalette: string | undefined,
-  sessionTheme: string | null,
+  sessionTheme: StoredPick<DecidedTheme>,
   globalsPalette: string | undefined,
 ): ThemeSelection {
   return resolveSelection(

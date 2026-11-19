@@ -5,12 +5,14 @@
 
 import { linkUrls } from "./helpers/frame";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import {
-  ANIMATION_SPEED_NAMES,
-  listResolvablePaletteNames,
-} from "../src/themes/policy";
+import { ANIMATION_SPEED_NAMES } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { clickUrl, effectsOf, bookedContext, CLICK_VERBS } from "./helpers/click";
+import {
+  clickUrl,
+  effectsOf,
+  bookedContext,
+  CLICK_VERBS,
+} from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
 import { closeIdleMenus, type VerbContext } from "../src/renderer/verbs/index";
@@ -157,8 +159,6 @@ describe("the idle period: a close is due a timeout after it began, while a menu
     expect(idle.next()).toBeNull();
   });
 });
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 const TAB = "candybar.tab";
 const PICKERS = "menus.candybar_pickers";
@@ -178,7 +178,6 @@ function idleBar(src: string) {
     source: src,
     label: "<user>",
     base: DEFAULT_DSL_CONFIG,
-    palettes: ALLOWED,
     sessionId: SID,
   });
   const { config, sessionState } = rig;
@@ -205,7 +204,10 @@ function idleBar(src: string) {
     );
     if (!url) throw new Error(`no affordance writing ${key}=${value} rendered`);
     const { verb, value: v } = linkClick(url);
-    expect(admitClick(verb, v, TEST_SIGNER).click).toMatchObject({ scope: "session", session: SID });
+    expect(admitClick(verb, v, TEST_SIGNER).click).toMatchObject({
+      scope: "session",
+      session: SID,
+    });
     await clickUrl(url, ctx);
   };
   const held = (key: string): string =>

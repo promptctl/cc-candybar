@@ -16,7 +16,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
   testVerbContext,
@@ -48,8 +47,6 @@ const typing = () => ({
   ),
 });
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
   endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
@@ -169,7 +166,6 @@ describe("parseSlashLine: a line is one slash command, and only text", () => {
       parseAndValidate(
         "<user>",
         `{ actions: { a: { slash: "compact" }, b: { slash: "/clear", to: "x" } } }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(/actions\.a\.slash[\s\S]*actions\.b\.to/);
@@ -236,7 +232,6 @@ function runtime(tmux: TmuxHint | null) {
       globals: {},
       root: { h: ['cmds'] },
     }`,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
@@ -444,7 +439,6 @@ function tray(tmux: TmuxHint | null, drawnIn: TmuxHint | null = tmux) {
   const config = parseAndValidate(
     "<user>",
     "{ root: { h: ['commands'] } }",
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();

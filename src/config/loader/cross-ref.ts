@@ -58,8 +58,10 @@ import {
 import {
   EXPRESSION_SLOTS,
   isExpression,
+  FOLLOW_BAR,
+  isInstalledTheme,
   isStyleEraEndcaps,
-  retiredThemeNote,
+  notInstalledTheme,
 } from "../../themes/policy.js";
 import { SLOT_PATHS, slotAt } from "../payload-inputs.js";
 import { endcapsNameMessage } from "./styles.js";
@@ -781,7 +783,9 @@ function checkPlacementSettings(
         ? `sets "${setting}", which segment "${node.name}" does not declare (it has: ${Object.keys(declared).join(", ")})`
         : inSettingDomain(decl, value)
           ? undefined
-          : `sets "${setting}" to ${JSON.stringify(value)}${decl.domain === "theme" ? retiredThemeNote(value) : ""}, but it must be ${describeSettingDomain(decl)}`;
+          : decl.domain === "theme" && typeof value === "string"
+            ? `sets "${setting}" to ${JSON.stringify(value)}, but ${notInstalledTheme(value)}, and not "${FOLLOW_BAR}" (the bar's own theme)`
+            : `sets "${setting}" to ${JSON.stringify(value)}, but it must be ${describeSettingDomain(decl)}`;
     if (problem !== undefined) {
       ctx.issues.push({
         path: layoutKey,
@@ -1275,6 +1279,22 @@ function setWrites(
 // config, a plugin's own for a plugin joining a layer that was checked.
 export type Subject = (name: string) => boolean;
 
+// [LAW:single-enforcer] One owner per session key: a setting's key belongs to
+// the setting, which parses what it holds against its domain. A `state`
+// variable over it would read the stored spelling raw, so the bar and the
+// variable could name two values. Judged on the merged config, where a
+// plugin's keys already sit under its namespace.
+function checkKeyOwner(ctx: ValidateCtx, path: string, v: VariableDecl): void {
+  if (v.kind !== "state") return;
+  const setting = SESSION_KEY_TO_SETTING.get(v.key);
+  if (setting === undefined) return;
+  ctx.issues.push({
+    path: `${path}.key`,
+    message: `${path}: "${v.key}" is the key of the "${setting}" setting, which owns it — read its value as "${SETTINGS[setting].effectiveVar}", or give this variable a key of its own`,
+    line: findKeyLine(ctx.source, [...path.split("."), "key"]),
+  });
+}
+
 // The names of `record` a check is about.
 function subjects<T>(
   record: Readonly<Record<string, T>>,
@@ -1452,13 +1472,10 @@ export function validateDeclarations(
       });
       continue;
     }
-    if (
-      target.scope === "theme-default" &&
-      !ctx.allowedPalettes.has(target.theme)
-    ) {
+    if (target.scope === "theme-default" && !isInstalledTheme(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        message: `actions.${name}: "${key}" names a theme: ${notInstalledTheme(target.theme)}`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
@@ -1490,6 +1507,7 @@ export function validateDeclarations(
   // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of subjects(cfg.variables, subject)) {
     checkVarRefs(ctx, `variables.${name}`, v, templateScope);
+    checkKeyOwner(ctx, `variables.${name}`, v);
     const retired = retiredVariableMessage(name);
     if (retired !== undefined) {
       ctx.issues.push({
@@ -1516,6 +1534,7 @@ export function validateDeclarations(
           templateScope,
           segName,
         );
+        checkKeyOwner(ctx, `segments.${segName}.vars.${vName}`, vDecl);
       }
     }
     // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs

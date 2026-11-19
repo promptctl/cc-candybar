@@ -264,7 +264,9 @@ describe("a kept part keeps nothing of where it was first asked", () => {
       view.errors.length = 0;
       view.draw({}, at);
       expect(view.errors).toEqual([
-        expect.stringMatching(/^segment "gated": .*only available inside a segment/),
+        expect.stringMatching(
+          /^segment "gated": .*only available inside a segment/,
+        ),
       ]);
     }
   });
@@ -279,7 +281,6 @@ describe("a kept part keeps nothing of where it was first asked", () => {
           segments: { s: { template: "s" } },
           root: { h: ["s"] },
         }`,
-        new Set(listResolvablePaletteNames()),
       ),
     );
     for (const at of [A, B]) {
@@ -306,7 +307,6 @@ describe("a kept part keeps nothing of where it was first asked", () => {
           segments: { s: { template: '{{ swatch "applyTheme" }}' } },
           root: { h: ["s"] },
         }`,
-        new Set(listResolvablePaletteNames()),
       ),
     );
     view.draw({}, A);
@@ -344,12 +344,7 @@ describe("a kept part keeps nothing of where it was first asked", () => {
 // that step draws: nothing a part reads escapes what it tracks.
 describe("a kept view draws what a fresh one draws", () => {
   const SID = sessionIdOf("parts");
-  const config = parseAndValidate(
-    "<user>",
-    "{}",
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<user>", "{}", DEFAULT_DSL_CONFIG);
 
   test("through the bundled bar's clicks and picks", async () => {
     const sessionState = new SessionState();

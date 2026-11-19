@@ -16,14 +16,14 @@ import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const ALLOWED_PALETTES = new Set(["textual-dark"]);
-
-// Minimal config — one input (session.id), one state-kind var bound to
-// SessionState's "theme" key, one segment that prints the state value.
+// Minimal config — one input (session.id), one state-kind var over a plain
+// key whose action ranges the themes (a setting's own key is the setting's),
+// one segment that prints the state value.
 const CONFIG_SRC = `{
   globals: {},
+  actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
   variables: {
-    themePick: { kind: 'state', key: 'theme', default: '(unset)' },
+    themePick: { kind: 'state', key: 'pick', default: '(unset)' },
   },
   segments: {
     themeSeg: {
@@ -44,7 +44,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   function cascadeBar(source: string = CONFIG_SRC) {
     const rig = buildRig({
       source,
-      palettes: ALLOWED_PALETTES,
       sessionId: SESSION_ID,
     });
     const render = () => textOf(rig.draw().frame);
@@ -59,7 +58,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   test("direct SessionState.set is visible on next render", () => {
     const { sessionState, render } = cascadeBar();
     expect(render()).toContain("theme=(unset)");
-    sessionState.set(SESSION_ID, "theme", "ocean");
+    sessionState.set(SESSION_ID, "pick", "ocean");
     expect(render()).toContain("theme=ocean");
   });
 
@@ -104,10 +103,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
     // set-state value shape: "<sessionId>/<key>/<value>" — key must be
     // one the session's config gates and value must satisfy its validator.
-    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/pick/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
-    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
+    await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/pick/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
   });
 
@@ -140,7 +139,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     try {
       expect(observed).toEqual(["(unset)"]);
 
-      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/pick/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -164,9 +163,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // those: it has no second observer to misbehave. This test adds one.
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
+      actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
+  actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        caps: { kind: 'state', key: 'endcaps', default: '' },
+        themePick: { kind: 'state', key: 'pick', default: '(unset)' },
+        caps: { kind: 'state', key: 'caps', default: '' },
       },
       segments: {
         themeSeg: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
@@ -191,7 +192,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(themeObs).toEqual(["(unset)"]);
       expect(capsObs).toEqual([""]);
 
-      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+      await CLICK_VERBS.get("set-state")!(`${SESSION_ID}/pick/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -202,7 +203,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
       // Sanity: a mutation to the OTHER state key fires the caps
       // observer (cascade is not over-suppressed).
-      sessionState.set(SESSION_ID, "endcaps", "capsule");
+      sessionState.set(SESSION_ID, "caps", "capsule");
       expect(capsObs).toEqual(["", "capsule"]);
       expect(themeObs).toEqual(["(unset)", "nord"]);
     } finally {
@@ -218,7 +219,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
     expect(() =>
       CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
-    ).toThrow(/unknown theme/);
+    ).toThrow(/is not an installed theme/);
   });
 
   test('set-state rejects the "custom" theme sentinel (not a renderable theme)', async () => {
@@ -230,7 +231,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { ctx } = cascadeBar();
     expect(() =>
       CLICK_VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
-    ).toThrow(/unknown theme/);
+    ).toThrow(/is not an installed theme/);
   });
 
   test("set-state rejects an unknown key with the registered-key list", async () => {
@@ -335,16 +336,18 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // tick per click, regardless of pair count.
     const { store, registry, sessionState, ctx } = cascadeBar(`{
       globals: {},
+      actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
+  actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: '(unset)' },
-        caps: { kind: 'state', key: 'endcaps', default: '' },
+        themePick: { kind: 'state', key: 'pick', default: '(unset)' },
+        caps: { kind: 'state', key: 'caps', default: '' },
       },
       segments: {
         s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },
       },
       root: 's',
     }`);
-    sessionState.set(SESSION_ID, "endcaps", "plain");
+    sessionState.set(SESSION_ID, "caps", "plain");
     feedInputs(registry, HOOK_DATA);
 
     // Observer reads BOTH state vars in one tracked frame — the kind
@@ -360,7 +363,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(snapshots).toEqual([{ theme: "(unset)", caps: "plain" }]);
 
       await CLICK_VERBS.get("set-state")!(
-        `${SESSION_ID}/theme/nord/endcaps/capsule`,
+        `${SESSION_ID}/pick/nord/caps/capsule`,
         ctx,
       );
 
@@ -446,8 +449,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // without declaring it loads AND renders the state it reads.
     const { config, render } = cascadeBar(`{
       globals: {},
+      actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
+  actions: { pickTheme: { set: 'pick', from: 'themes' }, pickCaps: { set: 'caps', from: 'endcaps' } },
       variables: {
-        themePick: { kind: 'state', key: 'theme', default: 'calm' },
+        themePick: { kind: 'state', key: 'pick', default: 'calm' },
       },
       segments: {
         s: { template: '{{ .themePick }}', bg: 'surface', fg: 'foreground' },

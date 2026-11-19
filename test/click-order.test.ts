@@ -10,10 +10,7 @@ import { clickParts } from "./helpers/click-parts";
 import { signedClick } from "./helpers/link-signer";
 import { replyTo } from "../src/daemon/reply";
 import { SessionState } from "../src/renderer/session-state";
-import {
-  type VerbContext,
-  type VerbHandler,
-} from "../src/renderer/verbs";
+import { type VerbContext, type VerbHandler } from "../src/renderer/verbs";
 import {
   VERB_DISPATCH,
   VERB_SET_CONFIG,
@@ -34,15 +31,12 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { NO_LAYERS, undoOf } from "./helpers/history-step";
 import { heldClock } from "./helpers/held-clock";
 import { FOREGROUND_BURST } from "../src/utils/keyed-serial-queue";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
 const S = sessionIdOf("s");
 
@@ -67,9 +61,12 @@ function setup(
   const sessionState = new SessionState();
   const logged: string[] = [];
   recordRender(sessionState, A);
-  const ctx = verbContextWith(testVerbContext(sessionState, undefined, EMPTY_DEFAULT), {
-    log: (_level, line) => logged.push(line),
-  });
+  const ctx = verbContextWith(
+    testVerbContext(sessionState, undefined, EMPTY_DEFAULT),
+    {
+      log: (_level, line) => logged.push(line),
+    },
+  );
   const { arrival: _a, context: _c, effects: _e, ...verbCtx } = ctx;
   const clock = over.clock ?? systemTimekeeper;
   const host = clickParts(verbCtx, over.collector, undefined, clock);
@@ -216,15 +213,19 @@ describe("the idle close decides as its turn comes", () => {
 
   test("a scheduled due closes another session's menu while leaving a queued click's menu open", async () => {
     const clock = heldClock(new Date(0));
-    const { menuIdle, park, renderer, sessionState, write, theme, logged } = setup({ clock });
+    const { menuIdle, park, renderer, sessionState, write, theme, logged } =
+      setup({ clock });
     const other = sessionIdOf("session-b");
     recordRender(sessionState, other);
     menuIdle.drew(A, tickAt(clock), true, 30);
     menuIdle.drew(other, tickAt(clock), true, 30);
-    const viewers = () => ({ kind: "event", event: { kind: "viewers", viewers: {} } }) as const;
+    const viewers = () =>
+      ({ kind: "event", event: { kind: "viewers", viewers: {} } }) as const;
     await renderer.deliver(viewers, []);
     const parked = park();
-    const foreground = Array.from({ length: FOREGROUND_BURST }, () => renderer.deliver(viewers, []));
+    const foreground = Array.from({ length: FOREGROUND_BURST }, () =>
+      renderer.deliver(viewers, []),
+    );
     clock.advance(30_000);
     let beforeClick: readonly string[] = [];
     const atNextOrdinarySlot = renderer.deliver(() => {
@@ -233,7 +234,12 @@ describe("the idle close decides as its turn comes", () => {
     }, []);
     const clicked = write("nord");
     parked.open();
-    await Promise.all([parked.holding, ...foreground, atNextOrdinarySlot, clicked]);
+    await Promise.all([
+      parked.holding,
+      ...foreground,
+      atNextOrdinarySlot,
+      clicked,
+    ]);
     expect(beforeClick).toEqual([
       expect.stringContaining(`(session=${other})`),
     ]);
@@ -391,10 +397,12 @@ describe("the click path", () => {
     const { send, theme, events } = setup({
       collector: { holding: () => () => {}, clicked },
     });
-    const { verb, value } = linkClick(effectsUrl([
-      { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
-      { verb: VERB_SET_STATE, args: [S, "theme", "dracula"] },
-    ]));
+    const { verb, value } = linkClick(
+      effectsUrl([
+        { verb: VERB_SET_STATE, args: [A, "theme", "nord"] },
+        { verb: VERB_SET_STATE, args: [S, "theme", "dracula"] },
+      ]),
+    );
 
     const { resp } = await send(verb, value);
 

@@ -13,7 +13,8 @@
 // so the button's count and the click's write cannot describe different sets.
 
 import {
-  parseSettingSpelling,
+  placementPick,
+  placementValue,
   settingOrderProblems,
   settingSpelling,
   settingsOf,
@@ -25,6 +26,7 @@ import {
   type SettingValue,
 } from "../config/dsl-types.js";
 import {
+  settingNameOf,
   THEME_DEFAULT_FIELDS,
   type ThemeDefaultField,
 } from "../config/globals-fields.js";
@@ -265,9 +267,8 @@ export interface PlacementDraft {
 
 // Every placement setting the session holds a pick for that differs from the
 // value the file gives that placement, in the preset the session renders — a
-// pick in another preset is one the render ignores, so it is no draft. A pick
-// the declaration no longer admits parses to nothing, and is no draft either:
-// the render shows the file's value for it.
+// pick in another preset is one the render ignores, so it is no draft. A stale
+// pick is no draft either: the render shows the file's value for it.
 export function placementDrafts(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
@@ -275,14 +276,71 @@ export function placementDrafts(
   const { preset } = sessionGlobals(config, sessionPick);
   return slotsOf(config, preset).flatMap(
     ({ id, setting, key, decl, saved }) => {
-      const pick = sessionPick(key);
-      const value =
-        pick === null ? undefined : parseSettingSpelling(decl, pick);
-      return value === undefined ||
-        settingSpelling(value) === settingSpelling(saved)
+      const pick = placementPick(decl, sessionPick(key));
+      return pick.kind !== "held" ||
+        settingSpelling(pick.value) === settingSpelling(saved)
         ? []
-        : [{ preset, id, setting, key, value }];
+        : [{ preset, id, setting, key, value: pick.value }];
     },
+  );
+}
+
+// [LAW:one-source-of-truth] A stored pick the bar does not wear, where it
+// would have decided: the setting as a warning names it, the spelling held,
+// and the variable holding what the bar wears instead — the variable its
+// control reads, so the warning and the control name one value.
+export interface StalePick {
+  readonly setting: string;
+  readonly stored: string;
+  readonly wears: string;
+  readonly domain: "theme" | "value";
+}
+
+// Every stale pick of the session: each global setting `effective` reports
+// (it alone knows which a staged value outranks), and each placement setting
+// of the preset the session renders.
+export function stalePicks(
+  config: DslConfig,
+  effective: EffectiveGlobals,
+  sessionPick: (key: string) => string | null,
+): readonly StalePick[] {
+  return [
+    ...effective.stale.map(
+      ({ setting, stored }): StalePick => ({
+        setting: `setting "${setting}"`,
+        stored,
+        wears: SETTINGS[setting].effectiveVar,
+        domain: setting === settingNameOf("palette") ? "theme" : "value",
+      }),
+    ),
+    ...slotsOf(config, effective.preset).flatMap(
+      ({ id, setting, key, decl, variable }): StalePick[] => {
+        const pick = placementPick(decl, sessionPick(key));
+        return pick.kind === "stale"
+          ? [
+              {
+                setting: `placement "${id}" setting "${setting}"`,
+                stored: pick.raw,
+                wears: variable,
+                domain: decl.domain === "theme" ? "theme" : "value",
+              },
+            ]
+          : [];
+      },
+    ),
+  ];
+}
+
+// The session keys of the global settings whose stored pick is stale: a save
+// leaves each stored, so it comes back when its domain does.
+export function staleSettingKeys(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+): ReadonlySet<string> {
+  return new Set(
+    sessionGlobals(config, sessionPick).stale.map(
+      ({ setting }) => SETTINGS[setting].sessionKey,
+    ),
   );
 }
 
@@ -306,12 +364,13 @@ export function placementPickProblems(
       const own = slots.filter((s) => s.id === id);
       const decls = Object.fromEntries(own.map((s) => [s.setting, s.decl]));
       const values = Object.fromEntries(
-        own.map((s) => {
-          const pick = written.get(s.key) ?? sessionPick(s.key);
-          const value =
-            pick === null ? undefined : parseSettingSpelling(s.decl, pick);
-          return [s.setting, value ?? s.saved];
-        }),
+        own.map((s) => [
+          s.setting,
+          placementValue(
+            placementPick(s.decl, written.get(s.key) ?? sessionPick(s.key)),
+            s.saved,
+          ),
+        ]),
       );
       return settingOrderProblems(decls, values).map(
         ({ message }) => `placement "${id}": ${message}`,
@@ -329,6 +388,7 @@ interface DraftSlotFact {
   readonly id: string;
   readonly setting: string;
   readonly key: string;
+  readonly variable: string;
   readonly decl: SettingDecl;
   readonly saved: SettingValue;
 }
@@ -344,16 +404,19 @@ function slotsOf(config: DslConfig, preset: string): readonly DraftSlotFact[] {
     (node) =>
       node.kind !== "segment" || node.drafts === undefined
         ? []
-        : Object.entries(node.drafts).map(([setting, { id, key }]) => {
-            const decl = settingsOf(config.segments[node.name]!)[setting]!;
-            return {
-              id,
-              setting,
-              key,
-              decl,
-              saved: node.settings?.[setting] ?? decl.default,
-            };
-          }),
+        : Object.entries(node.drafts).map(
+            ([setting, { id, key, variable }]) => {
+              const decl = settingsOf(config.segments[node.name]!)[setting]!;
+              return {
+                id,
+                setting,
+                key,
+                variable,
+                decl,
+                saved: node.settings?.[setting] ?? decl.default,
+              };
+            },
+          ),
   );
   const slots = [...new Map(facts.map((f) => [f.key, f])).values()];
   byPreset.set(preset, slots);

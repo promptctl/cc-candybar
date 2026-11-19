@@ -12,7 +12,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -26,8 +25,6 @@ import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
   endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
@@ -43,7 +40,6 @@ function config(actions: string, template: string): string {
     variables: {
       panel: { kind: 'state', key: 'panel', default: 'open' },
       focus: { kind: 'state', key: 'focus', default: 'off' },
-      themePick: { kind: 'state', key: 'theme', default: 'nord' },
     },
     actions: { ${actions} },
     segments: { bar: { template: '${template}', fg: 'foreground' } },
@@ -52,7 +48,7 @@ function config(actions: string, template: string): string {
 }
 
 function runtime(src: string) {
-  const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+  const cfg = parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
@@ -60,7 +56,16 @@ function runtime(src: string) {
   recordRender(sessionState, S1);
   return {
     sessionState,
-    render: () => drawPayload(cfg, compiled, store, registry, PAYLOAD, instantOf(new Date()), OPTS).frame,
+    render: () =>
+      drawPayload(
+        cfg,
+        compiled,
+        store,
+        registry,
+        PAYLOAD,
+        instantOf(new Date()),
+        OPTS,
+      ).frame,
     click: async (url: string) =>
       await clickUrl(url, testVerbContext(sessionState, undefined, cfg)),
   };
@@ -74,7 +79,10 @@ const FOCUS_AND_CLOSE = `
 describe("do: several declared actions, one click", () => {
   test("the head is the face; every member's write lands, through the derived gate", async () => {
     const rt = runtime(
-      config(FOCUS_AND_CLOSE, '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}'),
+      config(
+        FOCUS_AND_CLOSE,
+        '{{ action "focusAndClose" "◎ focus" "◉ unfocus" }}',
+      ),
     );
     const out = rt.render();
     // The head is a two-member cycle, so the `do` shows its per-member display.
@@ -153,12 +161,7 @@ describe("do: several declared actions, one click", () => {
 describe("do: load errors", () => {
   const loadError = (actions: string): string => {
     try {
-      parseAndValidate(
-        "<user>",
-        config(actions, "x"),
-        ALLOWED,
-        DEFAULT_DSL_CONFIG,
-      );
+      parseAndValidate("<user>", config(actions, "x"), DEFAULT_DSL_CONFIG);
     } catch (e) {
       if (e instanceof ConfigError) return e.message;
       throw e;
@@ -188,7 +191,6 @@ describe("do: load errors", () => {
            editAndClose: { do: ['edit.toggle', 'closePanel'] },`,
           '{{ action "editAndClose" "✎" }}',
         ),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).not.toThrow();

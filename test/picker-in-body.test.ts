@@ -50,16 +50,23 @@ function renderOf(
       segments: { s: { template: ${JSON.stringify(template)} } },
       root: { rows: { identity: { h: [${host}] }, status: { h: [] } } },
     }`,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
-  return drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
-    ...OPTS,
-    width,
-  }).frame;
+  return drawPayload(
+    config,
+    compiled,
+    store,
+    registry,
+    PAYLOAD,
+    instantOf(new Date()),
+    {
+      ...OPTS,
+      width,
+    },
+  ).frame;
 }
 
 describe("{{ carousel }} names what it sets", () => {
@@ -133,7 +140,6 @@ describe("{{ picker }} over a catalogue", () => {
         },
         root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
       }`,
-      new Set(listResolvablePaletteNames()),
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);
@@ -157,7 +163,9 @@ describe("{{ picker }} over a catalogue", () => {
       .find(({ text }) => text === DISCLOSURE_GLYPH_CLOSE);
     expect(close).toBeDefined();
     const { fg, bg } = close!;
-    expect(contrastRatio(truecolorOf(fg), truecolorOf(bg))).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
+    expect(
+      contrastRatio(truecolorOf(fg), truecolorOf(bg)),
+    ).toBeGreaterThanOrEqual(TEXT_MIN_CONTRAST);
   });
 });
 
@@ -166,7 +174,9 @@ describe("{{ picker }} inBody", () => {
     linksOf(out).filter((l) => l.text === DISCLOSURE_GLYPH_CLOSE);
 
   test("a standalone picker leads with its own ✕", () => {
-    expect(closes(renderOf('{{ picker "pick" "page" false true }}'))).toHaveLength(1);
+    expect(
+      closes(renderOf('{{ picker "pick" "page" false true }}')),
+    ).toHaveLength(1);
   });
 
   test("a picker in a body draws no ✕: the body's own ✕ closes it", () => {

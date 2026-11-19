@@ -38,7 +38,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import {
   bookedContext,
@@ -109,8 +108,6 @@ function colorsAt(rendered: Frame, text: string): { fg: string; bg: string } {
   return { fg: fg!, bg: bg! };
 }
 
-const ALLOWED = new Set(listResolvablePaletteNames());
-
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
     endcaps: "powerline" as const,
@@ -172,7 +169,7 @@ afterEach(() => {
 // a click edits is the tree the bar rendered — the daemon's own situation.
 function buildEditRuntime(src: string, sessionId = S1) {
   durable.write(src);
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   const sessionState = new SessionState();
   durable.seedOrigin(sessionState, sessionId);
   let store = new VariableStore(systemTimekeeper);
@@ -180,8 +177,9 @@ function buildEditRuntime(src: string, sessionId = S1) {
   const base = testVerbContext(sessionState, history, undefined, durable.host);
   const context = bookedContext(sessionState, sessionId)!;
   const draftText = () =>
-    base.edits.snapshot(context.durable.origin, sessionId)?.chain
-      .find((layer) => layer.role === "user")?.content;
+    base.edits
+      .snapshot(context.durable.origin, sessionId)
+      ?.chain.find((layer) => layer.role === "user")?.content;
   let loaded = src;
   let authored = config;
   let registry = new SourceRegistry(store, "", base.edits.view);
@@ -190,10 +188,10 @@ function buildEditRuntime(src: string, sessionId = S1) {
   });
   const effective = () => {
     const draft = draftText();
-    const text = draft?.kind === "text" ? draft.text : durable.text() ?? "{}";
+    const text = draft?.kind === "text" ? draft.text : (durable.text() ?? "{}");
     if (text !== loaded) {
       loaded = text;
-      authored = parseAndValidate("<test>", text, ALLOWED);
+      authored = parseAndValidate("<test>", text);
       registry.dispose();
       store = new VariableStore(systemTimekeeper);
       registry = new SourceRegistry(store, "", base.edits.view);
@@ -243,7 +241,6 @@ describe("insertSegmentFrom loader shape", () => {
       base(
         `{ ins: { persist: 'presets.default.root', insertSegmentFrom: 'themes', anchor: 'git', relation: 'before' } }`,
       ),
-      ALLOWED,
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
@@ -260,7 +257,6 @@ describe("insertSegmentFrom loader shape", () => {
       base(
         `{ ins: { persist: 'presets.default.root', insertSegmentFrom: ['gitPr'], anchor: 'git', relation: 'after' } }`,
       ),
-      ALLOWED,
     );
     expect(config.actions.ins).toEqual({
       persist: "presets.default.root",
@@ -278,7 +274,6 @@ describe("insertSegmentFrom loader shape", () => {
         base(
           `{ ins: { persist: 'presets.default.root', insertSegmentFrom: 'themes', relation: 'before' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -293,7 +288,6 @@ describe("insertSegmentFrom loader shape", () => {
         base(
           `{ ins: { persist: 'presets.default.root', insertSegment: 'directory', insertSegmentFrom: 'themes', anchor: 'git', relation: 'before' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(/declares exactly one value source/);
   });
@@ -305,7 +299,6 @@ describe("insertSegmentFrom loader shape", () => {
         base(
           `{ ins: { set: 'presets.default.root', insertSegmentFrom: 'themes', anchor: 'git', relation: 'before' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -323,7 +316,6 @@ describe("edit mode is in every config", () => {
         root: 'directory',
         presets: {},
       }`,
-      ALLOWED,
     );
     expect(config.actions[EDIT_TOGGLE_ACTION]).toBeDefined();
     expect(config.variables[EDIT_MODE_KEY]).toBeDefined();
@@ -338,7 +330,7 @@ describe("edit mode is in every config", () => {
   });
 
   test("a config referencing edit.toggle gets the toggle var + action synthesized", () => {
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     expect(config.actions[EDIT_TOGGLE_ACTION]).toEqual({
       set: EDIT_MODE_KEY,
       cycle: ["closed", EDIT_MODE_ARRANGE],
@@ -378,7 +370,6 @@ describe("edit mode is in every config", () => {
         root: { h: ['directory', 'trigger'] },
         presets: {},
       }`,
-      ALLOWED,
     );
     expect(config.actions[EDIT_TOGGLE_ACTION]).toBeDefined();
     expect(config.variables[EDIT_MODE_KEY]).toBeDefined();
@@ -394,7 +385,6 @@ describe("edit mode is in every config", () => {
           root: 'edit.mine',
           presets: {},
         }`,
-        ALLOWED,
       ),
     ).toThrow(/reserved "edit\." namespace/);
   });
@@ -404,7 +394,7 @@ describe("edit mode is in every config", () => {
 
 describe("edit chrome: what's spliced into the resolved preset root", () => {
   test("every ordinary segment gets a `-`, every gap gets a `+`", () => {
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     const names = segmentNamesOf(config.presets.default!.root!);
     // Original content untouched:
     expect(names).toEqual(
@@ -435,7 +425,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   });
 
   test("edit-mode's OWN synthesized chrome segments are exempt from further chrome", () => {
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     const names = segmentNamesOf(config.presets.default!.root!);
     // None of the "edit.default.remove*"/"edit.default.insert*" segments
     // themselves get a nested "-"/"+" — the splice recurses into containers
@@ -447,7 +437,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
   });
 
   test("every `+` ranges the one addable domain", () => {
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     const inserts = Object.entries(config.actions).filter(
       (
         e,
@@ -469,7 +459,7 @@ describe("edit chrome: what's spliced into the resolved preset root", () => {
     // Inside the cell means on the segment's own node, as its lead — not a
     // sibling cell a joiner separates from it. Both the live content node and
     // the name label that stands in for it carry it.
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     const leads = new Map<string, string>();
     for (const node of walkNodes(fragmentNode(config.presets.default!.root!))) {
       if (node.kind === "segment" && node.lead !== undefined) {
@@ -646,7 +636,9 @@ describe("edit chrome names follow their placement, not the walk", () => {
       };
       const leading = named(at - 2).filter((n) => n.includes(".insertSeg."));
       const calls = [cell.lead, cell.trail].flatMap((t) =>
-        t === undefined ? [] : templateActionRefs(t, {}).map(({ name }) => name),
+        t === undefined
+          ? []
+          : templateActionRefs(t, {}).map(({ name }) => name),
       );
       return [
         ...leading,
@@ -667,10 +659,13 @@ describe("edit chrome names follow their placement, not the walk", () => {
 
   test.each([
     ["in its row", "[ { h: ['directory', 'gitPr', 'git'] }, 'trigger' ]"],
-    ["in an earlier row", "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]"],
+    [
+      "in an earlier row",
+      "[ { h: ['gitPr'] }, { h: ['directory', 'git'] }, 'trigger' ]",
+    ],
   ])("an add %s renames no other placement's chrome", (_where, rows) => {
-    const before = parseAndValidate("<test>", BASE, ALLOWED);
-    const after = parseAndValidate("<test>", withRows(rows), ALLOWED);
+    const before = parseAndValidate("<test>", BASE);
+    const after = parseAndValidate("<test>", withRows(rows));
     for (const id of ["git", "trigger", "directory"]) {
       const kept = chromeNamesOf(before, id);
       // Its unit's segments, its two actions and a draft variable at least.
@@ -680,11 +675,10 @@ describe("edit chrome names follow their placement, not the walk", () => {
   });
 
   test("a removal leaves the next placement's names, and gives it the leading gap", () => {
-    const before = parseAndValidate("<test>", BASE, ALLOWED);
+    const before = parseAndValidate("<test>", BASE);
     const after = parseAndValidate(
       "<test>",
       withRows("[ { h: ['git'] }, 'trigger' ]"),
-      ALLOWED,
     );
     const kept = chromeNamesOf(before, "git");
     const now = chromeNamesOf(after, "git");
@@ -701,7 +695,6 @@ describe("edit chrome names follow their placement, not the walk", () => {
       withRows(
         "[ { h: [{ seg: 'git', id: 'git-2' }, { seg: 'git', id: 'git_2' }] }, 'trigger' ]",
       ),
-      ALLOWED,
     );
     const dash = chromeNamesOf(config, "git-2");
     const under = chromeNamesOf(config, "git_2");
@@ -713,7 +706,7 @@ describe("edit chrome names follow their placement, not the walk", () => {
   // The premise the names stand on: within a preset tree, every placement's
   // id is its own, with the settings menu and edit chrome spliced in.
   test("every placement id in the default config's preset trees is distinct", () => {
-    const config = parseAndValidate("<test>", "{}", ALLOWED);
+    const config = parseAndValidate("<test>", "{}");
     for (const preset of Object.values(config.presets)) {
       const ids = placementIds(fragmentNode(preset.root!));
       expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
@@ -790,7 +783,10 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "root: { v: [ { h: ['directory', 'git'] }, 'trigger' ], when: '{{ false }}' },",
       ),
     );
-    await CLICK_VERBS.get("set-state")!(`${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`, ctx);
+    await CLICK_VERBS.get("set-state")!(
+      `${S1}/${EDIT_MODE_KEY}/${EDIT_MODE_ARRANGE}`,
+      ctx,
+    );
     const liveToggle = (rendered: Frame, to: string): string | undefined =>
       ownUrls(rendered).find((u) =>
         effectsOf(u).some(
@@ -813,7 +809,6 @@ describe("edit mode shows the arrangement: each content cell reads as its name",
         "presets: {},",
         "presets: { label: { root: { v: [ { h: ['git', 'directory'] } ] } } },",
       ),
-      ALLOWED,
     );
     const stands = Object.keys(config.segments)
       .filter((n) => n.startsWith("edit."))
@@ -866,9 +861,10 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
     const original = durable.text()!;
     const placed = (target: string) =>
       ownUrls(render()).some((url) =>
-        effectsOf(url).some((effect) =>
-          effect.verb === "apply-layout-op" &&
-          effect.args[3] === encodeLayoutOp({ op: "remove", target }),
+        effectsOf(url).some(
+          (effect) =>
+            effect.verb === "apply-layout-op" &&
+            effect.args[3] === encodeLayoutOp({ op: "remove", target }),
         ),
       );
 
@@ -951,7 +947,7 @@ describe("a segment row's chrome rides its row", () => {
 
 describe("edit chrome is ordinary segment data — no special-cased render path", () => {
   test("padding applies to a chrome segment exactly like a hand-authored one", () => {
-    const config = parseAndValidate("<test>", BASE, ALLOWED);
+    const config = parseAndValidate("<test>", BASE);
     const sessionState = new SessionState();
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
@@ -1112,8 +1108,6 @@ describe("edit mode's save and cancel", () => {
       ...rt.ctx,
       log: (_level, message) => logs.push(message),
     });
-    expect(logs.join("\n")).toMatch(
-      /rewind: discarded draft \(session=s1\)/,
-    );
+    expect(logs.join("\n")).toMatch(/rewind: discarded draft \(session=s1\)/);
   });
 });

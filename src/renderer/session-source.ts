@@ -42,7 +42,7 @@ import {
 } from "./render-payload.js";
 import type { SessionStateReader } from "../renderer-interface/session-state.js";
 import type { HistoryDepth } from "./settings-history.js";
-import { settingCounts } from "./setting-drafts.js";
+import { settingCounts, stalePicks, type StalePick } from "./setting-drafts.js";
 import { layerFlags } from "../config/layer-role.js";
 
 // What a session's view draws from: the selections its slots settle and the
@@ -52,6 +52,9 @@ import { layerFlags } from "../config/layer-role.js";
 export interface SessionSource extends ViewSource {
   readonly payload: () => ViewPayload;
   readonly effective: () => EffectiveGlobals;
+  // Each stored pick of the session the bar does not wear, where it would
+  // have decided.
+  readonly stale: () => readonly StalePick[];
   // The session's world state (src/facts/world-state.ts), as the host last
   // handed it in.
   readonly facts: () => WorldState;
@@ -122,6 +125,9 @@ export function sessionSource(
         back: deps.navigation(sessionId, state.config),
       }),
     );
+    const stale = store.derive("session.stale", "computed", () =>
+      stalePicks(state.config, effective.read(), pick),
+    );
     const document = (): WorldState => deps.worldStates.of(sessionId);
     // [LAW:dataflow-not-control-flow] The payload is derived on every read:
     // composition is pure, so a throw reaches the draw.
@@ -132,6 +138,7 @@ export function sessionSource(
       session: sessionId,
       payload: () => payload.read(),
       effective: () => draw.read().effective,
+      stale: () => stale.read(),
       facts: document,
       // [LAW:types-are-the-program] A digest the document does not carry is a
       // run the host has not read for this session yet.

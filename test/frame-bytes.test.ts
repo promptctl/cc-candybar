@@ -67,12 +67,7 @@ function rig(
   opts: Omit<BuildLineOptions, "colorCompatibility">,
   depth: ColorCompatibility,
 ) {
-  const config = parseAndValidate(
-    "<user>",
-    src,
-    new Set(listResolvablePaletteNames()),
-    DEFAULT_DSL_CONFIG,
-  );
+  const config = parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);

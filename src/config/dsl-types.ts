@@ -33,6 +33,8 @@ import {
   isPlacementThemeName,
   parseSessionInt,
   PLACEMENT_EFFECTS,
+  storedPick,
+  type StoredPick,
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -136,7 +138,7 @@ export interface SegmentNode {
   readonly trail?: string;
   // Where this placement's unsaved setting values live (brandon-segment-
   // settings-i4n.g64): setting name → the session key configure mode's
-  // controls write and the `state` variable that reads it. The placement's
+  // controls write and the setting variable that reads it. The placement's
   // templates read `.settings` through these, so a pick shows the moment it
   // is made and `💾 save` writes it into the placement.
   // Synthesis-only, like `opens`: edit chrome mints one per declared setting.
@@ -167,7 +169,7 @@ export interface InsertCell {
   readonly by: InsertedBy;
 }
 
-// One setting's unsaved value: the session key it is held at, and the `state`
+// One setting's unsaved value: the session key it is held at, and the setting
 // variable a template reads it through — minted together, so a reader of the
 // key never looks the variable up to find it.
 export interface DraftSlot {
@@ -559,7 +561,8 @@ export type Globals = GlobalsOf<GlobalFieldRows>;
 export type VariableDecl =
   | AuthoredVariableDecl
   | DroppedVarDecl
-  | SourceVarDecl;
+  | SourceVarDecl
+  | SettingVarDecl;
 
 // What a config may write under `variables:`.
 export type AuthoredVariableDecl =
@@ -591,6 +594,17 @@ export interface DroppedVarDecl {
 // the view a session's declaration holds it for. Synthesized by the plugin
 // loader from a definition's `sources:`, never authored — the variable loader
 // accepts no `kind: "source"`.
+// [LAW:types-are-the-program] A placement setting's value: the session's pick
+// at `key` through the setting's one parse, else `saved`. Synthesis-only: edit
+// chrome mints one per placement setting and no config can write one, because
+// stale is a property of a setting and a plain `state` variable has no domain.
+export interface SettingVarDecl {
+  readonly kind: "setting";
+  readonly key: string;
+  readonly decl: SettingDecl;
+  readonly saved: SettingValue;
+}
+
 export interface SourceVarDecl {
   readonly kind: "source";
   // The folder the plugin's program writes its session files into: the
@@ -887,6 +901,26 @@ export function* stateVarDecls(
   }
 }
 
+// Every placement setting variable a config holds, by name. Edit chrome
+// mints them into the config's own variables, never a segment's.
+export function* settingVarDecls(
+  config: Pick<DslConfig, "variables">,
+): IterableIterator<readonly [name: string, decl: SettingVarDecl]> {
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "setting") yield [name, decl];
+  }
+}
+
+// [LAW:one-source-of-truth] What a placement setting variable holds for the
+// session's stored spelling `raw`: the variable's own read, and what a step
+// from it moves from.
+export function settingVarValue(
+  decl: SettingVarDecl,
+  raw: string | null,
+): SettingValue {
+  return placementValue(placementPick(decl.decl, raw), decl.saved);
+}
+
 // The settings every placement has without its segment declaring them.
 export const THEME_SETTING = "theme";
 export const EFFECT_SETTING = "effect";
@@ -1065,22 +1099,23 @@ export function parseSettingSpelling(
   return inSettingDomain(decl, value) ? value : undefined;
 }
 
-// [LAW:single-enforcer] What one setting of a placement holds: the session's
-// pick through the setting's draft slot (SegmentNode.drafts) when the
-// declaration admits it, else the placement's own value, else the
-// declaration's default. `pick` reads a slot — the render through its draft
-// variable, the doctor through the session's state — so the bar and the
-// doctor cannot disagree about what a placement wears.
-export function placementSetting(
-  node: SegmentNode,
-  name: string,
+// [LAW:single-enforcer] THE parse of a session's pick for one placement
+// setting. The setting's variable, its draft, the order check and its stale
+// report all read this one parse, so no two of them disagree about the pick.
+export function placementPick(
   decl: SettingDecl,
-  pick: (draft: DraftSlot) => string | null,
+  raw: string | null,
+): StoredPick<SettingValue> {
+  return storedPick(raw, (r) => parseSettingSpelling(decl, r) ?? null);
+}
+
+// What a placement setting holds: a pick its domain admits, else the
+// placement's saved value. A stale pick draws the saved value and stays stored.
+export function placementValue(
+  pick: StoredPick<SettingValue>,
+  saved: SettingValue,
 ): SettingValue {
-  const saved = node.settings?.[name] ?? decl.default;
-  const draft = node.drafts?.[name];
-  const raw = draft === undefined ? null : pick(draft);
-  return (raw === null ? undefined : parseSettingSpelling(decl, raw)) ?? saved;
+  return pick.kind === "held" ? pick.value : saved;
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

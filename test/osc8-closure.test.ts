@@ -25,14 +25,11 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // OSC-8 grammar: open = ESC ] 8 ; <params> ; <URI> ST, close = ESC ] 8 ; ; ST.
 // The close has an EMPTY URI; an open has a non-empty one. rich-js's
@@ -66,12 +63,20 @@ function osc8Walk(rendered: string): {
 }
 
 function render(src: string, opts: BuildLineOptions): Frame {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-  return drawPayload(config, compiled, store, registry, {}, instantOf(new Date()), opts).frame;
+  return drawPayload(
+    config,
+    compiled,
+    store,
+    registry,
+    {},
+    instantOf(new Date()),
+    opts,
+  ).frame;
 }
 
 // A multi-link toolbar with PLAIN text trailing the final link — the shape that
@@ -96,11 +101,15 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
   // re-open a split link region, never leave a visual line ending mid-link.
   for (const width of [Number.POSITIVE_INFINITY, 80, 40, 20, 12]) {
     test(`every link is closed and output never ends mid-link (width=${width})`, () => {
-      const out = ansiOf(render(TOOLBAR, {
-        endcaps: "powerline",
-        colorCompatibility: "truecolor", wrap: true, padding: 0,
-        width,
-      }));
+      const out = ansiOf(
+        render(TOOLBAR, {
+          endcaps: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 0,
+          width,
+        }),
+      );
       const { opens, closes, endsLinked } = osc8Walk(out);
       // Three authored links → at least three open/close pairs (a width-wrap may
       // add more as it splits-and-re-wraps a region across visual lines).
@@ -131,11 +140,15 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       root: { v: ['${SETTINGS_ANCHOR}', 'bar'] },
     }`;
     // The bar's own row; the settings door (a link of its own) sits above it.
-    const out = ansiOf(render(src, {
-      endcaps: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    })).split("\n")[1]!;
+    const out = ansiOf(
+      render(src, {
+        endcaps: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      }),
+    ).split("\n")[1]!;
     const { opens, closes, endsLinked } = osc8Walk(out);
     expect(opens).toBe(2);
     expect(closes).toBe(2);
@@ -155,11 +168,15 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
       },
       root: 'bar',
     }`;
-    const out = ansiOf(render(src, {
-      endcaps: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    }));
+    const out = ansiOf(
+      render(src, {
+        endcaps: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      }),
+    );
     const idsByUrl = new Map<string, string[]>();
     for (const seq of osc8Sequences(out)) {
       if (seq.uri === "") continue;

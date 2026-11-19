@@ -38,6 +38,9 @@ import {
   instantFacts,
 } from "./render-payload.js";
 import { type SessionSource } from "./session-source.js";
+import type { StalePick } from "./setting-drafts.js";
+import { notInstalledTheme } from "../themes/policy.js";
+import { toString as varToString } from "../var-system/types.js";
 import { runInAction } from "mobx";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
@@ -631,7 +634,7 @@ export function drawRender(
   const {
     frame,
     memory,
-    warnings: drawnWarnings,
+    warnings: walked,
     segments,
     evaluated,
     cellBreaks,
@@ -639,6 +642,15 @@ export function drawRender(
   } = width === payload.term.cols
     ? draw()
     : partsOf(state.compiled, view.store).withTerminalWidth(width, draw);
+  // [LAW:no-silent-failure] Each stale pick beside what the walk could not
+  // honour, naming what the bar wears instead: read from the variable the
+  // setting's own control reads, after the walk that read it.
+  const drawnWarnings: readonly RenderWarning[] = [
+    ...walked,
+    ...view.source
+      .stale()
+      .map((s) => staleWarning(s, varToString(view.store.read(s.wears)))),
+  ];
   // [LAW:one-source-of-truth] What each copy click this frame mints copies,
   // read back when the click runs (the copy-diagnostic verb): the list this
   // renderer last delivered, never text carried in the link. Recorded when
@@ -816,6 +828,23 @@ const faultOf = (
   message: string,
   subject?: string,
 ): Fault<FaultKind> => ({ level, kind, subject, message });
+
+// [LAW:one-source-of-truth] THE sentence of a stale pick, composed once from
+// its data. A theme's says it in the one wording every installed-theme check
+// uses.
+function staleWarning(s: StalePick, wears: string): RenderWarning {
+  const why =
+    s.domain === "theme"
+      ? notInstalledTheme(s.stored)
+      : `"${s.stored}" is not a value it can hold`;
+  return {
+    kind: "stale",
+    setting: s.setting,
+    stored: s.stored,
+    wears,
+    message: `${s.setting}: ${why}, so the bar wears "${wears}" (the pick stays stored)`,
+  };
+}
 
 // The warning a load carried, beside what a draw could not honour.
 interface LoadWarning {

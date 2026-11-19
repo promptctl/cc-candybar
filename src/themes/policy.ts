@@ -38,23 +38,35 @@ export { TRIAL_SHADE_NAMES, TRIAL_VARIATION_NAMES };
 // name → the theme that replaced it. `dark`/`light` were second names for the
 // textual palettes, and a second name put a step in every theme carousel that
 // recoloured nothing (brandon-theme-picker-bgw.exj.dw1) — but the settings
-// menu's own save could write them, so a file may still hold one. The loader
-// refuses it [LAW:no-silent-failure], as does a `globals.palette` rule that
-// renders one, and each refusal names the theme to write instead. A
-// future retirement is one row here.
+// menu's own save could write them, so a file or a session may still hold
+// one, and every refusal or report of one names the theme to write instead.
+// A future retirement is one row here.
 // A Map, not an object literal: an authored name is user data.
 const RETIRED_THEMES: ReadonlyMap<string, string> = new Map([
   ["dark", "textual-dark"],
   ["light", "textual-light"],
 ]);
 
-// The sentence appended to an unknown-theme refusal — empty for a name that
-// was never installed, so every refusal site spells it the same way.
-export function retiredThemeNote(name: unknown): string {
-  const to = typeof name === "string" ? RETIRED_THEMES.get(name) : undefined;
-  return to === undefined
-    ? ""
-    : ` — "${name as string}" was retired; write "${to}", the same palette`;
+// [LAW:single-enforcer] THE installed-theme authority: the loader, the session
+// gate, the fold over a stored pick, a rule's result and a placement's theme
+// all ask here. The registry's list is static for the life of the process, so
+// the set is built once.
+let installed: ReadonlySet<string> | undefined;
+export function isInstalledTheme(name: string): boolean {
+  installed ??= new Set(listThemePalettes());
+  return installed.has(name);
+}
+
+// [LAW:one-source-of-truth] THE wording of a name no installed theme answers
+// to, shared by every site that refuses or reports one, with the theme to
+// write instead when the name was retired.
+export function notInstalledTheme(name: string): string {
+  const to = RETIRED_THEMES.get(name);
+  const note =
+    to === undefined
+      ? ""
+      : ` — "${name}" was retired; write "${to}", the same palette`;
+  return `"${name}" is not an installed theme${note}`;
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
@@ -79,14 +91,10 @@ export const THEME_FLOOR = "textual-dark";
 // null and lands on the config default by the same code path a session that
 // clicked lands on its pick.
 //
-// [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
-// SessionState string and this field's domain: it returns the typed value or
-// null, and null means "no session pick" — indistinguishable, on purpose, from
-// never having clicked. That is what makes a stale entry from a prior config's
-// vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
-// default rather than throw or render something the label disagrees with
-// [LAW:no-silent-failure] — the caller publishes what this returns as
-// `<field>.effective`, so bar and label always trace to one value.
+// [LAW:parse-dont-validate] The pick arrives parsed (`StoredPick`): only a
+// held value decides. A stale one falls through to the config's value as an
+// unset one does, so the bar draws something its domain holds, but it stays a
+// distinct arm so the caller can report it and leave it stored.
 //
 // [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
 // chain documented in src/config/presets.ts — a fragment some transient MODE of
@@ -104,21 +112,43 @@ export const THEME_FLOOR = "textual-dark";
 // carried entirely by whether this argument has a value.
 export function effectiveGlobal<T>(
   staged: T | null | undefined,
-  sessionPick: string | null,
+  pick: StoredPick<T>,
   configDefault: T | null | undefined,
   floor: T,
-  parseSession: (raw: string) => T | null,
 ): T {
-  const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return staged ?? picked ?? configDefault ?? floor;
+  return (
+    staged ??
+    (pick.kind === "held" ? pick.value : null) ??
+    configDefault ??
+    floor
+  );
 }
 
-// [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
-// is exactly the registry's names — no alias, so every name is its palette's
-// own and a label always names the palette the bar wears. "custom" and "random" are
-// deliberately absent: neither names a concrete palette (custom needs inline
-// colors; random is a per-session sentinel). Config validators that gate a
-// palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
+// [LAW:types-are-the-program] What a session holds for one setting, parsed
+// once against the setting's domain: nothing, a value the domain holds, or a
+// spelling it does not (a theme no longer installed, a style the config no
+// longer declares, a number outside a narrowed range). Stale is not unset: the
+// bar draws the fallback, says so, and keeps the spelling stored, so it holds
+// again the moment its domain does.
+export type StoredPick<T> =
+  | { readonly kind: "unset" }
+  | { readonly kind: "held"; readonly value: T }
+  | { readonly kind: "stale"; readonly raw: string };
+
+// [LAW:parse-dont-validate] THE parse of a stored spelling, given its domain's
+// parse of one spelling.
+export function storedPick<T>(
+  raw: string | null,
+  parse: (raw: string) => T | null,
+): StoredPick<T> {
+  if (raw === null) return { kind: "unset" };
+  const value = parse(raw);
+  return value === null ? { kind: "stale", raw } : { kind: "held", value };
+}
+
+// [LAW:one-source-of-truth] The installed themes, the registry's names — no
+// alias, so every name is its palette's own and a label always names the
+// palette the bar wears.
 export function listResolvablePaletteNames(): readonly string[] {
   return listThemePalettes();
 }
@@ -135,13 +165,9 @@ export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
 }
 
-// Membership in `placementThemeNames`, which the render asks of every
-// placement's `theme` each render. The installed themes are fixed for the
-// life of the process, so the set is built once.
-let placementThemeSet: ReadonlySet<string> | undefined;
+// Membership in `placementThemeNames`.
 export function isPlacementThemeName(name: string): boolean {
-  placementThemeSet ??= new Set(placementThemeNames());
-  return placementThemeSet.has(name);
+  return name === FOLLOW_BAR || isInstalledTheme(name);
 }
 
 // --- Per-config member selection ---
@@ -165,21 +191,32 @@ export function isPlacementThemeName(name: string): boolean {
 // stale session entry is, and collapses one rung onward rather than throwing.
 export function effectiveMemberName(
   stagedName: string | undefined,
-  sessionPick: string | null,
+  pick: StoredPick<string>,
   configDefault: string | undefined,
   floor: string,
   declared: Readonly<Record<string, unknown>>,
 ): string {
-  const member = (raw: string): string | null =>
-    Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+  const member = memberOf(declared);
   return effectiveGlobal(
     stagedName === undefined ? null : member(stagedName),
-    sessionPick,
+    pick,
     member(configDefault ?? floor),
     floor,
-    member,
   );
 }
+
+// [LAW:one-source-of-truth] The parse of a per-config domain's member: a name
+// the config declares, or nothing.
+const memberOf =
+  (declared: Readonly<Record<string, unknown>>) =>
+  (raw: string): string | null =>
+    Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+
+// A stored pick of a per-config member (a preset).
+export const memberPick = (
+  raw: string | null,
+  declared: Readonly<Record<string, unknown>>,
+): StoredPick<string> => storedPick(raw, memberOf(declared));
 
 // --- A globals field that may hold a NAME or a RULE ---
 
@@ -253,7 +290,7 @@ export function isExpression(
 // name from ANY rung into that field's value or reports that it names nothing.
 export function resolveSelection<T>(
   stagedName: string | undefined,
-  sessionPick: string | null,
+  pick: StoredPick<Decided<T>>,
   globalsValue: string | undefined,
   floor: Decided<T>,
   named: (raw: string) => Decided<T> | null,
@@ -267,10 +304,9 @@ export function resolveSelection<T>(
     : named(globalsValue ?? floor.name);
   return effectiveGlobal<Selection<T>>(
     stagedName === undefined ? null : named(stagedName),
-    sessionPick,
+    pick,
     configRung,
     floor,
-    named,
   );
 }
 
@@ -349,12 +385,19 @@ export function decideStyleName(
   );
 }
 
+// A stored style pick, parsed against the config's declared styles.
+export const stylePick = (
+  raw: string | null,
+  declaredStyles: Readonly<Record<string, ThemeKey>>,
+): StoredPick<DecidedStyle> =>
+  storedPick(raw, (name) => namedStyle(name, declaredStyles));
+
 // The style a render should use, as far as it can be known before the render runs
 // [LAW:one-type-per-behavior] — `resolveSelection` with the style's own two
 // values.
 export function resolveStyleSelection(
   stagedStyle: string | undefined,
-  sessionStyle: string | null,
+  sessionStyle: StoredPick<DecidedStyle>,
   globalsStyle: string | undefined,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): StyleSelection {
@@ -459,12 +502,16 @@ export function decideEffectName(name: string): DecidedEffect {
   );
 }
 
+// A stored effect pick, parsed against the catalogue.
+export const effectPick = (raw: string | null): StoredPick<DecidedEffect> =>
+  storedPick(raw, namedEffect);
+
 // The effect a render should wear, as far as it can be known before the render
 // runs [LAW:one-type-per-behavior] — `resolveSelection` with the effect's own two
 // values.
 export function resolveEffectSelection(
   stagedEffect: string | undefined,
-  sessionEffect: string | null,
+  sessionEffect: StoredPick<DecidedEffect>,
   globalsEffect: string | undefined,
 ): EffectSelection {
   return resolveSelection(

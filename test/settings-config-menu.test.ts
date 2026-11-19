@@ -31,7 +31,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig } from "../src/dsl/render";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveInputs,
   renderOptionsOf,
@@ -71,8 +70,6 @@ import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("settings-ui-aok-3");
 
 // The config that motivated the whole epic: a `root` naming two segments and
@@ -120,12 +117,7 @@ function rig(
   // Everything the daemon's cache entry holds for one config — rebuilt whole
   // on a reload, the old registry disposed once the new one is built.
   const load = (text: string) => {
-    const config = parseAndValidate(
-      "<user>",
-      text,
-      ALLOWED,
-      DEFAULT_DSL_CONFIG,
-    );
+    const config = parseAndValidate("<user>", text, DEFAULT_DSL_CONFIG);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", sessionState);
     const compiled = registerDslConfig(config, registry, {
@@ -133,8 +125,7 @@ function rig(
     });
     // What the render cache reads off the file's raw parse (render.ts).
     const fileHeld = fileHeldSettings(
-      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED)
-        .raw,
+      loadConfigSource("<user>", text, DEFAULT_DSL_CONFIG, NO_PROJECT).raw,
     );
     return { config, store, registry, compiled, fileHeld };
   };
@@ -333,24 +324,18 @@ describe("the save action", () => {
     const config = parseAndValidate(
       "<test>",
       withActions(`{ s: { save: true } }`),
-      ALLOWED,
     );
     expect(config.actions.s).toEqual({ save: true, layer: "user" });
   });
 
   test("a save carries nothing: any other value or key is a load error", () => {
     expect(() =>
-      parseAndValidate(
-        "<test>",
-        withActions(`{ s: { save: 'theme' } }`),
-        ALLOWED,
-      ),
+      parseAndValidate("<test>", withActions(`{ s: { save: 'theme' } }`)),
     ).toThrow(/save must be the literal true/);
     expect(() =>
       parseAndValidate(
         "<test>",
         withActions(`{ s: { save: true, key: 'theme' } }`),
-        ALLOWED,
       ),
     ).toThrow(/Unknown key "key" on a save action/);
   });
@@ -362,7 +347,6 @@ describe("the save action", () => {
         withActions(
           `{ s: { set: 'theme', persist: 'palette', persistWhen: 'p', from: 'themes' } }`,
         ),
-        ALLOWED,
       ),
     ).toThrow(/persistWhen was removed: declare the `set` alone .*save: true/);
   });
@@ -1372,7 +1356,6 @@ describe("the preset action", () => {
       parseAndValidate(
         "<user>",
         JSON.stringify({ actions: { a: action } }),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(message);
@@ -1387,7 +1370,6 @@ describe("an action's layer", () => {
     parseAndValidate(
       "<user>",
       JSON.stringify({ actions: { a: action } }),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     ).actions["a"];
 
@@ -1643,7 +1625,6 @@ describe("the themeDefault action", () => {
       parseAndValidate(
         "<user>",
         JSON.stringify({ actions: { a: action } }),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(message);

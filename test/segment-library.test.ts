@@ -15,7 +15,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
@@ -39,8 +38,6 @@ import { VERB_SET_STATE } from "../src/click/wire";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 
 const PAYLOAD = {
@@ -69,7 +66,6 @@ function rig(width: number, userSegments = "") {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, segments: { ${userSegments} }, root: { h: ['directory', 'model'] } }`,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
@@ -78,13 +74,21 @@ function rig(width: number, userSegments = "") {
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp/proj" });
   sessionState.set(SID, EDIT_MODE_KEY, "arrange");
   const render = (): Frame =>
-    drawPayload(config, compiled, store, registry, PAYLOAD, instantOf(new Date()), {
-      endcaps: "powerline",
-      colorCompatibility: "truecolor",
-      wrap: true,
-      padding: 1,
-      width,
-    }).frame;
+    drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      PAYLOAD,
+      instantOf(new Date()),
+      {
+        endcaps: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 1,
+        width,
+      },
+    ).frame;
   // The `+` opener is the one coupled write whose 4th argument is the page
   // key of its 2nd; opening applies exactly those writes.
   let pageKey = "";
@@ -175,14 +179,19 @@ describe("the add menu is a segment library", () => {
       (_, i) => `mine${i}`,
     );
     const r = rig(80, names.map((n) => `${n}: { template: 'M' }`).join(", "));
-    expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])!.map(([n]) => n)).toEqual(
-      names,
-    );
+    expect(
+      walk(r)
+        .get(GROUP_LABELS[OTHER_GROUP])!
+        .map(([n]) => n),
+    ).toEqual(names);
     r.dispose();
   });
 
   test("a multi-line description folds onto its one row", () => {
-    const r = rig(400, `mine: { template: 'M', description: 'Shows X.\\n  Hidden when Y.' }`);
+    const r = rig(
+      400,
+      `mine: { template: 'M', description: 'Shows X.\\n  Hidden when Y.' }`,
+    );
     expect(walk(r).get(GROUP_LABELS[OTHER_GROUP])).toEqual([
       ["mine", "Shows X. Hidden when Y."],
     ]);

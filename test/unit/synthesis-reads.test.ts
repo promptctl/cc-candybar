@@ -56,12 +56,7 @@ describe("unresolvedReads", () => {
   test.each(cases)(
     "every read the chrome mints over %s resolves",
     (path, source, dflt) => {
-      const { config, placed, dropped } = parseAndPlace(
-        path,
-        source,
-        undefined,
-        dflt,
-      );
+      const { config, placed, dropped } = parseAndPlace(path, source, dflt);
       expect(dropped).toEqual([]);
       expect(unresolvedReads(config, placed)).toEqual([]);
     },

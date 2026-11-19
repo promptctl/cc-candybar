@@ -6,7 +6,6 @@
 // DEFAULT_DSL_CONFIG (not a hand-rolled template) is deliberate: a synthetic
 // segment could pass while the SHIPPED gitaculous regresses.
 
-
 import { drawPayload } from "./helpers/draw-payload";
 import { unscriptedRuns } from "./helpers/fake-launcher";
 import type { Frame, Run } from "../src/render/frame";
@@ -58,7 +57,6 @@ function render(): Frame {
   const config = parseAndValidate(
     "<interior-color>",
     userSource,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
 
@@ -66,11 +64,21 @@ function render(): Frame {
   const registry = new SourceRegistry(store, "", new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-    return drawPayload(config, compiled, store, registry, GIT_PAYLOAD, instantOf(new Date()), {
-      endcaps: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0,
-      width: Number.POSITIVE_INFINITY,
-    }).frame;
+    return drawPayload(
+      config,
+      compiled,
+      store,
+      registry,
+      GIT_PAYLOAD,
+      instantOf(new Date()),
+      {
+        endcaps: "powerline",
+        colorCompatibility: "truecolor",
+        wrap: true,
+        padding: 0,
+        width: Number.POSITIVE_INFINITY,
+      },
+    ).frame;
   } finally {
     registry.dispose();
   }
