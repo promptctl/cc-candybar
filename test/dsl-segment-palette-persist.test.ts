@@ -65,7 +65,6 @@ import {
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { stateDir } from "../src/daemon/paths";
 import { bareGates } from "./helpers/gates";
 import { systemTimekeeper } from "../src/time";
@@ -472,7 +471,6 @@ function makeCache(): {
       clock: systemTimekeeper,
       stateDir: stateDir(durable.host),
       locations: locations(durable.host),
-      storage: NO_PLUGIN_STORAGE,
       gates: bareGates(),
       sessionState,
       watchers,

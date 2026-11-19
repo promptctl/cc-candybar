@@ -28,7 +28,6 @@ import { hasCacheField } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
 import { textOf } from "../src/render/frame";
 import { viewFacts } from "./helpers/view-facts";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { answerRepo } from "./helpers/repo-approval";
 import { installFromRepo } from "../src/plugin-install";
 import { bindSelf } from "../src/config/loader/refs";
@@ -960,7 +959,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,
@@ -1615,7 +1613,6 @@ describe("an installed plugin", () => {
         clock: systemTimekeeper,
         stateDir: stateDir(host),
         locations: locations(host),
-        storage: NO_PLUGIN_STORAGE,
         gates: bareGates(),
         sessionState: new SessionState(),
         watchers,

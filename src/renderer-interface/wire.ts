@@ -32,7 +32,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 8;
+export const RENDERER_WIRE_VERSION = 10;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -49,7 +49,7 @@ export function rendererWireVersionProblem(
 
 // [LAW:parse-dont-validate] A worktree's private version is checked before
 // its boot shape. Report a mismatched value before announcing readiness.
-export function rendererBootFrom(raw: unknown): WireBoot {
+export function rendererBootFrom(raw: unknown): RendererBoot {
   if (!isPlainObject(raw) || raw.kind !== "boot")
     throw new Error("expected the renderer boot message first");
   const mismatch = rendererWireVersionProblem("host", raw.wireVersion);
@@ -81,30 +81,22 @@ export function rendererBootFrom(raw: unknown): WireBoot {
     locations: { home, configHome, dataHome, dataDirs },
     memoryLimitBytes,
     stored: storedStateOf(boot.stored),
-    ...(boot.subscriptionUpdates === true ? { subscriptionUpdates: true } : {}),
   };
 }
 
-// Opt-in within v8. An older renderer ignores it, and an older host omits it.
-type WireBoot = RendererBoot & { readonly subscriptionUpdates?: true };
-
 type Answer = Timed<RendererOutput | AdapterOutput>;
 type WireAnswer<T extends Answer = Answer> = T extends Answer
-  ? Omit<T, "subscriptions" | "wake"> &
-      (
-        | { readonly subscriptions: Subscriptions & Pick<T, "wake"> }
-        | (Pick<T, "wake"> & { readonly subscriptions?: Subscriptions })
-      )
+  ? Omit<T, "subscriptions"> & { readonly subscriptions?: Subscriptions }
   : never;
 
-// A reach's path in `AdapterToHost`, dotted: `storage.hold`, `storage.release`.
+// A notice names the callback it represents.
 export type ReachPath = string;
 
 export type HostLine =
   | {
       readonly kind: "boot";
       readonly wireVersion: RendererWireVersion;
-      readonly boot: WireBoot;
+      readonly boot: RendererBoot;
     }
   | {
       readonly kind: "input";
@@ -170,7 +162,6 @@ type ReachKinds<T> = {
 export const REACH_KINDS: ReachKinds<AdapterToHost> = {
   log: "notice",
   eventAnswered: "notice",
-  storage: { hold: "notice", release: "notice" },
 };
 
 type Reach = (...args: readonly unknown[]) => unknown;
@@ -278,30 +269,42 @@ export function rendererOverLines(deps: {
     const configs = compareStructural(subscriptions.configs, next.configs)
       ? subscriptions.configs
       : next.configs;
+    const managedFolders = compareStructural(
+      subscriptions.managedFolders,
+      next.managedFolders,
+    )
+      ? subscriptions.managedFolders
+      : next.managedFolders;
+    const configSelections = compareStructural(
+      subscriptions.configSelections,
+      next.configSelections,
+    )
+      ? subscriptions.configSelections
+      : next.configSelections;
     if (
+      configSelections !== subscriptions.configSelections ||
       sources !== subscriptions.sources ||
       lanes !== subscriptions.lanes ||
-      configs !== subscriptions.configs
+      configs !== subscriptions.configs ||
+      managedFolders !== subscriptions.managedFolders
     )
-      subscriptions = { sources, lanes, configs };
+      subscriptions = {
+        sources,
+        lanes,
+        configs,
+        managedFolders,
+        configSelections,
+      };
     return subscriptions;
   };
   const received = (output: WireAnswer): Answer | null => {
-    if ("wake" in output) {
-      const declared =
-        output.subscriptions === undefined
-          ? subscriptions
-          : hold(output.subscriptions);
-      return declared === undefined
-        ? null
-        : { ...output, subscriptions: declared };
-    }
-    const {
-      subscriptions: { wake, ...declared },
-      ...rest
-    } = output;
-    // An older v8 renderer repeats its full declaration on every answer.
-    return { ...rest, wake, subscriptions: hold(declared) };
+    const declared =
+      output.subscriptions === undefined
+        ? subscriptions
+        : hold(output.subscriptions);
+    return declared === undefined
+      ? null
+      : { ...output, subscriptions: declared };
   };
   let next = 0;
   let gone: Error | null = null;
@@ -477,7 +480,6 @@ export function hostOverLines(
 export function serveRenderer(deps: {
   readonly renderer: TimedRenderer;
   readonly send: (line: RendererLine) => void;
-  readonly subscriptionUpdates?: boolean;
   readonly memory: () => MemorySizes;
   // The process's heap as text, each piece handed to `chunk` in order.
   readonly heapSnapshot: (chunk: (text: string) => void) => Promise<void>;
@@ -488,17 +490,9 @@ export function serveRenderer(deps: {
     n: number,
     { subscriptions, wake, ...rest }: Answer,
   ): void => {
-    if (deps.subscriptionUpdates) {
-      const updates = subscriptions === sent ? {} : { subscriptions };
-      send({ kind: "output", n, output: { ...rest, wake, ...updates } });
-      sent = subscriptions;
-    } else {
-      send({
-        kind: "output",
-        n,
-        output: { ...rest, subscriptions: { ...subscriptions, wake } },
-      });
-    }
+    const updates = subscriptions === sent ? {} : { subscriptions };
+    send({ kind: "output", n, output: { ...rest, wake, ...updates } });
+    sent = subscriptions;
   };
   return (line) => {
     switch (line.kind) {

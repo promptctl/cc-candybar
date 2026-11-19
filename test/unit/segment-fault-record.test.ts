@@ -31,7 +31,6 @@ import { instantOf, type Tick } from "../../src/utils/instant";
 import { ABSENT, pendingOf } from "../../src/utils/outcome";
 import { daemonFactsOf } from "../helpers/daemon-facts";
 import { TEST_SIGNER } from "../helpers/link-signer";
-import { NO_PLUGIN_STORAGE } from "../helpers/plugin-storage";
 import { viewFacts } from "../helpers/view-facts";
 
 const AT = instantOf(new Date(1_700_000_000_000));
@@ -59,7 +58,6 @@ const rendererOf = (): Renderer =>
     {
       log: () => {},
       eventAnswered: () => {},
-      storage: NO_PLUGIN_STORAGE,
     },
   );
 
@@ -157,7 +155,7 @@ test("a placement's error draws its ⚠ cell, reaches the ⚠ list in full, and 
   const r = rendererOf();
   const context = contextOf("s1");
   const session = context.hookData.session_id;
-  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [] }));
+  answered(await handIn(r, { kind: "start", viewers: {}, sessions: [], configs: [] }));
   answered(
     await handIn(r, {
       kind: "context",

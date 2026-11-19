@@ -156,6 +156,15 @@ export type Event =
       // view before the view opens.
       readonly viewers: Viewers;
       readonly sessions: readonly SessionConfig[];
+      // The host's current shared snapshots, once per origin. Retained
+      // origins can outlive their last session and reopen their cached state.
+      readonly configs: ReadonlyArray<{
+        readonly origin: RenderOrigin;
+        readonly config: ConfigSnapshot;
+        // A committed cache entry: reconstruct from this previously selected
+        // observed input, or from the current observation offered above.
+        readonly retained?: "current" | ConfigSnapshot;
+      }>;
     }
   | {
       // A request's opening turn, delivered ahead of it: the session's
@@ -396,6 +405,13 @@ export type Subscription =
   // the host holds and hands in as that one variable's value.
   | { readonly kind: "env"; readonly name: string };
 
+// [LAW:types-are-the-program] A committed cache entry's selected input. A
+// fallback entry keeps its origin but has no successful authored revision.
+export interface ConfigSelection {
+  readonly origin: RenderOrigin;
+  readonly digest: string | null;
+}
+
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read and which lanes its settings switch on. A session
 // absent from it needs nothing read. An unchanged declaration keeps its identity.
@@ -404,6 +420,9 @@ export type Subscription =
 // absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+  // Each managed folder declared by a retained config, even between sessions.
+  // Its address came from the host's plugin discovery.
+  readonly managedFolders: readonly string[];
   // The lanes each session with an open view switches on, as it draws them:
   // the host gates every subscriber by its lane, and holds the tmux status
   // line row of each session whose switch is on, in the pane its newest
@@ -414,6 +433,7 @@ export interface Subscriptions {
   // first named, follows its files while it is named, and lets it go when it
   // is not.
   readonly configs: readonly RenderOrigin[];
+  readonly configSelections: readonly ConfigSelection[];
 }
 
 interface RendererDeclaration {

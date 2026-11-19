@@ -5,6 +5,8 @@
 // failing no turn that answered.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
+import type { ConfigSnapshot } from "../../src/config/config-snapshot";
+import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { FOREGROUND_BURST } from "../../src/utils/keyed-serial-queue";
@@ -16,21 +18,27 @@ import {
   rendererOf,
   type AdapterOutput,
   type EffectId,
+  type Event,
   type PushedFrame,
   type RendererOutput,
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
 import type { AdapterReply } from "../../src/renderer-interface/adapter";
+import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
-import type { Tick } from "../../src/utils/instant";
+import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
 import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
+import { ABSENT } from "../../src/utils/outcome";
+import { digestOf } from "../../src/utils/plain";
+import { heardRequest } from "../helpers/click";
+import { daemonFactsOf } from "../helpers/daemon-facts";
 
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
-const NONE: Subscriptions = { sources: {}, lanes: {}, configs: [] };
+const NONE: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] };
 
 // A clock that reads `wall` and `mono` as they stand, and sets no timer: no
 // output here declares a wake.
@@ -148,6 +156,7 @@ const answered = (): RendererOutput => ({
 
 test("a start heads the mailbox, behind only the slot in progress", async () => {
   const heard: string[] = [];
+  const followed = jest.fn(NO_ACTS.configs.follow);
   let open = (): void => {};
   const opened = new Promise<void>((resolve) => (open = resolve));
   const host = rendererHost(
@@ -180,7 +189,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
       recorded: () => {},
       holding: () => () => {},
     },
-    NO_ACTS,
+    { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
   );
   const asked = host.ask({ kind: "close-journal" });
   const waiting = host.deliver(
@@ -197,6 +206,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   open();
   await Promise.all([asked, waiting, started]);
   expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+  expect(followed).not.toHaveBeenCalled();
 });
 
 test("every turn's record reaches `recorded`, whatever input it took and however it was asked", async () => {
@@ -531,22 +541,118 @@ test("a config named by a push reaches the renderer before the next queued event
   expect(seen).toEqual(["push", "config", "due"]);
 });
 
-test("a failed start's input does not keep the previous renderer's served config", async () => {
+test("failed replacement starts leave the accepted declaration until a complete successor responds", async () => {
   const origin = {
     projectDir: "/p",
     cwd: "/p",
     target: { source: "search" as const },
   };
+  const config = {
+    chain: [],
+    repo: null,
+    plugins: [],
+    strays: [],
+    checkout: { root: origin.cwd, git: false },
+    notices: [],
+    watch: null,
+  };
+  const context = heardRequest("added", "/added");
+  const added = context.requested;
+  const addedConfig: ConfigSnapshot = {
+    ...config,
+    checkout: { root: added.cwd, git: false },
+  };
+  const absent = { ...ABSENT, at: instantOf(new Date(0)) };
+  const worldState = {
+    v: FACTS_VERSION,
+    session: context.hookData.session_id,
+    seq: 1,
+    builtins: {
+      session: absent,
+      today: absent,
+      speed: absent,
+      context: absent,
+      metrics: absent,
+      activity: absent,
+      cache: absent,
+      autocompact: absent,
+      git: absent,
+      pr: absent,
+      tmux: absent,
+      hostName: absent,
+      hostUser: absent,
+    },
+    sources: {},
+    runs: {},
+    env: {},
+    daemon: daemonFactsOf(),
+    diagnostics: [],
+  };
+  const previous = { ...NONE, sources: { kept: [] }, configs: [origin] };
+  const selectedPlan = {
+    ...previous,
+    configSelections: [{ origin, digest: digestOf(config) }],
+  };
+  const taken: Subscriptions[] = [];
+  const heard: Event[] = [];
+  const stored: StoreWrite[] = [];
+  const recorded: string[] = [];
+  const performed: string[] = [];
+  const write: StoreWrite = {
+    store: "session-state",
+    key: sessionIdOf("kept"),
+    value: { "open-menu": "before failing" },
+  };
   const read: string[] = [];
+  const discoveries: string[] = [];
+  const followed: string[][] = [];
+  const heldPaths = new Set<string>();
+  let attempted:
+    | "make"
+    | "follow"
+    | "prepare"
+    | "transport"
+    | "renderer"
+    | "success" = "success";
+  let selected = false;
+  let keepsDemand = true;
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
-        event: async () => ({
-          ...answered(),
-          subscriptions: { ...NONE, configs: [origin] },
-        }),
+        event: async ({ event }) => {
+          heard.push(event);
+          if (event.kind === "start") {
+            if (attempted === "transport") throw new Error("lost transport");
+            if (attempted === "renderer")
+              return {
+                ...answered(),
+                kind: "threw",
+                failure: failureOf(new Error("opening failed")),
+                stored: [write],
+                record: [["restoring", "failed after work"]],
+                effects: [
+                  {
+                    kind: "copy",
+                    id: 1 as EffectId,
+                    session: null,
+                    text: "work completed",
+                  },
+                ],
+              };
+            return {
+              ...answered(),
+              subscriptions: keepsDemand ? selectedPlan : NONE,
+            };
+          }
+          if (event.kind === "effect-done") return answered();
+          return {
+            ...answered(),
+            subscriptions:
+              event.kind === "config" || selected ? selectedPlan : previous,
+          };
+        },
         adapter: async () => {
           throw new Error("no push here");
         },
@@ -554,20 +660,46 @@ test("a failed start's input does not keep the previous renderer's served config
     ),
     () => {},
     {
-      subscribed: () => {},
+      subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
-      stored: () => {},
-      recorded: () => {},
+      stored: (writes) => void stored.push(...writes),
+      recorded: (record) =>
+        void recorded.push(...record.map(([key, value]) => `${key}=${value}`)),
       holding: () => () => {},
     },
     {
       ...NO_ACTS,
+      perform: async (act) => {
+        if (act.kind !== "copy") throw new Error(`unexpected ${act.kind}`);
+        performed.push(act.text);
+        return { kind: "ok" };
+      },
       configs: {
         ...NO_ACTS.configs,
-        follow: () => {},
+        follow: (wanted) => {
+          const paths = wanted.map(({ cwd }) => cwd);
+          followed.push(paths);
+          for (const cwd of paths) {
+            if (!heldPaths.has(cwd)) discoveries.push(cwd);
+            heldPaths.add(cwd);
+          }
+          if (attempted === "follow" && paths.includes(added.cwd))
+            throw new Error("follow failed after acquisition");
+          for (const cwd of heldPaths)
+            if (!paths.includes(cwd)) heldPaths.delete(cwd);
+        },
+        retainedOf: (of) =>
+          of.cwd === origin.cwd && selected ? "current" : undefined,
+        selected: (entries, delivered) => {
+          if (entries.length > 0) expect(delivered(origin)).toBe(config);
+          selected = entries.length > 0;
+        },
         snapshotOf: ({ cwd }) => {
           read.push(cwd);
-          return null;
+          if (!heldPaths.has(cwd)) return null;
+          if (cwd === added.cwd)
+            return attempted === "prepare" ? null : addedConfig;
+          return config;
         },
       },
     },
@@ -576,12 +708,80 @@ test("a failed start's input does not keep the previous renderer's served config
   await host.answer(due);
   await host.answer(due);
   expect(read).toEqual(["/p"]);
-  const start = await host.start(() => {
-    throw new Error("start could not be made");
-  }, []);
-  expect(start.kind).toBe("threw");
-  await host.answer(due);
-  expect(read).toEqual(["/p", "/p"]);
+  expect(taken).toEqual([previous]);
+  const start = () =>
+    host.start(() => {
+      if (attempted === "make") throw new Error("start maker failed");
+      return {
+        kind: "event",
+        event: {
+          kind: "start",
+          viewers: {},
+          sessions: [{ context, worldState }],
+        },
+      };
+    }, []);
+  for (const [stage, reason] of [
+    ["make", "start maker failed"],
+    ["follow", "follow failed after acquisition"],
+    ["prepare", "no config snapshot"],
+    ["transport", "lost transport"],
+  ] as const) {
+    attempted = stage;
+    expect(await start()).toMatchObject({
+      kind: "threw",
+      failure: { message: expect.stringContaining(reason) },
+    });
+    expect(heldPaths).toEqual(new Set([origin.cwd]));
+    expect(selected).toBe(true);
+    expect(await host.answer(due)).toMatchObject({ kind: "threw" });
+    await expect(host.ask({ kind: "stats" })).rejects.toThrow(reason);
+  }
+  expect(taken).toEqual([previous]);
+
+  attempted = "renderer";
+  expect(await start()).toMatchObject({
+    kind: "threw",
+    settled: [{ kind: "ok" }],
+  });
+  expect(stored).toEqual([write]);
+  expect(recorded).toContain("restoring=failed after work");
+  expect(performed).toEqual(["work completed"]);
+  expect(heard.at(-1)).toMatchObject({
+    kind: "effect-done",
+    of: 1,
+    outcome: { kind: "ok" },
+  });
+  expect(taken).toEqual([previous]);
+  expect(heldPaths).toEqual(new Set([origin.cwd]));
+  expect(selected).toBe(true);
+
+  attempted = "success";
+  expect(await start()).toMatchObject({ kind: "answered" });
+  expect(heard.at(-1)).toMatchObject({
+    kind: "start",
+    configs: [
+      { origin, config, retained: "current" },
+      { origin: added, config: addedConfig },
+    ],
+  });
+  expect(heard.map(({ kind }) => kind)).toEqual([
+    "due",
+    "config",
+    "due",
+    "start",
+    "start",
+    "effect-done",
+    "start",
+  ]);
+  expect(discoveries.filter((key) => key === origin.cwd)).toEqual([origin.cwd]);
+  expect(heldPaths).toEqual(new Set([origin.cwd]));
+  expect(taken).toEqual([previous, selectedPlan]);
+
+  keepsDemand = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
+  expect(taken).toEqual([previous, selectedPlan, NONE]);
+  expect(followed.at(-1)).toEqual([]);
 });
 
 test("a declared wake is handed in as a `due`, and none is made after the wake closes", async () => {

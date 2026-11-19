@@ -79,6 +79,8 @@ export function clickParts(
     renderCache: {
       subscriptions: () => ({ sources: {} }),
       origins: () => [],
+      configSelections: () => [],
+      managedFolders: () => [],
       holdView: () => null,
       configDelivery: (origin) => {
         const snapshot = verbCtx.snapshotFor(origin);
@@ -87,7 +89,13 @@ export function clickParts(
       prune: () => {},
     } satisfies Pick<
       MainRendererParts["renderCache"],
-      "subscriptions" | "origins" | "holdView" | "configDelivery" | "prune"
+      | "subscriptions"
+      | "origins"
+      | "configSelections"
+      | "managedFolders"
+      | "holdView"
+      | "configDelivery"
+      | "prune"
     >,
     // No session renders here: no world state is held, and a session's
     // context is the one the rig's book holds.

@@ -564,10 +564,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         actFailed = { ...actFailed, answered: true };
       restateFaults();
     },
-    storage: {
-      hold: (id, folders) => managedStorage.hold(id, folders),
-      release: (id) => managedStorage.release(id),
-    },
   };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
@@ -577,6 +573,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
+    reloaded: (folders) => managedStorage.recheck(folders),
   });
 
   interface RendererRuntime {
@@ -588,19 +585,32 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   }
   const declared = new Map<
     RendererName,
-    Pick<Subscriptions, "sources" | "lanes">
+    Pick<Subscriptions, "sources" | "lanes"> & {
+      readonly managedFolders: ReadonlySet<string>;
+    }
   >();
   const aggregate = (): void => {
     const sources: Record<SessionId, Subscriptions["sources"][SessionId]> = {};
     const lanes: Record<SessionId, Subscriptions["lanes"][SessionId]> = {};
+    const folders = new Set<string>();
     // [LAW:one-source-of-truth] A whole declaration only replaces its own
     // renderer's part. Shared providers see the current owner's demands.
     for (const [name, subscription] of declared) {
-      for (const [id, values] of Object.entries(subscription.sources))
-        if (nameOf(id as SessionId) === name) sources[id as SessionId] = values;
+      for (const folder of subscription.managedFolders) folders.add(folder);
+      for (const [id, values] of Object.entries(subscription.sources)) {
+        if (nameOf(id as SessionId) !== name) continue;
+        // [LAW:single-enforcer] A source read uses this renderer's admitted
+        // folders. Another renderer holding the same path confers no access.
+        sources[id as SessionId] = values.filter(
+          (source) =>
+            source.kind !== "plugin" ||
+            subscription.managedFolders.has(source.folder),
+        );
+      }
       for (const [id, values] of Object.entries(subscription.lanes))
         if (nameOf(id as SessionId) === name) lanes[id as SessionId] = values;
     }
+    managedStorage.follow(folders);
     collector.subscribed({ sources });
     frameFeeds.switched(lanes);
     declaredBarPanes.declare(lanes);
@@ -678,8 +688,14 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       log,
       {
         subscribed: (subscriptions) => {
+          const managedFolders = configDiscovery.admitManagedFolders(
+            name,
+            subscriptions.managedFolders,
+            declared.get(name)?.managedFolders,
+          );
           declared.set(name, {
             sources: subscriptions.sources,
+            managedFolders,
             lanes: subscriptions.lanes,
           });
           aggregate();

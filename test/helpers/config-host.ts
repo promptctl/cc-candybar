@@ -1,3 +1,4 @@
+import { compareStructural, reaction } from "mobx";
 import { configQuery } from "../../src/config/loader/chain-places.js";
 // The host's half of a config, for a test that drives a render cache with no
 // renderer around it: a real config discovery over the test's own watcher
@@ -13,8 +14,10 @@ import {
 } from "../../src/config-hint";
 import {
   ConfigDiscovery,
+  type ConfigDiscoveryDeps,
   type RendererConfigs,
 } from "../../src/daemon/config-discovery/config-discovery";
+import type { ManagedStorage } from "../../src/daemon/cache/managed-storage";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import type { WatcherRegistry } from "../../src/daemon/cache/watchers";
 import type { Locations } from "../../src/config/loader/chain-places";
@@ -68,6 +71,7 @@ export function configHost(
     readonly stateDir: string;
     readonly watchers: Pick<WatcherRegistry, "batch">;
     readonly log?: DaemonLogger;
+    readonly reloaded?: ConfigDiscoveryDeps["reloaded"];
   },
 ): ConfigHost {
   const origins = new Map<string, RenderOrigin>();
@@ -82,6 +86,7 @@ export function configHost(
     stateDir: world.stateDir,
     watchers: world.watchers,
     log: world.log ?? (() => {}),
+    reloaded: world.reloaded,
     moved: (_renderer, moved) => moved.forEach(handIn),
   });
   const configs = discovery.forRenderer(MAIN_RENDERER);
@@ -102,6 +107,19 @@ export function configHost(
     discovery: configs,
     close: () => discovery.close(),
   };
+}
+
+// [LAW:effects-at-boundaries] A detached cache has no turn output for a host
+// to accept. This observer takes its whole folder declaration at that seam.
+export function followManagedStorage(
+  cache: Pick<RenderCache<never, never>, "managedFolders">,
+  storage: Pick<ManagedStorage, "follow">,
+): () => void {
+  return reaction(
+    () => cache.managedFolders(),
+    (folders) => storage.follow(new Set(folders)),
+    { equals: compareStructural, fireImmediately: true },
+  );
 }
 
 // A load of what discovery finds at one origin now, as the doctor's CLI makes
@@ -134,10 +152,12 @@ export class DiscoveringCache<
     {
       stateDir,
       watchers,
+      reloaded,
       ...deps
     }: RenderDeps<S, F> & {
       readonly stateDir: string;
       readonly watchers: Pick<WatcherRegistry, "batch">;
+      readonly reloaded?: ConfigDiscoveryDeps["reloaded"];
     },
     opts: ConstructorParameters<typeof RenderCache<S, F>>[1],
   ) {
@@ -147,11 +167,13 @@ export class DiscoveringCache<
       stateDir,
       watchers,
       log: deps.log,
+      reloaded,
     });
   }
 
   override getOrCreate(origin: RenderOrigin): CacheEntry {
-    if (!this.shut) this.configs.follow(origin);
+    // A test driving the actual renderer turn has already chosen its input.
+    if (!this.shut && !this.holdsConfig(origin)) this.configs.follow(origin);
     return super.getOrCreate(origin);
   }
 

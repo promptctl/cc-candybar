@@ -67,7 +67,6 @@ function rig(
         dataDirs: [],
       },
       sessionState: state,
-      storage: adapter.storage,
       gates: createGates(),
       source: SOURCES_NOTHING,
     },
@@ -106,7 +105,6 @@ function rig(
   });
   const receive = serveRenderer({
     renderer: timed(renderer, clock.monotonic),
-    subscriptionUpdates: true,
     send: (line) => pipe.heard(JSON.parse(JSON.stringify(line))),
     memory: () => {
       throw new Error("unexpected memory probe");

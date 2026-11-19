@@ -78,6 +78,8 @@ The plugin's program writes that file, whole, by writing a temporary file beside
 
 `session` is the scope the API stores first. The other scopes store the same way when a plugin needs one: a key that is not a safe file name is stored under the hex SHA-256 of the key.
 
+The host shares each folder watch across all renderers. A worktree renderer can restart or unload its copy of a plugin while the primary renderer continues receiving writes. Closing a session releases its file reads. The host closes the folder watch when the final loaded config releases the plugin.
+
 The session id in the path is the one Claude Code gave the session, parsed where the request enters the daemon, so it can never name a file outside the folder.
 
 ## One owner per source

@@ -78,6 +78,8 @@ const WORLD = { session: SESSION, seq: 4 } as unknown as WorldState;
 const NO_SUBSCRIPTIONS: Subscriptions = {
   sources: {},
   lanes: {},
+  managedFolders: [],
+  configSelections: [],
   configs: [],
 };
 // The request's deadline is a timer the case fires itself (`deadlines`).
@@ -405,12 +407,22 @@ test("a turn that throws still hands the host what its open views read", async (
   const left: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const subscribed: Subscriptions[] = [];
   const { renderer } = scripted(threwWith([], "the draw broke", left));
   await answer(renderer, [], subscribed);
   expect(subscribed).toEqual([NO_SUBSCRIPTIONS, left]);
+});
+
+test("a config's managed folders can change while its session reads and lanes stay fixed", async () => {
+  const folders = { ...NO_SUBSCRIPTIONS, managedFolders: ["/plugin/session"] };
+  const subscribed: Subscriptions[] = [];
+  const { renderer } = scripted({ ...output([]), subscriptions: folders });
+  await answer(renderer, [], subscribed);
+  expect(subscribed).toEqual([NO_SUBSCRIPTIONS, folders]);
 });
 
 test("a new session context retries its failed config with the same declaration, while due does not", async () => {
@@ -495,11 +507,15 @@ test("the session's context reaches the renderer first, with the world state rea
   const opened: Subscriptions = {
     sources: { [SESSION]: [] },
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const drawn: Subscriptions = {
     sources: {},
     lanes: {},
+    managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const subscribed: Subscriptions[] = [];

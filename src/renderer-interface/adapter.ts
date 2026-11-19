@@ -16,11 +16,6 @@ import type {
 } from "../daemon/foundations/debug-types.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 
-// A render state's hold on its storage folders, named by the id the renderer
-// minted.
-declare const STORAGE_HOLD_ID: unique symbol;
-export type StorageHoldId = number & { readonly [STORAGE_HOLD_ID]: true };
-
 export type Level = "info" | "warn" | "error";
 
 // [LAW:effects-at-boundaries] exception: what the renderer reaches in the
@@ -33,16 +28,6 @@ export interface AdapterToHost {
   // An answer carrying a daemon-wide held event (the launcher's pipe event,
   // the last renderer's end) reached its client.
   readonly eventAnswered: (event: HeldEvent) => void;
-  // [LAW:no-ambient-temporal-coupling] The storage folders each render state's
-  // latest load named, held by the host's storage owner under the id the
-  // renderer minted, from the state's first load to its reclaim: a folder's
-  // watch lives as long as a build names it, never as long as a view. Every
-  // load holds again; a folder whose generation ended its owner opens again
-  // itself.
-  readonly storage: {
-    readonly hold: (id: StorageHoldId, folders: readonly string[]) => void;
-    readonly release: (id: StorageHoldId) => void;
-  };
 }
 
 // [LAW:types-are-the-program] Every reach crosses: the build fails on one a

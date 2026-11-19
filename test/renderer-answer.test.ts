@@ -35,7 +35,9 @@ import type {
   RendererOutput,
   RequestId,
   Subscription,
+  Subscriptions,
 } from "../src/renderer-interface/interface";
+import { rendererOf } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import {
   drawRender,
@@ -79,6 +81,10 @@ import { linksOf } from "../src/click/read";
 import { isBarLink } from "../src/click/wire";
 import type { DaemonFacts, WorldState } from "../src/facts/world-state";
 import { joinedEvent, type HeldEvent } from "../src/utils/event-hold";
+import { repoConfigs, repoConfigsPath } from "../src/daemon/config-discovery/repo-configs";
+import { stateDir } from "../src/daemon/paths";
+import { STORAGE_FOLDER } from "../src/config/loader/plugins";
+import { writeStatePlan } from "./helpers/state-file";
 import {
   hearingEvents,
   hostHeld,
@@ -167,6 +173,7 @@ function checked(
   pane?: string,
   file = "config.json5",
   terminal: Pick<ReaderRenderRequest, "termCols" | "termRows"> = {},
+  project = PROJECT,
 ): CheckedRenderRequest {
   const configFile = path.join(dir, file);
   fs.writeFileSync(configFile, "{}");
@@ -175,9 +182,17 @@ function checked(
     {
       v: PROTOCOL_VERSION,
       kind: "render",
-      hookData,
+      hookData: {
+        ...hookData,
+        cwd: project,
+        workspace: {
+          ...hookData.workspace,
+          current_dir: project,
+          project_dir: project,
+        },
+      },
       args: ["cc-candybar", "--config", configFile, "--bogus"],
-      cwd: PROJECT,
+      cwd: project,
       encoding: "frame",
       env: TEST_ENV,
       ...terminal,
@@ -344,7 +359,249 @@ async function dueFrame(r: Renderer, elapsed = 0) {
   return pushed.frame;
 }
 
+async function restartableRendererHost(context: CheckedRenderRequest) {
+  const prior = renderer();
+  let current = prior;
+  const origin = context.requested;
+  const worldState = prior.rig.served.collector.requested(
+    context,
+    TEST_ENVIRONMENT,
+  );
+  const { discovery } = prior.rig.cache.configs;
+  const published: Subscriptions[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    systemTimekeeper,
+    hostHeld(
+      rendererOf({
+        event: (input) => current.r.answer(input),
+        adapter: (input) => current.r.answer(input),
+      }),
+      systemTimekeeper.monotonic,
+    ),
+    () => {},
+    {
+      subscribed: (subscriptions) => void published.push(subscriptions),
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    { ...NO_ACTS, configs: discovery },
+  );
+  cleanups.push(() => host.closeWake());
+  const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
+  const draw = async () => {
+    const { effects } = await submit({ kind: "request", id: REQUEST, context });
+    return textOf(parseFrame(presentOf(effects).frame));
+  };
+  expect(await submit({ kind: "context", context, worldState })).toMatchObject({
+    kind: "answered",
+  });
+  const reload = async (file: string) => {
+    expect(discovery.landed([file])).toEqual([origin]);
+    const config = discovery.snapshotOf(origin);
+    if (config === null) throw new Error("missing changed config");
+    expect(await submit({ kind: "config", origin, config })).toMatchObject({
+      kind: "answered",
+    });
+  };
+  const replace = async () => {
+    current = renderer();
+    expect(await host.start(
+      () => ({
+        kind: "event",
+        event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
+      }),
+      [],
+    )).toMatchObject({ kind: "answered" });
+  };
+  return {
+    discovery,
+    published,
+    draw,
+    reload,
+    replace,
+    entry: () => current.rig.cache.getOrCreate(origin),
+    hold: () => current.rig.cache.hold(origin),
+  };
+}
+
 describe("a statusline request", () => {
+  test("a replacement keeps the selected plugin build and the current error until valid removal", async () => {
+    const context = checked();
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, "p");
+    fs.mkdirSync(plugin);
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'VALID-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }');
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
+    expect(await draw()).toContain("VALID-PLUGIN");
+    const good = discovery.snapshotOf(origin);
+    if (good === null) throw new Error("missing accepted config");
+    expect(discovery.retainedOf(origin)).toBe("current");
+    const originalSources = published.at(-1)?.sources[SESSION];
+    expect(originalSources).toEqual([
+      expect.objectContaining({ kind: "plugin", source: "plugins.p.marker" }),
+    ]);
+
+    const edit = async (text: string) => {
+      fs.writeFileSync(file, text);
+      await reload(file);
+    };
+    await edit("{ invalid syntax");
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(discovery.retainedOf(origin)).toBe(good);
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+
+    await replace();
+    expect(published.at(-1)?.sources[SESSION]).toEqual(originalSources);
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(entry().lastError).toBe(error);
+    expect(discovery.retainedOf(origin)).toBe(good);
+
+    await edit("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
+    expect(published.at(-1)?.sources[SESSION]).toEqual([]);
+    expect(await draw()).toContain("AFTER-REMOVAL");
+    expect(entry().lastError).toBeNull();
+    expect(discovery.retainedOf(origin)).toBe("current");
+  });
+
+  test("withdrawing project approval replaces the live last-good build even while config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'APPROVED-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ root: { h: ["repo.p.marker"] } }');
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const { discovery, published, draw, reload, replace, entry, hold } =
+      await restartableRendererHost(context);
+    expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "approved" });
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    expect(published.at(-1)?.managedFolders).toContain(folder);
+    fs.writeFileSync(file, "{ invalid syntax");
+    await reload(file);
+    expect(await draw()).toContain("APPROVED-PLUGIN");
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+
+    {
+      using drawing = hold();
+      expect(writeStatePlan(book.plan(() => ({})))).toMatchObject({ kind: "ok" });
+      await reload(repoConfigsPath(state));
+      expect(discovery.snapshotOf(origin)?.repo).toMatchObject({ dir, standing: "awaiting" });
+      expect(published.at(-1)?.managedFolders).toContain(folder);
+      expect(drawing.state.config.segments["repo.p.marker"]).toBeDefined();
+    }
+    const live = await draw();
+    const liveFolders = published.at(-1)?.managedFolders;
+    expect(entry().lastError).toBe(error);
+
+    await replace();
+    expect(await draw()).not.toContain("APPROVED-PLUGIN");
+    expect(entry().lastError).toBe(error);
+    expect(live).not.toContain("APPROVED-PLUGIN");
+    expect(liveFolders).not.toContain(folder);
+
+    fs.writeFileSync(file, "{ segments: { s: { template: 'RECOVERED' } }, root: { h: ['s'] } }");
+    await reload(file);
+    expect(await draw()).toContain("RECOVERED");
+    expect(entry().lastError).toBeNull();
+  });
+
+  test("the bundled fallback follows project discovery while the authored config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const file = path.join(dir, "config.json5");
+    fs.writeFileSync(file, "{ invalid syntax");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const definition = path.join(plugin, "plugin.json5");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(definition, `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } }
+    }`);
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
+    const folders = () => published.at(-1)?.managedFolders;
+    const fallback = entry().state;
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+    expect(folders()).not.toContain(folder);
+
+    fs.writeFileSync(file, "\n\n{ another invalid edit");
+    await reload(file);
+    expect(entry().lastError).not.toBe(error);
+    expect(entry().state).toBe(fallback);
+
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const recorded = book.read();
+    await reload(repoConfigsPath(state));
+    expect(discovery.snapshotOf(context.requested)?.repo).toMatchObject({ dir, standing: "approved" });
+    const liveFolders = folders();
+    const latestError = entry().lastError;
+    await draw();
+    await replace();
+    expect(folders()).toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(liveFolders).toEqual(folders());
+
+    fs.rmSync(plugin, { recursive: true });
+    await reload(definition);
+    expect(folders()).not.toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(book.read()).toEqual(recorded);
+    const remaining = folders();
+    await replace();
+    expect(folders()).toEqual(remaining);
+  });
+
+  test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {
+    const t = renderer();
+    const context = checked();
+    const inactive = checked(undefined, "inactive-config.json5").requested;
+    const offerings = [context.requested, inactive].map((origin) => {
+      t.rig.cache.configs.follow(origin);
+      const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+      if (config === null) throw new Error("the host did not hold the config");
+      return { origin, config, retained: "current" as const };
+    });
+    const first = answered(await handIn(t.r, {
+      kind: "start",
+      viewers: {
+        [SESSION]: {
+          lanes: { pane: { drawing: true, subscribers: 1 } },
+          shown: true,
+          joined: 1,
+        },
+      },
+      sessions: [{
+        context,
+        worldState: t.rig.served.collector.requested(context, TEST_ENVIRONMENT),
+      }],
+      configs: offerings,
+    }));
+
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    expect(first.subscriptions.configs).toEqual(expect.arrayContaining([context.requested, inactive]));
+    expect((await dueFrame(t.r)).bar.rows.length).toBeGreaterThan(0);
+  });
+
   test("successive ordinary draws retain the active subscription declaration", async () => {
     const t = renderer();
     const first = answered(await request(t));
@@ -410,7 +667,7 @@ describe("a statusline request", () => {
 
   // A restarted renderer: the host releases whatever its first output does
   // not name, a tmux status row included.
-  test("of each live session is configured by a start's one turn and the config it names, whose output names them all", async () => {
+  test("starts two live sessions from the same offered config in one turn", async () => {
     const t = renderer();
     const { r, rig } = t;
     const mine = checked();
@@ -419,12 +676,16 @@ describe("a statusline request", () => {
       ...mine,
       hookData: { ...mine.hookData, session_id: other },
     };
+    rig.cache.configs.follow(mine.requested);
+    const config = rig.cache.configs.discovery.snapshotOf(mine.requested);
+    if (config === null) throw new Error("missing shared start config");
     const output = await r.answer({
       kind: "event",
       ...READ,
       event: {
         kind: "start",
         viewers: {},
+        configs: [{ origin: mine.requested, config }],
         sessions: [mine, theirs].map((context) => ({
           context,
           worldState: rig.served.collector.requested(context, TEST_ENVIRONMENT),
@@ -432,11 +693,8 @@ describe("a statusline request", () => {
       },
     });
     expect(output.kind).toBe("answered");
-    // Both wait for the one origin they share.
     expect(output.subscriptions.configs).toEqual([mine.requested]);
-    const configured = await configsNamed(t, output);
-    expect(configured.kind).toBe("answered");
-    expect(Object.keys(configured.subscriptions.sources).sort()).toEqual(
+    expect(Object.keys(output.subscriptions.sources).sort()).toEqual(
       [SESSION, other].sort(),
     );
   });
@@ -992,11 +1250,6 @@ describe("the session's config, ahead of its request", () => {
 
   test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
     const t = renderer();
-    // Its origin's config is held, so the context opens the view itself.
-    await configure(t, checked());
-    t.rig.cache.holdSession = (() => {
-      throw new Error("the opening broke");
-    }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
@@ -1006,6 +1259,18 @@ describe("the session's config, ahead of its request", () => {
       unfollowedCollector(t.rig.served.collector),
       { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
     );
+    cleanups.push(() => host.closeWake());
+    // Its origin's config was delivered, so the next context opens the view itself.
+    const context = checked();
+    const worldState = t.rig.served.collector.requested(context, TEST_ENVIRONMENT);
+    expect(await host.answer(() => ({
+      kind: "event",
+      event: { kind: "context", context, worldState },
+    }))).toMatchObject({ kind: "answered" });
+    expect(kinds.splice(0)).toEqual(["context", "config"]);
+    t.rig.cache.holdSession = () => {
+      throw new Error("the opening broke");
+    };
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
@@ -1021,7 +1286,7 @@ describe("the session's config, ahead of its request", () => {
       { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
       facts as never,
     );
-    expect(kinds).toEqual(["context", "config"]);
+    expect(kinds).toEqual(["context"]);
     expect(answered.resp).toMatchObject({
       ok: false,
       error: expect.stringMatching(
