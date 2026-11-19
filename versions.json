@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "23c326f89ca153631c98d23faf4844e8803a63d5",
+      "timestamp": "2026-11-19T12:45:43.808Z",
+      "commits": [
+        {
+          "sha": "23c326f89ca153631c98d23faf4844e8803a63d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:44:20-07:00",
+          "message": "fix(config): refuse non-regular files during discovery (ibyq.h8t) (#869)"
+        }
+      ]
+    },
+    {
       "version": "pr-863",
       "ref": "refs/pull/863/merge",
       "sha": "11fc07066409baa994a18a184b645ab5712ee51b",
@@ -20,28 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:10:16-07:00",
           "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-869",
-      "ref": "refs/pull/869/merge",
-      "sha": "8b713dbd53e87f2435516f15da4ac15c4e522f45",
-      "timestamp": "2026-11-19T12:39:40.334Z",
-      "commits": [
-        {
-          "sha": "8b713dbd53e87f2435516f15da4ac15c4e522f45",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:38:38-07:00",
-          "message": "Merge 630dab8a7c88b9acf93baacefcf9abcfda973c8f into 21b8abaab0b95c9b35518fcd7a840b2d54aa052b\n"
-        },
-        {
-          "sha": "630dab8a7c88b9acf93baacefcf9abcfda973c8f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:38:13-07:00",
-          "message": "fix(config): refuse non-regular files during discovery (ibyq.h8t)\n"
         }
       ]
     },
@@ -85,21 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:11:10-07:00",
           "message": "feat(daemon): route named renderers through one shared host\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "21b8abaab0b95c9b35518fcd7a840b2d54aa052b",
-      "timestamp": "2026-11-19T12:37:55.389Z",
-      "commits": [
-        {
-          "sha": "21b8abaab0b95c9b35518fcd7a840b2d54aa052b",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T12:36:55Z",
-          "message": "chore(release): set `package.json` to 1.233.1\n\n## [1.233.1](https://github.com/promptctl/cc-candybar/compare/v1.233.0...v1.233.1) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** restore live sessions on renderer restart (ibyq.fqw) ([#862](https://github.com/promptctl/cc-candybar/issues/862)) ([2ea914d](https://github.com/promptctl/cc-candybar/commit/2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8))\n"
         }
       ]
     },
