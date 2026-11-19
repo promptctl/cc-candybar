@@ -55,9 +55,11 @@ import {
 } from "./foundations/verb-error.js";
 import {
   performChanges,
+  configEffectOutcome,
   type ApproveRepo,
   type ConfigLanding,
 } from "./effect-interpreter.js";
+import type { WriteConfigFile } from "./file-rewrites.js";
 import { outlives, type HostAct } from "./acts.js";
 import type { RequestedRun, RunAct } from "./foundations/run-authorization.js";
 import type { RunEvidence } from "../click/wire.js";
@@ -112,6 +114,7 @@ export interface HostWorld {
   readonly perform: (act: HostAct) => Promise<EffectOutcome>;
   readonly stateDir: string;
   readonly configs: RendererConfigs;
+  readonly writeConfigFile?: WriteConfigFile;
   readonly closing: () => boolean;
   readonly unheard: (text: string) => void;
 }
@@ -339,6 +342,7 @@ export function rendererHost(
       (effect): effect is ApproveRepo => effect.kind === "approve-repo",
     );
     const landed = landConfig(changes, answers);
+    const configOutcome = configEffectOutcome(landed);
     const requested =
       event.kind === "context" ? originKey(event.context.requested) : null;
     const followed = took(
@@ -362,10 +366,10 @@ export function rendererHost(
         waited.push(config.settled);
       }
     }
-    // [LAW:dataflow-not-control-flow] Every landed file, including a
-    // repository decision, invalidates the origins that actually used it.
+    // [LAW:dataflow-not-control-flow] Observe a successful write or an
+    // unrestored file through the same discovery path before effect-done.
     const moved =
-      landed.kind === "ok" && landed.files.length > 0
+      "files" in landed && landed.files.length > 0
         ? (recordTaken("landed config discovery", () =>
             world.configs.landed(landed.files),
           ) ?? [])
@@ -388,9 +392,7 @@ export function rendererHost(
             ).settled,
           );
       } else if (effect.kind === "change" || effect.kind === "approve-repo") {
-        const outcome: EffectOutcome =
-          landed.kind === "ok" ? { kind: "ok" } : landed;
-        owed.push((await settleInSlot(effect, outcome)).settled);
+        owed.push((await settleInSlot(effect, configOutcome)).settled);
       } else if (effect.kind === "run") {
         const checked = world.authorizeRun(effect, captures);
         if (checked.kind === "ok") acts.push(checked.value);
@@ -409,7 +411,7 @@ export function rendererHost(
     let before: Promise<unknown> = Promise.resolve();
     for (const act of acts) {
       const acted =
-        landed.kind === "ok"
+        configOutcome.kind === "ok"
           ? before
               .then(() => world.perform(act))
               .catch(
@@ -419,11 +421,11 @@ export function rendererHost(
                 }),
               )
           : Promise.resolve<EffectOutcome>(
-              landed.kind === "closing"
-                ? landed
+              configOutcome.kind === "closing"
+                ? configOutcome
                 : {
                     kind: "skipped",
-                    reason: `not performed: ${landed.reason}`,
+                    reason: `not performed: ${configOutcome.reason}`,
                   },
             );
       const settled = acted.then((outcome) => settle(act, outcome));
@@ -461,6 +463,7 @@ export function rendererHost(
             void recordTaken("trust book record", () => log("info", line)),
         },
         world.configs,
+        world.writeConfigFile,
       );
     } catch (thrown) {
       return { kind: "failed", reason: failureOf(thrown).detail };

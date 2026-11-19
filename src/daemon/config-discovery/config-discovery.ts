@@ -172,7 +172,7 @@ export class ConfigDiscovery {
     );
   }
 
-  // Rediscover origins watching one of the files the turn actually wrote.
+  // Rediscover origins watching a file the turn wrote or could not restore.
   // The writer reloads in this slot; the other holders get their own turns.
   private landed(
     writer: RendererName,

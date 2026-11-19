@@ -155,7 +155,7 @@ describe("performChanges", () => {
       );
       expect(outcome).toMatchObject({ kind: "failed" });
       expect(outcome.kind === "failed" && outcome.reason).toMatch(
-        /nothing was written$/,
+        /no file changes kept$/,
       );
       expect(read(user)).toBe(USER);
     } finally {
@@ -316,7 +316,7 @@ describe("performChanges with the trust book", () => {
       );
       expect(outcome).toMatchObject({ kind: "failed" });
       expect(outcome.kind === "failed" && outcome.reason).toMatch(
-        /nothing was written$/,
+        /no file changes kept$/,
       );
       expect(read(user)).toBe(USER);
       expect(said).toEqual([]);

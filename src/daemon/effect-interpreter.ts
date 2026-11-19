@@ -1,16 +1,14 @@
 // [LAW:single-enforcer] Where a config write lands: the host applies a turn's
 // `change`s to their files as the files stand, keeping every byte a change
-// does not touch, and lands them together or not at all, with the answers its
-// click gave the trust book: an approval is what decides which config a
-// session renders, so it lands with the configs or not at all. Every read in
-// every file is checked before any file is written, and a write that fails
-// puts back the files already written. No renderer writes a config file, or
-// Claude Code's settings.
+// does not touch, and batches them with the answers its click gave the trust
+// book. Every read is checked before publication. If a publication fails,
+// any earlier write whose restoration failed is sent to shared discovery.
 
 import {
   writeRevisions,
   type FileRewrite,
   type FileRetirement,
+  type WriteConfigFile,
 } from "./file-rewrites.js";
 import {
   addressText,
@@ -61,7 +59,21 @@ export type ConfigWriteFiles = Pick<
 
 export type ConfigLanding =
   | { readonly kind: "ok"; readonly files: readonly string[] }
+  | {
+      readonly kind: "incomplete";
+      readonly files: readonly string[];
+      readonly reason: string;
+    }
   | Extract<EffectOutcome, { kind: "refused" | "failed" | "closing" }>;
+
+// [LAW:effects-at-boundaries] Only the host uses the affected paths to
+// observe disk. The renderer receives its ordinary effect verdict.
+export function configEffectOutcome(landed: ConfigLanding): EffectOutcome {
+  if (landed.kind === "ok") return { kind: "ok" };
+  if (landed.kind === "incomplete")
+    return { kind: "failed", reason: landed.reason };
+  return landed;
+}
 
 const refused = (reason: string): ConfigLanding => ({
   kind: "refused",
@@ -98,6 +110,7 @@ export function performChanges(
   changes: readonly ConfigChange[],
   book: TrustBook | null,
   files: ConfigWriteFiles,
+  write?: WriteConfigFile,
 ): ConfigLanding {
   const rewrites = new Map<string, FileRewrite>();
   // The files a local layer's change lands in: the ones git never shows.
@@ -175,17 +188,27 @@ export function performChanges(
       reason: `config read failed: ${asError(e).message}`,
     };
   }
-  let landed: readonly string[];
-  try {
-    landed = writeRevisions(rewrites.values(), retire);
-  } catch (e) {
+  const landed = writeRevisions(rewrites.values(), retire, write);
+  if (landed.kind === "failed") {
     return {
       kind: "failed",
-      reason: `config write failed: ${asError(e).message}`,
+      reason: `config write failed: ${landed.error.message} — no file changes kept`,
+    };
+  }
+  if (landed.kind === "incomplete") {
+    return {
+      kind: "incomplete",
+      files: landed.unrestored.map(({ file }) => file),
+      reason: [
+        `config write failed: ${landed.error.message}`,
+        ...landed.unrestored.map(
+          ({ file, error }) => `could not restore ${file}: ${error.message}`,
+        ),
+      ].join("\n"),
     };
   }
   for (const line of answered) book?.said(line);
-  return { kind: "ok", files: landed };
+  return landed;
 }
 
 // The rewrite of the exclude file of `file`'s repository that names it, or
