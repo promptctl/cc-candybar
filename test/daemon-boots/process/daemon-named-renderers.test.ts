@@ -502,12 +502,12 @@ test("one project approval from an earlier frame covers both renderers, a config
     fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-approved-project-")),
   );
   const alternate = path.join(project, "worktree.mjs");
-  const writeProject = (label: string) =>
+  const writeProject = (label: string, rows = ["agreed"]) =>
     fs.writeFileSync(
       path.join(project, ".cc-candybar.json5"),
       JSON.stringify({
         segments: { agreed: { template: label } },
-        root: { h: ["agreed"] },
+        root: { h: rows },
       }),
     );
   const session = (renderer: string, afterRestart: boolean) =>
@@ -520,16 +520,16 @@ test("one project approval from an earlier frame covers both renderers, a config
         client: { kind: "node", bundle: alternate, source: null },
       }),
     });
-  const bothSee = (label: string, afterRestart = false) =>
+  const bothSee = (labels: readonly string[], afterRestart = false) =>
     until(
       async () => {
         const frames = await Promise.all([
           draw("main", afterRestart),
           draw("worktree", afterRestart),
         ]);
-        return frames.every((frame) => textOf(frame).includes(label));
+        return frames.map(textOf).every((text) => labels.every((label) => text.includes(label)));
       },
-      () => `both renderers to show ${label}`,
+      () => `both renderers to show ${labels.join(", ")}`,
       8_000,
     );
   let daemon: RunningDaemon | undefined;
@@ -558,12 +558,23 @@ test("one project approval from an earlier frame covers both renderers, a config
     if (approve === undefined) throw new Error("missing repository approval");
     expect(textOf(await draw("main"))).not.toContain("PROJECT-APPROVED");
     await click(isolated.sockPath, approve, 20_000);
-    await bothSee("PROJECT-APPROVED");
-    writeProject("PROJECT-EDITED");
-    await bothSee("PROJECT-EDITED");
+    await bothSee(["PROJECT-APPROVED"]);
+    const plugin = path.join(project, ".cc-candybar", "plugins", "marker");
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(
+      path.join(plugin, "plugin.json5"),
+      "{ segments: { row: { template: 'NEW-PLUGIN' } } }",
+    );
+    fs.writeFileSync(
+      path.join(project, ".cc-candybar.local.json5"),
+      "{ segments: { local: { template: 'NEW-LOCAL' } } }",
+    );
+    writeProject("PROJECT-EDITED", ["agreed", "local", "repo.marker.row"]);
+    const edited = ["PROJECT-EDITED", "NEW-LOCAL", "NEW-PLUGIN"];
+    await bothSee(edited);
     await daemon.stop();
     daemon = await spawnDaemonWithEnv(isolated.env);
-    await bothSee("PROJECT-EDITED", true);
+    await bothSee(edited, true);
     const after = await readDiagnostics(
       isolated.sockPath,
       session("main", true),
