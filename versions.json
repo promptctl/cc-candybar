@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-866",
+      "ref": "refs/pull/866/merge",
+      "sha": "6800b9e96410af3d37e52734471b6b0ccf0e1563",
+      "timestamp": "2026-11-19T13:10:35.026Z",
+      "commits": [
+        {
+          "sha": "6800b9e96410af3d37e52734471b6b0ccf0e1563",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:09:31Z",
+          "message": "Merge 7e5adc4da4b4cb87f66fa7151ff870a30795e716 into 9df2afa5338a7144c675bbd4ff228c85f32fe868\n"
+        },
+        {
+          "sha": "7e5adc4da4b4cb87f66fa7151ff870a30795e716",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:58:12-07:00",
+          "message": "test(cache): cover transcript replacement with unchanged mtime and size\n"
+        },
+        {
+          "sha": "ef2326997416a389b6af92cf934c718cbbd31e6b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:27:45-07:00",
+          "message": "test(host): prove two live feeds share source invalidation\n"
+        },
+        {
+          "sha": "1c03eeb35d89c0518a1304ff196d683b4d9ed852",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:15:51-07:00",
+          "message": "perf(host): share physical transcript observations across sessions\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "9df2afa5338a7144c675bbd4ff228c85f32fe868",
