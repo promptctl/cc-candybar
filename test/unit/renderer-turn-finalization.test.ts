@@ -443,6 +443,31 @@ test("a renderer answer preserves explicit crossed failure details", async () =>
   expect(second.detail).not.toBe(first.detail);
 });
 
+test("nested errors have portable details even inside a cyclic cause object", async () => {
+  const fail = async (worker: string) => {
+    const nested = new TypeError("invalid parsed value");
+    nested.stack = `TypeError: invalid parsed value\n    at ${worker}:17:3`;
+    const cause = {
+      pathname: "/project/recorded.json5:25:4",
+      faults: [nested],
+    };
+    Object.assign(cause, { same: cause });
+    const fixture = rig({
+      state: () => {
+        throw new Error("could not build row", { cause });
+      },
+    });
+    const output = await fixture.due();
+    if (output.kind !== "threw") throw new Error("the failed turn succeeded");
+    return output.failure.detail;
+  };
+  const first = await fail("/one/renderer.mjs");
+  expect(await fail("/other/renderer.mjs")).toBe(first);
+  expect(first).toContain("TypeError: invalid parsed value");
+  expect(first).toContain("/project/recorded.json5:25:4");
+  expect(first).toContain("[Circular");
+});
+
 test("a successful command reports its first finalizer failure and lands its successful drain", async () => {
   let blocked = true;
   const fixture = rig({

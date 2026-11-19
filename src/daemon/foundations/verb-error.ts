@@ -106,7 +106,9 @@ export function rendererFailureOf(thrown: unknown): Failure {
 function rendererDetail(value: unknown, path: Set<Error>): string {
   if (value instanceof CrossedFailure) return value.failure.detail;
   if (!(value instanceof Error))
-    return inspect(value, { customInspect: false });
+    return inspect(rendererValue(value, path, new Map()), {
+      customInspect: false,
+    });
   const title = Error.prototype.toString.call(value);
   if (path.has(value)) return `[Circular: ${title}]`;
   path.add(value);
@@ -133,6 +135,38 @@ function rendererDetail(value: unknown, path: Set<Error>): string {
   }
   path.delete(value);
   return lines.join("\n");
+}
+
+// [LAW:single-enforcer] A native exception in a plain cause or metadata
+// value uses the same projection. Preserve ordinary data and references for
+// inspect, including cycles, without invoking domain accessors.
+function rendererValue(
+  value: unknown,
+  errors: Set<Error>,
+  seen: Map<object, object>,
+): unknown {
+  if (value instanceof Error) return rendererDetail(value, errors);
+  if (typeof value !== "object" || value === null) return value;
+  const previous = seen.get(value);
+  if (previous !== undefined) return previous;
+
+  let copy: object;
+  if (Array.isArray(value)) {
+    copy = new Array<unknown>(value.length);
+  } else {
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype) return value;
+    copy = prototype === null ? Object.create(null) : {};
+  }
+  seen.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const field = Object.getOwnPropertyDescriptor(value, key);
+    if (!field?.enumerable) continue;
+    if ("value" in field)
+      field.value = rendererValue(field.value, errors, seen);
+    Object.defineProperty(copy, key, field);
+  }
+  return copy;
 }
 
 // A request refused for what it carried, nothing having thrown.
