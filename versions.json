@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-870",
+      "ref": "refs/pull/870/merge",
+      "sha": "a75d92e04df0e08beedf0a51627b16d7ca2c9fbf",
+      "timestamp": "2026-11-19T13:11:53.781Z",
+      "commits": [
+        {
+          "sha": "a75d92e04df0e08beedf0a51627b16d7ca2c9fbf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:10:42Z",
+          "message": "Merge 96bc0f09500ba08f3ba61d41c503ebfc853699b3 into 9df2afa5338a7144c675bbd4ff228c85f32fe868\n"
+        },
+        {
+          "sha": "96bc0f09500ba08f3ba61d41c503ebfc853699b3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:58:00-07:00",
+          "message": "perf(host): share checkout filesystem observations (x96a.uqq)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-863",
       "ref": "refs/pull/863/merge",
       "sha": "1f9f4c33eb07468bebbecbc3db1ad1a4fe11353a",
@@ -129,28 +151,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:28:42-07:00",
           "message": "refactor(cli): retire the standalone config check (ibyq.9lr)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-870",
-      "ref": "refs/pull/870/merge",
-      "sha": "0886189c1082b1cf0fb2a62538828da29773e63e",
-      "timestamp": "2026-11-19T13:02:01.773Z",
-      "commits": [
-        {
-          "sha": "0886189c1082b1cf0fb2a62538828da29773e63e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:00:53-07:00",
-          "message": "Merge b8bc38122073e9fc6d93efa5b79e13d6b7122f80 into 16eb7713b80a9c10567f515cf183025faeca7db4\n"
-        },
-        {
-          "sha": "b8bc38122073e9fc6d93efa5b79e13d6b7122f80",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:58:00-07:00",
-          "message": "perf(host): share checkout filesystem observations (x96a.uqq)\n"
         }
       ]
     },
