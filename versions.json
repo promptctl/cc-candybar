@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "b430a64a7ab7be113b28a91192cf47cb2e26835f",
+      "timestamp": "2026-11-19T18:13:21.948Z",
+      "commits": [
+        {
+          "sha": "b430a64a7ab7be113b28a91192cf47cb2e26835f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:12:08-07:00",
+          "message": "fix(daemon): preserve Git checkout read errors (#892)"
+        }
+      ]
+    },
+    {
       "version": "pr-897",
       "ref": "refs/pull/897/merge",
       "sha": "8f0a6881a30bfca60ca0c64977090a16975307f7",
@@ -42,43 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:05:04-07:00",
           "message": "fix(config): recognize equivalent saved project directories\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-892",
-      "ref": "refs/pull/892/merge",
-      "sha": "88925f47cf0df9e1f89de664e4d4c634dfafab78",
-      "timestamp": "2026-11-19T18:06:40.900Z",
-      "commits": [
-        {
-          "sha": "88925f47cf0df9e1f89de664e4d4c634dfafab78",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T18:05:15Z",
-          "message": "Merge 5bd4c7b1480ea8494023696ad94067eb92b7f78c into e78e6ea53d92f3294c4769635d9d974fb47550ca\n"
-        },
-        {
-          "sha": "5bd4c7b1480ea8494023696ad94067eb92b7f78c",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:33:16-07:00",
-          "message": "fix(daemon): preserve Git checkout read errors\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "e78e6ea53d92f3294c4769635d9d974fb47550ca",
-      "timestamp": "2026-11-19T18:05:18.659Z",
-      "commits": [
-        {
-          "sha": "e78e6ea53d92f3294c4769635d9d974fb47550ca",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:04:12-07:00",
-          "message": "test(daemon): assert source values in delivered pane frames (#889)"
         }
       ]
     },
