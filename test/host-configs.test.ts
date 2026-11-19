@@ -77,7 +77,7 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, configs },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs },
   wake: null,
   record: [],
   frames: [],

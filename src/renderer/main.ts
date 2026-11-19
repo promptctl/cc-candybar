@@ -146,6 +146,7 @@ export function mainRenderer(
   // The subscriptions this renderer last returned: none before its first turn.
   let subscriptions: Subscriptions = {
     sources: {},
+    managedFolders: [],
     lanes: {},
     configs: [],
   };
@@ -241,7 +242,16 @@ export function mainRenderer(
     frames: PushedFrame[],
   ): void => {
     switch (event.kind) {
-      case "start":
+      case "start": {
+        const configs = event.configs ?? [];
+        // [LAW:no-ambient-temporal-coupling] A replacement opens its views
+        // against the offered facts in the first turn. Its first declaration
+        // can then replace the predecessor's without an intermediate gap.
+        for (const { origin, config } of configs)
+          parts.renderCache.configure(origin, config);
+        const live = new Set(
+          event.sessions.map(({ context }) => originKey(context.requested)),
+        );
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
@@ -258,8 +268,14 @@ export function mainRenderer(
                   frames,
                 ),
           ),
+          ...configs.flatMap(({ origin, retained }) =>
+            retained && !live.has(originKey(origin))
+              ? [() => void parts.renderCache.getOrCreate(origin)]
+              : [],
+          ),
         ]);
         return;
+      }
       case "context": {
         const { context, worldState } = event;
         const session = context.hookData.session_id;
@@ -454,6 +470,9 @@ export function mainRenderer(
   const sources = computed(() => parts.renderCache.subscriptions().sources, {
     equals: compareStructural,
   });
+  const managedFolders = computed(() => parts.renderCache.managedFolders(), {
+    equals: compareStructural,
+  });
   const laneDeclaration = computed(
     () => {
       // [LAW:one-source-of-truth] Read off the same open views: a session whose
@@ -520,7 +539,12 @@ export function mainRenderer(
   const declaration = new Kept("renderer subscriptions", () => {
     const { lanes, unprepared } = laneDeclaration.get();
     return {
-      plan: { sources: sources.get(), lanes, configs: configOrigins.get() },
+      plan: {
+        sources: sources.get(),
+        managedFolders: managedFolders.get(),
+        lanes,
+        configs: configOrigins.get(),
+      },
       unprepared,
     };
   });
@@ -699,7 +723,6 @@ export function mainRendererOf(
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       currentRequest: (session) => worldStates.requestOf(session),
       log,
-      storage: host.storage,
       gates,
       // [LAW:single-enforcer] What every session's view draws from: its payload
       // composed over its world state, its request, its picks and its

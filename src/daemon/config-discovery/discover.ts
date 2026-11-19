@@ -40,6 +40,7 @@ import {
 } from "./plugin-folders.js";
 import {
   DEFINITION_FILE,
+  STORAGE_FOLDER,
   pluginDefinitionProblem,
   listedPath,
   pluginList,
@@ -136,7 +137,10 @@ export function readDefinition(
   return {
     scope,
     path: file,
-    definition: read.kind === "text" ? { ...read, dir } : read,
+    definition:
+      read.kind === "text"
+        ? { ...read, dir, storage: path.join(dir, STORAGE_FOLDER) }
+        : read,
   };
 }
 

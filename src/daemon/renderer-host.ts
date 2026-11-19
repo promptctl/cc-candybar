@@ -232,6 +232,28 @@ export function rendererHost(
   let declared: Subscriptions | undefined;
   let origins: Subscriptions["configs"] | undefined;
   let followFailure: Failure | null = null;
+  // [LAW:no-ambient-temporal-coupling] Only a complete replacement can
+  // publish over the predecessor's declaration. Later inputs stay out of a
+  // generation whose initial turn never reached that point.
+  let startFailure: Failure | null = null;
+
+  // [LAW:one-source-of-truth] Restoring a generation uses the same discovery
+  // holds as an ordinary config turn. It still follows preceding origins
+  // until the replacement answers with its own complete declaration.
+  const prepareStart = (event: Extract<Event, { kind: "start" }>): Event => {
+    const retained = new Map((origins ?? []).map((o) => [originKey(o), o]));
+    const wanted = new Map(retained);
+    for (const { context } of event.sessions)
+      wanted.set(originKey(context.requested), context.requested);
+    if (wanted.size > 0) world.configs.follow([...wanted.values()]);
+    const configs = [...wanted].map(([key, origin]) => {
+      const config = world.configs.snapshotOf(origin);
+      if (config === null)
+        throw new Error(`no config snapshot for renderer start origin ${key}`);
+      return { origin, config, retained: retained.has(key) };
+    });
+    return { ...event, configs };
+  };
 
   // [LAW:single-enforcer] The one way into the renderer's turn: `slot` once
   // every slot asked for before it has ended, handed how long it waited and
@@ -308,6 +330,12 @@ export function rendererHost(
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs,
     };
+    if (input.event.kind === "start") {
+      startFailure = turn.kind === "threw" ? turn.failure : null;
+      if (startFailure === null)
+        for (const { origin } of input.event.configs ?? [])
+          configs.set(originKey(origin), "received");
+    }
     const { settled, configFailure } = await landInSlot(
       input.event,
       output,
@@ -503,10 +531,17 @@ export function rendererHost(
     requested: RenderOrigin | null,
     receipt: SettlePresentation,
   ): ConfigFollowing => {
-    recordTaken("wake declaration", () => wake.declare(nextWake));
+    // [LAW:effects-at-boundaries] A failed replacement still owes its own
+    // collected writes and effects. Its view and wake declarations cannot
+    // replace the predecessor's, including during effect settlement.
+    const adoptDemand = startFailure === null;
+    if (adoptDemand)
+      recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
     if (
+      adoptDemand &&
       (declared?.sources !== subscriptions.sources ||
+        declared?.managedFolders !== subscriptions.managedFolders ||
         declared?.lanes !== subscriptions.lanes) &&
       recordTaken("subscriptions", () =>
         collector.subscribed(subscriptions),
@@ -534,6 +569,7 @@ export function rendererHost(
       )
         for (const frame of frames) settled(frame, false);
     }
+    if (!adoptDemand) return { kind: "following", named: [] };
     const named: RenderOrigin[] = [];
     const moved = origins !== subscriptions.configs;
     if (moved) {
@@ -770,33 +806,43 @@ export function rendererHost(
       try {
         // [LAW:no-silent-failure] A make that threw is the turn's failure.
         let made: Made;
+        let starting = at === "first";
         try {
           made = make();
+          if (made.kind === "event" && made.event.kind === "start") {
+            starting = true;
+            made = { ...made, event: prepareStart(made.event) };
+          }
         } catch (thrown) {
           made = failureOf(thrown);
         }
-        // A new renderer holds no config, even if its start was not made or
-        // could not be answered. The first mailbox place belongs to start.
-        if (
-          at === "first" ||
-          (made.kind === "event" && made.event.kind === "start")
-        ) {
+        // A new generation needs new deliveries. The host's existing
+        // declaration and followed origins still stand until it answers.
+        if (starting) {
           configs.clear();
           declared = undefined;
-          origins = undefined;
           followFailure = null;
         }
-        if (made.kind !== "event")
+        if (made.kind !== "event") {
+          if (starting) startFailure = made;
           return { event: null, slotted: unanswered(made, queuedMs) };
+        }
+        if (
+          !starting &&
+          startFailure !== null &&
+          made.event.kind !== "effect-done"
+        )
+          return { event: null, slotted: unanswered(startFailure, queuedMs) };
         holds(made.event.kind);
-        return {
-          event: made.event,
-          slotted: await inSlot(
-            stamped(made),
-            queuedMs,
-            made.event.kind === "click" ? made.runEvidence : undefined,
-          ),
-        };
+        const slotted = await inSlot(
+          stamped(made),
+          queuedMs,
+          made.event.kind === "click" ? made.runEvidence : undefined,
+        );
+        if (starting)
+          startFailure =
+            slotted.turn.kind === "threw" ? slotted.turn.failure : null;
+        return { event: made.event, slotted };
       } finally {
         // [LAW:no-ambient-temporal-coupling] Release before the mailbox can
         // select another slot, including when this click was refused.
@@ -852,6 +898,7 @@ export function rendererHost(
     const output = await inMailbox(async (_queuedMs, holds) => {
       holds(`push:${push.kind}`);
       try {
+        if (startFailure !== null) throw new CrossedFailure(startFailure);
         const { subscriptions, wake, stored, ...answered } =
           await renderer.answer({
             kind: "adapter",

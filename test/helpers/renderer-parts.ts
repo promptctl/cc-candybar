@@ -44,19 +44,12 @@ export const minter = (): (() => EffectId) => {
   return () => ++minted as EffectId;
 };
 
-// [LAW:no-silent-failure] A reach this rig has no host part for throws by
-// name, so a test that starts to depend on one says so.
-const unhosted = (what: string) => (): never => {
-  throw new Error(`${what}: no host part in this rig`);
-};
-
 // The host a renderer test draws against: no update is offered, and file
 // events are heard.
 export function inertHost(): AdapterToHost {
   return {
     log: () => {},
     eventAnswered: () => {},
-    storage: { hold: unhosted("storage"), release: unhosted("storage") },
   };
 }
 

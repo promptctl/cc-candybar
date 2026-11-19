@@ -73,6 +73,8 @@ export interface RendererConfigs {
 }
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
+  // One physical discovery batch can repair source watches for several renderers.
+  readonly reloaded?: (folders: ReadonlySet<string>) => void;
   readonly watchers: Pick<WatcherRegistry, "batch">;
   readonly files?: () => Partial<Omit<DiscoveryFiles, "stateText">>;
   readonly openText?: typeof withRegularTextFile;
@@ -148,11 +150,16 @@ export class ConfigDiscovery {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
-      for (const [key, origin] of fresh)
+      const snapshots: ConfigSnapshot[] = [];
+      for (const [key, origin] of fresh) {
+        const found = this.discovered(origin, shared, null);
         this.followed.set(key, {
-          ...this.discovered(origin, shared, null),
+          ...found,
           renderers: new Set([renderer]),
         });
+        snapshots.push(found.snapshot);
+      }
+      this.reloaded(snapshots);
     }
     let released = 0;
     for (const [key, { renderers, watch }] of this.followed) {
@@ -261,7 +268,17 @@ export class ConfigDiscovery {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length}`,
     );
+    if (moved.length > 0) this.reloaded(moved.map(({ snapshot }) => snapshot));
     return moved;
+  }
+
+  private reloaded(snapshots: readonly ConfigSnapshot[]): void {
+    if (this.deps.reloaded === undefined) return;
+    const folders = new Set<string>();
+    for (const snapshot of snapshots)
+      for (const { definition } of pluginFiles(snapshot))
+        if (definition.kind === "text") folders.add(definition.storage);
+    if (folders.size > 0) this.deps.reloaded(folders);
   }
 
   // [LAW:single-enforcer] The observation supplied to a poll watch comes
@@ -370,11 +387,15 @@ function watchTargetsFor(found: Discovered): PathsWatch {
     named: [
       ...targets.files,
       ...roots,
-      ...snapshot.plugins.map((p) => p.path),
-      ...snapshot.chain.flatMap((l) =>
-        Object.values(l.listed).map((p) => p.path),
-      ),
+      ...pluginFiles(snapshot).map((p) => p.path),
     ],
     whole: roots,
   });
+}
+
+function pluginFiles(snapshot: ConfigSnapshot) {
+  return [
+    ...snapshot.plugins,
+    ...snapshot.chain.flatMap((layer) => Object.values(layer.listed)),
+  ];
 }

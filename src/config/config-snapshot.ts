@@ -87,7 +87,13 @@ export interface PluginFile {
   readonly scope: PluginScope; // installed, or the repository's, which come with its approval
   readonly path: string; // the definition: its identity, its messages, its `data` path's base
   readonly definition:
-    | { readonly kind: "text"; readonly text: string; readonly dir: string } // dir: its folder's real path
+    | {
+        readonly kind: "text";
+        readonly text: string;
+        readonly dir: string;
+        // The managed directory resolved by discovery, including for a linked plugin.
+        readonly storage: string;
+      }
     | { readonly kind: "unreadable"; readonly error: string };
 }
 

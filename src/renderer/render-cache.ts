@@ -15,10 +15,6 @@ import type {
   Subscription,
   Subscriptions,
 } from "../renderer-interface/interface.js";
-import type {
-  AdapterToHost,
-  StorageHoldId,
-} from "../renderer-interface/adapter.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import {
   CrossedFailure,
@@ -150,11 +146,8 @@ export function renderCacheBudget(memoryLimitBytes: number): number {
 export const MAX_ENTRIES = 256;
 const MAX_UNPINNED_FAILURES = 256;
 
-// [LAW:single-enforcer] These are the cache-and-registry deps — session state
-// (for declareState atoms) and the host's storage owner. Daemon-
-// owned data providers like the SessionUsageStore/git provider/etc. live in
-// the session source (src/renderer/session-source.ts) a view's payload is
-// derived through; they are not part of cache identity or lifecycle.
+// [LAW:single-enforcer] Cache entries compile host-supplied facts. A view
+// reads its session's values through the session source.
 export interface RenderDeps<
   S extends ViewSource = ViewSource,
   F extends ViewFacts = ViewFacts,
@@ -169,9 +162,6 @@ export interface RenderDeps<
     origin: RenderOrigin,
     session: SessionId,
   ) => ConfigSnapshot | null;
-  // The host's storage owner, which holds the folders each served state's
-  // latest load named (`holdFolders`), from its first load to its reclaim.
-  storage: AdapterToHost["storage"];
   // The gates a load builds against (StateDeps).
   gates: Gates;
   // What a view draws from (src/renderer/session-source.ts); a test drawing no
@@ -480,8 +470,6 @@ export interface CacheEntry {
 // render — which otherwise resumed on a disposed store, every chained read
 // recomputed untracked.
 interface StateHold {
-  // The id the state's storage folders are held under at the host.
-  readonly id: StorageHoldId;
   holders: number;
   retired: Teardown | null;
 }
@@ -1171,9 +1159,12 @@ export class RenderCache<
     return this.closing.aborted;
   }
   // Every state the map serves or served, until reclaimed.
-  private readonly holds = new Map<DslRenderState, StateHold>();
-  // The last storage hold id minted.
-  private storageHolds = 0;
+  private readonly holds = observable.map<DslRenderState, StateHold>(
+    undefined,
+    {
+      deep: false,
+    },
+  );
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   private readonly views = observable.map<SessionId, SessionView<S, F>>(
@@ -1373,7 +1364,6 @@ export class RenderCache<
     // (including an observer throwing) can skip it.
     // [LAW:dataflow-not-control-flow]
     runInAction(() => this.entries.set(key, entry));
-    this.holdFolders(entry.state);
     this.fit(entry);
     this.log(
       "info",
@@ -1725,6 +1715,15 @@ export class RenderCache<
     ];
   }
 
+  // [LAW:one-source-of-truth] A retired state can still serve an in-flight
+  // draw. Its folders go with its last holder, just like its compile.
+  managedFolders(): readonly string[] {
+    const folders = new Set<string>();
+    for (const state of this.holds.keys())
+      for (const folder of state.sources.values()) folders.add(folder);
+    return [...folders].sort();
+  }
+
   subscriptions(): Pick<Subscriptions, "sources"> {
     return {
       sources: Object.fromEntries(
@@ -1870,24 +1869,13 @@ export class RenderCache<
       throw new Error(
         `render cache: a second compile for key ${state.compileKey.slice(0, 12)}`,
       );
-    this.holds.set(state, {
-      id: ++this.storageHolds as StorageHoldId,
-      holders: 0,
-      retired: null,
-    });
+    runInAction(() => this.holds.set(state, { holders: 0, retired: null }));
     this.compiles.set(state.compileKey, state.compiled);
     if (held === undefined)
       this.log(
         "info",
         `render-cache compile built key=${state.compileKey.slice(0, 12)} compiles=${this.compiles.size}`,
       );
-  }
-
-  // The host holds the storage folders a served state's latest load named.
-  private holdFolders(state: DslRenderState): void {
-    // [LAW:single-enforcer] The host keys each folder once, however many
-    // sources name it.
-    this.deps.storage.hold(this.holdOf(state).id, [...state.sources.values()]);
   }
 
   private holdOf(state: DslRenderState): StateHold {
@@ -1945,8 +1933,7 @@ export class RenderCache<
   // without dispose leaks every handle the config declared.
   private reclaim(state: DslRenderState, hold: StateHold): void {
     if (hold.retired === null || hold.holders > 0) return;
-    this.holds.delete(state);
-    this.deps.storage.release(hold.id);
+    runInAction(() => this.holds.delete(state));
     this.log("info", configDisposeLine(hold.retired, state.registry.dispose()));
     // [LAW:one-source-of-truth] `holds` lists every state not yet reclaimed,
     // so a compile no state left there carries has no render to draw it.
@@ -2009,10 +1996,6 @@ export class RenderCache<
       });
       this.serve(state);
     }
-    // [LAW:dataflow-not-control-flow] Every load holds, built, kept or failed.
-    // The successor's hold precedes its predecessor's release, so a folder
-    // both name is never closed and reopened.
-    this.holdFolders(entry.state);
     if (loaded.kind === "built") this.retire(served, "reload", entry);
     if (loaded.state !== null)
       for (const [session, failure] of retry)

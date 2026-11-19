@@ -26,7 +26,6 @@ import {
   type HostLine,
   type RendererLine,
 } from "../../src/renderer-interface/wire";
-import type { StorageHoldId } from "../../src/renderer-interface/adapter";
 import type {
   AdapterInput,
   AdapterOutput,
@@ -91,7 +90,6 @@ function rig(start: () => Promise<void> = async () => {}) {
   const logs: string[] = [];
   const levels: string[] = [];
   const ends: HeldEvent[] = [];
-  const held: Array<["hold" | "release", StorageHoldId]> = [];
   const launcher = {
     launchChannel: (opts: ChannelOpts): Channel => {
       let finish: (result: LaunchResult) => void = () => {};
@@ -122,13 +120,7 @@ function rig(start: () => Promise<void> = async () => {}) {
     },
   };
   const link = processRenderer({
-    reaches: {
-      ...inertHost(),
-      storage: {
-        hold: (id) => held.push(["hold", id]),
-        release: (id) => held.push(["release", id]),
-      },
-    },
+    reaches: inertHost(),
     log: (level, msg) => {
       logs.push(msg);
       levels.push(level);
@@ -158,7 +150,6 @@ function rig(start: () => Promise<void> = async () => {}) {
     logs,
     levels,
     ends,
-    held,
     link,
     inputs,
   };
@@ -180,7 +171,7 @@ const PINNED: Timed<AdapterOutput> = {
   kind: "replied",
   stored: [],
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, configs: [] },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
   wake: null,
   turnMs: 0,
 };
@@ -205,7 +196,7 @@ describe("a renderer process's start", () => {
       {
         kind: "boot",
         wireVersion: RENDERER_WIRE_VERSION,
-        boot: { ...RENDERER_BOOT, subscriptionUpdates: true },
+        boot: RENDERER_BOOT,
       },
     ]);
     expect(rendererNodeArgs(["--max-old-space-size=9"], 7)).toEqual([
@@ -411,147 +402,25 @@ describe("a renderer process's end", () => {
   });
 });
 
+test("a failed restoration ends that generation and starts its successor after backoff", async () => {
+  let attempt = 0;
+  const { link, children, clock, logs, ends } = rig(async () => {
+    if (++attempt === 1) throw new Error("unavailable config snapshot");
+  });
+  link.arm();
+  children[0]!.say(startedLine(9001));
+  await settled();
+  expect(children[0]!.opts.signal?.aborted).toBe(true);
+  expect(logs).toContainEqual(expect.stringContaining("start failed:"));
+  expect(ends[0]?.text).toContain("failed to start: unavailable config snapshot");
+  clock.advance(BACKOFF_FIRST_MS);
+  children[1]!.say(startedLine(9002));
+  await settled();
+  expect(attempt).toBe(2);
+  expect(link.process()?.pid).toBe(9002);
+});
+
 describe("ids a renderer mints", () => {
-  test("cross as the host's own, never repeated across renderers, and a gone renderer's holds go once the next has started", async () => {
-    let started: () => void = () => {};
-    const { link, children, clock, held } = rig(
-      () => new Promise<void>((resolve) => (started = resolve)),
-    );
-    link.arm();
-    const first = children[0]!;
-    first.say(startedLine(9001));
-    first.say({ kind: "notice", reach: "storage.hold", args: [1, ["/f"]] });
-    first.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f", "/g"]],
-    });
-    started();
-    await settled();
-    first.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    const second = children[1]!;
-    second.say(startedLine(9002));
-    second.say({ kind: "notice", reach: "storage.hold", args: [1, ["/g"]] });
-    await settled();
-    // The first renderer's hold stands until the second has started; the
-    // second's own id 1 is a new host id.
-    expect(held).toEqual([
-      ["hold", 1],
-      ["hold", 1],
-      ["hold", 2],
-    ]);
-    started();
-    await settled();
-    expect(held.at(-1)).toEqual(["release", 1]);
-  });
-
-  test("a gone renderer's holds stand while the next ends before its start answers, and go once one answers", async () => {
-    const starts: Array<() => void> = [];
-    const { link, children, clock, held } = rig(
-      () => new Promise<void>((resolve) => starts.push(resolve)),
-    );
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    starts[0]!();
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    children[1]!.exit(CRASHED);
-    starts[1]!();
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say(startedLine(9003));
-    starts[2]!();
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a refused start keeps the last renderer's storage hold", async () => {
-    let attempt = 0;
-    const { link, children, clock, held, logs } = rig(async () => {
-      if (++attempt === 2) throw new Error("start refused");
-    });
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    expect(logs).toContainEqual(expect.stringContaining("start refused"));
-
-    children[1]!.exit(CRASHED);
-    await settled();
-    clock.advance(2 * BACKOFF_FIRST_MS);
-    children[2]!.say(startedLine(9003));
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a renderer that never took over releases what it held as it ends", async () => {
-    const { link, children, held } = rig();
-    link.arm();
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
-  test("a start with nothing to await releases no holds before its renderer has booted", async () => {
-    const { link, children, clock, held } = rig();
-    link.arm();
-    children[0]!.say(startedLine(9001));
-    children[0]!.say({
-      kind: "notice",
-      reach: "storage.hold",
-      args: [1, ["/f"]],
-    });
-    await settled();
-    children[0]!.exit(CRASHED);
-    await settled();
-    clock.advance(BACKOFF_FIRST_MS);
-    await settled();
-    expect(held).toEqual([["hold", 1]]);
-    children[1]!.say(startedLine(9002));
-    await settled();
-    expect(held).toEqual([
-      ["hold", 1],
-      ["release", 1],
-    ]);
-  });
-
   test("an effect's id is the host's, and its done goes back by the renderer's", async () => {
     const { link, children, inputs } = rig();
     link.arm();
@@ -577,7 +446,7 @@ describe("ids a renderer mints", () => {
       stored: [],
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, configs: [] },
+      subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
       wake: null,
       frames: [],
       turnMs: 0,
@@ -629,7 +498,7 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, configs: [] },
+        subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
         wake: null,
         frames: [],
         turnMs: 0,

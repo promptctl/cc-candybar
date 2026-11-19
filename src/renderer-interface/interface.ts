@@ -156,6 +156,13 @@ export type Event =
       // view before the view opens.
       readonly viewers: Viewers;
       readonly sessions: readonly SessionConfig[];
+      // The host's current shared snapshots, once per origin. Retained
+      // origins can outlive their last session and reopen their cached state.
+      readonly configs?: ReadonlyArray<{
+        readonly origin: RenderOrigin;
+        readonly config: ConfigSnapshot;
+        readonly retained: boolean;
+      }>;
     }
   | {
       // A request's opening turn, delivered ahead of it: the session's
@@ -404,6 +411,9 @@ export type Subscription =
 // absent, never one holding `undefined`, which JSON does not carry.
 export interface Subscriptions {
   readonly sources: Readonly<Record<SessionId, readonly Subscription[]>>;
+  // Each managed folder declared by a retained config, even between sessions.
+  // Its address came from the host's plugin discovery.
+  readonly managedFolders: readonly string[];
   // The lanes each session with an open view switches on, as it draws them:
   // the host gates every subscriber by its lane, and holds the tmux status
   // line row of each session whose switch is on, in the pane its newest

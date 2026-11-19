@@ -47,7 +47,7 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
           kind: "replied",
           stored: [],
           reply: { kind: "close-journal" },
-          subscriptions: { sources: {}, lanes: {}, configs: [] },
+          subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
           wake: null,
         };
       },
@@ -75,7 +75,6 @@ function linesOver(
   host: AdapterToHost,
   heap: Parameters<typeof serveRenderer>[0]["heapSnapshot"] = async () => {},
   options: {
-    readonly subscriptionUpdates?: boolean;
     readonly renderer?: TimedRenderer;
     readonly heard?: RendererLine[];
   } = {},
@@ -94,7 +93,6 @@ function linesOver(
   );
   toRenderer = serveRenderer({
     renderer: options.renderer ?? talkingRenderer(reaches),
-    subscriptionUpdates: options.subscriptionUpdates,
     send: (line) => {
       const received = crossed(line);
       options.heard?.push(received);
@@ -109,7 +107,7 @@ function linesOver(
 const overLines = (host: AdapterToHost): TimedRenderer =>
   linesOver(host).renderer;
 
-test("v8 notices carry legacy and revised held event identities through JSON", () => {
+test("renderer notices carry legacy and revised held event identities through JSON", () => {
   const heard: HeldEvent[] = [];
   const lines = rendererOverLines({
     send: () => {},
@@ -133,9 +131,10 @@ const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   tick: 0 as Tick,
 });
 
-const empty: Subscriptions = { sources: {}, lanes: {}, configs: [] };
+const empty: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configs: [] };
 const opened: Subscriptions = {
   ...empty,
+  managedFolders: ["/p/plugin/session"],
   configs: [{ projectDir: "/p", cwd: "/p", target: { source: "search" } }],
 };
 
@@ -162,51 +161,40 @@ function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
   );
 }
 
-test.each([true, false])(
-  "a renderer pipe takes full replacements and stable wakes (subscription updates: %s)",
-  async (subscriptionUpdates) => {
-    const heard: RendererLine[] = [];
-    const wire = linesOver(inertHost(), undefined, {
-      heard,
-      subscriptionUpdates,
-      renderer: declaring([empty, empty, opened, opened, empty]),
-    });
-    const answers = [];
-    for (let step = 0; step < 5; step++)
-      answers.push(await wire.renderer.answer(push("close-journal")));
-    expect(answers.map(({ subscriptions }) => subscriptions)).toEqual([
-      empty,
-      empty,
-      opened,
-      opened,
-      empty,
-    ]);
-    expect(answers.map(({ wake }) => wake)).toEqual([1, 2, 3, 4, 5]);
-    expect(answers[1]?.subscriptions).toBe(answers[0]?.subscriptions);
-    expect(answers[3]?.subscriptions).toBe(answers[2]?.subscriptions);
-    const outputs = heard.flatMap((line) =>
-      line.kind === "output" ? [line.output] : [],
-    );
-    expect(outputs.map((value) => "subscriptions" in value)).toEqual(
-      subscriptionUpdates
-        ? [true, false, true, false, true]
-        : [true, true, true, true, true],
-    );
-    expect(outputs[0]).toMatchObject(
-      subscriptionUpdates
-        ? { subscriptions: empty, wake: 1 }
-        : { subscriptions: { ...empty, wake: 1 } },
-    );
-    expect(outputs[4]).toMatchObject({ subscriptions: empty });
-  },
-);
+test("a renderer pipe carries changes to the declaration independently of wakes", async () => {
+  const heard: RendererLine[] = [];
+  const wire = linesOver(inertHost(), undefined, {
+    heard,
+    renderer: declaring([empty, empty, opened, opened, empty]),
+  });
+  const answers = [];
+  for (let step = 0; step < 5; step++)
+    answers.push(await wire.renderer.answer(push("close-journal")));
+  expect(answers.map(({ subscriptions }) => subscriptions)).toEqual([
+    empty,
+    empty,
+    opened,
+    opened,
+    empty,
+  ]);
+  expect(answers.map(({ wake }) => wake)).toEqual([1, 2, 3, 4, 5]);
+  expect(answers[1]?.subscriptions).toBe(answers[0]?.subscriptions);
+  expect(answers[3]?.subscriptions).toBe(answers[2]?.subscriptions);
+  const outputs = heard.flatMap((line) =>
+    line.kind === "output" ? [line.output] : [],
+  );
+  expect(outputs.map((value) => "subscriptions" in value)).toEqual([
+    true, false, true, false, true,
+  ]);
+  expect(outputs[0]).toMatchObject({ subscriptions: empty, wake: 1 });
+  expect(outputs[4]).toMatchObject({ subscriptions: empty });
+});
 
 test("a replacement process sends the same nonempty declaration on its first answer", async () => {
   for (let generation = 0; generation < 2; generation++) {
     const heard: RendererLine[] = [];
     const { renderer } = linesOver(inertHost(), undefined, {
       heard,
-      subscriptionUpdates: true,
       renderer: declaring([opened]),
     });
     await expect(renderer.answer(push("close-journal"))).resolves.toMatchObject(

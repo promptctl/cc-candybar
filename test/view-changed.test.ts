@@ -13,7 +13,6 @@ import path from "node:path";
 import { RenderCache } from "../src/renderer/render-cache";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { SessionState } from "../src/renderer/session-state";
-import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
 import { viewFacts } from "./helpers/view-facts";
 import { writeAtomic } from "../src/utils/atomic-write";
 import { until } from "./helpers/until";
@@ -82,7 +81,6 @@ function setUp() {
       clock: systemTimekeeper,
       stateDir: stateDir(HOST),
       locations: locs(),
-      storage: NO_PLUGIN_STORAGE,
       gates: bareGates(),
       sessionState: new SessionState(),
       watchers,
