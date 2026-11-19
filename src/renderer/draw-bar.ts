@@ -24,6 +24,7 @@ import {
   type SessionView,
 } from "./render-cache";
 import { roleOf } from "../daemon/foundations/sighting-roles";
+import type { ClientHint } from "../client-hint.js";
 import { drawDsl, type RenderWarning } from "../dsl/render.js";
 import { renderFailedFrame, standIn, type Frame } from "../render/frame.js";
 import {
@@ -35,7 +36,6 @@ import {
 import { type SessionSource } from "./session-source.js";
 import { runInAction } from "mobx";
 import type { RichText } from "@promptctl/rich-js";
-import type { WorldState } from "../facts/world-state.js";
 import type { WorldStates } from "./world-states.js";
 import { isPending } from "../utils/outcome.js";
 import {
@@ -256,7 +256,10 @@ interface RenderSetup extends Disposable {
 }
 
 // What a render notes of the context it draws by.
-function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
+export function contextFacts(
+  req: CheckedRenderRequest,
+  facts: RequestFacts,
+): void {
   noteFacts(facts, { sid: req.hookData.session_id });
   const { hints } = req;
   noteFacts(facts, {
@@ -290,54 +293,10 @@ function contextFacts(req: CheckedRenderRequest, facts: RequestFacts): void {
 const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 
-// [LAW:single-enforcer] A `context` turn: the facts of the context it carries
-// noted, what the context says recorded, its world state taken, and the
-// session's view opened at it and let go, so the turn's output names what the
-// view reads before the request after it waits. The record goes first, so a
-// durable click on a session whose opening threw still resolves the origin
-// that opening was for, and the facts before it, so the request's event says
-// what a failed opening was for.
-//
-// [LAW:one-source-of-truth] The world state and the view's context are taken
-// in one action, so nothing drawn between the two pairs either with another
-// context's.
-export function configureSession(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  worldState: WorldState,
-  facts: RequestFacts,
-): void {
-  runInAction(() => {
-    takeContext(parts, req, worldState, facts);
-    openSession(parts, req);
-  });
-}
-
-// What a `context` does whether or not its origin's config is held: its
-// facts noted, and it and its world state taken, so the
-// session's documents are taken in the order the host hands them in, and the
-// origin it renders from is the session's.
-export function takeContext(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-  worldState: WorldState,
-  facts: RequestFacts,
-): void {
-  contextFacts(req, facts);
-  noteFacts(facts, { encoding: req.encoding });
-  runInAction(() => {
-    parts.worldStates.take(worldState);
-    parts.worldStates.heard(req);
-  });
-}
-
 // The session's view opened at the context, and let go: what a `context`
 // waits for its origin's config to do.
-export function openSession(
-  parts: RendererParts,
-  req: CheckedRenderRequest,
-): void {
-  holdSessionAt(parts, req)[Symbol.dispose]();
+export function openSession(parts: RendererParts, session: SessionId): void {
+  holdSessionAt(parts, parts.worldStates.requestOf(session))[Symbol.dispose]();
 }
 
 // [LAW:single-enforcer] A `retire` turn: the session's world state goes, and
@@ -359,9 +318,8 @@ export function retireSession(
 
 // [LAW:single-enforcer] The one way a session's view is held at a context:
 // opened, or kept and refreshed, at the origin the context names. A
-// `context` turn opens it ahead of the request, and the request holds it again
-// at its own context, so it draws by the context it carries and needs nothing
-// to outlive the turn before it: a view closed between the two opens again.
+// `context` turn opens it ahead of the request. If the cache evicts the
+// view before the request draws, the request can open it again at the live context.
 function holdSessionAt(
   parts: RendererParts,
   req: CheckedRenderRequest,
@@ -1029,18 +987,17 @@ export interface RequestAnswer {
 export function answerRequest(
   parts: RendererParts,
   req: CheckedRenderRequest,
+  client: ClientHint | null,
   facts: RequestFacts,
-  // The request's turn's effects, which the setups its session's clicks owe
-  // join.
 ): RequestAnswer {
   const { time, feeds } = parts;
+  const sessionId = req.hookData.session_id;
   using setup = setUpRender(
     parts,
     req,
     { at: time.at, tick: time.tick },
     facts,
   );
-  const sessionId = req.hookData.session_id;
   const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
     parts,
     setup,
@@ -1050,7 +1007,7 @@ export function answerRequest(
   const elsewhere = handedOffTo(lanes, feeds.following(sessionId));
   // A `frames` display draws the bar itself; Claude Code's statusline hands
   // it to the lanes drawing it elsewhere.
-  const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
+  const toStatusline = roleOf(client) === "statusline";
   // [LAW:single-enforcer] Signed as it leaves the renderer, each link once.
   const frame = signingFrames(parts.linkSigner)(
     toStatusline

@@ -144,6 +144,7 @@ const EXTRAS: Parameters<RuntimeStats["snapshot"]>[0] = {
   collector: { sessions: 1, retiring: 0 },
   effectCache: { sessions: 2, effects: 5 },
   menuIdle: { sessions: 2, armed: 1 },
+  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
   mailbox: { holder: null, heldMs: 0, queued: 0 },
   runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
   sessionState: { sessions: 2, observers: 11, revision: 7 },
@@ -437,6 +438,7 @@ describe("formatStats", () => {
       collector: { sessions: 1, retiring: 0 },
       effectCache: { sessions: 2, effects: 3 },
       menuIdle: { sessions: 2, armed: 1 },
+      rendererTurns: { parked: 2, presents: 1, deferrals: 3 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 3, failed: 1, timedOut: 1, refused: 0, running: 0 },
       sessionState: { sessions: 2, observers: 11, revision: 7 },
@@ -520,6 +522,9 @@ describe("formatStats", () => {
     expect(out).toContain("polled        3 paths");
     expect(out).toContain("active        5");
     expect(out).toContain("effects       3");
+    expect(out).toContain(
+      "renderer turns\n  parked        2\n  presents      1\n  deferrals     3",
+    );
     expect(out).toContain("armed         1");
     expect(out).toContain("observers     11");
     expect(out).toContain("revision      7");
@@ -593,6 +598,7 @@ describe("formatStats", () => {
       collector: { sessions: 1, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },

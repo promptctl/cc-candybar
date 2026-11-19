@@ -114,6 +114,8 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 - **Inputs and outputs:** §7.
 - **Inside:** Events → State machine → Draw. The state machine is the one writer of the renderer's state; Draw is a pure function of world state, renderer state, config and the instant it was handed.
 
+A live session has one renderer record containing its current context and its latest world document. Only a context turn opens that record. World updates apply during its lifetime, and retirement ends it along with any waiting work. When config arrives, a waiting view or click uses the session's current origin and context. A statusline request draws from that same record and returns its present in its own turn.
+
 ## 7. Interfaces
 
 ### The renderer interface
@@ -392,6 +394,8 @@ One wide event per unit of work, under one correlation id:
 
 - **The host,** per input delivered: renderer, session, input kind, mailbox wait, the renderer's `took`, the effects returned and each outcome, and the world state's `seq` the renderer last held. Per world-state push and per source run, as Proposal 1 §21. Per renderer start and end, with its bundle.
 - **A renderer** writes nothing. Its turn record (the event kind, the state revision it left, what it drew and what it settled for) is part of its output, and the host writes it beside the input's event.
+
+`daemon-stats` reports the number of operations waiting for config, presents awaiting their effect result, and deferrals waiting for their tick under `rendererTurns`.
 
 Every renderer's panel is the same, because there is one kind of renderer. Watching one is the whole of "dev mode". [LAW:nothing-unseen]
 

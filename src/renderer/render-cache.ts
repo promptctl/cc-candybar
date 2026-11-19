@@ -141,7 +141,10 @@ export const MAX_ENTRIES = 256;
 // owned data providers like the SessionUsageStore/git provider/etc. live in
 // the session source (src/renderer/session-source.ts) a view's payload is
 // derived through; they are not part of cache identity or lifecycle.
-export interface RenderDeps<S extends ViewSource = ViewSource> {
+export interface RenderDeps<
+  S extends ViewSource = ViewSource,
+  F extends ViewFacts = ViewFacts,
+> {
   // The renderer's turn time (StateDeps).
   clock: TurnClock;
   // Where the user's home is, which a `~` in a plugin's data path names
@@ -162,6 +165,9 @@ export interface RenderDeps<S extends ViewSource = ViewSource> {
   // What a view draws from (src/renderer/session-source.ts); a test drawing no
   // view's own payload passes SOURCES_NOTHING.
   source: SourceOf<S>;
+  // [LAW:one-source-of-truth] Live views read the renderer's session record.
+  // A standalone view can own its request in the absence of a session store.
+  currentRequest?: (session: SessionId) => F;
   // Where the cache's events go — every load, every teardown. Only the
   // daemon passes its log; a caller passing none logs quietly, like the
   // providers and the usage store.
@@ -990,11 +996,9 @@ export interface SessionView<
   readonly state: DslRenderState;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  // The request the view's renders draw by. A render of the same request
-  // changes nothing.
-  requested(facts: F): void;
-  // The request the view draws by now: the one it opened with, or a later
-  // one `requested` named.
+  // Standalone views can update the request they hold.
+  requested?(facts: F): void;
+  // The current request the view draws by.
   facts(): F;
   // What the view draws from: its payload and selections, bound to its
   // store's inputs and slots (`bindView`) when it opened.
@@ -1049,6 +1053,16 @@ export interface ViewDeclaring<S extends ViewSource = ViewSource> {
   readonly log: DaemonLogger;
 }
 
+function standaloneRequest<F>(facts: F) {
+  const requested = observable.box(facts, { deep: false });
+  return {
+    read: () => requested.get(),
+    update: (next: F) => {
+      if (next !== requested.get()) runInAction(() => requested.set(next));
+    },
+  };
+}
+
 // [LAW:single-enforcer] The one way a view is built: the state's directory
 // registry opens a view registry, and the config's view-scoped variables are
 // declared into it, in `cwd` — the entry's, where its shells run. What the
@@ -1060,6 +1074,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   cwd: string,
   facts: F,
   { source: sourceOf, changed, log }: ViewDeclaring<S>,
+  currentRequest?: () => F,
 ): SessionView<S, F> {
   // [LAW:one-source-of-truth] The session is the one the request's checkpoint
   // parsed: a later request of the view's names the same one.
@@ -1068,10 +1083,10 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
   // What fails to declare here failed in the load's probe (buildRenderState),
   // which reported it: a declaration reads only the config.
   declareDslVariables(state.config, registry, cwd, VIEW_SCOPE);
-  // [LAW:one-source-of-truth] The view's one record of the request it draws
-  // by: observable, so the view's payload is derived again in the turn a
-  // request lands.
-  const requested = observable.box(facts, { deep: false });
+  const request =
+    currentRequest === undefined
+      ? standaloneRequest(facts)
+      : { read: currentRequest, update: undefined };
   // [LAW:no-silent-failure] A source that throws in its opening turn fails the
   // open, which the cache records and reports; what the open took is released
   // first, so a session that keeps failing to open leaks nothing.
@@ -1081,7 +1096,7 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
       sessionId,
       state,
       store: registry.variableStore,
-      requested: () => requested.get(),
+      requested: request.read,
     });
   } catch (e) {
     registry.dispose();
@@ -1122,11 +1137,8 @@ export function openView<S extends ViewSource, F extends ViewFacts>(
     store: registry.variableStore,
     registry,
     source,
-    // [LAW:single-enforcer] A request is taken once.
-    requested: (next) => {
-      if (next !== requested.get()) runInAction(() => requested.set(next));
-    },
-    facts: () => requested.get(),
+    requested: request.update,
+    facts: request.read,
     frames: new Map(),
     lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     retire: stopChanged,
@@ -1220,7 +1232,7 @@ export class RenderCache<
   // [LAW:one-source-of-truth] One compile per compile key, shared by every
   // state carrying that key, and dropped with the last of them (reclaim).
   private readonly compiles = new Map<string, CompiledConfig>();
-  private readonly deps: RenderDeps<S> & StateDeps;
+  private readonly deps: RenderDeps<S, F> & StateDeps;
   private readonly log: DaemonLogger;
   // Read when an eviction is decided: the budget is a boot-time fact.
   private readonly budgetBytes: () => number;
@@ -1228,7 +1240,7 @@ export class RenderCache<
   private readonly observers: RenderCacheObservers;
 
   constructor(
-    deps: RenderDeps<S>,
+    deps: RenderDeps<S, F>,
     opts: {
       budgetBytes: () => number;
       maxEntries?: number;
@@ -1533,7 +1545,7 @@ export class RenderCache<
       this.views.delete(sessionId);
       this.views.set(sessionId, current);
       // A request is the one the view draws by from here.
-      current.requested(facts);
+      current.requested?.(facts);
       return current;
     }
     // [LAW:no-ambient-temporal-coupling] The new view opens before the old one
@@ -1565,11 +1577,20 @@ export class RenderCache<
     const sessionId = facts.hookData.session_id;
     let view: SessionView<S, F>;
     try {
-      view = openView(state, entry.cwd, facts, {
-        source: this.deps.source,
-        changed: (sid) => this.observers.onViewChanged?.(sid),
-        log: this.log,
-      });
+      const { currentRequest } = this.deps;
+      view = openView(
+        state,
+        entry.cwd,
+        facts,
+        {
+          source: this.deps.source,
+          changed: (sid) => this.observers.onViewChanged?.(sid),
+          log: this.log,
+        },
+        currentRequest === undefined
+          ? undefined
+          : () => currentRequest(sessionId),
+      );
     } catch (error) {
       this.openFailures.set(sessionId, { error });
       throw error;

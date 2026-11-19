@@ -46,6 +46,7 @@ import {
 } from "./payload-owners";
 import { sumsOf } from "./today";
 import { viewFacts } from "./view-facts";
+import { heardRequest } from "./click";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { DiscoveringCache, originOf } from "./config-host";
 
@@ -244,7 +245,12 @@ export async function settledRequest(
   configFile: string,
   cleanups: Array<() => void>,
 ): Promise<SessionView<SessionSource>> {
-  const request = requestOf(dir);
+  const { hookData } = requestOf(dir);
+  const request = heardRequest(SESSION, PROJECT, {
+    hookData,
+    tmux: PANE,
+    args: ["cc-candybar", "--config", configFile],
+  });
   const held = rig.served.config(request, () =>
     rig.cache.holdSession(originOf(dir, dir, configFile), request),
   );
