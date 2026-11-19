@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-840",
+      "ref": "refs/pull/840/merge",
+      "sha": "474bea705499aaa5d05eecd05d5d2bbd87c2d39c",
+      "timestamp": "2026-11-19T10:11:26.273Z",
+      "commits": [
+        {
+          "sha": "474bea705499aaa5d05eecd05d5d2bbd87c2d39c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:09:50Z",
+          "message": "Merge bd3af78c8c10e22914e352e63d94fd43b1a92eed into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "bd3af78c8c10e22914e352e63d94fd43b1a92eed",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:42-07:00",
+          "message": "fix(config): exclude retired update settings from writable targets\n"
+        },
+        {
+          "sha": "fdc1584da0e2ce4759363301c4e8d9175110cba8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:02-07:00",
+          "message": "refactor: remove in-bar update offers and workers\n"
+        }
+      ]
+    },
+    {
       "version": "pr-844",
       "ref": "refs/pull/844/merge",
       "sha": "d3796148d0fdf0dc59352bb4b9a1f4576bf1e1c7",
@@ -100,28 +129,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:52:27-07:00",
           "message": "fix(settings): treat display checkboxes as preferences (ibyq.1sb)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-840",
-      "ref": "refs/pull/840/merge",
-      "sha": "63bdeeee5310105cee39226a8320ae7d262c5719",
-      "timestamp": "2026-11-19T10:01:47.636Z",
-      "commits": [
-        {
-          "sha": "63bdeeee5310105cee39226a8320ae7d262c5719",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:00:25-07:00",
-          "message": "Merge fdc1584da0e2ce4759363301c4e8d9175110cba8 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
-        },
-        {
-          "sha": "fdc1584da0e2ce4759363301c4e8d9175110cba8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:02-07:00",
-          "message": "refactor: remove in-bar update offers and workers\n"
         }
       ]
     },
