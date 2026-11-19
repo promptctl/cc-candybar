@@ -16,9 +16,9 @@ import {
 import { DEFINITION_FILE } from "./config/loader/plugins.js";
 import { readDefinition } from "./daemon/config-discovery/discover.js";
 import { locations } from "./daemon/paths.js";
-import type { World } from "./host.js";
-import { type OneShotLauncher } from "./proc/launch.js";
+import { admit, type AdmittedWorld, type StartedWorld } from "./host.js";
 import { failureText } from "./proc/launcher.js";
+import { askGit, describeUnknown } from "./proc/repository-local-env.js";
 import { canonicalDirectory } from "./utils/watch-target.js";
 import { resolveUserPath } from "./utils/user-path.js";
 
@@ -89,38 +89,31 @@ function repoDefinitions(repo: string, source: string): readonly string[] {
 // checks out nothing, and repoDefinitions says so. `--` keeps a source
 // spelled like an option from being read as one. With terminal prompts off,
 // a repo that is not there (GitHub asks for credentials) fails rather than
-// waiting on a prompt; a credential helper still answers. The variables git
-// names as locating a repository (a hook's GIT_DIR, say) are dropped, so
-// every call acts on the clone. `shown` stands for `url` in messages.
+// waiting on a prompt; a credential helper still answers. `shown` stands for
+// `url` in messages.
+// [LAW:single-enforcer] Every call runs through the admitted world's launcher,
+// withholding what git names (a hook's GIT_DIR, say), so every call acts on
+// the clone.
 function cloneRepo(
-  launcher: OneShotLauncher,
+  { launcher }: AdmittedWorld,
   url: string,
   shown: string,
   into: string,
 ): void {
-  const git = (
-    envOverlay: Record<string, string | null>,
-    ...args: string[]
-  ): string => {
+  const git = (...args: string[]): void => {
     const run = launcher.launchSync({
       bin: "git",
       args,
-      envOverlay,
+      environment: "inherited",
+      envOverlay: { GIT_TERMINAL_PROMPT: "0" },
       category: "plugin.git",
     });
     if (!run.ok)
       throw new Error(
         `git ${args.map((a) => (a === url ? shown : a)).join(" ")} failed (${failureText(run)})`,
       );
-    return run.stdout;
   };
-  // Overlay: terminal prompts off, and the variables that locate a repository
-  // (named by the tool itself) unset.
-  const env: Record<string, string | null> = { GIT_TERMINAL_PROMPT: "0" };
-  for (const name of git(env, "rev-parse", "--local-env-vars").split("\n"))
-    env[name] = null;
   git(
-    env,
     "clone",
     "--quiet",
     "--depth",
@@ -132,7 +125,6 @@ function cloneRepo(
     into,
   );
   git(
-    env,
     "-C",
     into,
     "sparse-checkout",
@@ -144,18 +136,29 @@ function cloneRepo(
 
 // The source as a directory on disk for as long as `use` runs: a path is
 // itself; a git repo is cloned into a temporary directory, removed after.
-function withRepo<T>(
-  { host, launcher }: World,
+// [LAW:single-enforcer] The clone is where this process first needs git's
+// answer, so it is admitted here, with no bound on the ask: a person waits on
+// this command and can end it. [LAW:no-silent-failure] A git that cannot name
+// its repository-local variables refuses the clone, worded as the daemon's
+// same fault is, with what it means here.
+async function withRepo<T>(
+  started: StartedWorld,
   source: PluginSource,
   use: (repo: string) => T,
-): T {
+): Promise<T> {
   switch (source.kind) {
     case "path":
       return use(source.dir);
     case "git": {
-      const dir = fs.mkdtempSync(path.join(host.tmp, "cc-candybar-plugin-"));
+      const answer = await askGit(started.launcher, "unbounded");
+      if (answer.kind === "unknown")
+        throw new Error(describeUnknown(answer, "plugin install"));
+      const world = admit(started, answer);
+      const dir = fs.mkdtempSync(
+        path.join(world.host.tmp, "cc-candybar-plugin-"),
+      );
       try {
-        cloneRepo(launcher, source.url, source.shown, path.join(dir, "repo"));
+        cloneRepo(world, source.url, source.shown, path.join(dir, "repo"));
         return use(path.join(dir, "repo"));
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -291,7 +294,10 @@ const USAGE = "Usage: cc-candybar plugin install <path | owner/repo | git URL>";
 
 // Exit 0 installed, 1 the source or a definition failed, 2 usage or a source
 // naming nothing.
-export function runPlugin(argv: readonly string[], world: World): number {
+export async function runPlugin(
+  argv: readonly string[],
+  world: StartedWorld,
+): Promise<number> {
   const [verb, arg, ...rest] = argv;
   if (verb !== "install" || arg === undefined || rest.length > 0) {
     console.error(USAGE);
@@ -309,7 +315,7 @@ export function runPlugin(argv: readonly string[], world: World): number {
   }
   try {
     const from = source.kind === "path" ? source.dir : source.shown;
-    const installed = withRepo(world, source, (repo) =>
+    const installed = await withRepo(world, source, (repo) =>
       installFromRepo(
         repo,
         userPluginRoot(locations(world.host)),

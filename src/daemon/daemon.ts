@@ -5,7 +5,7 @@ import type { SessionFileStorage } from "./session-state-file.js";
 import type { DurableContext } from "../renderer-interface/request-context.js";
 import { Runs } from "./runs.js";
 import { locations, type DaemonPaths } from "./paths";
-import type { Host } from "../host";
+import type { AdmittedWorld } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
@@ -21,8 +21,9 @@ import {
   type ReplyRequest,
 } from "./reply.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
+import type { Settled } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
+import { admissionWarnings, withheldFor } from "../proc/repository-local-env";
 import type { DaemonLogger } from "../utils/logger";
 import type { Gates } from "./foundations/gates";
 import { makeBinaryWatch, type BundleStat } from "./binary-watch";
@@ -94,8 +95,6 @@ export interface RunningBundle {
 export interface DaemonAdapters {
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
-  // What every launch of the daemon's work goes through.
-  readonly launcher: (own: LaunchOwner) => TestableLauncher;
   // [LAW:one-source-of-truth] Where the stores of the profile `name` derives
   // are kept, which the daemon reads once it serves and is then their sole
   // writer. Built over the daemon's log: a write in flight at the close
@@ -132,10 +131,11 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly bundle: RunningBundle;
   // The renderer it serves, whose profile its stores are.
   readonly rendererName: RendererName;
-  // [LAW:one-source-of-truth] What the process knows of its machine: its
-  // environment, home and temporary directory. The daemon reads them from here
-  // alone, and its launcher's children inherit the same environment.
-  readonly host: Host;
+  // [LAW:one-source-of-truth] The admitted process the daemon runs in: the
+  // host it reads its machine's facts from, and the launcher its own is made
+  // by, whose children inherit that host's environment less what admission
+  // withholds. One value, so the two cannot differ.
+  readonly world: AdmittedWorld;
   // The paths the daemon itself reads or writes. The files an adapter owns are
   // aimed by the same value at the adapter (production-adapters.ts), so a daemon
   // aimed at a temporary directory writes nowhere else.
@@ -210,7 +210,8 @@ type DaemonPhase =
     };
 
 export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
-  const { bundle, memoryLimitBytes, clock, exit, paths, gates, host } = inputs;
+  const { bundle, memoryLimitBytes, clock, exit, paths, gates, world } = inputs;
+  const { host } = world;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
@@ -247,14 +248,27 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     logger: log,
     clock,
   });
+  // [LAW:no-silent-failure] What admission withholds, said once in daemon.log,
+  // and when git could not name its repository-local variables, what that
+  // means, said there and standing on every bar for the daemon's life.
+  const admission = admissionWarnings(world.answer);
+  log("info", `launches withhold ${withheldFor(world.answer).join(",")}`);
+  for (const warning of admission) log("warn", warning.message);
   // [LAW:one-source-of-truth] The daemon's own faults, as every session's
-  // world state carries them: whether file events are heard, and what the
-  // launcher stands behind. Restated whenever either may have moved, and
-  // compared whole, so a restatement that moved nothing moves no document.
+  // world state carries them: whether file events are heard, what admission
+  // left standing, and what the launcher stands behind. Restated whenever
+  // either may have moved, and compared whole, so a restatement that moved
+  // nothing moves no document.
   // [LAW:no-ambient-temporal-coupling] Declared before the launcher, whose
   // observer restates them.
   const daemonFaults = observable.box<DaemonFacts>(
-    { fileEvents: [], launcher: [], rendererEnded: null, actFailed: null },
+    {
+      fileEvents: [],
+      admission,
+      launcher: [],
+      rendererEnded: null,
+      actFailed: null,
+    },
     { deep: false, equals: compareStructural },
   );
   // [LAW:one-source-of-truth] How the last renderer process ended, and the
@@ -266,6 +280,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     runInAction(() =>
       daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
+        admission,
         launcher: launcher.standing(),
         rendererEnded,
         actFailed,
@@ -276,8 +291,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // this daemon's launcher meters them into daemon-stats and ends them with it.
   // Its work holds this one, so a closed daemon's launches are refused here,
   // whichever daemon is live by then.
-  const launcher = inputs.launcher({
-    inherited: host.env,
+  const launcher = world.launcher.forOwner({
     stats: stats.launchStats,
     signal: cancelWork.signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders

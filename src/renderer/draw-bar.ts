@@ -3,6 +3,7 @@
 import type { DrawInspection } from "../renderer-interface/interface.js";
 import type { FileEventsWarning } from "../daemon/foundations/file-events-warnings";
 import { launcherWarningsAt, type LauncherWarning } from "../proc/launcher";
+import type { RepositoryLocalEnvWarning } from "../facts/world-state";
 import {
   DAEMON_EVENT_HOLD_S,
   eventHoldAt,
@@ -62,7 +63,10 @@ import {
   type LaneSwitches,
 } from "../config/lanes.js";
 import { type AdapterToHost } from "../renderer-interface/adapter.js";
-import type { Fault } from "../renderer-interface/noted-faults.js";
+import {
+  type FAULT_SCOPES,
+  type Fault,
+} from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
@@ -540,6 +544,7 @@ export function drawRender(
   );
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
+    ...daemon.admission,
     ...launched,
     ...held,
     ...(configWatch === null
@@ -721,6 +726,7 @@ export function drawRender(
       case "load":
       case "facts":
       case "config-watch":
+      case "repository-local-env":
       case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
@@ -736,7 +742,7 @@ export function drawRender(
   // it moved since the renderer's last record of the session, so a reader
   // learns what the frame could not honour without its viewer, and `kept`
   // otherwise, so an unchanged bar costs no message per tick.
-  const faults: ReadonlyArray<Fault<FaultKind>> = [
+  const faults: ReadonlyArray<Fault<DrawnFaultKind>> = [
     ...errors.map((e) => faultOf("error", e.kind, e.text, e.subject)),
     ...standing.map((w) => faultOf("warning", w.kind, w.message)),
     ...drawnWarnings.map((w) =>
@@ -892,19 +898,25 @@ type MaybeError = Omit<DrawError, "text" | "copy"> & {
 };
 
 // [LAW:one-source-of-truth] Every kind a fault is noted by, derived from the
-// producers' own unions, so a new kind of warning or error is a fault's kind
-// with no list here to extend.
-type FaultKind =
+// producers' own unions. A new kind of warning or error is held to the scope
+// table (src/renderer-interface/noted-faults.ts) by `Fault`'s bound, and a
+// kind the table names that nothing draws fails the check below.
+type DrawnFaultKind =
   | DrawError["kind"]
   | StandingWarning["kind"]
   | RenderWarning["kind"];
+const everyScopedKindDrawn: Record<
+  Exclude<keyof typeof FAULT_SCOPES, DrawnFaultKind>,
+  never
+> = {};
+void everyScopedKindDrawn;
 
 const faultOf = (
   level: Fault["level"],
-  kind: FaultKind,
+  kind: DrawnFaultKind,
   message: string,
   subject?: string,
-): Fault<FaultKind> => ({ level, kind, subject, message });
+): Fault<DrawnFaultKind> => ({ level, kind, subject, message });
 
 // What a walk's warning is about, where it carries one.
 // [LAW:types-are-the-program] Exhaustive over the kinds, as `tagOf` is.
@@ -965,6 +977,7 @@ function daemonEventAt(
 // What stands before a draw, whatever the draw then meets.
 type StandingWarning =
   | FileEventsWarning
+  | RepositoryLocalEnvWarning
   | LauncherWarning
   | DaemonEventWarning
   | ConfigWatchWarning

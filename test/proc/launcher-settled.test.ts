@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { processProbe } from "../helpers/host";
-import { systemLauncher } from "../../src/proc/system-launcher";
+import { systemLauncher } from "../helpers/host";
 import { until } from "../helpers/until";
 import { systemTimekeeper } from "../../src/time";
 
@@ -37,6 +37,7 @@ describe("a launcher settles", () => {
     const run = launcher.launch({
       bin: "/bin/sh",
       args: ["-c", `trap '' TERM; touch '${up}'; exec sleep 30`],
+      environment: "inherited",
       category: "user-shell",
     });
     const lifeline = launcher.__lifelineForTest().pid as number;
@@ -59,6 +60,7 @@ describe("a launcher settles", () => {
         "-c",
         `trap 'echo LAST >&2' TERM; touch '${up}'; while :; do sleep 0.05; done`,
       ],
+      environment: "inherited",
       category: "user-shell",
     });
     await until(() => existsSync(up), "the child trapping SIGTERM");
@@ -85,6 +87,7 @@ describe("a launcher settles", () => {
          require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid));
          setInterval(() => {}, 1000);`,
       ],
+      environment: "inherited",
       category: "user-shell",
     });
     await until(
@@ -108,6 +111,7 @@ describe("a launcher settles", () => {
         "-c",
         `echo $$ > '${pidFile}.tmp'; mv '${pidFile}.tmp' '${pidFile}'; sleep 8 & exec sleep 30`,
       ],
+      environment: "inherited",
       category: "user-shell",
     });
     await until(() => existsSync(pidFile), "the child started");

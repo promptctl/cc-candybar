@@ -73,14 +73,25 @@ import type {
 // the shell. The one place a spawn failure becomes text names the directory
 // instead when that is what is missing (a removed worktree the session is
 // still rendering from). Measured only on the failure path.
-function spawnErrorText(err: unknown, cwd: string | undefined): string {
+// [LAW:single-enforcer] The one place the errno is read, so an ENOENT whose
+// directory is there leaves as the typed "missing-command" and no caller
+// reads the words for it.
+function spawnFailure(
+  err: unknown,
+  cwd: string | undefined,
+): { reason: "spawn-error" | "missing-command"; error: string } {
   // isNativeError, not instanceof: the realm-proof test (Node's own errors
   // fail `instanceof Error` under a vm context such as Jest's).
-  if (!types.isNativeError(err)) return String(err);
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === "ENOENT" && cwd !== undefined && !existsSync(cwd)
-    ? `working directory does not exist: ${cwd}`
-    : err.message;
+  if (!types.isNativeError(err))
+    return { reason: "spawn-error", error: String(err) };
+  if ((err as NodeJS.ErrnoException).code !== "ENOENT")
+    return { reason: "spawn-error", error: err.message };
+  return cwd !== undefined && !existsSync(cwd)
+    ? {
+        reason: "spawn-error",
+        error: `working directory does not exist: ${cwd}`,
+      }
+    : { reason: "missing-command", error: err.message };
 }
 
 // [LAW:single-enforcer] Per-category minimum interval between spawn attempts
@@ -124,16 +135,30 @@ function checkRateLimit(
 
 // [LAW:one-source-of-truth] The environment a child gets is the launch's own
 // (a session's) or else the owner's inherited one (`LaunchScope.inherited`,
-// handed in by the process main or the daemon's root), under the launch's
-// overlay, resolved here for every spawn
+// handed in by the process main or the daemon's root) less what the launcher
+// withholds, under the launch's overlay, resolved here for every spawn
 // site. Passing `undefined` lets node read the host process's environment
 // directly, which is a second clock: under a realm boundary (Jest's sandbox
 // copies `process.env` per test file) the two diverge, and a PATH the test set
 // for a `shell` source never reached the shell it spawned
 // (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
 // null removes that variable: node's spawn skips undefined values.
-function childEnv(scope: LaunchScope, opts: LaunchOpts): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...(opts.environment ?? scope.inherited) };
+// [LAW:dataflow-not-control-flow] The withheld names are a list on every
+// launcher, empty on a plain one, so this has one shape. A session's own
+// environment is the session's, its repository-local variables included.
+function childEnv(
+  inherited: NodeJS.ProcessEnv,
+  withheld: readonly string[],
+  opts: Pick<LaunchOpts, "environment" | "envOverlay">,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv =
+    opts.environment === "inherited"
+      ? Object.fromEntries(
+          Object.entries(inherited).filter(
+            ([name]) => !withheld.includes(name),
+          ),
+        )
+      : { ...opts.environment.session };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
   return env;
@@ -410,6 +435,9 @@ function standing(state: LaunchState): LauncherFact[] {
 // `awk` is found
 // on the launcher's PATH, as every launched program is: where a machine keeps
 // it is the machine's fact (NixOS has no /usr/bin/awk).
+// [LAW:one-source-of-truth] Its environment is built as every child's is, from
+// the owner's inherited one. It is shared by every view of this state, and
+// awk reads no repository, so it withholds nothing.
 function spawnLifeline(state: LaunchState): Lifeline | null {
   const { stats, clock } = state.scope;
   stats?.onStart("lifeline");
@@ -417,12 +445,13 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope.inherited, [], { environment: "inherited" }),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });
   } catch (err) {
     stats?.onEnd("lifeline", elapsedMs(clock, t0));
-    setFault(state, `did not start: ${spawnErrorText(err, undefined)}`);
+    setFault(state, `did not start: ${spawnFailure(err, undefined).error}`);
     return null;
   }
   stats?.onEnd("lifeline", elapsedMs(clock, t0));
@@ -663,12 +692,16 @@ function relay(
 
 // A channel: a waited launch whose output is heard and whose stdin is the
 // caller's to write and close.
-function launchChannel(state: LaunchState, opts: ChannelOpts): Channel {
+function launchChannel(
+  state: LaunchState,
+  opts: ChannelOpts,
+  env: NodeJS.ProcessEnv,
+): Channel {
   let input: Writable | null = null;
   let pid: number | null = null;
   const ended = track(
     state,
-    launchPiped(state, opts, {
+    launchPiped(state, opts, env, {
       read: (s, category, stream, ends, which) =>
         relay(s, category, stream, ends, opts.heard[which]),
       opened: (opened, spawned) => {
@@ -698,13 +731,15 @@ function launchChannel(state: LaunchState, opts: ChannelOpts): Channel {
 function launchWaited(
   state: LaunchState,
   opts: AsyncLaunchOpts,
+  env: NodeJS.ProcessEnv,
 ): Promise<LaunchResult> {
-  return launchPiped(state, opts, captured(opts.stdinInput));
+  return launchPiped(state, opts, env, captured(opts.stdinInput));
 }
 
 async function launchPiped(
   state: LaunchState,
   opts: Omit<AsyncLaunchOpts, "stdinInput">,
+  env: NodeJS.ProcessEnv,
   pipes: Pipes,
 ): Promise<LaunchResult> {
   const { stats, clock } = state.scope;
@@ -719,7 +754,7 @@ async function launchPiped(
     try {
       child = spawner.spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
-        env: childEnv(state.scope, opts),
+        env,
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });
@@ -727,12 +762,11 @@ async function launchPiped(
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       resolve({
         ok: false,
-        reason: "spawn-error",
         stdout: "",
         stderr: "",
         exitCode: null,
         signal: null,
-        error: spawnErrorText(err, opts.cwd),
+        ...spawnFailure(err, opts.cwd),
       });
       return;
     }
@@ -895,11 +929,10 @@ async function launchPiped(
     const onError = (err: Error) => {
       settle({
         ok: false,
-        reason: "spawn-error",
         ...output(),
         exitCode: null,
         signal: null,
-        error: spawnErrorText(err, opts.cwd),
+        ...spawnFailure(err, opts.cwd),
       });
     };
     child.on("error", onError);
@@ -956,7 +989,11 @@ async function launchPiped(
 
 // Sync variant. For callers that genuinely cannot be async — the spawn
 // outcome must be settled before the function returns.
-function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
+function launchBlocking(
+  state: LaunchState,
+  opts: LaunchOpts,
+  env: NodeJS.ProcessEnv,
+): LaunchResult {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
@@ -966,7 +1003,7 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
   try {
     const result = state.spawner.spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(state.scope, opts),
+      env,
       input: opts.stdinInput,
       timeout:
         opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : undefined,
@@ -985,19 +1022,18 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     // as in `launch`.
     const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
     if (result.error && code !== "EPIPE" && code !== "ECONNRESET") {
-      const reason: "timeout" | "spawn-error" =
-        code === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
-        reason,
         stdout,
         stderr,
         exitCode: null,
         signal: result.signal ?? null,
-        error:
-          reason === "timeout"
-            ? timedOutError(opts.timeoutMs ?? 0)
-            : spawnErrorText(result.error, opts.cwd),
+        ...(code === "ETIMEDOUT"
+          ? {
+              reason: "timeout" as const,
+              error: timedOutError(opts.timeoutMs ?? 0),
+            }
+          : spawnFailure(result.error, opts.cwd)),
       };
     }
 
@@ -1020,12 +1056,11 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
-      reason: "spawn-error",
       stdout: "",
       stderr: "",
       exitCode: null,
       signal: null,
-      error: spawnErrorText(err, opts.cwd),
+      ...spawnFailure(err, opts.cwd),
     };
   }
 }
@@ -1036,13 +1071,17 @@ function launchBlocking(state: LaunchState, opts: LaunchOpts): LaunchResult {
 // the typed spawn outcome synchronously (so a failed spawn surfaces as
 // `ok: false` rather than a discarded Promise reporting success), and meters
 // through the stats handle so orphan spawns still show up in daemon-stats.
-function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
+function launchOrphan(
+  state: LaunchState,
+  opts: LaunchOpts,
+  env: NodeJS.ProcessEnv,
+): LaunchResult {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
   if (refused !== null) return refused;
   const t0 = clock.monotonic();
   stats?.onStart(opts.category);
-  const result = launchDetachedSyncInner(state, opts);
+  const result = launchDetachedSyncInner(state, opts, env);
   stats?.onEnd(opts.category, elapsedMs(clock, t0));
   return result;
 }
@@ -1050,12 +1089,13 @@ function launchOrphan(state: LaunchState, opts: LaunchOpts): LaunchResult {
 function launchDetachedSyncInner(
   state: LaunchState,
   opts: LaunchOpts,
+  env: NodeJS.ProcessEnv,
 ): LaunchResult {
   let child;
   try {
     child = state.spawner.spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: childEnv(state.scope, opts),
+      env,
       detached: true,
       stdio: "ignore",
     });
@@ -1064,12 +1104,11 @@ function launchDetachedSyncInner(
     // EACCES on some platforms).
     return {
       ok: false,
-      reason: "spawn-error",
       stdout: "",
       stderr: "",
       exitCode: null,
       signal: null,
-      error: spawnErrorText(err, opts.cwd),
+      ...spawnFailure(err, opts.cwd),
     };
   }
   // [LAW:no-silent-failure] spawn() with ENOENT (e.g. missing binary) does
@@ -1114,6 +1153,7 @@ function launchJob(
   state: LaunchState,
   opts: LaunchOpts,
   files: JobFiles,
+  env: NodeJS.ProcessEnv,
 ): JobLaunch {
   const { stats, clock } = state.scope;
   const refused = admit(state, opts.category);
@@ -1137,18 +1177,14 @@ function launchJob(
       ],
       {
         cwd: opts.cwd,
-        env: childEnv(state.scope, opts),
+        env,
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
       },
     );
   } catch (err) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
-    return {
-      ok: false,
-      reason: "spawn-error",
-      error: spawnErrorText(err, opts.cwd),
-    };
+    return { ok: false, ...spawnFailure(err, opts.cwd) };
   }
   stats?.onEnd(opts.category, elapsedMs(clock, t0));
   // An async spawn failure has no pid; its `error` needs a listener or Node
@@ -1263,6 +1299,22 @@ function landVerdict(
 // `Launcher` by the type and the lint rule, not by the object's shape.
 export interface OneShotLauncher extends Launcher {
   launchSync(opts: LaunchOpts): LaunchResult;
+  // A launcher for an owner inside this process, with its own close, stats and
+  // lifeline, whose children inherit what this one's do: the same environment,
+  // less the same names.
+  forOwner(own: OwnScope): TestableLauncher;
+}
+
+// [LAW:types-are-the-program] The process's launcher as its main builds it,
+// beside the one way to withhold names from it. `withhold` is this same
+// launcher (its children, its limits and its lifeline) withholding `names`
+// from every child that inherits its environment. Neither launcher has a
+// `withhold`, so withheld names are given once and never replaced or taken
+// back. A started world (src/host.ts) keeps `withhold` where only admission
+// reaches it.
+export interface Admittable {
+  readonly launcher: TestableLauncher & OneShotLauncher;
+  readonly withhold: (names: readonly string[]) => OneShotLauncher;
 }
 
 export interface Settled {
@@ -1282,12 +1334,15 @@ export interface TestableLauncher extends Launcher {
   __lifelineForTest(): { pid: number | undefined; cut(): void };
 }
 
+// What an owner inside a process hands its launcher: any of its scope but the
+// environment, which it inherits from the launcher it is made by.
+export type OwnScope = Partial<Omit<LaunchScope, "inherited" | "clock">>;
+
 // What an owner hands its launcher: the environment its children inherit, and
 // any of the rest of its scope. Nothing here is read from the process, so a
 // launcher a process main builds (bar-pane, the CLI, the daemon's shell before it
 // has a daemon) and the daemon's own differ only in what they are given.
-export type LaunchOwner = Pick<LaunchScope, "inherited"> &
-  Partial<Omit<LaunchScope, "inherited" | "clock">>;
+export type LaunchOwner = Pick<LaunchScope, "inherited"> & OwnScope;
 
 // [LAW:no-ambient-temporal-coupling] An aborted scope ends what is in flight
 // and refuses what comes after, for good, whichever other launchers run.
@@ -1298,34 +1353,73 @@ export function createLauncher(
   clock: Timekeeper,
   spawner: Spawner,
 ): TestableLauncher {
-  return launcherWithState(owner, clock, spawner).launcher;
+  return launcherOver(launchState(owner, clock, spawner), []);
 }
 
 // The same launcher, with its blocking form added: for the process's one-shot
-// launcher and the tests of that form.
+// launcher and the tests of that form. It withholds nothing.
 export function createOneShotLauncher(
   owner: LaunchOwner,
   clock: Timekeeper,
   spawner: Spawner,
 ): TestableLauncher & OneShotLauncher {
-  const { launcher, state } = launcherWithState(owner, clock, spawner);
-  return { ...launcher, launchSync: (opts) => launchBlocking(state, opts) };
+  return oneShotOver(launchState(owner, clock, spawner), []);
 }
 
-function launcherWithState(
+// The one-shot launcher a process main starts with, and the one way to
+// withhold names from it: for a started world alone.
+export function createAdmittable(
   owner: LaunchOwner,
   clock: Timekeeper,
   spawner: Spawner,
-): {
-  launcher: TestableLauncher;
-  state: LaunchState;
-} {
-  const launcher: TestableLauncher = {
+): Admittable {
+  const state = launchState(owner, clock, spawner);
+  return {
+    launcher: oneShotOver(state, []),
+    withhold: (names) => oneShotOver(state, names),
+  };
+}
+
+function oneShotOver(
+  state: LaunchState,
+  withheld: readonly string[],
+): TestableLauncher & OneShotLauncher {
+  return {
+    ...launcherOver(state, withheld),
+    launchSync: (opts) =>
+      launchBlocking(
+        state,
+        opts,
+        childEnv(state.scope.inherited, withheld, opts),
+      ),
+    forOwner: (own) =>
+      launcherOver(
+        launchState(
+          { ...own, inherited: state.scope.inherited },
+          state.scope.clock,
+          state.spawner,
+        ),
+        withheld,
+      ),
+  };
+}
+
+// [LAW:one-source-of-truth] A launcher is its state and what it withholds:
+// every form resolves its child's environment through the same two.
+function launcherOver(
+  state: LaunchState,
+  withheld: readonly string[],
+): TestableLauncher {
+  const { spawner } = state;
+  const { clock } = state.scope;
+  const env = (opts: LaunchOpts): NodeJS.ProcessEnv =>
+    childEnv(state.scope.inherited, withheld, opts);
+  return {
     clock,
-    launch: (opts) => track(state, launchWaited(state, opts)),
-    launchChannel: (opts) => launchChannel(state, opts),
-    launchDetachedSync: (opts) => launchOrphan(state, opts),
-    launchJobSync: (opts, files) => launchJob(state, opts, files),
+    launch: (opts) => track(state, launchWaited(state, opts, env(opts))),
+    launchChannel: (opts) => launchChannel(state, opts, env(opts)),
+    launchDetachedSync: (opts) => launchOrphan(state, opts, env(opts)),
+    launchJobSync: (opts, files) => launchJob(state, opts, files, env(opts)),
     jobGroupAlive: (pid) => spawner.signalJob(pid, 0),
     endJob: (pid, status, end) => endJob(spawner, clock, pid, status, end),
     standing: () => standing(state),
@@ -1345,6 +1439,13 @@ function launcherWithState(
       };
     },
   };
+}
+
+function launchState(
+  owner: LaunchOwner,
+  clock: Timekeeper,
+  spawner: Spawner,
+): LaunchState {
   const state: LaunchState = {
     spawner,
     scope: {
@@ -1384,5 +1485,5 @@ function launcherWithState(
     },
     { once: true },
   );
-  return { launcher, state };
+  return state;
 }

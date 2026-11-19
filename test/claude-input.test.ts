@@ -32,7 +32,7 @@ import { VERB_SET_STATE, VERB_SLASH, effectsUrl } from "../src/click/wire";
 import { productionClaudeInputEdge } from "../src/claude-input/edge";
 import { promptState } from "../src/claude-input/prompt-screen";
 import { parseSlashLine } from "../src/claude-input/slash-line";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import type { TmuxHint } from "../src/tmux-hint";
 import { AUTOCOMPACT_WINDOWS } from "../src/segments/autocompact";
 import { instantOf } from "../src/utils/instant";

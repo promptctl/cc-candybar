@@ -712,6 +712,7 @@ function spawnDaemonDetachedReal({ host, launcher }: World): boolean {
   const result = launcher.launchDetachedSync({
     bin: node,
     args: daemonArgs(script, host.env),
+    environment: "inherited",
     category: "daemon-spawn",
   });
   return result.ok;

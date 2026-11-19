@@ -23,7 +23,13 @@ const okResult = (stdout: string): LaunchResult => ({
 });
 
 const failResult = (
-  reason: "non-zero" | "spawn-error" | "timeout" | "signal" | "rate-limited",
+  reason:
+    | "non-zero"
+    | "spawn-error"
+    | "missing-command"
+    | "timeout"
+    | "signal"
+    | "rate-limited",
   stderr = "",
   error?: string,
 ): LaunchResult => ({
@@ -123,8 +129,10 @@ describe("classifyForgePr (github)", () => {
     expect(classify(r)).toEqual({ kind: "absent" });
   });
 
-  test("gh not installed (ENOENT spawn-error) → absent, not failed", () => {
-    expect(classify(failResult("spawn-error", "", "spawn gh ENOENT"))).toEqual({
+  test("gh not installed (missing-command) → absent, not failed", () => {
+    expect(
+      classify(failResult("missing-command", "", "spawn gh ENOENT")),
+    ).toEqual({
       kind: "absent",
     });
   });

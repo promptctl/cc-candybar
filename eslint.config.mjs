@@ -116,19 +116,20 @@ const FAKE_IMPORTS = [
 ];
 
 const OWNED_IMPORTS = {
-  // The process's one launcher, built beside the host it inherits from: a
-  // process main takes it from `processWorld`, and everything else is handed it.
-  systemOneShotLauncher: {
+  // The process's one launcher, built beside the host it inherits from with
+  // the one way to withhold names from it: a process main takes it from
+  // `processWorld`, everything else is handed it, and admission alone
+  // withholds.
+  systemAdmittable: {
     group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
     owners: ["src/host.ts"],
     message:
       "The process has its one-shot launcher: take the one you are given.",
   },
-  // The composition root of the one owner that is not the process.
-  systemLauncher: {
-    group: ["**/proc/system-launcher", "**/proc/system-launcher.js"],
-    owners: ["src/daemon/production-adapters.ts"],
-    message: "A Launcher is an owner's: take the one you are handed.",
+  createAdmittable: {
+    group: ["**/proc/launch", "**/proc/launch.js"],
+    owners: [],
+    message: "A launcher over the machine is system-launcher's to build.",
   },
   // A launcher over a Spawner other than the machine's is a test's to build.
   createOneShotLauncher: {
@@ -310,6 +311,7 @@ const ZONE_ROWS = {
   "src/time.ts": "shared",
   "src/claude-settings.ts": "shared",
   "src/proc/launcher.ts": "shared",
+  "src/proc/forge.ts": "shared",
   "src/doctor/report.ts": "shared",
   "src/doctor/sightings.ts": "shared",
   "src/doctor/terminal.ts": "shared",

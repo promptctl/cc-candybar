@@ -4,7 +4,9 @@
 // the render a test reads is the one a client reads. What a test talks to it
 // through is daemon-e2e's helpers, which take this in place of a socket path.
 
+import { admittedOf } from "./admitted";
 import { HOST } from "./host";
+import type { AdmittedWorld } from "../../src/host";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -43,8 +45,11 @@ import type { StartBarDaemon } from "./drive-bar";
 import { memoryConnection } from "./memory-connection";
 
 export type DaemonOverrides = Partial<
-  Omit<DaemonInputs, "profile" | "paths">
+  Omit<DaemonInputs, "profile" | "paths" | "world">
 > & {
+  // The process the daemon runs in: its host, and the launcher its own is made
+  // by. This worker's, admitted, unless a case states one.
+  readonly world?: AdmittedWorld;
   readonly paths?: DaemonPaths;
   readonly profile?: (log: DaemonLogger) => Partial<ProfileStorage>;
 };
@@ -100,11 +105,12 @@ export function prepareDaemon(
   fs.mkdirSync(paths.state, { recursive: true });
   const daemonLog =
     overrides.daemonLog ?? new DaemonLog(paths.log, systemTimekeeper);
+  const world = overrides.world ?? admittedOf(HOST);
   try {
     const daemon = createDaemon({
-      ...productionAdapters(paths, daemonLog, systemTimekeeper),
+      ...productionAdapters(paths, daemonLog, world),
       bundle: bundleAt(path.join(paths.state, "checkout")),
-      host: HOST,
+      world,
       memoryLimitBytes: memoryLimitBytes(process.env),
       clock: systemTimekeeper,
       // A daemon's gates are its own: none is shared with another built here.

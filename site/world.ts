@@ -74,10 +74,12 @@ programs.set("awk", () => RESIDENT);
 // No OS process runs the simulated daemon.
 programs.set("ps", () => ok(""));
 
-// The four commands the git segment runs (src/segments/git.ts); anything else
-// fails as git does, and says so in the console, so a new one is noticed.
+// The four commands the git segment runs (src/segments/git.ts), and the ask the
+// daemon is admitted by (src/host.ts); anything else fails as git does, and
+// says so in the console, so a new one is noticed.
 programs.set("git", (args) => {
   const line = args.join(" ");
+  if (line === "rev-parse --local-env-vars") return ok("GIT_DIR\nGIT_WORK_TREE\n");
   if (line.startsWith("status --porcelain=v2 --branch")) {
     const rows = [
       `# branch.oid ${repo.head}`,

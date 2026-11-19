@@ -16,13 +16,19 @@ import {
   readSocketIdentity,
   type SocketIdentity,
 } from "./socket-ownership";
-import { readOwnStartTime, liveness, systemProbe } from "./process-fingerprint";
+import {
+  readOwnStartTime,
+  liveness,
+  systemProbe,
+  type ProcessProbe,
+} from "./process-fingerprint";
 import { admitDaemon, realBreakerDeps, removeEntry } from "./fork-bomb-breaker";
 import { bakedDigest } from "./build-currency";
 import { DaemonLog } from "./log";
 import type { LogLevel } from "../utils/logger";
 import { runTeardown } from "../utils/teardown.js";
-import type { World } from "../host";
+import { admit, type AdmittedWorld, type StartedWorld } from "../host";
+import type { Timekeeper } from "../time";
 import {
   createDaemon,
   type PreparedDaemon,
@@ -38,6 +44,7 @@ import { processPort } from "./renderer-process.js";
 import { mb } from "./foundations/memory-limit";
 import { armParentWatchdog, anchorFromEnv } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
+import { askGit } from "../proc/repository-local-env";
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -59,20 +66,36 @@ let myStartTime = "";
 // waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
 
-// [LAW:effects-at-boundaries] The daemon the process owns during bind and
-// service. Close is available even when bind never succeeds.
+// [LAW:effects-at-boundaries] The daemon the process owns once its bind is won
+// and it is admitted; null before, when a death has nothing to close.
 let prepared: PreparedDaemon | null = null;
 // Shutdown waits for admission to hand over any registry path it claimed.
 let startup: Promise<void> | null = null;
 
-// [LAW:effects-at-boundaries] The process this daemon is: the world its main
-// handed it, every path it touches (parsed from that world's host here and
-// nowhere below), and the log those paths name. Fixed once by `runDaemon`, before anything that can fail.
+// [LAW:effects-at-boundaries] The process this daemon is: every path it
+// touches (parsed from its main's host here and nowhere below), the log those
+// paths name, and the clock. Fixed by `runDaemon`, before anything that can
+// fail. It holds no world: the started one is boot's to admit, and the
+// admitted one is the daemon's.
 interface DaemonProcess {
-  readonly world: World;
+  readonly clock: Timekeeper;
   readonly paths: DaemonPaths;
   readonly log: DaemonLog;
 }
+
+// What boot hands the bind: the probe its liveness reads go through, the
+// memory limit parsed before anything was committed, and the admission it
+// runs once the bind is won. The started world goes no further than boot.
+interface Booting {
+  readonly probe: ProcessProbe;
+  readonly memoryLimitBytes: number;
+  readonly admitted: () => Promise<AdmittedWorld>;
+}
+
+// The ask runs after the bind, while every client draws its last render, so
+// its bound is sized for a git that is slow on its first run (a shim
+// resolving the real one) rather than for any client's wait.
+const ASK_LIMIT_MS = 10_000;
 let thisProcess: DaemonProcess | null = null;
 
 function daemonProcess(): DaemonProcess {
@@ -111,9 +134,13 @@ function processEntry(): string {
   return entry;
 }
 
-export function runDaemon(world: World): void {
-  const paths = daemonPaths(world.host);
-  thisProcess = { world, paths, log: new DaemonLog(paths.log, world.clock) };
+export function runDaemon(started: StartedWorld): void {
+  const paths = daemonPaths(started.host);
+  thisProcess = {
+    clock: started.clock,
+    paths,
+    log: new DaemonLog(paths.log, started.clock),
+  };
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
   // catching all of unknown space, not skipping known optional values.
@@ -141,7 +168,7 @@ export function runDaemon(world: World): void {
   // [LAW:single-enforcer] Refused through the same death funnel as every other
   // boot failure: the detached spawn discards stderr, so the one line that says
   // why the daemon never came up would otherwise go nowhere.
-  startup = boot().catch(refuseBoot);
+  startup = boot(started).catch(refuseBoot);
 }
 
 function refuseBoot(err: unknown): void {
@@ -149,15 +176,26 @@ function refuseBoot(err: unknown): void {
   shutdown(1);
 }
 
-async function boot(): Promise<void> {
+async function boot(started: StartedWorld): Promise<void> {
+  const { paths } = daemonProcess();
   // [LAW:effects-at-boundaries] The memory budget is parsed here, before any
   // resource is committed — a malformed override is refused before the breaker
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // the limits and the boot line.
-  const { world, paths, log: daemonLog } = daemonProcess();
-  const { host } = world;
-  const memoryLimit = memoryLimitBytes(host.env);
+  const booting: Booting = {
+    probe: systemProbe(started.launcher),
+    memoryLimitBytes: memoryLimitBytes(started.host.env),
+    // [LAW:no-silent-failure] exception: a daemon whose git cannot name its
+    // repository-local variables serves on with a standing ⚠ (the daemon logs
+    // and draws the fault), because a bar that refuses to draw helps nobody.
+    // `plugin install` refuses instead.
+    admitted: async () =>
+      admit(
+        started,
+        await askGit(started.launcher, { withinMs: ASK_LIMIT_MS }),
+      ),
+  };
 
   // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
   // resource-committing steps (no dir created, no socket touched, no session
@@ -165,14 +203,11 @@ async function boot(): Promise<void> {
   // holds even when everything downstream of it is thrashing. Own start-time
   // must be read first: it is both this check's identity and the lease's
   // fingerprint later, so it is read exactly once and threaded through both
-  // (see realBreakerDeps' doc comment).
-  myStartTime = await readOwnStartTime(
-    process.pid,
-    systemProbe(world.launcher).startTime,
-  );
+  // (see realBreakerDeps' doc comment). Its deps live only for this await.
+  myStartTime = await readOwnStartTime(process.pid, booting.probe.startTime);
   if (shuttingDown) return;
   const admission = await admitDaemon(
-    realBreakerDeps(world, myStartTime, paths.registry, (message) =>
+    realBreakerDeps(started, myStartTime, paths.registry, (message) =>
       serverLog("warn", message),
     ),
   );
@@ -198,10 +233,20 @@ async function boot(): Promise<void> {
   // as a daemon exit; the client falls back to the last cached render.
   ensureSocketParentSafe(paths.socket);
 
-  // Prepare before binding. The socket winner loads prior state in onListening.
+  const server = net.createServer();
+
+  // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
+  // Two daemons cannot both bind the same Unix socket path; the kernel makes
+  // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
+  // load-bearing for exclusion.
+  bindOrAttachAndExit(booting, server, paths.socket, /* retried */ false);
+}
+
+function prepare(world: AdmittedWorld, memoryLimit: number): PreparedDaemon {
+  const { paths, log: daemonLog } = daemonProcess();
   const daemon = createDaemon({
     rendererName: MAIN_RENDERER,
-    ...productionAdapters(paths, daemonLog, world.clock),
+    ...productionAdapters(paths, daemonLog, world),
     // [LAW:one-type-per-behavior] The renderer runs in a process of its own,
     // launched through the process's launcher: the daemon's close aborts its
     // own launches before the renderer's last steps of it.
@@ -209,45 +254,37 @@ async function boot(): Promise<void> {
       launcher: world.launcher,
       entry: processEntry(),
       cwd: paths.state,
-      heapCapMb: heapCapMb(host.env),
+      heapCapMb: heapCapMb(world.host.env),
     }),
     bundle: runningBundle(),
-    host,
+    world,
     paths,
     memoryLimitBytes: memoryLimit,
     clock: world.clock,
     gates: createGates(),
     exit: shutdown,
   });
-  prepared = daemon;
   // [LAW:single-enforcer] Same death funnel as the signals and the memory backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
   // a test-spawned daemon is anchored, so this is invisible to the real daemon.
   armParentWatchdog({
     clock: world.clock,
-    anchor: anchorFromEnv(host.env),
+    anchor: anchorFromEnv(world.host.env),
     probe: systemProbe(world.launcher),
     onOrphaned: (reason) => {
       serverLog("info", `parent watchdog: ${reason}; shutting down`);
       shutdown(0);
     },
   });
-
-  const server = net.createServer();
-
-  // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
-  // Two daemons cannot both bind the same Unix socket path; the kernel makes
-  // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
-  // load-bearing for exclusion.
-  bindOrAttachAndExit(daemon, server, paths.socket, /* retried */ false);
+  return daemon;
 }
 
 // [LAW:dataflow-not-control-flow] One operation ("bring this server up or
 // discover an existing one"). The bind result is the data that decides the
 // next step; callers do not get to choose whether to spawn.
 function bindOrAttachAndExit(
-  daemon: PreparedDaemon,
+  booting: Booting,
   server: net.Server,
   sockPath: string,
   retried: boolean,
@@ -274,9 +311,11 @@ function bindOrAttachAndExit(
       shutdown(0);
       return;
     }
-    handleAddressInUse(daemon, server, sockPath).catch(refuseBoot);
+    handleAddressInUse(booting, server, sockPath).catch(refuseBoot);
   });
-  server.listen(sockPath, () => onListening(daemon, server, sockPath));
+  server.listen(sockPath, () =>
+    onListening(booting, server, sockPath).catch(refuseBoot),
+  );
 }
 
 // [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
@@ -293,7 +332,7 @@ function bindOrAttachAndExit(
 // over the lease read + the injected probe; the kill / unlink / rebind effects
 // are performed here at the edge.
 async function handleAddressInUse(
-  daemon: PreparedDaemon,
+  booting: Booting,
   server: net.Server,
   sockPath: string,
 ): Promise<void> {
@@ -303,7 +342,7 @@ async function handleAddressInUse(
   const decision = await arbitrateSocket(
     readLease(leasePathFor(sockPath)),
     process.pid,
-    (pid, startTime) => liveness(pid, startTime, systemProbe(daemon.launcher)),
+    (pid, startTime) => liveness(pid, startTime, booting.probe),
   );
   if (shuttingDown) return;
   if (decision.kind === "attach-and-exit") {
@@ -332,14 +371,14 @@ async function handleAddressInUse(
       return;
     }
   }
-  bindOrAttachAndExit(daemon, server, sockPath, /* retried */ true);
+  bindOrAttachAndExit(booting, server, sockPath, /* retried */ true);
 }
 
-function onListening(
-  daemon: PreparedDaemon,
+async function onListening(
+  booting: Booting,
   server: net.Server,
   sockPath: string,
-): void {
+): Promise<void> {
   if (shuttingDown) return;
   // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
   // identity (dev+ino) as the fingerprint the ownership self-check re-stats
@@ -390,8 +429,19 @@ function onListening(
   } catch (e) {
     serverLog("warn", `chmod socket failed: ${(e as Error).message}`);
   }
-  // [LAW:no-ambient-temporal-coupling] A socket becomes a request entry
-  // point only after its owner loads the renderer and arms production work.
+  // [LAW:no-ambient-temporal-coupling] The daemon is admitted once its bind is
+  // won, so the ask never holds the socket back: a client that finds a bound
+  // socket starts no other daemon, however long git takes. The ask is a
+  // launch the loop awaits, so a signal ends the daemon while git answers.
+  // Nothing reads a repository before this: the daemon whose reads they are
+  // is built over the admitted world. A socket becomes a request entry point
+  // only after its owner is admitted, loads the renderer and arms production
+  // work.
+  const world = await booting.admitted();
+  if (shuttingDown) return;
+  const daemon = prepare(world, booting.memoryLimitBytes);
+  prepared = daemon;
+  if (shuttingDown) return;
   const served = daemon.serve();
   served.arm();
   if (shuttingDown) return;
@@ -432,7 +482,7 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
     readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
     log: serverLog,
-    clock: daemonProcess().world.clock,
+    clock: daemonProcess().clock,
   }).arm();
 }
 
@@ -489,9 +539,7 @@ function shutdown(code: number): void {
   // signal recovers that case. The realistic 452-corpse mode was async-
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
-  daemonProcess().world.clock.after(500, () =>
-    process.kill(process.pid, "SIGKILL"),
-  );
+  daemonProcess().clock.after(500, () => process.kill(process.pid, "SIGKILL"));
   // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
   // ONLY mutex preventing duplicate daemons. The previous shape unlinked
   // the socket file FIRST, then spent O(100ms) closing watchers, flushing

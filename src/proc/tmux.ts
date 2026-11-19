@@ -31,6 +31,7 @@ function invocation(
     bin: "tmux",
     args: ["-S", hint.socket, ...args],
     timeoutMs: 2000,
+    environment: "inherited",
     category,
     stdinInput,
   };

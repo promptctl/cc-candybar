@@ -31,6 +31,7 @@ const sh = (
 ) => ({
   bin: "/bin/sh",
   args: ["-c", command],
+  environment: "inherited" as const,
   category: "user-shell" as const,
   ...extra,
 });
@@ -74,7 +75,7 @@ describe("a launch over a scripted OS", () => {
   test("a program nobody scripted fails to start, as a missing binary does", async () => {
     const r = rig();
     const result = await settled(r, r.launcher.launch(sh("anything")));
-    expect(result).toMatchObject({ ok: false, reason: "spawn-error" });
+    expect(result).toMatchObject({ ok: false, reason: "missing-command" });
     expect((result as { error: string }).error).toMatch(/ENOENT/);
   });
 
@@ -136,6 +137,7 @@ describe("a launch over a scripted OS", () => {
     const click = {
       bin: "/bin/sh",
       args: ["-c", "pbcopy"],
+      environment: "inherited" as const,
       category: "click.pbcopy" as const,
     };
     expect(await settled(r, r.launcher.launch(click))).toMatchObject({

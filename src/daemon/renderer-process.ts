@@ -367,6 +367,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         "renderer",
       ],
       cwd: own.cwd,
+      environment: "inherited",
       category: "renderer",
       signal: kill.signal,
       heard: { stdout: stdout.push, stderr: stderr.push },

@@ -101,7 +101,7 @@ function shellReader(
         cwd,
         // [LAW:one-source-of-truth] Exactly the variables the run's identity
         // carries, so nothing its digest does not hold can move its output.
-        environment: env,
+        environment: { session: env },
         category: "user-shell",
         timeoutMs: SHELL_READ_TIMEOUT_MS,
         signal,

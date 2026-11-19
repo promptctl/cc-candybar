@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { GitService } from "../src/daemon/cache/git-service";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import { ABSENT, ok } from "../src/utils/outcome";
 import { systemTimekeeper } from "../src/time";
 

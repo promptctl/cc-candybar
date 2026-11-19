@@ -1,6 +1,7 @@
-import type { LaunchResult } from "../proc/launcher";
+import { isMissingCommand, type LaunchResult } from "../proc/launcher";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import type { Current } from "../utils/reading";
+import type { ForgeName } from "../proc/forge";
 
 export interface WorkingTree {
   staged: number;
@@ -242,44 +243,6 @@ export function launchFailure(
 
 export function firstLine(s: string): string {
   return s.trim().split("\n", 1)[0] ?? "";
-}
-
-// [LAW:one-type-per-behavior] `gh` and `glab` are two instances of one act:
-// "ask a forge CLI for the branch's PR, fold the typed launch result into an
-// Outcome<PullRequest>." The accept/reject shape table is identical across
-// both — only the no-PR stderr signature and the JSON field names differ — so
-// the classification lives here once and each forge supplies its own
-// (noPrPattern, parse) as data.
-//
-// [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
-//   ok + parse ok (open PR)         → ok            (the value)
-//   ok + parse ok (not open)        → absent        (branch's PR is done)
-//   ok + parse fails                → failed        (forge answered garbage)
-//   non-zero + no-PR stderr         → absent        (genuine "none for branch")
-//   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
-//   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)
-//   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
-//   timeout / signal / rate-limited → failed        (forge couldn't answer)
-export type ForgeName = "github" | "gitlab";
-
-// [LAW:one-source-of-truth] The CLI each forge is asked through — the PR lookup
-// here and the doctor's login probe (src/doctor/edge.ts) name it from this one
-// table.
-export const FORGE_CLI: Readonly<Record<ForgeName, "gh" | "glab">> = {
-  github: "gh",
-  gitlab: "glab",
-};
-
-// [LAW:single-enforcer] "The command is not installed": a spawn the OS refused
-// with ENOENT. Every other spawn failure (EACCES, resource limits) is a CLI
-// that is there but could not launch. The PR lookup reads this as "no forge
-// integration" and the doctor as "not installed" — one rule for both.
-export function isMissingCommand(result: LaunchResult): boolean {
-  return (
-    !result.ok &&
-    result.reason === "spawn-error" &&
-    /ENOENT/i.test(result.error ?? "")
-  );
 }
 
 // [LAW:types-are-the-program] A git remote decomposed into the four facts every
@@ -596,6 +559,22 @@ export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
   return url === null ? null : remoteWebUrl(url);
 }
 
+// [LAW:one-type-per-behavior] `gh` and `glab` are two instances of one act:
+// "ask a forge CLI for the branch's PR, fold the typed launch result into an
+// Outcome<PullRequest>." The accept/reject shape table is identical across
+// both — only the no-PR stderr signature and the JSON field names differ — so
+// the classification lives here once and each forge supplies its own
+// (noPrPattern, parse) as data.
+//
+// [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
+//   ok + parse ok (open PR)         → ok            (the value)
+//   ok + parse ok (not open)        → absent        (branch's PR is done)
+//   ok + parse fails                → failed        (forge answered garbage)
+//   non-zero + no-PR stderr         → absent        (genuine "none for branch")
+//   missing-command (no CLI)        → absent        (no forge integration)
+//   spawn-error (EACCES, …)         → failed        (CLI present but unlaunchable)
+//   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
+//   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export function classifyForgePr(
   label: string,
   result: LaunchResult,

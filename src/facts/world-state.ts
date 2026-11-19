@@ -66,15 +66,25 @@ export interface StampDiagnostic {
 export type FactsDiagnostic = LaneDiagnostic | StampDiagnostic;
 
 // [LAW:types-are-the-program] What every session's document carries of the
-// daemon itself: whether file events are heard,
+// daemon itself: whether file events are heard, what its admission left
+// standing (src/proc/repository-local-env.ts),
 // and what the launcher stands behind (whether what it launches dies with it,
 // and the latest pipe event, whose hold each draw judges at its own instant
 // and for whom it draws, src/utils/event-hold.ts), how the last renderer
 // process ended, and the acts that failed with no session's bar to hold them
 // (one no session asked for, or one whose renderer had ended), each held the
 // same way: null while none has.
+// [LAW:no-silent-failure] git could not name its repository-local environment
+// variables, so the daemon's children may still read the repository of the
+// shell that started it: standing for the daemon's whole life.
+export interface RepositoryLocalEnvWarning {
+  readonly kind: "repository-local-env";
+  readonly message: string;
+}
+
 export interface DaemonFacts {
   readonly fileEvents: readonly FileEventsWarning[];
+  readonly admission: readonly RepositoryLocalEnvWarning[];
   readonly launcher: readonly LauncherFact[];
   readonly rendererEnded: HeldEvent | null;
   readonly actFailed: HeldEvent | null;

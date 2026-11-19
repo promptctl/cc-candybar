@@ -57,7 +57,7 @@ export const LAUNCH_CATEGORIES = [
   // each scheduled only once the last has answered, so no rate limit.
   "limits.charge",
   // `cc-candybar plugin install`'s clone of a plugin's repo
-  // (src/plugin-install.ts): three git calls per install, in the CLI's own
+  // (src/plugin-install.ts): two git calls per install, in the CLI's own
   // process, apart from the daemon's per-render "git".
   "plugin.git",
   // Which panes each watched session's tmux server shows (pane-visibility.ts):
@@ -78,17 +78,26 @@ export const LAUNCH_CATEGORIES = [
   // every replacement counts in daemon-stats.
   "lifeline",
   "tmux-status-migration",
+  // `git rev-parse --local-env-vars` (src/proc/repository-local-env.ts): once
+  // per daemon, as it is admitted after its bind, and once per `plugin
+  // install` clone.
+  "repository-local-env",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
+
+// [LAW:types-are-the-program] The environment a child starts from: the
+// launcher's inherited one, less what the launcher withholds, or a session's,
+// whole, for a program the host runs for a session.
+export type ChildEnvironment =
+  | "inherited"
+  | { readonly session: Readonly<Record<string, string>> };
 
 export interface LaunchOpts {
   bin: string;
   args?: string[];
   cwd?: string;
-  // The environment the child starts from in place of the launcher's
-  // inherited one: a session's, for a program the host runs for a session.
-  environment?: Readonly<Record<string, string>>;
+  environment: ChildEnvironment;
   // Set over the environment the child starts from; null unsets.
   envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
@@ -116,9 +125,11 @@ export type LaunchResult =
       // "signal" means the OS or external killer ended the child for some
       // other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...); "non-zero" is a
       // clean exit with a non-zero code; "spawn-error" is a failure before
-      // the child started; "rate-limited" means the primitive refused to
-      // spawn because the per-category minimum interval was not yet elapsed
-      // — no child process was launched. "signal-refused" means the OS
+      // the child started; "missing-command" is the one such failure where
+      // the OS found no command by that name (ENOENT, its directory there);
+      // "rate-limited" means the primitive refused to spawn because the
+      // per-category minimum interval was not yet elapsed — no child
+      // process was launched. "signal-refused" means the OS
       // refused the termination signal (EPERM: the child changed its real
       // uid), so the child is NOT reaped; `error` carries the errno.
       // "output-limit" means a stream passed MAX_CAPTURED_BYTES: the child was
@@ -131,6 +142,7 @@ export type LaunchResult =
         | "aborted"
         | "signal"
         | "spawn-error"
+        | "missing-command"
         | "non-zero"
         | "rate-limited"
         | "signal-refused"
@@ -182,6 +194,7 @@ export function whyFailed(r: Failed): string {
     case "rate-limited":
     case "pipe-error":
     case "spawn-error":
+    case "missing-command":
       return r.error ?? r.reason;
     default:
       return r.error === undefined ? r.reason : `${r.reason}: ${r.error}`;
@@ -243,6 +256,12 @@ export interface LaunchPipesFact {
   readonly event: HeldEvent;
 }
 
+// [LAW:single-enforcer] "The command is not installed": the launcher's own
+// discriminator, set where a spawn failure is read. The PR lookup reads it as
+// "no forge integration", and the repository-local ask as "git not found".
+export const isMissingCommand = (result: LaunchResult): boolean =>
+  !result.ok && result.reason === "missing-command";
+
 // What the launcher stands behind now, whoever draws it: the lifeline's fault
 // while it stands, and the latest pipe event.
 export type LauncherFact = LifelineWarning | LaunchPipesFact;
@@ -259,15 +278,15 @@ export interface LaunchPipesWarning {
 export type LauncherWarning = LifelineWarning | LaunchPipesWarning;
 
 // [LAW:single-enforcer] What the launcher's facts warn a render at `at` for
-// `render`: the lifeline's fault while it stands, and the latest pipe event
-// while the event hold shows it.
+// `render`: each standing warning, and the latest pipe event while the event
+// hold shows it.
 export function launcherWarningsAt(
   facts: readonly LauncherFact[],
   at: Instant,
   render: Drawing["by"],
 ): LauncherWarning[] {
   return facts.flatMap((fact): LauncherWarning[] => {
-    if (fact.kind === "lifeline") return [fact];
+    if (fact.kind !== "launch-pipes") return [fact];
     const hold = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render);
     return hold === "over" ? [] : [{ ...fact, message: fact.event.text, hold }];
   });

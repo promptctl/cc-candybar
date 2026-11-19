@@ -18,7 +18,7 @@ import { instantOf } from "../src/utils/instant";
 import { ABSENT } from "../src/utils/outcome";
 import { viewFacts } from "./helpers/view-facts";
 import { NO_PLUGIN_STORAGE } from "./helpers/plugin-storage";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launcher";
 import { answerRepo } from "./helpers/repo-approval";
 import { stateDir } from "../src/daemon/paths";

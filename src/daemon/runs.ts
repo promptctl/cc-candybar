@@ -66,6 +66,7 @@ function outcomeOf(result: LaunchResult): RunOutcome {
     case "aborted":
       return "aborted";
     case "spawn-error":
+    case "missing-command":
     case "rate-limited":
     case "signal-refused":
       return "launch";
@@ -133,7 +134,7 @@ export class Runs {
         args: [...args],
         // [LAW:single-enforcer] The program's own variables over its
         // session's environment, laid here for every click's run.
-        environment: environment.value,
+        environment: { session: environment.value },
         envOverlay: run.env,
         cwd: run.cwd,
         timeoutMs: this.timeoutMs,

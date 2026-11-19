@@ -131,6 +131,7 @@ export function chargeProbe(
           bin: FOOTPRINT,
           args,
           timeoutMs: PROBE_TIMEOUT_MS,
+          environment: "inherited",
           category: "limits.charge",
         }),
       )
@@ -196,6 +197,7 @@ function commandProbe(
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
+        environment: "inherited",
         category: "limits.memory-report",
       });
       if (!result.ok) {

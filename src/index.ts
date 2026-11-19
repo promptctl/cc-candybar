@@ -115,7 +115,7 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
     await exitWith(await checkCommandPlan(args, world));
   },
   plugin: async (args) => {
-    process.exit(runPlugin(args, world));
+    process.exit(await runPlugin(args, world));
   },
   schema: async () => {
     await exitWith(schemaPlan());

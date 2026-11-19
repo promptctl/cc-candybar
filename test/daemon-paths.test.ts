@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { admittedOf } from "./helpers/admitted";
 import { hostOf } from "./helpers/host";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
 import os from "node:os";
@@ -70,7 +71,11 @@ describe("a daemon aimed by its paths value", () => {
   test("a profile under a second name writes only under its own directory", async () => {
     const aimed = daemonPaths(hostOf(aimedEnv()));
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
-    const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+    const adapters = productionAdapters(
+      aimed,
+      daemonLog,
+      admittedOf(hostOf(aimedEnv())),
+    );
     const second = adapters.profile(rendererNameOf("second"), () => {});
     second.session.save(new Map([[sessionIdOf("s1"), { theme: "x" }]]));
     await second.session.flush();
@@ -98,7 +103,11 @@ describe("a daemon aimed by its paths value", () => {
     ).toEqual([]);
     const daemonLog = new DaemonLog(aimed.log, systemTimekeeper);
     try {
-      const adapters = productionAdapters(aimed, daemonLog, systemTimekeeper);
+      const adapters = productionAdapters(
+        aimed,
+        daemonLog,
+        admittedOf(hostOf(aimedEnv())),
+      );
 
       daemonLog.log("info", "a line");
       await daemonLog.drained();

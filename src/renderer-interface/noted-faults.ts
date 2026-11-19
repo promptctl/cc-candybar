@@ -5,19 +5,58 @@
 // [LAW:one-source-of-truth] The renderer writes the note and the host reads
 // it, so both spellings live here, in the zone both processes load.
 
+// [LAW:one-source-of-truth] Every kind of fault, and whose it is: the
+// config's, when the bar the config draws is not what was drawn, so a check
+// of the config fails on it; or the daemon's, what the daemon itself stands
+// on, which says nothing of the config, so a check advises. The renderer's
+// own warnings and errors derive the kinds it draws (src/renderer/draw-bar.ts),
+// which the compiler holds to this table both ways.
+export const FAULT_SCOPES = {
+  "refused-args": "config",
+  hints: "config",
+  load: "config",
+  dropped: "config",
+  click: "config",
+  rule: "config",
+  segment: "config",
+  when: "config",
+  refresh: "config",
+  facts: "config",
+  "file-events": "daemon",
+  "config-watch": "daemon",
+  "repository-local-env": "daemon",
+  lifeline: "daemon",
+  "launch-pipes": "daemon",
+  "renderer-ended": "daemon",
+  "act-failed": "daemon",
+} as const;
+
+export type FaultKind = keyof typeof FAULT_SCOPES;
+type KindIn<Scope> = {
+  [K in FaultKind]: (typeof FAULT_SCOPES)[K] extends Scope ? K : never;
+}[FaultKind];
+
 // One fault: its level, as the bar's ⚠ list shows it (an error red, a warning
 // amber); its kind, the identity its producer gives it; what it is about,
 // where it carries one (a slot, a variable, a placement, a file); and its
 // whole message.
-// [LAW:types-are-the-program] The kinds are the renderer's, which this zone
-// cannot import: the renderer narrows `Kind` to the union it derives from its
-// own warnings and errors, and a reader parses any kind it is handed.
-export interface Fault<Kind extends string = string> {
+export interface Fault<Kind extends FaultKind = FaultKind> {
   readonly level: "error" | "warning";
   readonly kind: Kind;
   readonly subject?: string;
   readonly message: string;
 }
+
+// [LAW:types-are-the-program] A fault as its scope reads it, so a reader
+// switches over the kinds of one scope, every one of them named. The table
+// read by the fault's own kind is the scope; the compiler cannot correlate an
+// index with its key, so this is the one cast that says so.
+export type ScopedFault =
+  | { readonly scope: "config"; readonly fault: Fault<KindIn<"config">> }
+  | { readonly scope: "daemon"; readonly fault: Fault<KindIn<"daemon">> };
+
+export const scopedFault = (fault: Fault): ScopedFault =>
+  ({ scope: FAULT_SCOPES[fault.kind], fault }) as ScopedFault;
 
 // A record whose frame met the same faults as the last one its session and
 // renderer noted, so the record says so instead of repeating every message
@@ -65,13 +104,14 @@ export function readFaults(
     if (stray !== undefined) throw fault(`has a field no fault has, ${stray}`);
     const { level, kind, subject, message } = fields;
     if (!LEVELS.has(level)) throw fault("has no level of error or warning");
-    if (typeof kind !== "string") throw fault("has no kind");
+    if (typeof kind !== "string" || !Object.hasOwn(FAULT_SCOPES, kind))
+      throw fault("has no kind a fault has");
     if (typeof message !== "string") throw fault("has no message");
     if (subject !== undefined && typeof subject !== "string")
       throw fault("has a subject that is not text");
     return {
       level: level as Fault["level"],
-      kind,
+      kind: kind as FaultKind,
       ...(subject === undefined ? {} : { subject }),
       message,
     };

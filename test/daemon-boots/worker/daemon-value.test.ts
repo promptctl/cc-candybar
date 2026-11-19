@@ -5,6 +5,7 @@
 
 import { linkKeyFile, linkKeyFromFile } from "../../../src/daemon/link-key";
 import { linkSignerOver } from "../../../src/click/link-signer";
+import { admittedOf } from "../../helpers/admitted";
 import { hostOf } from "../../helpers/host";
 import type { Host } from "../../../src/host";
 import { createHook } from "node:async_hooks";
@@ -113,7 +114,7 @@ describe("the daemon is a value", () => {
   ): ServedDaemon => {
     const { profile } = inputs;
     const { daemon, daemonLog } = buildDaemon({
-      host: hostNow(),
+      world: admittedOf(hostNow()),
       paths: daemonPaths(hostNow()),
       bundle: bundleAt(
         inputs.checkout ?? path.join(root, "checkout"),
@@ -227,7 +228,7 @@ describe("the daemon is a value", () => {
 
   test("only serving opens ingress, and a prepared daemon can close before it serves", async () => {
     const { daemon, daemonLog } = prepareDaemon({
-      host: hostNow(),
+      world: admittedOf(hostNow()),
       paths: daemonPaths(hostNow()),
     });
     openLogs.push(daemonLog);
@@ -405,6 +406,7 @@ describe("the daemon is a value", () => {
     const child = daemon.launcher.launch({
       bin: "/bin/sh",
       args: ["-c", 'echo $$ > "$1"; exec sleep 30', "sh", pidFile],
+      environment: "inherited",
       category: "user-shell",
     });
     await until(() => existsSync(pidFile), "the child to start");
@@ -458,6 +460,7 @@ describe("the daemon is a value", () => {
     expect(
       await daemon.launcher.launch({
         bin: "/bin/echo",
+        environment: "inherited",
         category: "user-shell",
       }),
     ).toMatchObject({ ok: false, reason: "aborted" });

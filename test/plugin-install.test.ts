@@ -4,7 +4,8 @@
 
 import { execFileSync } from "node:child_process";
 import { HOST, hostOf, worldOf } from "./helpers/host";
-import type { World } from "../src/host";
+import type { StartedWorld } from "../src/host";
+import { pathWithGit } from "./helpers/repository-local-env";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -208,7 +209,7 @@ describe("installFromRepo", () => {
 });
 
 describe("runPlugin", () => {
-  let world: World;
+  let world: StartedWorld;
   let log: jest.SpyInstance;
   let err: jest.SpyInstance;
   beforeEach(() => {
@@ -221,7 +222,7 @@ describe("runPlugin", () => {
     err.mockRestore();
   });
 
-  test("clones a git URL and installs from it into $XDG_DATA_HOME", () => {
+  test("clones a git URL and installs from it into $XDG_DATA_HOME", async () => {
     const repo = repoWith({ app: DEFINITION });
     fs.writeFileSync(path.join(repo, "README"), "not a plugin");
     const git = (...args: string[]) =>
@@ -237,7 +238,7 @@ describe("runPlugin", () => {
     const hooked = worldOf(
       hostOf({ ...world.host.env, GIT_DIR: path.join(other, ".git") }),
     );
-    expect(runPlugin(["install", url], hooked)).toBe(0);
+    expect(await runPlugin(["install", url], hooked)).toBe(0);
     expect(fs.existsSync(path.join(other, ".git/info/sparse-checkout"))).toBe(
       false,
     );
@@ -251,7 +252,7 @@ describe("runPlugin", () => {
     );
   });
 
-  test("a git repo without the plugins folder fails, naming the source", () => {
+  test("a git repo without the plugins folder fails, naming the source", async () => {
     const repo = repoWith({});
     fs.writeFileSync(path.join(repo, "README"), "x");
     const git = (...args: string[]) =>
@@ -259,19 +260,58 @@ describe("runPlugin", () => {
     git("init", "-q");
     git("add", ".");
     git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "c");
-    expect(runPlugin(["install", `file://${repo}`], world)).toBe(1);
+    expect(await runPlugin(["install", `file://${repo}`], world)).toBe(1);
     expect(err).toHaveBeenCalledWith(
       `plugin install: file://${repo} has no plugins: none at .cc-candybar/plugins/<name>/plugin.json5`,
     );
   });
 
+  // A world whose `git` records each call in `calls`, then runs `answer`.
+  const recordingGit = (calls: string, answer = "exit 0"): StartedWorld =>
+    worldOf(
+      hostOf({
+        ...world.host.env,
+        PATH: pathWithGit(dir, `echo "$*" >> '${calls}'\n${answer}`),
+      }),
+    );
+
   test.each([[[]], [["install"]], [["remove", "x"]], [["install", "a", "b"]]])(
-    "%j is a usage error",
-    (argv) => {
-      expect(runPlugin(argv, world)).toBe(2);
+    "%j is a usage error, and runs no git",
+    async (argv) => {
+      const calls = path.join(dir, "git-calls");
+      expect(await runPlugin(argv, recordingGit(calls))).toBe(2);
       expect(err).toHaveBeenCalledWith(
         "Usage: cc-candybar plugin install <path | owner/repo | git URL>",
       );
+      expect(fs.existsSync(calls)).toBe(false);
     },
   );
+
+  test("an install from a path runs no git", async () => {
+    const calls = path.join(dir, "git-calls");
+    const repo = repoWith({ app: DEFINITION });
+    expect(await runPlugin(["install", repo], recordingGit(calls))).toBe(0);
+    expect(fs.existsSync(calls)).toBe(false);
+  });
+
+  test("a clone asks git once what it withholds, and refuses when git cannot say", async () => {
+    const calls = path.join(dir, "git-calls");
+    expect(await runPlugin(["install", "file:///nowhere"], recordingGit(calls))).toBe(
+      1,
+    );
+    expect(err).toHaveBeenCalledWith(
+      "plugin install: git could not name its repository-local environment variables: git named no variables, so a clone could act on the repository of the shell it runs in",
+    );
+    expect(fs.readFileSync(calls, "utf8")).toBe("rev-parse --local-env-vars\n");
+  });
+
+  test("with no git at all, the install says git was not found", async () => {
+    const empty = path.join(dir, "empty");
+    fs.mkdirSync(empty);
+    const gitless = worldOf(hostOf({ ...world.host.env, PATH: empty }));
+    expect(await runPlugin(["install", "file:///nowhere"], gitless)).toBe(1);
+    expect(err).toHaveBeenCalledWith(
+      "plugin install: git could not name its repository-local environment variables: git not found, so a clone could act on the repository of the shell it runs in",
+    );
+  });
 });

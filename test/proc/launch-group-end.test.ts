@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { systemLauncher } from "../../src/proc/system-launcher";
+import { systemLauncher } from "../helpers/host";
 import {
   MAX_CAPTURED_BYTES,
   type TestableLauncher,
@@ -72,6 +72,7 @@ afterEach(() => ending.abort());
 
 const launch = (run: { bin: string; args: string[] }, timeoutMs?: number) =>
   launcher.launch({
+    environment: "inherited",
     category: "user-shell",
     bin: run.bin,
     args: run.args,
@@ -140,6 +141,7 @@ describe("a launch whose child ends with a descendant outside its group", () => 
   it("reports an abort once the child has ended, whatever the group did", async () => {
     const abort = new AbortController();
     const running = launcher.launch({
+      environment: "inherited",
       category: "user-shell",
       bin: "sh",
       args: [

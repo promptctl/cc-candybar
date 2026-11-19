@@ -5,10 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 
-import {
-  systemLauncher,
-  systemOneShotLauncher,
-} from "../../src/proc/system-launcher";
+import { systemLauncher, systemOneShotLauncher } from "../helpers/host";
 import {
   MAX_CAPTURED_BYTES,
   type OneShotLauncher,
@@ -118,6 +115,7 @@ describe("launch (async)", () => {
     const r = await launch({
       bin: "/bin/echo",
       args: ["hi"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(true);
@@ -138,6 +136,7 @@ describe("launch (async)", () => {
           write("euro.subarray(0, 1)") +
           `setTimeout(() => { ${write("euro.subarray(1)")} }, 200);`,
       ],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r).toMatchObject({ ok: true, stdout: "€", stderr: "€" });
@@ -162,6 +161,7 @@ describe("launch (async)", () => {
       const r = await launch({
         bin: process.execPath,
         args: ["-e", "process.stdout.write('x'); setInterval(() => {}, 1000);"],
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({
@@ -187,6 +187,7 @@ describe("launch (async)", () => {
               `const chunk = Buffer.alloc(1 << 20, 97);` +
               `setInterval(() => process.${stream}.write(chunk), 0);`,
           ],
+          environment: "inherited",
           category: "user-shell",
         });
         expect(r).toMatchObject({ ok: false, reason: "output-limit" });
@@ -219,6 +220,7 @@ describe("launch (async)", () => {
           `process.stdout.write(Buffer.alloc(20, 97));` +
           `setInterval(() => process.stdout.write(Buffer.alloc(65536, 98)), 0);`,
       ],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r).toMatchObject({ ok: false, reason: "output-limit" });
@@ -229,6 +231,7 @@ describe("launch (async)", () => {
     const write = (bytes: number) => ({
       bin: process.execPath,
       args: ["-e", `process.stdout.write(Buffer.alloc(${bytes}, 97));`],
+      environment: "inherited" as const,
       category: "user-shell" as const,
     });
     const at = await launch(write(MAX_CAPTURED_BYTES));
@@ -243,6 +246,7 @@ describe("launch (async)", () => {
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "exit 7"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(false);
@@ -255,6 +259,7 @@ describe("launch (async)", () => {
   it("reports spawn-error for a nonexistent binary", async () => {
     const r = await launch({
       bin: "/nonexistent/binary-x9k7",
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(false);
@@ -273,6 +278,7 @@ describe("launch (async)", () => {
         bin: "/bin/sh",
         args: ["-c", "sleep 5"],
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "timeout" });
@@ -299,6 +305,7 @@ describe("launch (async)", () => {
     try {
       const pending = launch({
         ...ignoringChild(marker),
+        environment: "inherited",
         category: "user-shell",
         signal: controller.signal,
       });
@@ -330,6 +337,7 @@ describe("launch (async)", () => {
     const pending = launch({
       bin: "/bin/sh",
       args: ["-c", `${nap}; echo ${marker}`],
+      environment: "inherited",
       category: "user-shell",
       signal: controller.signal,
     });
@@ -355,6 +363,7 @@ describe("launch (async)", () => {
         bin: "/bin/sh",
         args: ["-c", "sleep 5"],
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
         signal: controller.signal,
       });
@@ -374,6 +383,7 @@ describe("launch (async)", () => {
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
       timeoutMs: 5000,
+      environment: "inherited",
       category: "user-shell",
       signal: controller.signal,
     });
@@ -393,6 +403,7 @@ describe("launch (async)", () => {
         bin: "/bin/sh",
         args: ["-c", "sleep 0.4"],
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({
@@ -422,6 +433,7 @@ describe("launch (async)", () => {
           survived,
         ],
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
@@ -456,6 +468,7 @@ describe("launch (async)", () => {
       const run = launch({
         bin: "/bin/sh",
         args: ["-c", "sleep 0.1"],
+        environment: "inherited",
         category: "user-shell",
         signal: controller.signal,
       });
@@ -477,6 +490,7 @@ describe("launch (async)", () => {
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "echo ran"],
+      environment: "inherited",
       category: "user-shell",
       signal: controller.signal,
     });
@@ -490,6 +504,7 @@ describe("launch (async)", () => {
     const r = await launch({
       bin: "/bin/sh",
       args: ["-c", "kill -TERM $$; sleep 1"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(false);
@@ -503,6 +518,7 @@ describe("launch (async)", () => {
     const r = await launch({
       bin: "/bin/cat",
       stdinInput: "via stdin",
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(true);
@@ -518,6 +534,7 @@ describe("launch (async)", () => {
       // redirections, so the input goes through an fd of its own.
       args: ["-c", "exec 3<&0; (sleep 0.2; wc -c <&3) &"],
       stdinInput: "x".repeat(10 * 1024 * 1024),
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r).toMatchObject({ ok: true });
@@ -556,6 +573,7 @@ describe("launch (async)", () => {
         args: ["-c", 'sleep 0.3; wc -c > "$1"', "sh", counted],
         stdinInput: "x".repeat(1024 * 1024),
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
@@ -587,6 +605,7 @@ describe("launch (async)", () => {
         args: ["-c", "sleep 0.3; exec sleep 30"],
         stdinInput: "x".repeat(1024 * 1024),
         timeoutMs: 50,
+        environment: "inherited",
         category: "user-shell",
       });
       expect(r).toMatchObject({ ok: false, reason: "signal-refused" });
@@ -607,10 +626,20 @@ describe("launch (async)", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
     // A launcher's first launch also starts its lifeline, a spawn of its own.
-    await launch({ bin: "/bin/echo", args: ["up"], category: "git" });
+    await launch({
+      bin: "/bin/echo",
+      args: ["up"],
+      environment: "inherited",
+      category: "git",
+    });
     starts.length = 0;
     ends.length = 0;
-    await launch({ bin: "/bin/echo", args: ["x"], category: "git" });
+    await launch({
+      bin: "/bin/echo",
+      args: ["x"],
+      environment: "inherited",
+      category: "git",
+    });
     expect(starts).toEqual(["git"]);
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("git");
@@ -623,6 +652,7 @@ describe("launchSync", () => {
     const r = launchSync({
       bin: "/bin/echo",
       args: ["sync"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(true);
@@ -635,6 +665,7 @@ describe("launchSync", () => {
     const r = launchSync({
       bin: "/bin/sh",
       args: ["-c", "exit 3"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(r.ok).toBe(false);
@@ -646,7 +677,12 @@ describe("launchSync", () => {
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
-    launchSync({ bin: "/bin/echo", args: ["m"], category: "user-shell" });
+    launchSync({
+      bin: "/bin/echo",
+      args: ["m"],
+      environment: "inherited",
+      category: "user-shell",
+    });
     expect(starts).toEqual(["user-shell"]);
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("user-shell");
@@ -658,6 +694,7 @@ describe("launchDetachedSync", () => {
     const r = launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
+      environment: "inherited",
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(true);
@@ -669,6 +706,7 @@ describe("launchDetachedSync", () => {
   it("returns spawn-error synchronously when the binary does not exist", () => {
     const r = launchDetachedSync({
       bin: "/nonexistent/daemon-x9k7",
+      environment: "inherited",
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(false);
@@ -683,6 +721,7 @@ describe("launchDetachedSync", () => {
     launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "true"],
+      environment: "inherited",
       category: "daemon-spawn",
     });
     expect(starts).toEqual(["daemon-spawn"]);
@@ -700,6 +739,7 @@ describe("launch — per-category rate-limit", () => {
     const first = launchSync({
       bin: "/bin/echo",
       args: ["x"],
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(first.ok).toBe(true);
@@ -707,6 +747,7 @@ describe("launch — per-category rate-limit", () => {
     const second = launchSync({
       bin: "/bin/echo",
       args: ["y"],
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(second.ok).toBe(false);
@@ -720,6 +761,7 @@ describe("launch — per-category rate-limit", () => {
     const first = launchSync({
       bin: "/bin/echo",
       args: ["x"],
+      environment: "inherited",
       category: "click.open",
     });
     expect(first.ok).toBe(true);
@@ -727,6 +769,7 @@ describe("launch — per-category rate-limit", () => {
     const second = launchSync({
       bin: "/bin/echo",
       args: ["y"],
+      environment: "inherited",
       category: "click.open",
     });
     expect(second.ok).toBe(false);
@@ -737,11 +780,13 @@ describe("launch — per-category rate-limit", () => {
     const first = launchSync({
       bin: "/bin/echo",
       args: ["x"],
+      environment: "inherited",
       category: "user-shell",
     });
     const second = launchSync({
       bin: "/bin/echo",
       args: ["y"],
+      environment: "inherited",
       category: "user-shell",
     });
     expect(first.ok).toBe(true);
@@ -752,12 +797,14 @@ describe("launch — per-category rate-limit", () => {
     const first = await launch({
       bin: "/bin/echo",
       args: ["x"],
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(first.ok).toBe(true);
     const second = await launch({
       bin: "/bin/echo",
       args: ["y"],
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(second.ok).toBe(false);
@@ -767,8 +814,18 @@ describe("launch — per-category rate-limit", () => {
   it("rate-limited rejection does NOT record stats (no spawn happened)", () => {
     const { handle, starts, ends } = makeSpyHandle();
     scoped({ stats: handle });
-    launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
-    launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
+    launchSync({
+      bin: "/bin/echo",
+      args: ["x"],
+      environment: "inherited",
+      category: "click.pbcopy",
+    });
+    launchSync({
+      bin: "/bin/echo",
+      args: ["y"],
+      environment: "inherited",
+      category: "click.pbcopy",
+    });
     // Only the first spawn went through onStart/onEnd. The second is data,
     // not a process, and must not pollute the histograms or per-category
     // counts.
@@ -782,13 +839,15 @@ describe("launch — per-category rate-limit", () => {
     // "rate-limited" — proving the gate runs before spawn-error attribution.
     const first = launchSync({
       bin: "/nonexistent/binary-rate-x9k7",
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(first.ok).toBe(false);
-    if (!first.ok) expect(first.reason).toBe("spawn-error");
+    if (!first.ok) expect(first.reason).toBe("missing-command");
 
     const second = launchSync({
       bin: "/nonexistent/binary-rate-x9k7",
+      environment: "inherited",
       category: "click.pbcopy",
     });
     expect(second.ok).toBe(false);
@@ -805,6 +864,7 @@ describe("the lifeline", () => {
   const grandchild = (seconds: string) => ({
     bin: "/bin/sh",
     args: ["-c", `sleep ${seconds}; echo late`],
+    environment: "inherited" as const,
     category: "user-shell" as const,
   });
   const running = (seconds: string) =>
@@ -873,6 +933,7 @@ describe("a launcher's scope", () => {
   const touching = (file: string) => ({
     bin: "/usr/bin/touch",
     args: [file],
+    environment: "inherited" as const,
     category: "user-shell" as const,
   });
 
@@ -913,6 +974,7 @@ describe("a launcher's scope", () => {
     const pending = launch({
       bin: "/bin/sh",
       args: ["-c", `touch '${marker}'; exec sleep 30`],
+      environment: "inherited",
       category: "user-shell",
     });
     await until(() => fs.existsSync(marker), "the child started");
@@ -928,7 +990,12 @@ describe("a launcher's scope", () => {
     const closing = new AbortController();
     scoped({ signal: closing.signal });
     const pending = Array.from({ length: 12 }, () =>
-      launch({ bin: "/bin/sleep", args: ["30"], category: "user-shell" }),
+      launch({
+        bin: "/bin/sleep",
+        args: ["30"],
+        environment: "inherited",
+        category: "user-shell",
+      }),
     );
     expect(getEventListeners(closing.signal, "abort")).toHaveLength(1);
 
@@ -945,6 +1012,7 @@ describe("a launcher's scope", () => {
     const pending = launch({
       bin: "/bin/sleep",
       args: ["30"],
+      environment: "inherited",
       category: "user-shell",
     });
 
@@ -972,7 +1040,11 @@ describe("a launcher's scope", () => {
     closing.abort();
     const next = makeSpyHandle();
     scoped({ stats: next.handle });
-    const echo = { bin: "/bin/echo", category: "user-shell" } as const;
+    const echo = {
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "user-shell",
+    } as const;
 
     expect(await launch(echo)).toMatchObject({ ok: true });
     expect(await first.launch(echo)).toMatchObject({
@@ -996,7 +1068,11 @@ describe("a launcher's scope", () => {
   });
 
   it("a launcher's rate limits are its own", () => {
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const once = {
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "click.open",
+    } as const;
     expect(launcher.launchSync(once)).toMatchObject({ ok: true });
     expect(launcher.launchSync(once)).toMatchObject({
       ok: false,
@@ -1016,7 +1092,11 @@ describe("a launcher's scope", () => {
     const closing = new AbortController();
     const { handle, refused, starts } = makeSpyHandle();
     scoped({ stats: handle, signal: closing.signal });
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const once = {
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "click.open",
+    } as const;
     expect(launchSync(once)).toMatchObject({ ok: true });
     expect(launchSync(once)).toMatchObject({ reason: "rate-limited" });
     expect(refused).toEqual(["click.open"]);
@@ -1055,7 +1135,11 @@ describe("a launcher's scope", () => {
 
   it("a refused job says what refused it", () => {
     scoped({});
-    const once = { bin: "/bin/echo", category: "click.open" } as const;
+    const once = {
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "click.open",
+    } as const;
     const files = {
       stdout: path.join(scratch, "limited.out"),
       stderr: path.join(scratch, "limited.err"),
@@ -1081,12 +1165,20 @@ describe("a launcher's scope", () => {
         if (change.kind === "lifeline") heard.push(change.fault);
       },
     });
-    await launch({ bin: "/bin/echo", category: "user-shell" });
+    await launch({
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "user-shell",
+    });
     const { pid } = lifeline();
     expect(pid).toBeDefined();
 
     closing.abort();
-    await launch({ bin: "/bin/echo", category: "user-shell" });
+    await launch({
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "user-shell",
+    });
 
     expect(lifeline().pid).toBeUndefined();
     await until(
@@ -1102,6 +1194,7 @@ describe("launch input a child does not read", () => {
 
   it("leaves a child's success standing", async () => {
     const r = await launch({
+      environment: "inherited",
       category: "user-shell",
       bin: "sh",
       args: ["-c", "exit 0"],
@@ -1112,6 +1205,7 @@ describe("launch input a child does not read", () => {
 
   it("leaves a child's failure its own explanation", async () => {
     const r = await launch({
+      environment: "inherited",
       category: "user-shell",
       bin: "sh",
       args: ["-c", "echo refused >&2; exit 1"],
@@ -1128,6 +1222,7 @@ describe("launch input a child does not read", () => {
 
   it("reports a timeout as a timeout", async () => {
     const r = await launch({
+      environment: "inherited",
       category: "user-shell",
       bin: "sleep",
       args: ["5"],
@@ -1144,6 +1239,7 @@ describe("launch input a child does not read", () => {
 
   it("names the bound when the blocking launch times out", () => {
     const r = launchSync({
+      environment: "inherited",
       category: "user-shell",
       bin: "sleep",
       args: ["5"],
@@ -1159,6 +1255,7 @@ describe("launch input a child does not read", () => {
   it("gives the blocking launch the same verdicts", () => {
     const run = (script: string) =>
       launchSync({
+        environment: "inherited",
         category: "user-shell",
         bin: "sh",
         args: ["-c", script],
@@ -1173,6 +1270,7 @@ describe("launch input a child does not read", () => {
     expect(run("head -c 1 >/dev/null").ok).toBe(true);
     expect(
       launchSync({
+        environment: "inherited",
         category: "user-shell",
         bin: "sh",
         args: ["-c", "kill -TERM $$"],

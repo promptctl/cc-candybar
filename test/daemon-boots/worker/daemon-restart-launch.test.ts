@@ -145,7 +145,11 @@ esac
   });
 
   test("a launch its rate limit refused runs at once on the next daemon", async () => {
-    const open = { bin: "/bin/echo", category: "click.open" } as const;
+    const open = {
+      bin: "/bin/echo",
+      environment: "inherited",
+      category: "click.open",
+    } as const;
     const first = start();
     expect(await first.daemon.launcher.launch(open)).toMatchObject({
       ok: true,

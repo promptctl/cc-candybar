@@ -75,6 +75,7 @@ async function readStartTime(
   const res = await launch({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
+    environment: "inherited",
     category: "process-fingerprint",
     timeoutMs: 2000,
     // [FRAMING:representation] Pin BOTH locale and timezone so the token is
@@ -92,7 +93,7 @@ async function readStartTime(
     return { kind: "unavailable", detail: "ps produced no start-time" };
   }
   const detail =
-    res.reason === "spawn-error"
+    res.reason === "spawn-error" || res.reason === "missing-command"
       ? (res.error ?? "ps spawn failed")
       : `ps ${res.reason} (exit ${res.exitCode})`;
   return { kind: "unavailable", detail };

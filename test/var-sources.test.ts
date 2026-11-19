@@ -45,7 +45,7 @@ import {
   shell,
 } from "../src/proc/spawner-fake";
 import { SessionState } from "../src/renderer/session-state";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { readPending } from "../src/var-system/types";
 import { pendingOf } from "../src/utils/outcome";

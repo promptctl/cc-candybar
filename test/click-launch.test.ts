@@ -2,7 +2,7 @@
 // says what the launch itself said of why, so the click's reply and its event
 // carry the cause, not only the class of failure.
 
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import { systemTimekeeper } from "../src/time";
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { clickLaunch } from "../src/daemon/foundations/click-launch";

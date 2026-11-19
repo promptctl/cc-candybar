@@ -7,8 +7,7 @@ import { SESSION_BOOK_FILE } from "./session-book.js";
 import { SessionFile } from "./session-state-file.js";
 import fs from "node:fs";
 import { productionClaudeInputEdge } from "../claude-input/edge.js";
-import { systemLauncher } from "../proc/system-launcher";
-import type { Timekeeper } from "../time";
+import type { AdmittedWorld } from "../host";
 import type { DaemonAdapters } from "./daemon.js";
 import { fileStorage } from "./file-storage";
 import { productionBarPaneEdge } from "./lane-edge.js";
@@ -20,17 +19,17 @@ import { profilePaths, type DaemonPaths } from "./paths";
 
 // [LAW:effects-at-boundaries] Every real adapter, over the paths and the log it
 // is given, so a daemon built over a temporary directory touches nothing else.
-// `machine` is the clock the machine's side runs on: real children, real files
-// and the log's blocking wait live in real time, whatever clock the daemon
-// itself is held on.
+// The world's clock is the one the machine's side runs on: real children, real
+// files and the log's blocking wait live in real time, whatever clock the
+// daemon itself is held on. Real adapters are for an admitted daemon alone.
 export function productionAdapters(
   paths: DaemonPaths,
   daemonLog: DaemonLog,
-  machine: Timekeeper,
+  world: AdmittedWorld,
 ): DaemonAdapters {
+  const machine = world.clock;
   return {
     daemonLog,
-    launcher: (own) => systemLauncher(own, machine),
     profile: (name, log) =>
       fileStorage(profilePaths(paths, name), log, machine),
     sessionBook: (log) =>

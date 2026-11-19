@@ -33,6 +33,7 @@ export const clickLaunchVia =
     launcher.launch({
       ...launch,
       args: launch.args?.slice(),
+      environment: "inherited",
       timeoutMs: CLICK_PROGRAM_TIMEOUT_MS,
     });
 

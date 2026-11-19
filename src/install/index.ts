@@ -397,6 +397,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
     const signed = launcher.launchSync({
       bin: "/usr/bin/codesign",
       args: ["--force", "--sign", "-", staging],
+      environment: "inherited",
       category: "install.codesign",
     });
     if (!signed.ok) {
@@ -416,6 +417,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const quit = launcher.launchSync({
     bin: "/usr/bin/killall",
     args: [APP_NAME],
+    environment: "inherited",
     category: "install.killall",
   });
   if (!quit.ok && quit.exitCode !== 1) {
@@ -432,6 +434,7 @@ function installUrlHandler(forwarder: string, { host, launcher }: World): void {
   const lsr = launcher.launchSync({
     bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
     args: ["-f", bundle],
+    environment: "inherited",
     category: "install.lsregister",
   });
   if (!lsr.ok) {

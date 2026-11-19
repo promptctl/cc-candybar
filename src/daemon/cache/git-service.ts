@@ -13,11 +13,11 @@ import {
   gitRootOf,
   holdsGit,
 } from "../../utils/git-root";
+import { FORGE_CLI } from "../../proc/forge";
 import {
   type PullRequest,
   type GitRead,
   classify,
-  FORGE_CLI,
   detectForge,
   type GitRemote,
   REMOTES_ARGS,
@@ -127,6 +127,7 @@ export class GitService {
       cwd: options.cwd,
       envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: options.timeout,
+      environment: "inherited",
       category: "git",
     });
   }
@@ -183,9 +184,9 @@ export class GitService {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not observable here: they describe whichever
+  // shell spawned the daemon rather than the session being rendered, and the
+  // daemon's launches withhold them.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -622,6 +623,7 @@ export class GitService {
       args: [...args],
       cwd: options.cwd,
       timeoutMs: options.timeout,
+      environment: "inherited",
       category: "forge",
     });
   }

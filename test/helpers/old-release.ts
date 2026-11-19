@@ -9,6 +9,7 @@ export async function oldReleaseStartTime(pid: number): Promise<string> {
   const res = await processLauncher.launch({
     bin: "ps",
     args: ["-o", "lstart=", "-p", String(pid)],
+    environment: "inherited",
     category: "process-fingerprint",
     timeoutMs: 2000,
     envOverlay: { LC_ALL: "C", TZ: "UTC" },

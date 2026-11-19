@@ -103,6 +103,7 @@ const NO_ACT = "a command performs no act";
 export function commandDaemonFacts(): DaemonFacts {
   return {
     fileEvents: [],
+    admission: [],
     launcher: [],
     rendererEnded: null,
     actFailed: null,

@@ -8,7 +8,8 @@
 
 import { plainEnvironment } from "../src/daemon/foundations/session-env";
 import { VERB_COPY } from "../src/click/wire";
-import { processWorld } from "../src/host";
+import { admit, processWorld } from "../src/host";
+import { askGit } from "../src/proc/repository-local-env";
 import { describeLink, effectsOf, HOST_VERBS, linksOf } from "../src/click/read";
 import { createDaemon } from "../src/daemon/daemon";
 import { memoryLimitBytes } from "../src/daemon/limits";
@@ -67,15 +68,16 @@ seedWorld(onClock(INITIAL_REPO) as RepoState);
 // The simulated page serves without arming production socket resources.
 // The page is a process main of its own: it reads the machine it runs on (the
 // simulated one, under the node shims) once.
-const WORLD = processWorld();
+const STARTED = processWorld();
+const WORLD = admit(STARTED, await askGit(STARTED.launcher, "unbounded"));
 const HOST = WORLD.host;
 const paths = daemonPaths(HOST);
-const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD.clock);
+const adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD);
 const pageDaemon = createDaemon({
   ...adapters,
   gates: createGates(),
   paths,
-  host: HOST,
+  world: WORLD,
   bundle: {
     digest: null,
     path: "/app/dist/index.mjs",

@@ -8,7 +8,7 @@
 
 import { holdClickError } from "../src/daemon/foundations/click-error";
 import { linkUrls } from "./helpers/frame";
-import { systemLauncher } from "../src/proc/system-launcher";
+import { systemLauncher } from "./helpers/host";
 import { MAX_CAPTURED_BYTES } from "../src/proc/launch";
 import { HOST, WORLD, locs, processLauncher } from "./helpers/host";
 import { type Launcher } from "../src/proc/launcher";
@@ -1027,7 +1027,7 @@ describe("the session's process environment", () => {
         systemTimekeeper,
       ).launch({
         bin: "/usr/bin/env",
-        environment: sessionEnvironment(reported, facts),
+        environment: { session: sessionEnvironment(reported, facts) },
         category: "click.run",
       });
       if (!ran.ok) throw new Error(`env failed: ${JSON.stringify(ran)}`);

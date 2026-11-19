@@ -53,7 +53,10 @@ import { PROTOCOL_VERSION } from "./daemon/foundations/protocol.js";
 import { plainEnvironment } from "./daemon/foundations/session-env.js";
 import { checkRenderRequest } from "./daemon/render-checkpoint.js";
 import { EMPTY_STORED_STATE } from "./renderer-interface/stored-state.js";
-import type { Fault } from "./renderer-interface/noted-faults.js";
+import {
+  scopedFault,
+  type ScopedFault,
+} from "./renderer-interface/noted-faults.js";
 import { columnsReserving } from "./utils/terminal-width.js";
 import {
   commandDaemonFacts,
@@ -326,7 +329,9 @@ function readPass(
   const dropped: string[] = [];
   const failures: string[] = [];
   const advisories: string[] = [];
-  const met = (fault: Fault): void => {
+  const met = (
+    fault: Extract<ScopedFault, { scope: "config" }>["fault"],
+  ): void => {
     switch (fault.kind) {
       case "load":
         if (fault.level === "error") fatal.push(fault.message);
@@ -361,20 +366,16 @@ function readPass(
       case "facts":
         failures.push(`facts: ${fault.message}`);
         return;
-      // What the daemon itself stands on, which says nothing of the config.
-      case "file-events":
-      case "lifeline":
-      case "launch-pipes":
-      case "renderer-ended":
-      case "act-failed":
-      case "config-watch":
-        advisories.push(fault.message);
-        return;
-      default:
-        failures.push(`${fault.kind}: ${fault.message}`);
     }
+    // [LAW:types-are-the-program] Every config kind is named above.
+    fault.kind satisfies never;
   };
-  faults.forEach(met);
+  // [LAW:single-enforcer] Whose a fault is comes from the scope table: what
+  // the daemon itself stands on says nothing of the config, so it advises.
+  for (const scoped of faults.map(scopedFault)) {
+    if (scoped.scope === "daemon") advisories.push(scoped.fault.message);
+    else met(scoped.fault);
+  }
   if (pass.preset !== null && preset !== pass.preset)
     failures.push(
       `render: the session asked for preset "${pass.preset}" drew preset "${preset}"`,
