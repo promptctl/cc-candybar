@@ -203,7 +203,12 @@ export function mainRenderer(
         return;
       }
       case "request": {
-        const { frame, delivery } = answerRequest(parts, event.context, record);
+        const { frame, delivery, inspection } = answerRequest(
+          parts,
+          event.context,
+          record,
+          event.inspect,
+        );
         const id = parts.mint();
         deliveries.set(id, delivery);
         effects.push({
@@ -213,6 +218,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          ...(inspection === undefined ? {} : { inspection }),
         });
         return;
       }
