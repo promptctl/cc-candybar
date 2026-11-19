@@ -84,7 +84,8 @@ function nameOf(act: HostAct): string {
   }
 }
 
-export const paneKey = (pane: TmuxHint): string => `${pane.socket}\0${pane.pane}`;
+export const paneKey = (pane: TmuxHint): string =>
+  `${pane.socket}\0${pane.pane}`;
 
 // [LAW:types-are-the-program] How an act ended: its outcome, and what its
 // line says of it — what it did, or why it did not.

@@ -207,11 +207,7 @@ export function mainRenderer(
         return;
       }
       case "request": {
-        const { frame, delivery } = answerRequest(
-          parts,
-          event.context,
-          record,
-        );
+        const { frame, delivery } = answerRequest(parts, event.context, record);
         const id = parts.mint();
         deliveries.set(id, delivery);
         effects.push({
