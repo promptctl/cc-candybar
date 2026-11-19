@@ -2,6 +2,49 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "24400191560c5a4ce91477d058834a7b195f20f3",
+      "timestamp": "2026-11-19T10:37:51.466Z",
+      "commits": [
+        {
+          "sha": "24400191560c5a4ce91477d058834a7b195f20f3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:36:42Z",
+          "message": "Merge f5db2cfe02f1da9df8e61015eeef02987a730ac4 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
+        },
+        {
+          "sha": "f5db2cfe02f1da9df8e61015eeef02987a730ac4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:35:53-07:00",
+          "message": "fix(test): a test daemon's slot has one release, its exit, and its cleanups wait for that exit (f6eo)\n\nTestDaemonProcess loses release() and spawnDaemonWithEnv loses its pool\nparameter; exit-only release is tested on a /bin/sh stand-in. Cleanups await\nthe daemon's exit before removing its directories, signalDaemon treats the\nEPERM macOS answers for an exited, unreaped group like ESRCH, a child error\nafter spawn is thrown, and the workflow check watches daemonCommand.\n"
+        },
+        {
+          "sha": "5b1fb07dff05930e916419c454d37164140a2f44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:10:47-07:00",
+          "message": "fix(test): a test daemon's pool slot is released by its exit alone, and its signal hears every refusal but ESRCH (f6eo)\n\nThe source entries share one constructor over production's daemonArgs and\ndaemonCommand. A signal no longer frees the machine-wide slot of a daemon it\nleaves alive, a spawn resolves only once the process has a pid, the frozen\ncase reads the daemon's pid from its lease, and the readiness refusal tests\nuse an unsafe socket parent under the default entry.\n"
+        },
+        {
+          "sha": "e656ae2280cbfbf0a220d1f253ccf6ab47e34fde",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:55:29-07:00",
+          "message": "fix(test): a test daemon runs on the arguments the client ships, and its signal is named for what it reaches (f6eo)\n\nThe source entry resolves tsx's loader through the package's exports and puts\nit in front of the client's own daemon arguments, heap cap included. Because\nthe client refuses to spawn on a malformed memory budget, the tests of the\ndaemon's own refusal run it by hand. killTree becomes signalDaemon.\n"
+        },
+        {
+          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:38:14-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-844",
       "ref": "refs/pull/844/merge",
       "sha": "9edbdc24ed3adc15ce2e7214ca42e9c13a5d6bb0",
@@ -241,42 +284,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:54:51-07:00",
           "message": "fix(test): each doctor click in the e2e waits for the run before it to report (boii)\n\nA doctor click while the session's run still waits for its reading starts\nno run, so two clicks one draw apart logged one or two runs depending on how\nfast the host read the machine. The effect-refresh case now draws its row\nback after each click before clicking again, and the URL-handler case waits\nfor its run's row instead of reading the first draw. Under a 1.5 s delay on\nthe host's reading, the old effect-refresh case logs three runs and fails;\nboth cases pass.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "a9e4abe35c9542438bac1273643ee9d7500b32f8",
-      "timestamp": "2026-11-19T10:22:22.685Z",
-      "commits": [
-        {
-          "sha": "a9e4abe35c9542438bac1273643ee9d7500b32f8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:21:16Z",
-          "message": "Merge 5b1fb07dff05930e916419c454d37164140a2f44 into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "5b1fb07dff05930e916419c454d37164140a2f44",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:10:47-07:00",
-          "message": "fix(test): a test daemon's pool slot is released by its exit alone, and its signal hears every refusal but ESRCH (f6eo)\n\nThe source entries share one constructor over production's daemonArgs and\ndaemonCommand. A signal no longer frees the machine-wide slot of a daemon it\nleaves alive, a spawn resolves only once the process has a pid, the frozen\ncase reads the daemon's pid from its lease, and the readiness refusal tests\nuse an unsafe socket parent under the default entry.\n"
-        },
-        {
-          "sha": "e656ae2280cbfbf0a220d1f253ccf6ab47e34fde",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:55:29-07:00",
-          "message": "fix(test): a test daemon runs on the arguments the client ships, and its signal is named for what it reaches (f6eo)\n\nThe source entry resolves tsx's loader through the package's exports and puts\nit in front of the client's own daemon arguments, heap cap included. Because\nthe client refuses to spawn on a malformed memory budget, the tests of the\ndaemon's own refusal run it by hand. killTree becomes signalDaemon.\n"
-        },
-        {
-          "sha": "a19ec2b1c69b3c896acfca239817b62ce6900f64",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:38:14-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n\nThe tsx CLI relays a signal to a worker of its own and SIGKILLs that worker\nif it has not answered within ~60 ms, so on a loaded runner a daemon stopped\nwith SIGTERM died before its handler restored tmux or released the registry.\nEvery process-tier daemon now runs as node with tsx's loader imported, through\nthe one spawn helper, so the pid a test holds and signals is the daemon's own.\nThe tmux-restore test adds the case that freezes the daemon across the\nSIGTERM.\n"
         }
       ]
     },
