@@ -753,8 +753,14 @@ function countingText(
 function physicalDiscovery(
   dataHome: string,
   reads: string[],
-  { opens, state = path.join(root, "state"), clock = heldClock(new Date()) }: {
+  {
+    opens,
+    dataDirs = [],
+    state = path.join(root, "state"),
+    clock = heldClock(new Date()),
+  }: {
     opens?: string[];
+    dataDirs?: readonly string[];
     state?: string;
     clock?: ReturnType<typeof heldClock>;
   } = {},
@@ -764,7 +770,7 @@ function physicalDiscovery(
     logger: () => {},
   });
   const service = new ConfigDiscovery({
-    locations: { ...locations(HOST), dataHome, dataDirs: [] },
+    locations: { ...locations(HOST), dataHome, dataDirs },
     stateDir: state,
     watchers,
     openText: countingText(reads, opens),
@@ -777,6 +783,72 @@ function physicalDiscovery(
   );
   return service;
 }
+
+test("two renderers read the winning plugin and promote its shadowed copy when the override is removed", () => {
+  const data = project("user-data");
+  const packaged = project("package-data");
+  const plugin = (at: string, label: string) => {
+    const dir = path.join(at, "cc-candybar", "plugins", "widget");
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, "plugin.json5");
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ segments: { s: { template: label } } }),
+    );
+    return file;
+  };
+  const lower = plugin(packaged, "packaged");
+  const override = plugin(data, "override");
+  const reads: string[] = [];
+  const opens: string[] = [];
+  const clock = heldClock(new Date());
+  const service = physicalDiscovery(data, reads, {
+    dataDirs: [packaged],
+    clock,
+    opens,
+  });
+  const main = service.forRenderer(MAIN_RENDERER);
+  const other = service.forRenderer(rendererNameOf("worktree"));
+  const { origin } = named("main-session");
+  const second = { ...origin, cwd: project("second-session") };
+  main.follow([origin]);
+  other.follow([second]);
+  const snapshots = () => [main.snapshotOf(origin), other.snapshotOf(second)];
+  for (const snap of snapshots())
+    expect(snap?.plugins).toMatchObject([
+      { path: override, definition: { kind: "text" } },
+    ]);
+  expect(opens).not.toContain(lower);
+  expect(reads.filter((file) => file === override)).toEqual([override]);
+
+  // The folder still wins when its definition cannot be read as a file.
+  fs.unlinkSync(override);
+  fs.mkdirSync(override);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  for (const snap of snapshots())
+    expect(snap?.plugins).toMatchObject([
+      { path: override, definition: { kind: "unreadable" } },
+    ]);
+  expect(opens).not.toContain(lower);
+
+  fs.rmSync(path.dirname(override), { recursive: true });
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  for (const snap of snapshots())
+    expect(snap?.plugins).toMatchObject([
+      { path: lower, definition: { kind: "text" } },
+    ]);
+  expect(reads.filter((file) => file === lower)).toEqual([lower]);
+
+  plugin(data, "override restored");
+  const listed = named("explicit-plugin", JSON.stringify({ plugins: [lower] }));
+  main.follow([origin, listed.origin]);
+  const snap = main.snapshotOf(listed.origin);
+  expect(snap?.plugins).toMatchObject([{ path: override }]);
+  expect(snap?.chain[0]?.listed[lower]).toMatchObject({
+    path: lower,
+    definition: { kind: "text", text: expect.stringContaining("packaged") },
+  });
+});
 
 test("the two renderers and an answer written through the host read each book revision once", () => {
   const state = project("book-state");

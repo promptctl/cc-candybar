@@ -10,12 +10,12 @@ import type { Locations } from "../../config/loader/chain-places.js";
 import type { Unchecked } from "../../utils/presence.js";
 import type { ApprovedRepo } from "../../config/loader/repo-gate.js";
 
-// [LAW:one-source-of-truth] A listing carries its scope from the observed
-// folder names through to their definitions. A failure names the same root.
-export interface RootListing<T> {
+// A directory listing names candidates. The scope and folder name decide
+// precedence before discovery opens a definition.
+export interface RootListing {
   readonly root: string;
   readonly scope: PluginScope;
-  readonly listed: FolderEntries<T> | Unchecked;
+  readonly listed: FolderEntries | Unchecked;
 }
 
 // Package-manager directories, lowest precedence first, then the user's.
@@ -45,8 +45,8 @@ export const REPO_PLUGIN_DIR = path.join(".cc-candybar", "plugins");
 export const repoPluginDir = (project: string): string =>
   path.join(project, REPO_PLUGIN_DIR);
 
-interface FolderEntries<T> {
-  readonly folders: readonly T[];
+interface FolderEntries {
+  readonly folders: readonly string[];
   readonly files: readonly string[];
 }
 
@@ -55,7 +55,7 @@ interface FolderEntries<T> {
 export function listedRepoRoot(
   approved: ApprovedRepo | null,
   entries: ReturnType<typeof listFolders> | null,
-): RootListing<string> | null {
+): RootListing | null {
   if (entries === null) return null;
   if ("error" in entries)
     return { root: entries.path, scope: "repo", listed: entries };
@@ -67,7 +67,7 @@ export function listedRepoRoot(
 // A root's entries: the folders in it, each a plugin's, and the loose files,
 // each a drop naming where it belongs. A root that is not there holds
 // nothing; one that cannot be listed is the `Unchecked` it is, never absence.
-export function listFolders(root: string): FolderEntries<string> | Unchecked {
+export function listFolders(root: string): FolderEntries | Unchecked {
   try {
     // A dot-entry (`.git`, `.DS_Store`, an editor's) is never an install.
     const entries = fs
