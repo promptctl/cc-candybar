@@ -8,7 +8,7 @@
 import type { SessionId } from "./foundations/session-id.js";
 import type { Duplex } from "node:stream";
 import { inspect } from "node:util";
-import type { Daemon } from "./daemon.js";
+import type { ServedDaemon } from "./daemon.js";
 import { framed, renderFailed } from "./foundations/render-answers.js";
 import { NOTHING_TO_SETTLE } from "./statusline-answer.js";
 import {
@@ -24,7 +24,7 @@ import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline.js";
 
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<
-  Daemon,
+  ServedDaemon,
   "stats" | "clock" | "handle" | "subscribe" | "exit" | "log"
 >;
 

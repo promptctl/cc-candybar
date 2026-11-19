@@ -58,12 +58,11 @@ export const failedWith = (message: string): Refusal => ({
 export const renderFailed = (err: unknown): Refusal =>
   failedWith(failureOf(err).message);
 
-// [LAW:single-enforcer] A render's failure is the daemon's, whatever kind was
-// thrown: the request passed its checkpoint, and its reply is RENDER_FAILED.
-export const renderFailure = (failure: Failure): Failure => ({
-  ...failure,
-  kind: "threw",
-});
+// [LAW:single-enforcer] An argument failure inside a checked render is a
+// daemon bug. Closing, abandonment and renderer availability retain their
+// own outcomes even though the wire uses the same failure envelope.
+export const renderFailure = (failure: Failure): Failure =>
+  failure.kind === "bad-request" ? { ...failure, kind: "threw" } : failure;
 
 // [LAW:dataflow-not-control-flow] A render's answer in each encoding, looked up
 // by the value the checkpoint parsed. Keyed by the type, so a new encoding names

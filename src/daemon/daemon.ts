@@ -9,14 +9,17 @@ import type { Host } from "../host";
 import type { DaemonLog } from "./log";
 import type { Inbound } from "./foundations/protocol";
 import type { DaemonParts } from "./daemon-parts.js";
+import { CrossedFailure, DaemonClosing } from "./foundations/verb-error.js";
+import { failedWith } from "./foundations/render-answers.js";
 import {
   handleRequest,
+  refuseClosingInbound,
+  refuseClosingReply,
   replyTo,
   type HandledRequest,
   type Reply,
   type ReplyRequest,
 } from "./reply.js";
-import { CrossedFailure } from "./foundations/verb-error.js";
 import type { CheckedRenderRequest } from "../renderer-interface/request-context.js";
 import type { LaunchOwner, Settled, TestableLauncher } from "../proc/launch";
 import type { Launcher } from "../proc/launcher";
@@ -152,30 +155,39 @@ export interface DaemonInputs extends DaemonAdapters {
   readonly exit: (code: number) => void;
 }
 
-// The daemon as a value: built by `createDaemon`, driven by calling `handle`,
-// ended by `close`. Everything about a process — a socket, signals, an exit —
-// is server.ts's, over this; `exit` is only the funnel it handed in.
-export interface Daemon {
+interface DaemonClose {
+  readonly settled: Promise<Settled>;
+}
+
+interface DaemonResources {
   readonly stats: RuntimeStats;
-  // What this daemon's work launches through: its close refuses them all.
   readonly launcher: Launcher;
-  // What this daemon's work logs through.
   readonly log: DaemonLogger;
   readonly memoryLimitBytes: number;
   readonly clock: Timekeeper;
-  // [LAW:one-source-of-truth] The funnel this daemon was built with, which a
-  // connection reaches once a reply carrying an exit has flushed.
   readonly exit: DaemonInputs["exit"];
-  // The request handling a connection calls, with the request as its
-  // connection accepted it.
+  // [LAW:no-ambient-temporal-coupling] Teardown settles before launch reaping,
+  // which carries its own outcome. Repeat callers share both waits.
+  close(): Promise<DaemonClose>;
+}
+
+// [LAW:types-are-the-program] Losing the socket bind only needs these resources.
+// A request-capable daemon is produced after loading the stores and renderer.
+export interface PreparedDaemon extends Pick<
+  DaemonResources,
+  "launcher" | "close"
+> {
+  serve(): ServedDaemon;
+}
+
+export interface ServedDaemon extends DaemonResources {
   readonly handle: (
     inbound: Inbound,
     timedOut: () => boolean,
     accepted: Acceptance,
     clientLeft: () => boolean,
   ) => Promise<HandledRequest>;
-  // The reply to a request of any kind but a subscribe, past the connection's
-  // checkpoint: what the page in site/ calls with requests it built.
+  // The site's in-process request path past the connection's checkpoint.
   readonly reply: (
     req: ReplyRequest,
     timedOut: () => boolean,
@@ -183,42 +195,40 @@ export interface Daemon {
     clientLeft: () => boolean,
   ) => Promise<Reply>;
   readonly subscribe: FrameFeeds<CheckedRenderRequest>["subscribe"];
-  // Discover every followed origin's config again, now: the page in site/
-  // calls it after it resets its simulated machine's config file, which no
-  // watch hears.
+  // The site resets a simulated file that its watches cannot hear.
   readonly rediscover: () => void;
-  // [LAW:no-ambient-temporal-coupling] Reads the profile's stores and builds
-  // the renderer from them: before it, an input fails as no renderer's. What
-  // the page calls, and a test's daemon; an armed daemon serves as it arms.
-  serve(): void;
-  // What a daemon that won the socket starts: only it counts its memory or
-  // watches its bundle.
+  // Only the socket owner arms production watchers and the renderer process.
   arm(): void;
-  // [LAW:no-ambient-temporal-coupling] After this nothing launches, no timer
-  // stays armed once what was in flight has settled, and only the log is
-  // written. A read already under way may finish. It resolves once every
-  // teardown step has run, the renderer's included, and its `settled` once the
-  // launches and lifeline it ended have ended.
-  close(): Promise<{ readonly settled: Promise<Settled> }>;
 }
 
-export function createDaemon(inputs: DaemonInputs): Daemon {
+// [LAW:one-source-of-truth] Draining seals admission immediately. The journal
+// barrier lets earlier clicks finish before closing cancels their launches.
+type DaemonPhase =
+  | { readonly kind: "building" | "built" | "starting" | "serving" | "armed" }
+  | {
+      readonly kind: "draining" | "closing" | "closed";
+      readonly done: Promise<DaemonClose>;
+    };
+
+export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   const { bundle, memoryLimitBytes, clock, exit, paths, gates, host } = inputs;
   // Parsed once, here, and handed to everything that loads a config.
   const locs = locations(host);
   const instant = (): Instant => instantAt(clock);
-  // [LAW:single-enforcer] What ends the daemon's work: every launch through its
-  // launcher, and the lane edge's waits.
-  const closing = new AbortController();
-  // Whether the close has finished: what is logged after it is work that
-  // outlived its daemon. A process exits with its close, so this is a daemon
-  // closed in a process that goes on, and the next daemon's log can be the file
-  // the line lands in: it says whose it is rather than reading as an event of
-  // that daemon's.
-  let closed = false;
-  // [LAW:one-source-of-truth] What this daemon's work logs through.
+  let phase: DaemonPhase = { kind: "building" };
+  const currentPhase = (): DaemonPhase => phase;
+  const serving = (): boolean =>
+    phase.kind === "serving" || phase.kind === "armed";
+  const cancelling = (): boolean =>
+    phase.kind === "closing" || phase.kind === "closed";
+  // [LAW:effects-at-boundaries] Cancellation for launch and wait adapters is
+  // emitted by the phase change at the journal barrier.
+  const cancelWork = new AbortController();
   const log: DaemonLogger = (level, msg) =>
-    inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
+    inputs.daemonLog.log(
+      level,
+      phase.kind === "closed" ? `after close: ${msg}` : msg,
+    );
   // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
   // instances would defeat the share-across-sessions invariant.
   const stats = new RuntimeStats(clock);
@@ -270,7 +280,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   const launcher = inputs.launcher({
     inherited: host.env,
     stats: stats.launchStats,
-    signal: closing.signal,
+    signal: cancelWork.signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
@@ -286,7 +296,10 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
             ? "launch lifeline running again"
             : `launch lifeline ${change.fault}; the next launch starts another`,
         );
-      restateFaults();
+      // [LAW:no-ambient-temporal-coupling] A factory may report a warning
+      // before its launcher can be read. The initial restatement reads it
+      // once the launcher exists.
+      if (phase.kind !== "building") restateFaults();
     },
   });
   const linkSigner = linkSignerOver(inputs.linkKey);
@@ -337,7 +350,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => link.process(),
+    renderer: () => (serving() ? link.process() : null),
   });
   const renderSightings = new RenderSightings();
   // [LAW:one-source-of-truth] One provider per data shape, shared across every
@@ -395,7 +408,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         socket: paths.socket,
       },
     },
-    closing: () => closing.signal.aborted,
+    closing: cancelling,
     log,
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -462,28 +475,6 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   }: CheckedRenderRequest): readonly string[] {
     return tmux === null || tmux === undefined ? [] : [tmux.socket];
   }
-  // [LAW:no-silent-failure] An edit made while file events went unheard is
-  // found when they resume: every followed origin is discovered again, and
-  // each one that moved gets its `config` turn. Every feed redraws when
-  // delivery moves, so its row comes and goes on frames too.
-  // [LAW:no-ambient-temporal-coupling] Every directory watch is judged against
-  // the disk on the one period the daemon keeps time by: a folder replaced
-  // beneath a renamed ancestor reports nothing to the handle bound to the old
-  // one, and a directory the OS refused is heard again only by a retry.
-  fileEvents.subscribe((notice) => {
-    switch (notice.kind) {
-      case "period":
-        watcherRegistry.judge();
-        return;
-      case "caught-up":
-        restateFaults();
-        configDiscovery.again("events-resumed");
-        return;
-      case "moved":
-        restateFaults();
-        return;
-    }
-  });
   const binaryWatch = makeBinaryWatch({
     clock,
     targets: bundle.targets,
@@ -540,6 +531,9 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
+      // [LAW:no-ambient-temporal-coupling] A start belongs to a serving
+      // daemon. Its renderer host exists by the time that phase is published.
+      if (!serving()) return;
       const started = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
@@ -582,20 +576,8 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     log,
     moved: (origins) => parts.renderer.moved(origins),
   });
-  // [LAW:single-enforcer] Served once, whichever asks first.
-  let served = false;
-  const serve = (): void => {
-    closing.signal.throwIfAborted();
-    if (served) return;
-    stores.load();
-    sessionBook.load();
-    link.serve();
-    // [LAW:no-silent-failure] Served once every step has: a step that threw
-    // is thrown to its caller, and the next ask serves again.
-    served = true;
-  };
   const parts: DaemonParts = {
-    closing: closing.signal,
+    closing: cancelWork.signal,
     home: host.home,
     launcher,
     log,
@@ -637,7 +619,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
         configs: configDiscovery,
-        closing: () => closing.signal.aborted,
+        closing: cancelling,
         // [LAW:no-silent-failure] Joined to the last while it is owed, by the
         // one rule for events that follow each other.
         unheard: (text) => {
@@ -648,90 +630,168 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
     ),
   };
 
-  return {
+  // [LAW:no-silent-failure] An edit made while file events went unheard is
+  // found when they resume: every followed origin is discovered again, and
+  // each one that moved gets its `config` turn. Every feed redraws when
+  // delivery moves, so its row comes and goes on frames too.
+  // [LAW:no-ambient-temporal-coupling] Every directory watch is judged against
+  // the disk on the one period the daemon keeps time by: a folder replaced
+  // beneath a renamed ancestor reports nothing to the handle bound to the old
+  // one, and a directory the OS refused is heard again only by a retry.
+  fileEvents.subscribe((notice) => {
+    switch (notice.kind) {
+      case "period":
+        watcherRegistry.judge();
+        return;
+      case "caught-up":
+        restateFaults();
+        configDiscovery.again("events-resumed");
+        return;
+      case "moved":
+        restateFaults();
+        return;
+    }
+  });
+  // [LAW:single-enforcer] All request-capable entry points share the same
+  // admission phase. A subscription can race close after its wire admission.
+  const admit = <T>(run: () => T, refuse: () => T): T =>
+    serving() ? run() : refuse();
+  const served: ServedDaemon = {
     stats,
     launcher,
     log,
     memoryLimitBytes,
     clock,
     exit,
-    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in waits its turn in the renderer's
-    // mailbox: one ahead of the close runs whole, and one behind it is
-    // refused; a subscribe its request reached as the daemon closed is
-    // refused here and opens no feed.
-    handle: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted, clientLeft);
-    },
-    reply: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted, clientLeft);
-    },
-    subscribe: (sessionId, subscriber) => {
-      closing.signal.throwIfAborted();
-      return frameFeeds.subscribe(sessionId, subscriber);
-    },
-    rediscover: () => {
-      closing.signal.throwIfAborted();
-      configDiscovery.again("asked");
-    },
-    serve,
+    close,
+    handle: (req, timedOut, accepted, clientLeft) =>
+      admit(
+        () => handleRequest(parts, req, timedOut, accepted, clientLeft),
+        () => Promise.resolve(refuseClosingInbound(parts, req, accepted)),
+      ),
+    reply: (req, timedOut, accepted, clientLeft) =>
+      admit(
+        () => replyTo(parts, req, timedOut, accepted, clientLeft),
+        () => Promise.resolve(refuseClosingReply(parts, req.kind, accepted)),
+      ),
+    subscribe: (sessionId, subscriber) =>
+      admit(
+        () => frameFeeds.subscribe(sessionId, subscriber),
+        () => {
+          log(
+            "info",
+            `feed sid=${JSON.stringify(sessionId)} refused lane=${subscriber.lane} daemon-closed`,
+          );
+          subscriber.refused(
+            failedWith(new DaemonClosing("subscribe").message),
+          );
+          return () => {};
+        },
+      ),
+    rediscover: () =>
+      admit(
+        () => configDiscovery.again("asked"),
+        () => {},
+      ),
     arm() {
-      closing.signal.throwIfAborted();
-      serve();
+      if (!serving()) throw new DaemonClosing("arm");
+      if (phase.kind === "armed") return;
+      phase = { kind: "armed" };
       fileEvents.start(paths.watchProbe);
       binaryWatch.arm();
       limits.arm();
       link.arm();
     },
-    async close() {
-      // The renderer's steps of the teardown, each awaited where it
-      // stands: the renderer takes them in the order they are sent.
-      const rendererStep =
-        (kind: "close-journal" | "close-views") => (): Promise<unknown> =>
-          parts.renderer.ask({ kind });
-      // The stores still flush after a close failed (runTeardown).
-      const teardown: readonly TeardownStep[] = [
-        // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
-        // ends is not started again, so no step below waits on a fresh boot.
-        // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
-        // from here, so no turn the renderer holds for later runs into the
-        // close's.
-        ["renderer wake close", () => parts.renderer.closeWake()],
-        ["renderer close begins", () => link.beginClose()],
-        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
-        // every click ahead of it lands whole, and none behind it begins.
-        ["renderer journal close", rendererStep("close-journal")],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
-        // is in flight is terminated, whichever owner's work it was, and the
-        // launcher's lifeline goes.
-        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
-        ["frameFeeds close", () => frameFeeds.close()],
-        ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => limits.disarm()],
-        // Before the sources and the storage its states hold.
-        ["collector close", () => collector.close()],
-        // Before the views close: a `config` made after it finds its origin
-        // let go, and hands the closed cache nothing.
-        ["configDiscovery close", () => configDiscovery.close()],
-        ["renderer views close", rendererStep("close-views")],
-        ...payloadProviders.closes,
-        ["runs close", () => runs.close()],
-        // After the collector, which holds every session's runs: its close
-        // releases them first, so this close drops nothing still held.
-        ["sourceRuns close", () => sourceRuns.close()],
-        ["fileEvents close", () => fileEvents.close()],
-        ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        // Last of the stores' writers: a run that ends in the teardown holds
-        // its click error first.
-        ["stores close", () => stores.close()],
-        ["sessionBook close", () => sessionBook.close()],
-        ["renderer process close", () => link.close()],
-      ];
-      await runTeardown(teardown, log);
-      closed = true;
-      return { settled: launcher.settled() };
-    },
   };
+  phase = { kind: "built" };
+
+  function serve(): ServedDaemon {
+    if (serving()) return served;
+    if (phase.kind !== "built") throw new DaemonClosing("serve");
+    const starting: DaemonPhase = { kind: "starting" };
+    phase = starting;
+    try {
+      stores.load();
+      sessionBook.load();
+      if (currentPhase() !== starting) throw new DaemonClosing("serve");
+      link.serve();
+      if (currentPhase() !== starting) throw new DaemonClosing("serve");
+      phase = { kind: "serving" };
+      return served;
+    } catch (error) {
+      if (currentPhase() === starting) phase = { kind: "built" };
+      throw error;
+    }
+  }
+
+  function close(): Promise<DaemonClose> {
+    if ("done" in phase) return phase.done;
+    const wasServing = serving();
+    // [LAW:no-ambient-temporal-coupling] Publish the shared close before any
+    // teardown step can call back into the daemon.
+    const done: Promise<DaemonClose> = Promise.resolve().then(() =>
+      tearDown(wasServing, done),
+    );
+    phase = { kind: "draining", done };
+    return done;
+  }
+
+  async function tearDown(
+    wasServing: boolean,
+    done: Promise<DaemonClose>,
+  ): Promise<DaemonClose> {
+    // The renderer's steps of the teardown, each awaited where it
+    // stands: the renderer takes them in the order they are sent.
+    const rendererStep = (kind: "close-journal" | "close-views") => () =>
+      wasServing ? parts.renderer.ask({ kind }) : undefined;
+    // The stores still flush after a close failed (runTeardown).
+    const teardown: readonly TeardownStep[] = [
+      // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
+      // ends is not started again, so no step below waits on a fresh boot.
+      // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
+      // from here, so no turn the renderer holds for later runs into the
+      // close's.
+      ["renderer wake close", () => parts.renderer.closeWake()],
+      ["renderer close begins", () => link.beginClose()],
+      // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+      // every click ahead of it lands whole, and none behind it begins.
+      ["renderer journal close", rendererStep("close-journal")],
+      // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+      // is in flight is terminated, whichever owner's work it was, and the
+      // launcher's lifeline goes.
+      [
+        "launches abort",
+        () => {
+          phase = { kind: "closing", done };
+          cancelWork.abort(new DaemonClosing("work"));
+        },
+      ],
+      ["frameFeeds close", () => frameFeeds.close()],
+      ["binaryWatch close", () => binaryWatch.close()],
+      ["limits disarm", () => limits.disarm()],
+      // Before the sources and the storage its states hold.
+      ["collector close", () => collector.close()],
+      // Before the views close: a `config` made after it finds its origin
+      // let go, and hands the closed cache nothing.
+      ["configDiscovery close", () => configDiscovery.close()],
+      ["renderer views close", rendererStep("close-views")],
+      ...payloadProviders.closes,
+      ["runs close", () => runs.close()],
+      // After the collector, which holds every session's runs: its close
+      // releases them first, so this close drops nothing still held.
+      ["sourceRuns close", () => sourceRuns.close()],
+      ["fileEvents close", () => fileEvents.close()],
+      ["watcherRegistry close", () => watcherRegistry.closeAll()],
+      // Last of the stores' writers: a run that ends in the teardown holds
+      // its click error first.
+      ["stores close", () => stores.close()],
+      ["sessionBook close", () => sessionBook.close()],
+      ["renderer process close", () => link.close()],
+    ];
+    await runTeardown(teardown, log);
+    phase = { kind: "closed", done };
+    return { settled: launcher.settled() };
+  }
+
+  return { launcher, close, serve };
 }
