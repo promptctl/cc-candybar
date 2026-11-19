@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "2e9c928c2afc2d8e586b4d92408d3c7f575c5f16",
+      "timestamp": "2026-11-19T19:40:06.122Z",
+      "commits": [
+        {
+          "sha": "2e9c928c2afc2d8e586b4d92408d3c7f575c5f16",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:38:59-07:00",
+          "message": "fix(install): replace staged executables atomically (#903)"
+        }
+      ]
+    },
+    {
       "version": "pr-906",
       "ref": "refs/pull/906/merge",
       "sha": "3676fe464a95bb50c3d8a35edb8ba07fdc4f9a63",
@@ -42,43 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:49:05-07:00",
           "message": "fix(renderer): use one outcome for each config delivery\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-903",
-      "ref": "refs/pull/903/merge",
-      "sha": "43cb8b2a5ebc37ad339f97052b2fd01061911ecf",
-      "timestamp": "2026-11-19T19:31:45.180Z",
-      "commits": [
-        {
-          "sha": "43cb8b2a5ebc37ad339f97052b2fd01061911ecf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:30:38Z",
-          "message": "Merge 18f9e02b2488eec5fd7425f722aa94b99731fb87 into 7df1347f46b6e135236f014e234935a7b5ffc5fc\n"
-        },
-        {
-          "sha": "18f9e02b2488eec5fd7425f722aa94b99731fb87",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:48:47-07:00",
-          "message": "fix(install): replace staged executables atomically\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "7df1347f46b6e135236f014e234935a7b5ffc5fc",
-      "timestamp": "2026-11-19T19:30:23.182Z",
-      "commits": [
-        {
-          "sha": "7df1347f46b6e135236f014e234935a7b5ffc5fc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:29:32-07:00",
-          "message": "fix(daemon): skip abandoned statusline draws (#902)\n\n* fix(daemon): skip abandoned statusline draws\n\n* test(client): reserve independent directories for concurrent feedback cases\n\n* test(daemon): state deadlines in the fixture clock domain\n\n* test(frames): assert handoffs on delivered renders"
         }
       ]
     },
