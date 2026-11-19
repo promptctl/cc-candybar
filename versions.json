@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "ba64a50c816d01574c923bb0ef96182d56914d25",
+      "timestamp": "2026-11-19T14:55:38.195Z",
+      "commits": [
+        {
+          "sha": "ba64a50c816d01574c923bb0ef96182d56914d25",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:54:35-07:00",
+          "message": "fix(watchers): follow the revision config discovery read (#876)\n\nfix(watchers): follow the revision config discovery read (ibyq.ds5)"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "b9d3fe9bbcfe9257b1e1496341dd877804057713",
@@ -55,43 +70,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-876",
-      "ref": "refs/pull/876/merge",
-      "sha": "be72c4ad3b9c5d41e81e32b0c8a26c36678b544b",
-      "timestamp": "2026-11-19T14:47:25.194Z",
-      "commits": [
-        {
-          "sha": "be72c4ad3b9c5d41e81e32b0c8a26c36678b544b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:46:08Z",
-          "message": "Merge fabbec0adc82e7183752ff7440c1749bc75b3ad1 into 59578c03d8f8e1de16a341adf4e70d2c1a550472\n"
-        },
-        {
-          "sha": "fabbec0adc82e7183752ff7440c1749bc75b3ad1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:48:34-07:00",
-          "message": "fix(watchers): follow the revision config discovery read (ibyq.ds5)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "59578c03d8f8e1de16a341adf4e70d2c1a550472",
-      "timestamp": "2026-11-19T14:45:04.602Z",
-      "commits": [
-        {
-          "sha": "59578c03d8f8e1de16a341adf4e70d2c1a550472",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T14:43:46Z",
-          "message": "chore(release): set `package.json` to 1.234.3\n\n## [1.234.3](https://github.com/promptctl/cc-candybar/compare/v1.234.2...v1.234.3) (2026-11-19)\n\n### Performance Improvements\n\n* **host:** share each session environment across statusline ticks ([#872](https://github.com/promptctl/cc-candybar/issues/872)) ([481101f](https://github.com/promptctl/cc-candybar/commit/481101f839d97ef1ae569bddbf9336ec8cfe52b5))\n"
         }
       ]
     },
