@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-857",
+      "ref": "refs/pull/857/merge",
+      "sha": "5f3abc81ed49e51b87c2c6d940011720247ef2c3",
+      "timestamp": "2026-11-19T12:30:48.833Z",
+      "commits": [
+        {
+          "sha": "5f3abc81ed49e51b87c2c6d940011720247ef2c3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T12:29:52Z",
+          "message": "Merge 5a909aaf46730f99a977fcbde9c59cb61456470b into 2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8\n"
+        },
+        {
+          "sha": "5a909aaf46730f99a977fcbde9c59cb61456470b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:35:29-07:00",
+          "message": "fix(daemon): launches withhold the spawning shell's repository-local environment variables, asked of git once its socket is bound\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "2ea914d28b9d385ad72a58229f4e9d4ddb9aeff8",
@@ -93,28 +115,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:18:15-07:00",
           "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-857",
-      "ref": "refs/pull/857/merge",
-      "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
-      "timestamp": "2026-11-19T11:39:12.887Z",
-      "commits": [
-        {
-          "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:38:19-07:00",
-          "message": "Merge e244675b27ea3fe054976feff8190d3357745ddf into f2035fdda3d7aced7e27f485137b01e28691e13f\n"
-        },
-        {
-          "sha": "e244675b27ea3fe054976feff8190d3357745ddf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T04:35:29-07:00",
-          "message": "fix(daemon): launches withhold the spawning shell's repository variables, asked of git once after admission\n"
         }
       ]
     }

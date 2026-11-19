@@ -72,18 +72,18 @@ var __callDispose = (stack, error, hasError) => {
     return _ = Error(m), _.name = "SuppressedError", _.error = e, _.suppressed = s, _;
   };
   var fail2 = (e) => error = hasError ? new E(e, error, "An error was suppressed during disposal") : (hasError = true, e);
-  var next = (it) => {
+  var next2 = (it) => {
     while (it = stack.pop()) {
       try {
         var result = it[1] && it[1].call(it[2]);
-        if (it[0]) return Promise.resolve(result).then(next, (e) => (fail2(e), next()));
+        if (it[0]) return Promise.resolve(result).then(next2, (e) => (fail2(e), next2()));
       } catch (e) {
         fail2(e);
       }
     }
     if (hasError) throw error;
   };
-  return next();
+  return next2();
 };
 
 // node_modules/.pnpm/events@3.3.0/node_modules/events/events.js
@@ -394,10 +394,10 @@ var require_events = __commonJS({
       return this._eventsCount > 0 ? ReflectOwnKeys(this._events) : [];
     };
     function arrayClone(arr, n) {
-      var copy3 = new Array(n);
+      var copy2 = new Array(n);
       for (var i2 = 0; i2 < n; ++i2)
-        copy3[i2] = arr[i2];
-      return copy3;
+        copy2[i2] = arr[i2];
+      return copy2;
     }
     function spliceOne(list2, index) {
       for (; index + 1 < list2.length; index++)
@@ -911,8 +911,8 @@ var require_buffer = __commonJS({
     }
     function fromArrayView(arrayView) {
       if (isInstance(arrayView, Uint8Array)) {
-        const copy3 = new Uint8Array(arrayView);
-        return fromArrayBuffer(copy3.buffer, copy3.byteOffset, copy3.byteLength);
+        const copy2 = new Uint8Array(arrayView);
+        return fromArrayBuffer(copy2.buffer, copy2.byteOffset, copy2.byteLength);
       }
       return fromArrayLike(arrayView);
     }
@@ -2015,7 +2015,7 @@ var require_buffer = __commonJS({
     Buffer4.prototype.writeDoubleBE = function writeDoubleBE(value, offset, noAssert) {
       return writeDouble(this, value, offset, false, noAssert);
     };
-    Buffer4.prototype.copy = function copy3(target, targetStart, start, end) {
+    Buffer4.prototype.copy = function copy2(target, targetStart, start, end) {
       if (!Buffer4.isBuffer(target)) throw new TypeError("argument should be a Buffer");
       if (!start) start = 0;
       if (!end && end !== 0) end = this.length;
@@ -3043,13 +3043,13 @@ var require_primordials = __commonJS({
       WeakMap: WeakMap2,
       WeakSet: WeakSet2
     } = primordials;
-    var createSafeIterator = (factory, next) => {
+    var createSafeIterator = (factory, next2) => {
       class SafeIterator {
         constructor(iterable) {
           this._iterator = factory(iterable);
         }
         next() {
-          return next(this._iterator);
+          return next2(this._iterator);
         }
         [SymbolIterator]() {
           return this;
@@ -3082,14 +3082,14 @@ var require_primordials = __commonJS({
     var makeSafe = (unsafe, safe) => {
       if (SymbolIterator in unsafe.prototype) {
         const dummy = new unsafe();
-        let next;
+        let next2;
         ArrayPrototypeForEach(ReflectOwnKeys(unsafe.prototype), (key) => {
           if (!ReflectGetOwnPropertyDescriptor(safe.prototype, key)) {
             const desc = ReflectGetOwnPropertyDescriptor(unsafe.prototype, key);
             if (typeof desc.value === "function" && desc.value.length === 0 && SymbolIterator in (FunctionPrototypeCall(desc.value, dummy) ?? {})) {
               const createIterator = uncurryThis(desc.value);
-              next = next ?? uncurryThis(createIterator(dummy).next);
-              const SafeIterator = createSafeIterator(createIterator, next);
+              next2 = next2 ?? uncurryThis(createIterator(dummy).next);
+              const SafeIterator = createSafeIterator(createIterator, next2);
               desc.value = function() {
                 return new SafeIterator(this);
               };
@@ -4099,15 +4099,15 @@ function __disposeResources(env2) {
     env2.hasError = true;
   }
   var r, s = 0;
-  function next() {
+  function next2() {
     while (r = env2.stack.pop()) {
       try {
-        if (!r.async && s === 1) return s = 0, env2.stack.push(r), Promise.resolve().then(next);
+        if (!r.async && s === 1) return s = 0, env2.stack.push(r), Promise.resolve().then(next2);
         if (r.dispose) {
           var result = r.dispose.call(r.value);
-          if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) {
+          if (r.async) return s |= 2, Promise.resolve(result).then(next2, function(e) {
             fail2(e);
-            return next();
+            return next2();
           });
         } else s |= 1;
       } catch (e) {
@@ -4117,7 +4117,7 @@ function __disposeResources(env2) {
     if (s === 1) return env2.hasError ? Promise.reject(env2.error) : Promise.resolve();
     if (env2.hasError) throw env2.error;
   }
-  return next();
+  return next2();
 }
 function __rewriteRelativeImportExtension(path31, preserveJsx) {
   if (typeof path31 === "string" && /^\.\.?\//.test(path31)) {
@@ -4500,8 +4500,8 @@ var require_inspectPrimitive = __commonJS({
           last2 = i2 + 1;
         } else if (point >= 55296 && point <= 57343) {
           if (point <= 56319 && i2 + 1 < length) {
-            const next = str.charCodeAt(i2 + 1);
-            if (next >= 56320 && next <= 57343) {
+            const next2 = str.charCodeAt(i2 + 1);
+            if (next2 >= 56320 && next2 <= 57343) {
               i2++;
               continue;
             }
@@ -6142,8 +6142,8 @@ var require_Node = __commonJS({
         return (0, buffer_1.bufferFrom)(this.buf.subarray(0, this.size));
       }
       setBuffer(buf) {
-        const copy3 = (0, buffer_1.bufferFrom)(buf);
-        this._setBuf(copy3);
+        const copy2 = (0, buffer_1.bufferFrom)(buf);
+        this._setBuf(copy2);
       }
       _setBuf(buf) {
         const size = buf.length;
@@ -8440,10 +8440,10 @@ var require_glob = __commonJS({
               gss++;
             if (gss > gs)
               parts.splice(gs + 1, gss - gs);
-            const next = parts[gs + 1];
+            const next2 = parts[gs + 1];
             const p2 = parts[gs + 2];
             const p22 = parts[gs + 3];
-            if (next !== "..")
+            if (next2 !== "..")
               continue;
             if (!p2 || p2 === "." || p2 === ".." || !p22 || p22 === "." || p22 === "..")
               continue;
@@ -8881,7 +8881,7 @@ var require_glob = __commonJS({
               return;
             const current = pattern2.at(index);
             const nextIndex = index + 1;
-            const next = pattern2.at(nextIndex);
+            const next2 = pattern2.at(nextIndex);
             const fromSymlink = !this.followSymlinks && pattern2.symlinks.has(index);
             if (current === GLOBSTAR) {
               const isDot = name.charCodeAt(0) === 46;
@@ -8905,7 +8905,7 @@ var require_glob = __commonJS({
                 subPatterns.add(nextIndex);
               if (!this.followSymlinks && entry.isSymbolicLink())
                 nSymlinks.add(index);
-              if (next === ".." && entryIsDirectory) {
+              if (next2 === ".." && entryIsDirectory) {
                 const parent = join4(path31, "..");
                 if (nextIndex < last2) {
                   if (!this.subpatterns.has(path31) && !cache2.seen(path31, pattern2, nextIndex + 1))
@@ -11292,7 +11292,7 @@ var require_from = __commonJS({
       readable._read = function() {
         if (!reading) {
           reading = true;
-          next();
+          next2();
         }
       };
       readable._destroy = function(error, cb) {
@@ -11318,7 +11318,7 @@ var require_from = __commonJS({
           await value;
         }
       }
-      async function next() {
+      async function next2() {
         for (; ; ) {
           try {
             const { value, done } = isAsync ? await iterator.next() : iterator.next();
@@ -12066,7 +12066,7 @@ var require_readable = __commonJS({
     }
     async function* createAsyncIterator(stream, options) {
       let callback = nop;
-      function next(resolve) {
+      function next2(resolve) {
         if (this === stream) {
           callback();
           callback = nop;
@@ -12074,7 +12074,7 @@ var require_readable = __commonJS({
           callback = resolve;
         }
       }
-      stream.on("readable", next);
+      stream.on("readable", next2);
       let error;
       const cleanup = eos(
         stream,
@@ -12097,7 +12097,7 @@ var require_readable = __commonJS({
           } else if (error === null) {
             return;
           } else {
-            await new Promise2(next);
+            await new Promise2(next2);
           }
         }
       } catch (err) {
@@ -12107,7 +12107,7 @@ var require_readable = __commonJS({
         if ((error || (options === null || options === void 0 ? void 0 : options.destroyOnReturn) !== false) && (error === void 0 || stream._readableState.autoDestroy)) {
           destroyImpl.destroyer(stream, null);
         } else {
-          stream.off("readable", next);
+          stream.off("readable", next2);
           cleanup();
         }
       }
@@ -14226,7 +14226,7 @@ var require_operators = __commonJS({
         const signalOpt = {
           signal
         };
-        let next;
+        let next2;
         let resume;
         let done = false;
         let cnt = 0;
@@ -14265,9 +14265,9 @@ var require_operators = __commonJS({
               cnt += 1;
               PromisePrototypeThen(val, afterItemProcessed, onCatch);
               queue.push(val);
-              if (next) {
-                next();
-                next = null;
+              if (next2) {
+                next2();
+                next2 = null;
               }
               if (!done && (queue.length >= highWaterMark || cnt >= concurrency)) {
                 await new Promise2((resolve) => {
@@ -14282,9 +14282,9 @@ var require_operators = __commonJS({
             queue.push(val);
           } finally {
             done = true;
-            if (next) {
-              next();
-              next = null;
+            if (next2) {
+              next2();
+              next2 = null;
             }
           }
         }
@@ -14306,7 +14306,7 @@ var require_operators = __commonJS({
               maybeResume();
             }
             await new Promise2((resolve) => {
-              next = resolve;
+              next2 = resolve;
             });
           }
         } finally {
@@ -15092,7 +15092,7 @@ var require_cp = __commonJS({
     var validators_1 = require_validators2();
     var pathResolve = path_1.posix.resolve;
     var { O_RDONLY, O_WRONLY, O_CREAT, O_EXCL, COPYFILE_EXCL, COPYFILE_FICLONE_FORCE } = fs_node_utils_1.constants;
-    var PREFIX2 = {
+    var PREFIX = {
       ERR_FS_CP_DIR_TO_NON_DIR: "Cannot overwrite non-directory with directory",
       ERR_FS_CP_EEXIST: "Target already exists",
       ERR_FS_CP_EINVAL: "Invalid src or dest",
@@ -15103,7 +15103,7 @@ var require_cp = __commonJS({
       ERR_FS_CP_UNKNOWN: "Cannot copy an unknown file type",
       ERR_FS_EISDIR: "Path is a directory"
     };
-    var cpSystemError = (code2, message2, path31, errno, uv) => new fs_core_1.SystemError(code2, PREFIX2[code2], { code: uv, message: message2, path: path31, syscall: "cp", errno });
+    var cpSystemError = (code2, message2, path31, errno, uv) => new fs_core_1.SystemError(code2, PREFIX[code2], { code: uv, message: message2, path: path31, syscall: "cp", errno });
     var cpCodeError = (code2, message2) => (0, argErrors_1.withNativeCode)(new Error(message2), code2);
     var invalidFilterReturn = (value) => (0, argErrors_1.withCode)(new TypeError('Expected boolean to be returned from the "filter" function but got an instance of Promise.'), "ERR_INVALID_RETURN_VALUE");
     var asCopyfileError = (error, src, dest) => error && typeof error.code === "string" && typeof error.syscall === "string" ? (0, fs_core_1.createError)(error.code, "copyfile", src, dest) : error;
@@ -17193,8 +17193,8 @@ var require_CachedUtf8Decoder = __commonJS({
         if (cachedValue !== null)
           return cachedValue;
         const value = (0, v10_1.default)(bytes, offset, size);
-        const copy3 = Uint8Array.prototype.slice.call(bytes, offset, offset + size);
-        this.store(copy3, value);
+        const copy2 = Uint8Array.prototype.slice.call(bytes, offset, offset + size);
+        this.store(copy2, value);
         return value;
       }
     };
@@ -22532,11 +22532,11 @@ var require_dist = __commonJS({
           return final;
         }
       };
-      var JSON57 = {
+      var JSON56 = {
         parse: parse3,
         stringify
       };
-      var lib = JSON57;
+      var lib = JSON56;
       var es5 = lib;
       return es5;
     }));
@@ -24337,7 +24337,7 @@ var require_deflate = __commonJS({
       var str, n;
       var wrap2;
       var avail;
-      var next;
+      var next2;
       var input;
       var tmpDict;
       if (!strm || !strm.state) {
@@ -24365,7 +24365,7 @@ var require_deflate = __commonJS({
         dictLength = s.w_size;
       }
       avail = strm.avail_in;
-      next = strm.next_in;
+      next2 = strm.next_in;
       input = strm.input;
       strm.avail_in = dictLength;
       strm.next_in = 0;
@@ -24390,7 +24390,7 @@ var require_deflate = __commonJS({
       s.lookahead = 0;
       s.match_length = s.prev_length = MIN_MATCH - 1;
       s.match_available = 0;
-      strm.next_in = next;
+      strm.next_in = next2;
       strm.input = input;
       strm.avail_in = avail;
       s.wrap = wrap2;
@@ -25131,7 +25131,7 @@ var require_inftrees = __commonJS({
       var fill;
       var low;
       var mask;
-      var next;
+      var next2;
       var base = null;
       var base_index = 0;
       var end;
@@ -25206,7 +25206,7 @@ var require_inftrees = __commonJS({
       huff = 0;
       sym = 0;
       len3 = min3;
-      next = table_index;
+      next2 = table_index;
       curr = root;
       drop = 0;
       low = -1;
@@ -25232,7 +25232,7 @@ var require_inftrees = __commonJS({
         min3 = fill;
         do {
           fill -= incr;
-          table[next + (huff >> drop) + fill] = here_bits << 24 | here_op << 16 | here_val | 0;
+          table[next2 + (huff >> drop) + fill] = here_bits << 24 | here_op << 16 | here_val | 0;
         } while (fill !== 0);
         incr = 1 << len3 - 1;
         while (huff & incr) {
@@ -25255,7 +25255,7 @@ var require_inftrees = __commonJS({
           if (drop === 0) {
             drop = root;
           }
-          next += min3;
+          next2 += min3;
           curr = len3 - drop;
           left = 1 << curr;
           while (curr + drop < max3) {
@@ -25271,11 +25271,11 @@ var require_inftrees = __commonJS({
             return 1;
           }
           low = huff & mask;
-          table[low] = root << 24 | curr << 16 | next - table_index | 0;
+          table[low] = root << 24 | curr << 16 | next2 - table_index | 0;
         }
       }
       if (huff !== 0) {
-        table[next + huff] = len3 - drop << 24 | 64 << 16 | 0;
+        table[next2 + huff] = len3 - drop << 24 | 64 << 16 | 0;
       }
       opts.bits = root;
       return 0;
@@ -25496,7 +25496,7 @@ var require_inflate = __commonJS({
       state.distcode = distfix;
       state.distbits = 5;
     }
-    function updatewindow(strm, src, end, copy3) {
+    function updatewindow(strm, src, end, copy2) {
       var dist;
       var state = strm.state;
       if (state.window === null) {
@@ -25505,20 +25505,20 @@ var require_inflate = __commonJS({
         state.whave = 0;
         state.window = new utils.Buf8(state.wsize);
       }
-      if (copy3 >= state.wsize) {
+      if (copy2 >= state.wsize) {
         utils.arraySet(state.window, src, end - state.wsize, state.wsize, 0);
         state.wnext = 0;
         state.whave = state.wsize;
       } else {
         dist = state.wsize - state.wnext;
-        if (dist > copy3) {
-          dist = copy3;
+        if (dist > copy2) {
+          dist = copy2;
         }
-        utils.arraySet(state.window, src, end - copy3, dist, state.wnext);
-        copy3 -= dist;
-        if (copy3) {
-          utils.arraySet(state.window, src, end - copy3, copy3, 0);
-          state.wnext = copy3;
+        utils.arraySet(state.window, src, end - copy2, dist, state.wnext);
+        copy2 -= dist;
+        if (copy2) {
+          utils.arraySet(state.window, src, end - copy2, copy2, 0);
+          state.wnext = copy2;
           state.whave = state.wsize;
         } else {
           state.wnext += dist;
@@ -25535,13 +25535,13 @@ var require_inflate = __commonJS({
     function inflate2(strm, flush) {
       var state;
       var input, output;
-      var next;
+      var next2;
       var put;
       var have, left;
       var hold2;
       var bits;
       var _in, _out;
-      var copy3;
+      var copy2;
       var from;
       var from_source;
       var here = 0;
@@ -25566,7 +25566,7 @@ var require_inflate = __commonJS({
       put = strm.next_out;
       output = strm.output;
       left = strm.avail_out;
-      next = strm.next_in;
+      next2 = strm.next_in;
       input = strm.input;
       have = strm.avail_in;
       hold2 = state.hold;
@@ -25587,7 +25587,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if (state.wrap & 2 && hold2 === 35615) {
@@ -25637,7 +25637,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               state.flags = hold2;
@@ -25669,7 +25669,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if (state.head) {
@@ -25692,7 +25692,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if (state.head) {
@@ -25715,7 +25715,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 state.length = hold2;
@@ -25736,11 +25736,11 @@ var require_inflate = __commonJS({
             /* falls through */
             case EXTRA:
               if (state.flags & 1024) {
-                copy3 = state.length;
-                if (copy3 > have) {
-                  copy3 = have;
+                copy2 = state.length;
+                if (copy2 > have) {
+                  copy2 = have;
                 }
-                if (copy3) {
+                if (copy2) {
                   if (state.head) {
                     len3 = state.head.extra_len - state.length;
                     if (!state.head.extra) {
@@ -25749,20 +25749,20 @@ var require_inflate = __commonJS({
                     utils.arraySet(
                       state.head.extra,
                       input,
-                      next,
+                      next2,
                       // extra field is limited to 65536 bytes
                       // - no need for additional size check
-                      copy3,
+                      copy2,
                       /*len + copy > state.head.extra_max - len ? state.head.extra_max : copy,*/
                       len3
                     );
                   }
                   if (state.flags & 512) {
-                    state.check = crc32(state.check, input, copy3, next);
+                    state.check = crc32(state.check, input, copy2, next2);
                   }
-                  have -= copy3;
-                  next += copy3;
-                  state.length -= copy3;
+                  have -= copy2;
+                  next2 += copy2;
+                  state.length -= copy2;
                 }
                 if (state.length) {
                   break inf_leave;
@@ -25776,18 +25776,18 @@ var require_inflate = __commonJS({
                 if (have === 0) {
                   break inf_leave;
                 }
-                copy3 = 0;
+                copy2 = 0;
                 do {
-                  len3 = input[next + copy3++];
+                  len3 = input[next2 + copy2++];
                   if (state.head && len3 && state.length < 65536) {
                     state.head.name += String.fromCharCode(len3);
                   }
-                } while (len3 && copy3 < have);
+                } while (len3 && copy2 < have);
                 if (state.flags & 512) {
-                  state.check = crc32(state.check, input, copy3, next);
+                  state.check = crc32(state.check, input, copy2, next2);
                 }
-                have -= copy3;
-                next += copy3;
+                have -= copy2;
+                next2 += copy2;
                 if (len3) {
                   break inf_leave;
                 }
@@ -25802,18 +25802,18 @@ var require_inflate = __commonJS({
                 if (have === 0) {
                   break inf_leave;
                 }
-                copy3 = 0;
+                copy2 = 0;
                 do {
-                  len3 = input[next + copy3++];
+                  len3 = input[next2 + copy2++];
                   if (state.head && len3 && state.length < 65536) {
                     state.head.comment += String.fromCharCode(len3);
                   }
-                } while (len3 && copy3 < have);
+                } while (len3 && copy2 < have);
                 if (state.flags & 512) {
-                  state.check = crc32(state.check, input, copy3, next);
+                  state.check = crc32(state.check, input, copy2, next2);
                 }
-                have -= copy3;
-                next += copy3;
+                have -= copy2;
+                next2 += copy2;
                 if (len3) {
                   break inf_leave;
                 }
@@ -25829,7 +25829,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 if (hold2 !== (state.check & 65535)) {
@@ -25853,7 +25853,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               strm.adler = state.check = zswap32(hold2);
@@ -25865,7 +25865,7 @@ var require_inflate = __commonJS({
               if (state.havedict === 0) {
                 strm.next_out = put;
                 strm.avail_out = left;
-                strm.next_in = next;
+                strm.next_in = next2;
                 strm.avail_in = have;
                 state.hold = hold2;
                 state.bits = bits;
@@ -25891,7 +25891,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               state.last = hold2 & 1;
@@ -25928,7 +25928,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if ((hold2 & 65535) !== (hold2 >>> 16 ^ 65535)) {
@@ -25948,23 +25948,23 @@ var require_inflate = __commonJS({
               state.mode = COPY;
             /* falls through */
             case COPY:
-              copy3 = state.length;
-              if (copy3) {
-                if (copy3 > have) {
-                  copy3 = have;
+              copy2 = state.length;
+              if (copy2) {
+                if (copy2 > have) {
+                  copy2 = have;
                 }
-                if (copy3 > left) {
-                  copy3 = left;
+                if (copy2 > left) {
+                  copy2 = left;
                 }
-                if (copy3 === 0) {
+                if (copy2 === 0) {
                   break inf_leave;
                 }
-                utils.arraySet(output, input, next, copy3, put);
-                have -= copy3;
-                next += copy3;
-                left -= copy3;
-                put += copy3;
-                state.length -= copy3;
+                utils.arraySet(output, input, next2, copy2, put);
+                have -= copy2;
+                next2 += copy2;
+                left -= copy2;
+                put += copy2;
+                state.length -= copy2;
                 break;
               }
               state.mode = TYPE;
@@ -25975,7 +25975,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               state.nlen = (hold2 & 31) + 257;
@@ -26002,7 +26002,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 state.lens[order2[state.have++]] = hold2 & 7;
@@ -26039,7 +26039,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 if (here_val < 16) {
@@ -26054,7 +26054,7 @@ var require_inflate = __commonJS({
                         break inf_leave;
                       }
                       have--;
-                      hold2 += input[next++] << bits;
+                      hold2 += input[next2++] << bits;
                       bits += 8;
                     }
                     hold2 >>>= here_bits;
@@ -26065,7 +26065,7 @@ var require_inflate = __commonJS({
                       break;
                     }
                     len3 = state.lens[state.have - 1];
-                    copy3 = 3 + (hold2 & 3);
+                    copy2 = 3 + (hold2 & 3);
                     hold2 >>>= 2;
                     bits -= 2;
                   } else if (here_val === 17) {
@@ -26075,13 +26075,13 @@ var require_inflate = __commonJS({
                         break inf_leave;
                       }
                       have--;
-                      hold2 += input[next++] << bits;
+                      hold2 += input[next2++] << bits;
                       bits += 8;
                     }
                     hold2 >>>= here_bits;
                     bits -= here_bits;
                     len3 = 0;
-                    copy3 = 3 + (hold2 & 7);
+                    copy2 = 3 + (hold2 & 7);
                     hold2 >>>= 3;
                     bits -= 3;
                   } else {
@@ -26091,22 +26091,22 @@ var require_inflate = __commonJS({
                         break inf_leave;
                       }
                       have--;
-                      hold2 += input[next++] << bits;
+                      hold2 += input[next2++] << bits;
                       bits += 8;
                     }
                     hold2 >>>= here_bits;
                     bits -= here_bits;
                     len3 = 0;
-                    copy3 = 11 + (hold2 & 127);
+                    copy2 = 11 + (hold2 & 127);
                     hold2 >>>= 7;
                     bits -= 7;
                   }
-                  if (state.have + copy3 > state.nlen + state.ndist) {
+                  if (state.have + copy2 > state.nlen + state.ndist) {
                     strm.msg = "invalid bit length repeat";
                     state.mode = BAD;
                     break;
                   }
-                  while (copy3--) {
+                  while (copy2--) {
                     state.lens[state.have++] = len3;
                   }
                 }
@@ -26150,7 +26150,7 @@ var require_inflate = __commonJS({
               if (have >= 6 && left >= 258) {
                 strm.next_out = put;
                 strm.avail_out = left;
-                strm.next_in = next;
+                strm.next_in = next2;
                 strm.avail_in = have;
                 state.hold = hold2;
                 state.bits = bits;
@@ -26158,7 +26158,7 @@ var require_inflate = __commonJS({
                 put = strm.next_out;
                 output = strm.output;
                 left = strm.avail_out;
-                next = strm.next_in;
+                next2 = strm.next_in;
                 input = strm.input;
                 have = strm.avail_in;
                 hold2 = state.hold;
@@ -26181,7 +26181,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if (here_op && (here_op & 240) === 0) {
@@ -26200,7 +26200,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 hold2 >>>= last_bits;
@@ -26236,7 +26236,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 state.length += hold2 & (1 << state.extra) - 1;
@@ -26260,7 +26260,7 @@ var require_inflate = __commonJS({
                   break inf_leave;
                 }
                 have--;
-                hold2 += input[next++] << bits;
+                hold2 += input[next2++] << bits;
                 bits += 8;
               }
               if ((here_op & 240) === 0) {
@@ -26279,7 +26279,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 hold2 >>>= last_bits;
@@ -26306,7 +26306,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 state.offset += hold2 & (1 << state.extra) - 1;
@@ -26325,39 +26325,39 @@ var require_inflate = __commonJS({
               if (left === 0) {
                 break inf_leave;
               }
-              copy3 = _out - left;
-              if (state.offset > copy3) {
-                copy3 = state.offset - copy3;
-                if (copy3 > state.whave) {
+              copy2 = _out - left;
+              if (state.offset > copy2) {
+                copy2 = state.offset - copy2;
+                if (copy2 > state.whave) {
                   if (state.sane) {
                     strm.msg = "invalid distance too far back";
                     state.mode = BAD;
                     break;
                   }
                 }
-                if (copy3 > state.wnext) {
-                  copy3 -= state.wnext;
-                  from = state.wsize - copy3;
+                if (copy2 > state.wnext) {
+                  copy2 -= state.wnext;
+                  from = state.wsize - copy2;
                 } else {
-                  from = state.wnext - copy3;
+                  from = state.wnext - copy2;
                 }
-                if (copy3 > state.length) {
-                  copy3 = state.length;
+                if (copy2 > state.length) {
+                  copy2 = state.length;
                 }
                 from_source = state.window;
               } else {
                 from_source = output;
                 from = put - state.offset;
-                copy3 = state.length;
+                copy2 = state.length;
               }
-              if (copy3 > left) {
-                copy3 = left;
+              if (copy2 > left) {
+                copy2 = left;
               }
-              left -= copy3;
-              state.length -= copy3;
+              left -= copy2;
+              state.length -= copy2;
               do {
                 output[put++] = from_source[from++];
-              } while (--copy3);
+              } while (--copy2);
               if (state.length === 0) {
                 state.mode = LEN;
               }
@@ -26377,7 +26377,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 |= input[next++] << bits;
+                  hold2 |= input[next2++] << bits;
                   bits += 8;
                 }
                 _out -= left;
@@ -26405,7 +26405,7 @@ var require_inflate = __commonJS({
                     break inf_leave;
                   }
                   have--;
-                  hold2 += input[next++] << bits;
+                  hold2 += input[next2++] << bits;
                   bits += 8;
                 }
                 if (hold2 !== (state.total & 4294967295)) {
@@ -26434,7 +26434,7 @@ var require_inflate = __commonJS({
         }
       strm.next_out = put;
       strm.avail_out = left;
-      strm.next_in = next;
+      strm.next_in = next2;
       strm.avail_in = have;
       state.hold = hold2;
       state.bits = bits;
@@ -28750,40 +28750,175 @@ var SEGMENTED_VERBS = /* @__PURE__ */ new Set([
   VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC
 ]);
-var SESSION_FIRST_VERBS = /* @__PURE__ */ new Set([
-  VERB_SET_STATE,
-  VERB_STEP_STATE,
-  VERB_SET_CONFIG,
-  VERB_STEP_CONFIG,
-  VERB_RESET_CONFIG,
-  VERB_SAVE,
-  VERB_SAVE_PRESET,
-  VERB_SAVE_THEME_DEFAULT,
-  VERB_DELETE_PRESET,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_UNDO,
-  VERB_REDO,
-  VERB_BACK,
-  VERB_REWIND,
-  VERB_SLASH,
-  VERB_RUN,
-  VERB_REPO_CONFIG,
-  VERB_COPY_DIAGNOSTIC
+var VERB_NAMES = Object.freeze([
+  ...Object.keys(SAYS),
+  VERB_DISPATCH
 ]);
-function clickSessionOf(verb, value) {
-  return sessionOfEffects(
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
-  );
+function isEffectVerb(verb) {
+  return Object.hasOwn(SAYS, verb);
 }
-function sessionOfEffects(effects) {
-  const bearing = effects.find((e) => SESSION_FIRST_VERBS.has(e.verb));
-  const sid = bearing === void 0 ? "" : decodeWire(() => decodeFirstSegment(bearing.value));
-  return sid === "" ? null : parseSessionId(sid);
+function admitClick(verb, value) {
+  if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
+    throw new BadVerbArgs(`unknown click verb: ${verb}`);
+  const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+  const global2 = [];
+  let scoped;
+  for (const step4 of batchAdjacentWrites(raw)) {
+    const name = step4.verb;
+    if (!isEffectVerb(name)) {
+      (scoped?.steps ?? global2).push({
+        kind: "invalid",
+        reason: `unknown effect verb "${name}"`
+      });
+      continue;
+    }
+    if (name === VERB_COPY || name === VERB_OPEN_VSCODE) {
+      try {
+        (scoped?.steps ?? global2).push({
+          kind: "global",
+          verb: name,
+          value: decodeWire(() => decodeURIComponent(step4.value))
+        });
+      } catch (e) {
+        if (!(e instanceof BadVerbArgs)) throw e;
+        (scoped?.steps ?? global2).push({
+          kind: "invalid",
+          reason: `${name}: ${e.message}`
+        });
+      }
+      continue;
+    }
+    const segmented = SEGMENTED_VERBS.has(name);
+    const claimed = decodeWire(
+      () => segmented ? decodeFirstSegment(step4.value) : decodeURIComponent(step4.value)
+    );
+    if (scoped === void 0) {
+      const parsed2 = parseSessionId(claimed);
+      if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
+      scoped = { id: parsed2.id, steps: [...global2] };
+    } else if (scoped.id !== claimed) {
+      throw new BadVerbArgs("a click cannot name more than one session");
+    }
+    const separator = segmented ? step4.value.indexOf("/") : -1;
+    try {
+      const args = separator === -1 ? [] : decodeWire(
+        () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
+      );
+      scoped.steps.push({ kind: "session", verb: name, args });
+    } catch (e) {
+      if (!(e instanceof BadVerbArgs)) throw e;
+      scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
+    }
+  }
+  return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
 }
 
 // src/host.ts
 init_globals();
 init_os();
+
+// src/proc/repository-local-env.ts
+init_globals();
+
+// src/proc/launcher.ts
+init_globals();
+
+// src/utils/event-hold.ts
+init_globals();
+var DAEMON_EVENT_HOLD_S = 60;
+function eventHoldAt(event, holdS, at, render3) {
+  if (at < event.at + holdS) return "held";
+  return render3 === "request" && !event.answered ? "owed" : "over";
+}
+function joinedEvent(last2, text4, at) {
+  return {
+    text: last2 === null || last2.answered ? text4 : `${last2.text}
+${text4}`,
+    at,
+    answered: false
+  };
+}
+function answeredBy(last2, shown) {
+  return !last2.answered && last2.at === shown.at && last2.text === shown.text;
+}
+
+// src/proc/launcher.ts
+function whyFailed(r) {
+  switch (r.reason) {
+    case "non-zero":
+      return `exited with code ${r.exitCode}`;
+    case "signal":
+      return `killed by ${r.signal ?? "a signal"}`;
+    // These are whole sentences: the launcher wrote them.
+    case "timeout":
+    case "output-limit":
+    case "rate-limited":
+    case "pipe-error":
+    case "spawn-error":
+    case "missing-command":
+      return r.error ?? r.reason;
+    default:
+      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
+  }
+}
+var SAID_LINE_CHARS = 200;
+var clipped = (line) => {
+  const kept = [];
+  for (const ch of line) {
+    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
+    kept.push(ch);
+  }
+  return line;
+};
+function saidBy(r, text4) {
+  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
+  const t2 = text4.trim();
+  const firstEnd = t2.search(/[\r\n]/);
+  if (firstEnd === -1) return clipped(t2);
+  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
+  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
+}
+function failureText(r, where = "") {
+  const said2 = saidBy(r, r.stderr);
+  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
+}
+var isMissingCommand = (result) => !result.ok && result.reason === "missing-command";
+function launcherWarningsAt(facts, at, render3) {
+  return facts.flatMap((fact) => {
+    if (fact.kind !== "launch-pipes") return [fact];
+    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
+    return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
+  });
+}
+
+// src/proc/repository-local-env.ts
+var VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function parseRepositoryLocalEnv(result) {
+  if (!result.ok)
+    return {
+      kind: "unknown",
+      reason: isMissingCommand(result) ? "git not found" : failureText(result)
+    };
+  const [first2, ...rest2] = result.stdout.split("\n").filter((line) => line !== "");
+  if (first2 === void 0)
+    return { kind: "unknown", reason: "git named no variables" };
+  const names = [first2, ...rest2];
+  const stray = names.find((line) => !VARIABLE_NAME.test(line));
+  return stray === void 0 ? { kind: "named", names } : {
+    kind: "unknown",
+    reason: `git answered ${JSON.stringify(stray)}, which names no variable`
+  };
+}
+var askGit = (limit) => (launcher) => parseRepositoryLocalEnv(
+  launcher.launchSync({
+    bin: "git",
+    args: ["rev-parse", "--local-env-vars"],
+    environment: "inherited",
+    timeoutMs: limit === "unbounded" ? void 0 : limit.withinMs,
+    category: "repository-local-env"
+  })
+);
+var repositoryLocalEnvFault = (answer2) => answer2.kind === "named" ? null : `git could not name its repository-local environment variables: ${answer2.reason}`;
 
 // src/proc/system-launcher.ts
 init_globals();
@@ -29003,9 +29138,9 @@ function walkLinks(at) {
   const hops = [at];
   try {
     for (let n = 0; n < MAX_LINK_HOPS; n++) {
-      const next = linkTarget(hops[hops.length - 1]);
-      if (next === null) return { hops, stopped: null };
-      hops.push(next);
+      const next2 = linkTarget(hops[hops.length - 1]);
+      if (next2 === null) return { hops, stopped: null };
+      hops.push(next2);
     }
     return {
       hops,
@@ -29030,25 +29165,6 @@ function linkTarget(file) {
 }
 var MAX_LINK_HOPS = 40;
 
-// src/utils/event-hold.ts
-init_globals();
-var DAEMON_EVENT_HOLD_S = 60;
-function eventHoldAt(event, holdS, at, render3) {
-  if (at < event.at + holdS) return "held";
-  return render3 === "request" && !event.answered ? "owed" : "over";
-}
-function joinedEvent(last2, text4, at) {
-  return {
-    text: last2 === null || last2.answered ? text4 : `${last2.text}
-${text4}`,
-    at,
-    answered: false
-  };
-}
-function answeredBy(last2, shown) {
-  return !last2.answered && last2.at === shown.at && last2.text === shown.text;
-}
-
 // src/utils/instant.ts
 init_globals();
 var instantOf = (date2) => date2.getTime() / 1e3;
@@ -29064,60 +29180,16 @@ var earliestOf = (ticks) => {
 };
 var readingsAt = (clock) => ({ at: instantAt(clock), tick: tickAt(clock) });
 
-// src/proc/launcher.ts
-init_globals();
-function whyFailed(r) {
-  switch (r.reason) {
-    case "non-zero":
-      return `exited with code ${r.exitCode}`;
-    case "signal":
-      return `killed by ${r.signal ?? "a signal"}`;
-    // These are whole sentences: the launcher wrote them.
-    case "timeout":
-    case "output-limit":
-    case "rate-limited":
-    case "pipe-error":
-    case "spawn-error":
-      return r.error ?? r.reason;
-    default:
-      return r.error === void 0 ? r.reason : `${r.reason}: ${r.error}`;
-  }
-}
-var SAID_LINE_CHARS = 200;
-var clipped = (line) => {
-  const kept = [];
-  for (const ch of line) {
-    if (kept.length === SAID_LINE_CHARS) return `${kept.join("")}\u2026`;
-    kept.push(ch);
-  }
-  return line;
-};
-function saidBy(r, text4) {
-  if (r.reason === "output-limit" || r.reason === "pipe-error") return "";
-  const t2 = text4.trim();
-  const firstEnd = t2.search(/[\r\n]/);
-  if (firstEnd === -1) return clipped(t2);
-  const lastStart = Math.max(t2.lastIndexOf("\n"), t2.lastIndexOf("\r")) + 1;
-  return `${clipped(t2.slice(0, firstEnd).trim())} \u2026 ${clipped(t2.slice(lastStart).trim())}`;
-}
-function failureText(r, where = "") {
-  const said2 = saidBy(r, r.stderr);
-  return `${whyFailed(r)}${where}${said2 === "" ? "" : `: ${said2}`}`;
-}
-var WITHHOLDS_NOTHING = { names: [], faults: [] };
-function launcherWarningsAt(facts, at, render3) {
-  return facts.flatMap((fact) => {
-    if (fact.kind !== "launch-pipes") return [fact];
-    const hold2 = eventHoldAt(fact.event, DAEMON_EVENT_HOLD_S, at, render3);
-    return hold2 === "over" ? [] : [{ ...fact, message: fact.event.text, hold: hold2 }];
-  });
-}
-
 // src/proc/launch.ts
-function spawnErrorText(err, cwd2) {
-  if (!types.isNativeError(err)) return String(err);
-  const code2 = err.code;
-  return code2 === "ENOENT" && cwd2 !== void 0 && !existsSync(cwd2) ? `working directory does not exist: ${cwd2}` : err.message;
+function spawnFailure(err, cwd2) {
+  if (!types.isNativeError(err))
+    return { reason: "spawn-error", error: String(err) };
+  if (err.code !== "ENOENT")
+    return { reason: "spawn-error", error: err.message };
+  return cwd2 !== void 0 && !existsSync(cwd2) ? {
+    reason: "spawn-error",
+    error: `working directory does not exist: ${cwd2}`
+  } : { reason: "missing-command", error: err.message };
 }
 var RATE_LIMITS = {
   // Click verbs: a misbehaving template emitting many clickable links + a
@@ -29141,11 +29213,11 @@ function checkRateLimit(lastStartAt, category, now2) {
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 function childEnv(inherited, withheld, opts) {
-  const env2 = {
-    ...opts.environment ?? Object.fromEntries(
-      Object.entries(inherited).filter(([name]) => !withheld.includes(name))
+  const env2 = opts.environment === "inherited" ? Object.fromEntries(
+    Object.entries(inherited).filter(
+      ([name]) => !withheld.includes(name)
     )
-  };
+  ) : { ...opts.environment.session };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env2[name] = value ?? void 0;
   return env2;
@@ -29198,10 +29270,10 @@ var TIMEOUT_KILL_GRACE_MS = 250;
 var GROUP_END_POLL_MIN_MS = 25;
 var GROUP_END_POLL_MAX_MS = 1e3;
 var LIFELINE_PROGRAM = `$1 == "+" { live[$2] = 1; next } $1 == "-" { delete live[$2]; next } END { for (g in live) groups = groups " -" g; if (groups != "") system("kill -TERM" groups " 2>/dev/null; sleep ${TIMEOUT_KILL_GRACE_MS / 1e3}; kill -KILL" groups " 2>/dev/null") }`;
-function setFault(state, next) {
-  if (next === state.fault) return;
-  state.fault = next;
-  state.scope.observeWarnings({ kind: "lifeline", fault: next });
+function setFault(state, next2) {
+  if (next2 === state.fault) return;
+  state.fault = next2;
+  state.scope.observeWarnings({ kind: "lifeline", fault: next2 });
 }
 function lose(state, line, reason) {
   if (state.lifeline?.process !== line) return;
@@ -29237,13 +29309,9 @@ function answeredPipeEvent(state, event) {
   if (last2 === null || !answeredBy(last2, event)) return;
   state.pipeEvent = { ...last2, answered: true };
 }
-function standing(state, withholding) {
+function standing(state) {
   const event = state.pipeEvent;
   return [
-    ...withholding.faults.map((message2) => ({
-      kind: "repository-vars",
-      message: message2
-    })),
     ...state.fault === null ? [] : [{ kind: "lifeline", message: lifelineMessage(state.fault) }],
     ...event === null ? [] : [
       {
@@ -29260,12 +29328,13 @@ function spawnLifeline(state) {
   let line;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
+      env: childEnv(state.scope.inherited, [], { environment: "inherited" }),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true
     });
   } catch (err) {
     stats?.onEnd("lifeline", elapsedMs(clock, t0));
-    setFault(state, `did not start: ${spawnErrorText(err, void 0)}`);
+    setFault(state, `did not start: ${spawnFailure(err, void 0).error}`);
     return null;
   }
   stats?.onEnd("lifeline", elapsedMs(clock, t0));
@@ -29456,12 +29525,11 @@ async function launchPiped(state, opts, env2, pipes) {
       stats?.onEnd(opts.category, elapsedMs(clock, t0));
       resolve({
         ok: false,
-        reason: "spawn-error",
         stdout: "",
         stderr: "",
         exitCode: null,
         signal: null,
-        error: spawnErrorText(err, opts.cwd)
+        ...spawnFailure(err, opts.cwd)
       });
       return;
     }
@@ -29577,11 +29645,10 @@ async function launchPiped(state, opts, env2, pipes) {
     const onError = (err) => {
       settle3({
         ok: false,
-        reason: "spawn-error",
         ...output(),
         exitCode: null,
         signal: null,
-        error: spawnErrorText(err, opts.cwd)
+        ...spawnFailure(err, opts.cwd)
       });
     };
     child.on("error", onError);
@@ -29641,15 +29708,16 @@ function launchBlocking(state, opts, env2) {
     const stderr2 = typeof result.stderr === "string" ? result.stderr : "";
     const code2 = result.error?.code;
     if (result.error && code2 !== "EPIPE" && code2 !== "ECONNRESET") {
-      const reason2 = code2 === "ETIMEDOUT" ? "timeout" : "spawn-error";
       return {
         ok: false,
-        reason: reason2,
         stdout: stdout2,
         stderr: stderr2,
         exitCode: null,
         signal: result.signal ?? null,
-        error: reason2 === "timeout" ? timedOutError(opts.timeoutMs ?? 0) : spawnErrorText(result.error, opts.cwd)
+        ...code2 === "ETIMEDOUT" ? {
+          reason: "timeout",
+          error: timedOutError(opts.timeoutMs ?? 0)
+        } : spawnFailure(result.error, opts.cwd)
       };
     }
     if (result.status === 0) {
@@ -29668,12 +29736,11 @@ function launchBlocking(state, opts, env2) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
     return {
       ok: false,
-      reason: "spawn-error",
       stdout: "",
       stderr: "",
       exitCode: null,
       signal: null,
-      error: spawnErrorText(err, opts.cwd)
+      ...spawnFailure(err, opts.cwd)
     };
   }
 }
@@ -29699,12 +29766,11 @@ function launchDetachedSyncInner(state, opts, env2) {
   } catch (err) {
     return {
       ok: false,
-      reason: "spawn-error",
       stdout: "",
       stderr: "",
       exitCode: null,
       signal: null,
-      error: spawnErrorText(err, opts.cwd)
+      ...spawnFailure(err, opts.cwd)
     };
   }
   child.once("error", () => {
@@ -29755,11 +29821,7 @@ function launchJob(state, opts, files, env2) {
     );
   } catch (err) {
     stats?.onEnd(opts.category, elapsedMs(clock, t0));
-    return {
-      ok: false,
-      reason: "spawn-error",
-      error: spawnErrorText(err, opts.cwd)
-    };
+    return { ok: false, ...spawnFailure(err, opts.cwd) };
   }
   stats?.onEnd(opts.category, elapsedMs(clock, t0));
   child.once("error", () => {
@@ -29823,28 +29885,34 @@ function landVerdict(status, end) {
   }
 }
 function createOneShotLauncher(owner, clock, spawner) {
-  return oneShotOver(launchState(owner, clock, spawner), WITHHOLDS_NOTHING);
-}
-function oneShotOver(state, withholding) {
+  const state = launchState(owner, clock, spawner);
   return {
-    ...launcherOver(state, withholding),
-    launchSync: (opts) => launchBlocking(state, opts, childEnvOf(state, withholding, opts)),
-    withholding: (next) => oneShotOver(state, next),
+    ...oneShotOver(state, []),
+    withhold: (names) => oneShotOver(state, names)
+  };
+}
+function oneShotOver(state, withheld) {
+  return {
+    ...launcherOver(state, withheld),
+    launchSync: (opts) => launchBlocking(
+      state,
+      opts,
+      childEnv(state.scope.inherited, withheld, opts)
+    ),
     forOwner: (own2) => launcherOver(
       launchState(
         { ...own2, inherited: state.scope.inherited },
         state.scope.clock,
         state.spawner
       ),
-      withholding
+      withheld
     )
   };
 }
-var childEnvOf = (state, withholding, opts) => childEnv(state.scope.inherited, withholding.names, opts);
-function launcherOver(state, withholding) {
+function launcherOver(state, withheld) {
   const { spawner } = state;
   const { clock } = state.scope;
-  const env2 = (opts) => childEnvOf(state, withholding, opts);
+  const env2 = (opts) => childEnv(state.scope.inherited, withheld, opts);
   return {
     clock,
     launch: (opts) => track(state, launchWaited(state, opts, env2(opts))),
@@ -29853,7 +29921,7 @@ function launcherOver(state, withholding) {
     launchJobSync: (opts, files) => launchJob(state, opts, files, env2(opts)),
     jobGroupAlive: (pid2) => spawner.signalJob(pid2, 0),
     endJob: (pid2, status, end) => endJob(spawner, clock, pid2, status, end),
-    standing: () => standing(state, withholding),
+    standing: () => standing(state),
     answeredPipeEvent: (event) => answeredPipeEvent(state, event),
     settled: async () => {
       await Promise.all(state.ending);
@@ -30032,7 +30100,298 @@ var systemSpawner = {
 // src/proc/system-launcher.ts
 var systemOneShotLauncher = (owner, clock) => createOneShotLauncher(owner, clock, systemSpawner);
 
+// src/segments/git.ts
+init_globals();
+function trackingOf(upstream, aheadBehind) {
+  if (upstream.kind === "absent") return ok("none");
+  if (upstream.kind === "failed") return upstream;
+  if (aheadBehind.kind === "failed") return aheadBehind;
+  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
+}
+function prOfHead(pr, head) {
+  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
+  if (head.kind === "failed")
+    return failed(`HEAD: ${head.reason}`, head.failedAt);
+  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
+}
+var GITHUB_PR_STATES = {
+  OPEN: "open",
+  MERGED: "merged",
+  CLOSED: "closed"
+};
+var GITLAB_MR_STATES = {
+  opened: "open",
+  locked: "open",
+  merged: "merged",
+  closed: "closed"
+};
+function prStateOf(cli, states, word) {
+  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
+}
+var READ_FIELD_NAMES = {
+  aheadBehind: "aheadBehind",
+  head: "head",
+  sha: "sha",
+  operation: "operation",
+  committedAt: "committedAt",
+  stashCount: "stash",
+  upstream: "upstream",
+  repoName: "repoName",
+  repoUrl: "repoUrl"
+};
+function gitInfoFailures(info) {
+  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
+    const outcome = info[field];
+    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
+  });
+}
+function classify(label2, result, nonZero) {
+  if (result.ok) return ok(result.stdout);
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  if (result.reason === "non-zero" && nonZero === result.exitCode)
+    return ABSENT;
+  return failed(launchFailure(label2, result), "read");
+}
+function launchFailure(label2, result) {
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return `${label2}: ${detail}`;
+}
+function firstLine(s) {
+  return s.trim().split("\n", 1)[0] ?? "";
+}
+var FORGE_CLI = {
+  github: "gh",
+  gitlab: "glab"
+};
+var FORGE_REPOSITORY_VARS = {
+  github: ["GH_REPO"],
+  gitlab: ["GITLAB_REPO"]
+};
+var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+function parseRemoteRef(raw) {
+  const trimmed = raw.trim();
+  if (DOS_DRIVE_PATH.test(trimmed)) return null;
+  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
+  let url;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  return {
+    scheme: url.protocol.replace(/:$/, ""),
+    host: url.hostname.toLowerCase(),
+    port: url.port,
+    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
+  };
+}
+function remoteHost(remoteUrl) {
+  return parseRemoteRef(remoteUrl)?.host || null;
+}
+function detectForge(remoteUrl) {
+  const host = remoteHost(remoteUrl);
+  if (!host) return null;
+  if (host === "github.com" || host.endsWith(".github.com")) return "github";
+  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
+  return null;
+}
+var REMOTES_ARGS = [
+  "config",
+  "--local",
+  "--get-regexp",
+  "^remote\\..*\\.url$"
+];
+function remotesOf(result) {
+  const r = classify("git config --get-regexp remote url", result, 1);
+  if (r.kind === "failed") return r;
+  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
+}
+function parseRemotes(stdout2) {
+  const urlsByName = /* @__PURE__ */ new Map();
+  for (const line of stdout2.split("\n")) {
+    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
+    if (!match) continue;
+    const urls = urlsByName.get(match[1]) ?? [];
+    urls.push(match[2].trim());
+    urlsByName.set(match[1], urls);
+  }
+  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
+}
+function identifyingUrl(remote) {
+  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
+}
+function pickRepoRemote(remotes) {
+  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
+}
+function repoRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  return remote ? identifyingUrl(remote) : null;
+}
+function forgeRemoteUrl(remotes) {
+  const remote = pickRepoRemote(remotes);
+  if (!remote) return null;
+  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
+}
+function repoNameFromUrl(url) {
+  const parsed2 = parseRemoteRef(url);
+  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
+  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
+  return name || null;
+}
+function remoteWebUrl(raw) {
+  const ref = parseRemoteRef(raw);
+  if (!ref) return null;
+  const web = (() => {
+    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
+    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
+    if (ref.scheme === "ssh" || ref.scheme === "git")
+      return { scheme: "https", port: "" };
+    return null;
+  })();
+  if (!web || !ref.host) return null;
+  const repoPath = ref.path.replace(/\.git$/, "");
+  if (!repoPath) return null;
+  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
+  return `${web.scheme}://${authority}/${repoPath}`;
+}
+function repoWebUrl(remotes) {
+  const url = repoRemoteUrl(remotes);
+  return url === null ? null : remoteWebUrl(url);
+}
+function classifyForgePr(label2, result, noPrPattern, parse3) {
+  if (result.ok) return parse3(result.stdout);
+  if (isMissingCommand(result)) return ABSENT;
+  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
+    return ABSENT;
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr)
+  ].filter(Boolean).join(", ");
+  return failed(`${label2}: ${detail}`, "read");
+}
+function isRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function parseStatusV2(stdout2) {
+  let branch = "detached";
+  let oid = ABSENT;
+  let upstream = ABSENT;
+  let aheadBehind = ABSENT;
+  let staged = 0;
+  let unstaged = 0;
+  let untracked2 = 0;
+  let conflicts = 0;
+  for (const line of stdout2.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith("# ")) {
+      const rest2 = line.slice(2);
+      if (rest2.startsWith("branch.oid ")) {
+        const v = rest2.slice("branch.oid ".length).trim();
+        oid = v === "(initial)" ? ABSENT : ok(v);
+      } else if (rest2.startsWith("branch.head ")) {
+        const v = rest2.slice("branch.head ".length).trim();
+        branch = v === "(detached)" ? "detached" : v;
+      } else if (rest2.startsWith("branch.upstream ")) {
+        upstream = ok(rest2.slice("branch.upstream ".length).trim());
+      } else if (rest2.startsWith("branch.ab ")) {
+        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
+        if (m) {
+          aheadBehind = ok({
+            ahead: parseInt(m[1], 10),
+            behind: parseInt(m[2], 10)
+          });
+        }
+      }
+      continue;
+    }
+    const kind = line[0];
+    if (kind === "1" || kind === "2") {
+      const xy = line.slice(2, 4);
+      if (xy[0] !== ".") staged++;
+      if (xy[1] !== ".") unstaged++;
+    } else if (kind === "u") {
+      conflicts++;
+    } else if (kind === "?") {
+      untracked2++;
+    }
+  }
+  let status = "clean";
+  if (conflicts > 0) status = "conflicts";
+  else if (staged || unstaged || untracked2) status = "dirty";
+  return {
+    branch,
+    status,
+    aheadBehind,
+    oid,
+    upstream,
+    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
+  };
+}
+function parseGithubPr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("gh pr view: JSON is not an object", "parse");
+  const { number, state, url, headRefOid: head } = json2;
+  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
+  }
+  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
+  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
+}
+function parseGitlabMr(stdout2) {
+  let json2;
+  try {
+    json2 = JSON.parse(stdout2);
+  } catch (e) {
+    return failed(
+      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+      "parse"
+    );
+  }
+  if (!isRecord(json2))
+    return failed("glab mr view: JSON is not an object", "parse");
+  const iid = json2.iid;
+  const state = json2.state;
+  const url = json2.web_url;
+  const head = json2.sha;
+  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
+    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
+  }
+  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
+  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
+}
+
 // src/host.ts
+var ADMITTED = /* @__PURE__ */ Symbol("admitted");
+function admit2(started2, ask2) {
+  const answer2 = ask2(started2.launcher);
+  const withheld = [
+    ...Object.values(FORGE_REPOSITORY_VARS).flat(),
+    ...answer2.kind === "named" ? answer2.names : []
+  ];
+  return {
+    host: started2.host,
+    clock: started2.clock,
+    launcher: started2.launcher.withhold(withheld),
+    withheld,
+    fault: repositoryLocalEnvFault(answer2),
+    [ADMITTED]: true
+  };
+}
 function processWorld() {
   const host = {
     env: process.env,
@@ -30049,6 +30408,14 @@ function processWorld() {
 
 // src/click/read.ts
 init_globals();
+
+// src/render/drawn-link.ts
+init_globals();
+function hrefOfDrawnLink(link) {
+  if (typeof link === "string") return link;
+  if (link.kind === "href") return link.url;
+  return effectsUrl([link.effect]);
+}
 
 // src/click/link-signer.ts
 init_globals();
@@ -30146,27 +30513,16 @@ function linkSignerOver(key) {
     }
   };
 }
-function signingFrames(signer) {
-  const sign = (link) => isBarLink(link) ? signer.signLink(link) : link;
-  return (frame2) => ({
-    ...frame2,
-    rows: frame2.rows.map((row) => ({
-      ...row,
-      runs: row.runs.map(
-        (run3) => run3.link === void 0 ? run3 : { ...run3, link: sign(run3.link) }
-      )
-    }))
-  });
-}
 
 // src/click/read.ts
 function linksOf({ rows }) {
   return rows.flatMap(({ runs }) => {
     const stretches = [];
     for (const { link, text: text4 } of runs.filter((run3) => run3.text !== "")) {
+      const url = link === void 0 ? void 0 : hrefOfDrawnLink(link);
       const last2 = stretches.at(-1);
-      if (last2 !== void 0 && last2.url === link) last2.text += text4;
-      else stretches.push({ url: link, text: text4 });
+      if (last2 !== void 0 && last2.url === url) last2.text += text4;
+      else stretches.push({ url, text: text4 });
     }
     return stretches.flatMap(
       ({ url, text: text4 }) => url === void 0 ? [] : [{ url, text: text4.trim() }]
@@ -30231,7 +30587,7 @@ function heardContextOf(req) {
 init_globals();
 function recordedTarget(source, configFile) {
   if (configFile === null) return { source: "search" };
-  return source === "argument" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
+  return source === "argument" || source === "argument-only" || source === "environment" ? { source, path: configFile } : { source: "unknown", path: configFile };
 }
 function originRecord({ projectDir, cwd: cwd2, target }) {
   return {
@@ -30367,6 +30723,7 @@ function outcomeOf(result) {
     case "aborted":
       return "aborted";
     case "spawn-error":
+    case "missing-command":
     case "rate-limited":
     case "signal-refused":
       return "launch";
@@ -30424,7 +30781,7 @@ var Runs = class {
       args: [...args],
       // [LAW:single-enforcer] The program's own variables over its
       // session's environment, laid here for every click's run.
-      environment: environment.value,
+      environment: { session: environment.value },
       envOverlay: run3.env,
       cwd: run3.cwd,
       timeoutMs: this.timeoutMs,
@@ -30558,6133 +30915,12 @@ function locations(host) {
   };
 }
 
-// src/daemon/reply.ts
-init_globals();
-
-// src/daemon/readings.ts
-init_globals();
-
-// src/utils/reading.ts
-init_globals();
-
-// node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
-init_globals();
-var __MOBX_DEV__ = true;
-var niceErrors = {
-  0: `Invalid value for configuration 'enforceActions', expected 'never', 'always' or 'observed'`,
-  1(annotationType, key) {
-    return `Cannot apply '${annotationType}' to '${key.toString()}': Field not found.`;
-  },
-  /*
-  2(prop) {
-      return `invalid decorator for '${prop.toString()}'`
-  },
-  3(prop) {
-      return `Cannot decorate '${prop.toString()}': action can only be used on properties with a function value.`
-  },
-  4(prop) {
-      return `Cannot decorate '${prop.toString()}': computed can only be used on getter properties.`
-  },
-  */
-  5: "'keys()' can only be used on observable objects, arrays, sets and maps",
-  6: "'values()' can only be used on observable objects, arrays, sets and maps",
-  7: "'entries()' can only be used on observable objects, arrays and maps",
-  8: "'set()' can only be used on observable objects, arrays and maps",
-  9: "'remove()' can only be used on observable objects, arrays and maps",
-  10: "'has()' can only be used on observable objects, arrays and maps",
-  11: "'get()' can only be used on observable objects, arrays and maps",
-  12: `Invalid annotation`,
-  13: `Dynamic observable objects cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
-  14: "Intercept handlers should return nothing or a change object",
-  15: `Observable arrays cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
-  16: `Modification exception: the internal structure of an observable array was changed.`,
-  19(other) {
-    return "Cannot initialize from classes that inherit from Map: " + other.constructor.name;
-  },
-  20(other) {
-    return "Cannot initialize map from " + other;
-  },
-  21(dataStructure) {
-    return `Cannot convert to map from '${dataStructure}'`;
-  },
-  23: "It is not possible to get index atoms from arrays",
-  24(thing) {
-    return "Cannot obtain administration from " + thing;
-  },
-  25(property, name) {
-    return `the entry '${property}' does not exist in the observable map '${name}'`;
-  },
-  26: "please specify a property",
-  27(property, name) {
-    return `no observable property '${property.toString()}' found on the observable object '${name}'`;
-  },
-  28(thing) {
-    return "Cannot obtain atom from " + thing;
-  },
-  29: "Expecting some object",
-  30: "invalid action stack. did you forget to finish an action?",
-  31: "missing option for computed: get",
-  32(name, derivation) {
-    return `Cycle detected in computation ${name}: ${derivation}`;
-  },
-  33(name) {
-    return `The setter of computed value '${name}' is trying to update itself. Did you intend to update an _observable_ value, instead of the computed property?`;
-  },
-  34(name) {
-    return `[ComputedValue '${name}'] It is not possible to assign a new value to a computed value.`;
-  },
-  35: "There are multiple, different versions of MobX active. Make sure MobX is loaded only once or use `configure({ isolateGlobalState: true })`",
-  36: "isolateGlobalState should be called before MobX is running any reactions",
-  37(method) {
-    return `[mobx] \`observableArray.${method}()\` mutates the array in-place, which is not allowed inside a derivation. Use \`array.slice().${method}()\` instead`;
-  },
-  38: "'ownKeys()' can only be used on observable objects",
-  39: "'defineProperty()' can only be used on observable objects",
-  40(length) {
-    return "Out of range: " + length;
-  },
-  41(other) {
-    return "Cannot initialize set from " + other;
-  },
-  42(key) {
-    return `Invalid index: '${key}'`;
-  },
-  43(annotationType, name, kind) {
-    return `Cannot apply '${annotationType}' to '${name}' (kind: ${kind}):
-'${annotationType}' can only be used on properties with a function value.`;
-  },
-  44(annotationType) {
-    return `'${annotationType}' can only be used with 'makeObservable'`;
-  }
-};
-var errors = __MOBX_DEV__ ? niceErrors : {};
-function die(error, ...args) {
-  if (__MOBX_DEV__) {
-    let e = typeof error === "string" ? error : errors[error];
-    if (typeof e === "function") e = e.apply(null, args);
-    throw new Error(`[MobX] ${e}`);
-  }
-  throw new Error(`[MobX] minified error nr: ${error}${args.length ? " " + args.map(String).join(",") : ""}. See mobx.js.org/errors`);
-}
-var assign = Object.assign;
-var getDescriptor = Object.getOwnPropertyDescriptor;
-var defineProperty = Object.defineProperty;
-var objectPrototype = Object.prototype;
-var EMPTY_ARRAY = [];
-Object.freeze(EMPTY_ARRAY);
-var EMPTY_OBJECT = {};
-Object.freeze(EMPTY_OBJECT);
-var plainObjectString = /* @__PURE__ */ Object.toString();
-function getNextId() {
-  return ++globalState.mobxGuid;
-}
-function once(func) {
-  let invoked = false;
-  return function() {
-    if (invoked) {
-      return;
-    }
-    invoked = true;
-    return func.apply(this, arguments);
-  };
-}
-var noop = () => {
-};
-function isFunction(fn) {
-  return typeof fn === "function";
-}
-function isStringish(value) {
-  const t2 = typeof value;
-  switch (t2) {
-    case "string":
-    case "symbol":
-    case "number":
-      return true;
-  }
-  return false;
-}
-function isObject(value) {
-  return value !== null && typeof value === "object";
-}
-function isPlainObject(value) {
-  if (!isObject(value)) {
-    return false;
-  }
-  const proto = Object.getPrototypeOf(value);
-  if (proto == null) {
-    return true;
-  }
-  const protoConstructor = hasProp(proto, "constructor") && proto.constructor;
-  return typeof protoConstructor === "function" && protoConstructor.toString() === plainObjectString;
-}
-function isGenerator(obj) {
-  const constructor = obj == null ? void 0 : obj.constructor;
-  if (!constructor) {
-    return false;
-  }
-  if ("GeneratorFunction" === constructor.name || "GeneratorFunction" === constructor.displayName) {
-    return true;
-  }
-  return false;
-}
-function addHiddenProp(object, propName, value) {
-  defineProperty(object, propName, {
-    enumerable: false,
-    writable: true,
-    configurable: true,
-    value
-  });
-}
-function addHiddenFinalProp(object, propName, value) {
-  defineProperty(object, propName, {
-    enumerable: false,
-    writable: false,
-    configurable: true,
-    value
-  });
-}
-function createInstanceofPredicate(name, theClass) {
-  const propName = "isMobX" + name;
-  theClass.prototype[propName] = true;
-  return function(x) {
-    return isObject(x) && x[propName] === true;
-  };
-}
-function isES6Map(thing) {
-  return thing != null && Object.prototype.toString.call(thing) === "[object Map]";
-}
-function isPlainES6Map(thing) {
-  const mapProto = Object.getPrototypeOf(thing);
-  const objectProto = Object.getPrototypeOf(mapProto);
-  const nullProto = Object.getPrototypeOf(objectProto);
-  return nullProto === null;
-}
-function isES6Set(thing) {
-  return thing != null && Object.prototype.toString.call(thing) === "[object Set]";
-}
-function getPlainObjectKeys(object) {
-  const keys2 = Object.keys(object);
-  const symbols2 = Object.getOwnPropertySymbols(object);
-  if (!symbols2.length) {
-    return keys2;
-  }
-  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
-}
-var ownKeys2 = Reflect.ownKeys;
-function stringifyKey(key) {
-  if (typeof key === "string") {
-    return key;
-  }
-  if (typeof key === "symbol") {
-    return key.toString();
-  }
-  return new String(key).toString();
-}
-function toPrimitive(value) {
-  return value === null ? null : typeof value === "object" ? "" + value : value;
-}
-function hasProp(target, prop) {
-  return objectPrototype.hasOwnProperty.call(target, prop);
-}
-var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
-function getFlag(flags, mask) {
-  return !!(flags & mask);
-}
-function setFlag(flags, mask, newValue) {
-  if (newValue) {
-    flags |= mask;
-  } else {
-    flags &= ~mask;
-  }
-  return flags;
-}
-function assert20223DecoratorType(context, types2) {
-  if (__MOBX_DEV__ && !types2.includes(context.kind)) {
-    die(`The decorator applied to '${String(context.name)}' cannot be used on a ${context.kind} element`);
-  }
-}
-var $mobx = /* @__PURE__ */ Symbol("mobx administration");
-var Atom = class {
-  /**
-   * Create a new atom. For debugging purposes it is recommended to give it a name.
-   * The onBecomeObserved and onBecomeUnobserved callbacks can be used for resource management.
-   */
-  constructor(name_ = __MOBX_DEV__ ? "Atom@" + getNextId() : "Atom") {
-    this.name_ = void 0;
-    this.flags_ = 0;
-    this.observers_ = null;
-    this.lastAccessedBy_ = 0;
-    this.lowestObserverState_ = -1;
-    this.onBOL = void 0;
-    this.onBUOL = void 0;
-    this.name_ = name_;
-  }
-  // for effective unobserving. BaseAtom has true, for extra optimization, so its onBecomeUnobserved never gets called, because it's not needed
-  get isBeingObserved() {
-    return getFlag(
-      this.flags_,
-      1
-      /* AtomFlags.isBeingObserved */
-    );
-  }
-  set isBeingObserved(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isPendingUnobservation() {
-    return getFlag(
-      this.flags_,
-      2
-      /* AtomFlags.isPendingUnobservation */
-    );
-  }
-  set isPendingUnobservation(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      4
-      /* AtomFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue === 1 ? true : false);
-  }
-  onBO() {
-    if (this.onBOL) {
-      this.onBOL.forEach((listener) => listener());
-    }
-  }
-  onBUO() {
-    if (this.onBUOL) {
-      this.onBUOL.forEach((listener) => listener());
-    }
-  }
-  /**
-   * Invoke this method to notify mobx that your atom has been used somehow.
-   * Returns true if there is currently a reactive context.
-   */
-  reportObserved() {
-    return reportObserved(this);
-  }
-  /**
-   * Invoke this method _after_ this method has changed to signal mobx that all its observers should invalidate.
-   */
-  reportChanged() {
-    startBatch();
-    propagateChanged(this);
-    endBatch();
-  }
-  toString() {
-    return this.name_;
-  }
-};
-var isAtom = /* @__PURE__ */ createInstanceofPredicate("Atom", Atom);
-function createAtom(name, onBecomeObservedHandler = noop, onBecomeUnobservedHandler = noop) {
-  const atom = new Atom(name);
-  if (onBecomeObservedHandler !== noop) {
-    atom.onBOL = /* @__PURE__ */ new Set([onBecomeObservedHandler]);
-  }
-  if (onBecomeUnobservedHandler !== noop) {
-    atom.onBUOL = /* @__PURE__ */ new Set([onBecomeUnobservedHandler]);
-  }
-  return atom;
-}
-function compareStructural(a, b) {
-  return deepEqual(a, b);
-}
-function compareShallow(a, b) {
-  return deepEqual(a, b, 1);
-}
-var compareDefault = Object.is;
-function deepEnhancer(v, _, name) {
-  if (v === null || typeof v !== "object" && typeof v !== "function") {
-    return v;
-  }
-  if (isObservable(v)) {
-    return v;
-  }
-  if (Array.isArray(v)) {
-    return observable.array(v, {
-      name
-    });
-  }
-  if (isPlainObject(v)) {
-    return observable.object(v, void 0, {
-      name
-    });
-  }
-  if (isES6Map(v)) {
-    return observable.map(v, {
-      name
-    });
-  }
-  if (isES6Set(v)) {
-    return observable.set(v, {
-      name
-    });
-  }
-  if (typeof v === "function" && !isAction(v) && !isFlow(v)) {
-    if (isGenerator(v)) {
-      return flow(v);
-    } else {
-      return autoAction(name, v);
-    }
-  }
-  return v;
-}
-function referenceEnhancer(newValue) {
-  return newValue;
-}
-var OVERRIDE = "override";
-function isOverride(annotation) {
-  return annotation.annotationType_ === OVERRIDE;
-}
-function createActionAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$5,
-    extend_: extend_$4
-  };
-}
-function make_$5(adm, key, descriptor, source) {
-  var _this$options_;
-  if ((_this$options_ = this.options_) != null && _this$options_.bound) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-  }
-  if (source === adm.target_) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
-  }
-  if (isAction(descriptor.value)) {
-    return 1;
-  }
-  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor, false);
-  defineProperty(source, key, actionDescriptor);
-  return 2;
-}
-function extend_$4(adm, key, descriptor, proxyTrap) {
-  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor);
-  return adm.defineProperty_(key, actionDescriptor, proxyTrap);
-}
-function decorateAction20223_(annotation, mthd, context) {
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["method", "field"]);
-  }
-  const {
-    kind,
-    name,
-    addInitializer
-  } = context;
-  const ann = annotation;
-  const _createAction = (m) => {
-    var _ann$options_$name, _ann$options_, _ann$options_$autoAct, _ann$options_2;
-    return createAction((_ann$options_$name = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.name) != null ? _ann$options_$name : name.toString(), m, (_ann$options_$autoAct = (_ann$options_2 = ann.options_) == null ? void 0 : _ann$options_2.autoAction) != null ? _ann$options_$autoAct : false);
-  };
-  if (kind == "field") {
-    return function(initMthd) {
-      var _ann$options_3;
-      let mthd2 = initMthd;
-      if (!isAction(mthd2)) {
-        mthd2 = _createAction(mthd2);
-      }
-      if ((_ann$options_3 = ann.options_) != null && _ann$options_3.bound) {
-        mthd2 = mthd2.bind(this);
-        mthd2.isMobxAction = true;
-      }
-      return mthd2;
-    };
-  }
-  if (kind == "method") {
-    var _ann$options_4;
-    if (!isAction(mthd)) {
-      mthd = _createAction(mthd);
-    }
-    if ((_ann$options_4 = ann.options_) != null && _ann$options_4.bound) {
-      addInitializer(function() {
-        const self2 = this;
-        const bound = self2[name].bind(self2);
-        bound.isMobxAction = true;
-        self2[name] = bound;
-      });
-    }
-    return mthd;
-  }
-  die(43, ann.annotationType_, String(name), kind);
-}
-function assertActionDescriptor(adm, {
-  annotationType_
-}, key, {
-  value
-}) {
-  if (__MOBX_DEV__ && !isFunction(value)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on properties with a function value.`);
-  }
-}
-function createActionDescriptor(adm, annotation, key, descriptor, safeDescriptors = globalState.safeDescriptors) {
-  var _annotation$options_, _annotation$options_$, _annotation$options_2, _annotation$options_$2, _annotation$options_3, _annotation$options_4, _adm$proxy_2;
-  assertActionDescriptor(adm, annotation, key, descriptor);
-  let {
-    value
-  } = descriptor;
-  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
-    var _adm$proxy_;
-    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-  }
-  return {
-    value: createAction(
-      (_annotation$options_$ = (_annotation$options_2 = annotation.options_) == null ? void 0 : _annotation$options_2.name) != null ? _annotation$options_$ : key.toString(),
-      value,
-      (_annotation$options_$2 = (_annotation$options_3 = annotation.options_) == null ? void 0 : _annotation$options_3.autoAction) != null ? _annotation$options_$2 : false,
-      // https://github.com/mobxjs/mobx/discussions/3140
-      (_annotation$options_4 = annotation.options_) != null && _annotation$options_4.bound ? (_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_ : void 0
-    ),
-    // Non-configurable for classes
-    // prevents accidental field redefinition in subclass
-    configurable: safeDescriptors ? adm.isPlainObject_ : true,
-    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
-    enumerable: false,
-    // Non-obsevable, therefore non-writable
-    // Also prevents rewriting in subclass constructor
-    writable: safeDescriptors ? false : true
-  };
-}
-function createFlowAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$4,
-    extend_: extend_$3
-  };
-}
-function make_$4(adm, key, descriptor, source) {
-  var _this$options_;
-  if (source === adm.target_) {
-    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
-  }
-  if ((_this$options_ = this.options_) != null && _this$options_.bound && (!hasProp(adm.target_, key) || !isFlow(adm.target_[key]))) {
-    if (this.extend_(adm, key, descriptor, false) === null) {
-      return 0;
-    }
-  }
-  if (isFlow(descriptor.value)) {
-    return 1;
-  }
-  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, false, false);
-  defineProperty(source, key, flowDescriptor);
-  return 2;
-}
-function extend_$3(adm, key, descriptor, proxyTrap) {
-  var _this$options_2;
-  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, (_this$options_2 = this.options_) == null ? void 0 : _this$options_2.bound);
-  return adm.defineProperty_(key, flowDescriptor, proxyTrap);
-}
-function decorateFlow20223_(annotation, mthd, context) {
-  var _annotation$options_;
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["method"]);
-  }
-  const {
-    name,
-    addInitializer
-  } = context;
-  if (!isFlow(mthd)) {
-    mthd = flow(mthd);
-  }
-  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
-    addInitializer(function() {
-      const self2 = this;
-      const bound = self2[name].bind(self2);
-      bound.isMobXFlow = true;
-      self2[name] = bound;
-    });
-  }
-  return mthd;
-}
-function assertFlowDescriptor(adm, {
-  annotationType_
-}, key, {
-  value
-}) {
-  if (__MOBX_DEV__ && !isFunction(value)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on properties with a generator function value.`);
-  }
-}
-function createFlowDescriptor(adm, annotation, key, descriptor, bound, safeDescriptors = globalState.safeDescriptors) {
-  assertFlowDescriptor(adm, annotation, key, descriptor);
-  let {
-    value
-  } = descriptor;
-  if (!isFlow(value)) {
-    value = flow(value);
-  }
-  if (bound) {
-    var _adm$proxy_;
-    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-    value.isMobXFlow = true;
-  }
-  return {
-    value,
-    // Non-configurable for classes
-    // prevents accidental field redefinition in subclass
-    configurable: safeDescriptors ? adm.isPlainObject_ : true,
-    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
-    enumerable: false,
-    // Non-obsevable, therefore non-writable
-    // Also prevents rewriting in subclass constructor
-    writable: safeDescriptors ? false : true
-  };
-}
-function createComputedAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$3,
-    extend_: extend_$2
-  };
-}
-function make_$3(adm, key, descriptor) {
-  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-}
-function extend_$2(adm, key, descriptor, proxyTrap) {
-  assertComputedDescriptor(adm, this, key, descriptor);
-  return adm.defineComputedProperty_(key, assign({}, this.options_, {
-    get: descriptor.get,
-    set: descriptor.set
-  }), proxyTrap);
-}
-function decorateComputed20223_(annotation, get3, context) {
-  if (__MOBX_DEV__) {
-    assert20223DecoratorType(context, ["getter"]);
-  }
-  const ann = annotation;
-  const {
-    name: key,
-    addInitializer
-  } = context;
-  let computedValues;
-  function createComputedValue(target, adm) {
-    const options = assign({}, ann.options_, {
-      get: get3,
-      context: target
-    });
-    options.name || (options.name = __MOBX_DEV__ ? `${adm.name_}.${key.toString()}` : `ObservableObject.${key.toString()}`);
-    return new ComputedValue(options);
-  }
-  addInitializer(function() {
-    var _adm$lazyComputedKeys;
-    const adm = asObservableObject(this)[$mobx];
-    const target = this;
-    const observable2 = adm.values_.get(key);
-    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
-      adm.values_.delete(key);
-    }
-    ((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null ? _adm$lazyComputedKeys : adm.lazyComputedKeys_ = /* @__PURE__ */ new Map()).set(key, () => createComputedValue(target, adm));
-  });
-  return function() {
-    const adm = this[$mobx];
-    const observable2 = adm.values_.get(key);
-    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
-      var _computedValues;
-      let computed3 = (_computedValues = computedValues) == null ? void 0 : _computedValues.get(this);
-      if (!computed3) {
-        var _computedValues2;
-        computed3 = createComputedValue(this, adm);
-        ((_computedValues2 = computedValues) != null ? _computedValues2 : computedValues = /* @__PURE__ */ new WeakMap()).set(this, computed3);
-      }
-      return computed3.get();
-    }
-    return adm.getObservablePropValue_(key);
-  };
-}
-function assertComputedDescriptor(adm, {
-  annotationType_
-}, key, {
-  get: get3
-}) {
-  if (__MOBX_DEV__ && !get3) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' can only be used on getter(+setter) properties.`);
-  }
-}
-function createObservableAnnotation(name, options) {
-  return {
-    annotationType_: name,
-    options_: options,
-    make_: make_$2,
-    extend_: extend_$1
-  };
-}
-function make_$2(adm, key, descriptor) {
-  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
-}
-function extend_$1(adm, key, descriptor, proxyTrap) {
-  var _this$options_$enhanc, _this$options_;
-  assertObservableDescriptor(adm, this, key, descriptor);
-  return adm.defineObservableProperty_(key, descriptor.value, (_this$options_$enhanc = (_this$options_ = this.options_) == null ? void 0 : _this$options_.enhancer_) != null ? _this$options_$enhanc : deepEnhancer, proxyTrap);
-}
-function decorateObservable20223_(annotation, desc, context) {
-  if (__MOBX_DEV__) {
-    if (context.kind === "field") {
-      throw die(`Please use \`@observable accessor ${String(context.name)}\` instead of \`@observable ${String(context.name)}\``);
-    }
-    assert20223DecoratorType(context, ["accessor"]);
-  }
-  const ann = annotation;
-  const {
-    kind,
-    name
-  } = context;
-  if (kind !== "accessor") {
-    return;
-  }
-  function registerLazy(target, value) {
-    var _adm$lazyObservableKe;
-    const adm = asObservableObject(target)[$mobx];
-    ((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null ? _adm$lazyObservableKe : adm.lazyObservableKeys_ = /* @__PURE__ */ new Map()).set(name, () => {
-      var _ann$options_$enhance, _ann$options_;
-      return new ObservableValue(value, (_ann$options_$enhance = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.enhancer_) != null ? _ann$options_$enhance : deepEnhancer, __MOBX_DEV__ ? `${adm.name_}.${name.toString()}` : `ObservableObject.${name.toString()}`, false);
-    });
-    return adm;
-  }
-  return {
-    get() {
-      var _this$$mobx;
-      const adm = (_this$$mobx = this[$mobx]) != null ? _this$$mobx : registerLazy(this, desc.get.call(this));
-      return adm.getObservablePropValue_(name);
-    },
-    set(value) {
-      var _this$$mobx2;
-      const adm = (_this$$mobx2 = this[$mobx]) != null ? _this$$mobx2 : registerLazy(this, value);
-      return adm.setObservablePropValue_(name, value);
-    },
-    init(value) {
-      registerLazy(this, value);
-      return value;
-    }
-  };
-}
-function assertObservableDescriptor(adm, {
-  annotationType_
-}, key, descriptor) {
-  if (__MOBX_DEV__ && !("value" in descriptor)) {
-    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
-'${annotationType_}' cannot be used on getter/setter properties`);
-  }
-}
-var AUTO = "true";
-var autoAnnotation = /* @__PURE__ */ createAutoAnnotation();
-function createAutoAnnotation(options) {
-  return {
-    annotationType_: AUTO,
-    options_: options,
-    make_: make_$1,
-    extend_
-  };
-}
-var autoAnnotations = [autoAnnotation];
-function getAutoAnnotation(options) {
-  var _autoAnnotations$idx;
-  const deep = options.deep !== false;
-  const autoBind = !!options.autoBind;
-  const idx = (deep ? 0 : 1) | (autoBind ? 2 : 0);
-  return (_autoAnnotations$idx = autoAnnotations[idx]) != null ? _autoAnnotations$idx : autoAnnotations[idx] = createAutoAnnotation({
-    deep,
-    autoBind
-  });
-}
-function make_$1(adm, key, descriptor, source) {
-  var _this$options_3, _this$options_4;
-  if (descriptor.get) {
-    return computed.make_(adm, key, descriptor, source);
-  }
-  if (descriptor.set) {
-    const set2 = isAction(descriptor.set) ? descriptor.set : createAction(key.toString(), descriptor.set);
-    if (source === adm.target_) {
-      return adm.defineProperty_(key, {
-        configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
-        set: set2
-      }) === null ? 0 : 2;
-    }
-    defineProperty(source, key, {
-      configurable: true,
-      set: set2
-    });
-    return 2;
-  }
-  if (source !== adm.target_ && typeof descriptor.value === "function") {
-    var _this$options_2;
-    if (isGenerator(descriptor.value)) {
-      var _this$options_;
-      const flowAnnotation2 = (_this$options_ = this.options_) != null && _this$options_.autoBind ? flowBound : flow;
-      return flowAnnotation2.make_(adm, key, descriptor, source);
-    }
-    const actionAnnotation2 = (_this$options_2 = this.options_) != null && _this$options_2.autoBind ? autoActionBound : autoAction;
-    return actionAnnotation2.make_(adm, key, descriptor, source);
-  }
-  let observableAnnotation2 = ((_this$options_3 = this.options_) == null ? void 0 : _this$options_3.deep) === false ? observableRef : observable;
-  if (typeof descriptor.value === "function" && (_this$options_4 = this.options_) != null && _this$options_4.autoBind) {
-    var _adm$proxy_;
-    descriptor.value = descriptor.value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
-  }
-  return observableAnnotation2.make_(adm, key, descriptor, source);
-}
-function extend_(adm, key, descriptor, proxyTrap) {
-  var _this$options_5, _this$options_6;
-  if (descriptor.get) {
-    return computed.extend_(adm, key, descriptor, proxyTrap);
-  }
-  if (descriptor.set) {
-    return adm.defineProperty_(key, {
-      configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
-      set: createAction(key.toString(), descriptor.set)
-    }, proxyTrap);
-  }
-  if (typeof descriptor.value === "function" && (_this$options_5 = this.options_) != null && _this$options_5.autoBind) {
-    var _adm$proxy_2;
-    descriptor.value = descriptor.value.bind((_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_);
-  }
-  let observableAnnotation2 = ((_this$options_6 = this.options_) == null ? void 0 : _this$options_6.deep) === false ? observableRef : observable;
-  return observableAnnotation2.extend_(adm, key, descriptor, proxyTrap);
-}
-function createDecoratorAnnotation(annotation, decorate) {
-  return assign(function decoratorAnnotation(value, context) {
-    if (context && typeof context.kind === "string") {
-      return decorate(annotation, value, context);
-    }
-    if (__MOBX_DEV__) {
-      die(`Invalid arguments for \`${annotation.annotationType_}\``);
-    }
-    return void 0;
-  }, annotation);
-}
-var OBSERVABLE = "observable";
-var OBSERVABLE_REF = "observable.ref";
-var defaultCreateObservableOptions = {
-  deep: true,
-  name: void 0,
-  defaultDecorator: void 0
-};
-Object.freeze(defaultCreateObservableOptions);
-function asCreateObservableOptions(thing) {
-  return thing || defaultCreateObservableOptions;
-}
-var observableAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE);
-var observableRefAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE_REF, {
-  enhancer_: referenceEnhancer
-});
-function createObservableDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateObservable20223_);
-}
-function getEnhancerFromOptions(options) {
-  return options.deep === true ? deepEnhancer : options.deep === false ? referenceEnhancer : getEnhancerFromAnnotation(options.defaultDecorator);
-}
-function getAnnotationFromOptions(options) {
-  var _options$defaultDecor;
-  return options ? (_options$defaultDecor = options.defaultDecorator) != null ? _options$defaultDecor : getAutoAnnotation(options) : void 0;
-}
-function getEnhancerFromAnnotation(annotation) {
-  var _annotation$options_$, _annotation$options_;
-  return !annotation ? deepEnhancer : (_annotation$options_$ = (_annotation$options_ = annotation.options_) == null ? void 0 : _annotation$options_.enhancer_) != null ? _annotation$options_$ : deepEnhancer;
-}
-function createObservable(v, arg2, arg3) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateObservable20223_(observableAnnotation, v, arg2);
-  }
-  if (isObservable(v)) {
-    return v;
-  }
-  if (isPlainObject(v)) {
-    return observable.object(v, arg2, arg3);
-  }
-  if (Array.isArray(v)) {
-    return observable.array(v, arg2);
-  }
-  if (isES6Map(v)) {
-    return observable.map(v, arg2);
-  }
-  if (isES6Set(v)) {
-    return observable.set(v, arg2);
-  }
-  if (typeof v === "object" && v !== null) {
-    return v;
-  }
-  return observable.box(v, arg2);
-}
-var observableFactories = {
-  box(value, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableValue(value, getEnhancerFromOptions(o), o.name, true, o.equals);
-  },
-  array(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return createObservableArray(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  map(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableMap(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  set(initialValues, options) {
-    const o = asCreateObservableOptions(options);
-    return new ObservableSet(initialValues, getEnhancerFromOptions(o), o.name);
-  },
-  object(props, annotations, options) {
-    return initObservable(() => extendObservable(asDynamicObservableObject({}, options), props, annotations));
-  }
-};
-var observableRef = /* @__PURE__ */ createObservableDecoratorAnnotation(observableRefAnnotation);
-var observable = /* @__PURE__ */ assign(createObservable, observableAnnotation, observableFactories);
-var COMPUTED = "computed";
-function createComputedDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateComputed20223_);
-}
-var computedAnnotation = /* @__PURE__ */ createComputedAnnotation(COMPUTED);
-var computed = function computed2(arg1, arg2) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateComputed20223_(computedAnnotation, arg1, arg2);
-  }
-  if (isPlainObject(arg1)) {
-    return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
-  }
-  if (__MOBX_DEV__) {
-    if (!isFunction(arg1)) {
-      die("First argument to `computed` should be an expression.");
-    }
-    if (isFunction(arg2)) {
-      die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
-    }
-  }
-  const opts = isPlainObject(arg2) ? arg2 : {};
-  opts.get = arg1;
-  opts.name || (opts.name = arg1.name || "");
-  return new ComputedValue(opts);
-};
-assign(computed, computedAnnotation);
-var _getDescriptor$config;
-var _getDescriptor;
-var currentActionId = 0;
-var nextActionId = 1;
-var isFunctionNameConfigurable = (_getDescriptor$config = (_getDescriptor = /* @__PURE__ */ getDescriptor(() => {
-}, "name")) == null ? void 0 : _getDescriptor.configurable) != null ? _getDescriptor$config : false;
-var tmpNameDescriptor = {
-  value: "action",
-  configurable: true,
-  writable: false,
-  enumerable: false
-};
-function createAction(actionName, fn, autoAction2 = false, ref) {
-  if (__MOBX_DEV__) {
-    if (!isFunction(fn)) {
-      die("`action` can only be invoked on functions");
-    }
-    if (typeof actionName !== "string" || !actionName) {
-      die(`actions should have valid names, got: '${actionName}'`);
-    }
-  }
-  function res() {
-    return executeAction(actionName, autoAction2, fn, ref || this, arguments);
-  }
-  res.isMobxAction = true;
-  res.toString = () => fn.toString();
-  if (isFunctionNameConfigurable) {
-    tmpNameDescriptor.value = actionName;
-    defineProperty(res, "name", tmpNameDescriptor);
-  }
-  return res;
-}
-function executeAction(actionName, canRunAsDerivation, fn, scope, args) {
-  const runInfo = _startAction(actionName, canRunAsDerivation, scope, args);
-  try {
-    return fn.apply(scope, args);
-  } catch (err) {
-    runInfo.error_ = err;
-    throw err;
-  } finally {
-    _endAction(runInfo);
-  }
-}
-function _startAction(actionName, canRunAsDerivation, scope, args) {
-  const notifySpy_ = __MOBX_DEV__ && isSpyEnabled() && !!actionName;
-  let startTime_ = 0;
-  if (notifySpy_) {
-    startTime_ = Date.now();
-    const flattenedArgs = args ? Array.from(args) : EMPTY_ARRAY;
-    spyReportStart({
-      type: ACTION,
-      name: actionName,
-      object: scope,
-      arguments: flattenedArgs
-    });
-  }
-  const prevDerivation_ = globalState.trackingDerivation;
-  const runAsAction = !canRunAsDerivation || !prevDerivation_;
-  startBatch();
-  let prevAllowStateChanges_ = globalState.allowStateChanges;
-  if (runAsAction) {
-    untrackedStart();
-    if (__MOBX_DEV__) {
-      prevAllowStateChanges_ = allowStateChangesStart(true);
-    }
-  }
-  const prevAllowStateReads_ = globalState.allowStateReads;
-  if (__MOBX_DEV__) {
-    allowStateReadsStart(true);
-  }
-  const runInfo = {
-    runAsAction_: runAsAction,
-    prevDerivation_,
-    prevAllowStateChanges_,
-    prevAllowStateReads_,
-    notifySpy_,
-    startTime_,
-    actionId_: nextActionId++,
-    parentActionId_: currentActionId
-  };
-  currentActionId = runInfo.actionId_;
-  return runInfo;
-}
-function _endAction(runInfo) {
-  if (currentActionId !== runInfo.actionId_) {
-    die(30);
-  }
-  currentActionId = runInfo.parentActionId_;
-  if (runInfo.error_ !== void 0) {
-    globalState.suppressReactionErrors = true;
-  }
-  if (__MOBX_DEV__) {
-    allowStateChangesEnd(runInfo.prevAllowStateChanges_);
-    allowStateReadsEnd(runInfo.prevAllowStateReads_);
-  }
-  endBatch();
-  if (runInfo.runAsAction_) {
-    untrackedEnd(runInfo.prevDerivation_);
-  }
-  if (__MOBX_DEV__ && runInfo.notifySpy_) {
-    spyReportEnd({
-      time: Date.now() - runInfo.startTime_
-    });
-  }
-  globalState.suppressReactionErrors = false;
-}
-function allowStateChanges(allowStateChanges2, func) {
-  const prev = allowStateChangesStart(allowStateChanges2);
-  try {
-    return func();
-  } finally {
-    allowStateChangesEnd(prev);
-  }
-}
-function allowStateChangesStart(allowStateChanges2) {
-  const prev = globalState.allowStateChanges;
-  globalState.allowStateChanges = allowStateChanges2;
-  return prev;
-}
-function allowStateChangesEnd(prev) {
-  globalState.allowStateChanges = prev;
-}
-var CREATE = "create";
-var ObservableValue = class extends Atom {
-  constructor(value, enhancer_, name_ = __MOBX_DEV__ ? "ObservableValue@" + getNextId() : "ObservableValue", notifySpy = true, equals_ = compareDefault) {
-    super(name_);
-    this.enhancer_ = void 0;
-    this.name_ = void 0;
-    this.equals_ = void 0;
-    this.hasUnreportedChange_ = false;
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.value_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = enhancer_;
-    this.name_ = name_;
-    this.equals_ = equals_;
-    this.value_ = enhancer_(value, void 0, name_);
-    if (__MOBX_DEV__ && notifySpy && isSpyEnabled()) {
-      spyReport({
-        type: CREATE,
-        object: this,
-        observableKind: "value",
-        debugObjectName: this.name_,
-        newValue: this.value_
-      });
-    }
-  }
-  dehanceValue(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  set(newValue) {
-    const oldValue = this.value_;
-    newValue = this.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart({
-          type: UPDATE,
-          object: this,
-          observableKind: "value",
-          debugObjectName: this.name_,
-          newValue,
-          oldValue
-        });
-      }
-      this.setNewValue_(newValue);
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-  }
-  prepareNewValue_(newValue) {
-    checkIfStateModificationsAreAllowed(this);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this,
-        type: UPDATE,
-        newValue
-      });
-      if (!change) {
-        return globalState.UNCHANGED;
-      }
-      newValue = change.newValue;
-    }
-    newValue = this.enhancer_(newValue, this.value_, this.name_);
-    return this.equals_(this.value_, newValue) ? globalState.UNCHANGED : newValue;
-  }
-  setNewValue_(newValue) {
-    const oldValue = this.value_;
-    this.value_ = newValue;
-    this.reportChanged();
-    if (hasListeners(this)) {
-      notifyListeners(this, {
-        type: UPDATE,
-        object: this,
-        newValue,
-        oldValue
-      });
-    }
-  }
-  get() {
-    this.reportObserved();
-    return this.dehanceValue(this.value_);
-  }
-  raw() {
-    return this.value_;
-  }
-  toJSON() {
-    return this.get();
-  }
-  toString() {
-    return `${this.name_}[${this.value_}]`;
-  }
-  valueOf() {
-    return toPrimitive(this.get());
-  }
-  [Symbol.toPrimitive]() {
-    return this.valueOf();
-  }
-};
-var ComputedValue = class {
-  /**
-   * Create a new computed value based on a function expression.
-   *
-   * The `name` property is for debug purposes only.
-   *
-   * The `equals` property specifies the comparer function used to determine if a newly produced
-   * value differs from the previous value. Structural comparison can be convenient if you always
-   * produce a new aggregated object and don't want to notify observers if it is structurally the same.
-   * This is useful for working with vectors, mouse coordinates etc.
-   */
-  constructor(options) {
-    this.dependenciesState_ = -1;
-    this.observing_ = [];
-    this.newObserving_ = null;
-    this.observers_ = null;
-    this.runId_ = 0;
-    this.lastAccessedBy_ = 0;
-    this.lowestObserverState_ = 0;
-    this.unboundDepsCount_ = 0;
-    this.value_ = new CaughtException(null);
-    this.name_ = void 0;
-    this.triggeredBy_ = void 0;
-    this.flags_ = 0;
-    this.derivation = void 0;
-    this.setter_ = void 0;
-    this.scope_ = void 0;
-    this.equals_ = void 0;
-    this.requiresReaction_ = void 0;
-    this.keepAlive_ = void 0;
-    this.onBOL = void 0;
-    this.onBUOL = void 0;
-    if (!options.get) {
-      die(31);
-    }
-    this.derivation = options.get;
-    this.name_ = options.name || (__MOBX_DEV__ ? "ComputedValue@" + getNextId() : "ComputedValue");
-    if (options.set) {
-      this.setter_ = createAction(__MOBX_DEV__ ? this.name_ + "-setter" : "ComputedValue-setter", options.set);
-    }
-    this.equals_ = options.equals || compareDefault;
-    this.scope_ = options.context;
-    this.requiresReaction_ = options.requiresReaction;
-    this.keepAlive_ = !!options.keepAlive;
-  }
-  onBecomeStale_() {
-    propagateMaybeChanged(this);
-  }
-  onBO() {
-    if (this.onBOL) {
-      this.onBOL.forEach((listener) => listener());
-    }
-  }
-  onBUO() {
-    if (this.onBUOL) {
-      this.onBUOL.forEach((listener) => listener());
-    }
-  }
-  // to check for cycles
-  get isComputing() {
-    return getFlag(
-      this.flags_,
-      1
-      /* ComputedValueFlags.isComputing */
-    );
-  }
-  set isComputing(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isRunningSetter() {
-    return getFlag(
-      this.flags_,
-      2
-      /* ComputedValueFlags.isRunningSetter */
-    );
-  }
-  set isRunningSetter(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get isBeingObserved() {
-    return getFlag(
-      this.flags_,
-      4
-      /* ComputedValueFlags.isBeingObserved */
-    );
-  }
-  set isBeingObserved(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue);
-  }
-  get isPendingUnobservation() {
-    return getFlag(
-      this.flags_,
-      8
-      /* ComputedValueFlags.isPendingUnobservation */
-    );
-  }
-  set isPendingUnobservation(newValue) {
-    this.flags_ = setFlag(this.flags_, 8, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      16
-      /* ComputedValueFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
-  }
-  /**
-   * Returns the current value of this computed value.
-   * Will evaluate its computation first if needed.
-   */
-  get() {
-    if (this.isComputing) {
-      die(32, this.name_, this.derivation);
-    }
-    if (globalState.inBatch === 0 && // !globalState.trackingDerivatpion &&
-    (!this.observers_ || this.observers_.size === 0) && !this.keepAlive_) {
-      if (shouldCompute(this)) {
-        this.warnAboutUntrackedRead_();
-        startBatch();
-        this.value_ = this.computeValue_(false);
-        endBatch();
-      }
-    } else {
-      const wasBeingObserved = this.isBeingObserved;
-      reportObserved(this);
-      if (shouldCompute(this)) {
-        let prevTrackingContext = globalState.trackingContext;
-        if (!prevTrackingContext && (this.keepAlive_ || this.isBeingObserved)) {
-          globalState.trackingContext = this;
-        }
-        if (this.trackAndCompute()) {
-          propagateChangeConfirmed(this);
-        }
-        globalState.trackingContext = prevTrackingContext;
-      } else if (!wasBeingObserved && this.isBeingObserved) {
-        this.observing_.forEach(markObserved);
-      }
-    }
-    const result = this.value_;
-    if (isCaughtException(result)) {
-      throw result.cause;
-    }
-    return result;
-  }
-  set(value) {
-    if (this.setter_) {
-      if (this.isRunningSetter) {
-        die(33, this.name_);
-      }
-      this.isRunningSetter = true;
-      try {
-        this.setter_.call(this.scope_, value);
-      } finally {
-        this.isRunningSetter = false;
-      }
-    } else {
-      die(34, this.name_);
-    }
-  }
-  trackAndCompute() {
-    const oldValue = this.value_;
-    const wasSuspended = (
-      /* see #1208 */
-      this.dependenciesState_ === -1
-    );
-    const newValue = this.computeValue_(true);
-    const changed = wasSuspended || isCaughtException(oldValue) || isCaughtException(newValue) || !this.equals_(oldValue, newValue);
-    if (changed) {
-      this.value_ = newValue;
-      if (__MOBX_DEV__ && isSpyEnabled()) {
-        spyReport({
-          observableKind: "computed",
-          debugObjectName: this.name_,
-          object: this.scope_,
-          type: "update",
-          oldValue,
-          newValue
-        });
-      }
-    }
-    return changed;
-  }
-  computeValue_(track2) {
-    this.isComputing = true;
-    const prev = __MOBX_DEV__ ? allowStateChangesStart(false) : false;
-    let res;
-    if (track2) {
-      res = trackDerivedFunction(this, this.derivation, this.scope_);
-    } else {
-      if (globalState.disableErrorBoundaries === true) {
-        res = this.derivation.call(this.scope_);
-      } else {
-        try {
-          res = this.derivation.call(this.scope_);
-        } catch (e) {
-          res = new CaughtException(e);
-        }
-      }
-    }
-    if (__MOBX_DEV__) {
-      allowStateChangesEnd(prev);
-    }
-    this.isComputing = false;
-    return res;
-  }
-  suspend_() {
-    if (!this.keepAlive_) {
-      clearObserving(this);
-      this.value_ = void 0;
-    }
-  }
-  warnAboutUntrackedRead_() {
-    if (!__MOBX_DEV__) {
-      return;
-    }
-    if (typeof this.requiresReaction_ === "boolean" ? this.requiresReaction_ : globalState.computedRequiresReaction) {
-      console.warn(`[mobx] Computed value '${this.name_}' is being read outside a reactive context. Doing a full recompute.`);
-    }
-  }
-  toString() {
-    return `${this.name_}[${this.derivation.toString()}]`;
-  }
-  valueOf() {
-    return toPrimitive(this.get());
-  }
-  [Symbol.toPrimitive]() {
-    return this.valueOf();
-  }
-};
-var isComputedValue = /* @__PURE__ */ createInstanceofPredicate("ComputedValue", ComputedValue);
-var CaughtException = class {
-  constructor(cause) {
-    this.cause = void 0;
-    this.cause = cause;
-  }
-};
-function isCaughtException(e) {
-  return e instanceof CaughtException;
-}
-function shouldCompute(derivation) {
-  switch (derivation.dependenciesState_) {
-    case 0:
-      return false;
-    case -1:
-    case 2:
-      return true;
-    case 1: {
-      const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
-      const prevUntracked = untrackedStart();
-      const obs = derivation.observing_, l = obs.length;
-      for (let i2 = 0; i2 < l; i2++) {
-        const obj = obs[i2];
-        if (isComputedValue(obj)) {
-          if (globalState.disableErrorBoundaries) {
-            obj.get();
-          } else {
-            try {
-              obj.get();
-            } catch (e) {
-              untrackedEnd(prevUntracked);
-              if (__MOBX_DEV__) {
-                allowStateReadsEnd(prevAllowStateReads);
-              }
-              return true;
-            }
-          }
-          if (derivation.dependenciesState_ === 2) {
-            untrackedEnd(prevUntracked);
-            if (__MOBX_DEV__) {
-              allowStateReadsEnd(prevAllowStateReads);
-            }
-            return true;
-          }
-        }
-      }
-      changeDependenciesStateTo0(derivation);
-      untrackedEnd(prevUntracked);
-      if (__MOBX_DEV__) {
-        allowStateReadsEnd(prevAllowStateReads);
-      }
-      return false;
-    }
-  }
-}
-function isComputingDerivation() {
-  return globalState.trackingDerivation !== null;
-}
-function checkIfStateModificationsAreAllowed(atom) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  const hasObservers = !!atom.observers_ && atom.observers_.size > 0;
-  if (!globalState.allowStateChanges && (hasObservers || globalState.enforceActions === "always")) {
-    console.warn("[MobX] " + (globalState.enforceActions ? "Since strict-mode is enabled, changing (observed) observable values without using an action is not allowed. Tried to modify: " : "Side effects like changing state are not allowed at this point. Are you trying to modify state from, for example, a computed value or the render function of a React component? You can wrap side effects in 'runInAction' (or decorate functions with 'action') if needed. Tried to modify: ") + atom.name_);
-  }
-}
-function checkIfStateReadsAreAllowed(observable2) {
-  if (__MOBX_DEV__ && !globalState.allowStateReads && globalState.observableRequiresReaction) {
-    console.warn(`[mobx] Observable '${observable2.name_}' being read outside a reactive context.`);
-  }
-}
-function trackDerivedFunction(derivation, f, context) {
-  const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
-  changeDependenciesStateTo0(derivation);
-  derivation.newObserving_ = new Array(
-    // Reserve constant space for initial dependencies, dynamic space otherwise.
-    // See https://github.com/mobxjs/mobx/pull/3833
-    derivation.runId_ === 0 ? 100 : derivation.observing_.length
-  );
-  derivation.unboundDepsCount_ = 0;
-  derivation.runId_ = ++globalState.runId;
-  const prevTracking = globalState.trackingDerivation;
-  globalState.trackingDerivation = derivation;
-  globalState.inBatch++;
-  let result;
-  if (globalState.disableErrorBoundaries === true) {
-    result = f.call(context);
-  } else {
-    try {
-      result = f.call(context);
-    } catch (e) {
-      result = new CaughtException(e);
-    }
-  }
-  globalState.inBatch--;
-  globalState.trackingDerivation = prevTracking;
-  bindDependencies(derivation);
-  warnAboutDerivationWithoutDependencies(derivation);
-  if (__MOBX_DEV__) {
-    allowStateReadsEnd(prevAllowStateReads);
-  }
-  return result;
-}
-function warnAboutDerivationWithoutDependencies(derivation) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (derivation.observing_.length !== 0) {
-    return;
-  }
-  if (typeof derivation.requiresObservable_ === "boolean" ? derivation.requiresObservable_ : globalState.reactionRequiresObservable) {
-    console.warn(`[mobx] Derivation '${derivation.name_}' is created/updated without reading any observable value.`);
-  }
-}
-function bindDependencies(derivation) {
-  const prevObserving = derivation.observing_;
-  const observing = derivation.observing_ = derivation.newObserving_;
-  let lowestNewObservingDerivationState = 0;
-  let i0 = 0, l = derivation.unboundDepsCount_;
-  for (let i2 = 0; i2 < l; i2++) {
-    const dep = observing[i2];
-    if (dep.diffValue === 0) {
-      dep.diffValue = 1;
-      if (i0 !== i2) {
-        observing[i0] = dep;
-      }
-      i0++;
-    }
-    if (dep.dependenciesState_ > lowestNewObservingDerivationState) {
-      lowestNewObservingDerivationState = dep.dependenciesState_;
-    }
-  }
-  observing.length = i0;
-  derivation.newObserving_ = null;
-  l = prevObserving.length;
-  while (l--) {
-    const dep = prevObserving[l];
-    if (dep.diffValue === 0) {
-      removeObserver(dep, derivation);
-    }
-    dep.diffValue = 0;
-  }
-  while (i0--) {
-    const dep = observing[i0];
-    if (dep.diffValue === 1) {
-      dep.diffValue = 0;
-      addObserver(dep, derivation);
-    }
-  }
-  if (lowestNewObservingDerivationState !== 0) {
-    derivation.dependenciesState_ = lowestNewObservingDerivationState;
-    derivation.onBecomeStale_();
-  }
-}
-function clearObserving(derivation) {
-  const obs = derivation.observing_;
-  derivation.observing_ = [];
-  let i2 = obs.length;
-  while (i2--) {
-    removeObserver(obs[i2], derivation);
-  }
-  derivation.dependenciesState_ = -1;
-}
-function untracked(action2) {
-  const prev = untrackedStart();
-  try {
-    return action2();
-  } finally {
-    untrackedEnd(prev);
-  }
-}
-function untrackedStart() {
-  const prev = globalState.trackingDerivation;
-  globalState.trackingDerivation = null;
-  return prev;
-}
-function untrackedEnd(prev) {
-  globalState.trackingDerivation = prev;
-}
-function allowStateReadsStart(allowStateReads) {
-  const prev = globalState.allowStateReads;
-  globalState.allowStateReads = allowStateReads;
-  return prev;
-}
-function allowStateReadsEnd(prev) {
-  globalState.allowStateReads = prev;
-}
-function changeDependenciesStateTo0(derivation) {
-  if (derivation.dependenciesState_ === 0) {
-    return;
-  }
-  derivation.dependenciesState_ = 0;
-  const obs = derivation.observing_;
-  let i2 = obs.length;
-  while (i2--) {
-    obs[i2].lowestObserverState_ = 0;
-  }
-}
-var MOBX_GLOBALS_VERSION = 7;
-var MobXGlobals = class {
-  constructor() {
-    this.version = MOBX_GLOBALS_VERSION;
-    this.UNCHANGED = {};
-    this.trackingDerivation = null;
-    this.trackingContext = null;
-    this.runId = 0;
-    this.mobxGuid = 0;
-    this.inBatch = 0;
-    this.pendingUnobservations = [];
-    this.pendingReactions = [];
-    this.isRunningReactions = false;
-    this.isRunningUnobservations = false;
-    this.allowStateChanges = false;
-    this.allowStateReads = true;
-    this.enforceActions = true;
-    this.spyListeners = [];
-    this.globalReactionErrorHandlers = [];
-    this.computedRequiresReaction = false;
-    this.reactionRequiresObservable = false;
-    this.observableRequiresReaction = false;
-    this.disableErrorBoundaries = false;
-    this.suppressReactionErrors = false;
-    this.safeDescriptors = true;
-  }
-};
-var canMergeGlobalState = true;
-var isolateCalled = false;
-var globalState = /* @__PURE__ */ (function() {
-  let global2 = globalThis;
-  if (global2.__mobxInstanceCount > 0 && !global2.__mobxGlobals) {
-    canMergeGlobalState = false;
-  }
-  if (global2.__mobxGlobals && global2.__mobxGlobals.version !== MOBX_GLOBALS_VERSION) {
-    canMergeGlobalState = false;
-  }
-  if (!canMergeGlobalState) {
-    setTimeout(() => {
-      if (!isolateCalled) {
-        die(35);
-      }
-    }, 1);
-    return new MobXGlobals();
-  } else if (global2.__mobxGlobals) {
-    global2.__mobxInstanceCount += 1;
-    if (!global2.__mobxGlobals.UNCHANGED) {
-      global2.__mobxGlobals.UNCHANGED = {};
-    }
-    return global2.__mobxGlobals;
-  } else {
-    global2.__mobxInstanceCount = 1;
-    return global2.__mobxGlobals = /* @__PURE__ */ new MobXGlobals();
-  }
-})();
-function addObserver(observable2, node) {
-  var _observable$observers2;
-  ((_observable$observers2 = observable2.observers_) != null ? _observable$observers2 : observable2.observers_ = /* @__PURE__ */ new Set()).add(node);
-  if (observable2.lowestObserverState_ > node.dependenciesState_) {
-    observable2.lowestObserverState_ = node.dependenciesState_;
-  }
-}
-function removeObserver(observable2, node) {
-  const observers = observable2.observers_;
-  if (!observers) {
-    return;
-  }
-  observers.delete(node);
-  if (observers.size === 0) {
-    queueForUnobservation(observable2);
-  }
-}
-function queueForUnobservation(observable2) {
-  if (observable2.isPendingUnobservation === false) {
-    observable2.isPendingUnobservation = true;
-    globalState.pendingUnobservations.push(observable2);
-  }
-}
-function startBatch() {
-  globalState.inBatch++;
-}
-function endBatch() {
-  if (--globalState.inBatch === 0) {
-    runReactions();
-    if (!globalState.isRunningUnobservations && globalState.pendingUnobservations.length > 0) {
-      runPendingUnobservations();
-    }
-  }
-}
-function runPendingUnobservations() {
-  globalState.isRunningUnobservations = true;
-  try {
-    const list2 = globalState.pendingUnobservations;
-    for (let i2 = 0; i2 < list2.length; i2++) {
-      const observable2 = list2[i2];
-      observable2.isPendingUnobservation = false;
-      if (!observable2.observers_ || observable2.observers_.size === 0) {
-        observable2.observers_ = null;
-        if (observable2.isBeingObserved) {
-          observable2.isBeingObserved = false;
-          observable2.onBUO();
-        }
-        if (observable2 instanceof ComputedValue) {
-          observable2.suspend_();
-        }
-      }
-    }
-    globalState.pendingUnobservations = [];
-  } finally {
-    globalState.isRunningUnobservations = false;
-  }
-}
-function markObserved(observable2) {
-  var _observable$observing;
-  if (observable2.isBeingObserved) {
-    return;
-  }
-  observable2.isBeingObserved = true;
-  observable2.onBO();
-  (_observable$observing = observable2.observing_) == null || _observable$observing.forEach(markObserved);
-}
-function reportObserved(observable2) {
-  checkIfStateReadsAreAllowed(observable2);
-  const derivation = globalState.trackingDerivation;
-  if (derivation !== null) {
-    if (derivation.runId_ !== observable2.lastAccessedBy_) {
-      observable2.lastAccessedBy_ = derivation.runId_;
-      derivation.newObserving_[derivation.unboundDepsCount_++] = observable2;
-      if (!observable2.isBeingObserved && globalState.trackingContext) {
-        observable2.isBeingObserved = true;
-        observable2.onBO();
-      }
-    }
-    return observable2.isBeingObserved;
-  } else if ((!observable2.observers_ || observable2.observers_.size === 0) && globalState.inBatch > 0) {
-    queueForUnobservation(observable2);
-  }
-  return false;
-}
-function propagateChanged(observable2) {
-  var _observable$observers3;
-  if (observable2.lowestObserverState_ === 2) {
-    return;
-  }
-  observable2.lowestObserverState_ = 2;
-  (_observable$observers3 = observable2.observers_) == null || _observable$observers3.forEach((d) => {
-    if (d.dependenciesState_ === 0) {
-      d.onBecomeStale_();
-    }
-    d.dependenciesState_ = 2;
-  });
-}
-function propagateChangeConfirmed(observable2) {
-  var _observable$observers4;
-  if (observable2.lowestObserverState_ === 2) {
-    return;
-  }
-  observable2.lowestObserverState_ = 2;
-  (_observable$observers4 = observable2.observers_) == null || _observable$observers4.forEach((d) => {
-    if (d.dependenciesState_ === 1) {
-      d.dependenciesState_ = 2;
-    } else if (d.dependenciesState_ === 0) {
-      observable2.lowestObserverState_ = 0;
-    }
-  });
-}
-function propagateMaybeChanged(observable2) {
-  var _observable$observers5;
-  if (observable2.lowestObserverState_ !== 0) {
-    return;
-  }
-  observable2.lowestObserverState_ = 1;
-  (_observable$observers5 = observable2.observers_) == null || _observable$observers5.forEach((d) => {
-    if (d.dependenciesState_ === 0) {
-      d.dependenciesState_ = 1;
-      d.onBecomeStale_();
-    }
-  });
-}
-var Reaction = class {
-  constructor(name_ = __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction", onInvalidate_, errorHandler_, requiresObservable_) {
-    this.name_ = void 0;
-    this.onInvalidate_ = void 0;
-    this.errorHandler_ = void 0;
-    this.requiresObservable_ = void 0;
-    this.observing_ = [];
-    this.newObserving_ = [];
-    this.dependenciesState_ = -1;
-    this.runId_ = 0;
-    this.unboundDepsCount_ = 0;
-    this.flags_ = 0;
-    this.removeAbortListener_ = void 0;
-    this.name_ = name_;
-    this.onInvalidate_ = onInvalidate_;
-    this.errorHandler_ = errorHandler_;
-    this.requiresObservable_ = requiresObservable_;
-  }
-  get isDisposed() {
-    return getFlag(
-      this.flags_,
-      1
-      /* ReactionFlags.isDisposed */
-    );
-  }
-  set isDisposed(newValue) {
-    this.flags_ = setFlag(this.flags_, 1, newValue);
-  }
-  get isScheduled() {
-    return getFlag(
-      this.flags_,
-      2
-      /* ReactionFlags.isScheduled */
-    );
-  }
-  set isScheduled(newValue) {
-    this.flags_ = setFlag(this.flags_, 2, newValue);
-  }
-  get isTrackPending() {
-    return getFlag(
-      this.flags_,
-      4
-      /* ReactionFlags.isTrackPending */
-    );
-  }
-  set isTrackPending(newValue) {
-    this.flags_ = setFlag(this.flags_, 4, newValue);
-  }
-  get isRunning() {
-    return getFlag(
-      this.flags_,
-      8
-      /* ReactionFlags.isRunning */
-    );
-  }
-  set isRunning(newValue) {
-    this.flags_ = setFlag(this.flags_, 8, newValue);
-  }
-  get diffValue() {
-    return getFlag(
-      this.flags_,
-      16
-      /* ReactionFlags.diffValue */
-    ) ? 1 : 0;
-  }
-  set diffValue(newValue) {
-    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
-  }
-  onBecomeStale_() {
-    this.schedule_();
-  }
-  schedule_() {
-    if (!this.isScheduled) {
-      this.isScheduled = true;
-      globalState.pendingReactions.push(this);
-      runReactions();
-    }
-  }
-  /**
-   * internal, use schedule() if you intend to kick off a reaction
-   */
-  runReaction_() {
-    if (!this.isDisposed) {
-      startBatch();
-      this.isScheduled = false;
-      const prev = globalState.trackingContext;
-      globalState.trackingContext = this;
-      if (shouldCompute(this)) {
-        this.isTrackPending = true;
-        try {
-          this.onInvalidate_();
-          if (__MOBX_DEV__ && this.isTrackPending && isSpyEnabled()) {
-            spyReport({
-              name: this.name_,
-              type: "scheduled-reaction"
-            });
-          }
-        } catch (e) {
-          this.reportExceptionInDerivation_(e);
-        }
-      }
-      globalState.trackingContext = prev;
-      endBatch();
-    }
-  }
-  track(fn) {
-    if (this.isDisposed) {
-      return;
-    }
-    startBatch();
-    const notify2 = __MOBX_DEV__ && isSpyEnabled();
-    let startTime;
-    if (__MOBX_DEV__ && notify2) {
-      startTime = Date.now();
-      spyReportStart({
-        name: this.name_,
-        type: "reaction"
-      });
-    }
-    this.isRunning = true;
-    const prevReaction = globalState.trackingContext;
-    globalState.trackingContext = this;
-    const result = trackDerivedFunction(this, fn, void 0);
-    globalState.trackingContext = prevReaction;
-    this.isRunning = false;
-    this.isTrackPending = false;
-    if (this.isDisposed) {
-      clearObserving(this);
-    }
-    if (isCaughtException(result)) {
-      this.reportExceptionInDerivation_(result.cause);
-    }
-    if (__MOBX_DEV__ && notify2) {
-      spyReportEnd({
-        time: Date.now() - startTime
-      });
-    }
-    endBatch();
-  }
-  reportExceptionInDerivation_(error) {
-    if (this.errorHandler_) {
-      this.errorHandler_(error, this);
-      return;
-    }
-    if (globalState.disableErrorBoundaries) {
-      throw error;
-    }
-    const message2 = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
-    if (!globalState.suppressReactionErrors) {
-      console.error(message2, error);
-    } else if (__MOBX_DEV__) {
-      console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
-    }
-    if (__MOBX_DEV__ && isSpyEnabled()) {
-      spyReport({
-        type: "error",
-        name: this.name_,
-        message: message2,
-        error: "" + error
-      });
-    }
-    globalState.globalReactionErrorHandlers.forEach((f) => f(error, this));
-  }
-  dispose() {
-    if (!this.isDisposed) {
-      var _this$removeAbortList;
-      this.isDisposed = true;
-      (_this$removeAbortList = this.removeAbortListener_) == null || _this$removeAbortList.call(this);
-      if (!this.isRunning) {
-        startBatch();
-        clearObserving(this);
-        endBatch();
-      }
-    }
-  }
-  getDisposer_(abortSignal) {
-    const dispose = () => this.dispose();
-    if (abortSignal != null && abortSignal.addEventListener && !this.isDisposed) {
-      abortSignal.addEventListener("abort", dispose);
-      this.removeAbortListener_ = () => abortSignal.removeEventListener == null ? void 0 : abortSignal.removeEventListener("abort", dispose);
-    }
-    dispose[$mobx] = this;
-    if ("dispose" in Symbol && typeof Symbol.dispose === "symbol") {
-      dispose[Symbol.dispose] = dispose;
-    }
-    return dispose;
-  }
-  toString() {
-    return `Reaction[${this.name_}]`;
-  }
-};
-var MAX_REACTION_ITERATIONS = 100;
-var reactionScheduler = (f) => f();
-function runReactions() {
-  if (globalState.inBatch > 0 || globalState.isRunningReactions) {
-    return;
-  }
-  reactionScheduler(runReactionsHelper);
-}
-function runReactionsHelper() {
-  globalState.isRunningReactions = true;
-  const allReactions = globalState.pendingReactions;
-  let iterations = 0;
-  while (allReactions.length > 0) {
-    if (++iterations === MAX_REACTION_ITERATIONS) {
-      console.error(__MOBX_DEV__ ? `Reaction doesn't converge to a stable state after ${MAX_REACTION_ITERATIONS} iterations. Probably there is a cycle in the reactive function: ${allReactions[0]}` : `[mobx] cycle in reaction: ${allReactions[0]}`);
-      allReactions.splice(0);
-    }
-    let remainingReactions = allReactions.splice(0);
-    for (let i2 = 0, l = remainingReactions.length; i2 < l; i2++) {
-      remainingReactions[i2].runReaction_();
-    }
-  }
-  globalState.isRunningReactions = false;
-}
-var isReaction = /* @__PURE__ */ createInstanceofPredicate("Reaction", Reaction);
-function isSpyEnabled() {
-  return __MOBX_DEV__ && !!globalState.spyListeners.length;
-}
-function spyReport(event) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (!globalState.spyListeners.length) {
-    return;
-  }
-  const listeners2 = globalState.spyListeners;
-  for (let i2 = 0, l = listeners2.length; i2 < l; i2++) {
-    listeners2[i2](event);
-  }
-}
-function spyReportStart(event) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  const change = assign({}, event, {
-    spyReportStart: true
-  });
-  spyReport(change);
-}
-var END_EVENT = {
-  type: "report-end",
-  spyReportEnd: true
-};
-function spyReportEnd(change) {
-  if (!__MOBX_DEV__) {
-    return;
-  }
-  if (change) {
-    spyReport(assign({}, change, {
-      type: "report-end",
-      spyReportEnd: true
-    }));
-  } else {
-    spyReport(END_EVENT);
-  }
-}
-function spy(listener) {
-  if (!__MOBX_DEV__) {
-    console.warn(`[mobx.spy] Is a no-op in production builds`);
-    return function() {
-    };
-  } else {
-    globalState.spyListeners.push(listener);
-    return once(() => {
-      globalState.spyListeners = globalState.spyListeners.filter((l) => l !== listener);
-    });
-  }
-}
-var ACTION = "action";
-var AUTOACTION = "autoAction";
-var AUTOACTION_BOUND = "autoAction.bound";
-var DEFAULT_ACTION_NAME = "<unnamed action>";
-var actionAnnotation = /* @__PURE__ */ createActionAnnotation(ACTION);
-var autoActionAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION, {
-  autoAction: true
-});
-var autoActionBoundAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION_BOUND, {
-  autoAction: true,
-  bound: true
-});
-function createActionDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateAction20223_);
-}
-function createActionFactory(autoAction2) {
-  const res = function action2(arg1, arg2) {
-    if (arg2 && typeof arg2.kind === "string") {
-      return decorateAction20223_(autoAction2 ? autoActionAnnotation : actionAnnotation, arg1, arg2);
-    }
-    if (isFunction(arg1)) {
-      return createAction(arg1.name || DEFAULT_ACTION_NAME, arg1, autoAction2);
-    }
-    if (isFunction(arg2)) {
-      return createAction(arg1, arg2, autoAction2);
-    }
-    if (isStringish(arg1)) {
-      return createActionDecoratorAnnotation(createActionAnnotation(autoAction2 ? AUTOACTION : ACTION, {
-        name: arg1,
-        autoAction: autoAction2
-      }));
-    }
-    if (__MOBX_DEV__) {
-      die("Invalid arguments for `action`");
-    }
-  };
-  return res;
-}
-var action = /* @__PURE__ */ createActionFactory(false);
-assign(action, actionAnnotation);
-var autoAction = /* @__PURE__ */ createActionFactory(true);
-assign(autoAction, autoActionAnnotation);
-var autoActionBound = /* @__PURE__ */ createActionDecoratorAnnotation(autoActionBoundAnnotation);
-function runInAction(fn) {
-  return executeAction(fn.name || DEFAULT_ACTION_NAME, false, fn, this, void 0);
-}
-function isAction(thing) {
-  return isFunction(thing) && thing.isMobxAction === true;
-}
-function autorun(view, opts = EMPTY_OBJECT) {
-  var _opts$name, _opts$signal;
-  if (__MOBX_DEV__) {
-    if (!isFunction(view)) {
-      die("Autorun expects a function as first argument");
-    }
-    if (isAction(view)) {
-      die("Autorun does not accept actions since actions are untrackable");
-    }
-  }
-  const name = (_opts$name = opts == null ? void 0 : opts.name) != null ? _opts$name : __MOBX_DEV__ ? view.name || "Autorun@" + getNextId() : "Autorun";
-  const runSync = !opts.scheduler && !opts.delay;
-  let reaction2;
-  if (runSync) {
-    reaction2 = new Reaction(name, function() {
-      this.track(reactionRunner);
-    }, opts.onError, opts.requiresObservable);
-  } else {
-    const scheduler = createSchedulerFromOptions(opts);
-    let isScheduled = false;
-    reaction2 = new Reaction(name, () => {
-      if (!isScheduled) {
-        isScheduled = true;
-        scheduler(() => {
-          isScheduled = false;
-          if (!reaction2.isDisposed) {
-            reaction2.track(reactionRunner);
-          }
-        });
-      }
-    }, opts.onError, opts.requiresObservable);
-  }
-  function reactionRunner() {
-    view(reaction2);
-  }
-  if (!(opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted)) {
-    reaction2.schedule_();
-  }
-  return reaction2.getDisposer_(opts == null ? void 0 : opts.signal);
-}
-var run = (f) => f();
-function createSchedulerFromOptions(opts) {
-  return opts.scheduler ? opts.scheduler : opts.delay ? (f) => setTimeout(f, opts.delay) : run;
-}
-function reaction(expression, effect, opts = EMPTY_OBJECT) {
-  var _opts$name2, _opts$signal2;
-  if (__MOBX_DEV__) {
-    if (!isFunction(expression) || !isFunction(effect)) {
-      die("First and second argument to reaction should be functions");
-    }
-    if (!isPlainObject(opts)) {
-      die("Third argument of reactions should be an object");
-    }
-  }
-  const name = (_opts$name2 = opts.name) != null ? _opts$name2 : __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction";
-  const effectAction = action(name, opts.onError ? wrapErrorHandler(opts.onError, effect) : effect);
-  const runSync = !opts.scheduler && !opts.delay;
-  const scheduler = createSchedulerFromOptions(opts);
-  let firstTime = true;
-  let isScheduled = false;
-  let value;
-  const equals = opts.equals || compareDefault;
-  const r = new Reaction(name, () => {
-    if (firstTime || runSync) {
-      reactionRunner();
-    } else if (!isScheduled) {
-      isScheduled = true;
-      scheduler(reactionRunner);
-    }
-  }, opts.onError, opts.requiresObservable);
-  function reactionRunner() {
-    isScheduled = false;
-    if (r.isDisposed) {
-      return;
-    }
-    let changed = false;
-    const oldValue = value;
-    r.track(() => {
-      const nextValue = allowStateChanges(false, () => expression(r));
-      changed = firstTime || !equals(value, nextValue);
-      value = nextValue;
-    });
-    if (firstTime && opts.fireImmediately) {
-      effectAction(value, oldValue, r);
-    } else if (!firstTime && changed) {
-      effectAction(value, oldValue, r);
-    }
-    firstTime = false;
-  }
-  if (!(opts != null && (_opts$signal2 = opts.signal) != null && _opts$signal2.aborted)) {
-    r.schedule_();
-  }
-  return r.getDisposer_(opts == null ? void 0 : opts.signal);
-}
-function wrapErrorHandler(errorHandler, baseFn) {
-  return function() {
-    try {
-      return baseFn.apply(this, arguments);
-    } catch (e) {
-      errorHandler.call(this, e);
-    }
-  };
-}
-function extendObservable(target, properties, annotations, options) {
-  if (__MOBX_DEV__) {
-    if (arguments.length > 4) {
-      die("'extendObservable' expected 2-4 arguments");
-    }
-    if (typeof target !== "object") {
-      die("'extendObservable' expects an object as first argument");
-    }
-    if (isObservableMap(target)) {
-      die("'extendObservable' should not be used on maps, use map.merge instead");
-    }
-    if (!isPlainObject(properties)) {
-      die(`'extendObservable' only accepts plain objects as second argument`);
-    }
-    if (isObservable(properties) || isObservable(annotations)) {
-      die(`Extending an object with another observable (object) is not supported`);
-    }
-  }
-  const descriptors = getOwnPropertyDescriptors(properties);
-  initObservable(() => {
-    const adm = asObservableObject(target, options)[$mobx];
-    ownKeys2(descriptors).forEach((key) => {
-      adm.extend_(
-        key,
-        descriptors[key],
-        // must pass "undefined" for { key: undefined }
-        !annotations ? true : key in annotations ? annotations[key] : true
-      );
-    });
-  });
-  return target;
-}
-var generatorId = 0;
-var FlowCancellationError = class extends Error {
-  constructor() {
-    super("FLOW_CANCELLED");
-    Object.setPrototypeOf(this, new.target.prototype);
-    this.name = "FlowCancellationError";
-  }
-  toString() {
-    return `Error: ${this.message}`;
-  }
-};
-function createFlowDecoratorAnnotation(annotation) {
-  return createDecoratorAnnotation(annotation, decorateFlow20223_);
-}
-var flowAnnotation = /* @__PURE__ */ createFlowAnnotation("flow");
-var flowBoundAnnotation = /* @__PURE__ */ createFlowAnnotation("flow.bound", {
-  bound: true
-});
-var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
-  if (arg2 && typeof arg2.kind === "string") {
-    return decorateFlow20223_(flowAnnotation, arg1, arg2);
-  }
-  if (__MOBX_DEV__ && arguments.length !== 1) {
-    die(`Flow expects single argument with generator function`);
-  }
-  const generator = arg1;
-  const name = generator.name || (__MOBX_DEV__ ? "<unnamed flow>" : "flow");
-  const res = function res2() {
-    const ctx = this;
-    const args = arguments;
-    const runId = __MOBX_DEV__ ? ++generatorId : 0;
-    const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
-    let rejector;
-    let pendingPromise = void 0;
-    const promise = new Promise(function(resolve, reject2) {
-      let stepId = 0;
-      rejector = reject2;
-      function onFulfilled(res3) {
-        pendingPromise = void 0;
-        let ret;
-        try {
-          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.next).call(gen, res3);
-        } catch (e) {
-          return reject2(e);
-        }
-        next(ret);
-      }
-      function onRejected(err) {
-        pendingPromise = void 0;
-        let ret;
-        try {
-          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.throw).call(gen, err);
-        } catch (e) {
-          return reject2(e);
-        }
-        next(ret);
-      }
-      function next(ret) {
-        if (isFunction(ret == null ? void 0 : ret.then)) {
-          ret.then(next, reject2);
-          return;
-        }
-        if (ret.done) {
-          return resolve(ret.value);
-        }
-        pendingPromise = Promise.resolve(ret.value);
-        return pendingPromise.then(onFulfilled, onRejected);
-      }
-      onFulfilled(void 0);
-    });
-    const cancelActionName = __MOBX_DEV__ ? `${name} - runid: ${runId} - cancel` : name;
-    promise.cancel = action(cancelActionName, function() {
-      try {
-        if (pendingPromise) {
-          cancelPromise(pendingPromise);
-        }
-        const res3 = gen.return(void 0);
-        const yieldedPromise = Promise.resolve(res3.value);
-        yieldedPromise.then(noop, noop);
-        cancelPromise(yieldedPromise);
-        rejector(new FlowCancellationError());
-      } catch (e) {
-        rejector(e);
-      }
-    });
-    return promise;
-  };
-  res.isMobXFlow = true;
-  return res;
-}, flowAnnotation);
-var flowBound = /* @__PURE__ */ createFlowDecoratorAnnotation(flowBoundAnnotation);
-function cancelPromise(promise) {
-  if (isFunction(promise.cancel)) {
-    promise.cancel();
-  }
-}
-function isFlow(fn) {
-  return (fn == null ? void 0 : fn.isMobXFlow) === true;
-}
-function _isObservable(value, property) {
-  if (!value) {
-    return false;
-  }
-  if (property !== void 0) {
-    if (__MOBX_DEV__ && (isObservableMap(value) || isObservableArray(value))) {
-      return die("isObservable(object, propertyName) is not supported for arrays and maps. Use map.has or array.length instead.");
-    }
-    if (isObservableObject(value)) {
-      var _adm$lazyComputedKeys, _adm$lazyObservableKe;
-      const adm = value[$mobx];
-      return adm.values_.has(property) || !!((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null && _adm$lazyComputedKeys.has(property)) || !!((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null && _adm$lazyObservableKe.has(property));
-    }
-    return false;
-  }
-  return isObservableObject(value) || !!value[$mobx] || isAtom(value) || isReaction(value) || isComputedValue(value);
-}
-function isObservable(value) {
-  if (__MOBX_DEV__ && arguments.length !== 1) {
-    die(`isObservable expects only 1 argument. Use isObservableProp to inspect the observability of a property`);
-  }
-  return _isObservable(value);
-}
-function observe(thing, propOrCb, cbOrFire, fireImmediately) {
-  if (isFunction(cbOrFire)) {
-    return observeObservableProperty(thing, propOrCb, cbOrFire, fireImmediately);
-  } else {
-    return observeObservable(thing, propOrCb, cbOrFire);
-  }
-}
-function observeObservable(thing, listener, fireImmediately) {
-  const adm = getAdministration(thing);
-  if (isObservableArray(thing)) {
-    if (fireImmediately) {
-      listener({
-        observableKind: "array",
-        object: adm.proxy_,
-        debugObjectName: adm.atom_.name_,
-        type: "splice",
-        index: 0,
-        added: adm.values_.slice(),
-        addedCount: adm.values_.length,
-        removed: [],
-        removedCount: 0
-      });
-    }
-  } else if (isObservableMap(thing)) {
-    if (__MOBX_DEV__ && fireImmediately === true) {
-      die("`observe` doesn't support fireImmediately=true in combination with maps.");
-    }
-  } else if (isObservableSet(thing)) {
-    if (__MOBX_DEV__ && fireImmediately === true) {
-      die("`observe` doesn't support fireImmediately=true in combination with sets.");
-    }
-  } else if (isObservableObject(thing)) {
-    if (__MOBX_DEV__ && fireImmediately === true) {
-      die("`observe` doesn't support the fire immediately property for observable objects.");
-    }
-  } else {
-    return observeValue(adm, listener, fireImmediately);
-  }
-  return registerListener(adm, listener);
-}
-function observeObservableProperty(thing, property, listener, fireImmediately) {
-  return observeValue(getAdministration(thing, property), listener, fireImmediately);
-}
-function observeValue(adm, listener, fireImmediately) {
-  if (isComputedValue(adm)) {
-    let firstTime = true;
-    let prevValue = void 0;
-    return autorun(() => {
-      const newValue = adm.get();
-      if (!firstTime || fireImmediately) {
-        const prevU = untrackedStart();
-        listener({
-          observableKind: "computed",
-          debugObjectName: adm.name_,
-          type: UPDATE,
-          object: adm,
-          newValue,
-          oldValue: prevValue
-        });
-        untrackedEnd(prevU);
-      }
-      firstTime = false;
-      prevValue = newValue;
-    });
-  }
-  if (fireImmediately) {
-    listener({
-      observableKind: "value",
-      debugObjectName: adm.name_,
-      object: adm,
-      type: UPDATE,
-      newValue: adm.value_,
-      oldValue: void 0
-    });
-  }
-  return registerListener(adm, listener);
-}
-function transaction(action2, thisArg = void 0) {
-  startBatch();
-  try {
-    return action2.apply(thisArg);
-  } finally {
-    endBatch();
-  }
-}
-function when(predicate, arg1, arg2) {
-  if (arguments.length === 1 || arg1 && typeof arg1 === "object") {
-    return whenPromise(predicate, arg1);
-  }
-  return _when(predicate, arg1, arg2 || {});
-}
-function _when(predicate, effect, opts) {
-  let timeoutHandle;
-  if (typeof opts.timeout === "number") {
-    const error = new Error("WHEN_TIMEOUT");
-    timeoutHandle = setTimeout(() => {
-      if (!disposer[$mobx].isDisposed) {
-        disposer();
-        if (opts.onError) {
-          opts.onError(error);
-        } else {
-          throw error;
-        }
-      }
-    }, opts.timeout);
-  }
-  opts.name = __MOBX_DEV__ ? opts.name || "When@" + getNextId() : "When";
-  const effectAction = createAction(__MOBX_DEV__ ? opts.name + "-effect" : "When-effect", effect);
-  var disposer = autorun((r) => {
-    let cond = allowStateChanges(false, predicate);
-    if (cond) {
-      r.dispose();
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-      effectAction();
-    }
-  }, opts);
-  return disposer;
-}
-function whenPromise(predicate, opts) {
-  var _opts$signal;
-  if (__MOBX_DEV__ && opts && opts.onError) {
-    return die(`the options 'onError' and 'promise' cannot be combined`);
-  }
-  if (opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted) {
-    return assign(Promise.reject(new Error("WHEN_ABORTED")), {
-      cancel: () => null
-    });
-  }
-  let cancel;
-  let abort;
-  const res = new Promise((resolve, reject2) => {
-    var _opts$signal2;
-    let disposer = _when(predicate, resolve, assign({}, opts, {
-      onError: reject2
-    }));
-    cancel = () => {
-      disposer();
-      reject2(new Error("WHEN_CANCELLED"));
-    };
-    abort = () => {
-      disposer();
-      reject2(new Error("WHEN_ABORTED"));
-    };
-    opts == null || (_opts$signal2 = opts.signal) == null || _opts$signal2.addEventListener == null || _opts$signal2.addEventListener("abort", abort);
-  }).finally(() => {
-    var _opts$signal3;
-    return opts == null || (_opts$signal3 = opts.signal) == null || _opts$signal3.removeEventListener == null ? void 0 : _opts$signal3.removeEventListener("abort", abort);
-  });
-  res.cancel = cancel;
-  return res;
-}
-function getAdm(target) {
-  return target[$mobx];
-}
-var objectProxyTraps = {
-  has(target, name) {
-    return getAdm(target).has_(name);
-  },
-  get(target, name) {
-    return getAdm(target).get_(name);
-  },
-  set(target, name, value) {
-    var _getAdm$set_;
-    if (!isStringish(name)) {
-      return false;
-    }
-    return (_getAdm$set_ = getAdm(target).set_(name, value, true)) != null ? _getAdm$set_ : true;
-  },
-  deleteProperty(target, name) {
-    var _getAdm$delete_;
-    if (!isStringish(name)) {
-      return false;
-    }
-    return (_getAdm$delete_ = getAdm(target).delete_(name, true)) != null ? _getAdm$delete_ : true;
-  },
-  defineProperty(target, name, descriptor) {
-    var _getAdm$definePropert;
-    return (_getAdm$definePropert = getAdm(target).defineProperty_(name, descriptor)) != null ? _getAdm$definePropert : true;
-  },
-  ownKeys(target) {
-    return getAdm(target).ownKeys_();
-  },
-  preventExtensions(target) {
-    die(13);
-  }
-};
-function asDynamicObservableObject(target, options) {
-  var _target$$mobx, _target$$mobx$proxy_;
-  target = asObservableObject(target, options);
-  return (_target$$mobx$proxy_ = (_target$$mobx = target[$mobx]).proxy_) != null ? _target$$mobx$proxy_ : _target$$mobx.proxy_ = new Proxy(target, objectProxyTraps);
-}
-function hasInterceptors(interceptable) {
-  return interceptable.interceptors_ !== void 0 && interceptable.interceptors_.length > 0;
-}
-function interceptChange(interceptable, change) {
-  const prevU = untrackedStart();
-  try {
-    const interceptors = [...interceptable.interceptors_ || []];
-    for (let i2 = 0, l = interceptors.length; i2 < l; i2++) {
-      change = interceptors[i2](change);
-      if (change && !change.type) {
-        die(14);
-      }
-      if (!change) {
-        break;
-      }
-    }
-    return change;
-  } finally {
-    untrackedEnd(prevU);
-  }
-}
-function hasListeners(listenable) {
-  return listenable.changeListeners_ !== void 0 && listenable.changeListeners_.length > 0;
-}
-function registerListener(listenable, handler) {
-  let listeners2 = listenable.changeListeners_;
-  if (listeners2) {
-    listeners2.push(handler);
-  } else {
-    listeners2 = listenable.changeListeners_ = [handler];
-  }
-  return once(() => {
-    const idx = listeners2.indexOf(handler);
-    if (idx !== -1) {
-      listeners2.splice(idx, 1);
-    }
-  });
-}
-function notifyListeners(listenable, change) {
-  const prevU = untrackedStart();
-  let listeners2 = listenable.changeListeners_;
-  if (!listeners2) {
-    return;
-  }
-  listeners2 = listeners2.slice();
-  for (let i2 = 0, l = listeners2.length; i2 < l; i2++) {
-    listeners2[i2](change);
-  }
-  untrackedEnd(prevU);
-}
-var SPLICE = "splice";
-var UPDATE = "update";
-var MAX_SPLICE_SIZE = 1e4;
-var arrayTraps = {
-  get(target, name) {
-    const adm = target[$mobx];
-    if (name === $mobx) {
-      return adm;
-    }
-    if (name === "length") {
-      return adm.getArrayLength_();
-    }
-    if (typeof name === "string" && !isNaN(name)) {
-      return adm.get_(parseInt(name));
-    }
-    if (hasProp(arrayExtensions, name)) {
-      return arrayExtensions[name];
-    }
-    return target[name];
-  },
-  set(target, name, value) {
-    const adm = target[$mobx];
-    if (name === "length") {
-      adm.setArrayLength_(value);
-    } else if (typeof name === "symbol" || isNaN(name)) {
-      target[name] = value;
-    } else {
-      adm.set_(parseInt(name), value);
-    }
-    return true;
-  },
-  preventExtensions() {
-    die(15);
-  }
-};
-var ObservableArrayAdministration = class {
-  constructor(name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", enhancer, owned_) {
-    this.owned_ = void 0;
-    this.atom_ = void 0;
-    this.values_ = [];
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.enhancer_ = void 0;
-    this.dehancer = void 0;
-    this.proxy_ = void 0;
-    this.lastKnownLength_ = 0;
-    this.owned_ = owned_;
-    this.atom_ = new Atom(name);
-    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, __MOBX_DEV__ ? name + "[..]" : "ObservableArray[..]");
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  dehanceValues_(values2) {
-    if (this.dehancer !== void 0 && values2.length > 0) {
-      return values2.map(this.dehancer);
-    }
-    return values2;
-  }
-  getArrayLength_() {
-    this.atom_.reportObserved();
-    return this.values_.length;
-  }
-  setArrayLength_(newLength) {
-    if (!Number.isInteger(newLength) || newLength < 0) {
-      die(40, newLength);
-    }
-    let currentLength = this.values_.length;
-    if (newLength === currentLength) {
-      return;
-    } else if (newLength > currentLength) {
-      const newItems = Array.from({
-        length: newLength - currentLength
-      });
-      this.spliceWithArray_(currentLength, 0, newItems);
-    } else {
-      this.spliceWithArray_(newLength, currentLength - newLength);
-    }
-  }
-  updateArrayLength_(oldLength, delta) {
-    if (oldLength !== this.lastKnownLength_) {
-      die(16);
-    }
-    this.lastKnownLength_ += delta;
-  }
-  spliceWithArray_(index, deleteCount, newItems) {
-    checkIfStateModificationsAreAllowed(this.atom_);
-    const length = this.values_.length;
-    if (index === void 0) {
-      index = 0;
-    } else if (index > length) {
-      index = length;
-    } else if (index < 0) {
-      index = Math.max(0, length + index);
-    }
-    if (arguments.length === 1) {
-      deleteCount = length - index;
-    } else if (deleteCount === void 0 || deleteCount === null) {
-      deleteCount = 0;
-    } else {
-      deleteCount = Math.max(0, Math.min(deleteCount, length - index));
-    }
-    if (newItems === void 0) {
-      newItems = EMPTY_ARRAY;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this.proxy_,
-        type: SPLICE,
-        index,
-        removedCount: deleteCount,
-        added: newItems
-      });
-      if (!change) {
-        return EMPTY_ARRAY;
-      }
-      deleteCount = change.removedCount;
-      newItems = change.added;
-    }
-    newItems = newItems.length === 0 ? newItems : newItems.map((v) => this.enhancer_(v, void 0));
-    if (__MOBX_DEV__) {
-      const lengthDelta = newItems.length - deleteCount;
-      this.updateArrayLength_(length, lengthDelta);
-    }
-    const res = this.spliceItemsIntoValues_(index, deleteCount, newItems);
-    if (deleteCount !== 0 || newItems.length !== 0) {
-      this.notifyArraySplice_(index, newItems, res);
-    }
-    return this.dehanceValues_(res);
-  }
-  spliceItemsIntoValues_(index, deleteCount, newItems) {
-    if (newItems.length < MAX_SPLICE_SIZE) {
-      return this.values_.splice(index, deleteCount, ...newItems);
-    } else {
-      const res = this.values_.slice(index, index + deleteCount);
-      let oldItems = this.values_.slice(index + deleteCount);
-      this.values_.length += newItems.length - deleteCount;
-      for (let i2 = 0; i2 < newItems.length; i2++) {
-        this.values_[index + i2] = newItems[i2];
-      }
-      for (let i2 = 0; i2 < oldItems.length; i2++) {
-        this.values_[index + newItems.length + i2] = oldItems[i2];
-      }
-      return res;
-    }
-  }
-  notifyArrayChildUpdate_(index, newValue, oldValue) {
-    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "array",
-      object: this.proxy_,
-      type: UPDATE,
-      debugObjectName: this.atom_.name_,
-      index,
-      newValue,
-      oldValue
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    this.atom_.reportChanged();
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  notifyArraySplice_(index, added, removed) {
-    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "array",
-      object: this.proxy_,
-      debugObjectName: this.atom_.name_,
-      type: SPLICE,
-      index,
-      removed,
-      added,
-      removedCount: removed.length,
-      addedCount: added.length
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    this.atom_.reportChanged();
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  get_(index) {
-    this.atom_.reportObserved();
-    return this.dehanceValue_(this.values_[index]);
-  }
-  set_(index, newValue) {
-    const values2 = this.values_;
-    if (index < values2.length) {
-      checkIfStateModificationsAreAllowed(this.atom_);
-      const oldValue = values2[index];
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          type: UPDATE,
-          object: this.proxy_,
-          // since "this" is the real array we need to pass its proxy
-          index,
-          newValue
-        });
-        if (!change) {
-          return;
-        }
-        newValue = change.newValue;
-      }
-      newValue = this.enhancer_(newValue, oldValue);
-      const changed = newValue !== oldValue;
-      if (changed) {
-        values2[index] = newValue;
-        this.notifyArrayChildUpdate_(index, newValue, oldValue);
-      }
-    } else {
-      const newItems = Array.from({
-        length: index + 1 - values2.length
-      });
-      newItems[newItems.length - 1] = newValue;
-      this.spliceWithArray_(values2.length, 0, newItems);
-    }
-  }
-};
-function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned = false) {
-  return initObservable(() => {
-    const adm = new ObservableArrayAdministration(name, enhancer, owned);
-    addHiddenFinalProp(adm.values_, $mobx, adm);
-    const proxy = new Proxy(adm.values_, arrayTraps);
-    adm.proxy_ = proxy;
-    if (initialValues && initialValues.length) {
-      adm.spliceWithArray_(0, 0, initialValues);
-    }
-    return proxy;
-  });
-}
-var arrayExtensions = {
-  clear() {
-    return this.splice(0);
-  },
-  replace(newItems) {
-    const adm = this[$mobx];
-    return adm.spliceWithArray_(0, adm.values_.length, newItems);
-  },
-  // Used by JSON.stringify
-  toJSON() {
-    return this.slice();
-  },
-  /*
-   * functions that do alter the internal structure of the array, (based on lib.es6.d.ts)
-   * since these functions alter the inner structure of the array, the have side effects.
-   * Because the have side effects, they should not be used in computed function,
-   * and for that reason the do not call dependencyState.notifyObserved
-   */
-  splice(index, deleteCount, ...newItems) {
-    const adm = this[$mobx];
-    switch (arguments.length) {
-      case 0:
-        return [];
-      case 1:
-        return adm.spliceWithArray_(index);
-      case 2:
-        return adm.spliceWithArray_(index, deleteCount);
-    }
-    return adm.spliceWithArray_(index, deleteCount, newItems);
-  },
-  spliceWithArray(index, deleteCount, newItems) {
-    return this[$mobx].spliceWithArray_(index, deleteCount, newItems);
-  },
-  push(...items) {
-    const adm = this[$mobx];
-    adm.spliceWithArray_(adm.values_.length, 0, items);
-    return adm.values_.length;
-  },
-  pop() {
-    return this.splice(Math.max(this[$mobx].values_.length - 1, 0), 1)[0];
-  },
-  shift() {
-    return this.splice(0, 1)[0];
-  },
-  unshift(...items) {
-    const adm = this[$mobx];
-    adm.spliceWithArray_(0, 0, items);
-    return adm.values_.length;
-  },
-  reverse() {
-    if (globalState.trackingDerivation) {
-      die(37, "reverse");
-    }
-    this.replace(this.slice().reverse());
-    return this;
-  },
-  sort() {
-    if (globalState.trackingDerivation) {
-      die(37, "sort");
-    }
-    const copy3 = this.slice();
-    copy3.sort.apply(copy3, arguments);
-    this.replace(copy3);
-    return this;
-  },
-  remove(value) {
-    const adm = this[$mobx];
-    const idx = adm.dehanceValues_(adm.values_).indexOf(value);
-    if (idx > -1) {
-      this.splice(idx, 1);
-      return true;
-    }
-    return false;
-  }
-};
-addArrayExtension("at", simpleFunc);
-addArrayExtension("concat", simpleFunc);
-addArrayExtension("flat", simpleFunc);
-addArrayExtension("includes", simpleFunc);
-addArrayExtension("indexOf", simpleFunc);
-addArrayExtension("join", simpleFunc);
-addArrayExtension("lastIndexOf", simpleFunc);
-addArrayExtension("slice", simpleFunc);
-addArrayExtension("toString", simpleFunc);
-addArrayExtension("toLocaleString", simpleFunc);
-addArrayExtension("toSorted", simpleFunc);
-addArrayExtension("toSpliced", simpleFunc);
-addArrayExtension("with", simpleFunc);
-addArrayExtension("every", mapLikeFunc);
-addArrayExtension("filter", mapLikeFunc);
-addArrayExtension("find", mapLikeFunc);
-addArrayExtension("findIndex", mapLikeFunc);
-addArrayExtension("findLast", mapLikeFunc);
-addArrayExtension("findLastIndex", mapLikeFunc);
-addArrayExtension("flatMap", mapLikeFunc);
-addArrayExtension("forEach", mapLikeFunc);
-addArrayExtension("map", mapLikeFunc);
-addArrayExtension("some", mapLikeFunc);
-addArrayExtension("toReversed", mapLikeFunc);
-addArrayExtension("reduce", reduceLikeFunc);
-addArrayExtension("reduceRight", reduceLikeFunc);
-function addArrayExtension(funcName, funcFactory) {
-  if (typeof Array.prototype[funcName] === "function") {
-    arrayExtensions[funcName] = funcFactory(funcName);
-  }
-}
-function simpleFunc(funcName) {
-  return function() {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    return dehancedValues[funcName].apply(dehancedValues, arguments);
-  };
-}
-function mapLikeFunc(funcName) {
-  return function(callback, thisArg) {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    return dehancedValues[funcName]((element, index) => {
-      return callback.call(thisArg, element, index, this);
-    });
-  };
-}
-function reduceLikeFunc(funcName) {
-  return function() {
-    const adm = this[$mobx];
-    adm.atom_.reportObserved();
-    const dehancedValues = adm.dehanceValues_(adm.values_);
-    const callback = arguments[0];
-    arguments[0] = (accumulator, currentValue, index) => {
-      return callback(accumulator, currentValue, index, this);
-    };
-    return dehancedValues[funcName].apply(dehancedValues, arguments);
-  };
-}
-var isObservableArrayAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableArrayAdministration", ObservableArrayAdministration);
-function isObservableArray(thing) {
-  return isObject(thing) && isObservableArrayAdministration(thing[$mobx]);
-}
-var ObservableMapMarker = {};
-var ADD = "add";
-var DELETE = "delete";
-var ObservableMap = class {
-  constructor(initialData, enhancer_ = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableMap@" + getNextId() : "ObservableMap") {
-    this.enhancer_ = void 0;
-    this.name_ = void 0;
-    this[$mobx] = ObservableMapMarker;
-    this.data_ = void 0;
-    this.hasMap_ = void 0;
-    this.keysAtom_ = void 0;
-    this.interceptors_ = void 0;
-    this.changeListeners_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = enhancer_;
-    this.name_ = name_;
-    initObservable(() => {
-      this.keysAtom_ = createAtom(__MOBX_DEV__ ? `${this.name_}.keys()` : "ObservableMap.keys()");
-      this.data_ = /* @__PURE__ */ new Map();
-      this.hasMap_ = /* @__PURE__ */ new Map();
-      if (initialData) {
-        this.merge(initialData);
-      }
-    });
-  }
-  has_(key) {
-    return this.data_.has(key);
-  }
-  has(key) {
-    if (!globalState.trackingDerivation) {
-      return this.has_(key);
-    }
-    let entry = this.hasMap_.get(key);
-    if (!entry) {
-      const newEntry = entry = new ObservableValue(this.has_(key), referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableMap.key?", false);
-      this.hasMap_.set(key, newEntry);
-      newEntry.onBUOL = /* @__PURE__ */ new Set([() => this.hasMap_.delete(key)]);
-    }
-    return entry.get();
-  }
-  set(key, value) {
-    const hasKey2 = this.has_(key);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: hasKey2 ? UPDATE : ADD,
-        object: this,
-        newValue: value,
-        name: key
-      });
-      if (!change) {
-        return this;
-      }
-      value = change.newValue;
-    }
-    if (hasKey2) {
-      this.updateValue_(key, value);
-    } else {
-      this.addValue_(key, value);
-    }
-    return this;
-  }
-  delete(key) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: DELETE,
-        object: this,
-        name: key
-      });
-      if (!change) {
-        return false;
-      }
-    }
-    if (this.has_(key)) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "map",
-        debugObjectName: this.name_,
-        type: DELETE,
-        object: this,
-        oldValue: this.data_.get(key).value_,
-        name: key
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      transaction(() => {
-        var _this$hasMap_$get;
-        this.keysAtom_.reportChanged();
-        (_this$hasMap_$get = this.hasMap_.get(key)) == null || _this$hasMap_$get.setNewValue_(false);
-        const observable2 = this.data_.get(key);
-        observable2.setNewValue_(void 0);
-        this.data_.delete(key);
-      });
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-      return true;
-    }
-    return false;
-  }
-  updateValue_(key, newValue) {
-    const observable2 = this.data_.get(key);
-    newValue = observable2.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "map",
-        debugObjectName: this.name_,
-        type: UPDATE,
-        object: this,
-        oldValue: observable2.value_,
-        name: key,
-        newValue
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      observable2.setNewValue_(newValue);
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-  }
-  addValue_(key, newValue) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    transaction(() => {
-      var _this$hasMap_$get2;
-      const observable2 = new ObservableValue(newValue, this.enhancer_, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}` : "ObservableMap.key", false);
-      this.data_.set(key, observable2);
-      newValue = observable2.value_;
-      (_this$hasMap_$get2 = this.hasMap_.get(key)) == null || _this$hasMap_$get2.setNewValue_(true);
-      this.keysAtom_.reportChanged();
-    });
-    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-    const notify2 = hasListeners(this);
-    const change = notify2 || notifySpy ? {
-      observableKind: "map",
-      debugObjectName: this.name_,
-      type: ADD,
-      object: this,
-      name: key,
-      newValue
-    } : null;
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportStart(change);
-    }
-    if (notify2) {
-      notifyListeners(this, change);
-    }
-    if (__MOBX_DEV__ && notifySpy) {
-      spyReportEnd();
-    }
-  }
-  get(key) {
-    if (this.has(key)) {
-      return this.dehanceValue_(this.data_.get(key).get());
-    }
-    return this.dehanceValue_(void 0);
-  }
-  getOrInsert(key, value) {
-    if (!this.has(key)) {
-      this.set(key, value);
-    }
-    return this.get(key);
-  }
-  getOrInsertComputed(key, callback) {
-    if (!this.has(key)) {
-      this.set(key, callback(key));
-    }
-    return this.get(key);
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  keys() {
-    this.keysAtom_.reportObserved();
-    return this.data_.keys();
-  }
-  values() {
-    const self2 = this;
-    const keys2 = this.keys();
-    return makeIterableForMap({
-      next() {
-        const {
-          done,
-          value
-        } = keys2.next();
-        return {
-          done,
-          value: done ? void 0 : self2.get(value)
-        };
-      }
-    });
-  }
-  entries() {
-    const self2 = this;
-    const keys2 = this.keys();
-    return makeIterableForMap({
-      next() {
-        const {
-          done,
-          value
-        } = keys2.next();
-        return {
-          done,
-          value: done ? void 0 : [value, self2.get(value)]
-        };
-      }
-    });
-  }
-  [Symbol.iterator]() {
-    return this.entries();
-  }
-  forEach(callback, thisArg) {
-    for (const [key, value] of this) {
-      callback.call(thisArg, value, key, this);
-    }
-  }
-  /** Merge another object into this object, returns this. */
-  merge(other) {
-    if (isObservableMap(other)) {
-      other = new Map(other);
-    }
-    transaction(() => {
-      if (isPlainObject(other)) {
-        getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
-      } else if (Array.isArray(other)) {
-        other.forEach(([key, value]) => this.set(key, value));
-      } else if (isES6Map(other)) {
-        if (!isPlainES6Map(other)) {
-          die(19, other);
-        }
-        other.forEach((value, key) => this.set(key, value));
-      } else if (other !== null && other !== void 0) {
-        die(20, other);
-      }
-    });
-    return this;
-  }
-  clear() {
-    transaction(() => {
-      untracked(() => {
-        for (const key of this.keys()) {
-          this.delete(key);
-        }
-      });
-    });
-  }
-  replace(values2) {
-    transaction(() => {
-      const replacementMap = convertToMap(values2);
-      const orderedData = /* @__PURE__ */ new Map();
-      let keysReportChangedCalled = false;
-      for (const key of this.data_.keys()) {
-        if (!replacementMap.has(key)) {
-          const deleted = this.delete(key);
-          if (deleted) {
-            keysReportChangedCalled = true;
-          } else {
-            const value = this.data_.get(key);
-            orderedData.set(key, value);
-          }
-        }
-      }
-      for (const [key, value] of replacementMap.entries()) {
-        const keyExisted = this.data_.has(key);
-        this.set(key, value);
-        if (this.data_.has(key)) {
-          const _value = this.data_.get(key);
-          orderedData.set(key, _value);
-          if (!keyExisted) {
-            keysReportChangedCalled = true;
-          }
-        }
-      }
-      if (!keysReportChangedCalled) {
-        if (this.data_.size !== orderedData.size) {
-          this.keysAtom_.reportChanged();
-        } else {
-          const iter1 = this.data_.keys();
-          const iter2 = orderedData.keys();
-          let next1 = iter1.next();
-          let next2 = iter2.next();
-          while (!next1.done) {
-            if (next1.value !== next2.value) {
-              this.keysAtom_.reportChanged();
-              break;
-            }
-            next1 = iter1.next();
-            next2 = iter2.next();
-          }
-        }
-      }
-      this.data_ = orderedData;
-    });
-    return this;
-  }
-  get size() {
-    this.keysAtom_.reportObserved();
-    return this.data_.size;
-  }
-  toString() {
-    return "[object ObservableMap]";
-  }
-  toJSON() {
-    return Array.from(this);
-  }
-  get [Symbol.toStringTag]() {
-    return "Map";
-  }
-};
-var isObservableMap = /* @__PURE__ */ createInstanceofPredicate("ObservableMap", ObservableMap);
-function makeIterableForMap(iterator) {
-  iterator[Symbol.toStringTag] = "MapIterator";
-  return makeIterable(iterator);
-}
-function convertToMap(dataStructure) {
-  if (isES6Map(dataStructure) || isObservableMap(dataStructure)) {
-    return dataStructure;
-  } else if (Array.isArray(dataStructure)) {
-    return new Map(dataStructure);
-  } else if (isPlainObject(dataStructure)) {
-    const map = /* @__PURE__ */ new Map();
-    for (const key in dataStructure) {
-      map.set(key, dataStructure[key]);
-    }
-    return map;
-  } else {
-    return die(21, dataStructure);
-  }
-}
-var ObservableSetMarker = {};
-var ObservableSet = class {
-  constructor(initialData, enhancer = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableSet@" + getNextId() : "ObservableSet") {
-    this.name_ = void 0;
-    this[$mobx] = ObservableSetMarker;
-    this.data_ = /* @__PURE__ */ new Set();
-    this.atom_ = void 0;
-    this.changeListeners_ = void 0;
-    this.interceptors_ = void 0;
-    this.dehancer = void 0;
-    this.enhancer_ = void 0;
-    this.name_ = name_;
-    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, name_);
-    initObservable(() => {
-      this.atom_ = createAtom(this.name_);
-      if (initialData) {
-        this.replace(initialData);
-      }
-    });
-  }
-  dehanceValue_(value) {
-    if (this.dehancer !== void 0) {
-      return this.dehancer(value);
-    }
-    return value;
-  }
-  clear() {
-    transaction(() => {
-      untracked(() => {
-        for (const value of this.data_.values()) {
-          this.delete(value);
-        }
-      });
-    });
-  }
-  forEach(callbackFn, thisArg) {
-    for (const value of this) {
-      callbackFn.call(thisArg, value, value, this);
-    }
-  }
-  get size() {
-    this.atom_.reportObserved();
-    return this.data_.size;
-  }
-  add(value) {
-    checkIfStateModificationsAreAllowed(this.atom_);
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: ADD,
-        object: this,
-        newValue: value
-      });
-      if (!change) {
-        return this;
-      }
-      value = change.newValue;
-    }
-    if (!this.has(value)) {
-      transaction(() => {
-        value = this.enhancer_(value, void 0);
-        this.data_.add(value);
-        this.atom_.reportChanged();
-      });
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "set",
-        debugObjectName: this.name_,
-        type: ADD,
-        object: this,
-        newValue: value
-      } : null;
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportStart(change);
-      }
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportEnd();
-      }
-    }
-    return this;
-  }
-  delete(value) {
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: DELETE,
-        object: this,
-        oldValue: value
-      });
-      if (!change) {
-        return false;
-      }
-    }
-    if (this.has(value)) {
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const notify2 = hasListeners(this);
-      const change = notify2 || notifySpy ? {
-        observableKind: "set",
-        debugObjectName: this.name_,
-        type: DELETE,
-        object: this,
-        oldValue: value
-      } : null;
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportStart(change);
-      }
-      transaction(() => {
-        this.atom_.reportChanged();
-        this.data_.delete(value);
-      });
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (notifySpy && __MOBX_DEV__) {
-        spyReportEnd();
-      }
-      return true;
-    }
-    return false;
-  }
-  has(value) {
-    this.atom_.reportObserved();
-    return this.data_.has(this.dehanceValue_(value));
-  }
-  entries() {
-    const values2 = this.values();
-    return makeIterableForSet({
-      next() {
-        const {
-          value,
-          done
-        } = values2.next();
-        return !done ? {
-          value: [value, value],
-          done
-        } : {
-          value: void 0,
-          done
-        };
-      }
-    });
-  }
-  keys() {
-    return this.values();
-  }
-  values() {
-    this.atom_.reportObserved();
-    const self2 = this;
-    const values2 = this.data_.values();
-    return makeIterableForSet({
-      next() {
-        const {
-          value,
-          done
-        } = values2.next();
-        return !done ? {
-          value: self2.dehanceValue_(value),
-          done
-        } : {
-          value: void 0,
-          done
-        };
-      }
-    });
-  }
-  intersection(otherSet) {
-    return new Set(this).intersection(otherSet);
-  }
-  union(otherSet) {
-    return new Set(this).union(otherSet);
-  }
-  difference(otherSet) {
-    return new Set(this).difference(otherSet);
-  }
-  symmetricDifference(otherSet) {
-    return new Set(this).symmetricDifference(otherSet);
-  }
-  isSubsetOf(otherSet) {
-    return new Set(this).isSubsetOf(otherSet);
-  }
-  isSupersetOf(otherSet) {
-    return new Set(this).isSupersetOf(otherSet);
-  }
-  isDisjointFrom(otherSet) {
-    return new Set(this).isDisjointFrom(otherSet);
-  }
-  replace(other) {
-    if (isObservableSet(other)) {
-      other = new Set(other);
-    }
-    if (Array.isArray(other) || isES6Set(other)) {
-      transaction(() => {
-        const replacementValues = isES6Set(other) ? other : new Set(other);
-        if (replacementValues.size === 0) {
-          this.clear();
-          return;
-        }
-        if (this.data_.size === 0) {
-          replacementValues.forEach((value) => this.add(value));
-          return;
-        }
-        for (const value of this.data_.values()) {
-          if (!replacementValues.has(this.dehanceValue_(value))) {
-            this.delete(value);
-          }
-        }
-        replacementValues.forEach((value) => this.add(value));
-      });
-    } else if (other !== null && other !== void 0) {
-      die(41, other);
-    }
-    return this;
-  }
-  toJSON() {
-    return Array.from(this);
-  }
-  toString() {
-    return "[object ObservableSet]";
-  }
-  [Symbol.iterator]() {
-    return this.values();
-  }
-  get [Symbol.toStringTag]() {
-    return "Set";
-  }
-};
-var isObservableSet = /* @__PURE__ */ createInstanceofPredicate("ObservableSet", ObservableSet);
-function makeIterableForSet(iterator) {
-  iterator[Symbol.toStringTag] = "SetIterator";
-  return makeIterable(iterator);
-}
-var descriptorCache = /* @__PURE__ */ Object.create(null);
-var REMOVE = "remove";
-var ObservableObjectAdministration = class {
-  constructor(target_, values_ = /* @__PURE__ */ new Map(), name_, defaultAnnotation_ = autoAnnotation) {
-    this.target_ = void 0;
-    this.values_ = void 0;
-    this.name_ = void 0;
-    this.defaultAnnotation_ = void 0;
-    this.keysAtom_ = void 0;
-    this.changeListeners_ = void 0;
-    this.interceptors_ = void 0;
-    this.proxy_ = void 0;
-    this.isPlainObject_ = void 0;
-    this.appliedAnnotations_ = void 0;
-    this.pendingKeys_ = void 0;
-    this.lazyComputedKeys_ = void 0;
-    this.lazyObservableKeys_ = void 0;
-    this.target_ = target_;
-    this.values_ = values_;
-    this.name_ = name_;
-    this.defaultAnnotation_ = defaultAnnotation_;
-    this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
-    this.isPlainObject_ = isPlainObject(this.target_);
-    if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
-      die(`defaultAnnotation must be valid annotation`);
-    }
-    if (__MOBX_DEV__) {
-      this.appliedAnnotations_ = {};
-    }
-  }
-  getObservablePropValue_(key) {
-    var _ref, _this$values_$get;
-    const observable2 = (_ref = (_this$values_$get = this.values_.get(key)) != null ? _this$values_$get : this.materializeLazyComputed_(key)) != null ? _ref : this.materializeLazyObservable_(key);
-    return observable2.get();
-  }
-  materializeLazyComputed_(key) {
-    var _this$lazyComputedKey;
-    const factory = (_this$lazyComputedKey = this.lazyComputedKeys_) == null ? void 0 : _this$lazyComputedKey.get(key);
-    if (!factory) {
-      return void 0;
-    }
-    this.lazyComputedKeys_.delete(key);
-    if (this.lazyComputedKeys_.size === 0) {
-      this.lazyComputedKeys_ = void 0;
-    }
-    const computed3 = factory();
-    this.values_.set(key, computed3);
-    return computed3;
-  }
-  materializeLazyObservable_(key) {
-    var _this$lazyObservableK;
-    const factory = (_this$lazyObservableK = this.lazyObservableKeys_) == null ? void 0 : _this$lazyObservableK.get(key);
-    if (!factory) {
-      return void 0;
-    }
-    this.lazyObservableKeys_.delete(key);
-    if (this.lazyObservableKeys_.size === 0) {
-      this.lazyObservableKeys_ = void 0;
-    }
-    const observable2 = factory();
-    this.values_.set(key, observable2);
-    return observable2;
-  }
-  setObservablePropValue_(key, newValue) {
-    var _ref2, _this$values_$get2;
-    const observable2 = (_ref2 = (_this$values_$get2 = this.values_.get(key)) != null ? _this$values_$get2 : this.materializeLazyComputed_(key)) != null ? _ref2 : this.materializeLazyObservable_(key);
-    if (observable2 instanceof ComputedValue) {
-      observable2.set(newValue);
-      return true;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        type: UPDATE,
-        object: this.proxy_ || this.target_,
-        name: key,
-        newValue
-      });
-      if (!change) {
-        return null;
-      }
-      newValue = change.newValue;
-    }
-    newValue = observable2.prepareNewValue_(newValue);
-    if (newValue !== globalState.UNCHANGED) {
-      const notify2 = hasListeners(this);
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const change = notify2 || notifySpy ? {
-        type: UPDATE,
-        observableKind: "object",
-        debugObjectName: this.name_,
-        object: this.proxy_ || this.target_,
-        oldValue: observable2.value_,
-        name: key,
-        newValue
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      observable2.setNewValue_(newValue);
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-    return true;
-  }
-  get_(key) {
-    if (globalState.trackingDerivation && !hasProp(this.target_, key)) {
-      this.has_(key);
-    }
-    return this.target_[key];
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {any} value
-   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  set_(key, value, proxyTrap = false) {
-    if (hasProp(this.target_, key)) {
-      if (this.values_.has(key)) {
-        return this.setObservablePropValue_(key, value);
-      } else if (proxyTrap) {
-        return Reflect.set(this.target_, key, value);
-      } else {
-        this.target_[key] = value;
-        return true;
-      }
-    } else {
-      return this.extend_(key, {
-        value,
-        enumerable: true,
-        writable: true,
-        configurable: true
-      }, this.defaultAnnotation_, proxyTrap);
-    }
-  }
-  // Trap for "in"
-  has_(key) {
-    if (!globalState.trackingDerivation) {
-      return key in this.target_;
-    }
-    this.pendingKeys_ || (this.pendingKeys_ = /* @__PURE__ */ new Map());
-    let entry = this.pendingKeys_.get(key);
-    if (!entry) {
-      entry = new ObservableValue(key in this.target_, referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableObject.key?", false);
-      this.pendingKeys_.set(key, entry);
-    }
-    return entry.get();
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  extend_(key, descriptor, annotation, proxyTrap = false) {
-    if (annotation === true) {
-      annotation = this.defaultAnnotation_;
-    }
-    if (annotation === false) {
-      return this.defineProperty_(key, descriptor, proxyTrap);
-    }
-    assertAnnotable(this, annotation, key);
-    const outcome = annotation.extend_(this, key, descriptor, proxyTrap);
-    if (outcome) {
-      recordAnnotationApplied(this, annotation, key);
-    }
-    return outcome;
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  defineProperty_(key, descriptor, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: descriptor.value
-        });
-        if (!change) {
-          return null;
-        }
-        const {
-          newValue
-        } = change;
-        if (descriptor.value !== newValue) {
-          descriptor = assign({}, descriptor, {
-            value: newValue
-          });
-        }
-      }
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      this.notifyPropertyAddition_(key, descriptor.value);
-    } finally {
-      endBatch();
-    }
-    return true;
-  }
-  // If original descriptor becomes relevant, move this to annotation directly
-  defineObservableProperty_(key, value, enhancer, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: value
-        });
-        if (!change) {
-          return null;
-        }
-        value = change.newValue;
-      }
-      const cachedDescriptor = getCachedObservablePropDescriptor(key);
-      const descriptor = {
-        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
-        enumerable: true,
-        get: cachedDescriptor.get,
-        set: cachedDescriptor.set
-      };
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      const observable2 = new ObservableValue(value, enhancer, __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key", false);
-      this.values_.set(key, observable2);
-      this.notifyPropertyAddition_(key, observable2.value_);
-    } finally {
-      endBatch();
-    }
-    return true;
-  }
-  // If original descriptor becomes relevant, move this to annotation directly
-  defineComputedProperty_(key, options, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    try {
-      startBatch();
-      const deleteOutcome = this.delete_(key);
-      if (!deleteOutcome) {
-        return deleteOutcome;
-      }
-      if (hasInterceptors(this)) {
-        const change = interceptChange(this, {
-          object: this.proxy_ || this.target_,
-          name: key,
-          type: ADD,
-          newValue: void 0
-        });
-        if (!change) {
-          return null;
-        }
-      }
-      options.name || (options.name = __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key");
-      options.context = this.proxy_ || this.target_;
-      const cachedDescriptor = getCachedObservablePropDescriptor(key);
-      const descriptor = {
-        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
-        enumerable: false,
-        get: cachedDescriptor.get,
-        set: cachedDescriptor.set
-      };
-      if (proxyTrap) {
-        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
-          return false;
-        }
-      } else {
-        defineProperty(this.target_, key, descriptor);
-      }
-      this.values_.set(key, new ComputedValue(options));
-      this.notifyPropertyAddition_(key, void 0);
-    } finally {
-      endBatch();
-    }
-    return true;
-  }
-  /**
-   * @param {PropertyKey} key
-   * @param {PropertyDescriptor} descriptor
-   * @param {boolean} proxyTrap whether it's called from proxy trap
-   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
-   */
-  delete_(key, proxyTrap = false) {
-    checkIfStateModificationsAreAllowed(this.keysAtom_);
-    if (!hasProp(this.target_, key)) {
-      return true;
-    }
-    if (hasInterceptors(this)) {
-      const change = interceptChange(this, {
-        object: this.proxy_ || this.target_,
-        name: key,
-        type: REMOVE
-      });
-      if (!change) {
-        return null;
-      }
-    }
-    try {
-      var _this$pendingKeys_;
-      startBatch();
-      const notify2 = hasListeners(this);
-      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-      const observable2 = this.values_.get(key);
-      let value = void 0;
-      if (!observable2 && (notify2 || notifySpy)) {
-        var _getDescriptor2;
-        value = (_getDescriptor2 = getDescriptor(this.target_, key)) == null ? void 0 : _getDescriptor2.value;
-      }
-      if (proxyTrap) {
-        if (!Reflect.deleteProperty(this.target_, key)) {
-          return false;
-        }
-      } else {
-        delete this.target_[key];
-      }
-      if (__MOBX_DEV__) {
-        delete this.appliedAnnotations_[key];
-      }
-      if (observable2) {
-        this.values_.delete(key);
-        if (observable2 instanceof ObservableValue) {
-          value = observable2.value_;
-        }
-        propagateChanged(observable2);
-      }
-      this.keysAtom_.reportChanged();
-      (_this$pendingKeys_ = this.pendingKeys_) == null || (_this$pendingKeys_ = _this$pendingKeys_.get(key)) == null || _this$pendingKeys_.set(key in this.target_);
-      if (notify2 || notifySpy) {
-        const change = {
-          type: REMOVE,
-          observableKind: "object",
-          object: this.proxy_ || this.target_,
-          debugObjectName: this.name_,
-          oldValue: value,
-          name: key
-        };
-        if (__MOBX_DEV__ && notifySpy) {
-          spyReportStart(change);
-        }
-        if (notify2) {
-          notifyListeners(this, change);
-        }
-        if (__MOBX_DEV__ && notifySpy) {
-          spyReportEnd();
-        }
-      }
-    } finally {
-      endBatch();
-    }
-    return true;
-  }
-  notifyPropertyAddition_(key, value) {
-    var _this$pendingKeys_2;
-    const notify2 = hasListeners(this);
-    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
-    if (notify2 || notifySpy) {
-      const change = notify2 || notifySpy ? {
-        type: ADD,
-        observableKind: "object",
-        debugObjectName: this.name_,
-        object: this.proxy_ || this.target_,
-        name: key,
-        newValue: value
-      } : null;
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportStart(change);
-      }
-      if (notify2) {
-        notifyListeners(this, change);
-      }
-      if (__MOBX_DEV__ && notifySpy) {
-        spyReportEnd();
-      }
-    }
-    (_this$pendingKeys_2 = this.pendingKeys_) == null || (_this$pendingKeys_2 = _this$pendingKeys_2.get(key)) == null || _this$pendingKeys_2.set(true);
-    this.keysAtom_.reportChanged();
-  }
-  ownKeys_() {
-    this.keysAtom_.reportObserved();
-    return ownKeys2(this.target_);
-  }
-  keys_() {
-    this.keysAtom_.reportObserved();
-    return Object.keys(this.target_);
-  }
-};
-function asObservableObject(target, options) {
-  var _options$name;
-  if (__MOBX_DEV__ && options && isObservableObject(target)) {
-    die(`Options can't be provided for already observable objects.`);
-  }
-  if (hasProp(target, $mobx)) {
-    if (__MOBX_DEV__ && !(getAdministration(target) instanceof ObservableObjectAdministration)) {
-      die(`Cannot convert '${getDebugName(target)}' into observable object:
-The target is already observable of different type.
-Extending builtins is not supported.`);
-    }
-    return target;
-  }
-  if (__MOBX_DEV__ && !Object.isExtensible(target)) {
-    die("Cannot make the designated object observable; it is not extensible");
-  }
-  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
-  const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
-  addHiddenProp(target, $mobx, adm);
-  return target;
-}
-var isObservableObjectAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableObjectAdministration", ObservableObjectAdministration);
-function getCachedObservablePropDescriptor(key) {
-  return descriptorCache[key] || (descriptorCache[key] = {
-    get() {
-      return this[$mobx].getObservablePropValue_(key);
-    },
-    set(value) {
-      return this[$mobx].setObservablePropValue_(key, value);
-    }
-  });
-}
-function isObservableObject(thing) {
-  if (isObject(thing)) {
-    return isObservableObjectAdministration(thing[$mobx]);
-  }
-  return false;
-}
-function recordAnnotationApplied(adm, annotation, key) {
-  if (__MOBX_DEV__) {
-    adm.appliedAnnotations_[key] = annotation;
-  }
-}
-function assertAnnotable(adm, annotation, key) {
-  if (__MOBX_DEV__ && !isAnnotation(annotation)) {
-    die(`Cannot annotate '${adm.name_}.${key.toString()}': Invalid annotation.`);
-  }
-  if (__MOBX_DEV__ && !isOverride(annotation) && hasProp(adm.appliedAnnotations_, key)) {
-    const fieldName = `${adm.name_}.${key.toString()}`;
-    const currentAnnotationType = adm.appliedAnnotations_[key].annotationType_;
-    const requestedAnnotationType = annotation.annotationType_;
-    die(`Cannot apply '${requestedAnnotationType}' to '${fieldName}':
-The field is already annotated with '${currentAnnotationType}'.
-Re-annotating fields is not allowed.
-Use 'override' annotation for methods overridden by subclass.`);
-  }
-}
-function getAtom(thing, property) {
-  if (typeof thing === "object" && thing !== null) {
-    if (isObservableArray(thing)) {
-      if (property !== void 0) {
-        die(23);
-      }
-      return thing[$mobx].atom_;
-    }
-    if (isObservableSet(thing)) {
-      return thing.atom_;
-    }
-    if (isObservableMap(thing)) {
-      if (property === void 0) {
-        return thing.keysAtom_;
-      }
-      const observable2 = thing.data_.get(property) || thing.hasMap_.get(property);
-      if (!observable2) {
-        die(25, property, getDebugName(thing));
-      }
-      return observable2;
-    }
-    if (isObservableObject(thing)) {
-      var _ref, _adm$values_$get;
-      if (!property) {
-        return die(26);
-      }
-      const adm = thing[$mobx];
-      const observable2 = (_ref = (_adm$values_$get = adm.values_.get(property)) != null ? _adm$values_$get : adm.materializeLazyComputed_(property)) != null ? _ref : adm.materializeLazyObservable_(property);
-      if (!observable2) {
-        die(27, property, getDebugName(thing));
-      }
-      return observable2;
-    }
-    if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
-      return thing;
-    }
-  } else if (isFunction(thing)) {
-    if (isReaction(thing[$mobx])) {
-      return thing[$mobx];
-    }
-  }
-  die(28);
-}
-function getAdministration(thing, property) {
-  if (!thing) {
-    die(29);
-  }
-  if (property !== void 0) {
-    return getAdministration(getAtom(thing, property));
-  }
-  if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
-    return thing;
-  }
-  if (isObservableMap(thing) || isObservableSet(thing)) {
-    return thing;
-  }
-  if (thing[$mobx]) {
-    return thing[$mobx];
-  }
-  die(24, thing);
-}
-function getDebugName(thing, property) {
-  let named2;
-  if (property !== void 0) {
-    named2 = getAtom(thing, property);
-  } else if (isAction(thing)) {
-    return thing.name;
-  } else if (isObservableObject(thing) || isObservableMap(thing) || isObservableSet(thing)) {
-    named2 = getAdministration(thing);
-  } else {
-    named2 = getAtom(thing);
-  }
-  return named2.name_;
-}
-function initObservable(cb) {
-  const derivation = untrackedStart();
-  const allowStateChanges2 = __MOBX_DEV__ ? allowStateChangesStart(true) : true;
-  startBatch();
-  try {
-    return cb();
-  } finally {
-    endBatch();
-    if (__MOBX_DEV__) {
-      allowStateChangesEnd(allowStateChanges2);
-    }
-    untrackedEnd(derivation);
-  }
-}
-var toString = objectPrototype.toString;
-function deepEqual(a, b, depth = -1) {
-  return eq(a, b, depth);
-}
-function eq(a, b, depth, aStack, bStack) {
-  if (a === b) {
-    return a !== 0 || 1 / a === 1 / b;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
-  if (a !== a) {
-    return b !== b;
-  }
-  const type3 = typeof a;
-  if (type3 !== "function" && type3 !== "object" && typeof b != "object") {
-    return false;
-  }
-  const className = toString.call(a);
-  if (className !== toString.call(b)) {
-    return false;
-  }
-  switch (className) {
-    // Strings, numbers, regular expressions, dates, and booleans are compared by value.
-    case "[object RegExp]":
-    // RegExps are coerced to strings for comparison (Note: '' + /a/i === '/a/i')
-    case "[object String]":
-      return "" + a === "" + b;
-    case "[object Number]":
-      if (+a !== +a) {
-        return +b !== +b;
-      }
-      return +a === 0 ? 1 / +a === 1 / b : +a === +b;
-    case "[object Date]":
-    case "[object Boolean]":
-      return +a === +b;
-    case "[object Symbol]":
-      return typeof Symbol !== "undefined" && Symbol.valueOf.call(a) === Symbol.valueOf.call(b);
-    case "[object Map]":
-    case "[object Set]":
-      if (depth >= 0) {
-        depth++;
-      }
-      break;
-  }
-  a = unwrap(a);
-  b = unwrap(b);
-  const areArrays = className === "[object Array]";
-  if (!areArrays) {
-    if (typeof a != "object" || typeof b != "object") {
-      return false;
-    }
-    const aCtor = a.constructor, bCtor = b.constructor;
-    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && "constructor" in a && "constructor" in b) {
-      return false;
-    }
-  }
-  if (depth === 0) {
-    return false;
-  } else if (depth < 0) {
-    depth = -1;
-  }
-  aStack = aStack || [];
-  bStack = bStack || [];
-  let length = aStack.length;
-  while (length--) {
-    if (aStack[length] === a) {
-      return bStack[length] === b;
-    }
-  }
-  aStack.push(a);
-  bStack.push(b);
-  if (areArrays) {
-    length = a.length;
-    if (length !== b.length) {
-      return false;
-    }
-    while (length--) {
-      if (!eq(a[length], b[length], depth - 1, aStack, bStack)) {
-        return false;
-      }
-    }
-  } else {
-    const keys2 = Object.keys(a);
-    const _length = keys2.length;
-    if (Object.keys(b).length !== _length) {
-      return false;
-    }
-    for (let i2 = 0; i2 < _length; i2++) {
-      const key = keys2[i2];
-      if (!(hasProp(b, key) && eq(a[key], b[key], depth - 1, aStack, bStack))) {
-        return false;
-      }
-    }
-  }
-  aStack.pop();
-  bStack.pop();
-  return true;
-}
-function unwrap(a) {
-  if (isObservableArray(a)) {
-    return a.slice();
-  }
-  if (isES6Map(a) || isObservableMap(a)) {
-    return Array.from(a.entries());
-  }
-  if (isES6Set(a) || isObservableSet(a)) {
-    return Array.from(a.entries());
-  }
-  return a;
-}
-var _globalThis$Iterator;
-var maybeIteratorPrototype = ((_globalThis$Iterator = globalThis.Iterator) == null ? void 0 : _globalThis$Iterator.prototype) || {};
-function makeIterable(iterator) {
-  iterator[Symbol.iterator] = getSelf;
-  return assign(Object.create(maybeIteratorPrototype), iterator);
-}
-function getSelf() {
-  return this;
-}
-function isAnnotation(thing) {
-  return (
-    // Can be function
-    thing instanceof Object && typeof thing.annotationType_ === "string" && isFunction(thing.make_) && isFunction(thing.extend_)
-  );
-}
-if (__MOBX_DEV__) {
-  const g = globalThis;
-  ["Symbol", "Map", "Set", "Proxy"].forEach((m) => {
-    if (typeof g[m] === "undefined") {
-      die(`MobX requires global '${m}' to be available or polyfilled`);
-    }
-  });
-}
-if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
-  __MOBX_DEVTOOLS_GLOBAL_HOOK__.injectMobx({
-    spy,
-    extras: {
-      getDebugName
-    },
-    $mobx
-  });
-}
-
-// src/utils/reading.ts
-function unread() {
-  return observable.box(pending("unread"), { deep: false });
-}
-function pending(why2) {
-  let land;
-  const landed = new Promise((resolve) => {
-    land = resolve;
-  });
-  return { kind: "pending", why: why2, landed, land };
-}
-function settle(source, outcome) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
-  runInAction(() => source.reading.set(outcome));
-  if (prior.kind === "pending") prior.land();
-}
-function renew(source, why2) {
-  const prior = source.reading.get();
-  if (prior.kind !== "pending") {
-    runInAction(() => source.reading.set(pending(why2)));
-  } else if (prior.why !== why2 && why2 === "unread") {
-    runInAction(() => source.reading.set({ ...prior, why: why2 }));
-  }
-}
-function answerPending(source, outcome) {
-  if (source.reading.get().kind === "pending") settle(source, outcome);
-}
-function currentOf(source) {
-  return source.reading.get();
-}
-function waitWithin(work, ms, late, after, closing) {
-  const wait = new AbortController();
-  const end = (why2) => () => wait.abort(why2);
-  const clear = after(Math.max(0, ms), end("deadline"));
-  const ended = new Promise((resolve, reject2) => {
-    wait.signal.addEventListener(
-      "abort",
-      () => resolve(wait.signal.reason)
-    );
-    closing.addEventListener("abort", end("closed"), { signal: wait.signal });
-    if (closing.aborted) end("closed")();
-    void work(wait.signal).then(
-      () => resolve("answered"),
-      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
-      // while it listens, its owner's after. Work that answered never
-      // rejects, so a wait aborted before it ended at its deadline or close.
-      (e) => wait.signal.aborted ? late(e, wait.signal.reason) : reject2(e)
-    );
-  });
-  return ended.finally(() => {
-    clear();
-    wait.abort();
-  });
-}
-function settledLane(outcome) {
-  return { current: () => outcome };
-}
-
-// src/facts/world-state.ts
-init_globals();
-var UNREAD_ENV = pendingOf("unread");
-var UNREAD_RUN = {
-  reading: pendingOf("unread"),
-  fault: null
-};
-var REFRESH_LANES = [
-  "session",
-  "context",
-  "metrics",
-  "activity",
-  "cache",
-  "speed",
-  "autocompact"
-];
-var SHORT_DIGEST_LENGTH = 7;
-var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
-function stampFailureOf(document) {
-  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
-}
-
-// src/daemon/source-runs.ts
-init_globals();
-
-// src/daemon/source-files.ts
-init_globals();
-
-// site/shims/fs-promises.ts
-init_globals();
-var p = fs.promises;
-var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
-
-// src/daemon/source-files.ts
-var SourceFiles = class {
-  constructor(readUtf8 = (file, signal) => readFile(file, { encoding: "utf8", signal })) {
-    this.readUtf8 = readUtf8;
-  }
-  readUtf8;
-  queued = /* @__PURE__ */ new Map();
-  // [LAW:single-enforcer] Every request queued for this path before dispatch
-  // shares one read. A request after dispatch may follow a write the earlier
-  // read missed, so it starts a fresh batch.
-  read(file, signal) {
-    const queued = this.queued.get(file);
-    if (queued !== void 0) {
-      queued.callers.add(signal);
-      return queued.result;
-    }
-    const callers = /* @__PURE__ */ new Set([signal]);
-    const result = Promise.resolve().then(() => {
-      this.queued.delete(file);
-      return this.dispatch(file, callers);
-    });
-    this.queued.set(file, { callers, result });
-    return result;
-  }
-  async dispatch(file, callers) {
-    const abort = new AbortController();
-    const cancelled = () => {
-      for (const signal of callers) if (!signal.aborted) return;
-      abort.abort();
-    };
-    for (const signal of callers)
-      signal.addEventListener("abort", cancelled, { once: true });
-    try {
-      cancelled();
-      abort.signal.throwIfAborted();
-      return { kind: "text", text: await this.readUtf8(file, abort.signal) };
-    } catch (error) {
-      const err = error;
-      return {
-        kind: "error",
-        code: typeof err?.code === "string" ? err.code : void 0,
-        message: typeof err?.message === "string" ? err.message : String(error)
-      };
-    } finally {
-      for (const signal of callers)
-        signal.removeEventListener("abort", cancelled);
-    }
-  }
-};
-
-// src/daemon/cache/watchers.ts
-init_globals();
-var import_node_path6 = __toESM(require_path_browserify(), 1);
-
-// src/utils/logger.ts
-init_globals();
-var debugEnabled = false;
-var debugOn = () => debugEnabled;
-function debug(message2, ...args) {
-  if (debugOn()) {
-    console.error(`[DEBUG] ${message2}`, ...args);
-  }
-}
-var quietLogger = (_level, message2) => debug(message2);
-
-// src/utils/folder-identity.ts
-init_globals();
-var statIdentity = (folder) => {
-  try {
-    const st = fs_default.statSync(folder, { bigint: true });
-    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
-  } catch (e) {
-    const code2 = e.code;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return "gone";
-    throw e;
-  }
-};
-var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
-var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
-var boundOf = (folder) => {
-  try {
-    return statIdentity(folder);
-  } catch (e) {
-    return { unreadable: e.code ?? String(e) };
-  }
-};
-var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
-var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
-
-// src/daemon/foundations/watch-targets.ts
-init_globals();
-
-// src/utils/watch-target.ts
-init_globals();
-function canonicalDirectory(p2) {
-  try {
-    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
-  } catch {
-    return null;
-  }
-}
-
-// src/daemon/foundations/watch-targets.ts
-var ridesStream = (targets) => targets.dirs.length > 0;
-function watchTargetsOf(paths2) {
-  const unresolved = [];
-  const polled = /* @__PURE__ */ new Set();
-  for (const at of paths2.named) {
-    const { hops, stopped: stopped2 } = walkLinks(at);
-    if (stopped2 !== null)
-      unresolved.push({ path: at, reason: stopped2.message });
-    for (const hop of hops) polled.add(hop);
-  }
-  const dirs = new Set(paths2.whole.flatMap((p2) => canonicalDirectory(p2) ?? []));
-  return {
-    ...specOf({
-      dirs: [...dirs].sort().map((d) => ({ path: d })),
-      polled: [...polled].sort()
-    }),
-    unresolved
-  };
-}
-function specOf(targets) {
-  const bound = targets.dirs.map((d) => {
-    const at = boundOf(d.path);
-    return bindsFolder(at) ? boundKey(at) : null;
-  });
-  return {
-    key: JSON.stringify([targets, bound]),
-    targets,
-    unbound: bound.includes(null)
-  };
-}
-function watchFault(label2, watch2, beyond) {
-  const reasons = [
-    ...watch2.derived.unresolved.map(
-      // Every reason names the path it stopped at, the kernel's and the loop's.
-      (u) => `cannot follow a link chain \u2014 ${u.reason}`
-    ),
-    ...watch2.held.handle.deaf.map(
-      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
-    ),
-    ...beyond === null ? [] : [beyond]
-  ];
-  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
-}
-function followWatch(held, spec, acquire) {
-  if (held !== null && (held.key === spec.key || spec.unbound))
-    return { watch: held, move: "kept" };
-  const watch2 = { key: spec.key, handle: acquire(spec.key, spec.targets) };
-  held?.handle.release();
-  return { watch: watch2, move: "rebound" };
-}
-
-// src/daemon/cache/watchers.ts
-var defaultLogger = (_level, message2) => debug(message2);
-var DEBOUNCE_MS = 50;
-var POLL_MS = 1e3;
-function folded(window2, next) {
-  if (next.kind === "failed") return next;
-  if (window2.kind !== "changed") return window2;
-  if (next.kind === "unknown") return next;
-  for (const p2 of next.paths) window2.paths.add(p2);
-  return window2;
-}
-var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
-var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path6.default.join(dir, filename)]) };
-var failedOf = (d) => ({
-  kind: "failed",
-  reason: `${d.path}: ${d.reason}`
-});
-var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
-var UNSEEN = /* @__PURE__ */ Symbol("unseen");
-var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
-var isBelow = (at, root) => at.startsWith(root + import_node_path6.default.sep);
-function dirsBelow(at, held, trusted, unlisted) {
-  const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
-  let entries;
-  try {
-    entries = fs_default.readdirSync(at, { withFileTypes: true });
-  } catch (e) {
-    const code2 = e.code;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
-    unlisted.push(at);
-    return [...held].filter((p2) => isBelow(p2, at));
-  }
-  return entries.filter((e) => e.isDirectory()).flatMap((e) => {
-    const below = import_node_path6.default.join(at, e.name);
-    return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
-  });
-}
-function entryAt(at) {
-  try {
-    const s = fs_default.lstatSync(at, { bigint: true });
-    const identity2 = `${s.mode}:${identityKey({ dev: s.dev, ino: s.ino, birthtimeNs: s.birthtimeNs })}`;
-    return s.isDirectory() ? identity2 : `${identity2}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-  } catch (e) {
-    return `error:${e.code}`;
-  }
-}
-var WatcherRegistry = class {
-  slots = /* @__PURE__ */ new Map();
-  dirs = /* @__PURE__ */ new Map();
-  polled = /* @__PURE__ */ new Map();
-  // The next sweep's cancel, armed exactly while a path is polled.
-  sweep = null;
-  counters;
-  logger;
-  clock;
-  closed = false;
-  nodeWalksTrees;
-  constructor(opts) {
-    this.clock = opts.clock;
-    this.counters = opts.counters;
-    this.logger = opts.logger ?? defaultLogger;
-    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
-  }
-  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
-  // holder of one slot, and each holder's callback hears every window.
-  // `targets` from the first acquire wins; subsequent acquires keep the
-  // original target set (consumers must use a fresh key if they need different
-  // targets). A consumer that needs no more than "something changed" ignores
-  // the invalidation's value.
-  acquire(key, targets, onInvalidate) {
-    if (this.closed) {
-      return {
-        release: () => {
-        },
-        deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
-          (path31) => ({
-            kind: "refused",
-            path: path31,
-            reason: "the watcher registry is closed"
-          })
-        ),
-        ridesStream: ridesStream(targets)
-      };
-    }
-    const shared = this.slots.get(key);
-    if (shared !== void 0) {
-      for (const { dir } of shared.listeners.values())
-        this.judged(dir, "acquire");
-      this.reconciled(shared, "acquire", null);
-    }
-    this.sighted(
-      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
-    );
-    const slot = shared ?? this.opened(key, targets);
-    const holder = { onInvalidate };
-    slot.holders.add(holder);
-    return this.makeHandle(slot, holder);
-  }
-  // The held watch following `spec` (`followWatch`).
-  follow(held, spec, onInvalidate) {
-    const followed = followWatch(
-      held,
-      spec,
-      (key, targets) => this.acquire(key, targets, onInvalidate)
-    );
-    if (followed.move === "kept")
-      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
-    return followed;
-  }
-  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
-  // have read a polled path since the last sweep, and read a state no sweep
-  // saw. Where the disk differs from the swept entry now, the next sweep
-  // fires it whatever it reads, so a change undone before the sweep is still
-  // heard. Only the sweep fires, so the work a path drives stays once a
-  // period; a change undone before the holder acquired or followed is one no
-  // poll sees.
-  // [LAW:escape-local-minima] exception: seeing a change undone before the
-  // holder looks needs the entry the holder read, which polled consumers do
-  // not yet hand over.
-  sighted(records) {
-    for (const record2 of records)
-      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
-        record2.entry = UNSEEN;
-  }
-  opened(key, targets) {
-    const slot = {
-      key,
-      targets: targets.dirs,
-      listeners: /* @__PURE__ */ new Map(),
-      polled: [],
-      holders: /* @__PURE__ */ new Set(),
-      debounce: null
-    };
-    this.reconciled(slot, "acquire", null);
-    for (const at of targets.polled) {
-      const record2 = this.polledAt(at);
-      record2.slots.add(slot);
-      slot.polled.push(record2);
-    }
-    this.armSweep();
-    this.slots.set(key, slot);
-    if (this.counters) {
-      if ([...slot.listeners.values()].every(
-        (l) => l.dir.state.kind === "listening"
-      ))
-        this.counters.watchersOpened++;
-      else this.counters.watchRefusals++;
-    }
-    return slot;
-  }
-  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
-  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
-  // Node's own walk (Linux) stops at the first entry it cannot watch and says
-  // nothing, and where it fails cannot be predicted, so a tree there is a
-  // plain watch on the root and on each directory below it, each refused or
-  // heard by the OS on its own. `heardIn` is the directory an event was heard
-  // in, or null for the whole of every target: an event moves only what its
-  // own directory lists, so only that listing is read again.
-  dirsOf(targets, heardIn, held, unlisted) {
-    return targets.flatMap((target) => {
-      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
-      const at = heardIn ?? target.path;
-      if (at !== target.path && !isBelow(at, target.path)) return [];
-      const below = dirsBelow(at, held, heardIn !== null, unlisted);
-      return [...heardIn === null ? [at] : [], ...below].map((dir) => ({
-        path: dir
-      }));
-    });
-  }
-  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
-  // directories its targets name now, below the directory listed again: one
-  // it lacks joins, one no longer named leaves. Run whole at its acquire and
-  // on every period, and for the directory each event its watches hear is
-  // heard in, so a tree's new directory is heard from the event that made it.
-  reconciled(slot, cause, heardIn) {
-    const held = new Set([...slot.listeners.values()].map((l) => l.dir.path));
-    const unlisted = [];
-    const named2 = new Map(
-      this.dirsOf(slot.targets, heardIn, held, unlisted).map((t2) => [
-        dirId(t2),
-        t2
-      ])
-    );
-    for (const [id2, listener] of slot.listeners)
-      if (!named2.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
-        slot.listeners.delete(id2);
-        this.left(listener, cause);
-      }
-    for (const [id2, target] of named2)
-      if (!slot.listeners.has(id2)) {
-        const dir = this.dirFor(target, cause);
-        const listener = { slot, dir };
-        dir.listeners.add(listener);
-        slot.listeners.set(id2, listener);
-        if (slot.holders.size > 0 && dir.state.kind === "deaf")
-          this.fire(slot, failedOf(dir.state.deafness));
-      }
-    for (const at of unlisted) {
-      const dir = this.dirs.get(dirId({ path: at }));
-      if (dir?.state.kind === "listening")
-        this.reopen(dir, "it cannot be listed");
-    }
-  }
-  // A directory watch closes with the last slot on it.
-  left(listener, cause) {
-    const { dir } = listener;
-    dir.listeners.delete(listener);
-    if (dir.listeners.size > 0) return;
-    if (dir.state.kind === "listening")
-      this.closeHandle(dir.path, dir.state.handle, cause);
-    this.dirs.delete(dir.id);
-  }
-  // The directory watch a slot's target joins: the one already open there,
-  // judged, or a new one.
-  dirFor(target, cause) {
-    const id2 = dirId(target);
-    const existing = this.dirs.get(id2);
-    if (existing !== void 0) {
-      this.judged(existing, cause);
-      return existing;
-    }
-    const where = { path: target.path, recursive: target.recursive === true };
-    const dir = {
-      id: id2,
-      ...where,
-      listeners: /* @__PURE__ */ new Set(),
-      state: this.open(where, () => dir, cause, null)
-    };
-    this.dirs.set(id2, dir);
-    return dir;
-  }
-  // [LAW:single-enforcer] The one rule that a directory watch names the
-  // folder at its path, applied whenever a holder acquires the directory,
-  // whenever an event says the folder there moved, and on every period
-  // (`judge`). A deaf one is opened again; a listening one whose path holds
-  // another folder than the one it bound (removed and made again, or a strict
-  // ancestor renamed away and another tree put at its path: inotify hears the
-  // old inode, and the bound folder is what an event naming the directory is
-  // judged against) is reopened in place. A path that binds nothing right now
-  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
-  // on the path hears the folder come back.
-  judged(dir, cause) {
-    if (dir.state.kind === "deaf") {
-      this.reopen(dir, cause);
-      return;
-    }
-    const now2 = boundOf(dir.path);
-    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
-      this.reopen(dir, "another folder is at its path");
-  }
-  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
-  // the disk, on the period the file-event delivery owner keeps (the daemon
-  // wires it). It is the one trigger for a replacement no event reaches a
-  // handle for (a strict ancestor renamed away and another tree put at its
-  // path: inotify reports a directory's own removal or self-move, never its
-  // parent's), and the retry of a directory the OS refused or whose handle
-  // errored while no holder newly acquires it. A directory staying as it is
-  // costs one stat, or one refused open, and tells nothing; a tree heard
-  // directory by directory costs a listing of each directory too.
-  judge() {
-    for (const slot of this.slots.values())
-      this.reconciled(slot, "period", null);
-    for (const dir of this.dirs.values()) this.judged(dir, "period");
-  }
-  // [LAW:no-silent-failure] Every slot on the directory hears it change
-  // state. Going deaf, or deaf for another reason, it hears the fault.
-  // Listening again, it hears an `unknown` window: whatever changed while the
-  // directory was deaf or bound to another folder went unheard, and a holder
-  // that re-derives on it reports its fault cleared. Deaf for the same reason
-  // is no change and tells nothing.
-  reopen(dir, cause) {
-    const was = dir.state;
-    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
-    const now2 = this.open(dir, () => dir, cause, was);
-    dir.state = now2;
-    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
-    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
-      this.tell(dir, failedOf(now2.deafness));
-  }
-  // `dirOf` names the watch the handle belongs to; its callbacks run only
-  // after the open returns, once the watch holds the state returned here.
-  open(where, dirOf, cause, was) {
-    const at = where.path;
-    const bound = boundKey(boundOf(at));
-    try {
-      fs_default.opendirSync(at).closeSync();
-      const handle = fs_default.watch(
-        at,
-        { persistent: false, recursive: where.recursive },
-        (_event, changed) => this.heard(dirOf(), handle, changed)
-      );
-      handle.on("error", (e) => {
-        this.logger("warn", `watcher error ${at}: ${e.message}`);
-        if (this.counters) this.counters.watchErrors++;
-        const dir = dirOf();
-        if (!heldBy(dir.state, handle)) return;
-        this.closeHandle(at, handle, "error");
-        const deafness = {
-          kind: "failed",
-          path: at,
-          reason: e.message
-        };
-        dir.state = { kind: "deaf", deafness };
-        this.tell(dir, failedOf(deafness));
-      });
-      if (this.counters) this.counters.dirWatchesOpened++;
-      this.logger(
-        "info",
-        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
-      );
-      return { kind: "listening", handle, bound };
-    } catch (e) {
-      const reason = e.message;
-      const deafness = { kind: "refused", path: at, reason };
-      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
-        this.logger("warn", `watch failed ${at}: ${reason}`);
-      return { kind: "deaf", deafness };
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Every event reaches every slot on the
-  // watch. One naming the directory itself, while the folder at the path is
-  // no longer the one this handle bound (its removal or replacement, which
-  // macOS reports as a change and Linux as a rename), is then judged, so a
-  // handle never stays bound to a folder no longer at its path and every later
-  // event naming the directory is judged against the folder there.
-  heard(dir, handle, changed) {
-    const { state } = dir;
-    if (!heldBy(state, handle)) return;
-    this.tell(dir, namedOf(dir.path, changed));
-    if (changed === import_node_path6.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
-      this.judged(dir, "moved");
-    for (const slot of [...dir.listeners].map((l) => l.slot))
-      this.reconciled(slot, "heard", dir.path);
-  }
-  tell(dir, invalidation) {
-    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
-  }
-  fire(slot, invalidation) {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    const debounce = {
-      window: invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          const heard = heardOf(debounce.window);
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(heard);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${e.message}`
-              );
-            }
-          }
-        },
-        { unref: true }
-      )
-    };
-    slot.debounce = debounce;
-  }
-  makeHandle(slot, holder) {
-    return {
-      get deaf() {
-        return [...slot.listeners.values()].flatMap(
-          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
-        );
-      },
-      // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
-      ridesStream: slot.listeners.size > 0,
-      release: () => {
-        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
-        if (this.slots.get(slot.key) !== slot) return;
-        this.closeSlot(slot, "last release");
-        this.slots.delete(slot.key);
-      }
-    };
-  }
-  closeHandle(at, handle, cause) {
-    try {
-      handle.close();
-    } catch {
-    }
-    if (this.counters) this.counters.dirWatchesClosed++;
-    this.logger(
-      "info",
-      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
-    );
-  }
-  // A directory watch closes, and a polled path is forgotten, with the last
-  // slot on it: a slot that names the path again starts from what is there at
-  // its own acquire.
-  closeSlot(slot, cause) {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
-    }
-    for (const listener of slot.listeners.values()) this.left(listener, cause);
-    for (const record2 of slot.polled) {
-      record2.slots.delete(slot);
-      if (record2.slots.size === 0) this.polled.delete(record2.path);
-    }
-    if (this.polled.size === 0) this.disarmSweep();
-    if (this.counters) this.counters.watchersClosed++;
-  }
-  // The record for a polled path: a new one read now, so only a change after
-  // the acquire is a change; or the one already held, which the acquire sights.
-  polledAt(at) {
-    const held = this.polled.get(at);
-    if (held !== void 0) return held;
-    const record2 = {
-      path: at,
-      entry: entryAt(at),
-      slots: /* @__PURE__ */ new Set()
-    };
-    this.polled.set(at, record2);
-    return record2;
-  }
-  // [LAW:no-ambient-temporal-coupling] The sweep runs every period while a
-  // path is polled and the registry is open. The reads are synchronous, so no
-  // two sweeps overlap and no older read lands over a newer one.
-  // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
-  // renders, once a period per path and once per acquire or follow naming it,
-  // so a mount under a polled path that stops answering stops every bar until
-  // it answers. The paths are a session's own files (its transcript, its
-  // settings, its config, its git directory), which the daemon reads on this
-  // thread to render anyway.
-  armSweep() {
-    if (this.sweep !== null || this.closed || this.polled.size === 0) return;
-    this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
-      unref: true
-    });
-  }
-  disarmSweep() {
-    this.sweep?.();
-    this.sweep = null;
-  }
-  // [LAW:dataflow-not-control-flow] The same read for every polled path each
-  // sweep. A path whose entry differs fires every slot that names it, by its
-  // path, through the slot's debounce, as a directory watch reports a child.
-  readPolled() {
-    for (const record2 of this.polled.values()) {
-      const now2 = entryAt(record2.path);
-      if (now2 === record2.entry) continue;
-      record2.entry = now2;
-      for (const slot of record2.slots)
-        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
-    }
-  }
-  // The slots held now.
-  size() {
-    return this.slots.size;
-  }
-  // The paths polled now: no OS watch each.
-  polledPaths() {
-    return this.polled.size;
-  }
-  // The OS directory watches open now.
-  dirWatches() {
-    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
-  }
-  // Every directory a held watch targets.
-  watchedDirs() {
-    return [...this.dirs.values()].map((d) => d.path);
-  }
-  closeAll() {
-    this.closed = true;
-    this.disarmSweep();
-    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
-    this.slots.clear();
-  }
-};
-
-// src/daemon/cache/file-events.ts
-init_globals();
-var import_node_path7 = __toESM(require_path_browserify(), 1);
-
-// src/daemon/foundations/file-events-warnings.ts
-init_globals();
-var iso = (at) => new Date(at).toISOString();
-var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
-var WATCHED_FOLDER = "a change inside a watched folder (a plugin installed, a folder a watch_file names)";
-var STILL_READ = "config files and files a watch_file names still refresh";
-function fileEventsWarnings(d) {
-  if (d.missedSince === null) return [];
-  const since = iso(d.missedSince);
-  const message2 = () => {
-    switch (d.kind) {
-      case "delivering":
-        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so ${WATCHED_FOLDER} may have been missed; ${STILL_READ}`;
-      case "stalled":
-        return `${stopped(d.missedSince)}, so ${WATCHED_FOLDER} won't be seen until they resume; ${STILL_READ}`;
-      case "unmeasured":
-        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
-    }
-  };
-  return [{ kind: "file-events", state: d.kind, message: message2() }];
-}
-
-// src/daemon/cache/file-events.ts
-var PROBE_EVERY_MS = 3e4;
-var STALL_AFTER = 2;
-var PROBE_FILE = "probe";
-var NO_FILE_EVENTS = {
-  delivery: () => ({
-    kind: "unmeasured",
-    since: 0,
-    reason: "outside the daemon",
-    missedSince: null
-  }),
-  subscribe: () => () => {
-  }
-};
-var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
-var FileEventDelivery = class {
-  current;
-  instrument = { kind: "idle" };
-  listeners = /* @__PURE__ */ new Set();
-  stalls = 0;
-  catchUps = 0;
-  probes = 0;
-  probeFailures = 0;
-  watchers;
-  logger;
-  identityOf;
-  clock;
-  constructor(opts) {
-    this.watchers = opts.watchers;
-    this.logger = opts.logger;
-    this.clock = opts.clock;
-    this.identityOf = opts.identityOf ?? statIdentity;
-    this.current = {
-      kind: "unmeasured",
-      since: this.clock.now(),
-      reason: "not started",
-      missedSince: null
-    };
-  }
-  delivery() {
-    return this.current;
-  }
-  subscribe(listener) {
-    this.listeners.add(listener);
-    return () => void this.listeners.delete(listener);
-  }
-  // Only the daemon starts the owner, once it has won its socket: it makes
-  // the folder, opens the one watch, and arms the period.
-  start(folder) {
-    if (this.instrument.kind !== "idle") {
-      throw new Error("file events: the owner was started twice");
-    }
-    const stopPeriod = this.clock.every(
-      PROBE_EVERY_MS,
-      () => void this.tick(),
-      {
-        unref: true
-      }
-    );
-    let identity2;
-    try {
-      fs_default.mkdirSync(folder, { recursive: true });
-      identity2 = this.identityOf(folder);
-    } catch (e) {
-      this.end(
-        stopPeriod,
-        `the probe folder could not be made: ${e.message}`
-      );
-      return;
-    }
-    if (identity2 === "gone") {
-      this.end(stopPeriod, "the probe folder was removed as it was made");
-      return;
-    }
-    const probing = {
-      kind: "probing",
-      folder,
-      identity: identity2,
-      stopPeriod,
-      // [LAW:single-enforcer] The only acquirer of this registry key.
-      handle: this.watchers.acquire(
-        `file-events:${folder}`,
-        // The folder whole: what the probe measures is the OS's event
-        // stream, and only an OS watch rides it (`ridesStream`).
-        { dirs: [{ path: folder }], polled: [] },
-        (heard) => this.heard(probing, heard)
-      )
-    };
-    this.instrument = probing;
-    this.logger("info", `file events probing folder=${valueOf(folder)}`);
-    const [refusal] = probing.handle.deaf;
-    if (refusal !== void 0) {
-      this.end(
-        stopPeriod,
-        `the OS refused the probe folder's watch: ${refusal.reason}`
-      );
-      return;
-    }
-    this.move({ kind: "delivering", unreported: [], missedSince: null });
-    void this.tick();
-  }
-  stats() {
-    return {
-      delivery: this.current,
-      stalls: this.stalls,
-      catchUps: this.catchUps,
-      probes: this.probes,
-      probeFailures: this.probeFailures
-    };
-  }
-  close() {
-    const inst = this.instrument;
-    this.instrument = { kind: "idle" };
-    this.listeners.clear();
-    switch (inst.kind) {
-      case "probing":
-        inst.handle.release();
-        inst.stopPeriod();
-        return;
-      case "ended":
-        inst.stopPeriod();
-        return;
-      case "idle":
-        return;
-    }
-  }
-  // [LAW:dataflow-not-control-flow] The same steps at the start and every
-  // period after: tell subscribers the period passed; judge the probe folder
-  // against the one the watch opened on, first, so a folder replaced at its
-  // path never reads as a stall; judge the probes still unreported; write the
-  // next one.
-  async tick() {
-    this.notify({ kind: "period" });
-    const inst = this.instrument;
-    if (inst.kind !== "probing") return;
-    let now2;
-    try {
-      now2 = this.identityOf(inst.folder);
-    } catch (e) {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder cannot be read: ${e.message}`
-      );
-      return;
-    }
-    if (now2 === "gone") {
-      this.end(inst.stopPeriod, "the probe folder was removed");
-      return;
-    }
-    if (!sameIdentity(now2, inst.identity)) {
-      this.end(inst.stopPeriod, "the probe folder was replaced");
-      return;
-    }
-    const d = this.current;
-    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
-      this.stalls++;
-      this.move({
-        kind: "stalled",
-        missedSince: d.missedSince ?? d.unreported[0]
-      });
-    }
-    await this.probe(inst);
-  }
-  // A delivering watch awaits the probe; a stalled one awaits none in
-  // particular, since any report recovers it. A write that lands while
-  // unmeasured measures again, awaiting that probe, so a transient failure
-  // (a full disk) measures once it clears. A write that fails is unmeasured
-  // with its error: it tests no watch. A probe still in flight when the
-  // instrument ends or closes judges nothing.
-  async probe(inst) {
-    const at = this.clock.now();
-    const before = this.current;
-    if (before.kind === "delivering") {
-      this.current = { ...before, unreported: [...before.unreported, at] };
-    }
-    try {
-      await fs_default.promises.writeFile(
-        import_node_path7.default.join(inst.folder, PROBE_FILE),
-        String(at)
-      );
-    } catch (e) {
-      this.probeFailures++;
-      const d2 = this.current;
-      if (this.instrument !== inst || d2.kind === "unmeasured") return;
-      this.move({
-        kind: "unmeasured",
-        since: at,
-        reason: `the probe could not be written: ${e.message}`,
-        missedSince: d2.missedSince ?? at
-      });
-      return;
-    }
-    this.probes++;
-    const d = this.current;
-    if (this.instrument !== inst || d.kind !== "unmeasured") return;
-    this.move({
-      kind: "delivering",
-      unreported: [at],
-      missedSince: d.missedSince
-    });
-  }
-  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
-  // OS refuses an immediate retry the way it refused the first (limits,
-  // permissions). Anything else it reports proves delivery.
-  heard(inst, heard) {
-    if (this.instrument !== inst) return;
-    if (heard.kind === "failed") {
-      this.end(
-        inst.stopPeriod,
-        `the probe folder's watch failed: ${heard.reason}`
-      );
-      return;
-    }
-    const d = this.current;
-    const delivering = {
-      kind: "delivering",
-      unreported: [],
-      missedSince: null
-    };
-    if (d.missedSince === null) {
-      this.move(delivering);
-      return;
-    }
-    this.current = delivering;
-    this.catchUps++;
-    this.logger(
-      "info",
-      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
-    );
-    this.notify({ kind: "caught-up", since: d.missedSince });
-  }
-  // [LAW:no-silent-failure] An ended instrument holds no watch and never
-  // measures again, so whatever ended it, only a restart can.
-  end(stopPeriod, reason) {
-    const inst = this.instrument;
-    if (inst.kind === "probing") inst.handle.release();
-    this.instrument = { kind: "ended", stopPeriod };
-    const at = this.clock.now();
-    this.move({
-      kind: "unmeasured",
-      since: at,
-      reason: `${reason}; restart the daemon`,
-      missedSince: this.current.missedSince ?? at
-    });
-  }
-  // [LAW:nothing-unseen] One line on each change of state, none per period.
-  move(next) {
-    const was = label(this.current);
-    this.current = next;
-    if (label(next) === was) return;
-    switch (next.kind) {
-      case "delivering":
-        this.logger("info", "file events delivering");
-        break;
-      case "stalled":
-        this.logger(
-          "warn",
-          `file events stalled since=${iso(next.missedSince)}`
-        );
-        break;
-      case "unmeasured":
-        this.logger(
-          "warn",
-          `file events unmeasured since=${iso(next.since)} reason=${JSON.stringify(next.reason)}`
-        );
-        break;
-    }
-    this.notify({ kind: "moved" });
-  }
-  notify(notice) {
-    for (const listener of [...this.listeners]) listener(notice);
-  }
-};
-var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
-
-// src/utils/keyed-source.ts
-init_globals();
-
-// src/utils/period.ts
-init_globals();
-function periodOf(every, outcome) {
-  return outcome.kind === "failed" ? every.failedMs : every.okMs;
-}
-function backedOffMs(every, failures, ceilingMs) {
-  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
-}
-var Period = class {
-  constructor(tick, clock) {
-    this.tick = tick;
-    this.clock = clock;
-  }
-  tick;
-  clock;
-  stop = null;
-  state = "released";
-  last = null;
-  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
-  // kept from earlier). `periodMs` is chosen by the caller from the read's
-  // outcome (a failed PR lookup is retried sooner than a found one).
-  landed(periodMs, at = this.clock.monotonic()) {
-    this.last = { at, periodMs };
-    this.schedule();
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const next = held ? "held" : "released";
-    if (next === this.state) return;
-    this.state = next;
-    this.schedule();
-  }
-  dispose() {
-    this.state = "disposed";
-    this.cancel();
-  }
-  schedule() {
-    this.cancel();
-    if (this.state !== "held" || this.last === null) return;
-    const wait = Math.max(
-      0,
-      this.last.at + this.last.periodMs - this.clock.monotonic()
-    );
-    this.stop = this.clock.after(
-      wait,
-      () => {
-        this.stop = null;
-        this.tick();
-      },
-      { unref: true }
-    );
-  }
-  cancel() {
-    this.stop?.();
-    this.stop = null;
-  }
-};
-
-// src/utils/keyed-source.ts
-var NO_WATCH = () => () => {
-};
-var KeyedSource = class {
-  constructor(spec) {
-    this.spec = spec;
-    this.refreshes = spec.ledger.declare({
-      name: spec.name,
-      scope: spec.scope,
-      refresh: ["first", "period", "change", "supersede"],
-      lines: spec.lines
-    });
-  }
-  spec;
-  entries = /* @__PURE__ */ new Map();
-  refreshes;
-  closed = false;
-  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
-  // home holds it until a declaration of the home's takes it no more, or the
-  // home is disposed, which keeps the entry for its next hold — and the lane
-  // reads it as it stands, never awaited and taking nothing. A key never read
-  // is created pending and read once, its first refresh.
-  //
-  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
-  // by that refresh — so its caller logs none. A declaration that THROWS is a
-  // bug none of those saw, reported by the session's declaration (declareLanes).
-  declare(holds2, input) {
-    if (this.closed)
-      return settledLane(failed(`${this.spec.name} closed`, "read"));
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
-    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
-    return { current: () => currentOf(entry) };
-  }
-  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
-  // the daemon itself is changing what this key reads (a click's move). The
-  // value is pending (`superseded`) and the read in flight is abandoned, so no
-  // draw after the click shows the value from before it. Every trigger of the
-  // key is held back until every supersede of it has resumed, so no read
-  // during the move stores the world from before it; the last resume starts
-  // one fresh read. A key never read is created for it, and its first read is
-  // that resume's.
-  supersede(input) {
-    if (this.closed) return () => {
-    };
-    const key = this.spec.keyOf(input);
-    const entry = this.touched(key) ?? this.created(key, input);
-    entry.superseding++;
-    renew(entry, "superseded");
-    this.abandon(entry);
-    entry.changed = false;
-    this.evict();
-    let resumed = false;
-    return () => {
-      if (resumed) return;
-      resumed = true;
-      entry.superseding--;
-      if (this.entries.get(entry.key) === entry)
-        this.refresh(entry, "supersede");
-    };
-  }
-  // The world changed under every held entry `affected` names (a watched file
-  // was written): each is read again, after the read in flight when one is
-  // out. An entry nobody holds is read when a hold returns to it.
-  changed(affected) {
-    for (const entry of this.entries.values()) {
-      if (affected(entry.input)) this.heard(entry);
-    }
-  }
-  // [LAW:single-enforcer] The one rule for a change under an entry, whether
-  // the owner's or the entry's own watch reports it: the entry owes a re-read
-  // (`owed`). One nobody holds keeps the debt for its hold's return, so a
-  // session back from idle never draws a write it missed while away.
-  heard(entry) {
-    entry.changed = true;
-    this.owed(entry);
-  }
-  // [LAW:no-ambient-temporal-coupling] The one place an owed change is read:
-  // whichever of a change, a landing or a hold's return finds the entry held
-  // and idle starts it, and starting any read pays the debt.
-  owed(entry) {
-    if (entry.changed && entry.holders > 0 && entry.flight === null)
-      this.refresh(entry, "change");
-  }
-  // Whether some home holds an entry `match` names now.
-  isHeld(match) {
-    for (const entry of this.entries.values()) {
-      if (entry.holders > 0 && match(entry.input)) return true;
-    }
-    return false;
-  }
-  stats() {
-    let held = 0;
-    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
-    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
-    return {
-      entries: this.entries.size,
-      held,
-      refreshes,
-      failures,
-      abandoned,
-      lastMs
-    };
-  }
-  // Ends every entry's period: a held entry's period re-arms on every landing,
-  // so an owner that is not closed keeps its timers for good.
-  close() {
-    this.closed = true;
-    for (const entry of [...this.entries.values()]) this.drop(entry);
-  }
-  // LRU touch: re-inserting moves the entry to the newest end.
-  touched(key) {
-    const entry = this.entries.get(key);
-    if (entry === void 0) return void 0;
-    this.entries.delete(key);
-    this.entries.set(key, entry);
-    return entry;
-  }
-  // In place before any read, so a read's answer finds its entry stored.
-  created(key, input) {
-    const entry = {
-      key,
-      input,
-      reading: unread(),
-      holders: 0,
-      flight: null,
-      changed: false,
-      superseding: 0,
-      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
-        period: () => this.refresh(entry, "period"),
-        holdReturned: () => this.refresh(entry, "change")
-      }),
-      unwatch: () => {
-      }
-    };
-    this.entries.set(key, entry);
-    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
-    return entry;
-  }
-  firstRead(entry) {
-    this.refresh(entry, "first");
-    return entry;
-  }
-  refresh(entry, by) {
-    if (entry.superseding > 0) return;
-    if (entry.flight !== null) {
-      entry.changed ||= by === "change";
-      return;
-    }
-    entry.changed = false;
-    const flight = new AbortController();
-    entry.flight = flight;
-    const startedAt = this.spec.clock.monotonic();
-    void attempt(() => this.spec.read(entry.input, flight.signal, by)).then((outcome) => {
-      const fields2 = this.spec.fields(entry.input, entry.holders);
-      const ms = elapsedMs(this.spec.clock, startedAt);
-      if (flight.signal.aborted) {
-        this.refreshes.abandoned(fields2, by, ms);
-        return;
-      }
-      try {
-        this.refreshes.recorded(fields2, by, outcome, ms);
-      } finally {
-        this.store(entry, outcome);
-      }
-    }).catch((e) => {
-      this.spec.logger(
-        "error",
-        `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`
-      );
-    });
-  }
-  store(entry, outcome) {
-    entry.flight = null;
-    try {
-      settle(entry, outcome);
-    } finally {
-      entry.revisit.landed(outcome);
-      this.owed(entry);
-    }
-  }
-  hold(entry) {
-    entry.holders++;
-    entry.revisit.hold(true);
-    this.owed(entry);
-    this.evict();
-    return () => {
-      entry.holders--;
-      entry.revisit.hold(entry.holders > 0);
-      this.evict();
-    };
-  }
-  // A held entry is never evicted, so held entries are bounded by their
-  // holders (the render cache's budget).
-  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
-  // supersede) and by every release, so an entry over the bound is dropped
-  // the moment nobody holds it. An entry mid-supersede is kept like a held
-  // one: dropped, a hold returning during the move would read the world
-  // from before it.
-  evict() {
-    for (const entry of [...this.entries.values()]) {
-      if (this.entries.size <= this.spec.maxEntries) return;
-      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
-    }
-  }
-  drop(entry) {
-    this.entries.delete(entry.key);
-    this.abandon(entry);
-    entry.unwatch();
-    entry.revisit.dispose();
-    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
-  }
-  // The read out, if one is, stores nothing and is told to stop.
-  abandon(entry) {
-    const flight = entry.flight;
-    entry.flight = null;
-    flight?.abort(new Error(`${this.spec.name} read abandoned`));
-  }
-};
-function revisitOf(every, clock, read2) {
-  if (every === null) return new HoldReturn(read2.holdReturned);
-  const period = new Period(read2.period, clock);
-  return {
-    landed: (outcome) => period.landed(periodOf(every, outcome)),
-    hold: (held) => period.hold(held),
-    dispose: () => period.dispose()
-  };
-}
-var HoldReturn = class {
-  constructor(reread) {
-    this.reread = reread;
-  }
-  reread;
-  state = "released";
-  answered = false;
-  landed() {
-    this.answered = true;
-  }
-  hold(held) {
-    if (this.state === "disposed") return;
-    const returned2 = held && this.state === "released" && this.answered;
-    this.state = held ? "held" : "released";
-    if (returned2) this.reread();
-  }
-  dispose() {
-    this.state = "disposed";
-  }
-};
-function attempt(read2) {
-  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
-  try {
-    return read2().catch(threw2);
-  } catch (e) {
-    return Promise.resolve(threw2(e));
-  }
-}
-
-// src/utils/refresh-ledger.ts
-init_globals();
-var REFRESH_TRIGGERS = [
-  "first",
-  "period",
-  "change",
-  "supersede"
-];
-var RefreshLedger = class {
-  constructor(logger = quietLogger) {
-    this.logger = logger;
-  }
-  logger;
-  tallies = /* @__PURE__ */ new Map();
-  declare(declaration) {
-    const key = `${declaration.scope}/${declaration.name}`;
-    const tally = this.tallies.get(key) ?? {
-      name: declaration.name,
-      scope: declaration.scope,
-      refreshes: {},
-      failures: 0,
-      abandoned: 0,
-      lastMs: null
-    };
-    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
-    this.tallies.set(key, tally);
-    return new Refreshes(tally, new Set(declaration.lines), this.logger);
-  }
-  // Every source declared, by scope then name.
-  snapshot() {
-    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
-  }
-  // Every source's refreshes summed by trigger: what the feed summary
-  // compares across its window.
-  totals() {
-    const sum2 = Object.fromEntries(
-      REFRESH_TRIGGERS.map((t2) => [t2, 0])
-    );
-    for (const tally of this.tallies.values()) {
-      for (const trigger of REFRESH_TRIGGERS) {
-        sum2[trigger] += tally.refreshes[trigger] ?? 0;
-      }
-    }
-    return sum2;
-  }
-};
-var Refreshes = class {
-  constructor(tally, lines2, logger) {
-    this.tally = tally;
-    this.lines = lines2;
-    this.logger = logger;
-  }
-  tally;
-  lines;
-  logger;
-  // This source's record as the ledger holds it: what its owner's own stats
-  // report, a view of the one tally rather than a count of its own.
-  record() {
-    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
-  }
-  // `fields` is the refreshed entry's logfmt identity.
-  recorded(fields2, by, outcome, ms) {
-    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
-    this.tally.lastMs = ms;
-    if (outcome.kind === "failed") this.tally.failures++;
-    const failure2 = outcome.kind === "failed";
-    if (!failure2 && !this.lines.has(by)) return;
-    const why2 = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
-    this.logger(
-      failure2 ? "warn" : "info",
-      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
-    );
-  }
-  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
-  // own count: a key that moves on every tick aborts a read on every tick,
-  // which no refresh or failure tally would show.
-  abandoned(fields2, by, ms) {
-    this.tally.abandoned++;
-    this.logger(
-      "info",
-      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
-    );
-  }
-};
-
-// src/daemon/source-runs.ts
-var SHELL_READ_TIMEOUT_MS = 1e4;
-var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
-function shellReader(launcher, read2, env2, signal) {
-  const { command, cwd: cwd2 } = read2;
-  return {
-    where: whereOf(read2),
-    read: async () => {
-      const r = await launcher.launch({
-        bin: "/bin/sh",
-        args: ["-c", command],
-        cwd: cwd2,
-        // [LAW:one-source-of-truth] Exactly the variables the run's identity
-        // carries, so nothing its digest does not hold can move its output.
-        environment: env2,
-        category: "user-shell",
-        timeoutMs: SHELL_READ_TIMEOUT_MS,
-        signal
-      });
-      if (r.ok) return ok(r.stdout);
-      return failed(
-        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
-        "read"
-      );
-    }
-  };
-}
-function fileReader(files, filePath2, readMode, signal) {
-  return {
-    where: whereOf({ kind: "file", path: filePath2, readMode }),
-    read: async () => {
-      const read2 = await files.read(filePath2, signal);
-      if (read2.kind === "text")
-        return ok(
-          readMode === "first-line" ? read2.text.split(/\r?\n/)[0] ?? "" : read2.text
-        );
-      return failed(
-        signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${read2.code ?? read2.message}): ${filePath2}`,
-        "read"
-      );
-    }
-  };
-}
-function readerOf(files, launcher, { run: { identity: identity2 }, env: env2 }, signal) {
-  const { read: read2 } = identity2;
-  switch (read2.kind) {
-    case "shell":
-      return shellReader(launcher, read2, env2, signal);
-    case "file":
-      return fileReader(files, read2.path, read2.readMode, signal);
-  }
-}
-function parsed(read2, parser, where) {
-  if (read2.kind !== "ok") return read2;
-  const out = parser(read2.value);
-  return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
-}
-var PathWatches = class {
-  constructor(watchers, fileEvents) {
-    this.watchers = watchers;
-    this.fileEvents = fileEvents;
-    this.releaseDelivery = fileEvents.subscribe(
-      (notice) => this.noticed(notice)
-    );
-  }
-  watchers;
-  fileEvents;
-  entries = /* @__PURE__ */ new Map();
-  releaseDelivery;
-  subscribe(filePath2, callback, onFault) {
-    const entry = this.entries.get(filePath2) ?? this.arm(filePath2);
-    entry.subscribers.set(callback, onFault);
-    onFault(this.faultOf(filePath2, entry));
-    return () => this.unsubscribe(filePath2, callback);
-  }
-  arm(filePath2) {
-    const watch2 = derived(filePath2);
-    const entry = {
-      bound: {
-        derived: watch2,
-        held: this.watchers.follow(
-          null,
-          watch2,
-          () => this.heard(filePath2, entry)
-        ).watch
-      },
-      subscribers: /* @__PURE__ */ new Map()
-    };
-    this.entries.set(filePath2, entry);
-    return entry;
-  }
-  // Derive where the path can change, follow it, and say the watch's fault.
-  // A new key acquires its watch, keeping every directory both keys name.
-  rederive(filePath2, entry) {
-    const paths2 = derived(filePath2);
-    const { watch: watch2 } = this.watchers.follow(
-      entry.bound.held,
-      paths2,
-      () => this.heard(filePath2, entry)
-    );
-    entry.bound = { derived: paths2, held: watch2 };
-    this.report(filePath2, entry);
-  }
-  // A window re-derives and re-reads: every path it watches is one the
-  // content can change at.
-  heard(filePath2, entry) {
-    this.rederive(filePath2, entry);
-    for (const cb of entry.subscribers.keys()) cb();
-  }
-  report(filePath2, entry) {
-    const fault = this.faultOf(filePath2, entry);
-    for (const onFault of entry.subscribers.values()) onFault(fault);
-  }
-  // The watch's fault, derived from what it holds now and whether the OS is
-  // delivering what it would hear. A stall is the fault only of a watch that
-  // rides the delivery owner's stream: a file is polled and keeps refreshing
-  // through one, and a directory watched whole does not.
-  faultOf(filePath2, entry) {
-    const { handle } = entry.bound.held;
-    return watchFault(
-      `watch_file ${filePath2}`,
-      entry.bound,
-      handle.ridesStream ? stallReason(this.fileEvents.delivery()) : null
-    );
-  }
-  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
-  // may have missed events: each watch re-derives where its path can change,
-  // since a directory may have appeared unheard, which says its fault, and
-  // every subscriber re-reads as if its own watch had reported. Both together,
-  // so no entry drops a stall's fault without reading again, and in one
-  // action, so one change of delivery is one publish of every entry's.
-  noticed(notice) {
-    switch (notice.kind) {
-      case "period":
-        return;
-      case "moved":
-      case "caught-up":
-        runInAction(() => {
-          for (const [filePath2, entry] of this.entries)
-            this.heard(filePath2, entry);
-        });
-        return;
-    }
-  }
-  unsubscribe(filePath2, callback) {
-    const entry = this.entries.get(filePath2);
-    if (!entry) return;
-    entry.subscribers.delete(callback);
-    if (entry.subscribers.size === 0) {
-      entry.bound.held.handle.release();
-      this.entries.delete(filePath2);
-    }
-  }
-  dispose() {
-    this.releaseDelivery();
-    for (const entry of this.entries.values())
-      entry.bound.held.handle.release();
-    this.entries.clear();
-  }
-  size() {
-    return this.entries.size;
-  }
-};
-var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
-var SourceRuns = class {
-  // File-reading policies in the same host share this filesystem edge.
-  files = new SourceFiles();
-  byKind;
-  watchMgr;
-  // Each watching entry's fault, by its run's digest, for the lanes that read
-  // it.
-  faults = observable.map(void 0, {
-    deep: false
-  });
-  constructor(deps) {
-    const logger = deps.logger ?? quietLogger;
-    const ledger = deps.ledger ?? new RefreshLedger(logger);
-    this.watchMgr = new PathWatches(
-      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
-      deps.fileEvents ?? NO_FILE_EVENTS
-    );
-    const source = (kind) => new KeyedSource({
-      name: `source.${kind}`,
-      scope: "daemon",
-      keyOf: (run3) => run3.digest,
-      // [LAW:nothing-unseen] Its declaration's digest beside its own, so
-      // the entry is found from the session's subscriptions that name it.
-      fields: ({ digest: digest2, run: run3 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run3.digest)} where=${valueOf(whereOf(run3.identity.read))} sharedBy=${holders}`,
-      // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
-      // readers through this one function; text/regex/json are three
-      // parsers through it.
-      read: async (run3, signal) => {
-        const reader = readerOf(this.files, deps.launcher, run3, signal);
-        return parsed(await reader.read(), run3.run.parser, reader.where);
-      },
-      every: ({
-        run: {
-          identity: { refresh }
-        }
-      }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
-      watch: ({ digest: digest2, run: { identity: identity2 } }, changed) => {
-        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
-        const unsubscribe = this.watchMgr.subscribe(
-          identity2.refresh.path,
-          changed,
-          (fault) => runInAction(() => {
-            if (fault === null) this.faults.delete(digest2);
-            else this.faults.set(digest2, fault);
-          })
-        );
-        return () => {
-          unsubscribe();
-          runInAction(() => this.faults.delete(digest2));
-        };
-      },
-      // [LAW:no-ambient-temporal-coupling] A run lives while it is held:
-      // the last release drops it, ending its child, its period and its
-      // watch, so a key that moves every tick leaves no child behind.
-      maxEntries: 0,
-      lines: REFRESH_TRIGGERS,
-      logger,
-      ledger,
-      clock: deps.clock
-    });
-    this.byKind = { shell: source("shell"), file: source("file") };
-  }
-  // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
-  // the session's run of an accepted declaration, created and read once on
-  // its first hold, and the lane reads it as it stands. A refused run reaches
-  // no reader: its lane answers its refusal for good, and the refusal is its
-  // standing fault, so the bar draws the source's fallback beside a ⚠ that
-  // says why. A shell run for a session whose environment the host does not
-  // hold is refused the same way: the host's own is never a session's.
-  declare(holds2, judged, environment) {
-    const { digest: digest2 } = judged;
-    const run3 = sessionRunOf(judged, environment);
-    if (run3.kind === "failed") {
-      const lane2 = settledLane(failed(run3.reason, "read"));
-      return { digest: digest2, current: () => lane2.current(), fault: () => run3.reason };
-    }
-    const held = run3.value;
-    const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
-    return {
-      digest: digest2,
-      current: () => lane.current(),
-      fault: () => this.faults.get(held.digest) ?? null
-    };
-  }
-  stats() {
-    return {
-      shell: this.byKind.shell.stats(),
-      file: this.byKind.file.stats(),
-      watches: this.watchMgr.size()
-    };
-  }
-  // Drops every entry, ending its read, its period and its watch.
-  close() {
-    this.byKind.shell.close();
-    this.byKind.file.close();
-    this.watchMgr.dispose();
-  }
-};
-function declareRuns(sourceRuns, holds2, runs, environment, take) {
-  return new Map(
-    [...runs].map(([digest2, judged]) => [
-      digest2,
-      take(digest2, () => sourceRuns.declare(holds2, judged, environment))
-    ])
-  );
-}
-function sessionRunOf(judged, environment) {
-  if (judged.kind === "refused")
-    return { kind: "failed", reason: `refused: ${judged.reason}` };
-  const { run: run3 } = judged;
-  const { read: read2 } = run3.identity;
-  if (read2.kind === "file")
-    return { kind: "ok", value: { digest: run3.digest, run: run3, env: {} } };
-  if (environment.kind === "failed")
-    return { kind: "failed", reason: `not run: ${environment.reason}` };
-  const session = environment.value;
-  const env2 = Object.fromEntries(
-    read2.env.flatMap((name) => {
-      const value = ownValue(session, name);
-      return value === void 0 ? [] : [[name, value]];
-    })
-  );
-  return {
-    kind: "ok",
-    value: { digest: digestOf({ run: run3.digest, env: env2 }), run: run3, env: env2 }
-  };
-}
-
-// src/daemon/readings.ts
-function settingsPathOf(hints, home) {
-  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
-}
-function cacheTallyFacts(deps) {
-  const tally = (t2) => `${t2.size}/${t2.hits}h/${t2.misses}m`;
-  return {
-    git: tally(deps.gitProvider.getStats()),
-    usage: tally(deps.usageStore.getStats())
-  };
-}
-function settledLanes(outcome, { plugins: plugins2, runs, env: env2 }) {
-  const lane = settledLane(outcome);
-  return {
-    git: lane,
-    tmux: lane,
-    hostName: lane,
-    hostUser: lane,
-    today: lane,
-    transcript: lane,
-    sources: new Map([...plugins2.keys()].map((name) => [name, lane])),
-    runs: new Map(
-      [...runs.keys()].map((digest2) => [
-        digest2,
-        { digest: digest2, current: () => lane.current(), fault: () => null }
-      ])
-    ),
-    env: new Map(env2.map((name) => [name, lane]))
-  };
-}
-function gitAt({
-  cwd: cwd2,
-  hookData: hookData2
-}) {
-  return [
-    cwd2 ?? hookData2.workspace?.current_dir,
-    hookData2.workspace?.project_dir
-  ];
-}
-function declareLanes(owners, holds2, facts, sources) {
-  const { environment } = facts;
-  const pane = facts.hints.tmux ?? null;
-  const faults = [];
-  const declare = (lane, take) => {
-    try {
-      return take();
-    } catch (e) {
-      faults.push(`${lane}: ${inspect(e)}`);
-      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
-    }
-  };
-  const lanes = {
-    git: declare(
-      "git",
-      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
-    ),
-    tmux: pane === null ? settledLane(ABSENT) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
-    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
-    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
-    today: declare(
-      "today",
-      () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
-    ),
-    transcript: declare(
-      "transcript",
-      () => owners.transcriptLanes.declare(holds2, {
-        session: facts.hookData.session_id,
-        transcript: facts.hookData.transcript_path,
-        settings: settingsPathOf(facts.hints, owners.home)
-      })
-    ),
-    // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
-    // the session the checkpoint parsed).
-    sources: new Map(
-      [...sources.plugins].map(([name, folder]) => [
-        name,
-        declare(
-          name,
-          () => owners.managedStorage.declare(
-            holds2,
-            folder,
-            facts.hookData.session_id
-          )
-        )
-      ])
-    ),
-    // A run whose declaration threw answers that failure and watches nothing;
-    // a declared run's own lane carries its watch's fault.
-    runs: declareRuns(
-      owners.sourceRuns,
-      holds2,
-      sources.runs,
-      environment,
-      (digest2, take) => ({
-        digest: digest2,
-        fault: () => null,
-        ...declare(`run ${shortDigest(digest2)}`, take)
-      })
-    ),
-    // [LAW:one-source-of-truth] Each named variable as the session's
-    // environment holds it: set, unset, or why the host holds none.
-    env: new Map(
-      sources.env.map((name) => [
-        name,
-        settledLane(
-          environment.kind === "failed" ? failed(environment.reason, "read") : variableOf(environment.value, name)
-        )
-      ])
-    )
-  };
-  return { lanes, faults };
-}
-function readingsOf(inputs, lanes) {
-  const { deps } = inputs;
-  const sessionId2 = inputs.hookData.session_id;
-  const entry = lanes.transcript.current();
-  const read2 = (lane, value, name = lane) => {
-    if (entry.kind === "failed") return entry;
-    const fault = deps.faults.of(sessionId2, lane);
-    if (fault !== void 0) return fault;
-    try {
-      return value();
-    } catch (e) {
-      deps.log("error", `${name} read threw: ${inspect(e)}`);
-      return failed(`${name}: ${String(e)}`, "read");
-    }
-  };
-  const laneReadings = {
-    git: lanes.git.current(),
-    usage: read2("session", () => deps.usageStore.usageOf(sessionId2)),
-    context: read2("context", () => deps.contextProvider.tokensOf(sessionId2)),
-    metrics: read2("metrics", () => deps.metricsProvider.foldOf(sessionId2)),
-    activity: read2(
-      "activity",
-      () => deps.activityProvider.activityOf(sessionId2)
-    ),
-    tmuxSession: lanes.tmux.current(),
-    hostName: lanes.hostName.current(),
-    hostUser: lanes.hostUser.current(),
-    cache: read2("cache", () => deps.cacheExpiry.expiryOf(sessionId2)),
-    speed: read2("speed", () => deps.usageStore.speedOf(sessionId2)),
-    autoCompact: read2(
-      "autocompact",
-      () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
-    ),
-    sources: new Map(
-      [...lanes.sources].map(([name, lane]) => [name, lane.current()])
-    ),
-    runs: new Map(
-      [...lanes.runs].map(([digest2, lane]) => [
-        digest2,
-        { reading: lane.current(), fault: lane.fault() }
-      ])
-    ),
-    env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()]))
-  };
-  return {
-    lanes: laneReadings,
-    // The session's own days are its record's, so its lane's failure is
-    // today's.
-    today: read2(
-      "session",
-      () => todayReading(lanes.today, deps.usageStore, sessionId2),
-      "today"
-    ),
-    faults: REFRESH_LANES.flatMap((lane) => {
-      const fault = deps.faults.of(sessionId2, lane);
-      return fault === void 0 ? [] : [{ kind: "lane", lane, reason: fault.reason }];
-    })
-  };
-}
-function todayReading(lane, usage, sessionId2) {
-  const set2 = lane.current();
-  if (set2.kind !== "ok") return set2;
-  const own2 = usage.daysOutside(sessionId2, set2.value.roots);
-  if (own2.kind === "failed") return own2;
-  return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
-}
-
 // src/daemon/foundations/render-answers.ts
 init_globals();
 
 // src/daemon/foundations/protocol.ts
 init_globals();
-var import_node_path8 = __toESM(require_path_browserify(), 1);
+var import_node_path6 = __toESM(require_path_browserify(), 1);
 
 // src/terminal-hint.ts
 init_globals();
@@ -36771,7 +31007,7 @@ function sanitizeTerminalEnv(v) {
   return set2.every((name) => typeof o[name] === "string" && o[name] !== "") ? Object.fromEntries(set2.map((name) => [name, o[name]])) : void 0;
 }
 function sanitizeAbsolutePath(v) {
-  return typeof v === "string" && import_node_path8.default.isAbsolute(v) ? v : void 0;
+  return typeof v === "string" && import_node_path6.default.isAbsolute(v) ? v : void 0;
 }
 function sanitizeTmux(v) {
   if (v === null) return null;
@@ -37646,14 +31882,14 @@ function cutCells(text4, positions) {
   let lead = 0;
   let at = 0;
   let col = 0;
-  let next = 0;
+  let next2 = 0;
   for (const glyph of clustersFrom(text4, asCodePoint(0))) {
-    if (next === positions.length)
+    if (next2 === positions.length)
       break;
     const end = col + cellLen(glyph);
     let from = col;
-    for (; next < positions.length && positions[next] < end; next++) {
-      const cut = positions[next];
+    for (; next2 < positions.length && positions[next2] < end; next2++) {
+      const cut = positions[next2];
       pieces.push(" ".repeat(lead) + text4.slice(start, at) + " ".repeat(cut - from));
       lead = 0;
       start = cut === col ? at : at + glyph.length;
@@ -38267,7 +32503,7 @@ var ColorSpec = class _ColorSpec {
       [new _ColorSpec(`color(${slot})`, depth === ColorDepth.WINDOWS ? depth : ColorDepth.STANDARD, slot), theme24.ansiColors.get(slot)],
       ...depth === ColorDepth.EIGHT_BIT ? [cubeCandidate(value)] : []
     ];
-    return candidates.reduce((best, next) => rgbDistance(next[1], value) < rgbDistance(best[1], value) ? next : best)[0];
+    return candidates.reduce((best, next2) => rgbDistance(next2[1], value) < rgbDistance(best[1], value) ? next2 : best)[0];
   }
   /**
    * Every colour `depth` writes by index, each with the colour a terminal
@@ -43734,9 +37970,9 @@ function transposePalette(palette, key, name) {
     return new Palette(name ?? palette.name, palette.dark, palette.mapRoles((colour) => colour));
   }
   const anchorKey = { ...key, hueShift: 0 };
-  const next = palette.mapRoles((colour, role) => Oklch.fromRgba(colour).applyKey(isAnchored(role) ? anchorKey : key).toRgba());
-  const newDark = Oklch.fromRgba(next.background).l < 0.5;
-  return new Palette(name ?? palette.name, newDark, next);
+  const next2 = palette.mapRoles((colour, role) => Oklch.fromRgba(colour).applyKey(isAnchored(role) ? anchorKey : key).toRgba());
+  const newDark = Oklch.fromRgba(next2.background).l < 0.5;
+  return new Palette(name ?? palette.name, newDark, next2);
 }
 
 // node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/themes/ramp.js
@@ -44492,13 +38728,13 @@ function parseStyleDefinition(definition) {
     const token = tokens[i2];
     if (token === "not") {
       i2++;
-      const next = tokens[i2];
-      if (!next) {
+      const next2 = tokens[i2];
+      if (!next2) {
         throw new StyleSyntaxError(`Expected attribute after "not" in style definition`);
       }
-      const attrName = ATTRIBUTE_SHORT_ALIASES[next] ?? next;
+      const attrName = ATTRIBUTE_SHORT_ALIASES[next2] ?? next2;
       if (!ATTRIBUTE_SET.has(attrName)) {
-        throw new StyleSyntaxError(`Invalid attribute: "${next}"${nearMiss(next, ATTRIBUTE_NAMES)}`);
+        throw new StyleSyntaxError(`Invalid attribute: "${next2}"${nearMiss(next2, ATTRIBUTE_NAMES)}`);
       }
       opts[attrName] = false;
       i2++;
@@ -44506,11 +38742,11 @@ function parseStyleDefinition(definition) {
     }
     if (token === "on") {
       i2++;
-      const next = tokens[i2];
-      if (!next) {
+      const next2 = tokens[i2];
+      if (!next2) {
         throw new StyleSyntaxError(`Expected color after "on" in style definition`);
       }
-      opts.bgcolor = parseStyleColor(next, "Invalid background color", COLOR_NAMES);
+      opts.bgcolor = parseStyleColor(next2, "Invalid background color", COLOR_NAMES);
       i2++;
       continue;
     }
@@ -45321,12 +39557,12 @@ var Segment = class _Segment {
       return [segments];
     const sections = [[]];
     let offset = 0;
-    let next = 0;
+    let next2 = 0;
     for (const segment of segments) {
       const end = offset + segment.cellLength;
       const inside = [];
-      for (; next < cuts.length && cuts[next] < end; next++) {
-        const cut = cuts[next];
+      for (; next2 < cuts.length && cuts[next2] < end; next2++) {
+        const cut = cuts[next2];
         if (cut <= offset)
           sections.push([]);
         else
@@ -45338,7 +39574,7 @@ var Segment = class _Segment {
         sections.push(piece.hasText ? [piece] : []);
       offset = end;
     }
-    for (; next < cuts.length; next++)
+    for (; next2 < cuts.length; next2++)
       sections.push([]);
     if (sections[sections.length - 1].length === 0)
       sections.pop();
@@ -45447,16 +39683,16 @@ function placedMeasure(animation, options) {
   return Measurement.get(options, drawable2(shown.value));
 }
 function membersOf(source) {
-  const copy3 = {};
+  const copy2 = {};
   for (let layer = source; layer !== null && layer !== Object.prototype; layer = Object.getPrototypeOf(layer)) {
     for (const key of Reflect.ownKeys(layer)) {
-      if (key === "constructor" || Object.hasOwn(copy3, key))
+      if (key === "constructor" || Object.hasOwn(copy2, key))
         continue;
       const member = Object.getOwnPropertyDescriptor(layer, key);
-      Object.defineProperty(copy3, key, member.get !== void 0 ? { enumerable: true, configurable: true, get: () => Reflect.get(source, key) } : { enumerable: true, configurable: true, writable: true, value: typeof member.value === "function" ? member.value.bind(source) : member.value });
+      Object.defineProperty(copy2, key, member.get !== void 0 ? { enumerable: true, configurable: true, get: () => Reflect.get(source, key) } : { enumerable: true, configurable: true, writable: true, value: typeof member.value === "function" ? member.value.bind(source) : member.value });
     }
   }
-  return copy3;
+  return copy2;
 }
 var Animation = {
   /**
@@ -46935,8 +41171,8 @@ var Strip = class {
     for (let i2 = 0; i2 < items.length; i2++) {
       const item = items[i2];
       yield* render(drawItem(item), row);
-      const next = i2 + 1 < items.length ? items[i2 + 1] : null;
-      yield* render(drawJoin(this.joiner, item, next, { index: i2 + 1 }), row);
+      const next2 = i2 + 1 < items.length ? items[i2 + 1] : null;
+      yield* render(drawJoin(this.joiner, item, next2, { index: i2 + 1 }), row);
     }
     yield Segment.line();
   }
@@ -47165,9 +41401,9 @@ var JoinedCell = class _JoinedCell {
       return void 0;
     const moved2 = (edge, move) => move === void 0 ? edge : new Style({ color: move.color ?? edge?.color, bgcolor: move.bgcolor ?? edge?.bgcolor });
     const edges = { left: moved2(this.edges.left, moves.left), right: moved2(this.edges.right, moves.right) };
-    const next = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
-    const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next : level.owner, inner: level.inner && restamp2(level.inner) });
-    return { colors: next.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
+    const next2 = new _JoinedCell(this.cell, this.parts, this.neighbours, edges, { ...this.options, colorSystem: depth });
+    const restamp2 = (level) => ({ ...level, owner: level.owner === this ? next2 : level.owner, inner: level.inner && restamp2(level.inner) });
+    return { colors: next2.style, style: style.withAnchor(style.anchor && restamp2(style.anchor)) };
   }
 };
 function joinedCell(anchor) {
@@ -48410,7 +42646,7 @@ function segmentsOf(drawn) {
     const i2 = index.get(at(row, col));
     return i2 === void 0 ? void 0 : regions.get(find(i2));
   };
-  const placeOf3 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
+  const placeOf2 = (region) => ({ row: (region.top + region.bottom) / 2, centre: (region.left + region.right + 1) / 2 });
   const pastSeam = (row, col, step4) => {
     let past = col;
     while (seams.has(at(row, past)))
@@ -48422,7 +42658,7 @@ function segmentsOf(drawn) {
     const width = own2?.width ?? 1;
     const beside2 = (own2?.seam === true ? [pastSeam(cell3.row, cell3.col - 1, -1), pastSeam(cell3.row, cell3.col + width, 1)] : []).find((region2) => region2?.hex === hex);
     const region = beside2 ?? regionAt(cell3.row, cell3.col);
-    return region === void 0 ? ownPlace(cell3, width) : placeOf3(region);
+    return region === void 0 ? ownPlace(cell3, width) : placeOf2(region);
   };
 }
 function wheel(curve, z) {
@@ -48442,7 +42678,7 @@ function wheel(curve, z) {
       return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
-    const placeOf3 = segmentsOf(drawn);
+    const placeOf2 = segmentsOf(drawn);
     return Animation.continuous((t2) => {
       const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
@@ -48457,7 +42693,7 @@ function wheel(curve, z) {
       };
       return (shown, cell3) => {
         const mine = { fg: own2(cell3.terminal.fg, shown.fg), bg: own2(cell3.terminal.bg, shown.bg) };
-        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf3(cell3, color.hex)) : color;
+        const turn = (color, ours, other, theirs) => ours ? write(color, boundWith(color, other, theirs), placeOf2(cell3, color.hex)) : color;
         return { ...shown, fg: turn(shown.fg, mine.fg, shown.bg, mine.bg), bg: turn(shown.bg, mine.bg, shown.fg, mine.fg) };
       };
     });
@@ -48982,6 +43218,4220 @@ var FlexStrip = class {
   }
 };
 
+// node_modules/.pnpm/mobx@7.0.6/node_modules/mobx/dist/mobx.mjs
+init_globals();
+var __MOBX_DEV__ = true;
+var niceErrors = {
+  0: `Invalid value for configuration 'enforceActions', expected 'never', 'always' or 'observed'`,
+  1(annotationType, key) {
+    return `Cannot apply '${annotationType}' to '${key.toString()}': Field not found.`;
+  },
+  /*
+  2(prop) {
+      return `invalid decorator for '${prop.toString()}'`
+  },
+  3(prop) {
+      return `Cannot decorate '${prop.toString()}': action can only be used on properties with a function value.`
+  },
+  4(prop) {
+      return `Cannot decorate '${prop.toString()}': computed can only be used on getter properties.`
+  },
+  */
+  5: "'keys()' can only be used on observable objects, arrays, sets and maps",
+  6: "'values()' can only be used on observable objects, arrays, sets and maps",
+  7: "'entries()' can only be used on observable objects, arrays and maps",
+  8: "'set()' can only be used on observable objects, arrays and maps",
+  9: "'remove()' can only be used on observable objects, arrays and maps",
+  10: "'has()' can only be used on observable objects, arrays and maps",
+  11: "'get()' can only be used on observable objects, arrays and maps",
+  12: `Invalid annotation`,
+  13: `Dynamic observable objects cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
+  14: "Intercept handlers should return nothing or a change object",
+  15: `Observable arrays cannot be frozen. If you're passing observables to 3rd party component/function that calls Object.freeze, pass copy instead: toJS(observable)`,
+  16: `Modification exception: the internal structure of an observable array was changed.`,
+  19(other) {
+    return "Cannot initialize from classes that inherit from Map: " + other.constructor.name;
+  },
+  20(other) {
+    return "Cannot initialize map from " + other;
+  },
+  21(dataStructure) {
+    return `Cannot convert to map from '${dataStructure}'`;
+  },
+  23: "It is not possible to get index atoms from arrays",
+  24(thing) {
+    return "Cannot obtain administration from " + thing;
+  },
+  25(property, name) {
+    return `the entry '${property}' does not exist in the observable map '${name}'`;
+  },
+  26: "please specify a property",
+  27(property, name) {
+    return `no observable property '${property.toString()}' found on the observable object '${name}'`;
+  },
+  28(thing) {
+    return "Cannot obtain atom from " + thing;
+  },
+  29: "Expecting some object",
+  30: "invalid action stack. did you forget to finish an action?",
+  31: "missing option for computed: get",
+  32(name, derivation) {
+    return `Cycle detected in computation ${name}: ${derivation}`;
+  },
+  33(name) {
+    return `The setter of computed value '${name}' is trying to update itself. Did you intend to update an _observable_ value, instead of the computed property?`;
+  },
+  34(name) {
+    return `[ComputedValue '${name}'] It is not possible to assign a new value to a computed value.`;
+  },
+  35: "There are multiple, different versions of MobX active. Make sure MobX is loaded only once or use `configure({ isolateGlobalState: true })`",
+  36: "isolateGlobalState should be called before MobX is running any reactions",
+  37(method) {
+    return `[mobx] \`observableArray.${method}()\` mutates the array in-place, which is not allowed inside a derivation. Use \`array.slice().${method}()\` instead`;
+  },
+  38: "'ownKeys()' can only be used on observable objects",
+  39: "'defineProperty()' can only be used on observable objects",
+  40(length) {
+    return "Out of range: " + length;
+  },
+  41(other) {
+    return "Cannot initialize set from " + other;
+  },
+  42(key) {
+    return `Invalid index: '${key}'`;
+  },
+  43(annotationType, name, kind) {
+    return `Cannot apply '${annotationType}' to '${name}' (kind: ${kind}):
+'${annotationType}' can only be used on properties with a function value.`;
+  },
+  44(annotationType) {
+    return `'${annotationType}' can only be used with 'makeObservable'`;
+  }
+};
+var errors = __MOBX_DEV__ ? niceErrors : {};
+function die(error, ...args) {
+  if (__MOBX_DEV__) {
+    let e = typeof error === "string" ? error : errors[error];
+    if (typeof e === "function") e = e.apply(null, args);
+    throw new Error(`[MobX] ${e}`);
+  }
+  throw new Error(`[MobX] minified error nr: ${error}${args.length ? " " + args.map(String).join(",") : ""}. See mobx.js.org/errors`);
+}
+var assign = Object.assign;
+var getDescriptor = Object.getOwnPropertyDescriptor;
+var defineProperty = Object.defineProperty;
+var objectPrototype = Object.prototype;
+var EMPTY_ARRAY = [];
+Object.freeze(EMPTY_ARRAY);
+var EMPTY_OBJECT = {};
+Object.freeze(EMPTY_OBJECT);
+var plainObjectString = /* @__PURE__ */ Object.toString();
+function getNextId() {
+  return ++globalState.mobxGuid;
+}
+function once(func) {
+  let invoked = false;
+  return function() {
+    if (invoked) {
+      return;
+    }
+    invoked = true;
+    return func.apply(this, arguments);
+  };
+}
+var noop = () => {
+};
+function isFunction(fn) {
+  return typeof fn === "function";
+}
+function isStringish(value) {
+  const t2 = typeof value;
+  switch (t2) {
+    case "string":
+    case "symbol":
+    case "number":
+      return true;
+  }
+  return false;
+}
+function isObject(value) {
+  return value !== null && typeof value === "object";
+}
+function isPlainObject(value) {
+  if (!isObject(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto == null) {
+    return true;
+  }
+  const protoConstructor = hasProp(proto, "constructor") && proto.constructor;
+  return typeof protoConstructor === "function" && protoConstructor.toString() === plainObjectString;
+}
+function isGenerator(obj) {
+  const constructor = obj == null ? void 0 : obj.constructor;
+  if (!constructor) {
+    return false;
+  }
+  if ("GeneratorFunction" === constructor.name || "GeneratorFunction" === constructor.displayName) {
+    return true;
+  }
+  return false;
+}
+function addHiddenProp(object, propName, value) {
+  defineProperty(object, propName, {
+    enumerable: false,
+    writable: true,
+    configurable: true,
+    value
+  });
+}
+function addHiddenFinalProp(object, propName, value) {
+  defineProperty(object, propName, {
+    enumerable: false,
+    writable: false,
+    configurable: true,
+    value
+  });
+}
+function createInstanceofPredicate(name, theClass) {
+  const propName = "isMobX" + name;
+  theClass.prototype[propName] = true;
+  return function(x) {
+    return isObject(x) && x[propName] === true;
+  };
+}
+function isES6Map(thing) {
+  return thing != null && Object.prototype.toString.call(thing) === "[object Map]";
+}
+function isPlainES6Map(thing) {
+  const mapProto = Object.getPrototypeOf(thing);
+  const objectProto = Object.getPrototypeOf(mapProto);
+  const nullProto = Object.getPrototypeOf(objectProto);
+  return nullProto === null;
+}
+function isES6Set(thing) {
+  return thing != null && Object.prototype.toString.call(thing) === "[object Set]";
+}
+function getPlainObjectKeys(object) {
+  const keys2 = Object.keys(object);
+  const symbols2 = Object.getOwnPropertySymbols(object);
+  if (!symbols2.length) {
+    return keys2;
+  }
+  return [...keys2, ...symbols2.filter((s) => objectPrototype.propertyIsEnumerable.call(object, s))];
+}
+var ownKeys2 = Reflect.ownKeys;
+function stringifyKey(key) {
+  if (typeof key === "string") {
+    return key;
+  }
+  if (typeof key === "symbol") {
+    return key.toString();
+  }
+  return new String(key).toString();
+}
+function toPrimitive(value) {
+  return value === null ? null : typeof value === "object" ? "" + value : value;
+}
+function hasProp(target, prop) {
+  return objectPrototype.hasOwnProperty.call(target, prop);
+}
+var getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
+function getFlag(flags, mask) {
+  return !!(flags & mask);
+}
+function setFlag(flags, mask, newValue) {
+  if (newValue) {
+    flags |= mask;
+  } else {
+    flags &= ~mask;
+  }
+  return flags;
+}
+function assert20223DecoratorType(context, types2) {
+  if (__MOBX_DEV__ && !types2.includes(context.kind)) {
+    die(`The decorator applied to '${String(context.name)}' cannot be used on a ${context.kind} element`);
+  }
+}
+var $mobx = /* @__PURE__ */ Symbol("mobx administration");
+var Atom = class {
+  /**
+   * Create a new atom. For debugging purposes it is recommended to give it a name.
+   * The onBecomeObserved and onBecomeUnobserved callbacks can be used for resource management.
+   */
+  constructor(name_ = __MOBX_DEV__ ? "Atom@" + getNextId() : "Atom") {
+    this.name_ = void 0;
+    this.flags_ = 0;
+    this.observers_ = null;
+    this.lastAccessedBy_ = 0;
+    this.lowestObserverState_ = -1;
+    this.onBOL = void 0;
+    this.onBUOL = void 0;
+    this.name_ = name_;
+  }
+  // for effective unobserving. BaseAtom has true, for extra optimization, so its onBecomeUnobserved never gets called, because it's not needed
+  get isBeingObserved() {
+    return getFlag(
+      this.flags_,
+      1
+      /* AtomFlags.isBeingObserved */
+    );
+  }
+  set isBeingObserved(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isPendingUnobservation() {
+    return getFlag(
+      this.flags_,
+      2
+      /* AtomFlags.isPendingUnobservation */
+    );
+  }
+  set isPendingUnobservation(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      4
+      /* AtomFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue === 1 ? true : false);
+  }
+  onBO() {
+    if (this.onBOL) {
+      this.onBOL.forEach((listener) => listener());
+    }
+  }
+  onBUO() {
+    if (this.onBUOL) {
+      this.onBUOL.forEach((listener) => listener());
+    }
+  }
+  /**
+   * Invoke this method to notify mobx that your atom has been used somehow.
+   * Returns true if there is currently a reactive context.
+   */
+  reportObserved() {
+    return reportObserved(this);
+  }
+  /**
+   * Invoke this method _after_ this method has changed to signal mobx that all its observers should invalidate.
+   */
+  reportChanged() {
+    startBatch();
+    propagateChanged(this);
+    endBatch();
+  }
+  toString() {
+    return this.name_;
+  }
+};
+var isAtom = /* @__PURE__ */ createInstanceofPredicate("Atom", Atom);
+function createAtom(name, onBecomeObservedHandler = noop, onBecomeUnobservedHandler = noop) {
+  const atom = new Atom(name);
+  if (onBecomeObservedHandler !== noop) {
+    atom.onBOL = /* @__PURE__ */ new Set([onBecomeObservedHandler]);
+  }
+  if (onBecomeUnobservedHandler !== noop) {
+    atom.onBUOL = /* @__PURE__ */ new Set([onBecomeUnobservedHandler]);
+  }
+  return atom;
+}
+function compareStructural(a, b) {
+  return deepEqual(a, b);
+}
+function compareShallow(a, b) {
+  return deepEqual(a, b, 1);
+}
+var compareDefault = Object.is;
+function deepEnhancer(v, _, name) {
+  if (v === null || typeof v !== "object" && typeof v !== "function") {
+    return v;
+  }
+  if (isObservable(v)) {
+    return v;
+  }
+  if (Array.isArray(v)) {
+    return observable.array(v, {
+      name
+    });
+  }
+  if (isPlainObject(v)) {
+    return observable.object(v, void 0, {
+      name
+    });
+  }
+  if (isES6Map(v)) {
+    return observable.map(v, {
+      name
+    });
+  }
+  if (isES6Set(v)) {
+    return observable.set(v, {
+      name
+    });
+  }
+  if (typeof v === "function" && !isAction(v) && !isFlow(v)) {
+    if (isGenerator(v)) {
+      return flow(v);
+    } else {
+      return autoAction(name, v);
+    }
+  }
+  return v;
+}
+function referenceEnhancer(newValue) {
+  return newValue;
+}
+var OVERRIDE = "override";
+function isOverride(annotation) {
+  return annotation.annotationType_ === OVERRIDE;
+}
+function createActionAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$5,
+    extend_: extend_$4
+  };
+}
+function make_$5(adm, key, descriptor, source) {
+  var _this$options_;
+  if ((_this$options_ = this.options_) != null && _this$options_.bound) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+  }
+  if (source === adm.target_) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
+  }
+  if (isAction(descriptor.value)) {
+    return 1;
+  }
+  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor, false);
+  defineProperty(source, key, actionDescriptor);
+  return 2;
+}
+function extend_$4(adm, key, descriptor, proxyTrap) {
+  const actionDescriptor = createActionDescriptor(adm, this, key, descriptor);
+  return adm.defineProperty_(key, actionDescriptor, proxyTrap);
+}
+function decorateAction20223_(annotation, mthd, context) {
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["method", "field"]);
+  }
+  const {
+    kind,
+    name,
+    addInitializer
+  } = context;
+  const ann = annotation;
+  const _createAction = (m) => {
+    var _ann$options_$name, _ann$options_, _ann$options_$autoAct, _ann$options_2;
+    return createAction((_ann$options_$name = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.name) != null ? _ann$options_$name : name.toString(), m, (_ann$options_$autoAct = (_ann$options_2 = ann.options_) == null ? void 0 : _ann$options_2.autoAction) != null ? _ann$options_$autoAct : false);
+  };
+  if (kind == "field") {
+    return function(initMthd) {
+      var _ann$options_3;
+      let mthd2 = initMthd;
+      if (!isAction(mthd2)) {
+        mthd2 = _createAction(mthd2);
+      }
+      if ((_ann$options_3 = ann.options_) != null && _ann$options_3.bound) {
+        mthd2 = mthd2.bind(this);
+        mthd2.isMobxAction = true;
+      }
+      return mthd2;
+    };
+  }
+  if (kind == "method") {
+    var _ann$options_4;
+    if (!isAction(mthd)) {
+      mthd = _createAction(mthd);
+    }
+    if ((_ann$options_4 = ann.options_) != null && _ann$options_4.bound) {
+      addInitializer(function() {
+        const self2 = this;
+        const bound = self2[name].bind(self2);
+        bound.isMobxAction = true;
+        self2[name] = bound;
+      });
+    }
+    return mthd;
+  }
+  die(43, ann.annotationType_, String(name), kind);
+}
+function assertActionDescriptor(adm, {
+  annotationType_
+}, key, {
+  value
+}) {
+  if (__MOBX_DEV__ && !isFunction(value)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on properties with a function value.`);
+  }
+}
+function createActionDescriptor(adm, annotation, key, descriptor, safeDescriptors = globalState.safeDescriptors) {
+  var _annotation$options_, _annotation$options_$, _annotation$options_2, _annotation$options_$2, _annotation$options_3, _annotation$options_4, _adm$proxy_2;
+  assertActionDescriptor(adm, annotation, key, descriptor);
+  let {
+    value
+  } = descriptor;
+  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
+    var _adm$proxy_;
+    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+  }
+  return {
+    value: createAction(
+      (_annotation$options_$ = (_annotation$options_2 = annotation.options_) == null ? void 0 : _annotation$options_2.name) != null ? _annotation$options_$ : key.toString(),
+      value,
+      (_annotation$options_$2 = (_annotation$options_3 = annotation.options_) == null ? void 0 : _annotation$options_3.autoAction) != null ? _annotation$options_$2 : false,
+      // https://github.com/mobxjs/mobx/discussions/3140
+      (_annotation$options_4 = annotation.options_) != null && _annotation$options_4.bound ? (_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_ : void 0
+    ),
+    // Non-configurable for classes
+    // prevents accidental field redefinition in subclass
+    configurable: safeDescriptors ? adm.isPlainObject_ : true,
+    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
+    enumerable: false,
+    // Non-obsevable, therefore non-writable
+    // Also prevents rewriting in subclass constructor
+    writable: safeDescriptors ? false : true
+  };
+}
+function createFlowAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$4,
+    extend_: extend_$3
+  };
+}
+function make_$4(adm, key, descriptor, source) {
+  var _this$options_;
+  if (source === adm.target_) {
+    return this.extend_(adm, key, descriptor, false) === null ? 0 : 2;
+  }
+  if ((_this$options_ = this.options_) != null && _this$options_.bound && (!hasProp(adm.target_, key) || !isFlow(adm.target_[key]))) {
+    if (this.extend_(adm, key, descriptor, false) === null) {
+      return 0;
+    }
+  }
+  if (isFlow(descriptor.value)) {
+    return 1;
+  }
+  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, false, false);
+  defineProperty(source, key, flowDescriptor);
+  return 2;
+}
+function extend_$3(adm, key, descriptor, proxyTrap) {
+  var _this$options_2;
+  const flowDescriptor = createFlowDescriptor(adm, this, key, descriptor, (_this$options_2 = this.options_) == null ? void 0 : _this$options_2.bound);
+  return adm.defineProperty_(key, flowDescriptor, proxyTrap);
+}
+function decorateFlow20223_(annotation, mthd, context) {
+  var _annotation$options_;
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["method"]);
+  }
+  const {
+    name,
+    addInitializer
+  } = context;
+  if (!isFlow(mthd)) {
+    mthd = flow(mthd);
+  }
+  if ((_annotation$options_ = annotation.options_) != null && _annotation$options_.bound) {
+    addInitializer(function() {
+      const self2 = this;
+      const bound = self2[name].bind(self2);
+      bound.isMobXFlow = true;
+      self2[name] = bound;
+    });
+  }
+  return mthd;
+}
+function assertFlowDescriptor(adm, {
+  annotationType_
+}, key, {
+  value
+}) {
+  if (__MOBX_DEV__ && !isFunction(value)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on properties with a generator function value.`);
+  }
+}
+function createFlowDescriptor(adm, annotation, key, descriptor, bound, safeDescriptors = globalState.safeDescriptors) {
+  assertFlowDescriptor(adm, annotation, key, descriptor);
+  let {
+    value
+  } = descriptor;
+  if (!isFlow(value)) {
+    value = flow(value);
+  }
+  if (bound) {
+    var _adm$proxy_;
+    value = value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+    value.isMobXFlow = true;
+  }
+  return {
+    value,
+    // Non-configurable for classes
+    // prevents accidental field redefinition in subclass
+    configurable: safeDescriptors ? adm.isPlainObject_ : true,
+    // https://github.com/mobxjs/mobx/pull/2641#issuecomment-737292058
+    enumerable: false,
+    // Non-obsevable, therefore non-writable
+    // Also prevents rewriting in subclass constructor
+    writable: safeDescriptors ? false : true
+  };
+}
+function createComputedAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$3,
+    extend_: extend_$2
+  };
+}
+function make_$3(adm, key, descriptor) {
+  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+}
+function extend_$2(adm, key, descriptor, proxyTrap) {
+  assertComputedDescriptor(adm, this, key, descriptor);
+  return adm.defineComputedProperty_(key, assign({}, this.options_, {
+    get: descriptor.get,
+    set: descriptor.set
+  }), proxyTrap);
+}
+function decorateComputed20223_(annotation, get3, context) {
+  if (__MOBX_DEV__) {
+    assert20223DecoratorType(context, ["getter"]);
+  }
+  const ann = annotation;
+  const {
+    name: key,
+    addInitializer
+  } = context;
+  let computedValues;
+  function createComputedValue(target, adm) {
+    const options = assign({}, ann.options_, {
+      get: get3,
+      context: target
+    });
+    options.name || (options.name = __MOBX_DEV__ ? `${adm.name_}.${key.toString()}` : `ObservableObject.${key.toString()}`);
+    return new ComputedValue(options);
+  }
+  addInitializer(function() {
+    var _adm$lazyComputedKeys;
+    const adm = asObservableObject(this)[$mobx];
+    const target = this;
+    const observable2 = adm.values_.get(key);
+    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
+      adm.values_.delete(key);
+    }
+    ((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null ? _adm$lazyComputedKeys : adm.lazyComputedKeys_ = /* @__PURE__ */ new Map()).set(key, () => createComputedValue(target, adm));
+  });
+  return function() {
+    const adm = this[$mobx];
+    const observable2 = adm.values_.get(key);
+    if (observable2 instanceof ComputedValue && observable2.derivation !== get3) {
+      var _computedValues;
+      let computed3 = (_computedValues = computedValues) == null ? void 0 : _computedValues.get(this);
+      if (!computed3) {
+        var _computedValues2;
+        computed3 = createComputedValue(this, adm);
+        ((_computedValues2 = computedValues) != null ? _computedValues2 : computedValues = /* @__PURE__ */ new WeakMap()).set(this, computed3);
+      }
+      return computed3.get();
+    }
+    return adm.getObservablePropValue_(key);
+  };
+}
+function assertComputedDescriptor(adm, {
+  annotationType_
+}, key, {
+  get: get3
+}) {
+  if (__MOBX_DEV__ && !get3) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' can only be used on getter(+setter) properties.`);
+  }
+}
+function createObservableAnnotation(name, options) {
+  return {
+    annotationType_: name,
+    options_: options,
+    make_: make_$2,
+    extend_: extend_$1
+  };
+}
+function make_$2(adm, key, descriptor) {
+  return this.extend_(adm, key, descriptor, false) === null ? 0 : 1;
+}
+function extend_$1(adm, key, descriptor, proxyTrap) {
+  var _this$options_$enhanc, _this$options_;
+  assertObservableDescriptor(adm, this, key, descriptor);
+  return adm.defineObservableProperty_(key, descriptor.value, (_this$options_$enhanc = (_this$options_ = this.options_) == null ? void 0 : _this$options_.enhancer_) != null ? _this$options_$enhanc : deepEnhancer, proxyTrap);
+}
+function decorateObservable20223_(annotation, desc, context) {
+  if (__MOBX_DEV__) {
+    if (context.kind === "field") {
+      throw die(`Please use \`@observable accessor ${String(context.name)}\` instead of \`@observable ${String(context.name)}\``);
+    }
+    assert20223DecoratorType(context, ["accessor"]);
+  }
+  const ann = annotation;
+  const {
+    kind,
+    name
+  } = context;
+  if (kind !== "accessor") {
+    return;
+  }
+  function registerLazy(target, value) {
+    var _adm$lazyObservableKe;
+    const adm = asObservableObject(target)[$mobx];
+    ((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null ? _adm$lazyObservableKe : adm.lazyObservableKeys_ = /* @__PURE__ */ new Map()).set(name, () => {
+      var _ann$options_$enhance, _ann$options_;
+      return new ObservableValue(value, (_ann$options_$enhance = (_ann$options_ = ann.options_) == null ? void 0 : _ann$options_.enhancer_) != null ? _ann$options_$enhance : deepEnhancer, __MOBX_DEV__ ? `${adm.name_}.${name.toString()}` : `ObservableObject.${name.toString()}`, false);
+    });
+    return adm;
+  }
+  return {
+    get() {
+      var _this$$mobx;
+      const adm = (_this$$mobx = this[$mobx]) != null ? _this$$mobx : registerLazy(this, desc.get.call(this));
+      return adm.getObservablePropValue_(name);
+    },
+    set(value) {
+      var _this$$mobx2;
+      const adm = (_this$$mobx2 = this[$mobx]) != null ? _this$$mobx2 : registerLazy(this, value);
+      return adm.setObservablePropValue_(name, value);
+    },
+    init(value) {
+      registerLazy(this, value);
+      return value;
+    }
+  };
+}
+function assertObservableDescriptor(adm, {
+  annotationType_
+}, key, descriptor) {
+  if (__MOBX_DEV__ && !("value" in descriptor)) {
+    die(`Cannot apply '${annotationType_}' to '${adm.name_}.${key.toString()}':
+'${annotationType_}' cannot be used on getter/setter properties`);
+  }
+}
+var AUTO = "true";
+var autoAnnotation = /* @__PURE__ */ createAutoAnnotation();
+function createAutoAnnotation(options) {
+  return {
+    annotationType_: AUTO,
+    options_: options,
+    make_: make_$1,
+    extend_
+  };
+}
+var autoAnnotations = [autoAnnotation];
+function getAutoAnnotation(options) {
+  var _autoAnnotations$idx;
+  const deep = options.deep !== false;
+  const autoBind = !!options.autoBind;
+  const idx = (deep ? 0 : 1) | (autoBind ? 2 : 0);
+  return (_autoAnnotations$idx = autoAnnotations[idx]) != null ? _autoAnnotations$idx : autoAnnotations[idx] = createAutoAnnotation({
+    deep,
+    autoBind
+  });
+}
+function make_$1(adm, key, descriptor, source) {
+  var _this$options_3, _this$options_4;
+  if (descriptor.get) {
+    return computed.make_(adm, key, descriptor, source);
+  }
+  if (descriptor.set) {
+    const set2 = isAction(descriptor.set) ? descriptor.set : createAction(key.toString(), descriptor.set);
+    if (source === adm.target_) {
+      return adm.defineProperty_(key, {
+        configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
+        set: set2
+      }) === null ? 0 : 2;
+    }
+    defineProperty(source, key, {
+      configurable: true,
+      set: set2
+    });
+    return 2;
+  }
+  if (source !== adm.target_ && typeof descriptor.value === "function") {
+    var _this$options_2;
+    if (isGenerator(descriptor.value)) {
+      var _this$options_;
+      const flowAnnotation2 = (_this$options_ = this.options_) != null && _this$options_.autoBind ? flowBound : flow;
+      return flowAnnotation2.make_(adm, key, descriptor, source);
+    }
+    const actionAnnotation2 = (_this$options_2 = this.options_) != null && _this$options_2.autoBind ? autoActionBound : autoAction;
+    return actionAnnotation2.make_(adm, key, descriptor, source);
+  }
+  let observableAnnotation2 = ((_this$options_3 = this.options_) == null ? void 0 : _this$options_3.deep) === false ? observableRef : observable;
+  if (typeof descriptor.value === "function" && (_this$options_4 = this.options_) != null && _this$options_4.autoBind) {
+    var _adm$proxy_;
+    descriptor.value = descriptor.value.bind((_adm$proxy_ = adm.proxy_) != null ? _adm$proxy_ : adm.target_);
+  }
+  return observableAnnotation2.make_(adm, key, descriptor, source);
+}
+function extend_(adm, key, descriptor, proxyTrap) {
+  var _this$options_5, _this$options_6;
+  if (descriptor.get) {
+    return computed.extend_(adm, key, descriptor, proxyTrap);
+  }
+  if (descriptor.set) {
+    return adm.defineProperty_(key, {
+      configurable: globalState.safeDescriptors ? adm.isPlainObject_ : true,
+      set: createAction(key.toString(), descriptor.set)
+    }, proxyTrap);
+  }
+  if (typeof descriptor.value === "function" && (_this$options_5 = this.options_) != null && _this$options_5.autoBind) {
+    var _adm$proxy_2;
+    descriptor.value = descriptor.value.bind((_adm$proxy_2 = adm.proxy_) != null ? _adm$proxy_2 : adm.target_);
+  }
+  let observableAnnotation2 = ((_this$options_6 = this.options_) == null ? void 0 : _this$options_6.deep) === false ? observableRef : observable;
+  return observableAnnotation2.extend_(adm, key, descriptor, proxyTrap);
+}
+function createDecoratorAnnotation(annotation, decorate) {
+  return assign(function decoratorAnnotation(value, context) {
+    if (context && typeof context.kind === "string") {
+      return decorate(annotation, value, context);
+    }
+    if (__MOBX_DEV__) {
+      die(`Invalid arguments for \`${annotation.annotationType_}\``);
+    }
+    return void 0;
+  }, annotation);
+}
+var OBSERVABLE = "observable";
+var OBSERVABLE_REF = "observable.ref";
+var defaultCreateObservableOptions = {
+  deep: true,
+  name: void 0,
+  defaultDecorator: void 0
+};
+Object.freeze(defaultCreateObservableOptions);
+function asCreateObservableOptions(thing) {
+  return thing || defaultCreateObservableOptions;
+}
+var observableAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE);
+var observableRefAnnotation = /* @__PURE__ */ createObservableAnnotation(OBSERVABLE_REF, {
+  enhancer_: referenceEnhancer
+});
+function createObservableDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateObservable20223_);
+}
+function getEnhancerFromOptions(options) {
+  return options.deep === true ? deepEnhancer : options.deep === false ? referenceEnhancer : getEnhancerFromAnnotation(options.defaultDecorator);
+}
+function getAnnotationFromOptions(options) {
+  var _options$defaultDecor;
+  return options ? (_options$defaultDecor = options.defaultDecorator) != null ? _options$defaultDecor : getAutoAnnotation(options) : void 0;
+}
+function getEnhancerFromAnnotation(annotation) {
+  var _annotation$options_$, _annotation$options_;
+  return !annotation ? deepEnhancer : (_annotation$options_$ = (_annotation$options_ = annotation.options_) == null ? void 0 : _annotation$options_.enhancer_) != null ? _annotation$options_$ : deepEnhancer;
+}
+function createObservable(v, arg2, arg3) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateObservable20223_(observableAnnotation, v, arg2);
+  }
+  if (isObservable(v)) {
+    return v;
+  }
+  if (isPlainObject(v)) {
+    return observable.object(v, arg2, arg3);
+  }
+  if (Array.isArray(v)) {
+    return observable.array(v, arg2);
+  }
+  if (isES6Map(v)) {
+    return observable.map(v, arg2);
+  }
+  if (isES6Set(v)) {
+    return observable.set(v, arg2);
+  }
+  if (typeof v === "object" && v !== null) {
+    return v;
+  }
+  return observable.box(v, arg2);
+}
+var observableFactories = {
+  box(value, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableValue(value, getEnhancerFromOptions(o), o.name, true, o.equals);
+  },
+  array(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return createObservableArray(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  map(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableMap(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  set(initialValues, options) {
+    const o = asCreateObservableOptions(options);
+    return new ObservableSet(initialValues, getEnhancerFromOptions(o), o.name);
+  },
+  object(props, annotations, options) {
+    return initObservable(() => extendObservable(asDynamicObservableObject({}, options), props, annotations));
+  }
+};
+var observableRef = /* @__PURE__ */ createObservableDecoratorAnnotation(observableRefAnnotation);
+var observable = /* @__PURE__ */ assign(createObservable, observableAnnotation, observableFactories);
+var COMPUTED = "computed";
+function createComputedDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateComputed20223_);
+}
+var computedAnnotation = /* @__PURE__ */ createComputedAnnotation(COMPUTED);
+var computed = function computed2(arg1, arg2) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateComputed20223_(computedAnnotation, arg1, arg2);
+  }
+  if (isPlainObject(arg1)) {
+    return createComputedDecoratorAnnotation(createComputedAnnotation(COMPUTED, arg1));
+  }
+  if (__MOBX_DEV__) {
+    if (!isFunction(arg1)) {
+      die("First argument to `computed` should be an expression.");
+    }
+    if (isFunction(arg2)) {
+      die("A setter as second argument is no longer supported, use `{ set: fn }` option instead");
+    }
+  }
+  const opts = isPlainObject(arg2) ? arg2 : {};
+  opts.get = arg1;
+  opts.name || (opts.name = arg1.name || "");
+  return new ComputedValue(opts);
+};
+assign(computed, computedAnnotation);
+var _getDescriptor$config;
+var _getDescriptor;
+var currentActionId = 0;
+var nextActionId = 1;
+var isFunctionNameConfigurable = (_getDescriptor$config = (_getDescriptor = /* @__PURE__ */ getDescriptor(() => {
+}, "name")) == null ? void 0 : _getDescriptor.configurable) != null ? _getDescriptor$config : false;
+var tmpNameDescriptor = {
+  value: "action",
+  configurable: true,
+  writable: false,
+  enumerable: false
+};
+function createAction(actionName, fn, autoAction2 = false, ref) {
+  if (__MOBX_DEV__) {
+    if (!isFunction(fn)) {
+      die("`action` can only be invoked on functions");
+    }
+    if (typeof actionName !== "string" || !actionName) {
+      die(`actions should have valid names, got: '${actionName}'`);
+    }
+  }
+  function res() {
+    return executeAction(actionName, autoAction2, fn, ref || this, arguments);
+  }
+  res.isMobxAction = true;
+  res.toString = () => fn.toString();
+  if (isFunctionNameConfigurable) {
+    tmpNameDescriptor.value = actionName;
+    defineProperty(res, "name", tmpNameDescriptor);
+  }
+  return res;
+}
+function executeAction(actionName, canRunAsDerivation, fn, scope, args) {
+  const runInfo = _startAction(actionName, canRunAsDerivation, scope, args);
+  try {
+    return fn.apply(scope, args);
+  } catch (err) {
+    runInfo.error_ = err;
+    throw err;
+  } finally {
+    _endAction(runInfo);
+  }
+}
+function _startAction(actionName, canRunAsDerivation, scope, args) {
+  const notifySpy_ = __MOBX_DEV__ && isSpyEnabled() && !!actionName;
+  let startTime_ = 0;
+  if (notifySpy_) {
+    startTime_ = Date.now();
+    const flattenedArgs = args ? Array.from(args) : EMPTY_ARRAY;
+    spyReportStart({
+      type: ACTION,
+      name: actionName,
+      object: scope,
+      arguments: flattenedArgs
+    });
+  }
+  const prevDerivation_ = globalState.trackingDerivation;
+  const runAsAction = !canRunAsDerivation || !prevDerivation_;
+  startBatch();
+  let prevAllowStateChanges_ = globalState.allowStateChanges;
+  if (runAsAction) {
+    untrackedStart();
+    if (__MOBX_DEV__) {
+      prevAllowStateChanges_ = allowStateChangesStart(true);
+    }
+  }
+  const prevAllowStateReads_ = globalState.allowStateReads;
+  if (__MOBX_DEV__) {
+    allowStateReadsStart(true);
+  }
+  const runInfo = {
+    runAsAction_: runAsAction,
+    prevDerivation_,
+    prevAllowStateChanges_,
+    prevAllowStateReads_,
+    notifySpy_,
+    startTime_,
+    actionId_: nextActionId++,
+    parentActionId_: currentActionId
+  };
+  currentActionId = runInfo.actionId_;
+  return runInfo;
+}
+function _endAction(runInfo) {
+  if (currentActionId !== runInfo.actionId_) {
+    die(30);
+  }
+  currentActionId = runInfo.parentActionId_;
+  if (runInfo.error_ !== void 0) {
+    globalState.suppressReactionErrors = true;
+  }
+  if (__MOBX_DEV__) {
+    allowStateChangesEnd(runInfo.prevAllowStateChanges_);
+    allowStateReadsEnd(runInfo.prevAllowStateReads_);
+  }
+  endBatch();
+  if (runInfo.runAsAction_) {
+    untrackedEnd(runInfo.prevDerivation_);
+  }
+  if (__MOBX_DEV__ && runInfo.notifySpy_) {
+    spyReportEnd({
+      time: Date.now() - runInfo.startTime_
+    });
+  }
+  globalState.suppressReactionErrors = false;
+}
+function allowStateChanges(allowStateChanges2, func) {
+  const prev = allowStateChangesStart(allowStateChanges2);
+  try {
+    return func();
+  } finally {
+    allowStateChangesEnd(prev);
+  }
+}
+function allowStateChangesStart(allowStateChanges2) {
+  const prev = globalState.allowStateChanges;
+  globalState.allowStateChanges = allowStateChanges2;
+  return prev;
+}
+function allowStateChangesEnd(prev) {
+  globalState.allowStateChanges = prev;
+}
+var CREATE = "create";
+var ObservableValue = class extends Atom {
+  constructor(value, enhancer_, name_ = __MOBX_DEV__ ? "ObservableValue@" + getNextId() : "ObservableValue", notifySpy = true, equals_ = compareDefault) {
+    super(name_);
+    this.enhancer_ = void 0;
+    this.name_ = void 0;
+    this.equals_ = void 0;
+    this.hasUnreportedChange_ = false;
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.value_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = enhancer_;
+    this.name_ = name_;
+    this.equals_ = equals_;
+    this.value_ = enhancer_(value, void 0, name_);
+    if (__MOBX_DEV__ && notifySpy && isSpyEnabled()) {
+      spyReport({
+        type: CREATE,
+        object: this,
+        observableKind: "value",
+        debugObjectName: this.name_,
+        newValue: this.value_
+      });
+    }
+  }
+  dehanceValue(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  set(newValue) {
+    const oldValue = this.value_;
+    newValue = this.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart({
+          type: UPDATE,
+          object: this,
+          observableKind: "value",
+          debugObjectName: this.name_,
+          newValue,
+          oldValue
+        });
+      }
+      this.setNewValue_(newValue);
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+  }
+  prepareNewValue_(newValue) {
+    checkIfStateModificationsAreAllowed(this);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this,
+        type: UPDATE,
+        newValue
+      });
+      if (!change) {
+        return globalState.UNCHANGED;
+      }
+      newValue = change.newValue;
+    }
+    newValue = this.enhancer_(newValue, this.value_, this.name_);
+    return this.equals_(this.value_, newValue) ? globalState.UNCHANGED : newValue;
+  }
+  setNewValue_(newValue) {
+    const oldValue = this.value_;
+    this.value_ = newValue;
+    this.reportChanged();
+    if (hasListeners(this)) {
+      notifyListeners(this, {
+        type: UPDATE,
+        object: this,
+        newValue,
+        oldValue
+      });
+    }
+  }
+  get() {
+    this.reportObserved();
+    return this.dehanceValue(this.value_);
+  }
+  raw() {
+    return this.value_;
+  }
+  toJSON() {
+    return this.get();
+  }
+  toString() {
+    return `${this.name_}[${this.value_}]`;
+  }
+  valueOf() {
+    return toPrimitive(this.get());
+  }
+  [Symbol.toPrimitive]() {
+    return this.valueOf();
+  }
+};
+var ComputedValue = class {
+  /**
+   * Create a new computed value based on a function expression.
+   *
+   * The `name` property is for debug purposes only.
+   *
+   * The `equals` property specifies the comparer function used to determine if a newly produced
+   * value differs from the previous value. Structural comparison can be convenient if you always
+   * produce a new aggregated object and don't want to notify observers if it is structurally the same.
+   * This is useful for working with vectors, mouse coordinates etc.
+   */
+  constructor(options) {
+    this.dependenciesState_ = -1;
+    this.observing_ = [];
+    this.newObserving_ = null;
+    this.observers_ = null;
+    this.runId_ = 0;
+    this.lastAccessedBy_ = 0;
+    this.lowestObserverState_ = 0;
+    this.unboundDepsCount_ = 0;
+    this.value_ = new CaughtException(null);
+    this.name_ = void 0;
+    this.triggeredBy_ = void 0;
+    this.flags_ = 0;
+    this.derivation = void 0;
+    this.setter_ = void 0;
+    this.scope_ = void 0;
+    this.equals_ = void 0;
+    this.requiresReaction_ = void 0;
+    this.keepAlive_ = void 0;
+    this.onBOL = void 0;
+    this.onBUOL = void 0;
+    if (!options.get) {
+      die(31);
+    }
+    this.derivation = options.get;
+    this.name_ = options.name || (__MOBX_DEV__ ? "ComputedValue@" + getNextId() : "ComputedValue");
+    if (options.set) {
+      this.setter_ = createAction(__MOBX_DEV__ ? this.name_ + "-setter" : "ComputedValue-setter", options.set);
+    }
+    this.equals_ = options.equals || compareDefault;
+    this.scope_ = options.context;
+    this.requiresReaction_ = options.requiresReaction;
+    this.keepAlive_ = !!options.keepAlive;
+  }
+  onBecomeStale_() {
+    propagateMaybeChanged(this);
+  }
+  onBO() {
+    if (this.onBOL) {
+      this.onBOL.forEach((listener) => listener());
+    }
+  }
+  onBUO() {
+    if (this.onBUOL) {
+      this.onBUOL.forEach((listener) => listener());
+    }
+  }
+  // to check for cycles
+  get isComputing() {
+    return getFlag(
+      this.flags_,
+      1
+      /* ComputedValueFlags.isComputing */
+    );
+  }
+  set isComputing(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isRunningSetter() {
+    return getFlag(
+      this.flags_,
+      2
+      /* ComputedValueFlags.isRunningSetter */
+    );
+  }
+  set isRunningSetter(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get isBeingObserved() {
+    return getFlag(
+      this.flags_,
+      4
+      /* ComputedValueFlags.isBeingObserved */
+    );
+  }
+  set isBeingObserved(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue);
+  }
+  get isPendingUnobservation() {
+    return getFlag(
+      this.flags_,
+      8
+      /* ComputedValueFlags.isPendingUnobservation */
+    );
+  }
+  set isPendingUnobservation(newValue) {
+    this.flags_ = setFlag(this.flags_, 8, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      16
+      /* ComputedValueFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
+  }
+  /**
+   * Returns the current value of this computed value.
+   * Will evaluate its computation first if needed.
+   */
+  get() {
+    if (this.isComputing) {
+      die(32, this.name_, this.derivation);
+    }
+    if (globalState.inBatch === 0 && // !globalState.trackingDerivatpion &&
+    (!this.observers_ || this.observers_.size === 0) && !this.keepAlive_) {
+      if (shouldCompute(this)) {
+        this.warnAboutUntrackedRead_();
+        startBatch();
+        this.value_ = this.computeValue_(false);
+        endBatch();
+      }
+    } else {
+      const wasBeingObserved = this.isBeingObserved;
+      reportObserved(this);
+      if (shouldCompute(this)) {
+        let prevTrackingContext = globalState.trackingContext;
+        if (!prevTrackingContext && (this.keepAlive_ || this.isBeingObserved)) {
+          globalState.trackingContext = this;
+        }
+        if (this.trackAndCompute()) {
+          propagateChangeConfirmed(this);
+        }
+        globalState.trackingContext = prevTrackingContext;
+      } else if (!wasBeingObserved && this.isBeingObserved) {
+        this.observing_.forEach(markObserved);
+      }
+    }
+    const result = this.value_;
+    if (isCaughtException(result)) {
+      throw result.cause;
+    }
+    return result;
+  }
+  set(value) {
+    if (this.setter_) {
+      if (this.isRunningSetter) {
+        die(33, this.name_);
+      }
+      this.isRunningSetter = true;
+      try {
+        this.setter_.call(this.scope_, value);
+      } finally {
+        this.isRunningSetter = false;
+      }
+    } else {
+      die(34, this.name_);
+    }
+  }
+  trackAndCompute() {
+    const oldValue = this.value_;
+    const wasSuspended = (
+      /* see #1208 */
+      this.dependenciesState_ === -1
+    );
+    const newValue = this.computeValue_(true);
+    const changed = wasSuspended || isCaughtException(oldValue) || isCaughtException(newValue) || !this.equals_(oldValue, newValue);
+    if (changed) {
+      this.value_ = newValue;
+      if (__MOBX_DEV__ && isSpyEnabled()) {
+        spyReport({
+          observableKind: "computed",
+          debugObjectName: this.name_,
+          object: this.scope_,
+          type: "update",
+          oldValue,
+          newValue
+        });
+      }
+    }
+    return changed;
+  }
+  computeValue_(track2) {
+    this.isComputing = true;
+    const prev = __MOBX_DEV__ ? allowStateChangesStart(false) : false;
+    let res;
+    if (track2) {
+      res = trackDerivedFunction(this, this.derivation, this.scope_);
+    } else {
+      if (globalState.disableErrorBoundaries === true) {
+        res = this.derivation.call(this.scope_);
+      } else {
+        try {
+          res = this.derivation.call(this.scope_);
+        } catch (e) {
+          res = new CaughtException(e);
+        }
+      }
+    }
+    if (__MOBX_DEV__) {
+      allowStateChangesEnd(prev);
+    }
+    this.isComputing = false;
+    return res;
+  }
+  suspend_() {
+    if (!this.keepAlive_) {
+      clearObserving(this);
+      this.value_ = void 0;
+    }
+  }
+  warnAboutUntrackedRead_() {
+    if (!__MOBX_DEV__) {
+      return;
+    }
+    if (typeof this.requiresReaction_ === "boolean" ? this.requiresReaction_ : globalState.computedRequiresReaction) {
+      console.warn(`[mobx] Computed value '${this.name_}' is being read outside a reactive context. Doing a full recompute.`);
+    }
+  }
+  toString() {
+    return `${this.name_}[${this.derivation.toString()}]`;
+  }
+  valueOf() {
+    return toPrimitive(this.get());
+  }
+  [Symbol.toPrimitive]() {
+    return this.valueOf();
+  }
+};
+var isComputedValue = /* @__PURE__ */ createInstanceofPredicate("ComputedValue", ComputedValue);
+var CaughtException = class {
+  constructor(cause) {
+    this.cause = void 0;
+    this.cause = cause;
+  }
+};
+function isCaughtException(e) {
+  return e instanceof CaughtException;
+}
+function shouldCompute(derivation) {
+  switch (derivation.dependenciesState_) {
+    case 0:
+      return false;
+    case -1:
+    case 2:
+      return true;
+    case 1: {
+      const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
+      const prevUntracked = untrackedStart();
+      const obs = derivation.observing_, l = obs.length;
+      for (let i2 = 0; i2 < l; i2++) {
+        const obj = obs[i2];
+        if (isComputedValue(obj)) {
+          if (globalState.disableErrorBoundaries) {
+            obj.get();
+          } else {
+            try {
+              obj.get();
+            } catch (e) {
+              untrackedEnd(prevUntracked);
+              if (__MOBX_DEV__) {
+                allowStateReadsEnd(prevAllowStateReads);
+              }
+              return true;
+            }
+          }
+          if (derivation.dependenciesState_ === 2) {
+            untrackedEnd(prevUntracked);
+            if (__MOBX_DEV__) {
+              allowStateReadsEnd(prevAllowStateReads);
+            }
+            return true;
+          }
+        }
+      }
+      changeDependenciesStateTo0(derivation);
+      untrackedEnd(prevUntracked);
+      if (__MOBX_DEV__) {
+        allowStateReadsEnd(prevAllowStateReads);
+      }
+      return false;
+    }
+  }
+}
+function isComputingDerivation() {
+  return globalState.trackingDerivation !== null;
+}
+function checkIfStateModificationsAreAllowed(atom) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  const hasObservers = !!atom.observers_ && atom.observers_.size > 0;
+  if (!globalState.allowStateChanges && (hasObservers || globalState.enforceActions === "always")) {
+    console.warn("[MobX] " + (globalState.enforceActions ? "Since strict-mode is enabled, changing (observed) observable values without using an action is not allowed. Tried to modify: " : "Side effects like changing state are not allowed at this point. Are you trying to modify state from, for example, a computed value or the render function of a React component? You can wrap side effects in 'runInAction' (or decorate functions with 'action') if needed. Tried to modify: ") + atom.name_);
+  }
+}
+function checkIfStateReadsAreAllowed(observable2) {
+  if (__MOBX_DEV__ && !globalState.allowStateReads && globalState.observableRequiresReaction) {
+    console.warn(`[mobx] Observable '${observable2.name_}' being read outside a reactive context.`);
+  }
+}
+function trackDerivedFunction(derivation, f, context) {
+  const prevAllowStateReads = __MOBX_DEV__ ? allowStateReadsStart(true) : true;
+  changeDependenciesStateTo0(derivation);
+  derivation.newObserving_ = new Array(
+    // Reserve constant space for initial dependencies, dynamic space otherwise.
+    // See https://github.com/mobxjs/mobx/pull/3833
+    derivation.runId_ === 0 ? 100 : derivation.observing_.length
+  );
+  derivation.unboundDepsCount_ = 0;
+  derivation.runId_ = ++globalState.runId;
+  const prevTracking = globalState.trackingDerivation;
+  globalState.trackingDerivation = derivation;
+  globalState.inBatch++;
+  let result;
+  if (globalState.disableErrorBoundaries === true) {
+    result = f.call(context);
+  } else {
+    try {
+      result = f.call(context);
+    } catch (e) {
+      result = new CaughtException(e);
+    }
+  }
+  globalState.inBatch--;
+  globalState.trackingDerivation = prevTracking;
+  bindDependencies(derivation);
+  warnAboutDerivationWithoutDependencies(derivation);
+  if (__MOBX_DEV__) {
+    allowStateReadsEnd(prevAllowStateReads);
+  }
+  return result;
+}
+function warnAboutDerivationWithoutDependencies(derivation) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (derivation.observing_.length !== 0) {
+    return;
+  }
+  if (typeof derivation.requiresObservable_ === "boolean" ? derivation.requiresObservable_ : globalState.reactionRequiresObservable) {
+    console.warn(`[mobx] Derivation '${derivation.name_}' is created/updated without reading any observable value.`);
+  }
+}
+function bindDependencies(derivation) {
+  const prevObserving = derivation.observing_;
+  const observing = derivation.observing_ = derivation.newObserving_;
+  let lowestNewObservingDerivationState = 0;
+  let i0 = 0, l = derivation.unboundDepsCount_;
+  for (let i2 = 0; i2 < l; i2++) {
+    const dep = observing[i2];
+    if (dep.diffValue === 0) {
+      dep.diffValue = 1;
+      if (i0 !== i2) {
+        observing[i0] = dep;
+      }
+      i0++;
+    }
+    if (dep.dependenciesState_ > lowestNewObservingDerivationState) {
+      lowestNewObservingDerivationState = dep.dependenciesState_;
+    }
+  }
+  observing.length = i0;
+  derivation.newObserving_ = null;
+  l = prevObserving.length;
+  while (l--) {
+    const dep = prevObserving[l];
+    if (dep.diffValue === 0) {
+      removeObserver(dep, derivation);
+    }
+    dep.diffValue = 0;
+  }
+  while (i0--) {
+    const dep = observing[i0];
+    if (dep.diffValue === 1) {
+      dep.diffValue = 0;
+      addObserver(dep, derivation);
+    }
+  }
+  if (lowestNewObservingDerivationState !== 0) {
+    derivation.dependenciesState_ = lowestNewObservingDerivationState;
+    derivation.onBecomeStale_();
+  }
+}
+function clearObserving(derivation) {
+  const obs = derivation.observing_;
+  derivation.observing_ = [];
+  let i2 = obs.length;
+  while (i2--) {
+    removeObserver(obs[i2], derivation);
+  }
+  derivation.dependenciesState_ = -1;
+}
+function untracked(action2) {
+  const prev = untrackedStart();
+  try {
+    return action2();
+  } finally {
+    untrackedEnd(prev);
+  }
+}
+function untrackedStart() {
+  const prev = globalState.trackingDerivation;
+  globalState.trackingDerivation = null;
+  return prev;
+}
+function untrackedEnd(prev) {
+  globalState.trackingDerivation = prev;
+}
+function allowStateReadsStart(allowStateReads) {
+  const prev = globalState.allowStateReads;
+  globalState.allowStateReads = allowStateReads;
+  return prev;
+}
+function allowStateReadsEnd(prev) {
+  globalState.allowStateReads = prev;
+}
+function changeDependenciesStateTo0(derivation) {
+  if (derivation.dependenciesState_ === 0) {
+    return;
+  }
+  derivation.dependenciesState_ = 0;
+  const obs = derivation.observing_;
+  let i2 = obs.length;
+  while (i2--) {
+    obs[i2].lowestObserverState_ = 0;
+  }
+}
+var MOBX_GLOBALS_VERSION = 7;
+var MobXGlobals = class {
+  constructor() {
+    this.version = MOBX_GLOBALS_VERSION;
+    this.UNCHANGED = {};
+    this.trackingDerivation = null;
+    this.trackingContext = null;
+    this.runId = 0;
+    this.mobxGuid = 0;
+    this.inBatch = 0;
+    this.pendingUnobservations = [];
+    this.pendingReactions = [];
+    this.isRunningReactions = false;
+    this.isRunningUnobservations = false;
+    this.allowStateChanges = false;
+    this.allowStateReads = true;
+    this.enforceActions = true;
+    this.spyListeners = [];
+    this.globalReactionErrorHandlers = [];
+    this.computedRequiresReaction = false;
+    this.reactionRequiresObservable = false;
+    this.observableRequiresReaction = false;
+    this.disableErrorBoundaries = false;
+    this.suppressReactionErrors = false;
+    this.safeDescriptors = true;
+  }
+};
+var canMergeGlobalState = true;
+var isolateCalled = false;
+var globalState = /* @__PURE__ */ (function() {
+  let global2 = globalThis;
+  if (global2.__mobxInstanceCount > 0 && !global2.__mobxGlobals) {
+    canMergeGlobalState = false;
+  }
+  if (global2.__mobxGlobals && global2.__mobxGlobals.version !== MOBX_GLOBALS_VERSION) {
+    canMergeGlobalState = false;
+  }
+  if (!canMergeGlobalState) {
+    setTimeout(() => {
+      if (!isolateCalled) {
+        die(35);
+      }
+    }, 1);
+    return new MobXGlobals();
+  } else if (global2.__mobxGlobals) {
+    global2.__mobxInstanceCount += 1;
+    if (!global2.__mobxGlobals.UNCHANGED) {
+      global2.__mobxGlobals.UNCHANGED = {};
+    }
+    return global2.__mobxGlobals;
+  } else {
+    global2.__mobxInstanceCount = 1;
+    return global2.__mobxGlobals = /* @__PURE__ */ new MobXGlobals();
+  }
+})();
+function addObserver(observable2, node) {
+  var _observable$observers2;
+  ((_observable$observers2 = observable2.observers_) != null ? _observable$observers2 : observable2.observers_ = /* @__PURE__ */ new Set()).add(node);
+  if (observable2.lowestObserverState_ > node.dependenciesState_) {
+    observable2.lowestObserverState_ = node.dependenciesState_;
+  }
+}
+function removeObserver(observable2, node) {
+  const observers = observable2.observers_;
+  if (!observers) {
+    return;
+  }
+  observers.delete(node);
+  if (observers.size === 0) {
+    queueForUnobservation(observable2);
+  }
+}
+function queueForUnobservation(observable2) {
+  if (observable2.isPendingUnobservation === false) {
+    observable2.isPendingUnobservation = true;
+    globalState.pendingUnobservations.push(observable2);
+  }
+}
+function startBatch() {
+  globalState.inBatch++;
+}
+function endBatch() {
+  if (--globalState.inBatch === 0) {
+    runReactions();
+    if (!globalState.isRunningUnobservations && globalState.pendingUnobservations.length > 0) {
+      runPendingUnobservations();
+    }
+  }
+}
+function runPendingUnobservations() {
+  globalState.isRunningUnobservations = true;
+  try {
+    const list2 = globalState.pendingUnobservations;
+    for (let i2 = 0; i2 < list2.length; i2++) {
+      const observable2 = list2[i2];
+      observable2.isPendingUnobservation = false;
+      if (!observable2.observers_ || observable2.observers_.size === 0) {
+        observable2.observers_ = null;
+        if (observable2.isBeingObserved) {
+          observable2.isBeingObserved = false;
+          observable2.onBUO();
+        }
+        if (observable2 instanceof ComputedValue) {
+          observable2.suspend_();
+        }
+      }
+    }
+    globalState.pendingUnobservations = [];
+  } finally {
+    globalState.isRunningUnobservations = false;
+  }
+}
+function markObserved(observable2) {
+  var _observable$observing;
+  if (observable2.isBeingObserved) {
+    return;
+  }
+  observable2.isBeingObserved = true;
+  observable2.onBO();
+  (_observable$observing = observable2.observing_) == null || _observable$observing.forEach(markObserved);
+}
+function reportObserved(observable2) {
+  checkIfStateReadsAreAllowed(observable2);
+  const derivation = globalState.trackingDerivation;
+  if (derivation !== null) {
+    if (derivation.runId_ !== observable2.lastAccessedBy_) {
+      observable2.lastAccessedBy_ = derivation.runId_;
+      derivation.newObserving_[derivation.unboundDepsCount_++] = observable2;
+      if (!observable2.isBeingObserved && globalState.trackingContext) {
+        observable2.isBeingObserved = true;
+        observable2.onBO();
+      }
+    }
+    return observable2.isBeingObserved;
+  } else if ((!observable2.observers_ || observable2.observers_.size === 0) && globalState.inBatch > 0) {
+    queueForUnobservation(observable2);
+  }
+  return false;
+}
+function propagateChanged(observable2) {
+  var _observable$observers3;
+  if (observable2.lowestObserverState_ === 2) {
+    return;
+  }
+  observable2.lowestObserverState_ = 2;
+  (_observable$observers3 = observable2.observers_) == null || _observable$observers3.forEach((d) => {
+    if (d.dependenciesState_ === 0) {
+      d.onBecomeStale_();
+    }
+    d.dependenciesState_ = 2;
+  });
+}
+function propagateChangeConfirmed(observable2) {
+  var _observable$observers4;
+  if (observable2.lowestObserverState_ === 2) {
+    return;
+  }
+  observable2.lowestObserverState_ = 2;
+  (_observable$observers4 = observable2.observers_) == null || _observable$observers4.forEach((d) => {
+    if (d.dependenciesState_ === 1) {
+      d.dependenciesState_ = 2;
+    } else if (d.dependenciesState_ === 0) {
+      observable2.lowestObserverState_ = 0;
+    }
+  });
+}
+function propagateMaybeChanged(observable2) {
+  var _observable$observers5;
+  if (observable2.lowestObserverState_ !== 0) {
+    return;
+  }
+  observable2.lowestObserverState_ = 1;
+  (_observable$observers5 = observable2.observers_) == null || _observable$observers5.forEach((d) => {
+    if (d.dependenciesState_ === 0) {
+      d.dependenciesState_ = 1;
+      d.onBecomeStale_();
+    }
+  });
+}
+var Reaction = class {
+  constructor(name_ = __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction", onInvalidate_, errorHandler_, requiresObservable_) {
+    this.name_ = void 0;
+    this.onInvalidate_ = void 0;
+    this.errorHandler_ = void 0;
+    this.requiresObservable_ = void 0;
+    this.observing_ = [];
+    this.newObserving_ = [];
+    this.dependenciesState_ = -1;
+    this.runId_ = 0;
+    this.unboundDepsCount_ = 0;
+    this.flags_ = 0;
+    this.removeAbortListener_ = void 0;
+    this.name_ = name_;
+    this.onInvalidate_ = onInvalidate_;
+    this.errorHandler_ = errorHandler_;
+    this.requiresObservable_ = requiresObservable_;
+  }
+  get isDisposed() {
+    return getFlag(
+      this.flags_,
+      1
+      /* ReactionFlags.isDisposed */
+    );
+  }
+  set isDisposed(newValue) {
+    this.flags_ = setFlag(this.flags_, 1, newValue);
+  }
+  get isScheduled() {
+    return getFlag(
+      this.flags_,
+      2
+      /* ReactionFlags.isScheduled */
+    );
+  }
+  set isScheduled(newValue) {
+    this.flags_ = setFlag(this.flags_, 2, newValue);
+  }
+  get isTrackPending() {
+    return getFlag(
+      this.flags_,
+      4
+      /* ReactionFlags.isTrackPending */
+    );
+  }
+  set isTrackPending(newValue) {
+    this.flags_ = setFlag(this.flags_, 4, newValue);
+  }
+  get isRunning() {
+    return getFlag(
+      this.flags_,
+      8
+      /* ReactionFlags.isRunning */
+    );
+  }
+  set isRunning(newValue) {
+    this.flags_ = setFlag(this.flags_, 8, newValue);
+  }
+  get diffValue() {
+    return getFlag(
+      this.flags_,
+      16
+      /* ReactionFlags.diffValue */
+    ) ? 1 : 0;
+  }
+  set diffValue(newValue) {
+    this.flags_ = setFlag(this.flags_, 16, newValue === 1 ? true : false);
+  }
+  onBecomeStale_() {
+    this.schedule_();
+  }
+  schedule_() {
+    if (!this.isScheduled) {
+      this.isScheduled = true;
+      globalState.pendingReactions.push(this);
+      runReactions();
+    }
+  }
+  /**
+   * internal, use schedule() if you intend to kick off a reaction
+   */
+  runReaction_() {
+    if (!this.isDisposed) {
+      startBatch();
+      this.isScheduled = false;
+      const prev = globalState.trackingContext;
+      globalState.trackingContext = this;
+      if (shouldCompute(this)) {
+        this.isTrackPending = true;
+        try {
+          this.onInvalidate_();
+          if (__MOBX_DEV__ && this.isTrackPending && isSpyEnabled()) {
+            spyReport({
+              name: this.name_,
+              type: "scheduled-reaction"
+            });
+          }
+        } catch (e) {
+          this.reportExceptionInDerivation_(e);
+        }
+      }
+      globalState.trackingContext = prev;
+      endBatch();
+    }
+  }
+  track(fn) {
+    if (this.isDisposed) {
+      return;
+    }
+    startBatch();
+    const notify2 = __MOBX_DEV__ && isSpyEnabled();
+    let startTime;
+    if (__MOBX_DEV__ && notify2) {
+      startTime = Date.now();
+      spyReportStart({
+        name: this.name_,
+        type: "reaction"
+      });
+    }
+    this.isRunning = true;
+    const prevReaction = globalState.trackingContext;
+    globalState.trackingContext = this;
+    const result = trackDerivedFunction(this, fn, void 0);
+    globalState.trackingContext = prevReaction;
+    this.isRunning = false;
+    this.isTrackPending = false;
+    if (this.isDisposed) {
+      clearObserving(this);
+    }
+    if (isCaughtException(result)) {
+      this.reportExceptionInDerivation_(result.cause);
+    }
+    if (__MOBX_DEV__ && notify2) {
+      spyReportEnd({
+        time: Date.now() - startTime
+      });
+    }
+    endBatch();
+  }
+  reportExceptionInDerivation_(error) {
+    if (this.errorHandler_) {
+      this.errorHandler_(error, this);
+      return;
+    }
+    if (globalState.disableErrorBoundaries) {
+      throw error;
+    }
+    const message2 = __MOBX_DEV__ ? `[mobx] Encountered an uncaught exception that was thrown by a reaction or observer component, in: '${this}'` : `[mobx] uncaught error in '${this}'`;
+    if (!globalState.suppressReactionErrors) {
+      console.error(message2, error);
+    } else if (__MOBX_DEV__) {
+      console.warn(`[mobx] (error in reaction '${this.name_}' suppressed, fix error of causing action below)`);
+    }
+    if (__MOBX_DEV__ && isSpyEnabled()) {
+      spyReport({
+        type: "error",
+        name: this.name_,
+        message: message2,
+        error: "" + error
+      });
+    }
+    globalState.globalReactionErrorHandlers.forEach((f) => f(error, this));
+  }
+  dispose() {
+    if (!this.isDisposed) {
+      var _this$removeAbortList;
+      this.isDisposed = true;
+      (_this$removeAbortList = this.removeAbortListener_) == null || _this$removeAbortList.call(this);
+      if (!this.isRunning) {
+        startBatch();
+        clearObserving(this);
+        endBatch();
+      }
+    }
+  }
+  getDisposer_(abortSignal) {
+    const dispose = () => this.dispose();
+    if (abortSignal != null && abortSignal.addEventListener && !this.isDisposed) {
+      abortSignal.addEventListener("abort", dispose);
+      this.removeAbortListener_ = () => abortSignal.removeEventListener == null ? void 0 : abortSignal.removeEventListener("abort", dispose);
+    }
+    dispose[$mobx] = this;
+    if ("dispose" in Symbol && typeof Symbol.dispose === "symbol") {
+      dispose[Symbol.dispose] = dispose;
+    }
+    return dispose;
+  }
+  toString() {
+    return `Reaction[${this.name_}]`;
+  }
+};
+var MAX_REACTION_ITERATIONS = 100;
+var reactionScheduler = (f) => f();
+function runReactions() {
+  if (globalState.inBatch > 0 || globalState.isRunningReactions) {
+    return;
+  }
+  reactionScheduler(runReactionsHelper);
+}
+function runReactionsHelper() {
+  globalState.isRunningReactions = true;
+  const allReactions = globalState.pendingReactions;
+  let iterations = 0;
+  while (allReactions.length > 0) {
+    if (++iterations === MAX_REACTION_ITERATIONS) {
+      console.error(__MOBX_DEV__ ? `Reaction doesn't converge to a stable state after ${MAX_REACTION_ITERATIONS} iterations. Probably there is a cycle in the reactive function: ${allReactions[0]}` : `[mobx] cycle in reaction: ${allReactions[0]}`);
+      allReactions.splice(0);
+    }
+    let remainingReactions = allReactions.splice(0);
+    for (let i2 = 0, l = remainingReactions.length; i2 < l; i2++) {
+      remainingReactions[i2].runReaction_();
+    }
+  }
+  globalState.isRunningReactions = false;
+}
+var isReaction = /* @__PURE__ */ createInstanceofPredicate("Reaction", Reaction);
+function isSpyEnabled() {
+  return __MOBX_DEV__ && !!globalState.spyListeners.length;
+}
+function spyReport(event) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (!globalState.spyListeners.length) {
+    return;
+  }
+  const listeners2 = globalState.spyListeners;
+  for (let i2 = 0, l = listeners2.length; i2 < l; i2++) {
+    listeners2[i2](event);
+  }
+}
+function spyReportStart(event) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  const change = assign({}, event, {
+    spyReportStart: true
+  });
+  spyReport(change);
+}
+var END_EVENT = {
+  type: "report-end",
+  spyReportEnd: true
+};
+function spyReportEnd(change) {
+  if (!__MOBX_DEV__) {
+    return;
+  }
+  if (change) {
+    spyReport(assign({}, change, {
+      type: "report-end",
+      spyReportEnd: true
+    }));
+  } else {
+    spyReport(END_EVENT);
+  }
+}
+function spy(listener) {
+  if (!__MOBX_DEV__) {
+    console.warn(`[mobx.spy] Is a no-op in production builds`);
+    return function() {
+    };
+  } else {
+    globalState.spyListeners.push(listener);
+    return once(() => {
+      globalState.spyListeners = globalState.spyListeners.filter((l) => l !== listener);
+    });
+  }
+}
+var ACTION = "action";
+var AUTOACTION = "autoAction";
+var AUTOACTION_BOUND = "autoAction.bound";
+var DEFAULT_ACTION_NAME = "<unnamed action>";
+var actionAnnotation = /* @__PURE__ */ createActionAnnotation(ACTION);
+var autoActionAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION, {
+  autoAction: true
+});
+var autoActionBoundAnnotation = /* @__PURE__ */ createActionAnnotation(AUTOACTION_BOUND, {
+  autoAction: true,
+  bound: true
+});
+function createActionDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateAction20223_);
+}
+function createActionFactory(autoAction2) {
+  const res = function action2(arg1, arg2) {
+    if (arg2 && typeof arg2.kind === "string") {
+      return decorateAction20223_(autoAction2 ? autoActionAnnotation : actionAnnotation, arg1, arg2);
+    }
+    if (isFunction(arg1)) {
+      return createAction(arg1.name || DEFAULT_ACTION_NAME, arg1, autoAction2);
+    }
+    if (isFunction(arg2)) {
+      return createAction(arg1, arg2, autoAction2);
+    }
+    if (isStringish(arg1)) {
+      return createActionDecoratorAnnotation(createActionAnnotation(autoAction2 ? AUTOACTION : ACTION, {
+        name: arg1,
+        autoAction: autoAction2
+      }));
+    }
+    if (__MOBX_DEV__) {
+      die("Invalid arguments for `action`");
+    }
+  };
+  return res;
+}
+var action = /* @__PURE__ */ createActionFactory(false);
+assign(action, actionAnnotation);
+var autoAction = /* @__PURE__ */ createActionFactory(true);
+assign(autoAction, autoActionAnnotation);
+var autoActionBound = /* @__PURE__ */ createActionDecoratorAnnotation(autoActionBoundAnnotation);
+function runInAction(fn) {
+  return executeAction(fn.name || DEFAULT_ACTION_NAME, false, fn, this, void 0);
+}
+function isAction(thing) {
+  return isFunction(thing) && thing.isMobxAction === true;
+}
+function autorun(view, opts = EMPTY_OBJECT) {
+  var _opts$name, _opts$signal;
+  if (__MOBX_DEV__) {
+    if (!isFunction(view)) {
+      die("Autorun expects a function as first argument");
+    }
+    if (isAction(view)) {
+      die("Autorun does not accept actions since actions are untrackable");
+    }
+  }
+  const name = (_opts$name = opts == null ? void 0 : opts.name) != null ? _opts$name : __MOBX_DEV__ ? view.name || "Autorun@" + getNextId() : "Autorun";
+  const runSync = !opts.scheduler && !opts.delay;
+  let reaction2;
+  if (runSync) {
+    reaction2 = new Reaction(name, function() {
+      this.track(reactionRunner);
+    }, opts.onError, opts.requiresObservable);
+  } else {
+    const scheduler = createSchedulerFromOptions(opts);
+    let isScheduled = false;
+    reaction2 = new Reaction(name, () => {
+      if (!isScheduled) {
+        isScheduled = true;
+        scheduler(() => {
+          isScheduled = false;
+          if (!reaction2.isDisposed) {
+            reaction2.track(reactionRunner);
+          }
+        });
+      }
+    }, opts.onError, opts.requiresObservable);
+  }
+  function reactionRunner() {
+    view(reaction2);
+  }
+  if (!(opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted)) {
+    reaction2.schedule_();
+  }
+  return reaction2.getDisposer_(opts == null ? void 0 : opts.signal);
+}
+var run = (f) => f();
+function createSchedulerFromOptions(opts) {
+  return opts.scheduler ? opts.scheduler : opts.delay ? (f) => setTimeout(f, opts.delay) : run;
+}
+function reaction(expression, effect, opts = EMPTY_OBJECT) {
+  var _opts$name2, _opts$signal2;
+  if (__MOBX_DEV__) {
+    if (!isFunction(expression) || !isFunction(effect)) {
+      die("First and second argument to reaction should be functions");
+    }
+    if (!isPlainObject(opts)) {
+      die("Third argument of reactions should be an object");
+    }
+  }
+  const name = (_opts$name2 = opts.name) != null ? _opts$name2 : __MOBX_DEV__ ? "Reaction@" + getNextId() : "Reaction";
+  const effectAction = action(name, opts.onError ? wrapErrorHandler(opts.onError, effect) : effect);
+  const runSync = !opts.scheduler && !opts.delay;
+  const scheduler = createSchedulerFromOptions(opts);
+  let firstTime = true;
+  let isScheduled = false;
+  let value;
+  const equals = opts.equals || compareDefault;
+  const r = new Reaction(name, () => {
+    if (firstTime || runSync) {
+      reactionRunner();
+    } else if (!isScheduled) {
+      isScheduled = true;
+      scheduler(reactionRunner);
+    }
+  }, opts.onError, opts.requiresObservable);
+  function reactionRunner() {
+    isScheduled = false;
+    if (r.isDisposed) {
+      return;
+    }
+    let changed = false;
+    const oldValue = value;
+    r.track(() => {
+      const nextValue = allowStateChanges(false, () => expression(r));
+      changed = firstTime || !equals(value, nextValue);
+      value = nextValue;
+    });
+    if (firstTime && opts.fireImmediately) {
+      effectAction(value, oldValue, r);
+    } else if (!firstTime && changed) {
+      effectAction(value, oldValue, r);
+    }
+    firstTime = false;
+  }
+  if (!(opts != null && (_opts$signal2 = opts.signal) != null && _opts$signal2.aborted)) {
+    r.schedule_();
+  }
+  return r.getDisposer_(opts == null ? void 0 : opts.signal);
+}
+function wrapErrorHandler(errorHandler, baseFn) {
+  return function() {
+    try {
+      return baseFn.apply(this, arguments);
+    } catch (e) {
+      errorHandler.call(this, e);
+    }
+  };
+}
+function extendObservable(target, properties, annotations, options) {
+  if (__MOBX_DEV__) {
+    if (arguments.length > 4) {
+      die("'extendObservable' expected 2-4 arguments");
+    }
+    if (typeof target !== "object") {
+      die("'extendObservable' expects an object as first argument");
+    }
+    if (isObservableMap(target)) {
+      die("'extendObservable' should not be used on maps, use map.merge instead");
+    }
+    if (!isPlainObject(properties)) {
+      die(`'extendObservable' only accepts plain objects as second argument`);
+    }
+    if (isObservable(properties) || isObservable(annotations)) {
+      die(`Extending an object with another observable (object) is not supported`);
+    }
+  }
+  const descriptors = getOwnPropertyDescriptors(properties);
+  initObservable(() => {
+    const adm = asObservableObject(target, options)[$mobx];
+    ownKeys2(descriptors).forEach((key) => {
+      adm.extend_(
+        key,
+        descriptors[key],
+        // must pass "undefined" for { key: undefined }
+        !annotations ? true : key in annotations ? annotations[key] : true
+      );
+    });
+  });
+  return target;
+}
+var generatorId = 0;
+var FlowCancellationError = class extends Error {
+  constructor() {
+    super("FLOW_CANCELLED");
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.name = "FlowCancellationError";
+  }
+  toString() {
+    return `Error: ${this.message}`;
+  }
+};
+function createFlowDecoratorAnnotation(annotation) {
+  return createDecoratorAnnotation(annotation, decorateFlow20223_);
+}
+var flowAnnotation = /* @__PURE__ */ createFlowAnnotation("flow");
+var flowBoundAnnotation = /* @__PURE__ */ createFlowAnnotation("flow.bound", {
+  bound: true
+});
+var flow = /* @__PURE__ */ assign(function flow2(arg1, arg2) {
+  if (arg2 && typeof arg2.kind === "string") {
+    return decorateFlow20223_(flowAnnotation, arg1, arg2);
+  }
+  if (__MOBX_DEV__ && arguments.length !== 1) {
+    die(`Flow expects single argument with generator function`);
+  }
+  const generator = arg1;
+  const name = generator.name || (__MOBX_DEV__ ? "<unnamed flow>" : "flow");
+  const res = function res2() {
+    const ctx = this;
+    const args = arguments;
+    const runId = __MOBX_DEV__ ? ++generatorId : 0;
+    const gen = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - init` : name, generator).apply(ctx, args);
+    let rejector;
+    let pendingPromise = void 0;
+    const promise = new Promise(function(resolve, reject2) {
+      let stepId = 0;
+      rejector = reject2;
+      function onFulfilled(res3) {
+        pendingPromise = void 0;
+        let ret;
+        try {
+          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.next).call(gen, res3);
+        } catch (e) {
+          return reject2(e);
+        }
+        next2(ret);
+      }
+      function onRejected(err) {
+        pendingPromise = void 0;
+        let ret;
+        try {
+          ret = action(__MOBX_DEV__ ? `${name} - runid: ${runId} - yield ${stepId++}` : name, gen.throw).call(gen, err);
+        } catch (e) {
+          return reject2(e);
+        }
+        next2(ret);
+      }
+      function next2(ret) {
+        if (isFunction(ret == null ? void 0 : ret.then)) {
+          ret.then(next2, reject2);
+          return;
+        }
+        if (ret.done) {
+          return resolve(ret.value);
+        }
+        pendingPromise = Promise.resolve(ret.value);
+        return pendingPromise.then(onFulfilled, onRejected);
+      }
+      onFulfilled(void 0);
+    });
+    const cancelActionName = __MOBX_DEV__ ? `${name} - runid: ${runId} - cancel` : name;
+    promise.cancel = action(cancelActionName, function() {
+      try {
+        if (pendingPromise) {
+          cancelPromise(pendingPromise);
+        }
+        const res3 = gen.return(void 0);
+        const yieldedPromise = Promise.resolve(res3.value);
+        yieldedPromise.then(noop, noop);
+        cancelPromise(yieldedPromise);
+        rejector(new FlowCancellationError());
+      } catch (e) {
+        rejector(e);
+      }
+    });
+    return promise;
+  };
+  res.isMobXFlow = true;
+  return res;
+}, flowAnnotation);
+var flowBound = /* @__PURE__ */ createFlowDecoratorAnnotation(flowBoundAnnotation);
+function cancelPromise(promise) {
+  if (isFunction(promise.cancel)) {
+    promise.cancel();
+  }
+}
+function isFlow(fn) {
+  return (fn == null ? void 0 : fn.isMobXFlow) === true;
+}
+function _isObservable(value, property) {
+  if (!value) {
+    return false;
+  }
+  if (property !== void 0) {
+    if (__MOBX_DEV__ && (isObservableMap(value) || isObservableArray(value))) {
+      return die("isObservable(object, propertyName) is not supported for arrays and maps. Use map.has or array.length instead.");
+    }
+    if (isObservableObject(value)) {
+      var _adm$lazyComputedKeys, _adm$lazyObservableKe;
+      const adm = value[$mobx];
+      return adm.values_.has(property) || !!((_adm$lazyComputedKeys = adm.lazyComputedKeys_) != null && _adm$lazyComputedKeys.has(property)) || !!((_adm$lazyObservableKe = adm.lazyObservableKeys_) != null && _adm$lazyObservableKe.has(property));
+    }
+    return false;
+  }
+  return isObservableObject(value) || !!value[$mobx] || isAtom(value) || isReaction(value) || isComputedValue(value);
+}
+function isObservable(value) {
+  if (__MOBX_DEV__ && arguments.length !== 1) {
+    die(`isObservable expects only 1 argument. Use isObservableProp to inspect the observability of a property`);
+  }
+  return _isObservable(value);
+}
+function observe(thing, propOrCb, cbOrFire, fireImmediately) {
+  if (isFunction(cbOrFire)) {
+    return observeObservableProperty(thing, propOrCb, cbOrFire, fireImmediately);
+  } else {
+    return observeObservable(thing, propOrCb, cbOrFire);
+  }
+}
+function observeObservable(thing, listener, fireImmediately) {
+  const adm = getAdministration(thing);
+  if (isObservableArray(thing)) {
+    if (fireImmediately) {
+      listener({
+        observableKind: "array",
+        object: adm.proxy_,
+        debugObjectName: adm.atom_.name_,
+        type: "splice",
+        index: 0,
+        added: adm.values_.slice(),
+        addedCount: adm.values_.length,
+        removed: [],
+        removedCount: 0
+      });
+    }
+  } else if (isObservableMap(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support fireImmediately=true in combination with maps.");
+    }
+  } else if (isObservableSet(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support fireImmediately=true in combination with sets.");
+    }
+  } else if (isObservableObject(thing)) {
+    if (__MOBX_DEV__ && fireImmediately === true) {
+      die("`observe` doesn't support the fire immediately property for observable objects.");
+    }
+  } else {
+    return observeValue(adm, listener, fireImmediately);
+  }
+  return registerListener(adm, listener);
+}
+function observeObservableProperty(thing, property, listener, fireImmediately) {
+  return observeValue(getAdministration(thing, property), listener, fireImmediately);
+}
+function observeValue(adm, listener, fireImmediately) {
+  if (isComputedValue(adm)) {
+    let firstTime = true;
+    let prevValue = void 0;
+    return autorun(() => {
+      const newValue = adm.get();
+      if (!firstTime || fireImmediately) {
+        const prevU = untrackedStart();
+        listener({
+          observableKind: "computed",
+          debugObjectName: adm.name_,
+          type: UPDATE,
+          object: adm,
+          newValue,
+          oldValue: prevValue
+        });
+        untrackedEnd(prevU);
+      }
+      firstTime = false;
+      prevValue = newValue;
+    });
+  }
+  if (fireImmediately) {
+    listener({
+      observableKind: "value",
+      debugObjectName: adm.name_,
+      object: adm,
+      type: UPDATE,
+      newValue: adm.value_,
+      oldValue: void 0
+    });
+  }
+  return registerListener(adm, listener);
+}
+function transaction(action2, thisArg = void 0) {
+  startBatch();
+  try {
+    return action2.apply(thisArg);
+  } finally {
+    endBatch();
+  }
+}
+function when(predicate, arg1, arg2) {
+  if (arguments.length === 1 || arg1 && typeof arg1 === "object") {
+    return whenPromise(predicate, arg1);
+  }
+  return _when(predicate, arg1, arg2 || {});
+}
+function _when(predicate, effect, opts) {
+  let timeoutHandle;
+  if (typeof opts.timeout === "number") {
+    const error = new Error("WHEN_TIMEOUT");
+    timeoutHandle = setTimeout(() => {
+      if (!disposer[$mobx].isDisposed) {
+        disposer();
+        if (opts.onError) {
+          opts.onError(error);
+        } else {
+          throw error;
+        }
+      }
+    }, opts.timeout);
+  }
+  opts.name = __MOBX_DEV__ ? opts.name || "When@" + getNextId() : "When";
+  const effectAction = createAction(__MOBX_DEV__ ? opts.name + "-effect" : "When-effect", effect);
+  var disposer = autorun((r) => {
+    let cond = allowStateChanges(false, predicate);
+    if (cond) {
+      r.dispose();
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+      effectAction();
+    }
+  }, opts);
+  return disposer;
+}
+function whenPromise(predicate, opts) {
+  var _opts$signal;
+  if (__MOBX_DEV__ && opts && opts.onError) {
+    return die(`the options 'onError' and 'promise' cannot be combined`);
+  }
+  if (opts != null && (_opts$signal = opts.signal) != null && _opts$signal.aborted) {
+    return assign(Promise.reject(new Error("WHEN_ABORTED")), {
+      cancel: () => null
+    });
+  }
+  let cancel;
+  let abort;
+  const res = new Promise((resolve, reject2) => {
+    var _opts$signal2;
+    let disposer = _when(predicate, resolve, assign({}, opts, {
+      onError: reject2
+    }));
+    cancel = () => {
+      disposer();
+      reject2(new Error("WHEN_CANCELLED"));
+    };
+    abort = () => {
+      disposer();
+      reject2(new Error("WHEN_ABORTED"));
+    };
+    opts == null || (_opts$signal2 = opts.signal) == null || _opts$signal2.addEventListener == null || _opts$signal2.addEventListener("abort", abort);
+  }).finally(() => {
+    var _opts$signal3;
+    return opts == null || (_opts$signal3 = opts.signal) == null || _opts$signal3.removeEventListener == null ? void 0 : _opts$signal3.removeEventListener("abort", abort);
+  });
+  res.cancel = cancel;
+  return res;
+}
+function getAdm(target) {
+  return target[$mobx];
+}
+var objectProxyTraps = {
+  has(target, name) {
+    return getAdm(target).has_(name);
+  },
+  get(target, name) {
+    return getAdm(target).get_(name);
+  },
+  set(target, name, value) {
+    var _getAdm$set_;
+    if (!isStringish(name)) {
+      return false;
+    }
+    return (_getAdm$set_ = getAdm(target).set_(name, value, true)) != null ? _getAdm$set_ : true;
+  },
+  deleteProperty(target, name) {
+    var _getAdm$delete_;
+    if (!isStringish(name)) {
+      return false;
+    }
+    return (_getAdm$delete_ = getAdm(target).delete_(name, true)) != null ? _getAdm$delete_ : true;
+  },
+  defineProperty(target, name, descriptor) {
+    var _getAdm$definePropert;
+    return (_getAdm$definePropert = getAdm(target).defineProperty_(name, descriptor)) != null ? _getAdm$definePropert : true;
+  },
+  ownKeys(target) {
+    return getAdm(target).ownKeys_();
+  },
+  preventExtensions(target) {
+    die(13);
+  }
+};
+function asDynamicObservableObject(target, options) {
+  var _target$$mobx, _target$$mobx$proxy_;
+  target = asObservableObject(target, options);
+  return (_target$$mobx$proxy_ = (_target$$mobx = target[$mobx]).proxy_) != null ? _target$$mobx$proxy_ : _target$$mobx.proxy_ = new Proxy(target, objectProxyTraps);
+}
+function hasInterceptors(interceptable) {
+  return interceptable.interceptors_ !== void 0 && interceptable.interceptors_.length > 0;
+}
+function interceptChange(interceptable, change) {
+  const prevU = untrackedStart();
+  try {
+    const interceptors = [...interceptable.interceptors_ || []];
+    for (let i2 = 0, l = interceptors.length; i2 < l; i2++) {
+      change = interceptors[i2](change);
+      if (change && !change.type) {
+        die(14);
+      }
+      if (!change) {
+        break;
+      }
+    }
+    return change;
+  } finally {
+    untrackedEnd(prevU);
+  }
+}
+function hasListeners(listenable) {
+  return listenable.changeListeners_ !== void 0 && listenable.changeListeners_.length > 0;
+}
+function registerListener(listenable, handler) {
+  let listeners2 = listenable.changeListeners_;
+  if (listeners2) {
+    listeners2.push(handler);
+  } else {
+    listeners2 = listenable.changeListeners_ = [handler];
+  }
+  return once(() => {
+    const idx = listeners2.indexOf(handler);
+    if (idx !== -1) {
+      listeners2.splice(idx, 1);
+    }
+  });
+}
+function notifyListeners(listenable, change) {
+  const prevU = untrackedStart();
+  let listeners2 = listenable.changeListeners_;
+  if (!listeners2) {
+    return;
+  }
+  listeners2 = listeners2.slice();
+  for (let i2 = 0, l = listeners2.length; i2 < l; i2++) {
+    listeners2[i2](change);
+  }
+  untrackedEnd(prevU);
+}
+var SPLICE = "splice";
+var UPDATE = "update";
+var MAX_SPLICE_SIZE = 1e4;
+var arrayTraps = {
+  get(target, name) {
+    const adm = target[$mobx];
+    if (name === $mobx) {
+      return adm;
+    }
+    if (name === "length") {
+      return adm.getArrayLength_();
+    }
+    if (typeof name === "string" && !isNaN(name)) {
+      return adm.get_(parseInt(name));
+    }
+    if (hasProp(arrayExtensions, name)) {
+      return arrayExtensions[name];
+    }
+    return target[name];
+  },
+  set(target, name, value) {
+    const adm = target[$mobx];
+    if (name === "length") {
+      adm.setArrayLength_(value);
+    } else if (typeof name === "symbol" || isNaN(name)) {
+      target[name] = value;
+    } else {
+      adm.set_(parseInt(name), value);
+    }
+    return true;
+  },
+  preventExtensions() {
+    die(15);
+  }
+};
+var ObservableArrayAdministration = class {
+  constructor(name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", enhancer, owned_) {
+    this.owned_ = void 0;
+    this.atom_ = void 0;
+    this.values_ = [];
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.enhancer_ = void 0;
+    this.dehancer = void 0;
+    this.proxy_ = void 0;
+    this.lastKnownLength_ = 0;
+    this.owned_ = owned_;
+    this.atom_ = new Atom(name);
+    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, __MOBX_DEV__ ? name + "[..]" : "ObservableArray[..]");
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  dehanceValues_(values2) {
+    if (this.dehancer !== void 0 && values2.length > 0) {
+      return values2.map(this.dehancer);
+    }
+    return values2;
+  }
+  getArrayLength_() {
+    this.atom_.reportObserved();
+    return this.values_.length;
+  }
+  setArrayLength_(newLength) {
+    if (!Number.isInteger(newLength) || newLength < 0) {
+      die(40, newLength);
+    }
+    let currentLength = this.values_.length;
+    if (newLength === currentLength) {
+      return;
+    } else if (newLength > currentLength) {
+      const newItems = Array.from({
+        length: newLength - currentLength
+      });
+      this.spliceWithArray_(currentLength, 0, newItems);
+    } else {
+      this.spliceWithArray_(newLength, currentLength - newLength);
+    }
+  }
+  updateArrayLength_(oldLength, delta) {
+    if (oldLength !== this.lastKnownLength_) {
+      die(16);
+    }
+    this.lastKnownLength_ += delta;
+  }
+  spliceWithArray_(index, deleteCount, newItems) {
+    checkIfStateModificationsAreAllowed(this.atom_);
+    const length = this.values_.length;
+    if (index === void 0) {
+      index = 0;
+    } else if (index > length) {
+      index = length;
+    } else if (index < 0) {
+      index = Math.max(0, length + index);
+    }
+    if (arguments.length === 1) {
+      deleteCount = length - index;
+    } else if (deleteCount === void 0 || deleteCount === null) {
+      deleteCount = 0;
+    } else {
+      deleteCount = Math.max(0, Math.min(deleteCount, length - index));
+    }
+    if (newItems === void 0) {
+      newItems = EMPTY_ARRAY;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this.proxy_,
+        type: SPLICE,
+        index,
+        removedCount: deleteCount,
+        added: newItems
+      });
+      if (!change) {
+        return EMPTY_ARRAY;
+      }
+      deleteCount = change.removedCount;
+      newItems = change.added;
+    }
+    newItems = newItems.length === 0 ? newItems : newItems.map((v) => this.enhancer_(v, void 0));
+    if (__MOBX_DEV__) {
+      const lengthDelta = newItems.length - deleteCount;
+      this.updateArrayLength_(length, lengthDelta);
+    }
+    const res = this.spliceItemsIntoValues_(index, deleteCount, newItems);
+    if (deleteCount !== 0 || newItems.length !== 0) {
+      this.notifyArraySplice_(index, newItems, res);
+    }
+    return this.dehanceValues_(res);
+  }
+  spliceItemsIntoValues_(index, deleteCount, newItems) {
+    if (newItems.length < MAX_SPLICE_SIZE) {
+      return this.values_.splice(index, deleteCount, ...newItems);
+    } else {
+      const res = this.values_.slice(index, index + deleteCount);
+      let oldItems = this.values_.slice(index + deleteCount);
+      this.values_.length += newItems.length - deleteCount;
+      for (let i2 = 0; i2 < newItems.length; i2++) {
+        this.values_[index + i2] = newItems[i2];
+      }
+      for (let i2 = 0; i2 < oldItems.length; i2++) {
+        this.values_[index + newItems.length + i2] = oldItems[i2];
+      }
+      return res;
+    }
+  }
+  notifyArrayChildUpdate_(index, newValue, oldValue) {
+    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "array",
+      object: this.proxy_,
+      type: UPDATE,
+      debugObjectName: this.atom_.name_,
+      index,
+      newValue,
+      oldValue
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    this.atom_.reportChanged();
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  notifyArraySplice_(index, added, removed) {
+    const notifySpy = __MOBX_DEV__ && !this.owned_ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "array",
+      object: this.proxy_,
+      debugObjectName: this.atom_.name_,
+      type: SPLICE,
+      index,
+      removed,
+      added,
+      removedCount: removed.length,
+      addedCount: added.length
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    this.atom_.reportChanged();
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  get_(index) {
+    this.atom_.reportObserved();
+    return this.dehanceValue_(this.values_[index]);
+  }
+  set_(index, newValue) {
+    const values2 = this.values_;
+    if (index < values2.length) {
+      checkIfStateModificationsAreAllowed(this.atom_);
+      const oldValue = values2[index];
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          type: UPDATE,
+          object: this.proxy_,
+          // since "this" is the real array we need to pass its proxy
+          index,
+          newValue
+        });
+        if (!change) {
+          return;
+        }
+        newValue = change.newValue;
+      }
+      newValue = this.enhancer_(newValue, oldValue);
+      const changed = newValue !== oldValue;
+      if (changed) {
+        values2[index] = newValue;
+        this.notifyArrayChildUpdate_(index, newValue, oldValue);
+      }
+    } else {
+      const newItems = Array.from({
+        length: index + 1 - values2.length
+      });
+      newItems[newItems.length - 1] = newValue;
+      this.spliceWithArray_(values2.length, 0, newItems);
+    }
+  }
+};
+function createObservableArray(initialValues, enhancer, name = __MOBX_DEV__ ? "ObservableArray@" + getNextId() : "ObservableArray", owned = false) {
+  return initObservable(() => {
+    const adm = new ObservableArrayAdministration(name, enhancer, owned);
+    addHiddenFinalProp(adm.values_, $mobx, adm);
+    const proxy = new Proxy(adm.values_, arrayTraps);
+    adm.proxy_ = proxy;
+    if (initialValues && initialValues.length) {
+      adm.spliceWithArray_(0, 0, initialValues);
+    }
+    return proxy;
+  });
+}
+var arrayExtensions = {
+  clear() {
+    return this.splice(0);
+  },
+  replace(newItems) {
+    const adm = this[$mobx];
+    return adm.spliceWithArray_(0, adm.values_.length, newItems);
+  },
+  // Used by JSON.stringify
+  toJSON() {
+    return this.slice();
+  },
+  /*
+   * functions that do alter the internal structure of the array, (based on lib.es6.d.ts)
+   * since these functions alter the inner structure of the array, the have side effects.
+   * Because the have side effects, they should not be used in computed function,
+   * and for that reason the do not call dependencyState.notifyObserved
+   */
+  splice(index, deleteCount, ...newItems) {
+    const adm = this[$mobx];
+    switch (arguments.length) {
+      case 0:
+        return [];
+      case 1:
+        return adm.spliceWithArray_(index);
+      case 2:
+        return adm.spliceWithArray_(index, deleteCount);
+    }
+    return adm.spliceWithArray_(index, deleteCount, newItems);
+  },
+  spliceWithArray(index, deleteCount, newItems) {
+    return this[$mobx].spliceWithArray_(index, deleteCount, newItems);
+  },
+  push(...items) {
+    const adm = this[$mobx];
+    adm.spliceWithArray_(adm.values_.length, 0, items);
+    return adm.values_.length;
+  },
+  pop() {
+    return this.splice(Math.max(this[$mobx].values_.length - 1, 0), 1)[0];
+  },
+  shift() {
+    return this.splice(0, 1)[0];
+  },
+  unshift(...items) {
+    const adm = this[$mobx];
+    adm.spliceWithArray_(0, 0, items);
+    return adm.values_.length;
+  },
+  reverse() {
+    if (globalState.trackingDerivation) {
+      die(37, "reverse");
+    }
+    this.replace(this.slice().reverse());
+    return this;
+  },
+  sort() {
+    if (globalState.trackingDerivation) {
+      die(37, "sort");
+    }
+    const copy2 = this.slice();
+    copy2.sort.apply(copy2, arguments);
+    this.replace(copy2);
+    return this;
+  },
+  remove(value) {
+    const adm = this[$mobx];
+    const idx = adm.dehanceValues_(adm.values_).indexOf(value);
+    if (idx > -1) {
+      this.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+};
+addArrayExtension("at", simpleFunc);
+addArrayExtension("concat", simpleFunc);
+addArrayExtension("flat", simpleFunc);
+addArrayExtension("includes", simpleFunc);
+addArrayExtension("indexOf", simpleFunc);
+addArrayExtension("join", simpleFunc);
+addArrayExtension("lastIndexOf", simpleFunc);
+addArrayExtension("slice", simpleFunc);
+addArrayExtension("toString", simpleFunc);
+addArrayExtension("toLocaleString", simpleFunc);
+addArrayExtension("toSorted", simpleFunc);
+addArrayExtension("toSpliced", simpleFunc);
+addArrayExtension("with", simpleFunc);
+addArrayExtension("every", mapLikeFunc);
+addArrayExtension("filter", mapLikeFunc);
+addArrayExtension("find", mapLikeFunc);
+addArrayExtension("findIndex", mapLikeFunc);
+addArrayExtension("findLast", mapLikeFunc);
+addArrayExtension("findLastIndex", mapLikeFunc);
+addArrayExtension("flatMap", mapLikeFunc);
+addArrayExtension("forEach", mapLikeFunc);
+addArrayExtension("map", mapLikeFunc);
+addArrayExtension("some", mapLikeFunc);
+addArrayExtension("toReversed", mapLikeFunc);
+addArrayExtension("reduce", reduceLikeFunc);
+addArrayExtension("reduceRight", reduceLikeFunc);
+function addArrayExtension(funcName, funcFactory) {
+  if (typeof Array.prototype[funcName] === "function") {
+    arrayExtensions[funcName] = funcFactory(funcName);
+  }
+}
+function simpleFunc(funcName) {
+  return function() {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    return dehancedValues[funcName].apply(dehancedValues, arguments);
+  };
+}
+function mapLikeFunc(funcName) {
+  return function(callback, thisArg) {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    return dehancedValues[funcName]((element, index) => {
+      return callback.call(thisArg, element, index, this);
+    });
+  };
+}
+function reduceLikeFunc(funcName) {
+  return function() {
+    const adm = this[$mobx];
+    adm.atom_.reportObserved();
+    const dehancedValues = adm.dehanceValues_(adm.values_);
+    const callback = arguments[0];
+    arguments[0] = (accumulator, currentValue, index) => {
+      return callback(accumulator, currentValue, index, this);
+    };
+    return dehancedValues[funcName].apply(dehancedValues, arguments);
+  };
+}
+var isObservableArrayAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableArrayAdministration", ObservableArrayAdministration);
+function isObservableArray(thing) {
+  return isObject(thing) && isObservableArrayAdministration(thing[$mobx]);
+}
+var ObservableMapMarker = {};
+var ADD = "add";
+var DELETE = "delete";
+var ObservableMap = class {
+  constructor(initialData, enhancer_ = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableMap@" + getNextId() : "ObservableMap") {
+    this.enhancer_ = void 0;
+    this.name_ = void 0;
+    this[$mobx] = ObservableMapMarker;
+    this.data_ = void 0;
+    this.hasMap_ = void 0;
+    this.keysAtom_ = void 0;
+    this.interceptors_ = void 0;
+    this.changeListeners_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = enhancer_;
+    this.name_ = name_;
+    initObservable(() => {
+      this.keysAtom_ = createAtom(__MOBX_DEV__ ? `${this.name_}.keys()` : "ObservableMap.keys()");
+      this.data_ = /* @__PURE__ */ new Map();
+      this.hasMap_ = /* @__PURE__ */ new Map();
+      if (initialData) {
+        this.merge(initialData);
+      }
+    });
+  }
+  has_(key) {
+    return this.data_.has(key);
+  }
+  has(key) {
+    if (!globalState.trackingDerivation) {
+      return this.has_(key);
+    }
+    let entry = this.hasMap_.get(key);
+    if (!entry) {
+      const newEntry = entry = new ObservableValue(this.has_(key), referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableMap.key?", false);
+      this.hasMap_.set(key, newEntry);
+      newEntry.onBUOL = /* @__PURE__ */ new Set([() => this.hasMap_.delete(key)]);
+    }
+    return entry.get();
+  }
+  set(key, value) {
+    const hasKey2 = this.has_(key);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: hasKey2 ? UPDATE : ADD,
+        object: this,
+        newValue: value,
+        name: key
+      });
+      if (!change) {
+        return this;
+      }
+      value = change.newValue;
+    }
+    if (hasKey2) {
+      this.updateValue_(key, value);
+    } else {
+      this.addValue_(key, value);
+    }
+    return this;
+  }
+  delete(key) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: DELETE,
+        object: this,
+        name: key
+      });
+      if (!change) {
+        return false;
+      }
+    }
+    if (this.has_(key)) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "map",
+        debugObjectName: this.name_,
+        type: DELETE,
+        object: this,
+        oldValue: this.data_.get(key).value_,
+        name: key
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      transaction(() => {
+        var _this$hasMap_$get;
+        this.keysAtom_.reportChanged();
+        (_this$hasMap_$get = this.hasMap_.get(key)) == null || _this$hasMap_$get.setNewValue_(false);
+        const observable2 = this.data_.get(key);
+        observable2.setNewValue_(void 0);
+        this.data_.delete(key);
+      });
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+      return true;
+    }
+    return false;
+  }
+  updateValue_(key, newValue) {
+    const observable2 = this.data_.get(key);
+    newValue = observable2.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "map",
+        debugObjectName: this.name_,
+        type: UPDATE,
+        object: this,
+        oldValue: observable2.value_,
+        name: key,
+        newValue
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      observable2.setNewValue_(newValue);
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+  }
+  addValue_(key, newValue) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    transaction(() => {
+      var _this$hasMap_$get2;
+      const observable2 = new ObservableValue(newValue, this.enhancer_, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}` : "ObservableMap.key", false);
+      this.data_.set(key, observable2);
+      newValue = observable2.value_;
+      (_this$hasMap_$get2 = this.hasMap_.get(key)) == null || _this$hasMap_$get2.setNewValue_(true);
+      this.keysAtom_.reportChanged();
+    });
+    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+    const notify2 = hasListeners(this);
+    const change = notify2 || notifySpy ? {
+      observableKind: "map",
+      debugObjectName: this.name_,
+      type: ADD,
+      object: this,
+      name: key,
+      newValue
+    } : null;
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportStart(change);
+    }
+    if (notify2) {
+      notifyListeners(this, change);
+    }
+    if (__MOBX_DEV__ && notifySpy) {
+      spyReportEnd();
+    }
+  }
+  get(key) {
+    if (this.has(key)) {
+      return this.dehanceValue_(this.data_.get(key).get());
+    }
+    return this.dehanceValue_(void 0);
+  }
+  getOrInsert(key, value) {
+    if (!this.has(key)) {
+      this.set(key, value);
+    }
+    return this.get(key);
+  }
+  getOrInsertComputed(key, callback) {
+    if (!this.has(key)) {
+      this.set(key, callback(key));
+    }
+    return this.get(key);
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  keys() {
+    this.keysAtom_.reportObserved();
+    return this.data_.keys();
+  }
+  values() {
+    const self2 = this;
+    const keys2 = this.keys();
+    return makeIterableForMap({
+      next() {
+        const {
+          done,
+          value
+        } = keys2.next();
+        return {
+          done,
+          value: done ? void 0 : self2.get(value)
+        };
+      }
+    });
+  }
+  entries() {
+    const self2 = this;
+    const keys2 = this.keys();
+    return makeIterableForMap({
+      next() {
+        const {
+          done,
+          value
+        } = keys2.next();
+        return {
+          done,
+          value: done ? void 0 : [value, self2.get(value)]
+        };
+      }
+    });
+  }
+  [Symbol.iterator]() {
+    return this.entries();
+  }
+  forEach(callback, thisArg) {
+    for (const [key, value] of this) {
+      callback.call(thisArg, value, key, this);
+    }
+  }
+  /** Merge another object into this object, returns this. */
+  merge(other) {
+    if (isObservableMap(other)) {
+      other = new Map(other);
+    }
+    transaction(() => {
+      if (isPlainObject(other)) {
+        getPlainObjectKeys(other).forEach((key) => this.set(key, other[key]));
+      } else if (Array.isArray(other)) {
+        other.forEach(([key, value]) => this.set(key, value));
+      } else if (isES6Map(other)) {
+        if (!isPlainES6Map(other)) {
+          die(19, other);
+        }
+        other.forEach((value, key) => this.set(key, value));
+      } else if (other !== null && other !== void 0) {
+        die(20, other);
+      }
+    });
+    return this;
+  }
+  clear() {
+    transaction(() => {
+      untracked(() => {
+        for (const key of this.keys()) {
+          this.delete(key);
+        }
+      });
+    });
+  }
+  replace(values2) {
+    transaction(() => {
+      const replacementMap = convertToMap(values2);
+      const orderedData = /* @__PURE__ */ new Map();
+      let keysReportChangedCalled = false;
+      for (const key of this.data_.keys()) {
+        if (!replacementMap.has(key)) {
+          const deleted = this.delete(key);
+          if (deleted) {
+            keysReportChangedCalled = true;
+          } else {
+            const value = this.data_.get(key);
+            orderedData.set(key, value);
+          }
+        }
+      }
+      for (const [key, value] of replacementMap.entries()) {
+        const keyExisted = this.data_.has(key);
+        this.set(key, value);
+        if (this.data_.has(key)) {
+          const _value = this.data_.get(key);
+          orderedData.set(key, _value);
+          if (!keyExisted) {
+            keysReportChangedCalled = true;
+          }
+        }
+      }
+      if (!keysReportChangedCalled) {
+        if (this.data_.size !== orderedData.size) {
+          this.keysAtom_.reportChanged();
+        } else {
+          const iter1 = this.data_.keys();
+          const iter2 = orderedData.keys();
+          let next1 = iter1.next();
+          let next2 = iter2.next();
+          while (!next1.done) {
+            if (next1.value !== next2.value) {
+              this.keysAtom_.reportChanged();
+              break;
+            }
+            next1 = iter1.next();
+            next2 = iter2.next();
+          }
+        }
+      }
+      this.data_ = orderedData;
+    });
+    return this;
+  }
+  get size() {
+    this.keysAtom_.reportObserved();
+    return this.data_.size;
+  }
+  toString() {
+    return "[object ObservableMap]";
+  }
+  toJSON() {
+    return Array.from(this);
+  }
+  get [Symbol.toStringTag]() {
+    return "Map";
+  }
+};
+var isObservableMap = /* @__PURE__ */ createInstanceofPredicate("ObservableMap", ObservableMap);
+function makeIterableForMap(iterator) {
+  iterator[Symbol.toStringTag] = "MapIterator";
+  return makeIterable(iterator);
+}
+function convertToMap(dataStructure) {
+  if (isES6Map(dataStructure) || isObservableMap(dataStructure)) {
+    return dataStructure;
+  } else if (Array.isArray(dataStructure)) {
+    return new Map(dataStructure);
+  } else if (isPlainObject(dataStructure)) {
+    const map = /* @__PURE__ */ new Map();
+    for (const key in dataStructure) {
+      map.set(key, dataStructure[key]);
+    }
+    return map;
+  } else {
+    return die(21, dataStructure);
+  }
+}
+var ObservableSetMarker = {};
+var ObservableSet = class {
+  constructor(initialData, enhancer = deepEnhancer, name_ = __MOBX_DEV__ ? "ObservableSet@" + getNextId() : "ObservableSet") {
+    this.name_ = void 0;
+    this[$mobx] = ObservableSetMarker;
+    this.data_ = /* @__PURE__ */ new Set();
+    this.atom_ = void 0;
+    this.changeListeners_ = void 0;
+    this.interceptors_ = void 0;
+    this.dehancer = void 0;
+    this.enhancer_ = void 0;
+    this.name_ = name_;
+    this.enhancer_ = (newV, oldV) => enhancer(newV, oldV, name_);
+    initObservable(() => {
+      this.atom_ = createAtom(this.name_);
+      if (initialData) {
+        this.replace(initialData);
+      }
+    });
+  }
+  dehanceValue_(value) {
+    if (this.dehancer !== void 0) {
+      return this.dehancer(value);
+    }
+    return value;
+  }
+  clear() {
+    transaction(() => {
+      untracked(() => {
+        for (const value of this.data_.values()) {
+          this.delete(value);
+        }
+      });
+    });
+  }
+  forEach(callbackFn, thisArg) {
+    for (const value of this) {
+      callbackFn.call(thisArg, value, value, this);
+    }
+  }
+  get size() {
+    this.atom_.reportObserved();
+    return this.data_.size;
+  }
+  add(value) {
+    checkIfStateModificationsAreAllowed(this.atom_);
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: ADD,
+        object: this,
+        newValue: value
+      });
+      if (!change) {
+        return this;
+      }
+      value = change.newValue;
+    }
+    if (!this.has(value)) {
+      transaction(() => {
+        value = this.enhancer_(value, void 0);
+        this.data_.add(value);
+        this.atom_.reportChanged();
+      });
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "set",
+        debugObjectName: this.name_,
+        type: ADD,
+        object: this,
+        newValue: value
+      } : null;
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportStart(change);
+      }
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportEnd();
+      }
+    }
+    return this;
+  }
+  delete(value) {
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: DELETE,
+        object: this,
+        oldValue: value
+      });
+      if (!change) {
+        return false;
+      }
+    }
+    if (this.has(value)) {
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const notify2 = hasListeners(this);
+      const change = notify2 || notifySpy ? {
+        observableKind: "set",
+        debugObjectName: this.name_,
+        type: DELETE,
+        object: this,
+        oldValue: value
+      } : null;
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportStart(change);
+      }
+      transaction(() => {
+        this.atom_.reportChanged();
+        this.data_.delete(value);
+      });
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (notifySpy && __MOBX_DEV__) {
+        spyReportEnd();
+      }
+      return true;
+    }
+    return false;
+  }
+  has(value) {
+    this.atom_.reportObserved();
+    return this.data_.has(this.dehanceValue_(value));
+  }
+  entries() {
+    const values2 = this.values();
+    return makeIterableForSet({
+      next() {
+        const {
+          value,
+          done
+        } = values2.next();
+        return !done ? {
+          value: [value, value],
+          done
+        } : {
+          value: void 0,
+          done
+        };
+      }
+    });
+  }
+  keys() {
+    return this.values();
+  }
+  values() {
+    this.atom_.reportObserved();
+    const self2 = this;
+    const values2 = this.data_.values();
+    return makeIterableForSet({
+      next() {
+        const {
+          value,
+          done
+        } = values2.next();
+        return !done ? {
+          value: self2.dehanceValue_(value),
+          done
+        } : {
+          value: void 0,
+          done
+        };
+      }
+    });
+  }
+  intersection(otherSet) {
+    return new Set(this).intersection(otherSet);
+  }
+  union(otherSet) {
+    return new Set(this).union(otherSet);
+  }
+  difference(otherSet) {
+    return new Set(this).difference(otherSet);
+  }
+  symmetricDifference(otherSet) {
+    return new Set(this).symmetricDifference(otherSet);
+  }
+  isSubsetOf(otherSet) {
+    return new Set(this).isSubsetOf(otherSet);
+  }
+  isSupersetOf(otherSet) {
+    return new Set(this).isSupersetOf(otherSet);
+  }
+  isDisjointFrom(otherSet) {
+    return new Set(this).isDisjointFrom(otherSet);
+  }
+  replace(other) {
+    if (isObservableSet(other)) {
+      other = new Set(other);
+    }
+    if (Array.isArray(other) || isES6Set(other)) {
+      transaction(() => {
+        const replacementValues = isES6Set(other) ? other : new Set(other);
+        if (replacementValues.size === 0) {
+          this.clear();
+          return;
+        }
+        if (this.data_.size === 0) {
+          replacementValues.forEach((value) => this.add(value));
+          return;
+        }
+        for (const value of this.data_.values()) {
+          if (!replacementValues.has(this.dehanceValue_(value))) {
+            this.delete(value);
+          }
+        }
+        replacementValues.forEach((value) => this.add(value));
+      });
+    } else if (other !== null && other !== void 0) {
+      die(41, other);
+    }
+    return this;
+  }
+  toJSON() {
+    return Array.from(this);
+  }
+  toString() {
+    return "[object ObservableSet]";
+  }
+  [Symbol.iterator]() {
+    return this.values();
+  }
+  get [Symbol.toStringTag]() {
+    return "Set";
+  }
+};
+var isObservableSet = /* @__PURE__ */ createInstanceofPredicate("ObservableSet", ObservableSet);
+function makeIterableForSet(iterator) {
+  iterator[Symbol.toStringTag] = "SetIterator";
+  return makeIterable(iterator);
+}
+var descriptorCache = /* @__PURE__ */ Object.create(null);
+var REMOVE = "remove";
+var ObservableObjectAdministration = class {
+  constructor(target_, values_ = /* @__PURE__ */ new Map(), name_, defaultAnnotation_ = autoAnnotation) {
+    this.target_ = void 0;
+    this.values_ = void 0;
+    this.name_ = void 0;
+    this.defaultAnnotation_ = void 0;
+    this.keysAtom_ = void 0;
+    this.changeListeners_ = void 0;
+    this.interceptors_ = void 0;
+    this.proxy_ = void 0;
+    this.isPlainObject_ = void 0;
+    this.appliedAnnotations_ = void 0;
+    this.pendingKeys_ = void 0;
+    this.lazyComputedKeys_ = void 0;
+    this.lazyObservableKeys_ = void 0;
+    this.target_ = target_;
+    this.values_ = values_;
+    this.name_ = name_;
+    this.defaultAnnotation_ = defaultAnnotation_;
+    this.keysAtom_ = new Atom(__MOBX_DEV__ ? `${this.name_}.keys` : "ObservableObject.keys");
+    this.isPlainObject_ = isPlainObject(this.target_);
+    if (__MOBX_DEV__ && !isAnnotation(this.defaultAnnotation_)) {
+      die(`defaultAnnotation must be valid annotation`);
+    }
+    if (__MOBX_DEV__) {
+      this.appliedAnnotations_ = {};
+    }
+  }
+  getObservablePropValue_(key) {
+    var _ref, _this$values_$get;
+    const observable2 = (_ref = (_this$values_$get = this.values_.get(key)) != null ? _this$values_$get : this.materializeLazyComputed_(key)) != null ? _ref : this.materializeLazyObservable_(key);
+    return observable2.get();
+  }
+  materializeLazyComputed_(key) {
+    var _this$lazyComputedKey;
+    const factory = (_this$lazyComputedKey = this.lazyComputedKeys_) == null ? void 0 : _this$lazyComputedKey.get(key);
+    if (!factory) {
+      return void 0;
+    }
+    this.lazyComputedKeys_.delete(key);
+    if (this.lazyComputedKeys_.size === 0) {
+      this.lazyComputedKeys_ = void 0;
+    }
+    const computed3 = factory();
+    this.values_.set(key, computed3);
+    return computed3;
+  }
+  materializeLazyObservable_(key) {
+    var _this$lazyObservableK;
+    const factory = (_this$lazyObservableK = this.lazyObservableKeys_) == null ? void 0 : _this$lazyObservableK.get(key);
+    if (!factory) {
+      return void 0;
+    }
+    this.lazyObservableKeys_.delete(key);
+    if (this.lazyObservableKeys_.size === 0) {
+      this.lazyObservableKeys_ = void 0;
+    }
+    const observable2 = factory();
+    this.values_.set(key, observable2);
+    return observable2;
+  }
+  setObservablePropValue_(key, newValue) {
+    var _ref2, _this$values_$get2;
+    const observable2 = (_ref2 = (_this$values_$get2 = this.values_.get(key)) != null ? _this$values_$get2 : this.materializeLazyComputed_(key)) != null ? _ref2 : this.materializeLazyObservable_(key);
+    if (observable2 instanceof ComputedValue) {
+      observable2.set(newValue);
+      return true;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        type: UPDATE,
+        object: this.proxy_ || this.target_,
+        name: key,
+        newValue
+      });
+      if (!change) {
+        return null;
+      }
+      newValue = change.newValue;
+    }
+    newValue = observable2.prepareNewValue_(newValue);
+    if (newValue !== globalState.UNCHANGED) {
+      const notify2 = hasListeners(this);
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const change = notify2 || notifySpy ? {
+        type: UPDATE,
+        observableKind: "object",
+        debugObjectName: this.name_,
+        object: this.proxy_ || this.target_,
+        oldValue: observable2.value_,
+        name: key,
+        newValue
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      observable2.setNewValue_(newValue);
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+    return true;
+  }
+  get_(key) {
+    if (globalState.trackingDerivation && !hasProp(this.target_, key)) {
+      this.has_(key);
+    }
+    return this.target_[key];
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {any} value
+   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  set_(key, value, proxyTrap = false) {
+    if (hasProp(this.target_, key)) {
+      if (this.values_.has(key)) {
+        return this.setObservablePropValue_(key, value);
+      } else if (proxyTrap) {
+        return Reflect.set(this.target_, key, value);
+      } else {
+        this.target_[key] = value;
+        return true;
+      }
+    } else {
+      return this.extend_(key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true
+      }, this.defaultAnnotation_, proxyTrap);
+    }
+  }
+  // Trap for "in"
+  has_(key) {
+    if (!globalState.trackingDerivation) {
+      return key in this.target_;
+    }
+    this.pendingKeys_ || (this.pendingKeys_ = /* @__PURE__ */ new Map());
+    let entry = this.pendingKeys_.get(key);
+    if (!entry) {
+      entry = new ObservableValue(key in this.target_, referenceEnhancer, __MOBX_DEV__ ? `${this.name_}.${stringifyKey(key)}?` : "ObservableObject.key?", false);
+      this.pendingKeys_.set(key, entry);
+    }
+    return entry.get();
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {Annotation|boolean} annotation true - use default annotation, false - copy as is
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  extend_(key, descriptor, annotation, proxyTrap = false) {
+    if (annotation === true) {
+      annotation = this.defaultAnnotation_;
+    }
+    if (annotation === false) {
+      return this.defineProperty_(key, descriptor, proxyTrap);
+    }
+    assertAnnotable(this, annotation, key);
+    const outcome = annotation.extend_(this, key, descriptor, proxyTrap);
+    if (outcome) {
+      recordAnnotationApplied(this, annotation, key);
+    }
+    return outcome;
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  defineProperty_(key, descriptor, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: descriptor.value
+        });
+        if (!change) {
+          return null;
+        }
+        const {
+          newValue
+        } = change;
+        if (descriptor.value !== newValue) {
+          descriptor = assign({}, descriptor, {
+            value: newValue
+          });
+        }
+      }
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      this.notifyPropertyAddition_(key, descriptor.value);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  // If original descriptor becomes relevant, move this to annotation directly
+  defineObservableProperty_(key, value, enhancer, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: value
+        });
+        if (!change) {
+          return null;
+        }
+        value = change.newValue;
+      }
+      const cachedDescriptor = getCachedObservablePropDescriptor(key);
+      const descriptor = {
+        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
+        enumerable: true,
+        get: cachedDescriptor.get,
+        set: cachedDescriptor.set
+      };
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      const observable2 = new ObservableValue(value, enhancer, __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key", false);
+      this.values_.set(key, observable2);
+      this.notifyPropertyAddition_(key, observable2.value_);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  // If original descriptor becomes relevant, move this to annotation directly
+  defineComputedProperty_(key, options, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    try {
+      startBatch();
+      const deleteOutcome = this.delete_(key);
+      if (!deleteOutcome) {
+        return deleteOutcome;
+      }
+      if (hasInterceptors(this)) {
+        const change = interceptChange(this, {
+          object: this.proxy_ || this.target_,
+          name: key,
+          type: ADD,
+          newValue: void 0
+        });
+        if (!change) {
+          return null;
+        }
+      }
+      options.name || (options.name = __MOBX_DEV__ ? `${this.name_}.${key.toString()}` : "ObservableObject.key");
+      options.context = this.proxy_ || this.target_;
+      const cachedDescriptor = getCachedObservablePropDescriptor(key);
+      const descriptor = {
+        configurable: globalState.safeDescriptors ? this.isPlainObject_ : true,
+        enumerable: false,
+        get: cachedDescriptor.get,
+        set: cachedDescriptor.set
+      };
+      if (proxyTrap) {
+        if (!Reflect.defineProperty(this.target_, key, descriptor)) {
+          return false;
+        }
+      } else {
+        defineProperty(this.target_, key, descriptor);
+      }
+      this.values_.set(key, new ComputedValue(options));
+      this.notifyPropertyAddition_(key, void 0);
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  /**
+   * @param {PropertyKey} key
+   * @param {PropertyDescriptor} descriptor
+   * @param {boolean} proxyTrap whether it's called from proxy trap
+   * @returns {boolean|null} true on success, false on failure (proxyTrap + non-configurable), null when cancelled by interceptor
+   */
+  delete_(key, proxyTrap = false) {
+    checkIfStateModificationsAreAllowed(this.keysAtom_);
+    if (!hasProp(this.target_, key)) {
+      return true;
+    }
+    if (hasInterceptors(this)) {
+      const change = interceptChange(this, {
+        object: this.proxy_ || this.target_,
+        name: key,
+        type: REMOVE
+      });
+      if (!change) {
+        return null;
+      }
+    }
+    try {
+      var _this$pendingKeys_;
+      startBatch();
+      const notify2 = hasListeners(this);
+      const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+      const observable2 = this.values_.get(key);
+      let value = void 0;
+      if (!observable2 && (notify2 || notifySpy)) {
+        var _getDescriptor2;
+        value = (_getDescriptor2 = getDescriptor(this.target_, key)) == null ? void 0 : _getDescriptor2.value;
+      }
+      if (proxyTrap) {
+        if (!Reflect.deleteProperty(this.target_, key)) {
+          return false;
+        }
+      } else {
+        delete this.target_[key];
+      }
+      if (__MOBX_DEV__) {
+        delete this.appliedAnnotations_[key];
+      }
+      if (observable2) {
+        this.values_.delete(key);
+        if (observable2 instanceof ObservableValue) {
+          value = observable2.value_;
+        }
+        propagateChanged(observable2);
+      }
+      this.keysAtom_.reportChanged();
+      (_this$pendingKeys_ = this.pendingKeys_) == null || (_this$pendingKeys_ = _this$pendingKeys_.get(key)) == null || _this$pendingKeys_.set(key in this.target_);
+      if (notify2 || notifySpy) {
+        const change = {
+          type: REMOVE,
+          observableKind: "object",
+          object: this.proxy_ || this.target_,
+          debugObjectName: this.name_,
+          oldValue: value,
+          name: key
+        };
+        if (__MOBX_DEV__ && notifySpy) {
+          spyReportStart(change);
+        }
+        if (notify2) {
+          notifyListeners(this, change);
+        }
+        if (__MOBX_DEV__ && notifySpy) {
+          spyReportEnd();
+        }
+      }
+    } finally {
+      endBatch();
+    }
+    return true;
+  }
+  notifyPropertyAddition_(key, value) {
+    var _this$pendingKeys_2;
+    const notify2 = hasListeners(this);
+    const notifySpy = __MOBX_DEV__ && isSpyEnabled();
+    if (notify2 || notifySpy) {
+      const change = notify2 || notifySpy ? {
+        type: ADD,
+        observableKind: "object",
+        debugObjectName: this.name_,
+        object: this.proxy_ || this.target_,
+        name: key,
+        newValue: value
+      } : null;
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportStart(change);
+      }
+      if (notify2) {
+        notifyListeners(this, change);
+      }
+      if (__MOBX_DEV__ && notifySpy) {
+        spyReportEnd();
+      }
+    }
+    (_this$pendingKeys_2 = this.pendingKeys_) == null || (_this$pendingKeys_2 = _this$pendingKeys_2.get(key)) == null || _this$pendingKeys_2.set(true);
+    this.keysAtom_.reportChanged();
+  }
+  ownKeys_() {
+    this.keysAtom_.reportObserved();
+    return ownKeys2(this.target_);
+  }
+  keys_() {
+    this.keysAtom_.reportObserved();
+    return Object.keys(this.target_);
+  }
+};
+function asObservableObject(target, options) {
+  var _options$name;
+  if (__MOBX_DEV__ && options && isObservableObject(target)) {
+    die(`Options can't be provided for already observable objects.`);
+  }
+  if (hasProp(target, $mobx)) {
+    if (__MOBX_DEV__ && !(getAdministration(target) instanceof ObservableObjectAdministration)) {
+      die(`Cannot convert '${getDebugName(target)}' into observable object:
+The target is already observable of different type.
+Extending builtins is not supported.`);
+    }
+    return target;
+  }
+  if (__MOBX_DEV__ && !Object.isExtensible(target)) {
+    die("Cannot make the designated object observable; it is not extensible");
+  }
+  const name = (_options$name = options == null ? void 0 : options.name) != null ? _options$name : __MOBX_DEV__ ? `${isPlainObject(target) ? "ObservableObject" : target.constructor.name}@${getNextId()}` : "ObservableObject";
+  const adm = new ObservableObjectAdministration(target, /* @__PURE__ */ new Map(), String(name), getAnnotationFromOptions(options));
+  addHiddenProp(target, $mobx, adm);
+  return target;
+}
+var isObservableObjectAdministration = /* @__PURE__ */ createInstanceofPredicate("ObservableObjectAdministration", ObservableObjectAdministration);
+function getCachedObservablePropDescriptor(key) {
+  return descriptorCache[key] || (descriptorCache[key] = {
+    get() {
+      return this[$mobx].getObservablePropValue_(key);
+    },
+    set(value) {
+      return this[$mobx].setObservablePropValue_(key, value);
+    }
+  });
+}
+function isObservableObject(thing) {
+  if (isObject(thing)) {
+    return isObservableObjectAdministration(thing[$mobx]);
+  }
+  return false;
+}
+function recordAnnotationApplied(adm, annotation, key) {
+  if (__MOBX_DEV__) {
+    adm.appliedAnnotations_[key] = annotation;
+  }
+}
+function assertAnnotable(adm, annotation, key) {
+  if (__MOBX_DEV__ && !isAnnotation(annotation)) {
+    die(`Cannot annotate '${adm.name_}.${key.toString()}': Invalid annotation.`);
+  }
+  if (__MOBX_DEV__ && !isOverride(annotation) && hasProp(adm.appliedAnnotations_, key)) {
+    const fieldName = `${adm.name_}.${key.toString()}`;
+    const currentAnnotationType = adm.appliedAnnotations_[key].annotationType_;
+    const requestedAnnotationType = annotation.annotationType_;
+    die(`Cannot apply '${requestedAnnotationType}' to '${fieldName}':
+The field is already annotated with '${currentAnnotationType}'.
+Re-annotating fields is not allowed.
+Use 'override' annotation for methods overridden by subclass.`);
+  }
+}
+function getAtom(thing, property) {
+  if (typeof thing === "object" && thing !== null) {
+    if (isObservableArray(thing)) {
+      if (property !== void 0) {
+        die(23);
+      }
+      return thing[$mobx].atom_;
+    }
+    if (isObservableSet(thing)) {
+      return thing.atom_;
+    }
+    if (isObservableMap(thing)) {
+      if (property === void 0) {
+        return thing.keysAtom_;
+      }
+      const observable2 = thing.data_.get(property) || thing.hasMap_.get(property);
+      if (!observable2) {
+        die(25, property, getDebugName(thing));
+      }
+      return observable2;
+    }
+    if (isObservableObject(thing)) {
+      var _ref, _adm$values_$get;
+      if (!property) {
+        return die(26);
+      }
+      const adm = thing[$mobx];
+      const observable2 = (_ref = (_adm$values_$get = adm.values_.get(property)) != null ? _adm$values_$get : adm.materializeLazyComputed_(property)) != null ? _ref : adm.materializeLazyObservable_(property);
+      if (!observable2) {
+        die(27, property, getDebugName(thing));
+      }
+      return observable2;
+    }
+    if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
+      return thing;
+    }
+  } else if (isFunction(thing)) {
+    if (isReaction(thing[$mobx])) {
+      return thing[$mobx];
+    }
+  }
+  die(28);
+}
+function getAdministration(thing, property) {
+  if (!thing) {
+    die(29);
+  }
+  if (property !== void 0) {
+    return getAdministration(getAtom(thing, property));
+  }
+  if (isAtom(thing) || isComputedValue(thing) || isReaction(thing)) {
+    return thing;
+  }
+  if (isObservableMap(thing) || isObservableSet(thing)) {
+    return thing;
+  }
+  if (thing[$mobx]) {
+    return thing[$mobx];
+  }
+  die(24, thing);
+}
+function getDebugName(thing, property) {
+  let named2;
+  if (property !== void 0) {
+    named2 = getAtom(thing, property);
+  } else if (isAction(thing)) {
+    return thing.name;
+  } else if (isObservableObject(thing) || isObservableMap(thing) || isObservableSet(thing)) {
+    named2 = getAdministration(thing);
+  } else {
+    named2 = getAtom(thing);
+  }
+  return named2.name_;
+}
+function initObservable(cb) {
+  const derivation = untrackedStart();
+  const allowStateChanges2 = __MOBX_DEV__ ? allowStateChangesStart(true) : true;
+  startBatch();
+  try {
+    return cb();
+  } finally {
+    endBatch();
+    if (__MOBX_DEV__) {
+      allowStateChangesEnd(allowStateChanges2);
+    }
+    untrackedEnd(derivation);
+  }
+}
+var toString = objectPrototype.toString;
+function deepEqual(a, b, depth = -1) {
+  return eq(a, b, depth);
+}
+function eq(a, b, depth, aStack, bStack) {
+  if (a === b) {
+    return a !== 0 || 1 / a === 1 / b;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  if (a !== a) {
+    return b !== b;
+  }
+  const type3 = typeof a;
+  if (type3 !== "function" && type3 !== "object" && typeof b != "object") {
+    return false;
+  }
+  const className = toString.call(a);
+  if (className !== toString.call(b)) {
+    return false;
+  }
+  switch (className) {
+    // Strings, numbers, regular expressions, dates, and booleans are compared by value.
+    case "[object RegExp]":
+    // RegExps are coerced to strings for comparison (Note: '' + /a/i === '/a/i')
+    case "[object String]":
+      return "" + a === "" + b;
+    case "[object Number]":
+      if (+a !== +a) {
+        return +b !== +b;
+      }
+      return +a === 0 ? 1 / +a === 1 / b : +a === +b;
+    case "[object Date]":
+    case "[object Boolean]":
+      return +a === +b;
+    case "[object Symbol]":
+      return typeof Symbol !== "undefined" && Symbol.valueOf.call(a) === Symbol.valueOf.call(b);
+    case "[object Map]":
+    case "[object Set]":
+      if (depth >= 0) {
+        depth++;
+      }
+      break;
+  }
+  a = unwrap(a);
+  b = unwrap(b);
+  const areArrays = className === "[object Array]";
+  if (!areArrays) {
+    if (typeof a != "object" || typeof b != "object") {
+      return false;
+    }
+    const aCtor = a.constructor, bCtor = b.constructor;
+    if (aCtor !== bCtor && !(isFunction(aCtor) && aCtor instanceof aCtor && isFunction(bCtor) && bCtor instanceof bCtor) && "constructor" in a && "constructor" in b) {
+      return false;
+    }
+  }
+  if (depth === 0) {
+    return false;
+  } else if (depth < 0) {
+    depth = -1;
+  }
+  aStack = aStack || [];
+  bStack = bStack || [];
+  let length = aStack.length;
+  while (length--) {
+    if (aStack[length] === a) {
+      return bStack[length] === b;
+    }
+  }
+  aStack.push(a);
+  bStack.push(b);
+  if (areArrays) {
+    length = a.length;
+    if (length !== b.length) {
+      return false;
+    }
+    while (length--) {
+      if (!eq(a[length], b[length], depth - 1, aStack, bStack)) {
+        return false;
+      }
+    }
+  } else {
+    const keys2 = Object.keys(a);
+    const _length = keys2.length;
+    if (Object.keys(b).length !== _length) {
+      return false;
+    }
+    for (let i2 = 0; i2 < _length; i2++) {
+      const key = keys2[i2];
+      if (!(hasProp(b, key) && eq(a[key], b[key], depth - 1, aStack, bStack))) {
+        return false;
+      }
+    }
+  }
+  aStack.pop();
+  bStack.pop();
+  return true;
+}
+function unwrap(a) {
+  if (isObservableArray(a)) {
+    return a.slice();
+  }
+  if (isES6Map(a) || isObservableMap(a)) {
+    return Array.from(a.entries());
+  }
+  if (isES6Set(a) || isObservableSet(a)) {
+    return Array.from(a.entries());
+  }
+  return a;
+}
+var _globalThis$Iterator;
+var maybeIteratorPrototype = ((_globalThis$Iterator = globalThis.Iterator) == null ? void 0 : _globalThis$Iterator.prototype) || {};
+function makeIterable(iterator) {
+  iterator[Symbol.iterator] = getSelf;
+  return assign(Object.create(maybeIteratorPrototype), iterator);
+}
+function getSelf() {
+  return this;
+}
+function isAnnotation(thing) {
+  return (
+    // Can be function
+    thing instanceof Object && typeof thing.annotationType_ === "string" && isFunction(thing.make_) && isFunction(thing.extend_)
+  );
+}
+if (__MOBX_DEV__) {
+  const g = globalThis;
+  ["Symbol", "Map", "Set", "Proxy"].forEach((m) => {
+    if (typeof g[m] === "undefined") {
+      die(`MobX requires global '${m}' to be available or polyfilled`);
+    }
+  });
+}
+if (__MOBX_DEV__ && typeof __MOBX_DEVTOOLS_GLOBAL_HOOK__ === "object") {
+  __MOBX_DEVTOOLS_GLOBAL_HOOK__.injectMobx({
+    spy,
+    extras: {
+      getDebugName
+    },
+    $mobx
+  });
+}
+
 // src/render/diagnostic-style.ts
 init_globals();
 var DIAGNOSTIC_ERROR_COLORS = {
@@ -49007,7 +47457,6 @@ var DIAGNOSTIC_ERROR_BG = sgrOf(48, DIAGNOSTIC_ERROR_COLORS.bg);
 
 // src/render/diagnostic-text.ts
 init_globals();
-var ELLIPSIS = "\u2026";
 var NEUTRALIZED_RANGES = [
   [0, 31],
   [127, 159],
@@ -49024,43 +47473,77 @@ function sanitizeText(text4) {
   }
   return sanitized.replace(/\s+/g, " ").trim();
 }
-function sanitizeAndTruncate(text4, maxLen) {
-  const sanitized = sanitizeText(text4);
-  let out = "";
-  let count = 0;
-  for (const ch of sanitized) {
-    if (count === maxLen) {
-      return out.replace(/.$/u, ELLIPSIS);
-    }
-    out += ch;
-    count++;
-  }
-  return out;
-}
 
 // src/render/error-glyph.ts
 init_globals();
 var OPEN = `${DIAGNOSTIC_ERROR_BG}${DIAGNOSTIC_ERROR_FG}`;
-var PREFIX = "\u26A0 cc-candybar: ";
-var MAX_MESSAGE_LEN = 60;
-function permanentGlyphText(outcome) {
-  return `${PREFIX}${describe(outcome)}`;
-}
-function describe(outcome) {
-  switch (outcome.cause) {
-    case "version_mismatch": {
-      const daemon2 = outcome.daemonV === 0 ? "unknown" : `v${outcome.daemonV}`;
-      return `protocol mismatch (client v${outcome.clientV} \u2260 daemon ${daemon2})`;
-    }
-    case "bad_request":
-      return `daemon rejected request: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "render_failed":
-      return `render failed: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "switched_off":
-      return `switched off: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
-    case "malformed_response":
-      return `malformed daemon response: ${sanitizeAndTruncate(outcome.message, MAX_MESSAGE_LEN)}`;
+
+// src/render/link-style.ts
+init_globals();
+var PROOF = /* @__PURE__ */ Symbol("Candybar link target");
+var MARKER = "candybar-span:";
+var LinkProof = class {
+  marker;
+  target;
+  constructor(target) {
+    this.target = target.kind === "action" ? Object.freeze({
+      kind: "action",
+      effect: Object.freeze({
+        verb: target.effect.verb,
+        args: Object.freeze([...target.effect.args])
+      })
+    }) : Object.freeze({ kind: "href", url: target.url });
+    this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
   }
+};
+function styleWithLink(style, link) {
+  if (typeof link === "string") return style.withLink(link);
+  const proof = new LinkProof(link);
+  return style.add(new Style({ link: proof.marker, meta: { [PROOF]: proof } }));
+}
+function linkFromStyle(style) {
+  const { link, meta } = style;
+  const proof = meta === void 0 ? void 0 : Reflect.get(meta, PROOF);
+  if (proof instanceof LinkProof && proof.marker === link) return proof.target;
+  return link?.startsWith(MARKER) ? void 0 : link;
+}
+function authoredLinks(funcs) {
+  const link = funcs.link;
+  const style = funcs.style;
+  if (link === void 0 || style === void 0) {
+    throw new Error("rich-js is missing its link or style template binding");
+  }
+  const project = (binding, input, child, setsLink) => {
+    const result = Reflect.apply(binding.fn, void 0, [
+      input,
+      child
+    ]);
+    if (!(result instanceof RichText)) {
+      throw new TypeError(
+        "rich-js link and style bindings must return RichText"
+      );
+    }
+    if (!setsLink || typeof result.style === "string") return result;
+    const layered = result.style;
+    const base = layered instanceof Style ? layered : layered.over;
+    const url = base.link;
+    if (url?.startsWith(MARKER)) {
+      const quoted2 = styleWithLink(base, { kind: "href", url });
+      result.style = layered instanceof Style ? quoted2 : { ...layered, over: quoted2 };
+    }
+    return result;
+  };
+  return {
+    ...funcs,
+    link: {
+      ...link,
+      fn: (url, child) => project(link, url, child, url !== "")
+    },
+    style: {
+      ...style,
+      fn: (spec, child) => project(style, spec, child, Style.parse(spec).link !== void 0)
+    }
+  };
 }
 
 // src/render/frame.ts
@@ -49075,23 +47558,6 @@ function standIn(frame2, rows) {
     motion: frame2.motion === "still" ? "still" : "can-move",
     pending: []
   };
-}
-function diagnosticFrame(text4, colors) {
-  return {
-    depth: "truecolor",
-    rows: [
-      { kind: "diagnostic", runs: [{ text: sanitizeText(text4), ...colors }] }
-    ],
-    nextChange: Infinity,
-    motion: "still",
-    pending: []
-  };
-}
-function renderFailedFrame(message2) {
-  return diagnosticFrame(
-    permanentGlyphText({ kind: "permanent", cause: "render_failed", message: message2 }),
-    DIAGNOSTIC_ERROR_COLORS
-  );
 }
 function drawnColor(spec) {
   if (spec.type === ColorDepth.TRUECOLOR) return spec.value.hex;
@@ -49108,10 +47574,11 @@ function lookOf(style, depth) {
   };
 }
 function runOf({ text: text4, style }, depth) {
+  const link = style === void 0 ? void 0 : linkFromStyle(style);
   return {
     text: text4,
     ...style !== void 0 && depth !== null && lookOf(style, depth),
-    ...style?.link !== void 0 && { link: style.link }
+    ...link !== void 0 && { link }
   };
 }
 function runLines(segments, depth) {
@@ -49126,7 +47593,7 @@ function segmentOf({ text: text4, fg, bg, attrs = [], link }) {
     new Style({
       color: fg,
       bgcolor: bg,
-      link,
+      link: link === void 0 ? void 0 : hrefOfDrawnLink(link),
       ...Object.fromEntries(attrs.map((name) => [name, true]))
     })
   );
@@ -49169,14 +47636,1954 @@ var failedWith = (message2) => ({
   daemonV: PROTOCOL_VERSION
 });
 var renderFailed = (err) => failedWith(failureOf(err).message);
-var renderFailure = (failure2) => ({
-  ...failure2,
-  kind: "threw"
-});
+var renderFailure = (failure2) => failure2.kind === "bad-request" ? { ...failure2, kind: "threw" } : failure2;
 var RENDER_ANSWERS = {
   ansi: (frame2) => ({ ok: true, output: composeBar(frame2) }),
   frame: (frame2) => ({ ok: true, frame: frame2 })
 };
+
+// src/daemon/reply.ts
+init_globals();
+
+// src/daemon/readings.ts
+init_globals();
+
+// src/utils/reading.ts
+init_globals();
+function unread() {
+  return observable.box(pending("unread"), { deep: false });
+}
+function pending(why2) {
+  let land;
+  const landed = new Promise((resolve) => {
+    land = resolve;
+  });
+  return { kind: "pending", why: why2, landed, land };
+}
+function settle(source, outcome) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending" && compareStructural(prior, outcome)) return;
+  runInAction(() => source.reading.set(outcome));
+  if (prior.kind === "pending") prior.land();
+}
+function renew(source, why2) {
+  const prior = source.reading.get();
+  if (prior.kind !== "pending") {
+    runInAction(() => source.reading.set(pending(why2)));
+  } else if (prior.why !== why2 && why2 === "unread") {
+    runInAction(() => source.reading.set({ ...prior, why: why2 }));
+  }
+}
+function answerPending(source, outcome) {
+  if (source.reading.get().kind === "pending") settle(source, outcome);
+}
+function currentOf(source) {
+  return source.reading.get();
+}
+function waitWithin(work, ms, late, after, closing) {
+  const wait = new AbortController();
+  const end = (why2) => () => wait.abort(why2);
+  const clear = after(Math.max(0, ms), end("deadline"));
+  const ended = new Promise((resolve, reject2) => {
+    wait.signal.addEventListener(
+      "abort",
+      () => resolve(wait.signal.reason)
+    );
+    closing.addEventListener("abort", end("closed"), { signal: wait.signal });
+    if (closing.aborted) end("closed")();
+    void work(wait.signal).then(
+      () => resolve("answered"),
+      // [LAW:no-silent-failure] Every rejection is reported: the wait's own
+      // while it listens, its owner's after. Work that answered never
+      // rejects, so a wait aborted before it ended at its deadline or close.
+      (e) => wait.signal.aborted ? late(e, wait.signal.reason) : reject2(e)
+    );
+  });
+  return ended.finally(() => {
+    clear();
+    wait.abort();
+  });
+}
+function settledLane(outcome) {
+  return { current: () => outcome };
+}
+
+// src/facts/world-state.ts
+init_globals();
+var UNREAD_ENV = pendingOf("unread");
+var UNREAD_RUN = {
+  reading: pendingOf("unread"),
+  fault: null
+};
+var REFRESH_LANES = [
+  "session",
+  "context",
+  "metrics",
+  "activity",
+  "cache",
+  "speed",
+  "autocompact"
+];
+var SHORT_DIGEST_LENGTH = 7;
+var shortDigest = (digest2) => digest2.slice(0, SHORT_DIGEST_LENGTH);
+function stampFailureOf(document) {
+  return document.diagnostics.find((d) => d.kind === "stamp")?.reason ?? null;
+}
+
+// src/daemon/source-runs.ts
+init_globals();
+
+// src/daemon/source-files.ts
+init_globals();
+
+// site/shims/fs-promises.ts
+init_globals();
+var p = fs.promises;
+var { readFile, writeFile, stat, lstat, readdir, mkdir, rm, unlink, rename, open, access, appendFile, realpath, mkdtemp, copyFile } = p;
+
+// src/daemon/source-files.ts
+var SourceFiles = class {
+  constructor(readUtf8 = (file, signal) => readFile(file, { encoding: "utf8", signal })) {
+    this.readUtf8 = readUtf8;
+  }
+  readUtf8;
+  queued = /* @__PURE__ */ new Map();
+  // [LAW:single-enforcer] Every request queued for this path before dispatch
+  // shares one read. A request after dispatch may follow a write the earlier
+  // read missed, so it starts a fresh batch.
+  read(file, signal) {
+    const queued = this.queued.get(file);
+    if (queued !== void 0) {
+      queued.callers.add(signal);
+      return queued.result;
+    }
+    const callers = /* @__PURE__ */ new Set([signal]);
+    const result = Promise.resolve().then(() => {
+      this.queued.delete(file);
+      return this.dispatch(file, callers);
+    });
+    this.queued.set(file, { callers, result });
+    return result;
+  }
+  async dispatch(file, callers) {
+    const abort = new AbortController();
+    const cancelled = () => {
+      for (const signal of callers) if (!signal.aborted) return;
+      abort.abort();
+    };
+    for (const signal of callers)
+      signal.addEventListener("abort", cancelled, { once: true });
+    try {
+      cancelled();
+      abort.signal.throwIfAborted();
+      return { kind: "text", text: await this.readUtf8(file, abort.signal) };
+    } catch (error) {
+      const err = error;
+      return {
+        kind: "error",
+        code: typeof err?.code === "string" ? err.code : void 0,
+        message: typeof err?.message === "string" ? err.message : String(error)
+      };
+    } finally {
+      for (const signal of callers)
+        signal.removeEventListener("abort", cancelled);
+    }
+  }
+};
+
+// src/daemon/cache/watchers.ts
+init_globals();
+var import_node_path7 = __toESM(require_path_browserify(), 1);
+
+// src/utils/logger.ts
+init_globals();
+var debugEnabled = false;
+var debugOn = () => debugEnabled;
+function debug(message2, ...args) {
+  if (debugOn()) {
+    console.error(`[DEBUG] ${message2}`, ...args);
+  }
+}
+var quietLogger = (_level, message2) => debug(message2);
+
+// src/utils/folder-identity.ts
+init_globals();
+var statIdentity = (folder) => {
+  try {
+    const st = fs_default.statSync(folder, { bigint: true });
+    return { dev: st.dev, ino: st.ino, birthtimeNs: st.birthtimeNs };
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return "gone";
+    throw e;
+  }
+};
+var sameIdentity = (a, b) => a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+var identityKey = (identity2) => identity2 === "gone" ? "gone" : `${identity2.dev}:${identity2.ino}:${identity2.birthtimeNs}`;
+var boundOf = (folder) => {
+  try {
+    return statIdentity(folder);
+  } catch (e) {
+    return { unreadable: e.code ?? String(e) };
+  }
+};
+var boundKey = (bound) => typeof bound === "string" || "ino" in bound ? identityKey(bound) : `unreadable:${bound.unreadable}`;
+var bindsFolder = (bound) => typeof bound !== "string" && "ino" in bound;
+
+// src/daemon/foundations/watch-targets.ts
+init_globals();
+
+// src/utils/watch-target.ts
+init_globals();
+function canonicalDirectory(p2) {
+  try {
+    return fs_default.statSync(p2).isDirectory() ? fs_default.realpathSync(p2) : null;
+  } catch {
+    return null;
+  }
+}
+
+// src/daemon/foundations/watch-targets.ts
+var ridesStream = (targets) => targets.dirs.length > 0;
+function watchTargetsOf(paths2) {
+  const unresolved = [];
+  const polled = /* @__PURE__ */ new Set();
+  for (const at of paths2.named) {
+    const { hops, stopped: stopped2 } = walkLinks(at);
+    if (stopped2 !== null)
+      unresolved.push({ path: at, reason: stopped2.message });
+    for (const hop of hops) polled.add(hop);
+  }
+  const dirs = new Set(paths2.whole.flatMap((p2) => canonicalDirectory(p2) ?? []));
+  return {
+    ...specOf({
+      dirs: [...dirs].sort().map((d) => ({ path: d })),
+      polled: [...polled].sort()
+    }),
+    unresolved
+  };
+}
+function specOf(targets) {
+  const bound = targets.dirs.map((d) => {
+    const at = boundOf(d.path);
+    return bindsFolder(at) ? boundKey(at) : null;
+  });
+  return {
+    key: JSON.stringify([targets, bound]),
+    targets,
+    unbound: bound.includes(null)
+  };
+}
+function watchFault(label2, watch2, beyond) {
+  const reasons = [
+    ...watch2.derived.unresolved.map(
+      // Every reason names the path it stopped at, the kernel's and the loop's.
+      (u) => `cannot follow a link chain \u2014 ${u.reason}`
+    ),
+    ...watch2.held.handle.deaf.map(
+      (d) => d.kind === "refused" ? `cannot watch ${d.path} \u2014 ${d.reason}` : `watching ${d.path} failed \u2014 ${d.reason}`
+    ),
+    ...beyond === null ? [] : [beyond]
+  ];
+  return reasons.length === 0 ? null : `${label2}: ${reasons.join("; ")}`;
+}
+function followWatch(held, spec, acquire) {
+  if (held !== null && (held.key === spec.key || spec.unbound))
+    return { watch: held, move: "kept" };
+  const watch2 = { key: spec.key, handle: acquire(spec.key, spec.targets) };
+  held?.handle.release();
+  return { watch: watch2, move: "rebound" };
+}
+
+// src/daemon/cache/watchers.ts
+var defaultLogger = (_level, message2) => debug(message2);
+var DEBOUNCE_MS = 50;
+var POLL_MS = 1e3;
+function folded(window2, next2) {
+  if (next2.kind === "failed") return next2;
+  if (window2.kind !== "changed") return window2;
+  if (next2.kind === "unknown") return next2;
+  for (const p2 of next2.paths) window2.paths.add(p2);
+  return window2;
+}
+var heardOf = (window2) => window2.kind === "changed" ? { kind: "changed", paths: [...window2.paths].sort() } : window2;
+var namedOf = (dir, filename) => filename === null ? { kind: "unknown" } : { kind: "changed", paths: /* @__PURE__ */ new Set([import_node_path7.default.join(dir, filename)]) };
+var failedOf = (d) => ({
+  kind: "failed",
+  reason: `${d.path}: ${d.reason}`
+});
+var heldBy = (state, handle) => state.kind === "listening" && state.handle === handle;
+var UNSEEN = /* @__PURE__ */ Symbol("unseen");
+var dirId = (target) => `${target.recursive === true ? "tree" : "dir"}:${target.path}`;
+var isBelow = (at, root) => at.startsWith(root + import_node_path7.default.sep);
+function dirsBelow(at, held, trusted, unlisted) {
+  const heldIn = (dir) => [...held].filter((p2) => p2 === dir || isBelow(p2, dir));
+  let entries;
+  try {
+    entries = fs_default.readdirSync(at, { withFileTypes: true });
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return [];
+    unlisted.push(at);
+    return [...held].filter((p2) => isBelow(p2, at));
+  }
+  return entries.filter((e) => e.isDirectory()).flatMap((e) => {
+    const below = import_node_path7.default.join(at, e.name);
+    return trusted && held.has(below) ? heldIn(below) : [below, ...dirsBelow(below, held, false, unlisted)];
+  });
+}
+function entryAt(at) {
+  try {
+    const s = fs_default.lstatSync(at, { bigint: true });
+    const identity2 = `${s.mode}:${identityKey({ dev: s.dev, ino: s.ino, birthtimeNs: s.birthtimeNs })}`;
+    return s.isDirectory() ? identity2 : `${identity2}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
+  } catch (e) {
+    return `error:${e.code}`;
+  }
+}
+var WatcherRegistry = class {
+  slots = /* @__PURE__ */ new Map();
+  dirs = /* @__PURE__ */ new Map();
+  polled = /* @__PURE__ */ new Map();
+  // The next sweep's cancel, armed exactly while a path is polled.
+  sweep = null;
+  counters;
+  logger;
+  clock;
+  closed = false;
+  nodeWalksTrees;
+  constructor(opts) {
+    this.clock = opts.clock;
+    this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
+    this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
+  }
+  // [LAW:single-enforcer] A consumer that reloads several slots together can
+  // share their delivery window. Each slot still receives only its own paths.
+  // Keys acquired in this window belong to it until their last release.
+  batch(completed) {
+    const window2 = { pending: null, completed };
+    const acquire = (key, targets, onInvalidate) => this.acquired(key, targets, onInvalidate, window2);
+    return {
+      acquire,
+      follow: (held, spec, onInvalidate) => this.followed(
+        held,
+        spec,
+        (key, targets) => acquire(key, targets, onInvalidate)
+      )
+    };
+  }
+  // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
+  // holder of one slot, and each holder's callback hears every window.
+  // `targets` from the first acquire wins; subsequent acquires keep the
+  // original target set (consumers must use a fresh key if they need different
+  // targets). A consumer that needs no more than "something changed" ignores
+  // the invalidation's value.
+  acquire(key, targets, onInvalidate) {
+    return this.acquired(key, targets, onInvalidate);
+  }
+  acquired(key, targets, onInvalidate, window2) {
+    if (this.closed) {
+      return {
+        release: () => {
+        },
+        deaf: [...targets.dirs.map((d) => d.path), ...targets.polled].map(
+          (path31) => ({
+            kind: "refused",
+            path: path31,
+            reason: "the watcher registry is closed"
+          })
+        ),
+        ridesStream: ridesStream(targets)
+      };
+    }
+    const shared = this.slots.get(key);
+    if (shared !== void 0 && (window2 === void 0 ? shared.window.completed !== void 0 : shared.window !== window2))
+      throw new Error(
+        `watch ${valueOf(key)} belongs to another delivery window`
+      );
+    if (shared !== void 0) {
+      for (const { dir } of shared.listeners.values())
+        this.judged(dir, "acquire");
+      this.reconciled(shared, "acquire", null);
+    }
+    this.sighted(
+      shared?.polled ?? targets.polled.flatMap((at) => this.polled.get(at) ?? [])
+    );
+    const slot = shared ?? this.opened(key, targets, window2 ?? { pending: null });
+    const holder = { onInvalidate };
+    slot.holders.add(holder);
+    return this.makeHandle(slot, holder);
+  }
+  // The held watch following `spec` (`followWatch`).
+  follow(held, spec, onInvalidate) {
+    return this.followed(
+      held,
+      spec,
+      (key, targets) => this.acquire(key, targets, onInvalidate)
+    );
+  }
+  followed(held, spec, acquire) {
+    const followed = followWatch(held, spec, acquire);
+    if (followed.move === "kept")
+      this.sighted(this.slots.get(followed.watch.key)?.polled ?? []);
+    return followed;
+  }
+  // [LAW:no-ambient-temporal-coupling] A holder acquiring or following may
+  // have read a polled path since the last sweep, and read a state no sweep
+  // saw. Where the disk differs from the swept entry now, the next sweep
+  // fires it whatever it reads, so a change undone before the sweep is still
+  // heard. Only the sweep fires, so the work a path drives stays once a
+  // period; a change undone before the holder acquired or followed is one no
+  // poll sees.
+  // [LAW:escape-local-minima] exception: seeing a change undone before the
+  // holder looks needs the entry the holder read, which polled consumers do
+  // not yet hand over.
+  sighted(records) {
+    for (const record2 of records)
+      if (record2.entry !== UNSEEN && entryAt(record2.path) !== record2.entry)
+        record2.entry = UNSEEN;
+  }
+  opened(key, targets, window2) {
+    const slot = {
+      key,
+      targets: targets.dirs,
+      listeners: /* @__PURE__ */ new Map(),
+      polled: [],
+      holders: /* @__PURE__ */ new Set(),
+      window: window2
+    };
+    this.reconciled(slot, "acquire", null);
+    for (const at of targets.polled) {
+      const record2 = this.polledAt(at);
+      record2.slots.add(slot);
+      slot.polled.push(record2);
+    }
+    this.armSweep();
+    this.slots.set(key, slot);
+    if (this.counters) {
+      if ([...slot.listeners.values()].every(
+        (l) => l.dir.state.kind === "listening"
+      ))
+        this.counters.watchersOpened++;
+      else this.counters.watchRefusals++;
+    }
+    return slot;
+  }
+  // [LAW:single-enforcer] How a tree is heard is decided here, by what the
+  // runtime's recursive watch is. Native (macOS's FSEvents), it is one watch.
+  // Node's own walk (Linux) stops at the first entry it cannot watch and says
+  // nothing, and where it fails cannot be predicted, so a tree there is a
+  // plain watch on the root and on each directory below it, each refused or
+  // heard by the OS on its own. `heardIn` is the directory an event was heard
+  // in, or null for the whole of every target: an event moves only what its
+  // own directory lists, so only that listing is read again.
+  dirsOf(targets, heardIn, held, unlisted) {
+    return targets.flatMap((target) => {
+      if (target.recursive !== true || !this.nodeWalksTrees) return [target];
+      const at = heardIn ?? target.path;
+      if (at !== target.path && !isBelow(at, target.path)) return [];
+      const below = dirsBelow(at, held, heardIn !== null, unlisted);
+      return [...heardIn === null ? [at] : [], ...below].map((dir) => ({
+        path: dir
+      }));
+    });
+  }
+  // [LAW:dataflow-not-control-flow] A slot holds a watch on exactly the
+  // directories its targets name now, below the directory listed again: one
+  // it lacks joins, one no longer named leaves. Run whole at its acquire and
+  // on every period, and for the directory each event its watches hear is
+  // heard in, so a tree's new directory is heard from the event that made it.
+  reconciled(slot, cause, heardIn) {
+    const held = new Set([...slot.listeners.values()].map((l) => l.dir.path));
+    const unlisted = [];
+    const named2 = new Map(
+      this.dirsOf(slot.targets, heardIn, held, unlisted).map((t2) => [
+        dirId(t2),
+        t2
+      ])
+    );
+    for (const [id2, listener] of slot.listeners)
+      if (!named2.has(id2) && (heardIn === null || isBelow(listener.dir.path, heardIn))) {
+        slot.listeners.delete(id2);
+        this.left(listener, cause);
+      }
+    for (const [id2, target] of named2)
+      if (!slot.listeners.has(id2)) {
+        const dir = this.dirFor(target, cause);
+        const listener = { slot, dir };
+        dir.listeners.add(listener);
+        slot.listeners.set(id2, listener);
+        if (slot.holders.size > 0 && dir.state.kind === "deaf")
+          this.fire(slot, failedOf(dir.state.deafness));
+      }
+    for (const at of unlisted) {
+      const dir = this.dirs.get(dirId({ path: at }));
+      if (dir?.state.kind === "listening")
+        this.reopen(dir, "it cannot be listed");
+    }
+  }
+  // A directory watch closes with the last slot on it.
+  left(listener, cause) {
+    const { dir } = listener;
+    dir.listeners.delete(listener);
+    if (dir.listeners.size > 0) return;
+    if (dir.state.kind === "listening")
+      this.closeHandle(dir.path, dir.state.handle, cause);
+    this.dirs.delete(dir.id);
+  }
+  // The directory watch a slot's target joins: the one already open there,
+  // judged, or a new one.
+  dirFor(target, cause) {
+    const id2 = dirId(target);
+    const existing = this.dirs.get(id2);
+    if (existing !== void 0) {
+      this.judged(existing, cause);
+      return existing;
+    }
+    const where = { path: target.path, recursive: target.recursive === true };
+    const dir = {
+      id: id2,
+      ...where,
+      listeners: /* @__PURE__ */ new Set(),
+      state: this.open(where, () => dir, cause, null)
+    };
+    this.dirs.set(id2, dir);
+    return dir;
+  }
+  // [LAW:single-enforcer] The one rule that a directory watch names the
+  // folder at its path, applied whenever a holder acquires the directory,
+  // whenever an event says the folder there moved, and on every period
+  // (`judge`). A deaf one is opened again; a listening one whose path holds
+  // another folder than the one it bound (removed and made again, or a strict
+  // ancestor renamed away and another tree put at its path: inotify hears the
+  // old inode, and the bound folder is what an event naming the directory is
+  // judged against) is reopened in place. A path that binds nothing right now
+  // keeps the listening handle, as `follow` keeps a held watch: a macOS watch
+  // on the path hears the folder come back.
+  judged(dir, cause) {
+    if (dir.state.kind === "deaf") {
+      this.reopen(dir, cause);
+      return;
+    }
+    const now2 = boundOf(dir.path);
+    if (bindsFolder(now2) && boundKey(now2) !== dir.state.bound)
+      this.reopen(dir, "another folder is at its path");
+  }
+  // [LAW:no-ambient-temporal-coupling] Every directory watch judged against
+  // the disk, on the period the file-event delivery owner keeps (the daemon
+  // wires it). It is the one trigger for a replacement no event reaches a
+  // handle for (a strict ancestor renamed away and another tree put at its
+  // path: inotify reports a directory's own removal or self-move, never its
+  // parent's), and the retry of a directory the OS refused or whose handle
+  // errored while no holder newly acquires it. A directory staying as it is
+  // costs one stat, or one refused open, and tells nothing; a tree heard
+  // directory by directory costs a listing of each directory too.
+  judge() {
+    for (const slot of this.slots.values())
+      this.reconciled(slot, "period", null);
+    for (const dir of this.dirs.values()) this.judged(dir, "period");
+  }
+  // [LAW:no-silent-failure] Every slot on the directory hears it change
+  // state. Going deaf, or deaf for another reason, it hears the fault.
+  // Listening again, it hears an `unknown` window: whatever changed while the
+  // directory was deaf or bound to another folder went unheard, and a holder
+  // that re-derives on it reports its fault cleared. Deaf for the same reason
+  // is no change and tells nothing.
+  reopen(dir, cause) {
+    const was = dir.state;
+    if (was.kind === "listening") this.closeHandle(dir.path, was.handle, cause);
+    const now2 = this.open(dir, () => dir, cause, was);
+    dir.state = now2;
+    if (now2.kind === "listening") this.tell(dir, { kind: "unknown" });
+    else if (was.kind === "listening" || !compareStructural(was.deafness, now2.deafness))
+      this.tell(dir, failedOf(now2.deafness));
+  }
+  // `dirOf` names the watch the handle belongs to; its callbacks run only
+  // after the open returns, once the watch holds the state returned here.
+  open(where, dirOf, cause, was) {
+    const at = where.path;
+    const bound = boundKey(boundOf(at));
+    try {
+      fs_default.opendirSync(at).closeSync();
+      const handle = fs_default.watch(
+        at,
+        { persistent: false, recursive: where.recursive },
+        (_event, changed) => this.heard(dirOf(), handle, changed)
+      );
+      handle.on("error", (e) => {
+        this.logger("warn", `watcher error ${at}: ${e.message}`);
+        if (this.counters) this.counters.watchErrors++;
+        const dir = dirOf();
+        if (!heldBy(dir.state, handle)) return;
+        this.closeHandle(at, handle, "error");
+        const deafness = {
+          kind: "failed",
+          path: at,
+          reason: e.message
+        };
+        dir.state = { kind: "deaf", deafness };
+        this.tell(dir, failedOf(deafness));
+      });
+      if (this.counters) this.counters.dirWatchesOpened++;
+      this.logger(
+        "info",
+        `dir watch opened path=${valueOf(at)} cause=${valueOf(cause)}`
+      );
+      return { kind: "listening", handle, bound };
+    } catch (e) {
+      const reason = e.message;
+      const deafness = { kind: "refused", path: at, reason };
+      if (was?.kind !== "deaf" || !compareStructural(was.deafness, deafness))
+        this.logger("warn", `watch failed ${at}: ${reason}`);
+      return { kind: "deaf", deafness };
+    }
+  }
+  // [LAW:dataflow-not-control-flow] Every event reaches every slot on the
+  // watch. One naming the directory itself, while the folder at the path is
+  // no longer the one this handle bound (its removal or replacement, which
+  // macOS reports as a change and Linux as a rename), is then judged, so a
+  // handle never stays bound to a folder no longer at its path and every later
+  // event naming the directory is judged against the folder there.
+  heard(dir, handle, changed) {
+    const { state } = dir;
+    if (!heldBy(state, handle)) return;
+    this.tell(dir, namedOf(dir.path, changed));
+    if (changed === import_node_path7.default.basename(dir.path) && boundKey(boundOf(dir.path)) !== state.bound)
+      this.judged(dir, "moved");
+    for (const slot of [...dir.listeners].map((l) => l.slot))
+      this.reconciled(slot, "heard", dir.path);
+  }
+  tell(dir, invalidation) {
+    for (const { slot } of dir.listeners) this.fire(slot, invalidation);
+  }
+  fire(slot, invalidation) {
+    const { window: window2 } = slot;
+    if (window2.pending === null) {
+      const changes2 = /* @__PURE__ */ new Map();
+      window2.pending = {
+        changes: changes2,
+        cancel: this.clock.after(
+          DEBOUNCE_MS,
+          () => {
+            window2.pending = null;
+            for (const [changed, gathered2] of changes2) {
+              if (this.slots.get(changed.key) !== changed) continue;
+              const heard = heardOf(gathered2);
+              for (const holder of changed.holders)
+                this.notify(changed.key, () => holder.onInvalidate(heard));
+            }
+            if (window2.completed !== void 0)
+              this.notify(null, window2.completed);
+          },
+          { unref: true }
+        )
+      };
+    }
+    const { changes } = window2.pending;
+    const gathered = changes.get(slot);
+    changes.set(
+      slot,
+      gathered !== void 0 ? folded(gathered, invalidation) : invalidation.kind === "changed" ? { kind: "changed", paths: new Set(invalidation.paths) } : invalidation
+    );
+  }
+  notify(key, take) {
+    try {
+      take();
+    } catch (thrown2) {
+      const why2 = thrown2 instanceof Error ? thrown2.message : String(thrown2);
+      const about = key === null ? "batch" : `key=${valueOf(key)}`;
+      this.logger("warn", `watcher invalidate threw ${about}: ${why2}`);
+    }
+  }
+  makeHandle(slot, holder) {
+    return {
+      get deaf() {
+        return [...slot.listeners.values()].flatMap(
+          ({ dir }) => dir.state.kind === "deaf" ? [dir.state.deafness] : []
+        );
+      },
+      // [LAW:one-source-of-truth] The slot's OS watches are what ride it.
+      ridesStream: slot.listeners.size > 0,
+      release: () => {
+        if (!slot.holders.delete(holder) || slot.holders.size > 0) return;
+        if (this.slots.get(slot.key) !== slot) return;
+        this.closeSlot(slot, "last release");
+        this.slots.delete(slot.key);
+      }
+    };
+  }
+  closeHandle(at, handle, cause) {
+    try {
+      handle.close();
+    } catch {
+    }
+    if (this.counters) this.counters.dirWatchesClosed++;
+    this.logger(
+      "info",
+      `dir watch closed path=${valueOf(at)} cause=${valueOf(cause)}`
+    );
+  }
+  // A directory watch closes, and a polled path is forgotten, with the last
+  // slot on it: a slot that names the path again starts from what is there at
+  // its own acquire.
+  closeSlot(slot, cause) {
+    const { window: window2 } = slot;
+    const { pending: pending2 } = window2;
+    if (pending2 !== null && pending2.changes.delete(slot) && pending2.changes.size === 0) {
+      pending2.cancel();
+      window2.pending = null;
+    }
+    for (const listener of slot.listeners.values()) this.left(listener, cause);
+    for (const record2 of slot.polled) {
+      record2.slots.delete(slot);
+      if (record2.slots.size === 0) this.polled.delete(record2.path);
+    }
+    if (this.polled.size === 0) this.disarmSweep();
+    if (this.counters) this.counters.watchersClosed++;
+  }
+  // The record for a polled path: a new one read now, so only a change after
+  // the acquire is a change; or the one already held, which the acquire sights.
+  polledAt(at) {
+    const held = this.polled.get(at);
+    if (held !== void 0) return held;
+    const record2 = {
+      path: at,
+      entry: entryAt(at),
+      slots: /* @__PURE__ */ new Set()
+    };
+    this.polled.set(at, record2);
+    return record2;
+  }
+  // [LAW:no-ambient-temporal-coupling] The sweep runs every period while a
+  // path is polled and the registry is open. The reads are synchronous, so no
+  // two sweeps overlap and no older read lands over a newer one.
+  // [LAW:effects-at-boundaries] exception: an lstat runs on the thread that
+  // renders, once a period per path and once per acquire or follow naming it,
+  // so a mount under a polled path that stops answering stops every bar until
+  // it answers. The paths are a session's own files (its transcript, its
+  // settings, its config, its git directory), which the daemon reads on this
+  // thread to render anyway.
+  armSweep() {
+    if (this.sweep !== null || this.closed || this.polled.size === 0) return;
+    this.sweep = this.clock.every(POLL_MS, () => this.readPolled(), {
+      unref: true
+    });
+  }
+  disarmSweep() {
+    this.sweep?.();
+    this.sweep = null;
+  }
+  // [LAW:dataflow-not-control-flow] The same read for every polled path each
+  // sweep. A path whose entry differs fires every slot that names it, by its
+  // path, through the slot's debounce, as a directory watch reports a child.
+  readPolled() {
+    for (const record2 of this.polled.values()) {
+      const now2 = entryAt(record2.path);
+      if (now2 === record2.entry) continue;
+      record2.entry = now2;
+      for (const slot of record2.slots)
+        this.fire(slot, { kind: "changed", paths: /* @__PURE__ */ new Set([record2.path]) });
+    }
+  }
+  // The slots held now.
+  size() {
+    return this.slots.size;
+  }
+  // The paths polled now: no OS watch each.
+  polledPaths() {
+    return this.polled.size;
+  }
+  // The OS directory watches open now.
+  dirWatches() {
+    return [...this.dirs.values()].filter((d) => d.state.kind === "listening").length;
+  }
+  // Every directory a held watch targets.
+  watchedDirs() {
+    return [...this.dirs.values()].map((d) => d.path);
+  }
+  closeAll() {
+    this.closed = true;
+    this.disarmSweep();
+    for (const slot of this.slots.values()) this.closeSlot(slot, "close");
+    this.slots.clear();
+  }
+};
+
+// src/daemon/cache/file-events.ts
+init_globals();
+var import_node_path8 = __toESM(require_path_browserify(), 1);
+
+// src/daemon/foundations/file-events-warnings.ts
+init_globals();
+var iso = (at) => new Date(at).toISOString();
+var stopped = (since) => `file events stopped at ${iso(since)}; the OS has delivered none since, not even for a file the daemon wrote to test it`;
+var WATCHED_FOLDER = "a change inside a watched folder (a plugin installed, a folder a watch_file names)";
+var STILL_READ = "config files and files a watch_file names still refresh";
+function fileEventsWarnings(d) {
+  if (d.missedSince === null) return [];
+  const since = iso(d.missedSince);
+  const message2 = () => {
+    switch (d.kind) {
+      case "delivering":
+        return `file events unconfirmed since ${since}: the probe written to test them has not been heard yet, so ${WATCHED_FOLDER} may have been missed; ${STILL_READ}`;
+      case "stalled":
+        return `${stopped(d.missedSince)}, so ${WATCHED_FOLDER} won't be seen until they resume; ${STILL_READ}`;
+      case "unmeasured":
+        return `since ${since}, the daemon cannot check whether file events are arriving: ${d.reason}`;
+    }
+  };
+  return [{ kind: "file-events", state: d.kind, message: message2() }];
+}
+
+// src/daemon/cache/file-events.ts
+var PROBE_EVERY_MS = 3e4;
+var STALL_AFTER = 2;
+var PROBE_FILE = "probe";
+var NO_FILE_EVENTS = {
+  delivery: () => ({
+    kind: "unmeasured",
+    since: 0,
+    reason: "outside the daemon",
+    missedSince: null
+  }),
+  subscribe: () => () => {
+  }
+};
+var label = (d) => d.kind === "unmeasured" ? `unmeasured:${d.reason}` : d.kind;
+var FileEventDelivery = class {
+  current;
+  instrument = { kind: "idle" };
+  listeners = /* @__PURE__ */ new Set();
+  stalls = 0;
+  catchUps = 0;
+  probes = 0;
+  probeFailures = 0;
+  watchers;
+  logger;
+  identityOf;
+  clock;
+  constructor(opts) {
+    this.watchers = opts.watchers;
+    this.logger = opts.logger;
+    this.clock = opts.clock;
+    this.identityOf = opts.identityOf ?? statIdentity;
+    this.current = {
+      kind: "unmeasured",
+      since: this.clock.now(),
+      reason: "not started",
+      missedSince: null
+    };
+  }
+  delivery() {
+    return this.current;
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+  // Only the daemon starts the owner, once it has won its socket: it makes
+  // the folder, opens the one watch, and arms the period.
+  start(folder) {
+    if (this.instrument.kind !== "idle") {
+      throw new Error("file events: the owner was started twice");
+    }
+    const stopPeriod = this.clock.every(
+      PROBE_EVERY_MS,
+      () => void this.tick(),
+      {
+        unref: true
+      }
+    );
+    let identity2;
+    try {
+      fs_default.mkdirSync(folder, { recursive: true });
+      identity2 = this.identityOf(folder);
+    } catch (e) {
+      this.end(
+        stopPeriod,
+        `the probe folder could not be made: ${e.message}`
+      );
+      return;
+    }
+    if (identity2 === "gone") {
+      this.end(stopPeriod, "the probe folder was removed as it was made");
+      return;
+    }
+    const probing = {
+      kind: "probing",
+      folder,
+      identity: identity2,
+      stopPeriod,
+      // [LAW:single-enforcer] The only acquirer of this registry key.
+      handle: this.watchers.acquire(
+        `file-events:${folder}`,
+        // The folder whole: what the probe measures is the OS's event
+        // stream, and only an OS watch rides it (`ridesStream`).
+        { dirs: [{ path: folder }], polled: [] },
+        (heard) => this.heard(probing, heard)
+      )
+    };
+    this.instrument = probing;
+    this.logger("info", `file events probing folder=${valueOf(folder)}`);
+    const [refusal] = probing.handle.deaf;
+    if (refusal !== void 0) {
+      this.end(
+        stopPeriod,
+        `the OS refused the probe folder's watch: ${refusal.reason}`
+      );
+      return;
+    }
+    this.move({ kind: "delivering", unreported: [], missedSince: null });
+    void this.tick();
+  }
+  stats() {
+    return {
+      delivery: this.current,
+      stalls: this.stalls,
+      catchUps: this.catchUps,
+      probes: this.probes,
+      probeFailures: this.probeFailures
+    };
+  }
+  close() {
+    const inst = this.instrument;
+    this.instrument = { kind: "idle" };
+    this.listeners.clear();
+    switch (inst.kind) {
+      case "probing":
+        inst.handle.release();
+        inst.stopPeriod();
+        return;
+      case "ended":
+        inst.stopPeriod();
+        return;
+      case "idle":
+        return;
+    }
+  }
+  // [LAW:dataflow-not-control-flow] The same steps at the start and every
+  // period after: tell subscribers the period passed; judge the probe folder
+  // against the one the watch opened on, first, so a folder replaced at its
+  // path never reads as a stall; judge the probes still unreported; write the
+  // next one.
+  async tick() {
+    this.notify({ kind: "period" });
+    const inst = this.instrument;
+    if (inst.kind !== "probing") return;
+    let now2;
+    try {
+      now2 = this.identityOf(inst.folder);
+    } catch (e) {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder cannot be read: ${e.message}`
+      );
+      return;
+    }
+    if (now2 === "gone") {
+      this.end(inst.stopPeriod, "the probe folder was removed");
+      return;
+    }
+    if (!sameIdentity(now2, inst.identity)) {
+      this.end(inst.stopPeriod, "the probe folder was replaced");
+      return;
+    }
+    const d = this.current;
+    if (d.kind === "delivering" && d.unreported.length >= STALL_AFTER) {
+      this.stalls++;
+      this.move({
+        kind: "stalled",
+        missedSince: d.missedSince ?? d.unreported[0]
+      });
+    }
+    await this.probe(inst);
+  }
+  // A delivering watch awaits the probe; a stalled one awaits none in
+  // particular, since any report recovers it. A write that lands while
+  // unmeasured measures again, awaiting that probe, so a transient failure
+  // (a full disk) measures once it clears. A write that fails is unmeasured
+  // with its error: it tests no watch. A probe still in flight when the
+  // instrument ends or closes judges nothing.
+  async probe(inst) {
+    const at = this.clock.now();
+    const before = this.current;
+    if (before.kind === "delivering") {
+      this.current = { ...before, unreported: [...before.unreported, at] };
+    }
+    try {
+      await fs_default.promises.writeFile(
+        import_node_path8.default.join(inst.folder, PROBE_FILE),
+        String(at)
+      );
+    } catch (e) {
+      this.probeFailures++;
+      const d2 = this.current;
+      if (this.instrument !== inst || d2.kind === "unmeasured") return;
+      this.move({
+        kind: "unmeasured",
+        since: at,
+        reason: `the probe could not be written: ${e.message}`,
+        missedSince: d2.missedSince ?? at
+      });
+      return;
+    }
+    this.probes++;
+    const d = this.current;
+    if (this.instrument !== inst || d.kind !== "unmeasured") return;
+    this.move({
+      kind: "delivering",
+      unreported: [at],
+      missedSince: d.missedSince
+    });
+  }
+  // [LAW:no-silent-failure] The watch's own failure ends the instrument: the
+  // OS refuses an immediate retry the way it refused the first (limits,
+  // permissions). Anything else it reports proves delivery.
+  heard(inst, heard) {
+    if (this.instrument !== inst) return;
+    if (heard.kind === "failed") {
+      this.end(
+        inst.stopPeriod,
+        `the probe folder's watch failed: ${heard.reason}`
+      );
+      return;
+    }
+    const d = this.current;
+    const delivering = {
+      kind: "delivering",
+      unreported: [],
+      missedSince: null
+    };
+    if (d.missedSince === null) {
+      this.move(delivering);
+      return;
+    }
+    this.current = delivering;
+    this.catchUps++;
+    this.logger(
+      "info",
+      `file events resumed since=${iso(d.missedSince)} missed=${this.clock.now() - d.missedSince}ms from=${d.kind}`
+    );
+    this.notify({ kind: "caught-up", since: d.missedSince });
+  }
+  // [LAW:no-silent-failure] An ended instrument holds no watch and never
+  // measures again, so whatever ended it, only a restart can.
+  end(stopPeriod, reason) {
+    const inst = this.instrument;
+    if (inst.kind === "probing") inst.handle.release();
+    this.instrument = { kind: "ended", stopPeriod };
+    const at = this.clock.now();
+    this.move({
+      kind: "unmeasured",
+      since: at,
+      reason: `${reason}; restart the daemon`,
+      missedSince: this.current.missedSince ?? at
+    });
+  }
+  // [LAW:nothing-unseen] One line on each change of state, none per period.
+  move(next2) {
+    const was = label(this.current);
+    this.current = next2;
+    if (label(next2) === was) return;
+    switch (next2.kind) {
+      case "delivering":
+        this.logger("info", "file events delivering");
+        break;
+      case "stalled":
+        this.logger(
+          "warn",
+          `file events stalled since=${iso(next2.missedSince)}`
+        );
+        break;
+      case "unmeasured":
+        this.logger(
+          "warn",
+          `file events unmeasured since=${iso(next2.since)} reason=${JSON.stringify(next2.reason)}`
+        );
+        break;
+    }
+    this.notify({ kind: "moved" });
+  }
+  notify(notice) {
+    for (const listener of [...this.listeners]) listener(notice);
+  }
+};
+var stallReason = (d) => d.kind === "stalled" ? stopped(d.missedSince) : null;
+
+// src/utils/keyed-source.ts
+init_globals();
+
+// src/utils/period.ts
+init_globals();
+function periodOf(every, outcome) {
+  return outcome.kind === "failed" ? every.failedMs : every.okMs;
+}
+function backedOffMs(every, failures, ceilingMs) {
+  return failures === 0 ? every.okMs : Math.min(every.failedMs * 2 ** (failures - 1), ceilingMs);
+}
+var Period = class {
+  constructor(tick, clock) {
+    this.tick = tick;
+    this.clock = clock;
+  }
+  tick;
+  clock;
+  stop = null;
+  state = "released";
+  last = null;
+  // A read landed at the monotonic reading `at` (now, unless the owner is resuming an answer it
+  // kept from earlier). `periodMs` is chosen by the caller from the read's
+  // outcome (a failed PR lookup is retried sooner than a found one).
+  landed(periodMs, at = this.clock.monotonic()) {
+    this.last = { at, periodMs };
+    this.schedule();
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const next2 = held ? "held" : "released";
+    if (next2 === this.state) return;
+    this.state = next2;
+    this.schedule();
+  }
+  dispose() {
+    this.state = "disposed";
+    this.cancel();
+  }
+  schedule() {
+    this.cancel();
+    if (this.state !== "held" || this.last === null) return;
+    const wait = Math.max(
+      0,
+      this.last.at + this.last.periodMs - this.clock.monotonic()
+    );
+    this.stop = this.clock.after(
+      wait,
+      () => {
+        this.stop = null;
+        this.tick();
+      },
+      { unref: true }
+    );
+  }
+  cancel() {
+    this.stop?.();
+    this.stop = null;
+  }
+};
+
+// src/utils/keyed-source.ts
+var NO_WATCH = () => () => {
+};
+var KeyedSource = class {
+  constructor(spec) {
+    this.spec = spec;
+    this.refreshes = spec.ledger.declare({
+      name: spec.name,
+      scope: spec.scope,
+      refresh: ["first", "period", "change", "supersede"],
+      lines: spec.lines
+    });
+  }
+  spec;
+  entries = /* @__PURE__ */ new Map();
+  refreshes;
+  closed = false;
+  // [LAW:single-enforcer] The one way into an entry: `holds` takes it — the
+  // home holds it until a declaration of the home's takes it no more, or the
+  // home is disposed, which keeps the entry for its next hold — and the lane
+  // reads it as it stands, never awaited and taking nothing. A key never read
+  // is created pending and read once, its first refresh.
+  //
+  // [LAW:no-silent-failure] The owner logs its own failures — each refresh's
+  // by that refresh — so its caller logs none. A declaration that THROWS is a
+  // bug none of those saw, reported by the session's declaration (declareLanes).
+  declare(holds2, input) {
+    if (this.closed)
+      return settledLane(failed(`${this.spec.name} closed`, "read"));
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.firstRead(this.created(key, input));
+    holds2.take(`${this.spec.name}:${key}`, () => this.hold(entry));
+    return { current: () => currentOf(entry) };
+  }
+  // [LAW:one-source-of-truth] The one supersede rule (SOURCES-AND-FRAMES.md):
+  // the daemon itself is changing what this key reads (a click's move). The
+  // value is pending (`superseded`) and the read in flight is abandoned, so no
+  // draw after the click shows the value from before it. Every trigger of the
+  // key is held back until every supersede of it has resumed, so no read
+  // during the move stores the world from before it; the last resume starts
+  // one fresh read. A key never read is created for it, and its first read is
+  // that resume's.
+  supersede(input) {
+    if (this.closed) return () => {
+    };
+    const key = this.spec.keyOf(input);
+    const entry = this.touched(key) ?? this.created(key, input);
+    entry.superseding++;
+    renew(entry, "superseded");
+    this.abandon(entry);
+    entry.changed = false;
+    this.evict();
+    let resumed = false;
+    return () => {
+      if (resumed) return;
+      resumed = true;
+      entry.superseding--;
+      if (this.entries.get(entry.key) === entry)
+        this.refresh(entry, "supersede");
+    };
+  }
+  // The world changed under every held entry `affected` names (a watched file
+  // was written): each is read again, after the read in flight when one is
+  // out. An entry nobody holds is read when a hold returns to it.
+  changed(affected) {
+    for (const entry of this.entries.values()) {
+      if (affected(entry.input)) this.heard(entry);
+    }
+  }
+  // [LAW:single-enforcer] The one rule for a change under an entry, whether
+  // the owner's or the entry's own watch reports it: the entry owes a re-read
+  // (`owed`). One nobody holds keeps the debt for its hold's return, so a
+  // session back from idle never draws a write it missed while away.
+  heard(entry) {
+    entry.changed = true;
+    this.owed(entry);
+  }
+  // [LAW:no-ambient-temporal-coupling] The one place an owed change is read:
+  // whichever of a change, a landing or a hold's return finds the entry held
+  // and idle starts it, and starting any read pays the debt.
+  owed(entry) {
+    if (entry.changed && entry.holders > 0 && entry.flight === null)
+      this.refresh(entry, "change");
+  }
+  // Whether some home holds an entry `match` names now.
+  isHeld(match) {
+    for (const entry of this.entries.values()) {
+      if (entry.holders > 0 && match(entry.input)) return true;
+    }
+    return false;
+  }
+  stats() {
+    let held = 0;
+    for (const entry of this.entries.values()) if (entry.holders > 0) held++;
+    const { refreshes, failures, abandoned, lastMs } = this.refreshes.record();
+    return {
+      entries: this.entries.size,
+      held,
+      refreshes,
+      failures,
+      abandoned,
+      lastMs
+    };
+  }
+  // Ends every entry's period: a held entry's period re-arms on every landing,
+  // so an owner that is not closed keeps its timers for good.
+  close() {
+    this.closed = true;
+    for (const entry of [...this.entries.values()]) this.drop(entry);
+  }
+  // LRU touch: re-inserting moves the entry to the newest end.
+  touched(key) {
+    const entry = this.entries.get(key);
+    if (entry === void 0) return void 0;
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return entry;
+  }
+  // In place before any read, so a read's answer finds its entry stored.
+  created(key, input) {
+    const entry = {
+      key,
+      input,
+      reading: unread(),
+      holders: 0,
+      flight: null,
+      changed: false,
+      superseding: 0,
+      revisit: revisitOf(this.spec.every(input), this.spec.clock, {
+        period: () => this.refresh(entry, "period"),
+        holdReturned: () => this.refresh(entry, "change")
+      }),
+      unwatch: () => {
+      }
+    };
+    this.entries.set(key, entry);
+    entry.unwatch = this.spec.watch(input, () => this.heard(entry));
+    return entry;
+  }
+  firstRead(entry) {
+    this.refresh(entry, "first");
+    return entry;
+  }
+  refresh(entry, by) {
+    if (entry.superseding > 0) return;
+    if (entry.flight !== null) {
+      entry.changed ||= by === "change";
+      return;
+    }
+    entry.changed = false;
+    const flight = new AbortController();
+    entry.flight = flight;
+    const startedAt = this.spec.clock.monotonic();
+    void attempt(() => this.spec.read(entry.input, flight.signal, by)).then((outcome) => {
+      const fields2 = this.spec.fields(entry.input, entry.holders);
+      const ms = elapsedMs(this.spec.clock, startedAt);
+      if (flight.signal.aborted) {
+        this.refreshes.abandoned(fields2, by, ms);
+        return;
+      }
+      try {
+        this.refreshes.recorded(fields2, by, outcome, ms);
+      } finally {
+        this.store(entry, outcome);
+      }
+    }).catch((e) => {
+      this.spec.logger(
+        "error",
+        `${this.spec.name} refresh threw (${this.spec.fields(entry.input, entry.holders)}): ${String(e)}`
+      );
+    });
+  }
+  store(entry, outcome) {
+    entry.flight = null;
+    try {
+      settle(entry, outcome);
+    } finally {
+      entry.revisit.landed(outcome);
+      this.owed(entry);
+    }
+  }
+  hold(entry) {
+    entry.holders++;
+    entry.revisit.hold(true);
+    this.owed(entry);
+    this.evict();
+    return () => {
+      entry.holders--;
+      entry.revisit.hold(entry.holders > 0);
+      this.evict();
+    };
+  }
+  // A held entry is never evicted, so held entries are bounded by their
+  // holders (the render cache's budget).
+  // [LAW:single-enforcer] Run by every claim that can add an entry (a hold, a
+  // supersede) and by every release, so an entry over the bound is dropped
+  // the moment nobody holds it. An entry mid-supersede is kept like a held
+  // one: dropped, a hold returning during the move would read the world
+  // from before it.
+  evict() {
+    for (const entry of [...this.entries.values()]) {
+      if (this.entries.size <= this.spec.maxEntries) return;
+      if (entry.holders === 0 && entry.superseding === 0) this.drop(entry);
+    }
+  }
+  drop(entry) {
+    this.entries.delete(entry.key);
+    this.abandon(entry);
+    entry.unwatch();
+    entry.revisit.dispose();
+    answerPending(entry, failed(`${this.spec.name} entry dropped`, "read"));
+  }
+  // The read out, if one is, stores nothing and is told to stop.
+  abandon(entry) {
+    const flight = entry.flight;
+    entry.flight = null;
+    flight?.abort(new Error(`${this.spec.name} read abandoned`));
+  }
+};
+function revisitOf(every, clock, read2) {
+  if (every === null) return new HoldReturn(read2.holdReturned);
+  const period = new Period(read2.period, clock);
+  return {
+    landed: (outcome) => period.landed(periodOf(every, outcome)),
+    hold: (held) => period.hold(held),
+    dispose: () => period.dispose()
+  };
+}
+var HoldReturn = class {
+  constructor(reread) {
+    this.reread = reread;
+  }
+  reread;
+  state = "released";
+  answered = false;
+  landed() {
+    this.answered = true;
+  }
+  hold(held) {
+    if (this.state === "disposed") return;
+    const returned2 = held && this.state === "released" && this.answered;
+    this.state = held ? "held" : "released";
+    if (returned2) this.reread();
+  }
+  dispose() {
+    this.state = "disposed";
+  }
+};
+function attempt(read2) {
+  const threw2 = (e) => failed(`read threw: ${String(e)}`, "read");
+  try {
+    return read2().catch(threw2);
+  } catch (e) {
+    return Promise.resolve(threw2(e));
+  }
+}
+
+// src/utils/refresh-ledger.ts
+init_globals();
+var REFRESH_TRIGGERS = [
+  "first",
+  "period",
+  "change",
+  "supersede"
+];
+var RefreshLedger = class {
+  constructor(logger = quietLogger) {
+    this.logger = logger;
+  }
+  logger;
+  tallies = /* @__PURE__ */ new Map();
+  declare(declaration) {
+    const key = `${declaration.scope}/${declaration.name}`;
+    const tally = this.tallies.get(key) ?? {
+      name: declaration.name,
+      scope: declaration.scope,
+      refreshes: {},
+      failures: 0,
+      abandoned: 0,
+      lastMs: null
+    };
+    for (const trigger of declaration.refresh) tally.refreshes[trigger] ??= 0;
+    this.tallies.set(key, tally);
+    return new Refreshes(tally, new Set(declaration.lines), this.logger);
+  }
+  // Every source declared, by scope then name.
+  snapshot() {
+    return [...this.tallies.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, t2]) => ({ ...t2, refreshes: { ...t2.refreshes } }));
+  }
+  // Every source's refreshes summed by trigger: what the feed summary
+  // compares across its window.
+  totals() {
+    const sum2 = Object.fromEntries(
+      REFRESH_TRIGGERS.map((t2) => [t2, 0])
+    );
+    for (const tally of this.tallies.values()) {
+      for (const trigger of REFRESH_TRIGGERS) {
+        sum2[trigger] += tally.refreshes[trigger] ?? 0;
+      }
+    }
+    return sum2;
+  }
+};
+var Refreshes = class {
+  constructor(tally, lines2, logger) {
+    this.tally = tally;
+    this.lines = lines2;
+    this.logger = logger;
+  }
+  tally;
+  lines;
+  logger;
+  // This source's record as the ledger holds it: what its owner's own stats
+  // report, a view of the one tally rather than a count of its own.
+  record() {
+    return { ...this.tally, refreshes: { ...this.tally.refreshes } };
+  }
+  // `fields` is the refreshed entry's logfmt identity.
+  recorded(fields2, by, outcome, ms) {
+    this.tally.refreshes[by] = (this.tally.refreshes[by] ?? 0) + 1;
+    this.tally.lastMs = ms;
+    if (outcome.kind === "failed") this.tally.failures++;
+    const failure2 = outcome.kind === "failed";
+    if (!failure2 && !this.lines.has(by)) return;
+    const why2 = failure2 ? ` reason=${JSON.stringify(outcome.reason)}` : "";
+    this.logger(
+      failure2 ? "warn" : "info",
+      `${this.tally.name} refresh ${fields2} by=${by} outcome=${outcome.kind}${why2} took=${ms}ms`
+    );
+  }
+  // [LAW:nothing-unseen] A read the owner abandoned is its own event and its
+  // own count: a key that moves on every tick aborts a read on every tick,
+  // which no refresh or failure tally would show.
+  abandoned(fields2, by, ms) {
+    this.tally.abandoned++;
+    this.logger(
+      "info",
+      `${this.tally.name} refresh ${fields2} by=${by} abandoned took=${ms}ms`
+    );
+  }
+};
+
+// src/daemon/source-runs.ts
+var SHELL_READ_TIMEOUT_MS = 1e4;
+var whereOf = (read2) => read2.kind === "shell" ? `output of "${read2.command}" in ${read2.cwd}` : `"${read2.path}"`;
+function shellReader(launcher, read2, env2, signal) {
+  const { command, cwd: cwd2 } = read2;
+  return {
+    where: whereOf(read2),
+    read: async () => {
+      const r = await launcher.launch({
+        bin: "/bin/sh",
+        args: ["-c", command],
+        cwd: cwd2,
+        // [LAW:one-source-of-truth] Exactly the variables the run's identity
+        // carries, so nothing its digest does not hold can move its output.
+        environment: { session: env2 },
+        category: "user-shell",
+        timeoutMs: SHELL_READ_TIMEOUT_MS,
+        signal
+      });
+      if (r.ok) return ok(r.stdout);
+      return failed(
+        `shell "${command}" ${failureText(r, ` in ${cwd2}`)}`,
+        "read"
+      );
+    }
+  };
+}
+function fileReader(files, filePath2, readMode, signal) {
+  return {
+    where: whereOf({ kind: "file", path: filePath2, readMode }),
+    read: async () => {
+      const read2 = await files.read(filePath2, signal);
+      if (read2.kind === "text")
+        return ok(
+          readMode === "first-line" ? read2.text.split(/\r?\n/)[0] ?? "" : read2.text
+        );
+      return failed(
+        signal.aborted ? `file read aborted: ${String(signal.reason)}` : `file unreadable (${read2.code ?? read2.message}): ${filePath2}`,
+        "read"
+      );
+    }
+  };
+}
+function readerOf(files, launcher, { run: { identity: identity2 }, env: env2 }, signal) {
+  const { read: read2 } = identity2;
+  switch (read2.kind) {
+    case "shell":
+      return shellReader(launcher, read2, env2, signal);
+    case "file":
+      return fileReader(files, read2.path, read2.readMode, signal);
+  }
+}
+function parsed(read2, parser, where) {
+  if (read2.kind !== "ok") return read2;
+  const out = parser(read2.value);
+  return out.kind === "failed" ? failed(`${out.reason} in ${where}`, out.failedAt) : out;
+}
+var PathWatches = class {
+  constructor(watchers, fileEvents) {
+    this.watchers = watchers;
+    this.fileEvents = fileEvents;
+    this.releaseDelivery = fileEvents.subscribe(
+      (notice) => this.noticed(notice)
+    );
+  }
+  watchers;
+  fileEvents;
+  entries = /* @__PURE__ */ new Map();
+  releaseDelivery;
+  subscribe(filePath2, callback, onFault) {
+    const entry = this.entries.get(filePath2) ?? this.arm(filePath2);
+    entry.subscribers.set(callback, onFault);
+    onFault(this.faultOf(filePath2, entry));
+    return () => this.unsubscribe(filePath2, callback);
+  }
+  arm(filePath2) {
+    const watch2 = derived(filePath2);
+    const entry = {
+      bound: {
+        derived: watch2,
+        held: this.watchers.follow(
+          null,
+          watch2,
+          () => this.heard(filePath2, entry)
+        ).watch
+      },
+      subscribers: /* @__PURE__ */ new Map()
+    };
+    this.entries.set(filePath2, entry);
+    return entry;
+  }
+  // Derive where the path can change, follow it, and say the watch's fault.
+  // A new key acquires its watch, keeping every directory both keys name.
+  rederive(filePath2, entry) {
+    const paths2 = derived(filePath2);
+    const { watch: watch2 } = this.watchers.follow(
+      entry.bound.held,
+      paths2,
+      () => this.heard(filePath2, entry)
+    );
+    entry.bound = { derived: paths2, held: watch2 };
+    this.report(filePath2, entry);
+  }
+  // A window re-derives and re-reads: every path it watches is one the
+  // content can change at.
+  heard(filePath2, entry) {
+    this.rederive(filePath2, entry);
+    for (const cb of entry.subscribers.keys()) cb();
+  }
+  report(filePath2, entry) {
+    const fault = this.faultOf(filePath2, entry);
+    for (const onFault of entry.subscribers.values()) onFault(fault);
+  }
+  // The watch's fault, derived from what it holds now and whether the OS is
+  // delivering what it would hear. A stall is the fault only of a watch that
+  // rides the delivery owner's stream: a file is polled and keeps refreshing
+  // through one, and a directory watched whole does not.
+  faultOf(filePath2, entry) {
+    const { handle } = entry.bound.held;
+    return watchFault(
+      `watch_file ${filePath2}`,
+      entry.bound,
+      handle.ridesStream ? stallReason(this.fileEvents.delivery()) : null
+    );
+  }
+  // [LAW:no-silent-failure] Delivery moved or a span closed, so the watches
+  // may have missed events: each watch re-derives where its path can change,
+  // since a directory may have appeared unheard, which says its fault, and
+  // every subscriber re-reads as if its own watch had reported. Both together,
+  // so no entry drops a stall's fault without reading again, and in one
+  // action, so one change of delivery is one publish of every entry's.
+  noticed(notice) {
+    switch (notice.kind) {
+      case "period":
+        return;
+      case "moved":
+      case "caught-up":
+        runInAction(() => {
+          for (const [filePath2, entry] of this.entries)
+            this.heard(filePath2, entry);
+        });
+        return;
+    }
+  }
+  unsubscribe(filePath2, callback) {
+    const entry = this.entries.get(filePath2);
+    if (!entry) return;
+    entry.subscribers.delete(callback);
+    if (entry.subscribers.size === 0) {
+      entry.bound.held.handle.release();
+      this.entries.delete(filePath2);
+    }
+  }
+  dispose() {
+    this.releaseDelivery();
+    for (const entry of this.entries.values())
+      entry.bound.held.handle.release();
+    this.entries.clear();
+  }
+  size() {
+    return this.entries.size;
+  }
+};
+var derived = (filePath2) => watchTargetsOf({ named: [filePath2], whole: [filePath2] });
+var SourceRuns = class {
+  // File-reading policies in the same host share this filesystem edge.
+  files = new SourceFiles();
+  byKind;
+  watchMgr;
+  // Each watching entry's fault, by its run's digest, for the lanes that read
+  // it.
+  faults = observable.map(void 0, {
+    deep: false
+  });
+  constructor(deps) {
+    const logger = deps.logger ?? quietLogger;
+    const ledger = deps.ledger ?? new RefreshLedger(logger);
+    this.watchMgr = new PathWatches(
+      deps.watchers ?? new WatcherRegistry({ clock: deps.clock }),
+      deps.fileEvents ?? NO_FILE_EVENTS
+    );
+    const source = (kind) => new KeyedSource({
+      name: `source.${kind}`,
+      scope: "daemon",
+      keyOf: (run3) => run3.digest,
+      // [LAW:nothing-unseen] Its declaration's digest beside its own, so
+      // the entry is found from the session's subscriptions that name it.
+      fields: ({ digest: digest2, run: run3 }, holders) => `digest=${shortDigest(digest2)} declared=${shortDigest(run3.digest)} where=${valueOf(whereOf(run3.identity.read))} sharedBy=${holders}`,
+      // [LAW:single-enforcer] THE run: read → parse. Shell and file are two
+      // readers through this one function; text/regex/json are three
+      // parsers through it.
+      read: async (run3, signal) => {
+        const reader = readerOf(this.files, deps.launcher, run3, signal);
+        return parsed(await reader.read(), run3.run.parser, reader.where);
+      },
+      every: ({
+        run: {
+          identity: { refresh }
+        }
+      }) => refresh.kind === "ttl" ? { okMs: refresh.durationMs, failedMs: refresh.durationMs } : null,
+      watch: ({ digest: digest2, run: { identity: identity2 } }, changed) => {
+        if (identity2.refresh.kind !== "watch_file") return NO_WATCH();
+        const unsubscribe = this.watchMgr.subscribe(
+          identity2.refresh.path,
+          changed,
+          (fault) => runInAction(() => {
+            if (fault === null) this.faults.delete(digest2);
+            else this.faults.set(digest2, fault);
+          })
+        );
+        return () => {
+          unsubscribe();
+          runInAction(() => this.faults.delete(digest2));
+        };
+      },
+      // [LAW:no-ambient-temporal-coupling] A run lives while it is held:
+      // the last release drops it, ending its child, its period and its
+      // watch, so a key that moves every tick leaves no child behind.
+      maxEntries: 0,
+      lines: REFRESH_TRIGGERS,
+      logger,
+      ledger,
+      clock: deps.clock
+    });
+    this.byKind = { shell: source("shell"), file: source("file") };
+  }
+  // [LAW:single-enforcer] The one way to a run: `holds` takes the entry for
+  // the session's run of an accepted declaration, created and read once on
+  // its first hold, and the lane reads it as it stands. A refused run reaches
+  // no reader: its lane answers its refusal for good, and the refusal is its
+  // standing fault, so the bar draws the source's fallback beside a ⚠ that
+  // says why. A shell run for a session whose environment the host does not
+  // hold is refused the same way: the host's own is never a session's.
+  declare(holds2, judged, environment) {
+    const { digest: digest2 } = judged;
+    const run3 = sessionRunOf(judged, environment);
+    if (run3.kind === "failed") {
+      const lane2 = settledLane(failed(run3.reason, "read"));
+      return { digest: digest2, current: () => lane2.current(), fault: () => run3.reason };
+    }
+    const held = run3.value;
+    const lane = this.byKind[held.run.identity.read.kind].declare(holds2, held);
+    return {
+      digest: digest2,
+      current: () => lane.current(),
+      fault: () => this.faults.get(held.digest) ?? null
+    };
+  }
+  stats() {
+    return {
+      shell: this.byKind.shell.stats(),
+      file: this.byKind.file.stats(),
+      watches: this.watchMgr.size()
+    };
+  }
+  // Drops every entry, ending its read, its period and its watch.
+  close() {
+    this.byKind.shell.close();
+    this.byKind.file.close();
+    this.watchMgr.dispose();
+  }
+};
+function declareRuns(sourceRuns, holds2, runs, environment, take) {
+  return new Map(
+    [...runs].map(([digest2, judged]) => [
+      digest2,
+      take(digest2, () => sourceRuns.declare(holds2, judged, environment))
+    ])
+  );
+}
+function sessionRunOf(judged, environment) {
+  if (judged.kind === "refused")
+    return { kind: "failed", reason: `refused: ${judged.reason}` };
+  const { run: run3 } = judged;
+  const { read: read2 } = run3.identity;
+  if (read2.kind === "file")
+    return { kind: "ok", value: { digest: run3.digest, run: run3, env: {} } };
+  if (environment.kind === "failed")
+    return { kind: "failed", reason: `not run: ${environment.reason}` };
+  const session = environment.value;
+  const env2 = Object.fromEntries(
+    read2.env.flatMap((name) => {
+      const value = ownValue(session, name);
+      return value === void 0 ? [] : [[name, value]];
+    })
+  );
+  return {
+    kind: "ok",
+    value: { digest: digestOf({ run: run3.digest, env: env2 }), run: run3, env: env2 }
+  };
+}
+
+// src/daemon/readings.ts
+function settingsPathOf(hints, home) {
+  return claudeSettingsPath(claudeConfigDir(hints.claudeConfigDir, home));
+}
+function cacheTallyFacts(deps) {
+  const tally = (t2) => `${t2.size}/${t2.hits}h/${t2.misses}m`;
+  return {
+    git: tally(deps.gitProvider.getStats()),
+    usage: tally(deps.usageStore.getStats())
+  };
+}
+function settledLanes(outcome, { plugins: plugins2, runs, env: env2 }) {
+  const lane = settledLane(outcome);
+  return {
+    git: lane,
+    tmux: lane,
+    hostName: lane,
+    hostUser: lane,
+    today: lane,
+    transcript: lane,
+    sources: new Map([...plugins2.keys()].map((name) => [name, lane])),
+    runs: new Map(
+      [...runs.keys()].map((digest2) => [
+        digest2,
+        { digest: digest2, current: () => lane.current(), fault: () => null }
+      ])
+    ),
+    env: new Map(env2.map((name) => [name, lane]))
+  };
+}
+function gitAt({
+  cwd: cwd2,
+  hookData: hookData2
+}) {
+  return [
+    cwd2 ?? hookData2.workspace?.current_dir,
+    hookData2.workspace?.project_dir
+  ];
+}
+function declareLanes(owners, holds2, facts, sources) {
+  const { environment } = facts;
+  const pane = facts.hints.tmux ?? null;
+  const faults = [];
+  const declare = (lane, take) => {
+    try {
+      return take();
+    } catch (e) {
+      faults.push(`${lane}: ${inspect(e)}`);
+      return settledLane(failed(`${lane}: ${String(e)}`, "read"));
+    }
+  };
+  const lanes = {
+    git: declare(
+      "git",
+      () => owners.gitProvider.declare(holds2, ...gitAt(facts))
+    ),
+    tmux: pane === null ? settledLane(ABSENT) : declare("tmux", () => owners.tmuxService.declare(holds2, pane)),
+    hostName: declare("host.name", () => owners.hostService.declareName(holds2)),
+    hostUser: declare("host.user", () => owners.hostService.declareUser(holds2)),
+    today: declare(
+      "today",
+      () => owners.usageStore.declareToday(holds2, facts.hints.claudeConfigDir)
+    ),
+    transcript: declare(
+      "transcript",
+      () => owners.transcriptLanes.declare(holds2, {
+        session: facts.hookData.session_id,
+        transcript: facts.hookData.transcript_path,
+        settings: settingsPathOf(facts.hints, owners.home)
+      })
+    ),
+    // [LAW:one-source-of-truth] Each source's hold at (its storage folder,
+    // the session the checkpoint parsed).
+    sources: new Map(
+      [...sources.plugins].map(([name, folder]) => [
+        name,
+        declare(
+          name,
+          () => owners.managedStorage.declare(
+            holds2,
+            folder,
+            facts.hookData.session_id
+          )
+        )
+      ])
+    ),
+    // A run whose declaration threw answers that failure and watches nothing;
+    // a declared run's own lane carries its watch's fault.
+    runs: declareRuns(
+      owners.sourceRuns,
+      holds2,
+      sources.runs,
+      environment,
+      (digest2, take) => ({
+        digest: digest2,
+        fault: () => null,
+        ...declare(`run ${shortDigest(digest2)}`, take)
+      })
+    ),
+    // [LAW:one-source-of-truth] Each named variable as the session's
+    // environment holds it: set, unset, or why the host holds none.
+    env: new Map(
+      sources.env.map((name) => [
+        name,
+        settledLane(
+          environment.kind === "failed" ? failed(environment.reason, "read") : variableOf(environment.value, name)
+        )
+      ])
+    )
+  };
+  return { lanes, faults };
+}
+function readingsOf(inputs, lanes) {
+  const { deps } = inputs;
+  const sessionId2 = inputs.hookData.session_id;
+  const entry = lanes.transcript.current();
+  const read2 = (lane, value, name = lane) => {
+    if (entry.kind === "failed") return entry;
+    const fault = deps.faults.of(sessionId2, lane);
+    if (fault !== void 0) return fault;
+    try {
+      return value();
+    } catch (e) {
+      deps.log("error", `${name} read threw: ${inspect(e)}`);
+      return failed(`${name}: ${String(e)}`, "read");
+    }
+  };
+  const laneReadings = {
+    git: lanes.git.current(),
+    usage: read2("session", () => deps.usageStore.usageOf(sessionId2)),
+    context: read2("context", () => deps.contextProvider.tokensOf(sessionId2)),
+    metrics: read2("metrics", () => deps.metricsProvider.foldOf(sessionId2)),
+    activity: read2(
+      "activity",
+      () => deps.activityProvider.activityOf(sessionId2)
+    ),
+    tmuxSession: lanes.tmux.current(),
+    hostName: lanes.hostName.current(),
+    hostUser: lanes.hostUser.current(),
+    cache: read2("cache", () => deps.cacheExpiry.expiryOf(sessionId2)),
+    speed: read2("speed", () => deps.usageStore.speedOf(sessionId2)),
+    autoCompact: read2(
+      "autocompact",
+      () => deps.autoCompact.stored(settingsPathOf(inputs.hints, deps.home))
+    ),
+    sources: new Map(
+      [...lanes.sources].map(([name, lane]) => [name, lane.current()])
+    ),
+    runs: new Map(
+      [...lanes.runs].map(([digest2, lane]) => [
+        digest2,
+        { reading: lane.current(), fault: lane.fault() }
+      ])
+    ),
+    env: new Map([...lanes.env].map(([name, lane]) => [name, lane.current()]))
+  };
+  return {
+    lanes: laneReadings,
+    // The session's own days are its record's, so its lane's failure is
+    // today's.
+    today: read2(
+      "session",
+      () => todayReading(lanes.today, deps.usageStore, sessionId2),
+      "today"
+    ),
+    faults: REFRESH_LANES.flatMap((lane) => {
+      const fault = deps.faults.of(sessionId2, lane);
+      return fault === void 0 ? [] : [{ kind: "lane", lane, reason: fault.reason }];
+    })
+  };
+}
+function todayReading(lane, usage, sessionId2) {
+  const set2 = lane.current();
+  if (set2.kind !== "ok") return set2;
+  const own2 = usage.daysOutside(sessionId2, set2.value.roots);
+  if (own2.kind === "failed") return own2;
+  return ok({ sums: set2.value.sums, own: own2.kind === "ok" ? own2.value : {} });
+}
 
 // src/daemon/statusline-answer.ts
 init_globals();
@@ -49253,7 +49660,7 @@ var msOf = (ms) => ms === null ? "-" : `${ms}ms`;
 function recorded(facts, delivered) {
   facts.push(...delivered.record);
 }
-async function answerStatusline(host, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
+async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts, inspectDraw) {
   const req = located(arrived2, locate);
   const session = req.hookData.session_id;
   const done = (effect, reason) => void host.deliver(
@@ -49282,6 +49689,10 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
       noteFacts(facts, { renderer: host.name });
       return failed2(host, configured.failure, "its context turn: ");
     }
+    if (configured.configFailure !== void 0) {
+      noteFacts(facts, { renderer: host.name });
+      return failed2(host, configured.configFailure, "its config turn: ");
+    }
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
     noteFacts(facts, {
@@ -49302,7 +49713,12 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
     );
     noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
     delivered = await host.answer(
-      unlessClosing({ kind: "request", id: id2, context: req })
+      unlessClosing({
+        kind: "request",
+        id: id2,
+        context: req,
+        ...inspectDraw === true ? { inspect: true } : {}
+      })
     );
   } finally {
     release3();
@@ -49329,6 +49745,11 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
             effect,
             `presents request ${effect.request}, not this turn's ${id2}`
           );
+        else if (effect.session !== session)
+          done(
+            effect,
+            `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`
+          );
         else if (answer2 !== null)
           done(effect, `a second statusline frame for request ${id2}`);
         else answer2 = effect;
@@ -49347,7 +49768,7 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
   const encodeFrom = clock.monotonic();
   let resp;
   try {
-    resp = RENDER_ANSWERS[req.encoding](parseFrame(presented.frame));
+    resp = RENDER_ANSWERS[req.encoding](publish(presented.frame));
   } catch (e) {
     const failure2 = failureOf(e);
     done(presented, `encoding its frame threw: ${failure2.message}`);
@@ -49358,6 +49779,7 @@ async function answerStatusline(host, collector, clock, closing, log, locate, ar
     outcome: { kind: "ok" },
     resp,
     seen: presented.frame.motion,
+    ...presented.inspection === void 0 ? {} : { inspection: presented.inspection },
     settled: (took) => done(presented, took ? null : "the client did not take the answer")
   };
 }
@@ -49491,15 +49913,25 @@ function explicitConfigPath(base, p2, home) {
 
 // src/config-hint.ts
 init_globals();
-function requestedConfigTarget(argument, environment) {
-  if (argument !== void 0) return { source: "argument", path: argument };
+var CONFIG_FLAGS = {
+  config: { type: "string" },
+  "config-only": { type: "string" }
+};
+var isConfigFlag = (name) => Object.hasOwn(CONFIG_FLAGS, name);
+function requestedConfigTarget(argument, environment, flag = "config") {
+  if (argument !== void 0)
+    return {
+      source: flag === "config-only" ? "argument-only" : "argument",
+      path: argument
+    };
   if (environment !== void 0) {
     return { source: "environment", path: environment };
   }
   return { source: "search" };
 }
-function originKey(origin) {
-  return `${origin.projectDir}\0${origin.cwd}\0${origin.target.path ?? ""}`;
+function originKey({ projectDir, cwd: cwd2, target }) {
+  const scope = target.source === "argument-only" ? "\0only" : "";
+  return `${projectDir}\0${cwd2}\0${target.path ?? ""}${scope}`;
 }
 function chainName(paths2, none2 = "bundled default (no config file loaded)") {
   return paths2.join(" < ") || none2;
@@ -49674,22 +50106,31 @@ function waitBudgetMs(deadline, acceptedMonoMs, arrival) {
 }
 
 // src/daemon/render-checkpoint.ts
-function parseRenderArgs(args, cwd2, home) {
+function parseRenderArgs(args, cwd2, home, configEnv) {
   const { tokens } = (0, import_parseargs.parseArgs)({
     args: args.slice(1),
     // skip binary path
-    options: { config: { type: "string" } },
+    options: CONFIG_FLAGS,
     strict: false,
     tokens: true,
     allowPositionals: true
   });
+  for (const token of tokens ?? []) {
+    if (token.kind === "option" && isConfigFlag(token.name) && token.inlineValue === false && token.value?.startsWith("--") && isConfigFlag(token.value.slice(2).split("=", 1)[0] ?? ""))
+      return {
+        problem: token.rawName + " names no file before " + token.value
+      };
+  }
   const config = (tokens ?? []).filter(
-    (t2) => t2.kind === "option" && t2.name === "config"
+    (t2) => t2.kind === "option" && isConfigFlag(t2.name)
   ).at(-1);
+  const path31 = explicitConfigPath(cwd2, config?.value, home);
+  if (config?.name === "config-only" && path31 === void 0)
+    return { problem: "--config-only needs a path" };
   const refused2 = (tokens ?? []).flatMap((t2) => {
     switch (t2.kind) {
       case "option":
-        return t2.name !== "config" ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
+        return !isConfigFlag(t2.name) ? [{ arg: t2.rawName, why: "unknown" }] : t2 === config && t2.value === void 0 ? [{ arg: t2.rawName, why: "no-value" }] : [];
       case "positional":
         return [{ arg: t2.value, why: "positional" }];
       // `--` only ends the flags; the words after it are positionals.
@@ -49698,7 +50139,11 @@ function parseRenderArgs(args, cwd2, home) {
     }
   });
   return {
-    configFile: explicitConfigPath(cwd2, config?.value, home),
+    target: requestedConfigTarget(
+      path31,
+      configEnv,
+      config?.name === "config-only" ? "config-only" : "config"
+    ),
     // In argv order, each refusal once.
     refusedArgs: refused2.filter(
       (r, i2) => refused2.findIndex((o) => o.arg === r.arg && o.why === r.why) === i2
@@ -49753,6 +50198,11 @@ function checkRenderRequest(req, stats, log, home) {
     return { ok: false, problems: [...wireProblems, deadline.problem] };
   if (wireProblems.length > 0 || !sessionId2.ok || !encoding.ok || env2.kind === "refused")
     return { ok: false, problems: wireProblems };
+  const hints = parseClientHints(req);
+  const parsedArgs = parseRenderArgs(req.args, req.cwd, home, hints.configEnv);
+  if ("problem" in parsedArgs)
+    return { ok: false, problems: [parsedArgs.problem] };
+  const { target, refusedArgs } = parsedArgs;
   for (const field of report2.unknownTopLevelFields) {
     if (stats.firstSightOfUnknownHookField(field)) {
       log(
@@ -49761,8 +50211,6 @@ function checkRenderRequest(req, stats, log, home) {
       );
     }
   }
-  const hints = parseClientHints(req);
-  const { configFile, refusedArgs } = parseRenderArgs(req.args, req.cwd, home);
   const { env: _env, ...rest2 } = req;
   return {
     ok: true,
@@ -49784,7 +50232,7 @@ function checkRenderRequest(req, stats, log, home) {
       requested: {
         projectDir: req.hookData.workspace.project_dir,
         cwd: req.cwd,
-        target: requestedConfigTarget(configFile, hints.configEnv)
+        target
       },
       refusedArgs
     }
@@ -49809,15 +50257,26 @@ function parseClick(url, delivery, links) {
       kind: "refused",
       problem: `expected a ${URL_SCHEME}:// link, got: ${url}`
     };
-  const opened = openClick(url, links);
-  return opened.kind === "link" ? { ...opened, delivery } : opened;
-}
-function openClick(signed, links) {
-  const opened = links.openLink(signed);
+  const opened = links.openLink(url);
   if (opened.kind === "failed")
     return { kind: "refused", problem: opened.reason };
   const link = parseHandlerUrl(opened.value);
-  return link.ok ? { kind: "link", verb: link.verb, value: link.value, link: opened.value } : { kind: "refused", problem: link.problem };
+  if (!link.ok) return { kind: "refused", problem: link.problem };
+  try {
+    return {
+      kind: "link",
+      click: admitClick(link.verb, link.value),
+      link: opened.value,
+      delivery
+    };
+  } catch (e) {
+    if (!(e instanceof BadVerbArgs)) throw e;
+    return {
+      kind: "refused",
+      problem: e.message,
+      signed: { link: opened.value, verb: link.verb }
+    };
+  }
 }
 
 // src/utils/transcript-fs.ts
@@ -49945,16 +50404,16 @@ async function readWholeLines(path31, prior, until2, window2) {
     let reached = start + first2.length;
     let shortRead = first2.length < Math.min(window2.length, end - start);
     while (lastNl < 0 && reached < end && !shortRead) {
-      const next = await readInto(
+      const next2 = await readInto(
         fh,
         window2.subarray(0, end - reached),
         reached
       );
-      bytesRead += next.length;
-      const nl = next.indexOf(10);
+      bytesRead += next2.length;
+      const nl = next2.indexOf(10);
       if (nl >= 0) lastNl = reached - start + nl;
-      shortRead = next.length < Math.min(window2.length, end - reached);
-      reached += next.length;
+      shortRead = next2.length < Math.min(window2.length, end - reached);
+      reached += next2.length;
     }
     const bytes = lastNl + 1;
     const longLine = bytes > window2.length ? bytes : 0;
@@ -50133,6 +50592,36 @@ function renderRecord(rendered) {
   };
 }
 var replied = (reply) => ({ kind: "reply", ...reply });
+function closingResponse(parts, rawKind, accepted) {
+  const kind = rawKind === "render" || rawKind === "click" ? rawKind : "request";
+  const failure2 = failureOf(new DaemonClosing(kind));
+  if (kind === "render" || kind === "click") {
+    if (kind === "render") {
+      parts.stats.requestsTotal++;
+      parts.stats.requestsErrored++;
+    }
+    const event = requestEvent(
+      kind,
+      [["req", String(accepted.id)]],
+      failure2,
+      elapsedMs(parts.clock, accepted.at)
+    );
+    parts.log(event.level, event.line);
+  }
+  return failedWith(failure2.message);
+}
+function refuseClosingReply(parts, kind, accepted) {
+  return stay(closingResponse(parts, kind, accepted));
+}
+function refuseClosingInbound(parts, inbound, accepted) {
+  return inbound.kind === "url" ? {
+    kind: "url",
+    awaitsVerdict: awaitsVerdict(inbound.frame.urlV),
+    verdict: closingResponse(parts, "click", accepted),
+    land: async () => {
+    }
+  } : replied(refuseClosingReply(parts, inbound.req?.kind, accepted));
+}
 var REPLY_KINDS = {
   render: true,
   "pane-session": true,
@@ -50272,7 +50761,6 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     const facts = [];
     stats.requestsTotal++;
     const order2 = accepted.id;
-    const checked = checkRenderRequest(req, stats, parts.log, parts.home);
     const sighted = (req2, frame2) => renderSightings.see(
       req2.hookData.session_id,
       {
@@ -50290,16 +50778,10 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       at,
       order2
     );
-    if (checked.ok) {
-      sighted(checked.req, "drawing");
-      frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
-      if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
-        parts.sessionBook.heard(checked.req, checked.environment);
-      const tmux3 = checked.req.hints.tmux;
-      if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
-    }
-    const recorded2 = (rendered) => {
-      const { reply, outcome } = renderRecord(rendered);
+    const recorded2 = ({
+      reply,
+      outcome
+    }) => {
       if (outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
         req: String(accepted.id),
@@ -50313,50 +50795,58 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.log(level, line);
       return reply;
     };
-    if (!checked.ok) return recorded2(refusedRender(checked.problems));
-    const answered = await answerStatusline(
-      parts.renderer,
-      parts.collector,
-      clock,
-      parts.closing,
-      parts.log,
-      checkoutLocation,
-      checked.req,
-      // [LAW:one-source-of-truth] The book's, the newest request's, so a
-      // request that arrived behind a newer one runs nothing in its older
-      // environment.
-      parts.sessionBook.environmentOf(checked.req.hookData.session_id),
-      order2,
-      // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
-      // fixed at its arrival: early enough before its client hangs up to
-      // draw (src/daemon/foundations/request-deadline.ts).
-      t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
-        epochMs: started2.getTime(),
-        monoMs: t0
-      }),
-      facts
-    ).catch(
-      // [LAW:no-silent-failure] The driver hands every turn's failure back
-      // as a value; a throw here is its own bug, answered as any throw is.
-      (error) => {
+    const draw2 = async () => {
+      let answered;
+      try {
+        const checked = checkRenderRequest(req, stats, parts.log, parts.home);
+        if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        sighted(checked.req, "drawing");
+        frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
+        if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
+          parts.sessionBook.heard(checked.req, checked.environment);
+        const tmux3 = checked.req.hints.tmux;
+        if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
+        answered = await answerStatusline(
+          parts.renderer,
+          parts.publishFrame,
+          parts.collector,
+          clock,
+          parts.closing,
+          parts.log,
+          checkoutLocation,
+          checked.req,
+          // [LAW:one-source-of-truth] The book's, the newest request's, so a
+          // request that arrived behind a newer one runs nothing in its older
+          // environment.
+          parts.sessionBook.environmentOf(checked.req.hookData.session_id),
+          order2,
+          // [LAW:no-ambient-temporal-coupling] When the request's wait ends,
+          // fixed at its arrival: early enough before its client hangs up to
+          // draw (src/daemon/foundations/request-deadline.ts).
+          t0 + waitBudgetMs(checked.req.deadline, accepted.at, {
+            epochMs: started2.getTime(),
+            monoMs: t0
+          }),
+          facts
+        );
+        noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
+        const rendered = renderRecord(answered);
+        sighted(
+          checked.req,
+          rendered.reply.unsent === null ? answered.seen : "failed"
+        );
+        return rendered;
+      } catch (error) {
+        answered?.settled(false);
         const failure2 = renderFailure(failureOf(error));
-        return {
+        return renderRecord({
           outcome: failure2,
           resp: failedWith(failure2.message),
-          seen: "failed",
           settled: NOTHING_TO_SETTLE
-        };
+        });
       }
-    );
-    noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
-    try {
-      const reply = recorded2(answered);
-      sighted(checked.req, reply.unsent === null ? answered.seen : "failed");
-      return reply;
-    } catch (e) {
-      answered.settled(false);
-      throw e;
-    }
+    };
+    return recorded2(await draw2());
   }
   if (req.kind === "click") {
     return stay(
@@ -50365,7 +50855,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         accepted,
         timedOut,
         clientLeft,
-        (facts, click3) => clickOutcome(parts, req, facts, click3)
+        (facts, click2) => clickOutcome(parts, req, facts, click2)
       )
     );
   }
@@ -50437,10 +50927,10 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
     ["req", String(accepted.id)],
     ["queued", `${spanMs(accepted.at, t0)}ms`]
   ];
-  const click3 = {
+  const click2 = {
     gone: () => timedOut() || clientLeft()
   };
-  const outcome = await run3(facts, click3).catch(failureOf);
+  const outcome = await run3(facts, click2).catch(failureOf);
   noteFacts(facts, {
     timedOut: timedOut() ? "Y" : "N",
     clientLeft: clientLeft() ? "Y" : "N"
@@ -50454,7 +50944,7 @@ async function clickEvent(parts, accepted, timedOut, clientLeft, run3) {
   parts.log(level, line);
   return clickReply(outcome);
 }
-async function clickOutcome(parts, req, facts, click3) {
+async function clickOutcome(parts, req, facts, click2) {
   noteFacts(facts, { via: "cli" });
   const { url } = req;
   if (typeof url !== "string")
@@ -50463,7 +50953,7 @@ async function clickOutcome(parts, req, facts, click3) {
     parts,
     parseClick(url, { kind: "cli" }, parts.linkSigner),
     facts,
-    click3
+    click2
   );
 }
 function readUrlFrame(frame2, links) {
@@ -50491,51 +50981,47 @@ function urlClick(parts, frame2, timedOut, accepted, clientLeft) {
       accepted,
       timedOut,
       clientLeft,
-      async (facts, click3) => {
+      async (facts, click2) => {
         noteFacts(facts, { via: "forwarder", urlV: String(frame2.urlV) });
-        return ranClick(parts, read2, facts, click3);
+        return ranClick(parts, read2, facts, click2);
       }
     ).then(() => {
     })
   };
 }
-async function ranClick(parts, read2, facts, click3) {
+async function ranClick(parts, read2, facts, click2) {
   switch (read2.kind) {
     case "refused":
+      if (read2.signed !== void 0) noteFacts(facts, read2.signed);
       return badRequest(read2.problem);
     case "link":
       noteFacts(facts, { link: read2.link });
       return handleClick(
         parts,
-        read2.verb,
-        read2.value,
+        read2.click,
         { via: "link", delivery: read2.delivery },
         facts,
-        click3
+        click2
       );
   }
 }
-async function handleClick(parts, verb, value, arrival, facts, click3) {
-  noteFacts(facts, { verb });
-  const session = clickSessionOf(verb, value);
-  if (session === null) noteFacts(facts, { sid: "-" });
-  else if (session.ok) {
-    noteFacts(facts, { sid: session.id });
-    parts.collector.clicked(session.id);
-  }
-  const delivered = await parts.renderer.answer(
-    () => click3.gone() ? failureOf(new ClickAbandoned(verb)) : {
+async function handleClick(parts, admitted, arrival, facts, click2) {
+  const { verb } = admitted;
+  const session = admitted.scope === "session" ? admitted.session : null;
+  noteFacts(facts, { verb, sid: session ?? "-" });
+  if (session !== null) parts.collector.clicked(session);
+  const delivered = await parts.renderer.answerClick(
+    session,
+    () => click2.gone() ? failureOf(new ClickAbandoned(verb)) : {
       kind: "event",
       event: {
         kind: "click",
-        verb,
-        value,
-        session,
+        click: admitted,
         arrival,
-        context: session?.ok ? parts.sessionBook.contextOf(
-          session.id,
-          parts.frameFeeds.latest(session.id)
-        ) : null
+        context: session === null ? null : parts.sessionBook.contextOf(
+          session,
+          parts.frameFeeds.latest(session)
+        )
       }
     }
   );
@@ -50656,280 +51142,6 @@ init_globals();
 // src/daemon/cache/git.ts
 init_globals();
 var import_node_path13 = __toESM(require_path_browserify(), 1);
-
-// src/segments/git.ts
-init_globals();
-function trackingOf(upstream, aheadBehind) {
-  if (upstream.kind === "absent") return ok("none");
-  if (upstream.kind === "failed") return upstream;
-  if (aheadBehind.kind === "failed") return aheadBehind;
-  return ok(aheadBehind.kind === "ok" ? "tracked" : "gone");
-}
-function prOfHead(pr, head) {
-  if (pr.kind !== "ok" || pr.value.state === "open") return pr;
-  if (head.kind === "failed")
-    return failed(`HEAD: ${head.reason}`, head.failedAt);
-  return head.kind === "ok" && head.value === pr.value.head ? pr : { kind: "earlier", value: pr.value };
-}
-var GITHUB_PR_STATES = {
-  OPEN: "open",
-  MERGED: "merged",
-  CLOSED: "closed"
-};
-var GITLAB_MR_STATES = {
-  opened: "open",
-  locked: "open",
-  merged: "merged",
-  closed: "closed"
-};
-function prStateOf(cli, states, word) {
-  return Object.hasOwn(states, word) ? ok(states[word]) : failed(`${cli}: unknown state ${JSON.stringify(word)}`, "parse");
-}
-var READ_FIELD_NAMES = {
-  aheadBehind: "aheadBehind",
-  head: "head",
-  sha: "sha",
-  operation: "operation",
-  committedAt: "committedAt",
-  stashCount: "stash",
-  upstream: "upstream",
-  repoName: "repoName",
-  repoUrl: "repoUrl"
-};
-function gitInfoFailures(info) {
-  return Object.keys(READ_FIELD_NAMES).flatMap((field) => {
-    const outcome = info[field];
-    return outcome.kind === "failed" ? [`git.${READ_FIELD_NAMES[field]}: ${outcome.reason}`] : [];
-  });
-}
-function classify(label2, result, nonZero) {
-  if (result.ok) return ok(result.stdout);
-  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
-  if (result.reason === "non-zero" && nonZero === result.exitCode)
-    return ABSENT;
-  return failed(launchFailure(label2, result), "read");
-}
-function launchFailure(label2, result) {
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return `${label2}: ${detail}`;
-}
-function firstLine(s) {
-  return s.trim().split("\n", 1)[0] ?? "";
-}
-var FORGE_CLI = {
-  github: "gh",
-  gitlab: "glab"
-};
-function isMissingCommand(result) {
-  return !result.ok && result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? "");
-}
-var DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
-function parseRemoteRef(raw) {
-  const trimmed = raw.trim();
-  if (DOS_DRIVE_PATH.test(trimmed)) return null;
-  const scp = trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ?? trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
-  const candidate = scp ? `ssh://${scp[1]}/${scp[2].replace(/^\/+/, "")}` : trimmed;
-  let url;
-  try {
-    url = new URL(candidate);
-  } catch {
-    return null;
-  }
-  return {
-    scheme: url.protocol.replace(/:$/, ""),
-    host: url.hostname.toLowerCase(),
-    port: url.port,
-    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, "")
-  };
-}
-function remoteHost(remoteUrl) {
-  return parseRemoteRef(remoteUrl)?.host || null;
-}
-function detectForge(remoteUrl) {
-  const host = remoteHost(remoteUrl);
-  if (!host) return null;
-  if (host === "github.com" || host.endsWith(".github.com")) return "github";
-  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
-  return null;
-}
-var REMOTES_ARGS = [
-  "config",
-  "--local",
-  "--get-regexp",
-  "^remote\\..*\\.url$"
-];
-function remotesOf(result) {
-  const r = classify("git config --get-regexp remote url", result, 1);
-  if (r.kind === "failed") return r;
-  return { kind: "ok", value: r.kind === "ok" ? parseRemotes(r.value) : [] };
-}
-function parseRemotes(stdout2) {
-  const urlsByName = /* @__PURE__ */ new Map();
-  for (const line of stdout2.split("\n")) {
-    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
-    if (!match) continue;
-    const urls = urlsByName.get(match[1]) ?? [];
-    urls.push(match[2].trim());
-    urlsByName.set(match[1], urls);
-  }
-  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
-}
-function identifyingUrl(remote) {
-  return remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null;
-}
-function pickRepoRemote(remotes) {
-  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
-}
-function repoRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  return remote ? identifyingUrl(remote) : null;
-}
-function forgeRemoteUrl(remotes) {
-  const remote = pickRepoRemote(remotes);
-  if (!remote) return null;
-  return remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote);
-}
-function repoNameFromUrl(url) {
-  const parsed2 = parseRemoteRef(url);
-  const segments = (parsed2?.path ?? url.replace(/[\\/]+$/, "")).split("/");
-  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
-  return name || null;
-}
-function remoteWebUrl(raw) {
-  const ref = parseRemoteRef(raw);
-  if (!ref) return null;
-  const web = (() => {
-    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
-    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
-    if (ref.scheme === "ssh" || ref.scheme === "git")
-      return { scheme: "https", port: "" };
-    return null;
-  })();
-  if (!web || !ref.host) return null;
-  const repoPath = ref.path.replace(/\.git$/, "");
-  if (!repoPath) return null;
-  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
-  return `${web.scheme}://${authority}/${repoPath}`;
-}
-function repoWebUrl(remotes) {
-  const url = repoRemoteUrl(remotes);
-  return url === null ? null : remoteWebUrl(url);
-}
-function classifyForgePr(label2, result, noPrPattern, parse3) {
-  if (result.ok) return parse3(result.stdout);
-  if (isMissingCommand(result)) return ABSENT;
-  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
-    return ABSENT;
-  const detail = [
-    result.reason,
-    result.exitCode != null ? `exit ${result.exitCode}` : null,
-    result.error ?? firstLine(result.stderr)
-  ].filter(Boolean).join(", ");
-  return failed(`${label2}: ${detail}`, "read");
-}
-function isRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function parseStatusV2(stdout2) {
-  let branch = "detached";
-  let oid = ABSENT;
-  let upstream = ABSENT;
-  let aheadBehind = ABSENT;
-  let staged = 0;
-  let unstaged = 0;
-  let untracked2 = 0;
-  let conflicts = 0;
-  for (const line of stdout2.split("\n")) {
-    if (!line) continue;
-    if (line.startsWith("# ")) {
-      const rest2 = line.slice(2);
-      if (rest2.startsWith("branch.oid ")) {
-        const v = rest2.slice("branch.oid ".length).trim();
-        oid = v === "(initial)" ? ABSENT : ok(v);
-      } else if (rest2.startsWith("branch.head ")) {
-        const v = rest2.slice("branch.head ".length).trim();
-        branch = v === "(detached)" ? "detached" : v;
-      } else if (rest2.startsWith("branch.upstream ")) {
-        upstream = ok(rest2.slice("branch.upstream ".length).trim());
-      } else if (rest2.startsWith("branch.ab ")) {
-        const m = rest2.slice("branch.ab ".length).trim().match(/^\+(\d+)\s+-(\d+)$/);
-        if (m) {
-          aheadBehind = ok({
-            ahead: parseInt(m[1], 10),
-            behind: parseInt(m[2], 10)
-          });
-        }
-      }
-      continue;
-    }
-    const kind = line[0];
-    if (kind === "1" || kind === "2") {
-      const xy = line.slice(2, 4);
-      if (xy[0] !== ".") staged++;
-      if (xy[1] !== ".") unstaged++;
-    } else if (kind === "u") {
-      conflicts++;
-    } else if (kind === "?") {
-      untracked2++;
-    }
-  }
-  let status = "clean";
-  if (conflicts > 0) status = "conflicts";
-  else if (staged || unstaged || untracked2) status = "dirty";
-  return {
-    branch,
-    status,
-    aheadBehind,
-    oid,
-    upstream,
-    workingTree: { staged, unstaged, untracked: untracked2, conflicts }
-  };
-}
-function parseGithubPr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("gh pr view: JSON is not an object", "parse");
-  const { number, state, url, headRefOid: head } = json2;
-  if (typeof number !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("gh pr view: missing number/state/url/headRefOid", "parse");
-  }
-  const prState = prStateOf("gh pr view", GITHUB_PR_STATES, state);
-  return prState.kind === "ok" ? ok({ number, state: prState.value, url, head }) : prState;
-}
-function parseGitlabMr(stdout2) {
-  let json2;
-  try {
-    json2 = JSON.parse(stdout2);
-  } catch (e) {
-    return failed(
-      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
-      "parse"
-    );
-  }
-  if (!isRecord(json2))
-    return failed("glab mr view: JSON is not an object", "parse");
-  const iid = json2.iid;
-  const state = json2.state;
-  const url = json2.web_url;
-  const head = json2.sha;
-  if (typeof iid !== "number" || typeof state !== "string" || typeof url !== "string" || typeof head !== "string") {
-    return failed("glab mr view: missing iid/state/web_url/sha", "parse");
-  }
-  const mrState = prStateOf("glab mr view", GITLAB_MR_STATES, state);
-  return mrState.kind === "ok" ? ok({ number: iid, state: mrState.value, url, head }) : mrState;
-}
 
 // src/utils/trailing-edge.ts
 init_globals();
@@ -52287,13 +52499,13 @@ async function foldAppended(filePath2, prior, empty2, step4) {
     if (end === void 0 || window2.reset) {
       end = { size: window2.size, stamp: window2.stamp };
     }
-    const next = window2.start + window2.lines.length;
+    const next2 = window2.start + window2.lines.length;
     value = await step4(
       value,
       decodeLines(window2, (b) => parseJsonlLines(b.toString("utf-8")))
     );
     cursor = {
-      offset: next,
+      offset: next2,
       stamp: end.stamp,
       ino: window2.ino
     };
@@ -52572,9 +52784,9 @@ var DocumentCell = class {
     return this.cell.get();
   }
   set(value) {
-    const next = shaped(value);
-    if (sameDocument(this.cell.get(), next)) return;
-    this.cell.set(next);
+    const next2 = shaped(value);
+    if (sameDocument(this.cell.get(), next2)) return;
+    this.cell.set(next2);
     this.lastChangedAt = this.clock.now();
   }
   lastUpdatedMs() {
@@ -53565,6 +53777,7 @@ var GitService = class {
       cwd: options.cwd,
       envOverlay: { GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: options.timeout,
+      environment: "inherited",
       category: "git"
     });
   }
@@ -53616,9 +53829,9 @@ var GitService = class {
   // unusual configuration: `core.worktree` is not honoured (the short-circuit
   // never honoured it either), and the ascent does not stop at a filesystem
   // boundary the way git does without GIT_DISCOVERY_ACROSS_FILESYSTEM.
-  // `GIT_DIR`/`GIT_WORK_TREE` were never observable here: `execGitAsync` passes
-  // the DAEMON's environment, which describes whichever shell spawned it rather
-  // than the session being rendered.
+  // `GIT_DIR`/`GIT_WORK_TREE` are not observable here: they describe whichever
+  // shell spawned the daemon rather than the session being rendered, and the
+  // daemon's launches withhold them.
   //
   // [LAW:no-mode-explosion] No new `failed` arm. An unreadable ancestor is
   // `absent`, which is exactly where the old non-zero `rev-parse` exit landed
@@ -53983,6 +54196,7 @@ var GitService = class {
       args: [...args],
       cwd: options.cwd,
       timeoutMs: options.timeout,
+      environment: "inherited",
       category: "forge"
     });
   }
@@ -54462,6 +54676,7 @@ function invocation(hint, category, args, stdinInput) {
     bin: "tmux",
     args: ["-S", hint.socket, ...args],
     timeoutMs: 2e3,
+    environment: "inherited",
     category,
     stdinInput
   };
@@ -54483,6 +54698,13 @@ async function runTmuxAsync(launcher, hint, category, args, stdinInput) {
   );
 }
 
+// src/tmux-hint.ts
+init_globals();
+var paneKey = ({
+  socket,
+  pane
+}) => JSON.stringify([socket, pane]);
+
 // src/daemon/cache/tmux.ts
 var NAME_PERIOD_MS = 3e4;
 var MAX_ENTRIES = 64;
@@ -54493,10 +54715,7 @@ var TmuxService = class {
     this.names = new KeyedSource({
       name: "tmux",
       scope: "pane",
-      // A socket path cannot hold a newline's worth of pane id, so the pair
-      // is unambiguous.
-      keyOf: (hint) => `${hint.socket}
-${hint.pane}`,
+      keyOf: paneKey,
       fields: (hint) => `pane=${valueOf(hint.pane)} socket=${valueOf(hint.socket)}`,
       read: (hint) => askSessionName(opts.launcher, hint),
       every: () => ({ okMs: NAME_PERIOD_MS, failedMs: NAME_PERIOD_MS }),
@@ -54893,8 +55112,8 @@ function trailerAfter(text4, end) {
   LINE_TRAILER.lastIndex = i2;
   const m = LINE_TRAILER.exec(text4);
   if (m === null) return { commaEnd, line: null };
-  const next = i2 + m[0].length;
-  return { commaEnd, line: { at: next - m[1].length, next } };
+  const next2 = i2 + m[0].length;
+  return { commaEnd, line: { at: next2 - m[1].length, next: next2 } };
 }
 function removeMember(text4, span) {
   const { commaEnd, line } = trailerAfter(text4, span.end);
@@ -54981,13 +55200,13 @@ function insertValue(text4, path31, valueText, dialect, precedes) {
       parent.span.start
     );
   const member = entryText([leaf], valueText, dialect);
-  const next = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
-  if (next === void 0) return appendMember(text4, parent, member, dialect);
-  if (!startsLine(text4, next.span.start))
-    return splice(text4, next.span.start, next.span.start, `${member}, `);
-  const indent2 = indentOfLine(text4, next.span.start);
+  const next2 = precedes === null ? void 0 : parent.entries.find((e) => e.key === precedes);
+  if (next2 === void 0) return appendMember(text4, parent, member, dialect);
+  if (!startsLine(text4, next2.span.start))
+    return splice(text4, next2.span.start, next2.span.start, `${member}, `);
+  const indent2 = indentOfLine(text4, next2.span.start);
   const eol = eolOf(text4);
-  const at = lineStartOf(text4, next.span.start);
+  const at = lineStartOf(text4, next2.span.start);
   return splice(
     text4,
     at,
@@ -55373,12 +55592,12 @@ var RefreshFaults = class {
   refreshed(sessionId2, lane, reason) {
     const held = this.bySession.get(sessionId2);
     if (reason === null && held?.has(lane) !== true) return;
-    const next = new Map(held);
-    if (reason === null) next.delete(lane);
-    else next.set(lane, reason);
+    const next2 = new Map(held);
+    if (reason === null) next2.delete(lane);
+    else next2.set(lane, reason);
     runInAction(() => {
-      if (next.size === 0) this.bySession.delete(sessionId2);
-      else this.bySession.set(sessionId2, next);
+      if (next2.size === 0) this.bySession.delete(sessionId2);
+      else this.bySession.set(sessionId2, next2);
     });
   }
 };
@@ -55410,7 +55629,7 @@ var jsonDocumentParser = (text4) => text4.trim() === "" ? ABSENT : jsonParser(te
 // src/config/loader/plugins.ts
 init_globals();
 var import_node_path19 = __toESM(require_path_browserify(), 1);
-var import_json52 = __toESM(require_dist(), 1);
+var import_json53 = __toESM(require_dist(), 1);
 
 // src/config/dsl-types.ts
 init_globals();
@@ -56351,6 +56570,23 @@ function actionBindsTemplateValue(a) {
 
 // src/config/loader/diagnostics.ts
 init_globals();
+var import_json52 = __toESM(require_dist(), 1);
+function parseJson5Syntax(source) {
+  try {
+    return { kind: "parsed", value: import_json52.default.parse(source) };
+  } catch (e) {
+    const error = e;
+    return {
+      kind: "invalid",
+      issue: {
+        path: "",
+        message: `JSON5 syntax error: ${error.message}`,
+        line: error.lineNumber,
+        col: error.columnNumber
+      }
+    };
+  }
+}
 var ConfigError = class extends Error {
   file;
   issues;
@@ -56419,11 +56655,11 @@ function elementPathLine(source, document, pathParts) {
   let indexed = false;
   for (const part of pathParts) {
     const element = node.kind === "array" && /^\d+$/.test(part);
-    const next = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
-    if (next === void 0) break;
+    const next2 = node.kind === "array" ? element ? node.elements[Number(part)] : void 0 : entryOf2(node, part)?.value;
+    if (next2 === void 0) break;
     indexed ||= element;
-    node = next;
-    reached = next;
+    node = next2;
+    reached = next2;
   }
   return reached === void 0 || !indexed ? void 0 : lineFromOffset(source, reached.span.start);
 }
@@ -57008,11 +57244,11 @@ function beside(node, anchor, cell3, relation) {
     };
   }
   for (const [i2, child] of node.children.entries()) {
-    const next = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
-    if (next !== null) {
+    const next2 = child.kind === "container" ? beside(child, anchor, cell3, relation) : besideInBody(child, anchor, cell3, relation);
+    if (next2 !== null) {
       return {
         ...node,
-        children: node.children.map((c, j) => j === i2 ? next : c)
+        children: node.children.map((c, j) => j === i2 ? next2 : c)
       };
     }
   }
@@ -57020,12 +57256,12 @@ function beside(node, anchor, cell3, relation) {
 }
 function besideInBody(node, anchor, cell3, relation) {
   let found2 = false;
-  const next = mapOpens(node, (body) => {
+  const next2 = mapOpens(node, (body) => {
     const placed2 = beside(body, anchor, cell3, relation);
     found2 = placed2 !== null;
     return placed2 ?? body;
   });
-  return found2 ? next : null;
+  return found2 ? next2 : null;
 }
 function restages(fragment) {
   if (!isRowsFragment(fragment)) return true;
@@ -59763,19 +59999,19 @@ var Lexer = class {
     const startOffset = this.offset;
     if (isSign(this.src[this.offset] ?? "")) this.advanceBy(1);
     if (this.src[this.offset] === "0" && this.offset + 1 < this.src.length) {
-      const next = this.src[this.offset + 1];
-      if (next === "x" || next === "X") {
+      const next2 = this.src[this.offset + 1];
+      if (next2 === "x" || next2 === "X") {
         this.advanceBy(2);
         while (isHex(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         if (this.src[this.offset] === "." || this.src[this.offset] === "p" || this.src[this.offset] === "P") while (this.isHexFloatTail(this.src[this.offset] ?? "")) this.advanceBy(1);
         return this.finishNumber(startOffset, start);
       }
-      if (next === "o" || next === "O") {
+      if (next2 === "o" || next2 === "O") {
         this.advanceBy(2);
         while (isOctal(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         return this.finishNumber(startOffset, start);
       }
-      if (next === "b" || next === "B") {
+      if (next2 === "b" || next2 === "B") {
         this.advanceBy(2);
         while (isBinary(this.src[this.offset] ?? "") || this.src[this.offset] === "_") this.advanceBy(1);
         return this.finishNumber(startOffset, start);
@@ -60226,10 +60462,10 @@ var Parser = class {
     const cmds = [this.parseCommand()];
     while (this.peek().type === "Pipe") {
       this.next();
-      const next = this.peek();
-      if (!canStartPrimary(next.type)) throw this.errAt(next, "missing command after `|`", {
+      const next2 = this.peek();
+      if (!canStartPrimary(next2.type)) throw this.errAt(next2, "missing command after `|`", {
         expected: "command",
-        found: tokenLabel(next)
+        found: tokenLabel(next2)
       });
       cmds.push(this.parseCommand());
     }
@@ -60459,8 +60695,8 @@ function decodeStringLiteral(raw, pos, source) {
       out += c;
       continue;
     }
-    const next = raw[++i2];
-    switch (next) {
+    const next2 = raw[++i2];
+    switch (next2) {
       case "n":
         out += "\n";
         break;
@@ -60499,7 +60735,7 @@ function decodeStringLiteral(raw, pos, source) {
       case "5":
       case "6":
       case "7": {
-        const digits = next + (raw[i2 + 1] ?? "") + (raw[i2 + 2] ?? "");
+        const digits = next2 + (raw[i2 + 1] ?? "") + (raw[i2 + 2] ?? "");
         i2 += 2;
         out += String.fromCodePoint(Number.parseInt(digits, 8));
         break;
@@ -60523,9 +60759,9 @@ function decodeStringLiteral(raw, pos, source) {
         break;
       }
       default:
-        throw new ParseError(`bad escape sequence \\${next}`, pos, {
+        throw new ParseError(`bad escape sequence \\${next2}`, pos, {
           expected: "valid escape sequence",
-          found: `\\${next}`,
+          found: `\\${next2}`,
           source
         });
     }
@@ -61467,8 +61703,8 @@ var Engine = class {
     if (pipe.cmds.length === 0) throw new EvalError("empty pipeline", pipe.pos, { source: ctx.source });
     let value = this.evalCommand(pipe.cmds[0], scope, ctx, NO_PIPE);
     for (let i2 = 1; i2 < pipe.cmds.length; i2++) {
-      const next = pipe.cmds[i2];
-      value = this.evalCommand(next, scope, ctx, {
+      const next2 = pipe.cmds[i2];
+      value = this.evalCommand(next2, scope, ctx, {
         kind: "value",
         value
       });
@@ -63703,12 +63939,12 @@ function initials(s) {
 function join3(sep2, list2) {
   const parts = [];
   for (const v of list2) {
-    if (v !== null && v !== void 0 && typeof v === "object") throw bodyTypeMismatch("join", 2, "list of strings/primitives", `list element of type ${describe2(v)}`);
+    if (v !== null && v !== void 0 && typeof v === "object") throw bodyTypeMismatch("join", 2, "list of strings/primitives", `list element of type ${describe(v)}`);
     parts.push(String(v));
   }
   return parts.join(sep2);
 }
-function describe2(v) {
+function describe(v) {
   if (Array.isArray(v)) return "array";
   if (v instanceof Map) return "Map";
   if (v instanceof Set) return "Set";
@@ -64471,6 +64707,9 @@ var DEFINITION_KEYS = /* @__PURE__ */ new Set([
   "actions"
 ]);
 var DEFINITION_FILE = "plugin.json5";
+function pluginDefinitionProblem(file) {
+  return import_node_path19.default.basename(file) === DEFINITION_FILE ? null : `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+}
 var PLUGIN_NAME = /^[a-z][a-z0-9_]*$/;
 function pluginDefinition(definition, scope) {
   const name = import_node_path19.default.basename(import_node_path19.default.dirname(definition));
@@ -64524,18 +64763,18 @@ function applyPlugins(files, ctx, base, validate) {
       const definition = pluginDefinition(found2.path, found2.scope);
       const file = definition.path;
       const ns = definition.name === void 0 ? void 0 : pluginNs(definition);
-      const drop = (reason, config) => {
+      const drop = (reason2, config) => {
         const rendering = new Map(layer.rendering);
         if (ns !== void 0 && config !== layer.config) rendering.delete(ns);
         return {
           ...layer,
           config,
           rendering,
-          dropped: [...layer.dropped, { ...definition, reason }]
+          dropped: [...layer.dropped, { ...definition, reason: reason2 }]
         };
       };
-      if (import_node_path19.default.basename(file) !== DEFINITION_FILE) {
-        const reason = `a plugin is a folder holding its ${DEFINITION_FILE}, and the folder's name is the plugin's: move this file to <dir>/<name>/${DEFINITION_FILE} and list that`;
+      const reason = pluginDefinitionProblem(file);
+      if (reason !== null) {
         return drop(
           reason,
           ns === void 0 ? layer.config : tombstone(withoutPlugin(layer.config, ns), ns, {
@@ -64567,7 +64806,7 @@ function applyPlugins(files, ctx, base, validate) {
             file,
             read2.dir,
             definition,
-            { source, json: import_json52.default.parse(source) },
+            { source, json: import_json53.default.parse(source) },
             ctx
           ),
           under2
@@ -65825,7 +66064,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.15";
+var PACKAGE_VERSION = "1.233.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66051,6 +66290,7 @@ var RuntimeStats = class _RuntimeStats {
       collector: { sessions: 0, retiring: 0 },
       effectCache: { sessions: 0, effects: 0 },
       menuIdle: { sessions: 0, armed: 0 },
+      rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
       mailbox: { holder: null, heldMs: 0, queued: 0 },
       runs: { started: 0, failed: 0, timedOut: 0, refused: 0, running: 0 },
       sessionState: { sessions: 0, observers: 0, revision: 0 },
@@ -66110,6 +66350,7 @@ var RuntimeStats = class _RuntimeStats {
       collector: extras.collector,
       effectCache: extras.effectCache,
       menuIdle: extras.menuIdle,
+      rendererTurns: extras.rendererTurns,
       mailbox: extras.mailbox,
       runs: extras.runs,
       sessionState: extras.sessionState,
@@ -66192,6 +66433,7 @@ function chargeProbe(launcher, platform3) {
       bin: FOOTPRINT,
       args,
       timeoutMs: PROBE_TIMEOUT_MS,
+      environment: "inherited",
       category: "limits.charge"
     })
   ) : async (_pids, rss) => ({ kind: "charged", measure: "rss", bytes: rss });
@@ -66236,6 +66478,7 @@ function commandProbe(launcher, bin, args) {
         bin,
         args: [...args],
         timeoutMs: PROBE_TIMEOUT_MS,
+        environment: "inherited",
         category: "limits.memory-report"
       });
       if (!result.ok) {
@@ -66591,13 +66834,13 @@ init_globals();
 
 // src/facts/fact.ts
 init_globals();
-function restamp(prior, next, at) {
-  if (next.kind === "pending") return pendingOf(next.why);
+function restamp(prior, next2, at) {
+  if (next2.kind === "pending") return pendingOf(next2.why);
   if (prior !== void 0 && prior.kind !== "pending") {
     const { at: _at, ...held } = prior;
-    if (compareStructural(held, next)) return prior;
+    if (compareStructural(held, next2)) return prior;
   }
-  return { ...next, at };
+  return { ...next2, at };
 }
 
 // src/daemon/facts-assembly.ts
@@ -66765,10 +67008,13 @@ var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
-var locatorOf = (req, environment) => ({
-  hookData: req.hookData,
-  cwd: req.cwd,
-  hints: req.hints,
+var locatorOf = ({
+  context: { hookData: hookData2, cwd: cwd2, hints },
+  environment
+}) => ({
+  hookData: hookData2,
+  cwd: cwd2,
+  hints,
   environment
 });
 var sourcesOf2 = (subscriptions, prior) => ({
@@ -66794,7 +67040,10 @@ var sourcesOf2 = (subscriptions, prior) => ({
   ].sort()
 });
 var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && a.env.length === b.env.length && a.env.every((name, i2) => b.env[i2] === name);
-function release2({ stop: stop2, holds: holds2 }) {
+function release2({
+  stop: stop2,
+  holds: holds2
+}) {
   stop2();
   holds2.close();
 }
@@ -66821,21 +67070,21 @@ var Collector = class {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req, environment) {
-    const locator = locatorOf(req, environment);
-    const sessionId2 = req.hookData.session_id;
+  requested(context, environment) {
+    const request2 = { context, environment };
+    const sessionId2 = context.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId2);
       if (held === void 0) {
-        const opened = this.open(sessionId2, locator);
+        const opened = this.open(sessionId2, request2);
         this.records.set(sessionId2, opened);
         return opened.stamped.document;
       }
       held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
-        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
-      const live = phase.kind === "live" ? phase : this.live(held, locator);
+        phase.declared.set(this.declared({ ...held, request: request2 }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, request2);
       held.phase = live;
       this.stamp(held, live.inputs.get());
       return held.stamped.document;
@@ -66892,23 +67141,23 @@ var Collector = class {
     }
     runInAction(() => {
       for (const record2 of this.records.values()) {
-        const next = sourcesOf2(
+        const next2 = sourcesOf2(
           sources.get(record2.session) ?? [],
           record2.subscriptions
         );
-        if (sameSources(next, record2.subscriptions)) continue;
-        for (const [digest2, judged] of next.runs)
+        if (sameSources(next2, record2.subscriptions)) continue;
+        for (const [digest2, judged] of next2.runs)
           if (judged.kind === "refused" && !record2.subscriptions.runs.has(digest2))
             this.deps.log(
               "warn",
               `run refused sid=${JSON.stringify(record2.session)} digest=${shortDigest(digest2)} reason=${valueOf(judged.reason)}`
             );
-        record2.subscriptions = next;
+        record2.subscriptions = next2;
         const { phase } = record2;
         if (phase.kind === "live")
           phase.declared.set(
             this.declared(
-              { ...record2, locator: phase.declared.get().locator },
+              { ...record2, request: phase.declared.get() },
               phase.holds
             )
           );
@@ -66931,14 +67180,17 @@ var Collector = class {
       record2.turns--;
     };
   }
-  // Each session the collector reads now, with its latest stamp: what a
-  // renderer's complete start configures again. Unlike a request, it marks no
-  // session active, so a restart keeps none past a sweep that would retire it.
-  liveDocuments() {
-    return new Map(
-      [...this.records.values()].flatMap(
-        (r) => r.phase.kind === "live" ? [[r.session, r.stamped.document]] : []
-      )
+  // [LAW:one-source-of-truth] Every session the collector reads has its
+  // request at the keys of its latest stamp. Restarting reads that pair
+  // without reactivating a session or handing the renderer its environment.
+  liveSessions() {
+    return [...this.records.values()].flatMap(
+      ({ phase, stamped }) => phase.kind === "live" ? [
+        {
+          context: phase.declared.get().context,
+          worldState: stamped.document
+        }
+      ] : []
     );
   }
   // One sweep. Public so a test can run it at an instant it chose.
@@ -66964,13 +67216,13 @@ var Collector = class {
       if (phase.kind === "live") release2(phase);
     runInAction(() => this.records.clear());
   }
-  open(session, locator) {
+  open(session, request2) {
     const subscriptions = {
       plugins: /* @__PURE__ */ new Map(),
       runs: /* @__PURE__ */ new Map(),
       env: []
     };
-    const reader = this.reader({ session, locator, subscriptions });
+    const reader = this.reader({ session, request: request2, subscriptions });
     const first2 = reader.inputs.get();
     let document;
     try {
@@ -67011,11 +67263,11 @@ var Collector = class {
   }
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
-  live(record2, locator) {
+  live(record2, request2) {
     return this.watch(
       record2.session,
       record2.stamped,
-      this.reader({ ...record2, locator })
+      this.reader({ ...record2, request: request2 })
     );
   }
   reader(keys2) {
@@ -67064,7 +67316,7 @@ var Collector = class {
   // is released (`Holds.declare`).
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
-  declared({ session, locator, subscriptions }, holds2) {
+  declared({ session, request: request2, subscriptions }, holds2) {
     const sid = JSON.stringify(session);
     try {
       const {
@@ -67072,7 +67324,12 @@ var Collector = class {
         acquired,
         released
       } = holds2.declare(
-        () => declareLanes(this.deps.owners, holds2, locator, subscriptions)
+        () => declareLanes(
+          this.deps.owners,
+          holds2,
+          locatorOf(request2),
+          subscriptions
+        )
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -67081,14 +67338,14 @@ var Collector = class {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
         );
-      return { locator, lanes };
+      return { ...request2, lanes };
     } catch (e) {
       this.deps.log(
         "error",
         `session declaration threw sid=${sid}: ${inspect(e)}`
       );
       return {
-        locator,
+        ...request2,
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions
@@ -67099,9 +67356,9 @@ var Collector = class {
   inputsOf(locator) {
     return { ...locator, deps: this.deps.owners };
   }
-  read({ locator, lanes }) {
+  read(declared) {
     try {
-      return ok(readingsOf(this.inputsOf(locator), lanes));
+      return ok(readingsOf(this.inputsOf(locatorOf(declared)), declared.lanes));
     } catch (e) {
       return failed(`reading the owners: ${String(e)}`, "read");
     }
@@ -67113,21 +67370,21 @@ var Collector = class {
   stamp({ session, stamped }, moved2) {
     const prior = stamped.document;
     const { owners, daemon: daemon2 } = moved2;
-    const next = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
+    const next2 = owners.kind === "failed" ? failedStamp(prior, owners.reason, daemon2) : this.assembled(
       prior,
       owners.value,
       daemon2,
       instantAt(this.deps.clock)
     );
-    const failure2 = next === prior ? null : stampFailureOf(next);
+    const failure2 = next2 === prior ? null : stampFailureOf(next2);
     if (failure2 !== null)
       this.deps.log(
         "error",
         `world state sid=${JSON.stringify(session)}: ${failure2}`
       );
-    stamped.document = next;
+    stamped.document = next2;
     stamped.from = moved2;
-    return next !== prior;
+    return next2 !== prior;
   }
   assembled(prior, readings, daemon2, at) {
     try {
@@ -67216,6 +67473,16 @@ var laneOffReason = (lane) => {
 
 // src/daemon/frame-feed.ts
 var MAX_REQUESTS = 256;
+var failedFeed = (refusal) => {
+  const encoded = JSON.stringify(refusal);
+  return { resp: encoded, statusline: encoded };
+};
+function encodeFeed(frame2, publish) {
+  if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
+  const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar)));
+  const statusline = frame2.handoff === null ? resp : JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.handoff)));
+  return { resp, statusline };
+}
 var FrameFeeds = class {
   constructor(deps) {
     this.deps = deps;
@@ -67373,10 +67640,21 @@ var FrameFeeds = class {
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
   took(frames) {
-    for (const { session, answers } of frames) {
+    for (const { session, frame: frame2 } of frames) {
       const watched = this.watched.get(session);
       if (watched === void 0) continue;
-      watched.last = answers;
+      try {
+        watched.last = encodeFeed(frame2, this.deps.publishFrame);
+      } catch (error) {
+        const refused2 = renderFailed(error);
+        const failed3 = failedFeed(refused2);
+        if (watched.last?.resp !== failed3.resp)
+          this.deps.log(
+            "error",
+            `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
+          );
+        watched.last = failed3;
+      }
       for (const sub2 of watched.followers.keys()) this.send(watched, sub2);
     }
   }
@@ -67780,8 +68058,8 @@ var RetiredTmuxStatus = class {
   surveys = new ObservableLru(256);
   observe(socket) {
     this.surveys.touch(socket);
-    const next = this.surveys.get(socket);
-    if (next !== void 0 && this.clock.monotonic() < next)
+    const next2 = this.surveys.get(socket);
+    if (next2 !== void 0 && this.clock.monotonic() < next2)
       return Promise.resolve();
     return this.flights.run(socket, async () => {
       try {
@@ -67871,6 +68149,7 @@ var CLICK_PROGRAM_TIMEOUT_MS = 5e3;
 var clickLaunchVia = (launcher) => (launch) => launcher.launch({
   ...launch,
   args: launch.args?.slice(),
+  environment: "inherited",
   timeoutMs: CLICK_PROGRAM_TIMEOUT_MS
 });
 async function clickLaunch(launch, opts, what, said2) {
@@ -67942,9 +68221,19 @@ var typeInPane = (edge) => async (tmux3, line) => {
 
 // src/utils/keyed-serial-queue.ts
 init_globals();
+var FOREGROUND_BURST = 8;
+function next(waiting) {
+  const first2 = waiting.first.pop();
+  if (first2 !== void 0) return first2;
+  if (waiting.scheduled.length > 0 && (waiting.last.length === 0 || waiting.ordinary === FOREGROUND_BURST)) {
+    waiting.ordinary = 0;
+    return waiting.scheduled.shift();
+  }
+  const last2 = waiting.last.shift();
+  if (last2 !== void 0 && waiting.scheduled.length > 0) waiting.ordinary++;
+  return last2;
+}
 var KeyedSerialQueue = class {
-  // Each key's tasks still to run, while one runs: those placed `idle` apart,
-  // since every other waits ahead of them.
   waiting = /* @__PURE__ */ new Map();
   run(key, task, at = "last") {
     return new Promise((resolve, reject2) => {
@@ -67957,15 +68246,18 @@ var KeyedSerialQueue = class {
       };
       const behind = this.waiting.get(key);
       if (behind !== void 0) {
-        if (at === "first") behind.tasks.unshift(entry);
-        else if (at === "last") behind.tasks.push(entry);
-        else behind.idle.push(entry);
+        behind[at].push(entry);
         return;
       }
-      const waiting = { tasks: [], idle: [] };
+      const waiting = {
+        first: [],
+        last: [],
+        scheduled: [],
+        ordinary: 0
+      };
       this.waiting.set(key, waiting);
-      const drain = (next) => void next().then(() => {
-        const after = waiting.tasks.shift() ?? waiting.idle.shift();
+      const drain = (entry2) => void entry2().then(() => {
+        const after = next(waiting);
         if (after === void 0) this.waiting.delete(key);
         else drain(after);
       });
@@ -67994,13 +68286,7 @@ async function paneOff(tmux3, edge) {
 }
 
 // src/daemon/acts.ts
-var OUTLIVES = {
-  copy: false,
-  open: false,
-  "type-slash": false,
-  run: true
-};
-var outlives = (act) => OUTLIVES[act.kind];
+var outlives = (act) => act.kind === "run";
 function nameOf(act) {
   switch (act.kind) {
     case "copy":
@@ -68012,7 +68298,6 @@ function nameOf(act) {
       return `run ${act.action}`;
   }
 }
-var paneKey = (pane) => `${pane.socket}\0${pane.pane}`;
 var did = (said2) => ({ outcome: { kind: "ok" }, said: said2 });
 var not = (outcome) => ({
   outcome,
@@ -68054,19 +68339,24 @@ var Acts = class {
   // time, in the order asked: a slash line or a bar pane change.
   inPane = new KeyedSerialQueue();
   performers;
-  // [LAW:single-enforcer] A bar-pane split and input typing share the pane's
-  // queue regardless of what changed the display setting.
-  setBarPane(pane, on2) {
-    const { edge, host } = this.deps.barPane;
-    return this.inPane.run(paneKey(pane), async () => {
-      if (this.deps.closing()) return "daemon closing";
-      return on2 ? paneOn(pane, host, edge) : paneOff(pane, edge);
+  // [LAW:single-enforcer] A bar-pane split and input typing share the
+  // pane's queue. Admission happens when the act reaches the head.
+  inPaneTurn(pane, act) {
+    return this.inPane.run(paneKey(pane), () => {
+      if (this.deps.closing()) throw new DaemonClosing("pane act");
+      return act();
     });
   }
-  // A slash line typed into `pane` in its turn.
+  setBarPane(pane, on2) {
+    const { edge, host } = this.deps.barPane;
+    return this.inPaneTurn(
+      pane,
+      () => on2 ? paneOn(pane, host, edge) : paneOff(pane, edge)
+    );
+  }
   typed(pane, line) {
-    return this.inPane.run(
-      paneKey(pane),
+    return this.inPaneTurn(
+      pane,
       () => typeInPane(this.deps.claudeInput)(pane, line)
     );
   }
@@ -68114,16 +68404,16 @@ var DeclaredBarPanes = class {
   log;
   held = /* @__PURE__ */ new Map();
   declare(lanes) {
-    const next = /* @__PURE__ */ new Map();
+    const next2 = /* @__PURE__ */ new Map();
     for (const [session, switches] of Object.entries(lanes)) {
       const reported = this.paneOf(session);
       if (reported === void 0) continue;
       const key = paneKey(reported.pane);
-      const competing = next.get(key);
+      const competing = next2.get(key);
       if (competing === void 0 || competing.order < reported.order)
-        next.set(key, { ...reported, session, on: switches.pane });
+        next2.set(key, { ...reported, session, on: switches.pane });
     }
-    for (const [key, demand] of next) {
+    for (const [key, demand] of next2) {
       const held = this.held.get(key);
       if (held === void 0)
         this.held.set(key, {
@@ -68137,7 +68427,7 @@ var DeclaredBarPanes = class {
       }
     }
     for (const [key, held] of this.held) {
-      if (!next.has(key)) {
+      if (!next2.has(key)) {
         held.listed = false;
         held.demand = { ...held.demand, on: false };
       }
@@ -68163,18 +68453,46 @@ var DeclaredBarPanes = class {
         this.reconcile(key, held);
       },
       (error) => {
+        const failure2 = failureOf(error);
+        if (failure2.kind === "closing") {
+          this.held.delete(key);
+          this.log("info", `${event} \u2014 ${failure2.message}`);
+          return;
+        }
         held.application = {
           kind: "retry",
           on: on2,
           after: this.clock.monotonic() + RETRY_MS2
         };
-        this.log("warn", `${event} \u2014 ${failureOf(error).detail}`);
+        this.log("warn", `${event} \u2014 ${failure2.detail}`);
         if (!held.listed && !on2) this.held.delete(key);
         else this.reconcile(key, held);
       }
     );
   }
 };
+
+// src/daemon/foundations/frame-publication.ts
+init_globals();
+function publishingFrames(signer) {
+  return (wire) => {
+    const frame2 = parseFrame(wire);
+    return {
+      ...frame2,
+      rows: frame2.rows.map((row) => ({
+        ...row,
+        runs: row.runs.map(({ link, ...run3 }) => {
+          if (link === void 0) return run3;
+          const href = hrefOfDrawnLink(link);
+          return {
+            ...run3,
+            link: isBarLink(href) ? signer.signLink(href) : href
+          };
+        })
+      }))
+    };
+  };
+}
 
 // src/daemon/renderer-host.ts
 init_globals();
@@ -68184,7 +68502,7 @@ init_globals();
 
 // src/config/config-changes.ts
 init_globals();
-var import_json53 = __toESM(require_dist(), 1);
+var import_json54 = __toESM(require_dist(), 1);
 var ABSENT3 = { kind: "absent" };
 function parse2(text4) {
   if (text4 === null) return { kind: "none" };
@@ -68213,7 +68531,7 @@ function readOf(text4, node) {
 }
 function sameRead(a, b) {
   if (a.kind === "value" && b.kind === "value")
-    return sameValue(import_json53.default.parse(a.text), import_json53.default.parse(b.text));
+    return sameValue(import_json54.default.parse(a.text), import_json54.default.parse(b.text));
   if (a.kind === "file" && b.kind === "file") return a.text === b.text;
   return a.kind === "absent" && b.kind === "absent";
 }
@@ -68287,8 +68605,8 @@ function diffMembers(at, beforeText, was, afterText, will) {
     })
   );
   const anchors = will.entries.map((e, i2) => {
-    const next = will.entries.slice(i2 + 1).find((n) => prior.has(n.key));
-    return next?.key ?? null;
+    const next2 = will.entries.slice(i2 + 1).find((n) => prior.has(n.key));
+    return next2?.key ?? null;
   });
   const changed = will.entries.flatMap((e, i2) => {
     const old = prior.get(e.key);
@@ -68476,10 +68794,10 @@ function stateFile(dir, name, empty2, parse3) {
     const parsed2 = parse3(doc);
     return parsed2.kind === "ok" ? parsed2 : { kind: "failed", reason: `${file} ${parsed2.reason}` };
   };
-  const plan = (next) => {
+  const plan = (next2) => {
     const current = read2();
     if (current.kind === "failed") return current;
-    const value = next(current.value);
+    const value = next2(current.value);
     return {
       kind: "ok",
       value: {
@@ -68489,7 +68807,7 @@ function stateFile(dir, name, empty2, parse3) {
       }
     };
   };
-  return { read: read2, plan, update: (next) => written2(plan(next)) };
+  return { read: read2, plan, update: (next2) => written2(plan(next2)) };
 }
 function written2(planned) {
   if (planned.kind === "failed") return planned;
@@ -68516,16 +68834,16 @@ var repoConfigs = (dir) => {
   );
   const loose = stateFile(dir, REPO_CONFIGS_FILE, {}, parseRepoConfigBook);
   const filed = () => fs_default.existsSync(repoConfigsPath(dir));
-  const plan = (next) => {
-    if (filed()) return book.plan(next);
+  const plan = (next2) => {
+    if (filed()) return book.plan(next2);
     const kept = loose.read();
     if (kept.kind === "failed") return kept;
-    return book.plan(() => next(kept.value));
+    return book.plan(() => next2(kept.value));
   };
   return {
     read: () => (filed() ? book : loose).read(),
     plan,
-    update: (next) => written2(plan(next))
+    update: (next2) => written2(plan(next2))
   };
 };
 function answering(book, dir, answer2) {
@@ -68707,6 +69025,9 @@ var RendererWake = class {
   took = durationHistogram();
   dues = 0;
   failed = 0;
+  // A bound in slots still allows slow slots. Report the longest observed
+  // wait without logging every frame's turn.
+  queuedMaxMs = 0;
   opened;
   summarizedAt;
   // [LAW:one-source-of-truth] The renderer's wake, whole, as an output
@@ -68757,7 +69078,12 @@ var RendererWake = class {
     try {
       ended = await this.deps.due();
     } catch (thrown2) {
-      ended = { kind: "threw", failure: failureOf(thrown2), turnMs: null };
+      ended = {
+        kind: "threw",
+        failure: failureOf(thrown2),
+        queuedMs: null,
+        turnMs: null
+      };
     }
     this.answered(tick, ended);
   }
@@ -68778,6 +69104,8 @@ var RendererWake = class {
       this.heldUntil = this.declared !== null && this.declared <= tick ? now2 + FAILED_DUE_HOLD_S : null;
       this.arm();
     }
+    if (ended.queuedMs !== null)
+      this.queuedMaxMs = Math.max(this.queuedMaxMs, ended.queuedMs);
     if (ended.turnMs !== null) {
       this.dues++;
       recordMs(this.took, ended.turnMs);
@@ -68791,7 +69119,7 @@ var RendererWake = class {
     const now2 = tickAt(this.deps.clock);
     const histogram = state === "running" ? "" : ` tookHistogram=${encodedOf(this.took)}`;
     this.deps.log(
-      `wake ${state} for=${Math.round(now2 - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)}${histogram}`
+      `wake ${state} for=${Math.round(now2 - this.opened)}s dues=${this.dues} failed=${this.failed} took=${distributionOf(this.took)} queuedMaxMs=${Math.round(this.queuedMaxMs)}${histogram}`
     );
     this.summarizedAt = now2;
   }
@@ -68810,7 +69138,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   const stamped = stampedOf(clock);
   let holder = null;
   let queued = 0;
-  let served = /* @__PURE__ */ new Set();
+  const pendingClicks = /* @__PURE__ */ new Map();
+  let configs = /* @__PURE__ */ new Map();
   const inMailbox = (slot, at = "last") => {
     const asked = clock.monotonic();
     queued++;
@@ -68856,6 +69185,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       recordTaken("session release", release3);
       return unanswered(failureOf(thrown2), queuedMs);
     }
+    if (input.event.kind === "config") {
+      const key = originKey(input.event.origin);
+      if (configs.has(key)) configs.set(key, "received");
+    }
     const { subscriptions, frames, stored, turnMs, ...answer3 } = output;
     const turn = {
       ...answer3,
@@ -68863,9 +69196,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
     };
-    const { settled: settled3 } = await landInSlot(input.event, output);
+    const { settled: settled3, configFailure } = await landInSlot(input.event, output);
     return {
-      turn,
+      turn: configFailure === null ? turn : { ...turn, configFailure },
       settled: settled3.finally(
         () => void recordTaken("session release", release3)
       )
@@ -68880,10 +69213,27 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       (effect) => effect.kind === "approve-repo"
     );
     const landed = landConfig(changes, answers);
-    const named2 = took(output.subscriptions, output.frames, output.stored);
+    const requested = event.kind === "context" ? originKey(event.context.requested) : null;
+    const followed = took(
+      output.subscriptions,
+      output.frames,
+      output.stored,
+      requested
+    );
+    let configFailure = null;
     const waited = [];
-    for (const origin of named2)
-      waited.push((await configInSlot(origin, "config-subscribed")).settled);
+    const unreceived = [];
+    if (followed.kind === "failed") {
+      if (requested !== null && configs.get(requested) !== "received")
+        configFailure = followed.failure;
+    } else {
+      for (const origin of followed.named) {
+        const config = await configInSlot(origin, "config-subscribed");
+        if (originKey(origin) === requested) configFailure = config.failure;
+        if (config.kind === "unreceived") unreceived.push(origin);
+        waited.push(config.settled);
+      }
+    }
     const moved3 = landed.kind === "ok" && (landed.files.length > 0 || answers.length > 0) ? recordTaken(
       "landed config discovery",
       () => world.configs.landed(landed.files, answers.length > 0)
@@ -68932,7 +69282,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       Promise.all(reloaded),
       Promise.all(owed)
     ]).then(([caused, , own2]) => [...caused.flat(), ...own2]);
-    return { settled: settled3 };
+    for (const origin of unreceived) markUnreceived(origin);
+    return { settled: settled3, configFailure };
   };
   const landConfig = (changes, answers) => {
     try {
@@ -68953,37 +69304,48 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return { kind: "failed", reason: failureOf(thrown2).detail };
     }
   };
+  const notTaken = (what, failure2) => {
+    const text4 = `renderer ${name}'s ${what} could not be taken: ${failure2.detail}`;
+    log("error", text4);
+    world.unheard(text4);
+  };
   const recordTaken = (what, operation) => {
     try {
       return operation();
     } catch (thrown2) {
-      const text4 = `renderer ${name}'s ${what} could not be taken: ${failureOf(thrown2).detail}`;
-      log("error", text4);
-      world.unheard(text4);
+      notTaken(what, failureOf(thrown2));
       return null;
     }
   };
-  const took = (subscriptions, frames, stored) => {
+  const took = (subscriptions, frames, stored, requested) => {
     recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
-    let named2 = [];
-    for (const [what, apply] of [
-      ["stored writes", () => collector.stored(stored)],
-      ["subscriptions", () => collector.subscribed(subscriptions)],
-      ["frames", () => collector.frames(frames)],
-      [
-        "configs",
-        () => {
-          world.configs.follow(subscriptions.configs);
-          named2 = subscriptions.configs.filter(
-            (o) => !served.has(originKey(o))
-          );
-          served = new Set(subscriptions.configs.map((o) => originKey(o)));
-        }
-      ]
-    ]) {
-      recordTaken(what, apply);
+    recordTaken("stored writes", () => collector.stored(stored));
+    recordTaken("subscriptions", () => collector.subscribed(subscriptions));
+    recordTaken("frames", () => collector.frames(frames));
+    const named2 = [];
+    try {
+      const next2 = /* @__PURE__ */ new Map();
+      for (const origin of subscriptions.configs) {
+        const key = originKey(origin);
+        const before = configs.get(key);
+        if (before === void 0 || key === requested && before === "unreceived") {
+          named2.push(origin);
+          next2.set(key, "scheduled");
+        } else next2.set(key, before);
+      }
+      configs = next2;
+      world.configs.follow(subscriptions.configs);
+      return { kind: "following", named: named2 };
+    } catch (thrown2) {
+      for (const origin of named2) markUnreceived(origin);
+      const failure2 = failureOf(thrown2);
+      notTaken("configs", failure2);
+      return { kind: "failed", failure: failure2 };
     }
-    return named2;
+  };
+  const markUnreceived = (origin) => {
+    const key = originKey(origin);
+    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
   };
   const configMade = (origin) => () => {
     const config = world.configs.snapshotOf(origin);
@@ -69003,6 +69365,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (made.kind !== "event")
       return {
+        kind: "unreceived",
+        failure: made,
         settled: Promise.resolve([{ kind: "failed", reason: made.message }])
       };
     const input = stamped(made);
@@ -69014,7 +69378,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         reason: turn.failure.message
       }
     ] : [];
-    return { settled: settled3.then((outcomes) => [...threw2, ...outcomes]) };
+    const outcomes = settled3.then((outcomes2) => [...threw2, ...outcomes2]);
+    return turn.kind === "threw" && turn.turnMs === null ? { kind: "unreceived", failure: turn.failure, settled: outcomes } : {
+      kind: "received",
+      failure: turn.kind === "threw" ? turn.failure : null,
+      settled: outcomes
+    };
   };
   const doneOf = (effect, outcome) => ({
     kind: "event",
@@ -69068,31 +69437,44 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         );
     }
   };
-  const throughSlot = (make, at) => inMailbox(async (queuedMs, holds2) => {
-    let made;
-    try {
-      made = make();
-    } catch (thrown2) {
-      made = failureOf(thrown2);
+  const throughSlot = (make, at, click2 = null) => {
+    const held = click2 === null ? null : pendingClicks.get(click2) ?? { session: click2, count: 0 };
+    if (held !== null) {
+      held.count++;
+      pendingClicks.set(held.session, held);
     }
-    if (at === "first" || made.kind === "event" && made.event.kind === "start")
-      served.clear();
-    if (made.kind !== "event")
-      return { event: null, slotted: unanswered(made, queuedMs) };
-    holds2(made.event.kind);
-    return {
-      event: made.event,
-      slotted: await inSlot(stamped(made), queuedMs)
-    };
-  }, at);
-  const taken2 = async (make, at = "last") => {
-    const { event, slotted } = await throughSlot(make, at);
+    return inMailbox(async (queuedMs, holds2) => {
+      try {
+        let made;
+        try {
+          made = make();
+        } catch (thrown2) {
+          made = failureOf(thrown2);
+        }
+        if (at === "first" || made.kind === "event" && made.event.kind === "start")
+          configs.clear();
+        if (made.kind !== "event")
+          return { event: null, slotted: unanswered(made, queuedMs) };
+        holds2(made.event.kind);
+        return {
+          event: made.event,
+          slotted: await inSlot(stamped(made), queuedMs)
+        };
+      } finally {
+        if (held !== null && --held.count === 0)
+          pendingClicks.delete(held.session);
+      }
+    }, at);
+  };
+  const taken2 = async (make, at = "last", click2 = null) => {
+    const { event, slotted } = await throughSlot(make, at, click2);
     return {
       event,
       turn: { ...slotted.turn, settled: await slotted.settled }
     };
   };
   const answer2 = async (make) => (await taken2(make)).turn;
+  const answerClick = async (session, make) => (await taken2(make, "last", session)).turn;
   const recorded2 = (at) => async (make, about) => {
     const { event, turn } = await taken2(make, at);
     record2(event, about, turn);
@@ -69113,11 +69495,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           push,
           ...readingsAt(clock)
         });
-        for (const origin of took(subscriptions, [], stored))
-          unawaited(
-            "config",
-            deliver2(configMade(origin), [["why", "config-subscribed"]])
-          );
+        const followed = took(subscriptions, [], stored, null);
+        if (followed.kind === "following")
+          for (const origin of followed.named) {
+            const config = await configInSlot(origin, "config-subscribed");
+            if (config.kind === "unreceived") markUnreceived(origin);
+            unawaited("config", config.settled);
+          }
         return answered;
       } catch (thrown2) {
         return {
@@ -69168,8 +69552,14 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           kind: "closing",
           message: "the daemon is closing",
           detail: "a due made after the renderer's wake closed"
-        } : { kind: "event", event: { kind: "due" } },
-        "idle"
+        } : {
+          kind: "event",
+          event: {
+            kind: "due",
+            pendingClicks: [...pendingClicks.keys()]
+          }
+        },
+        "scheduled"
       );
       unawaited("due acts", settled3);
       record2(event, [], turn);
@@ -69183,6 +69573,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   return {
     name,
     answer: answer2,
+    answerClick,
     deliver: deliver2,
     start: recorded2("first"),
     ask: ask2,
@@ -69211,7 +69602,7 @@ function sessionOf(event) {
     case "world-state":
       return event.worldState.session;
     case "click":
-      return event.session?.ok ? event.session.id : null;
+      return event.click.scope === "session" ? event.click.session : null;
     case "retire":
     case "effect-done":
       return event.session;
@@ -69764,9 +70155,9 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
   );
   return minted;
 }
-function plainMessage({ about, text: message2, copy: copy3 }, severity) {
+function plainMessage({ about, text: message2, copy: copy2 }, severity) {
   const [first2, ...rest2] = message2.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
-  return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy3, lines: [first2, ...rest2] }];
+  return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy2, lines: [first2, ...rest2] }];
 }
 function copyKeys(list2) {
   return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
@@ -69969,12 +70360,1866 @@ function repoQuestions(question, sessionId2, signer) {
   });
 }
 
-// src/dsl/render.ts
+// src/dsl/parts.ts
 init_globals();
 
-// src/config/edit-chrome.ts
+// src/var-system/sources.ts
 init_globals();
-var import_node_path26 = __toESM(require_path_browserify(), 1);
+
+// src/template-engine/engine.ts
+init_globals();
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+init_globals();
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+init_globals();
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
+init_globals();
+function applyStyleToFragment(child, style) {
+  const fragment = asFragment(child);
+  const result = fragment.copy();
+  result.style = layerStyle(fragment.style, style);
+  return result;
+}
+function asFragment(child) {
+  if (!(child instanceof RichText)) {
+    throw new TypeError(`template function expected a RichText fragment, got ${typeof child === "object" ? Object.prototype.toString.call(child) : typeof child}`);
+  }
+  return child;
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
+function attrFunc(style) {
+  return {
+    fn: ((child) => applyStyleToFragment(child, style)),
+    argTypes: ["liftable"],
+    arity: { kind: "exact" },
+    returnType: "T"
+  };
+}
+function colorSinkFunc(slot) {
+  return {
+    fn: ((spec, child) => applyStyleToFragment(child, new Style({ [slot]: ColorSpec.parse(spec) }))),
+    argTypes: ["string", "liftable"],
+    arity: { kind: "exact" },
+    returnType: "T"
+  };
+}
+function attrStyle(name, value) {
+  return new Style({ [name]: value });
+}
+function attributeFuncs() {
+  const out = {};
+  for (const name of ATTRIBUTE_NAMES) {
+    out[name] = attrFunc(attrStyle(name, true));
+    out[`not_${name}`] = attrFunc(attrStyle(name, false));
+  }
+  for (const [alias, canonical2] of Object.entries(ATTRIBUTE_SHORT_ALIASES)) {
+    out[alias] = attrFunc(attrStyle(canonical2, true));
+  }
+  return out;
+}
+var styleSpecFunc = {
+  fn: ((spec, child) => {
+    return applyStyleToFragment(child, Style.parse(spec));
+  }),
+  argTypes: ["string", "liftable"],
+  arity: { kind: "exact" },
+  returnType: "T"
+};
+var linkFunc = {
+  fn: ((url, child) => {
+    return applyStyleToFragment(child, new Style({ link: url }));
+  }),
+  argTypes: ["string", "liftable"],
+  arity: { kind: "exact" },
+  returnType: "T"
+};
+function richTextStyleFuncs() {
+  return {
+    fg: colorSinkFunc("color"),
+    bg: colorSinkFunc("bgcolor"),
+    ...attributeFuncs(),
+    link: linkFunc,
+    style: styleSpecFunc
+  };
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
+init_globals();
+function asColor(value, func) {
+  let colour;
+  try {
+    colour = parseHexColor(value.trim());
+  } catch (cause) {
+    if (!(cause instanceof ColorParseError))
+      throw cause;
+    throw new TypeError(`${func} expected a color (#RRGGBB or #RRGGBBAA), got ${JSON.stringify(value)} \u2014 to use a palette name here, wrap it: ${func} (color ${JSON.stringify(value)}) \u2026`, { cause });
+  }
+  return computable(colour, func, JSON.stringify(value));
+}
+function computable(colour, func, written3) {
+  if (colour.alpha === 0) {
+    throw new RangeError(`${func} got ${written3}, which is fully transparent: it draws no colour of its own, so there is nothing to compute with \u2014 use the colour of the surface it sits on, e.g. (color "background")`);
+  }
+  return colour;
+}
+function colorFunc(argTypes, fn) {
+  return { fn, argTypes, arity: { kind: "exact" }, returnType: "string" };
+}
+function asAmount(value, func, param, range) {
+  const inRange = range === void 0 || value >= range.min && value <= range.max;
+  if (!Number.isFinite(value) || !inRange) {
+    const bound = range === void 0 ? "a finite number" : `within ${range.min}..${range.max} (${range.note})`;
+    throw new RangeError(`${func}'s ${param} must be ${bound}, got ${value}`);
+  }
+  return value;
+}
+var darkenFunc = colorFunc(["string", "int"], ((hex, levels) => darken(asColor(hex, "darken"), levels).hex));
+var lightenFunc = colorFunc(["string", "int"], ((hex, levels) => darken(asColor(hex, "lighten"), -levels).hex));
+var MIX_PCT_MAX = 100;
+var MIX_RANGE = { min: 0, max: MIX_PCT_MAX, note: "0 = from, 100 = toward" };
+var mixFunc = colorFunc(["string", "string", "float"], ((fromHex, towardHex, pct) => blendRgb(asColor(fromHex, "mix"), asColor(towardHex, "mix"), asAmount(pct, "mix", "percentage", MIX_RANGE) / MIX_PCT_MAX).hex));
+var RATIO_RANGE = {
+  min: 1,
+  max: 21,
+  note: "4.5 = AA body text, 3 = AA large text"
+};
+var contrastOnFunc = colorFunc(["string"], ((bgHex) => contrastFor(asColor(bgHex, "contrastOn")).hex));
+var TRUECOLOR = { depth: ColorDepth.TRUECOLOR };
+var readableOnFunc = (drawnAt) => colorFunc(["string", "string", "float"], ((fgHex, bgHex, ratio) => {
+  const { depth, terminal } = drawnAt();
+  return ensureContrast(asColor(fgHex, "readableOn"), asColor(bgHex, "readableOn"), asAmount(ratio, "readableOn", "ratio", RATIO_RANGE), depth, void 0, terminal).hex;
+}));
+var OKLCH_AXIS_FUNCS = {
+  hueShift: "shiftHue",
+  chromaScale: "scaleChroma",
+  lightnessScale: "scaleLightness",
+  lightnessShift: "shiftLightness"
+};
+function oklchAxisFuncs() {
+  const out = {};
+  for (const [axis, funcName] of Object.entries(OKLCH_AXIS_FUNCS)) {
+    const key = axis;
+    out[funcName] = colorFunc(["string", "float"], ((hex, amount) => {
+      const themeKey = {
+        ...IDENTITY,
+        [key]: asAmount(amount, funcName, "amount")
+      };
+      return Oklch.fromRgba(asColor(hex, funcName)).applyKey(themeKey).toRgba().hex;
+    }));
+  }
+  return out;
+}
+function colorFuncs(drawnAt = () => TRUECOLOR) {
+  return {
+    darken: darkenFunc,
+    lighten: lightenFunc,
+    mix: mixFunc,
+    contrastOn: contrastOnFunc,
+    readableOn: readableOnFunc(drawnAt),
+    ...oklchAxisFuncs()
+  };
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
+init_globals();
+function colorStops(tail, palette) {
+  if (tail.length % 2 !== 0) {
+    throw new RangeError(`ramp's last stop (position ${String(tail[tail.length - 1])}) has no color \u2014 stops are <position> <color> pairs`);
+  }
+  const stops = [];
+  for (let i2 = 0; i2 < tail.length; i2 += 2) {
+    stops.push({
+      at: tail[i2],
+      color: computable(resolveColorRef(palette, tail[i2 + 1]), "ramp", JSON.stringify(tail[i2 + 1]))
+    });
+  }
+  return stops;
+}
+function paletteFuncs(getPalette) {
+  const colorFunc2 = {
+    fn: ((ref) => resolveColorRef(getPalette(), ref).hex),
+    argTypes: ["string"],
+    arity: { kind: "exact" },
+    returnType: "string"
+  };
+  const rampFunc = {
+    fn: ((value, ease, ...tail) => new ColorRamp(parseEase(ease), colorStops(tail, getPalette())).at(value).hex),
+    argTypes: ["float", "string"],
+    arity: { kind: "alternating", minimum: 4 },
+    returnType: "string"
+  };
+  return { color: colorFunc2, ramp: rampFunc };
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
+init_globals();
+var HOST_CLOCK = Timeline.play(0);
+function pairs(what, tail, value) {
+  if (tail.length % 2 !== 0) {
+    throw new RangeError(`last hold (${String(tail[tail.length - 1])} s) has no ${what} \u2014 the arguments are <seconds> <${what}> pairs`);
+  }
+  const paired = [];
+  for (let i2 = 0; i2 < tail.length; i2 += 2) {
+    const seconds = tail[i2];
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new RangeError(`hold ${i2 / 2} must be a positive number of seconds, got ${seconds}`);
+    }
+    paired.push({ seconds, value: value(tail[i2 + 1]) });
+  }
+  return paired;
+}
+var GLYPH_EFFECTS = {
+  ...GLYPH_EFFECT_CATALOGUE.loops,
+  typewriter: (element) => GLYPH_EFFECT_CATALOGUE.transitions.typewriter(element).effect,
+  scramble: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scramble(element).effect,
+  backspace: (element) => GLYPH_EFFECT_CATALOGUE.transitions.backspace(element).effect,
+  scrambleOut: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scrambleOut(element).effect
+};
+function glyphEffect(name) {
+  if (!Object.hasOwn(GLYPH_EFFECTS, name)) {
+    throw new RangeError(`unknown glyph effect ${JSON.stringify(name)}; expected one of ${Object.keys(GLYPH_EFFECTS).map((n) => JSON.stringify(n)).join(", ")}`);
+  }
+  return GLYPH_EFFECTS[name];
+}
+function animationFuncs(frame2, options = {}) {
+  const timeline = options.timeline ?? (() => HOST_CLOCK);
+  const drawing2 = (what, animation, at) => [Timeline.run(timeline(), animation), finiteTime(what, at.time)];
+  const now2 = (what, animation) => {
+    const at = frame2();
+    const [drawn, t2] = drawing2(what, animation, at);
+    const shown = shownAt(drawn, t2, at);
+    at.onHold?.(holdOf(shown, t2));
+    return shown.value;
+  };
+  const startedAt = (start, animation) => Timeline.run(Timeline.play(start), animation);
+  const framesFunc = {
+    fn: ((...tail) => {
+      const frames = pairs("frame", tail, asFragment).map(({ seconds, value }) => ({ seconds, text: value }));
+      const at = frame2();
+      return textFrameAt(...drawing2("frames", new FrameSequence(frames), at), at);
+    }),
+    argTypes: ["float", "liftable"],
+    arity: { kind: "alternating", minimum: 2 },
+    returnType: "T"
+  };
+  const steppedFunc = {
+    fn: ((...tail) => {
+      const steps2 = pairs("color", tail, (v) => asColor(v, "stepped"));
+      return steps2[now2("stepped", beat(steps2.map((step4) => step4.seconds)))].value.hex;
+    }),
+    argTypes: ["float", "string"],
+    arity: { kind: "alternating", minimum: 2 },
+    returnType: "string"
+  };
+  const tweenFunc = {
+    fn: ((seconds, ease, start, from, to) => now2("tween", startedAt(start, tween(from, to, { seconds, ease: parseEase(ease) })))),
+    argTypes: ["float", "string", "float", "float", "float"],
+    arity: { kind: "exact" },
+    returnType: "float"
+  };
+  const loopFunc = {
+    fn: ((seconds, start) => now2("loop", startedAt(start, Animation.continuous(Phase.loop(seconds))))),
+    argTypes: ["float", "float"],
+    arity: { kind: "exact" },
+    returnType: "float"
+  };
+  const glyphsFunc = {
+    fn: ((name, start, child) => {
+      const make = glyphEffect(name);
+      const fragment = asFragment(child);
+      const key = fragment.plain;
+      const at = frame2();
+      const reglyphed = reglyphText(fragment, make({ z: cellSeed(key, 0, 0) }), { key, asciiOnly: at.asciiOnly === true });
+      return textFrameAt(...drawing2("glyphs", startedAt(start, reglyphed), at), at);
+    }),
+    argTypes: ["string", "float", "liftable"],
+    arity: { kind: "exact" },
+    returnType: "T"
+  };
+  return { frames: framesFunc, stepped: steppedFunc, tween: tweenFunc, loop: loopFunc, glyphs: glyphsFunc };
+}
+
+// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
+function richTextFuncs(drawnAt) {
+  return { ...richTextStyleFuncs(), ...colorFuncs(drawnAt) };
+}
+var FALLBACK_ERROR_STYLE = new Style({ color: "red", dim: true });
+
+// src/template-engine/funcs.ts
+init_globals();
+var import_path = __toESM(require_path_browserify(), 1);
+
+// src/utils/formatters.ts
+init_globals();
+var CLAUDE_MODEL_PATTERN = /^(?:(?:global|apac|au|eu|us|us-east-\d|us-west-\d|eu-west-\d|eu-central-\d)\.)?(?:anthropic\.|azure_ai\/|bedrock\/|vertex_ai\/)?claude-(?:(?<family>opus|sonnet|haiku)-(?<newMajor>\d+)(?:-(?<newMinor>\d))?|(?<oldMajor>\d+)(?:-(?<oldMinor>\d))?-(?<oldFamily>opus|sonnet|haiku))(?:[-@]\d{8})?(?:-v\d+:\d+)?(?:-latest)?$/i;
+var FRIENDLY_MODEL_PATTERN = /^(?<family>opus|sonnet|haiku)\s+(?<major>\d+)(?:\.(?<minor>\d))?$/i;
+function formatModelName(rawName) {
+  if (!rawName) {
+    return "Claude";
+  }
+  const stripped = rawName.trim().replace(/\s*\([^)]*\)\s*$/, "").replace(/\s*\[[^\]]*\]\s*$/, "").trim();
+  const match = stripped.match(CLAUDE_MODEL_PATTERN);
+  if (match?.groups) {
+    const { family, newMajor, newMinor, oldMajor, oldMinor, oldFamily } = match.groups;
+    const modelFamily = family || oldFamily;
+    const major = newMajor || oldMajor;
+    const minor = newMinor || oldMinor;
+    if (modelFamily && major) {
+      const capitalizedFamily = modelFamily.charAt(0).toUpperCase() + modelFamily.slice(1).toLowerCase();
+      const version = minor ? `${major}.${minor}` : major;
+      return `${capitalizedFamily} ${version}`;
+    }
+  }
+  const friendly = stripped.match(FRIENDLY_MODEL_PATTERN);
+  if (friendly?.groups) {
+    const family = friendly.groups.family;
+    const major = friendly.groups.major;
+    const minor = friendly.groups.minor;
+    const capitalizedFamily = family.charAt(0).toUpperCase() + family.slice(1).toLowerCase();
+    const version = minor ? `${major}.${minor}` : major;
+    return `${capitalizedFamily} ${version}`;
+  }
+  return stripped || rawName;
+}
+function shortenModelName(formatted) {
+  const match = formatted.match(FRIENDLY_MODEL_PATTERN);
+  if (!match?.groups) return formatted;
+  const family = match.groups.family;
+  const major = match.groups.major;
+  const minor = match.groups.minor;
+  const initial2 = family.charAt(0).toUpperCase();
+  const version = minor ? `${major}.${minor}` : major;
+  return `${initial2}${version}`;
+}
+function abbreviatePath(path31) {
+  const segments = path31.split("/");
+  const lastIndex = segments.length - 1;
+  return segments.map((seg2, i2) => {
+    if (i2 === lastIndex) return seg2;
+    const abbreviated = seg2.match(/^\.*./);
+    return abbreviated ? abbreviated[0] : seg2;
+  }).join("/");
+}
+function formatInteger(n) {
+  return n.toLocaleString();
+}
+
+// src/template-engine/cascade.ts
+init_globals();
+function parseCascadeStops(specs) {
+  if (specs.length === 0) {
+    throw new Error('a cascade needs at least one stop, e.g. "0:calm"');
+  }
+  const stops = [];
+  for (const [i2, spec] of specs.entries()) {
+    const cut = spec.indexOf(":");
+    const at = cut < 0 ? Number.NaN : Number(spec.slice(0, cut));
+    if (!Number.isFinite(at)) {
+      throw new Error(
+        `cascade stop ${i2} ("${spec}") must be "<position>:<result>", e.g. "80:hot" \u2014 the position must be a number`
+      );
+    }
+    const prev = stops[i2 - 1];
+    if (prev !== void 0 && at < prev.at) {
+      throw new Error(
+        `cascade stops must be in ascending position order; stop ${i2} at ${at} follows stop ${i2 - 1} at ${prev.at}`
+      );
+    }
+    stops.push({ at, text: spec.slice(cut + 1) });
+  }
+  return stops;
+}
+function cascadeAt(value, stops) {
+  if (!Number.isFinite(value)) {
+    throw new Error(`a cascade needs a finite value, got ${value}`);
+  }
+  let lower2 = -1;
+  while (lower2 + 1 < stops.length && stops[lower2 + 1].at <= value) lower2++;
+  return (lower2 < 0 ? stops[0] : stops[lower2]).text;
+}
+
+// src/template-engine/sparkline.ts
+init_globals();
+var SPARK_LEVELS = [
+  "\u2581",
+  // ▁
+  "\u2582",
+  // ▂
+  "\u2583",
+  // ▃
+  "\u2584",
+  // ▄
+  "\u2585",
+  // ▅
+  "\u2586",
+  // ▆
+  "\u2587",
+  // ▇
+  "\u2588"
+  // █
+];
+var LEVELS2 = SPARK_LEVELS.length;
+function renderSparkline(values2, width) {
+  const window2 = width === void 0 ? values2 : width <= 0 ? [] : values2.slice(-width);
+  if (window2.length === 0) return "";
+  let min3 = window2[0];
+  let max3 = window2[0];
+  for (const v of window2) {
+    if (v < min3) min3 = v;
+    if (v > max3) max3 = v;
+  }
+  const range = max3 - min3;
+  let out = "";
+  for (const v of window2) {
+    const idx = range === 0 ? 0 : Math.round((v - min3) / range * (LEVELS2 - 1));
+    out += SPARK_LEVELS[idx];
+  }
+  return out;
+}
+function parseSeries(s) {
+  const out = [];
+  for (const tok of s.split(",")) {
+    const t2 = tok.trim();
+    if (t2 === "") continue;
+    const n = Number(t2);
+    if (!Number.isFinite(n)) {
+      throw new TypeError(
+        `sparkline: non-numeric series element ${JSON.stringify(tok)}`
+      );
+    }
+    out.push(n);
+  }
+  return out;
+}
+
+// src/template-engine/optional-tail.ts
+init_globals();
+function refuseSurplus(call, optional, surplus) {
+  if (surplus.length === 0) return;
+  throw new Error(
+    `${call}: takes at most ${optional.length} optional argument${optional.length === 1 ? "" : "s"} (${optional.join(", ")}), got ${optional.length + surplus.length}`
+  );
+}
+
+// src/template-engine/funcs.ts
+var THEMES_LIST = listResolvablePaletteNames();
+var ENDCAPS_LIST = [...ENDCAPS_SHAPES];
+function ccCandybarFuncs() {
+  return {
+    // Path operations absent from sprig in this package.
+    basename: {
+      fn: (s) => (0, import_path.basename)(s),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    },
+    dirname: {
+      fn: (s) => (0, import_path.dirname)(s),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    },
+    // [LAW:decomposition] Fish-style path abbreviation — one thing: shorten
+    // every segment but the leaf. Composes over the directory template's
+    // already-collapsed output (`~`/project-relative), never duplicating that
+    // logic. Impl in utils/formatters.ts, mirroring formatModelName's split.
+    abbreviatePath: {
+      fn: (s) => abbreviatePath(s),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    },
+    // [LAW:single-enforcer] Type casts delegate to var-system/types.ts.
+    // "value" argType: these funcs enforce their own constraints and emit
+    // a useful TypeError on ambiguous input — no need for the engine gate
+    // to pre-filter (it can't describe the partial-cast semantics anyway).
+    // `int` truncates toward zero, as sprig's does: an `int` parameter refuses
+    // a fractional at the gate, so this cast is how an author says "drop it".
+    int: {
+      fn: (v) => Math.trunc(toNumber(v)),
+      argTypes: ["value"],
+      arity: { kind: "exact" }
+    },
+    string: {
+      fn: (v) => toString2(v),
+      argTypes: ["value"],
+      arity: { kind: "exact" }
+    },
+    bool: {
+      fn: (v) => toBool(v),
+      argTypes: ["value"],
+      arity: { kind: "exact" }
+    },
+    // [LAW:single-enforcer] One URL-encoding function for click-verb URL
+    // construction in templates. encodeURIComponent matches the legacy
+    // src/segments/renderer.ts toolbar/tray renderers, so DSL-emitted
+    // cc-candybar://verb/<value> URLs are byte-identical to legacy ones.
+    // [LAW:types-are-the-program] Domain primitive surfaced by chunk-7/8
+    // migration (vhi.3) — the proposal explicitly budgets "may add one or
+    // two filters during migration." This is one of those.
+    urlEncode: {
+      fn: (s) => encodeURIComponent(s),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    },
+    // [LAW:one-source-of-truth] themes() and styles() are zero-arg
+    // projections of the daemon's canonical domain lists. A picker (or a
+    // hand-authored `range`) expresses "options come from list Y" by
+    // iterating these bindings; the same lists feed the set-state
+    // validator's allow-list checks, so the rendered options are exactly
+    // the values the next click will be allowed to write. No second
+    // enumeration in user config.
+    // [LAW:dataflow-not-control-flow] A range loop over a list IS the
+    // option primitive — `{{ range themes }}…{{ end }}` produces one
+    // rendered cell per allowed value. Adding a theme adds a cell;
+    // removing a theme removes a cell; no template branch on "how many
+    // themes are there."
+    themes: {
+      fn: () => THEMES_LIST,
+      argTypes: [],
+      arity: { kind: "exact" }
+    },
+    endcaps: {
+      fn: () => ENDCAPS_LIST,
+      argTypes: [],
+      arity: { kind: "exact" }
+    },
+    // [LAW:effects-at-boundaries] Pure trend renderer: a numeric series (the
+    // daemon-owned ring, projected through the payload as a delimited string)
+    // becomes a unicode mini-graph. The series crosses the scalar var-system
+    // seam as a string, so the FuncMap slot is "string"; `parseSeries` decodes
+    // it and `renderSparkline` draws it — neither accumulates state. The
+    // optional trailing "int" slot caps the glyph count to fit a cell: Go spells
+    // an optional parameter as a variadic one, so the gate owns the minimum and
+    // the body refuses a second cap. Returns a bare string;
+    // the engine lifts it to RichText so the segment's fg/bg palette colors the
+    // whole graph — no per-glyph color math here.
+    sparkline: {
+      fn: (series, width, ...extra) => {
+        refuseSurplus("sparkline", ["width"], extra);
+        return renderSparkline(parseSeries(series), width);
+      },
+      argTypes: ["string", "int"],
+      arity: { kind: "variadic" }
+    },
+    // A threshold cascade whose result is TEXT (brandon-template-funcs-jku): the
+    // same `<value> <stops…>` shape `{{ ramp }}` takes, minus the easing, because
+    // interpolating between two words is meaningless. It needs no palette — the
+    // results are the author's own strings — so unlike `{{ gauge }}` it lives here
+    // beside the sparkline rather than in render/segment-color.ts.
+    //
+    // Returns a bare string, which the engine lifts, so a cascade composes inside
+    // any template position a word can occupy — including a `fg:`, where it
+    // replaces the nested `if` chain that could not be read as a cascade at all.
+    cascade: {
+      fn: (value, ...stops) => cascadeAt(value, parseCascadeStops(stops)),
+      argTypes: ["float", "string"],
+      arity: { kind: "variadic" }
+    }
+  };
+}
+var MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1e3;
+function etaMinutes(usedPercentage, resetsAtSec, windowMinutes, nowMs) {
+  const elapsedMs2 = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
+  if (elapsedMs2 < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
+  const pctPerMs = usedPercentage / elapsedMs2;
+  return Math.max(0, Math.round((100 - usedPercentage) / pctPerMs / 6e4));
+}
+var relativeTimeFuncs = (clock) => ({
+  // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
+  // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
+  // `formatResetCountdown` helper (block/weekly, which adds the minute in
+  // progress) and the cacheTimer warmth countdown (numeric `le` thresholds,
+  // 0 = cold).
+  minutesUntilReset: {
+    fn: (epochSeconds) => Math.round(
+      Math.max(0, epochSeconds * 1e3 - clock.now().getTime()) / 6e4
+    ),
+    // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
+    // fractional or precision-losing carrier at the gate.
+    argTypes: ["int"],
+    arity: { kind: "exact" }
+  },
+  // `etaMinutes <used %> <resets at, epoch s> <window minutes>` — the bundled
+  // `block.etaMinutes`/`weekly.etaMinutes` variables.
+  etaMinutes: {
+    fn: (used, resetsAt, windowMinutes) => etaMinutes(used, resetsAt, windowMinutes, clock.now().getTime()),
+    argTypes: ["float", "int", "int"],
+    arity: { kind: "exact" }
+  }
+});
+function formatterFuncs() {
+  return {
+    // ─── Locale-grouped integer (context's "50,000") ──────────────────
+    // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
+    // (not migrated to a DSL helper). toLocaleString reads the host locale the
+    // daemon inherits, so grouping is locale-correct (en_US "50,000" /
+    // de_DE "50.000"). A regex helper would be a second, locale-blind producer
+    // of grouping policy — same parsing/formatting boundary that keeps
+    // formatModelName here.
+    formatInteger: {
+      fn: (n) => formatInteger(n),
+      // [LAW:types-are-the-program] Integer grouping is meaningful only for an
+      // integer; `int` rejects a fractional/precision-losing carrier at the gate.
+      argTypes: ["int"],
+      arity: { kind: "exact" }
+    },
+    // ─── Numeric helper (block/weekly's Math.round of pct) ────────────
+    // [LAW:one-source-of-truth] Math.round is a JS built-in shared between
+    // legacy and DSL — no wrapper indirection makes sense for it. The
+    // formatters.ts module documents domain-meaningful rules; rounding is
+    // not domain-meaningful, so it stays here.
+    round: {
+      fn: (n) => Math.round(n),
+      // [LAW:types-are-the-program] round takes a fractional value (e.g. a
+      // percentage) → `float` admits any finite number.
+      argTypes: ["float"],
+      arity: { kind: "exact" }
+    },
+    // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
+    // [LAW:one-source-of-truth] formatModelName / shortenModelName are regex-
+    // based normalizers; the DSL function set has no regex primitive, so the
+    // only honest way to express them is to wrap the canonical impls. The
+    // model binding can then move from "echo display_name verbatim" (only
+    // byte-parity for friendly names) to "echo normalized model name" (full
+    // behavioral parity, including raw IDs like "claude-sonnet-4-6").
+    formatModelName: {
+      fn: (raw) => formatModelName(raw),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    },
+    shortenModelName: {
+      fn: (formatted) => shortenModelName(formatted),
+      argTypes: ["string"],
+      arity: { kind: "exact" }
+    }
+  };
+}
+
+// src/template-engine/engine.ts
+var drawing = null;
+function bindClock(at, timeline) {
+  if (drawing !== null) {
+    throw new Error("a draw is already in progress: draws do not nest");
+  }
+  const bound = {
+    at,
+    timeline,
+    frame: {
+      time: at,
+      onHold: ({ nextChange }) => {
+        bound.soonest = Math.min(bound.soonest, nextChange);
+      }
+    },
+    soonest: Infinity
+  };
+  drawing = bound;
+  return {
+    heard: () => bound.soonest,
+    [Symbol.dispose]: () => {
+      drawing = null;
+    }
+  };
+}
+function drawInProgress(read2) {
+  if (isComputingDerivation()) {
+    throw new Error(
+      `the clock was read by a value that keeps its answer (${read2}): a template reaching a time variable or a clock function by a name it does not spell (index, get) is not known to read the instant \u2014 name it: {{ .clock }}`
+    );
+  }
+  if (drawing === null) {
+    throw new Error(`the clock was read outside a draw (${read2})`);
+  }
+  return drawing;
+}
+var CLOCK = {
+  now: () => dateOf(drawInProgress("now").at),
+  frame: () => drawInProgress("frame").frame,
+  timeline: () => drawInProgress("timeline").timeline
+};
+function animationPair(frame2, timeline) {
+  const { frames, stepped: stepped2 } = animationFuncs(
+    frame2,
+    timeline === void 0 ? {} : { timeline }
+  );
+  if (frames === void 0 || stepped2 === void 0) {
+    throw new Error(
+      "rich-js's animationFuncs no longer registers frames and stepped"
+    );
+  }
+  return { frames, stepped: stepped2 };
+}
+var SPRIG_CLOCK_READERS = /* @__PURE__ */ new Set(["now", "ago"]);
+function sprigDatetimeWhere(clock, readsClock) {
+  return Object.fromEntries(
+    Object.entries(sprigDatetime(clock)).filter(
+      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock
+    )
+  );
+}
+var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
+  throw new Error(
+    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS"
+  );
+}, false);
+var CLOCK_FACTORIES = [
+  (clock) => sprigDatetimeWhere(clock.now, true),
+  (clock) => animationPair(clock.frame, clock.timeline),
+  (clock) => Object.fromEntries(
+    Object.entries(animationPair(clock.frame)).map(([name, func]) => [
+      `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
+      func
+    ])
+  ),
+  relativeTimeFuncs
+];
+function clockFuncs(factories) {
+  return Object.assign({}, ...factories.map((factory) => factory(CLOCK)));
+}
+var CLOCK_FUNCTIONS = new Set(
+  Object.keys(clockFuncs(CLOCK_FACTORIES))
+);
+function engineClockFunctions(extra) {
+  return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
+}
+var DEPTH_BINDINGS = { readableOn: readableOnFunc };
+function createCcCandybarEngine(opts) {
+  const { drawnAt, extraFuncs } = opts;
+  const depth = () => ({ depth: drawnAt() });
+  return createEngine({
+    fromString: (s) => new RichText(s),
+    toString: (rt) => rt.plain,
+    // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
+    // prints as Go prints a map, instead of leaking the object into the
+    // fragments as if it were text.
+    isT: (v) => v instanceof RichText,
+    // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
+    // not silently produce "<no value>". Callers (SourceRegistry, segments)
+    // depend on MissingFieldError to drive varDefault / defaultEmptyValue.
+    missingKey: "error",
+    funcs: {
+      ...sprigDefaults(),
+      ...sprigStrings(),
+      ...sprigLists(),
+      ...sprigMath(),
+      ...sprigConversions(),
+      // `fail` is how a stand-in for a dropped plugin's helper says why.
+      ...sprigFlow(),
+      // [LAW:types-are-the-program] `dict` is the substrate primitive a helper
+      // uses to receive more than one input through its single dot arg:
+      // `{{ template "budgetStatus" (dict "cost" .x "budget" .y "warn" .z) }}`.
+      // It makes a multi-input formatter's domain exactly {named scalars},
+      // decoupled from any payload's nesting — no per-payload helper variant.
+      ...sprigDicts(),
+      ...SPRIG_DATE_FUNCS,
+      ...authoredLinks(richTextFuncs(depth)),
+      ...Object.fromEntries(
+        Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
+          name,
+          bind(depth)
+        ])
+      ),
+      // [LAW:single-enforcer] Every function that reads the time, built over
+      // the one Clock.
+      ...clockFuncs([...CLOCK_FACTORIES, ...opts.clockFuncs ?? []]),
+      // Domain-specific overrides last (wins on collision with sprig aliases).
+      // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
+      // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`
+      // so a template's `int` keeps one meaning. Position is the override policy.
+      ...ccCandybarFuncs(),
+      // [LAW:one-source-of-truth] formatter funcs delegate to
+      // src/utils/formatters.ts. The only sprig collision is `round`:
+      // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
+      // registered last so the domain meaning wins (revisited by the bdi
+      // cleanup ticket).
+      ...formatterFuncs(),
+      // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
+      // engine supplies the `action` + `picker` funcs; resolver-less compile-only
+      // paths do not). Last so a feature can override on collision.
+      ...extraFuncs ?? {}
+    }
+  });
+}
+
+// src/template-engine/scope.ts
+init_globals();
+function buildScope(store) {
+  const names = new Set(store.names());
+  return makeProxy(store, names, "");
+}
+function makeProxy(store, names, prefix) {
+  return new Proxy(/* @__PURE__ */ Object.create(null), {
+    has(_, key) {
+      if (typeof key !== "string") return false;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) return !absentDocument(store, fullKey);
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) return true;
+      }
+      return false;
+    },
+    get(_, key) {
+      if (typeof key !== "string") return void 0;
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+      if (names.has(fullKey)) {
+        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
+        const doc = store.readDocument(fullKey);
+        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
+      }
+      const nsPrefix = `${fullKey}.`;
+      for (const n of names) {
+        if (n.startsWith(nsPrefix)) {
+          return makeProxy(store, names, fullKey);
+        }
+      }
+      return void 0;
+    }
+  });
+}
+function placementScope(scope, settings) {
+  return new Proxy(scope, {
+    has: (target, key) => key === "settings" || Reflect.has(target, key),
+    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
+  });
+}
+function absentDocument(store, name) {
+  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
+}
+function unwrapDocument(name, doc) {
+  switch (doc.kind) {
+    case "ok":
+      return doc.value;
+    case "pending":
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not completed a scan`
+      );
+    case "failed":
+      throw new Error(`variable "${name}": ${doc.reason}`);
+  }
+}
+
+// src/facts/source-identity.ts
+init_globals();
+var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
+function keyHashOf(value) {
+  return crypto_default.createHash("sha256").update(value).digest("hex");
+}
+
+// src/var-system/sources.ts
+var TORN_WRITE_SETTLE_MS = 250;
+function parseDuration(s) {
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
+  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
+  const v = parseFloat(m[1]);
+  switch (m[2]) {
+    case "ms":
+      return v;
+    case "s":
+      return v * 1e3;
+    case "m":
+      return v * 6e4;
+    case "h":
+      return v * 36e5;
+    default:
+      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+  }
+}
+function parserIdOf(parse3) {
+  switch (parse3.kind) {
+    case "text":
+      return { kind: "text" };
+    case "regex":
+      return { kind: "regex", pattern: parse3.pattern };
+    case "json":
+      return { kind: "json" };
+  }
+}
+var UNBOUND = {
+  session: () => {
+    throw new PendingValueError(
+      "session_id",
+      "the view's session has no value yet: no view source is bound"
+    );
+  },
+  read: () => pendingOf("unread"),
+  run: () => UNREAD_RUN,
+  env: () => UNREAD_ENV,
+  drawnAt: () => {
+    throw new PendingValueError(
+      "colorCompatibility.effective",
+      "the drawn depth has no value yet: no view source is bound"
+    );
+  }
+};
+var found = (value) => ({ kind: "found", value });
+function resolvePath2(obj, path31) {
+  let cur = obj;
+  let inDocument = false;
+  for (const part of path31.split(".")) {
+    if (!inDocument && isPending(cur)) return cur;
+    if (cur == null || typeof cur !== "object") return found(void 0);
+    inDocument ||= part === "value" && cur.kind === "ok";
+    cur = cur[part];
+  }
+  return !inDocument && isPending(cur) ? cur : found(cur);
+}
+function sourceReading(name, resolved) {
+  if (resolved.kind === "pending") return resolved;
+  const raw = resolved.value;
+  if (raw === void 0) {
+    return failed(
+      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
+      "read"
+    );
+  }
+  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
+  switch (kind) {
+    case "ok":
+    case "absent":
+    case "failed":
+      return raw;
+    default:
+      return failed(
+        `variable "${name}": the view's payload holds no source reading at "${name}"`,
+        "read"
+      );
+  }
+}
+function coerceToType(raw, type3) {
+  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
+    throw new TypeError(
+      `Expected string|number|boolean from payload, got ${typeof raw}`
+    );
+  }
+  if (type3 === "string") return toString2(raw);
+  if (type3 === "number") return toNumber(raw);
+  return toBool(raw);
+}
+function zeroValue(type3) {
+  if (type3 === "number") return 0;
+  if (type3 === "boolean") return false;
+  return "";
+}
+var SourceRegistry = class _SourceRegistry {
+  // defaultEmptyValue is the global fallback of last resort — the config-level
+  // `default_empty_value` from the proposal. Defaults to empty string.
+  //
+  // sessionState lets the daemon inject its singleton so state-kind variables
+  // share one MobX atom and one disk-persistence layer with the click verbs.
+  // Omitted in tests that don't exercise state vars.
+  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
+    this.store = store;
+    this.defaultEmptyValue = defaultEmptyValue;
+    this.parent = parent;
+    this.sessionState = sessionState;
+    this.cleanups.push(observe(this.subscriptionsNow, () => {
+    }));
+    this.cleanups.push(observe(this.envNow, () => {
+    }));
+  }
+  store;
+  defaultEmptyValue;
+  parent;
+  lastErrors = /* @__PURE__ */ new Map();
+  // A cache policy that cannot fire is a STANDING fault, not a read's
+  // outcome: a read that succeeds afterwards says nothing about whether the
+  // source will ever run again, so no read outcome clears it. A key template
+  // that throws lives until the key evaluates again. One map, since a
+  // variable has one policy. Observable, since the bar draws each fault as a
+  // refresh warning.
+  policyFaults = observable.map(void 0, {
+    deep: false
+  });
+  // The run's own standing fault, as the host reads it: the judge refused
+  // the run, or its watch cannot hear every place its path changes. Its own
+  // map, written by the run's fault alone, so a policy's outcome and a run's
+  // never clear each other.
+  runFaults = observable.map(void 0, {
+    deep: false
+  });
+  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
+  // tears everything down in one call.
+  cleanups = [];
+  // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
+  // by variable name: a derivation of its identity's inputs, pending while a
+  // policy over values has nothing answered to name, failed while its key
+  // failed before ever answering. A derivation, never a
+  // value a reaction writes, so whoever reads the runs inside a batch — a
+  // turn handed a world state from within the host's reaction — reads them as
+  // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
+  // and their readings come back through the view's input source.
+  runs = observable.map(
+    void 0,
+    { deep: false }
+  );
+  runSourcesNow = computed(
+    () => new Map([...this.runs].map(([name, run3]) => [name, run3.get()]))
+  );
+  namedNow = computed(
+    () => new Map(
+      [...this.runSourcesNow.get()].flatMap(
+        ([name, run3]) => run3.kind === "ok" ? [[name, run3.value]] : []
+      )
+    )
+  );
+  // Every `shell` and `file` source by variable name, with the run it names
+  // or why it names none: what the render event counts, so a source whose key
+  // never answers, or failed, is still told.
+  runSources() {
+    return this.runSourcesNow.get();
+  }
+  // The run each source names, by variable name: what a request waits on and
+  // what names `check`'s stragglers.
+  namedRuns() {
+    return this.namedNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry needs run, deduped by
+  // digest, in digest order, so an output is the same whatever order a config
+  // declares in. Computed and observed for the registry's life (the
+  // constructor), so a turn in which nothing moved sorts nothing: a computed
+  // read outside a reaction is derived again on every read.
+  subscriptionsNow = computed(
+    () => [
+      ...new Map(
+        [...this.namedNow.get().values()].map((run3) => [run3.digest, run3])
+      )
+    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run3]) => run3)
+  );
+  subscriptions() {
+    return this.subscriptionsNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry's inputs are derived from
+  // (`bindInputs`), and so the depth the terminal draws this view's renders at
+  // — the one depth every contrast floor reads, in this registry's variable
+  // templates and in the render engine alike. Derived from the view's own
+  // settings, so a template variable whose `readableOn` read it recomputes in
+  // the turn the setting moves (edit mode staging a depth included), never at
+  // a draw.
+  inputs = observable.box(UNBOUND, {
+    deep: false
+  });
+  drawnAt = () => this.inputs.get().drawnAt();
+  // Shared engine instance — parse() is expensive; the engine is reused for
+  // all key: template compilations.
+  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
+  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
+  // The names of this registry's own async sources (shell, file), whose
+  // stored values `published` reads.
+  sourceNames = observable.array([], { deep: false });
+  // The variables this registry's `env` sources read.
+  envNames = observable.array([], { deep: false });
+  // [LAW:one-source-of-truth] What this registry needs of the session's
+  // environment: each variable once, sorted, so an output is the same
+  // whatever order a config declares in.
+  envNow = computed(
+    () => [...new Set(this.envNames)].sort(),
+    { equals: compareStructural }
+  );
+  envSubscriptions() {
+    return this.envNow.get();
+  }
+  // [LAW:one-source-of-truth] What this registry's sources have published, as
+  // one value that changes exactly when one of their stored values or
+  // standing faults does: the store writes a value only when its own compare
+  // finds it changed, and a fault is written only when its reason does, so a
+  // re-read that found what was stored moves nothing. A session's view reacts
+  // to it, and so its feed wakes on a publish that changed what the bar can
+  // show (openView).
+  publishedNow = computed(
+    () => ({
+      values: this.sourceNames.map((name) => this.store.stored(name)),
+      faults: [...this.policyFaults.values(), ...this.runFaults.values()]
+    })
+  );
+  published() {
+    return this.publishedNow.get();
+  }
+  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
+  // so tests can substitute a fake and the daemon shares its singleton.
+  // Absent in non-daemon contexts; declareState() rejects loudly in that case
+  // rather than silently returning empty strings.
+  sessionState;
+  // [LAW:one-source-of-truth] A session's view of this directory home
+  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
+  // its own, which reads through to this one. The session's values are
+  // declared there, so its inputs, its state and its derivations are its own,
+  // and what its sources fail with is recorded there; a directory value it
+  // reads is this home's one node, and its failure this home's one record. It
+  // shares the daemon's session state, and is disposed on its
+  // own: a session leaving the directory disposes nothing of it.
+  view() {
+    return new _SourceRegistry(
+      new VariableStore(this.store.clock, this.store),
+      this.defaultEmptyValue,
+      this.sessionState,
+      this
+    );
+  }
+  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
+  // variable it declares lives there, and the renderer reads back through it.
+  // Exposing it read-only lets a caller that already holds the registry obtain
+  // the one store without threading a second reference that could diverge (the
+  // action runtime reads current values from this exact store).
+  get variableStore() {
+    return this.store;
+  }
+  // ─── Synchronous source kinds ─────────────────────────────────────────────
+  // literal: type inferred from value; box written once at declaration and never again.
+  declareLiteral(name, value) {
+    this.store.defineBox(name, typeOf(value), value);
+  }
+  // A document that is a known failure for as long as it is declared.
+  declareFailedDocument(name, reason) {
+    this.store.defineDocument(name, failed(reason, "parse"));
+  }
+  // A plugin's source: a document derived from the reading its view's payload
+  // carries at the source's own name — ok, absent or failed as the storage
+  // owner read the session's file, or pending while it has not answered.
+  // [LAW:no-silent-failure] A payload with nothing there is a declaration
+  // that did not take the source the config declares: a bug, read as a failure
+  // naming the variable, never as absent.
+  declareSourceDocument(name) {
+    this.store.defineDerivedDocument(
+      name,
+      () => sourceReading(name, this.inputs.get().read(name))
+    );
+  }
+  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
+  // the registry lives — a render state's hold on a plugin's storage folder —
+  // released by the registry's one teardown (`dispose`), with everything else
+  // it holds.
+  own(release3) {
+    this.cleanups.push(release3);
+  }
+  // input: a derived value of its path in the bound InputSource, cast to its
+  // type. [LAW:types-are-the-program] Before its source answers it holds no
+  // value: it is not answered yet, never its default, which answers a payload
+  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
+  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
+  declareInput(name, path31, type3, varDefault, derivation) {
+    this.store.defineDerived(
+      name,
+      type3,
+      derivation,
+      () => this.inputAt(name, path31, type3, varDefault)
+    );
+  }
+  // [LAW:single-enforcer] The one reading of an input: its path's value cast
+  // to its type, else the fallback chain with the failure recorded.
+  inputAt(name, path31, type3, varDefault) {
+    const resolved = this.inputs.get().read(path31);
+    if (resolved.kind === "pending") {
+      this.lastErrors.delete(name);
+      throw new PendingValueError(
+        name,
+        `variable "${name}" has no value yet: its source has not answered`
+      );
+    }
+    const raw = resolved.value;
+    if (raw === void 0) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        `input path "${path31}" not found in payload`
+      );
+    }
+    try {
+      const value = coerceToType(raw, type3);
+      this.lastErrors.delete(name);
+      return value;
+    } catch (e) {
+      return this.fallbackOf(
+        name,
+        type3,
+        varDefault,
+        e instanceof Error ? e.message : String(e)
+      );
+    }
+  }
+  // env: a variable of the session's environment, which the host holds and
+  // hands in as this one variable's value (`InputSource.env`). Pending until
+  // it is handed in; an unset variable is the fallback, with the reason on
+  // the variable. Always a string: env vars are text by nature.
+  declareEnv(name, envVar, varDefault) {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", pendingOf("unread"));
+    runInAction(() => this.envNames.push(envVar));
+    this.cleanups.push(
+      reaction(
+        () => this.inputs.get().env(envVar),
+        (fact) => {
+          if (fact.kind === "pending") return;
+          const { at: _at, ...outcome } = fact;
+          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
+          this.noteOutcome(name, read2);
+          this.store.setBox(name, orElse(read2, fallback));
+        },
+        { fireImmediately: true }
+      )
+    );
+  }
+  // ─── Async source kinds ───────────────────────────────────────────────────
+  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
+  declareShell(name, command, opts) {
+    this.declareSource(
+      name,
+      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
+      opts.cache,
+      opts.parse
+    );
+  }
+  // file: read the file at path (whole, or its first line) as the text the
+  // parser sees.
+  declareFile(name, filePath2, opts) {
+    this.declareSource(
+      name,
+      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
+      opts.cache,
+      opts.parse
+    );
+  }
+  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
+  // the one reaction that publishes into it the reading of the run it names,
+  // as the view's input source has it (the host runs it: read → parse). The
+  // cache policy names WHICH run, through the identity it names
+  // (registerCachePolicy), never whether the node exists
+  // [LAW:dataflow-not-control-flow].
+  //
+  // [LAW:types-are-the-program] Only an answered reading is published: the
+  // node holds its fallback until the first run answers, and on a key's move
+  // it holds the old run's answer until the new run's lands — the old `ok` is
+  // simply not overwritten yet, so a key change draws no pending flash (spec
+  // section 19).
+  declareSource(name, read2, cache2, parse3) {
+    const publish = this.publisherFor(name, parse3);
+    const refreshOf = this.registerCachePolicy(name, cache2);
+    const run3 = computed(
+      () => {
+        const refresh = refreshOf();
+        return refresh.kind === "ok" ? ok(
+          runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
+        ) : refresh;
+      },
+      // A failure is a failure whatever it says: its text is the variable's
+      // standing fault, so a key throwing a moving message moves no run.
+      {
+        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
+      }
+    );
+    runInAction(() => {
+      this.sourceNames.push(name);
+      this.runs.set(name, run3);
+    });
+    this.cleanups.push(
+      // The run's fault, as the host reads it, is the variable's standing
+      // fault for as long as this source names that run.
+      reaction(
+        () => this.runFact(name)?.fault ?? null,
+        (fault) => this.noteFault(
+          this.runFaults,
+          name,
+          fault === null ? ok(void 0) : failed(fault, "read")
+        ),
+        { fireImmediately: true }
+      ),
+      reaction(
+        () => this.runFact(name)?.reading,
+        (reading) => {
+          if (reading === void 0 || reading.kind === "pending") return;
+          const { at: _at, ...outcome } = reading;
+          publish(outcome);
+        },
+        { fireImmediately: true }
+      )
+    );
+  }
+  // The reading of the run `name` names, or nothing while its policy names
+  // none (one over values not answered yet).
+  runFact(name) {
+    const run3 = this.runs.get(name)?.get();
+    return run3?.kind === "ok" ? this.inputs.get().run(run3.value.digest) : void 0;
+  }
+  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
+  // the node it publishes: the text arms publish a string box, the json arm a
+  // document. Selected once, at declaration — the pipeline never asks again.
+  // The run parsed by the arm's own parser (source-runs.ts), so its value is
+  // the arm's type.
+  publisherFor(name, parse3) {
+    switch (parse3.kind) {
+      case "text":
+      case "regex":
+        return this.scalarPublisher(name, parse3.default);
+      case "json":
+        return this.documentPublisher(name, parse3.default);
+    }
+  }
+  scalarPublisher(name, varDefault) {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", fallback);
+    return (outcome) => {
+      this.noteOutcome(name, outcome);
+      this.store.setBox(name, orElse(outcome, fallback));
+    };
+  }
+  // A document's fallback is the declared default, or NO document: without a
+  // default the node is pending until its first scan, then holds what the scan
+  // found — absent when it had nothing to read, failed with its reason after a
+  // bad one — which the scope proxy surfaces naming the variable
+  // [LAW:no-silent-failure]: a document has no honest empty value the way a
+  // string has "".
+  //
+  // The default stands in for a run that had nothing to READ — a missing
+  // file, a command that failed, blank output — never for text that was read
+  // and is not a document (failed in its parse phase): that is a broken
+  // writer, and reads as its failure (⚠) whatever the default says
+  // (brandon-plugins-ktag.8fv).
+  //
+  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
+  // (truncate, then write) is caught mid-update by any read that lands
+  // between the two, and the text it sees is not a document. Text that does
+  // not parse is therefore held back while a document is showing: the document
+  // stays, and the failure is published only if no read replaces it within
+  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
+  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
+  // that settle; a document that was never good shows it at once.
+  documentPublisher(name, varDefault) {
+    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
+    this.store.defineDocument(name, fallback);
+    let clearSettling;
+    let showingRead = false;
+    this.cleanups.push(() => clearSettling?.());
+    return (raw) => {
+      clearSettling?.();
+      const outcome = raw;
+      this.noteOutcome(name, outcome);
+      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
+      const next2 = readText || varDefault === void 0 ? outcome : fallback;
+      const torn2 = showingRead && readText && outcome.kind !== "ok";
+      const show2 = () => {
+        showingRead = outcome.kind === "ok";
+        this.store.setDocument(name, next2);
+      };
+      if (torn2) {
+        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
+      } else {
+        show2();
+      }
+    };
+  }
+  // template: a variable whose value is derived by evaluating a go-template
+  // against the current variable store.  MobX auto-tracks every store.read()
+  // made during evaluation — no explicit dep declarations needed.
+  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
+  // invalidation graph built from the template's read pattern; a projection
+  // (one that reads the instant: src/config/loader/projections.ts) is derived
+  // again by every read, at the draw in progress.
+  declareTemplate(name, template, opts) {
+    const parsedTpl = this.engine.parse(template);
+    this.declareDerived(
+      name,
+      opts.type,
+      opts.derivation,
+      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // time: the instant of the draw in progress in a Go reference-time layout —
+  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
+  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
+  // layout implementation, the one a template calling `date` gets.
+  declareTime(name, opts) {
+    const parsedTpl = this.engine.parse("{{ date .layout now }}");
+    const scope = { layout: opts.format };
+    this.declareDerived(
+      name,
+      "string",
+      "projection",
+      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
+      opts.varDefault
+    );
+  }
+  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
+  // template and a time variable differ only in what they compute, and a
+  // computed and a projection only in whether the store keeps the answer.
+  // Evaluated at its first read, never at declaration: a projection has no
+  // instant to read until a draw binds one, and cycles are the loader's to
+  // refuse (validateNoCycles) [LAW:single-enforcer].
+  declareDerived(name, type3, derivation, derive, fallback) {
+    this.store.defineDerived(name, type3, derivation, () => {
+      try {
+        const result = coerceToType(derive(), type3);
+        this.lastErrors.delete(name);
+        return result;
+      } catch (e) {
+        const pending2 = readPending(e);
+        if (pending2 !== void 0) {
+          this.lastErrors.delete(name);
+          throw pending2;
+        }
+        const message2 = e instanceof Error ? e.message : String(e);
+        this.recordError(name, message2);
+        if (fallback === void 0) {
+          throw new Error(`variable "${name}": ${message2}`);
+        }
+        return fallback;
+      }
+    });
+  }
+  // state: read-through to SessionState. The computed reads two deps — the
+  // bound view's session (`session()`) and SessionState itself (MobX-tracked
+  // via its internal atom). A click verb that mutates SessionState
+  // invalidates this computed.
+  // Persistence rides on SessionState's disk backing — no extra wiring.
+  //
+  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
+  // determine the result, never whether code runs.
+  declareState(name, opts) {
+    if (!this.sessionState) {
+      throw new Error(
+        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
+      );
+    }
+    const sessionState = this.sessionState;
+    const fallback = opts.varDefault ?? this.stringInitial(void 0);
+    this.store.defineComputed(name, "string", () => {
+      const value = sessionState.get(this.session(), opts.key);
+      return value !== null ? value : fallback;
+    });
+  }
+  // [LAW:one-source-of-truth] The revision of the session state this render's
+  // `state` variables read (SessionStateReader.revision), found the way they
+  // find it: through the session id the render was handed. A registry with no
+  // session state reads none — one state that never changes.
+  stateRevision() {
+    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
+  }
+  // The session the bound view draws for (InputSource.session): pending, as
+  // every input is, before a view is bound.
+  session() {
+    return this.inputs.get().session();
+  }
+  // ─── The view's source ────────────────────────────────────────────────────
+  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
+  // derived from: bound once by the view that owns the registry, whose source
+  // reads its payload as it stands. A directory binds none: it reads no
+  // payload and no depth — a source whose key reads one is a view's
+  // (src/dsl/variable-scope.ts).
+  bindInputs(source) {
+    runInAction(() => this.inputs.set(source));
+  }
+  // ─── Diagnostics ─────────────────────────────────────────────────────────
+  // Returns the recorded error for a variable, or undefined if the last
+  // resolution succeeded (or the variable has never been resolved).
+  getLastError(name) {
+    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
+    const read2 = this.lastErrors.get(name);
+    const fault = this.standingFault(name);
+    if (fault === void 0) return read2;
+    return read2 === void 0 || read2.message === fault.message ? fault : {
+      timestamp: read2.timestamp,
+      message: `${fault.message}; ${read2.message}`
+    };
+  }
+  // Every variable that cannot refresh, with why: its cache policy cannot
+  // fire, or the host refused or cannot hear its run. Each render reports
+  // them (`RenderWarning` kind `refresh`), since the bar draws such a
+  // variable's last value or fallback with nothing of its own to say so.
+  cachePolicyFaults() {
+    const names = /* @__PURE__ */ new Set([
+      ...this.policyFaults.keys(),
+      ...this.runFaults.keys()
+    ]);
+    return new Map([
+      ...this.parent?.cachePolicyFaults() ?? [],
+      ...[...names].map((name) => [name, this.standingFault(name)])
+    ]);
+  }
+  // A variable's standing fault: its policy's and its run's, joined when
+  // both stand, so neither hides the other.
+  standingFault(name) {
+    const policy = this.policyFaults.get(name);
+    const run3 = this.runFaults.get(name);
+    return policy === void 0 || run3 === void 0 ? policy ?? run3 : {
+      timestamp: policy.timestamp,
+      message: `${policy.message}; ${run3.message}`
+    };
+  }
+  // Whether `name` lives in this registry's own store, not its directory's.
+  declaredHere(name) {
+    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
+  }
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
+  // reads registered by async source kinds.
+  // Call when the registry is no longer needed (e.g. on daemon shutdown or
+  // config hot-reload). Returns how many computeds the store released, for
+  // the caller's log line.
+  dispose() {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups.length = 0;
+    return this.store.dispose();
+  }
+  // ─── Private helpers ──────────────────────────────────────────────────────
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
+  // refresh of the identity the source names: a period, a watched path or
+  // nothing is the run's own refresh, fixed at declaration; a policy over what
+  // the source reads is the hash of what that answered, pending until it
+  // first answers. Adding a new policy kind means adding one case here.
+  registerCachePolicy(name, policy) {
+    switch (policy.kind) {
+      case "never":
+        return () => ok({ kind: "never" });
+      case "ttl":
+        return () => ok({ kind: "ttl", durationMs: policy.durationMs });
+      case "watch_file":
+        return () => ok({ kind: "watch_file", path: policy.path });
+      case "key": {
+        const parsedKey = this.engine.parse(policy.template);
+        return this.answeredUnder(name, () => {
+          try {
+            return ok(
+              parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
+            );
+          } catch (e) {
+            return readPending(e) !== void 0 ? pendingOf("unread") : failed(
+              `cache key: ${e instanceof Error ? e.message : String(e)}`,
+              "read"
+            );
+          }
+        });
+      }
+      case "depends_on": {
+        return this.answeredUnder(name, () => {
+          const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+        });
+      }
+    }
+  }
+  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
+  // key, the variables it depends on — name the hash of the last value what
+  // they read answered. Over a value not answered yet (a view's inputs before
+  // its first payload) they name nothing (pending) rather than reading, so a first value
+  // is one read, not a read under no value and another when the value arrives
+  // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
+  // answered, keeps the last answer, so a key failing for a moment and coming
+  // back unchanged names nothing new; what it failed with is the variable's
+  // standing fault (noteFault). One that has never answered names its
+  // failure, so the render event says failed rather than unread.
+  answeredUnder(name, reads) {
+    const answer2 = computed(reads, { equals: compareStructural });
+    this.cleanups.push(
+      reaction(
+        () => answer2.get(),
+        (now2) => this.noteFault(this.policyFaults, name, now2),
+        { fireImmediately: true }
+      )
+    );
+    let last2;
+    return () => {
+      const now2 = answer2.get();
+      if (now2.kind === "ok") last2 = now2.value;
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+    };
+  }
+  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
+  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
+  // backstop is the only "silent" path and exists because the caller has already
+  // recorded the error — downstream reads get a safe typed value, not an exception.
+  fallbackOf(name, type3, varDefault, errorMessage) {
+    this.recordError(name, errorMessage);
+    if (varDefault !== void 0) return varDefault;
+    try {
+      return coerceToType(this.defaultEmptyValue, type3);
+    } catch {
+      return zeroValue(type3);
+    }
+  }
+  // Initial string value for shell/file boxes before the first async run.
+  stringInitial(varDefault) {
+    if (varDefault !== void 0) return varDefault;
+    if (typeof this.defaultEmptyValue === "string")
+      return this.defaultEmptyValue;
+    return "";
+  }
+  recordError(name, message2) {
+    this.lastErrors.set(name, {
+      timestamp: this.store.clock.now(),
+      message: message2
+    });
+  }
+  // The one fold from an outcome (whether the policy can fire, whether the
+  // host can run the run) to the variable's standing fault in `faults`.
+  // A fault standing for the same reason keeps its record, so it moves
+  // nothing that draws it.
+  noteFault(faults, name, outcome) {
+    runInAction(() => {
+      if (outcome.kind !== "failed") faults.delete(name);
+      else if (faults.get(name)?.message !== outcome.reason)
+        faults.set(name, {
+          timestamp: this.store.clock.now(),
+          message: outcome.reason
+        });
+    });
+  }
+  // [LAW:single-enforcer] The one fold from a source outcome to the
+  // variable's error record: ok clears it, anything else records the reason.
+  noteOutcome(name, outcome) {
+    if (outcome.kind === "ok") this.lastErrors.delete(name);
+    else
+      this.recordError(
+        name,
+        outcome.kind === "failed" ? outcome.reason : "no value"
+      );
+  }
+};
+
+// src/template-engine/index.ts
+init_globals();
+
+// src/template-engine/cells.ts
+init_globals();
+function fragmentsToCells(fragments, baseStyle) {
+  const cells = [];
+  let group = [];
+  const flush = () => {
+    if (!group.length) return;
+    const cell3 = buildCell(group, baseStyle);
+    if (cell3.plain.length > 0) cells.push(cell3);
+    group = [];
+  };
+  for (const frag of fragments) {
+    const item = { frag, style: resolvedStyle(frag.style) };
+    if (item.style.link) {
+      flush();
+      const cell3 = buildCell([item], baseStyle);
+      if (cell3.plain.length > 0) cells.push(cell3);
+    } else {
+      group.push(item);
+    }
+  }
+  flush();
+  return cells;
+}
+function buildCell(items, baseStyle) {
+  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
+  const layered = items.map(
+    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
+  );
+  const cell3 = RichText.fromFragments(layered);
+  cell3.end = "";
+  cell3.overflow = "ignore";
+  if (layered.length === 1) {
+    cell3.style = layered[0].style;
+  } else if (base !== void 0) {
+    cell3.style = base;
+  }
+  return cell3;
+}
+function withStyle(frag, style) {
+  const copy2 = frag.copy();
+  copy2.style = style;
+  return copy2;
+}
+
+// src/template-engine/layout.ts
+init_globals();
+function evaluateWhen(template, scope) {
+  if (template === void 0) return true;
+  const fragments = template.evaluate(scope);
+  return fragments.map((f) => f.plain).join("") !== "false";
+}
+var HIDDEN = { kind: "hidden" };
+var SHOWN = { kind: "shown" };
+function gateOf(template, scope) {
+  try {
+    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
+  } catch (e) {
+    const pending2 = readPending(e);
+    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+      kind: "failed",
+      message: e instanceof Error ? e.message : String(e)
+    };
+  }
+}
+function collapseToCell(cells, baseStyle) {
+  const merged = RichText.fromFragments(cells);
+  merged.end = "";
+  merged.overflow = "ignore";
+  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
+  return merged;
+}
+function sizeCell(cell3, width, how) {
+  if (cell3.cellLength > width) {
+    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
+  } else if (cell3.cellLength < width) {
+    cell3.align(how.justify, width);
+  }
+}
+function cellParts({ lead, text: text4, trail }) {
+  return [
+    ...lead === void 0 ? [] : [lead],
+    text4,
+    ...trail === void 0 ? [] : [trail]
+  ];
+}
+function heldCell({ text: text4, placement, lead, trail }) {
+  return {
+    text: unlinked(text4),
+    placement,
+    ...lead !== void 0 && { lead: unlinked(lead) },
+    ...trail !== void 0 && { trail: unlinked(trail) }
+  };
+}
+function unlinked(text4) {
+  const copy2 = text4.blankCopy(text4.plain);
+  copy2.style = resolvedStyle(text4.style).clearMetaAndLinks();
+  for (const { start, end, style } of text4.spans)
+    copy2.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
+  return copy2;
+}
+function stripItem(cell3) {
+  const parts = cellParts(cell3);
+  if (parts.length === 1) return cell3.text;
+  const joined = collapseToCell(parts);
+  joined.style = cell3.text.style;
+  return joined;
+}
+function applySegmentLayout(cells, options) {
+  const {
+    width,
+    justify,
+    truncate,
+    baseStyle,
+    padding,
+    placement,
+    lead = [],
+    trail = []
+  } = options;
+  if (cells.length === 0) return [];
+  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
+  const pad = new RichText(" ".repeat(padding));
+  const tail = {
+    placement,
+    ...lead.length > 0 && {
+      lead: collapseToCell([pad, ...lead], baseStyle)
+    },
+    ...trail.length > 0 && {
+      trail: collapseToCell([...trail, pad], baseStyle)
+    }
+  };
+  if (width === "auto") return [{ text: cell3, ...tail }];
+  const how = { justify, truncate };
+  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
+  sizeCell(cell3, width, how);
+  return [{ text: cell3, ...tail }];
+}
+
+// src/template-engine/colors.ts
+init_globals();
+var NO_FILL = "none";
+function groundOf(palette) {
+  return resolveColorRef(palette, "background");
+}
+var ColorSpecError = class extends Error {
+  constructor(spec, role, detail) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
+    this.name = "ColorSpecError";
+  }
+};
+function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
+  const { palette, tint, text: text4 } = active2;
+  const bgSpec = evalToPlainText(bgTemplate, scope);
+  const filled2 = bgSpec !== NO_FILL;
+  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
+  active2.bg = bgColor;
+  const fgSpec = evalToPlainText(fgTemplate, scope);
+  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
+  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
+  return new Style({
+    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
+    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
+  });
+}
+function evalToPlainText(template, scope) {
+  if (template === void 0) return void 0;
+  return template.evaluate(scope).map((f) => f.plain).join("");
+}
+function resolveRef(palette, ref, role) {
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
+}
+
+// src/render/active-segment.ts
+init_globals();
+function createActiveSegmentRef(drawnAt) {
+  return { current: null, drawnAt };
+}
+function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
+  const active2 = {
+    segName,
+    placementId: placementId2,
+    palette,
+    disclosure,
+    tint,
+    text: text4,
+    bg: void 0,
+    drops: []
+  };
+  ref.current = active2;
+  return active2;
+}
+function inSegment(ref, place, run3) {
+  return publishing(
+    ref,
+    () => run3(
+      openSegment(
+        ref,
+        place.segName,
+        place.placementId,
+        place.palette,
+        place.disclosure,
+        place.tint,
+        place.text
+      )
+    )
+  );
+}
+function outsideSegments(ref, run3) {
+  return publishing(ref, () => {
+    ref.current = null;
+    return run3();
+  });
+}
+function publishing(ref, run3) {
+  const prior = ref.current;
+  try {
+    return run3();
+  } finally {
+    ref.current = prior;
+  }
+}
+function requireActiveSegment(ref, spelling) {
+  const active2 = ref.current;
+  if (active2 === null) {
+    throw new Error(
+      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
+    );
+  }
+  return active2;
+}
+
+// src/render/action.ts
+init_globals();
 
 // src/config/option-domain.ts
 init_globals();
@@ -70109,6 +72354,708 @@ function unknownOptionDomain(from, perConfigDomains) {
   const hint = renamed === void 0 ? "" : ` \u2014 it was renamed "${renamed}"; write from: "${renamed}"`;
   return `unknown option domain "${from}"${hint} (have: ${knownOptionDomainNames(perConfigDomains).join(", ")})`;
 }
+
+// src/config/layout-ops.ts
+init_globals();
+function encodeLayoutOp(op) {
+  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
+}
+function decodeLayoutOp(token) {
+  const parts = token.split(":");
+  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
+    return { op: "remove", target: parts[1] };
+  }
+  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
+    return {
+      op: "insert",
+      segment: parts[1],
+      anchor: parts[2],
+      relation: parts[3]
+    };
+  }
+  return null;
+}
+function mintPlacement(segment, anchor, trees) {
+  const taken2 = new Set(
+    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
+  );
+  const id2 = freePlacementId(segment, taken2);
+  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
+}
+
+// src/render/action.ts
+function renderBinding(runtime, reader) {
+  if (runtime.bound === void 0) {
+    throw new Error(
+      `${reader} ran outside a render: no render bound its store and clocks`
+    );
+  }
+  return runtime.bound;
+}
+function renderLook(runtime, reader) {
+  const { look } = renderBinding(runtime, reader);
+  if (look === void 0) {
+    throw new Error(`${reader} read the render's look before it was resolved`);
+  }
+  return look;
+}
+function renderLayout(runtime, reader) {
+  const { layout } = renderBinding(runtime, reader);
+  if (layout === void 0) {
+    throw new Error(`${reader} read the render's rows before they were laid`);
+  }
+  return layout();
+}
+function bindRender(runtime, binding) {
+  if (runtime.bound !== void 0) {
+    throw new Error("a render bound a compile another render holds");
+  }
+  runtime.bound = binding;
+  return {
+    [Symbol.dispose]: () => {
+      runtime.bound = void 0;
+    }
+  };
+}
+function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
+  const out = /* @__PURE__ */ new Map();
+  const entries = Object.entries(actions);
+  for (const [name, action2] of [
+    ...entries.filter(([, a]) => !("do" in a)),
+    ...entries.filter(([, a]) => "do" in a)
+  ]) {
+    out.set(
+      name,
+      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
+    );
+  }
+  return out;
+}
+function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
+  if ("set" in action2) {
+    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
+    if ("to" in action2) {
+      return {
+        kind: "set-literal",
+        key: action2.set,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "set-option",
+        key: action2.set,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    if ("int" in action2) {
+      return { kind: "set-int", key: action2.set, stateVar };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "set-cycle",
+        key: action2.set,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    return {
+      kind: "set-bounded",
+      key: action2.set,
+      by: action2.by
+    };
+  }
+  if ("persist" in action2) {
+    const layer = action2.layer ?? "user";
+    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
+    if ("to" in action2) {
+      return {
+        kind: "persist-literal",
+        key: action2.persist,
+        layer,
+        value: action2.to,
+        stateVar
+      };
+    }
+    if ("from" in action2) {
+      const domain = resolveOptionDomain(action2.from, perConfigDomains);
+      return {
+        kind: "persist-option",
+        key: action2.persist,
+        layer,
+        stateVar,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    if ("cycle" in action2) {
+      return {
+        kind: "persist-cycle",
+        key: action2.persist,
+        layer,
+        stateVar,
+        members: action2.cycle
+      };
+    }
+    if ("removeSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        layer,
+        op: { op: "remove", target: action2.removeSegment }
+      };
+    }
+    if ("insertSegment" in action2) {
+      return {
+        kind: "layout-op",
+        key: action2.persist,
+        layer,
+        op: {
+          op: "insert",
+          segment: action2.insertSegment,
+          anchor: action2.anchor,
+          relation: action2.relation
+        }
+      };
+    }
+    if ("insertSegmentFrom" in action2) {
+      const domain = resolveOptionDomain(
+        action2.insertSegmentFrom,
+        perConfigDomains
+      );
+      return {
+        kind: "layout-op-option",
+        key: action2.persist,
+        layer,
+        anchor: action2.anchor,
+        relation: action2.relation,
+        options: [...domain.members],
+        paletteOf: domain.paletteOf,
+        labelOf: domain.labelOf,
+        library: domain.library
+      };
+    }
+    return {
+      kind: "persist-bounded",
+      key: action2.persist,
+      layer,
+      by: action2.by
+    };
+  }
+  if ("copy" in action2) {
+    return {
+      kind: "copy",
+      text: parseActionTemplate(parse3, action2.copy, name)
+    };
+  }
+  if ("open" in action2) {
+    return {
+      kind: "open",
+      target: parseActionTemplate(parse3, action2.open, name)
+    };
+  }
+  if ("reset" in action2) {
+    return { kind: "reset", key: action2.reset, layer: action2.layer ?? "user" };
+  }
+  if ("slash" in action2) return { kind: "slash", line: action2.slash };
+  if ("run" in action2) {
+    return {
+      kind: "run",
+      name,
+      declaration: runDeclaration(action2),
+      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
+      env: Object.entries(action2.env).map(
+        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
+      )
+    };
+  }
+  if ("undo" in action2) return { kind: "undo" };
+  if ("redo" in action2) return { kind: "redo" };
+  if ("back" in action2) return { kind: "back" };
+  if ("rewind" in action2) return { kind: "rewind" };
+  if ("save" in action2) return { kind: "save", layer: action2.layer ?? "user" };
+  if ("preset" in action2) {
+    const layer = action2.layer ?? "user";
+    return action2.preset === "save" ? { kind: "preset-save", layer } : {
+      kind: "preset-delete",
+      layer,
+      name: parseActionTemplate(parse3, action2.name, name)
+    };
+  }
+  if ("themeDefault" in action2)
+    return { kind: "theme-default-save", layer: action2.layer ?? "user" };
+  const [head, ...rest2] = action2.do.map((member) => {
+    const c = compiled.get(member);
+    if (c === void 0) {
+      throw new Error(
+        `action "${name}" fires "${member}", which is not declared in this config`
+      );
+    }
+    return c;
+  });
+  return { kind: "do", head, rest: rest2 };
+}
+function presentedAction(c) {
+  return c.kind === "do" ? presentedAction(c.head) : c;
+}
+function bindsTemplateValue(c) {
+  const presented = presentedAction(c);
+  switch (presented.kind) {
+    case "set-option":
+    case "set-int":
+    case "persist-option":
+    case "layout-op-option":
+      return true;
+    case "set-literal":
+    case "set-bounded":
+    case "set-cycle":
+    case "copy":
+    case "open":
+    case "persist-literal":
+    case "persist-bounded":
+    case "persist-cycle":
+    case "reset":
+    case "layout-op":
+    case "undo":
+    case "redo":
+    case "back":
+    case "rewind":
+    case "save":
+    case "preset-save":
+    case "preset-delete":
+    case "theme-default-save":
+    case "slash":
+    case "run":
+    case "do":
+      return false;
+  }
+}
+function parseActionTemplate(parse3, src, name) {
+  try {
+    return parse3(src);
+  } catch (e) {
+    throw new Error(
+      `Template parse error in actions.${name}: ${e.message}`,
+      { cause: e }
+    );
+  }
+}
+function readVar(store, name) {
+  return store.has(name) ? toString2(store.read(name)) : "";
+}
+function clickSession(runtime, reader) {
+  return renderBinding(runtime, reader).registry.session();
+}
+function evalTemplate(tpl, scope) {
+  return tpl.evaluate(scope).map((f) => f.plain).join("");
+}
+function linkFragment(text4, link, active2, base) {
+  const rt = new RichText(text4, {
+    style: Style.combine([
+      base,
+      styleWithLink(new Style({ bold: active2 }), link)
+    ])
+  });
+  rt.overflow = "ignore";
+  rt.end = "";
+  return rt;
+}
+function linkOver(cell3, url, current = false) {
+  const link = new Style({ link: url, bold: current ? true : void 0 });
+  const linked = new RichText(cell3.plain, {
+    style: Style.combine([resolvedStyle(cell3.style), link])
+  });
+  for (const span of cell3.spans) {
+    linked.stylize(
+      Style.combine([resolvedStyle(span.style), link]),
+      span.start,
+      span.end
+    );
+  }
+  linked.overflow = "ignore";
+  linked.end = "";
+  return linked;
+}
+function cycleIndex(c, store) {
+  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+}
+function realize(c, display, boundValue, store, sessionId2, signer) {
+  switch (c.kind) {
+    case "set-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
+        active: current === c.value
+      };
+    }
+    case "set-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-int": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
+        active: current === value
+      };
+    }
+    case "set-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next2] }],
+        active: false
+      };
+    }
+    case "set-bounded": {
+      return {
+        effects: [
+          {
+            verb: VERB_STEP_STATE,
+            args: [sessionId2, c.key, String(c.by)]
+          }
+        ],
+        active: false
+      };
+    }
+    case "copy":
+      return {
+        effects: [
+          {
+            verb: VERB_COPY,
+            args: [evalTemplate(c.text, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    case "open":
+      return {
+        effects: [
+          {
+            verb: VERB_OPEN_VSCODE,
+            args: [evalTemplate(c.target, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
+    // verbatim (same literal/option/cycle/bounded semantics), only the wire
+    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
+    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
+    // the write durable, not the click itself.
+    case "persist-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, c.value] }
+        ],
+        active: current === c.value
+      };
+    }
+    case "persist-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, value] }
+        ],
+        active: current === value
+      };
+    }
+    case "persist-cycle": {
+      const next2 = c.members[(cycleIndex(c, store) + 1) % c.members.length];
+      return {
+        effects: [
+          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, next2] }
+        ],
+        active: false
+      };
+    }
+    case "persist-bounded": {
+      return {
+        effects: [
+          {
+            verb: VERB_STEP_CONFIG,
+            args: [sessionId2, c.layer, c.key, String(c.by)]
+          }
+        ],
+        active: false
+      };
+    }
+    case "reset":
+      return {
+        effects: [
+          { verb: VERB_RESET_CONFIG, args: [sessionId2, c.layer, c.key] }
+        ],
+        active: false
+      };
+    // [LAW:one-source-of-truth] No key to carry — the click just says "step
+    // the history", and which entry moves is entirely server-side state
+    // (never wire input, so there is nothing here to gate). Never "active":
+    // a history step is a one-shot trigger, not a current-selection toggle.
+    case "undo":
+      return {
+        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
+        active: false
+      };
+    case "redo":
+      return {
+        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
+        active: false
+      };
+    case "back":
+      return {
+        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
+        active: false
+      };
+    // One-shot, like undo: which steps it takes back is server-side state.
+    case "rewind":
+      return {
+        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
+        active: false
+      };
+    // [LAW:no-silent-failure] A save that asks writes the layer its click
+    // binds, and one drawn without a layer to bind is the author's error,
+    // said on the bar — never a write to some layer it did not name.
+    case "save": {
+      const layer = c.layer === "ask" ? layerRoleOf(boundValue) : c.layer;
+      if (layer === null)
+        throw new Error(
+          `a save that asks which layer it writes binds the layer as its value \u2014 {{ action "<save>" "\u{1F4BE} project" "project" }} \u2014 and ${boundValue === void 0 ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`
+        );
+      return {
+        effects: [{ verb: VERB_SAVE, args: [sessionId2, layer] }],
+        active: false
+      };
+    }
+    // Never "active": one-shot triggers, like save.
+    case "preset-save":
+      return {
+        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId2, c.layer] }],
+        active: false
+      };
+    case "theme-default-save":
+      return {
+        effects: [
+          { verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId2, c.layer] }
+        ],
+        active: false
+      };
+    case "preset-delete":
+      return {
+        effects: [
+          {
+            verb: VERB_DELETE_PRESET,
+            args: [sessionId2, c.layer, evalTemplate(c.name, buildScope(store))]
+          }
+        ],
+        active: false
+      };
+    // Never "active": typing a command is a one-shot trigger.
+    case "slash":
+      return {
+        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
+        active: false
+      };
+    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
+    // draw, as copy's text is. The link carries what was evaluated and its
+    // mac, so the click runs what the bar showed and nothing a URL made up.
+    // Never "active": a run is a one-shot trigger.
+    case "run": {
+      const scope = buildScope(store);
+      const evaluated2 = JSON.stringify({
+        run: c.argv.map((item) => evalTemplate(item, scope)),
+        env: Object.fromEntries(
+          c.env.map(([variable, value]) => [
+            variable,
+            evalTemplate(value, scope)
+          ])
+        )
+      });
+      const mac = signer.sign({
+        sessionId: sessionId2,
+        action: c.name,
+        declaration: c.declaration,
+        evaluated: evaluated2
+      });
+      return {
+        effects: [
+          { verb: VERB_RUN, args: [sessionId2, c.name, evaluated2, mac] }
+        ],
+        active: false
+      };
+    }
+    // [LAW:one-source-of-truth] The op is fixed at compile time (see
+    // compileAction) — the click just delivers it. `apply-layout-op`'s
+    // handler does read-current-append-write (see verbs/index.ts), unlike
+    // persist-literal's plain overwrite, so it is its own verb rather than
+    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
+    // trigger, not a current-selection toggle.
+    case "layout-op":
+      return {
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId2, c.layer, c.key, encodeLayoutOp(c.op)]
+          }
+        ],
+        active: false
+      };
+    case "do": {
+      const head = realize(
+        c.head,
+        display,
+        boundValue,
+        store,
+        sessionId2,
+        signer
+      );
+      return {
+        effects: [
+          ...head.effects,
+          ...c.rest.flatMap(
+            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
+          )
+        ],
+        active: head.active
+      };
+    }
+    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
+    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
+    // relation are the compiled literals. Same wire shape a literal layout-op
+    // emits, so the daemon's apply-layout-op handler and undo/redo need no
+    // knowledge of where the segment name came from. Never "active": a
+    // structural edit is a one-shot trigger, not a current-selection toggle.
+    case "layout-op-option": {
+      const segment = boundValue ?? display;
+      const op = {
+        op: "insert",
+        segment,
+        anchor: c.anchor,
+        relation: c.relation
+      };
+      return {
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId2, c.layer, c.key, encodeLayoutOp(op)]
+          }
+        ],
+        active: false
+      };
+    }
+  }
+}
+function selectDisplay(name, action2, displays, store) {
+  if (displays.length === 0) {
+    throw new Error(`action "${name}" needs a display (the clickable text)`);
+  }
+  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
+    const display = pickCycleDisplay(
+      `action "${name}"`,
+      displays,
+      action2.members.length,
+      cycleIndex(action2, store)
+    );
+    return { display, boundValue: void 0 };
+  }
+  if (displays.length > 2) {
+    throw new Error(
+      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
+    );
+  }
+  return { display: displays[0], boundValue: displays[1]?.plain };
+}
+function renderAction(name, displays, runtime) {
+  const declared = runtime.compiled.get(name);
+  if (!declared) {
+    throw new Error(`action "${name}" is not declared in this config`);
+  }
+  const store = renderBinding(runtime, `action "${name}"`).store;
+  const { display, boundValue } = selectDisplay(
+    name,
+    presentedAction(declared),
+    displays,
+    store
+  );
+  const sessionId2 = clickSession(runtime, `action "${name}"`);
+  const { effects, active: active2 } = realize(
+    declared,
+    display.plain,
+    boundValue,
+    store,
+    sessionId2,
+    runtime.signer
+  );
+  return linkOver(display, effectsUrl(effects), active2);
+}
+function actionFuncs(runtime) {
+  return {
+    action: {
+      fn: (name, ...displays) => renderAction(name, displays, runtime),
+      argTypes: ["string", "liftable"],
+      arity: { kind: "variadic" },
+      returnType: "T"
+    }
+  };
+}
+
+// src/render/band-style.ts
+init_globals();
+function stateCell(palette, background, drawnAt) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(background),
+    color: ColorSpec.fromRgba(textOn2(palette, background, drawnAt))
+  });
+}
+function decoratedCell({
+  tint,
+  text: text4
+}) {
+  return new Style({
+    bgcolor: ColorSpec.fromRgba(tint),
+    color: ColorSpec.fromRgba(text4)
+  });
+}
+function closeOn(palette, ground, drawnAt) {
+  return new Style({
+    color: ColorSpec.fromRgba(
+      ensureContrast(
+        palette.get(DISCLOSURE_CLOSE_ROLE),
+        ground,
+        TEXT_MIN_CONTRAST,
+        drawnAt
+      )
+    )
+  });
+}
+function closeCell(palette, background, drawnAt) {
+  return Style.combine([
+    stateCell(palette, background, drawnAt),
+    closeOn(palette, background, drawnAt)
+  ]);
+}
+function bandItemStyle(active2, step4, drawnAt) {
+  return decoratedCell(
+    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
+  );
+}
+
+// src/config/edit-chrome.ts
+init_globals();
+var import_node_path26 = __toESM(require_path_browserify(), 1);
 
 // src/config/setting-control.ts
 init_globals();
@@ -70754,7 +73701,7 @@ function declareHelp(name, lines2, within3, out) {
     ),
     // The trigger is visible wherever its host surface is. An unnested `(?)`
     // (`within` empty) is always visible, and declares no `when` at all.
-    ...gateOf(within3)
+    ...gateOf2(within3)
   };
   const children2 = lines2.map((line, i2) => {
     const lineName = `${name}.${i2}`;
@@ -70768,49 +73715,9 @@ function declareHelp(name, lines2, within3, out) {
     "drop"
   );
 }
-function gateOf(within3) {
+function gateOf2(within3) {
   const [first2, ...rest2] = within3;
   return first2 === void 0 ? {} : { when: disclosureGate(first2, ...rest2) };
-}
-
-// src/template-engine/colors.ts
-init_globals();
-var NO_FILL = "none";
-function groundOf(palette) {
-  return resolveColorRef(palette, "background");
-}
-var ColorSpecError = class extends Error {
-  constructor(spec, role, detail) {
-    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
-    this.name = "ColorSpecError";
-  }
-};
-function resolveSegmentColors(active2, drawnAt, bgTemplate, fgTemplate, scope) {
-  const { palette, tint, text: text4 } = active2;
-  const bgSpec = evalToPlainText(bgTemplate, scope);
-  const filled2 = bgSpec !== NO_FILL;
-  const bgColor = !filled2 ? groundOf(palette) : bgSpec !== void 0 ? resolveRef(palette, bgSpec, "bg") : tint;
-  active2.bg = bgColor;
-  const fgSpec = evalToPlainText(fgTemplate, scope);
-  const chosen = (ground) => ground.hex === tint.hex ? text4 : textOn2(palette, ground, drawnAt);
-  const fgColor = fgSpec !== void 0 ? resolveRef(palette, fgSpec, "fg") : filled2 ? chosen(bgColor) : void 0;
-  return new Style({
-    ...filled2 && { bgcolor: ColorSpec.fromRgba(bgColor) },
-    ...fgColor !== void 0 && { color: ColorSpec.fromRgba(fgColor) }
-  });
-}
-function evalToPlainText(template, scope) {
-  if (template === void 0) return void 0;
-  return template.evaluate(scope).map((f) => f.plain).join("");
-}
-function resolveRef(palette, ref, role) {
-  try {
-    return resolveColorRef(palette, ref);
-  } catch (e) {
-    if (e instanceof ColorRefError)
-      throw new ColorSpecError(ref, role, e.message);
-    throw e;
-  }
 }
 
 // src/help-text.ts
@@ -70865,9 +73772,14 @@ Debugging:
   CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
 
 Configuration:
-  Layout and segment options are defined in .cc-candybar.json5 (place in your
-  project dir, cwd, or ~/.config/cc-candybar/config.json5). Use CC_CANDYBAR_CONFIG
-  to point at a specific file. To see the effective merged config:
+  Layout and segment settings layer the user's ~/.config/cc-candybar/config.json5
+  with the workspace project's .cc-candybar.json5 and .cc-candybar.local.json5.
+  --config PATH            Use PATH as the user layer. Approved project
+                           config and repository plugins still load.
+  --config-only PATH       Load only PATH over the bundled base. Installed
+                           plugins and definitions listed in PATH still load.
+  CC_CANDYBAR_CONFIG names the user layer when neither flag is passed.
+  To see the effective merged config:
     cc-candybar config
 
   Every bar carries a settings menu, whatever your config says \u2014 no config
@@ -70913,13 +73825,13 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
-  frames --lane LANE [--config PATH]
+  frames --lane LANE [--config PATH | --config-only PATH]
                            One session's bar as the daemon pushes it \u2014 up to
                            30 frames a second while it moves, at once on a
                            click \u2014 one JSON message per stdout line. Reads
                            Claude Code's statusline JSON from stdin (one object
                            a line) and sends it as the session's data
-                           (--config rides with it). LANE is one of
+                           (config flags ride with it). LANE is one of
                            ${LANE_NAMES.join(", ")}:
                            the experimental lane this stream serves,
                            which streams only while its toggle in the settings
@@ -70936,7 +73848,8 @@ Config tooling:
   check [--render] [file]  Validate a config on the full render pipeline (parse
                            \u2192 merge \u2192 validate \u2192 register \u2192 render, under
                            every preset) with no daemon. With no path, checks
-                           the same file the daemon would load from here. Exit
+                           the same layers the daemon would load from here.
+                           Use --config-only PATH to check in isolation. Exit
                            0 clean (warnings on stderr), 1 invalid, 2
                            unreadable. --render also prints the bar a fresh
                            session opens on, so you can read a config without
@@ -72085,6 +74998,1059 @@ function synthesizeEditChrome(config) {
   };
 }
 
+// src/themes/index.ts
+init_globals();
+
+// src/dsl/node-registry.ts
+init_globals();
+
+// src/render/split-lines.ts
+init_globals();
+function splitCellsIntoLines(cells) {
+  const lines2 = [];
+  let current = [];
+  for (const cell3 of cells) {
+    if (!cell3.contains("\n")) {
+      current.push(cell3);
+      continue;
+    }
+    const pieces = cell3.split("\n");
+    current.push(pieces[0]);
+    for (let i2 = 1; i2 < pieces.length; i2++) {
+      lines2.push(current);
+      current = [pieces[i2]];
+    }
+  }
+  lines2.push(current);
+  return lines2;
+}
+
+// src/dsl/node-registry.ts
+function rowIdentities(lines2) {
+  const counts = /* @__PURE__ */ new Map();
+  return lines2.map((line) => {
+    const kind = `${line.place}.${line.band}`;
+    const nth = counts.get(kind) ?? 0;
+    counts.set(kind, nth + 1);
+    return { line, row: `${kind}#${nth}` };
+  });
+}
+var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
+function within2(parent, own2) {
+  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
+}
+function returnedBy(id2, lines2) {
+  const own2 = [];
+  const deeper = [];
+  let ground;
+  for (const line of lines2) {
+    (line.band === "own" ? own2 : deeper).push(line);
+    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
+  }
+  return {
+    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
+    deeper
+  };
+}
+function heldLine(line) {
+  return { ...line, cells: line.cells.map(heldCell) };
+}
+function composeBlocks(direction, blocks) {
+  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
+  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
+  return [...above, ...composeFlow(direction, flow3)];
+}
+function composeFlow(direction, blocks) {
+  switch (direction) {
+    case "vertical":
+      return blocks.flatMap((b) => b);
+    case "horizontal": {
+      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
+      if (height === 0) return [];
+      const row0 = {
+        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
+        band: "own",
+        place: "flow"
+      };
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return [row0, ...drops];
+    }
+  }
+}
+function layoutRows(node, shown) {
+  const lines2 = (n, address) => {
+    if (!shown(n)) return [];
+    if (n.kind === "segment") {
+      return [
+        {
+          cells: [{ name: n.name, address, settings: n.settings }],
+          band: "own",
+          place: "flow"
+        }
+      ];
+    }
+    return composeBlocks(
+      n.direction,
+      n.children.map(
+        (child, index) => lines2(child, [...address, childStep(n, index)])
+      )
+    );
+  };
+  return lines2(node, []).map((line) => [...line.cells]);
+}
+function childStep(node, index) {
+  return node.steps[index];
+}
+function spanOf(node) {
+  if (node.kind === "segment" || node.unit === true) {
+    return { width: 1, reach: 1 };
+  }
+  const laid = laidOut(node);
+  return { width: widthOf2(laid), reach: reachOf(laid) };
+}
+function laidOut(node) {
+  const spans = node.children.map(spanOf);
+  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
+  if (node.direction === "vertical" || node.unit === true) {
+    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
+  }
+  let start = 0;
+  return spans.map((span, i2) => {
+    const at = start;
+    start += span.width;
+    return { start: at, span, ownLine: ownLine(i2) };
+  });
+}
+var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
+var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
+function placeChildren(node, at) {
+  const laid = laidOut(node);
+  if (at?.axis === "cell") {
+    return laid.map(({ start, span, ownLine }) => {
+      const index = at.index + start;
+      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
+    });
+  }
+  const axis = AXIS_OF[node.direction];
+  const distribution = placedBy(node.distribution);
+  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
+  return places.map((index) => ({
+    index,
+    count,
+    distribution,
+    axis,
+    lineStart: 0,
+    lineEnd
+  }));
+}
+var containerType = {
+  compile(node, cctx) {
+    const steps2 = placeChildren(node, cctx.at);
+    return {
+      kind: "container",
+      direction: node.direction,
+      when: cctx.when,
+      steps: steps2,
+      children: node.children.map(
+        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
+      )
+    };
+  },
+  render(node, ctx) {
+    if (ctx.gate.kind === "failed") ctx.gate.report();
+    return composeBlocks(
+      node.direction,
+      node.children.map(
+        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
+      )
+    );
+  }
+};
+var BODY_PLACE = {
+  drop: (line) => line.place,
+  above: () => "above"
+};
+var OPEN_LEAD = {
+  drop: (inline, close) => ({ lead: close(), stays: inline }),
+  above: (inline) => ({
+    lead: inline.slice(0, 1).flatMap((line) => line.cells),
+    stays: inline.slice(1)
+  })
+};
+var segmentType = {
+  compile(node, cctx) {
+    return {
+      kind: "segment",
+      when: cctx.when,
+      name: node.name,
+      id: placementId(node),
+      settings: cctx.placementSettings(node),
+      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
+      // predicate by the one `disclosureGate` every disclosure reads through.
+      ...node.opens !== void 0 && {
+        opens: {
+          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
+          // A body roots a band: its first step is placed afresh.
+          body: cctx.compileChild(
+            node.opens.body,
+            bodyPath(cctx.path),
+            void 0
+          ),
+          key: node.opens.ref.key,
+          placement: node.opens.placement
+        }
+      },
+      ...node.lead !== void 0 && {
+        lead: cctx.parse(node.lead, "lead")
+      },
+      ...node.trail !== void 0 && {
+        trail: cctx.parse(node.trail, "trail")
+      }
+    };
+  },
+  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
+  // hidden, gated off, drawn, broken — is reported to the session's record, so
+  // one that stops drawing leaves the bar as it was last drawn.
+  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
+};
+function drawSegment(node, ctx) {
+  const seg2 = ctx.lookupSegment(node.name);
+  if (seg2 === void 0) {
+    throw new Error(`Layout segment "${node.name}" has no matching segment`);
+  }
+  if (ctx.gate.kind === "hidden") return [];
+  const scope = placementScope(ctx.scope, node.settings);
+  if (ctx.gate.kind === "failed") {
+    return brokenSegment(node, scope, ctx, ctx.gate.message);
+  }
+  try {
+    const parts = ctx.placement(node);
+    const gate2 = within2(ctx.gate, parts.gate());
+    if (gate2.kind === "failed") {
+      return brokenSegment(node, scope, ctx, gate2.message);
+    }
+    if (gate2.kind === "hidden") return [];
+    const ownBodyGate = parts.bodyGate();
+    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
+    if (bodyGate.kind === "failed") {
+      return brokenSegment(node, scope, ctx, bodyGate.message);
+    }
+    const palette = placementPalette(node.settings.theme, ctx.palette);
+    const placement = {
+      id: node.id,
+      effect: node.settings.effect,
+      ground: groundOf(palette)
+    };
+    const layoutOf = (baseStyle) => ({
+      width: seg2.width ?? "auto",
+      justify: seg2.justify ?? "left",
+      truncate: seg2.truncate ?? "right",
+      baseStyle,
+      // [LAW:dataflow-not-control-flow] Padding is uniform across every
+      // line a segment contributes — inline rows AND dropped menu bands —
+      // one value, no per-line-kind branch. The picker reserves 2×padding
+      // at its pagination seam so a padded band still fits the width
+      // budget.
+      padding: ctx.padding,
+      placement
+    });
+    const bodyOpen = bodyGate.kind === "shown";
+    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
+    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
+    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
+      node,
+      scope,
+      ctx,
+      own2.variable,
+      palette,
+      bodyOpen,
+      layoutOf
+    );
+    if (drawn === null) return [];
+    const { styles, inline: inlineLines, drops: dropLines } = drawn;
+    const opens = node.opens;
+    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
+      ...line,
+      place: BODY_PLACE[opens.placement](line)
+    }));
+    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
+      ...layoutOf(style),
+      width: "auto",
+      padding
+    });
+    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
+    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
+      inlineLines,
+      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
+    ) : { lead: [], stays: inlineLines };
+    const holdLead = openLead.flatMap(
+      (cell3) => leadCell(
+        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
+        styles.trigger,
+        0
+      )
+    );
+    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
+    const ledBody = bodyLines.map((line, i2) => ({
+      cells: [...leadOf(line, i2), ...line.cells],
+      band: "deeper",
+      place: line.place
+    }));
+    const laidLines = [...stays, ...dropLines];
+    ctx.segments.set(
+      node.id,
+      [
+        ...laidLines.flatMap((line) => line.cells),
+        ...bodyLines.flatMap(leadOf)
+      ].flatMap(cellParts)
+    );
+    return [...laidLines, ...ledBody];
+  } catch (err) {
+    return brokenSegment(
+      node,
+      scope,
+      ctx,
+      err.message ?? String(err)
+    );
+  }
+}
+var waitingOn = (variable) => ({
+  kind: "waiting",
+  variable
+});
+function ownAnswer(evaluate) {
+  try {
+    return { kind: "drawn", segment: evaluate() };
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 === void 0) throw err;
+    return waitingOn(pending2.variable);
+  }
+}
+function drawnRows2(segment, layoutOf) {
+  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
+  const baseStyle = open2 ? styles.trigger : styles.closed;
+  const layout = layoutOf(baseStyle);
+  const inline = splitCellsIntoLines(
+    fragmentsToCells(fragments, baseStyle)
+  ).map((line, i2) => ({
+    cells: applySegmentLayout(line, {
+      ...layout,
+      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
+      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
+    }),
+    band: "own",
+    place: "flow"
+  }));
+  return {
+    styles,
+    inline,
+    drops: drops.map((body) => ({
+      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
+        ...layout,
+        baseStyle: styles.band
+      }),
+      band: "deeper",
+      place: "flow"
+    }))
+  };
+}
+var LOADING_GLYPH = "\u2026";
+function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
+  ctx.waited(variable);
+  const last2 = ctx.lastDrawn(node.id);
+  if (last2?.kind === "hidden") return null;
+  const styles = ctx.decorations(node, palette);
+  const style = bodyOpen ? styles.trigger : styles.closed;
+  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
+  const trail = fragmentsToCells(
+    errorAffix(node.trail, node, scope, ctx),
+    style
+  );
+  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
+    (line) => line.cells.map((cell3) => cell3.text.cellLength)
+  );
+  return {
+    styles,
+    inline: rows.map((widths, row) => ({
+      cells: widths.flatMap((width, i2) => {
+        const first2 = row === 0 && i2 === 0;
+        return applySegmentLayout(
+          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
+          {
+            ...layoutOf(style),
+            width,
+            justify: "left",
+            truncate: "right",
+            lead: first2 ? lead : [],
+            trail: first2 ? trail : []
+          }
+        );
+      }),
+      band: "own",
+      place: "flow"
+    })),
+    drops: []
+  };
+}
+function cellsWidth(cells) {
+  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
+}
+function brokenSegment(node, scope, ctx, message2) {
+  ctx.brokenPlacement(node.id, message2);
+  const oneLine = message2.replace(/\s*\n\s*/g, " ");
+  return [
+    {
+      cells: applySegmentLayout(
+        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
+        {
+          width: "auto",
+          justify: "left",
+          truncate: "right",
+          padding: 0,
+          // It follows the bar, and fades in from the bar's ground: the
+          // failure it reports may be the read of this placement's own
+          // settings.
+          placement: {
+            id: node.id,
+            effect: FOLLOW_BAR,
+            ground: groundOf(ctx.palette)
+          },
+          lead: errorAffix(node.lead, node, scope, ctx),
+          trail: errorAffix(node.trail, node, scope, ctx)
+        }
+      ),
+      band: "own",
+      place: "flow"
+    }
+  ];
+}
+function errorAffix(affix, node, scope, ctx) {
+  if (affix === void 0) return [];
+  try {
+    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
+  } catch (err) {
+    const pending2 = readPending(err);
+    if (pending2 !== void 0) ctx.waited(pending2.variable);
+    else ctx.brokenPlacement(node.id, err.message ?? String(err));
+    return [];
+  }
+}
+var REGISTRY = {
+  container: containerType,
+  segment: segmentType
+};
+function nodeType(kind) {
+  return REGISTRY[kind];
+}
+
+// src/dsl/parts.ts
+var SELECTION_OF = {
+  palette: "theme",
+  style: "style",
+  effect: "effect"
+};
+var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
+var COLOR_FLOOR = "truecolor";
+var UNDRAWN = {
+  width: 0,
+  chromeCols: 0,
+  padding: 0,
+  seamCols: 0,
+  preset: ""
+};
+function answerOf3(deriver) {
+  try {
+    return { ok: true, value: deriver() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+function unwrap2(answer2) {
+  if (answer2.ok) return answer2.value;
+  throw answer2.error;
+}
+var always = (value) => ({ read: () => value });
+var sameLook = sameBy({
+  basePalette: is,
+  palette: is,
+  decor: sameDecor
+});
+var ViewParts = class {
+  constructor(store, registry, source, view) {
+    this.store = store;
+    this.registry = registry;
+    this.source = source;
+    this.view = observable.box(view, { deep: false });
+    this.scope = buildScope(store);
+    this.depth = store.derive("drawn depth", "computed", () => {
+      const said2 = this.inputAt(COLOR_PATH);
+      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
+    });
+    const drawn = observable(UNDRAWN, void 0, { deep: false });
+    this.facts = drawn;
+    const look = this.look;
+    const phase = this.phase;
+    const layout = () => this.layout.read();
+    this.binding = {
+      store,
+      registry,
+      get width() {
+        return drawn.width;
+      },
+      get chromeCols() {
+        return drawn.chromeCols;
+      },
+      get padding() {
+        return drawn.padding;
+      },
+      get seamCols() {
+        return drawn.seamCols;
+      },
+      get look() {
+        return phase.ruling ? void 0 : look.get();
+      },
+      get layout() {
+        return phase.ruling ? void 0 : layout;
+      }
+    };
+    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
+      const root = source.roots.get(drawn.preset);
+      const palette = look.get().palette;
+      return layoutRows(root, (node) => this.shown(node)).map(
+        (row) => row.flatMap(({ name: placedName, address, settings }) => {
+          const name = arrangedSegment(placedName);
+          return name === void 0 ? [] : [
+            {
+              name,
+              address,
+              palette: placementPalette(settings.theme, palette)
+            }
+          ];
+        })
+      );
+    });
+    registry.bindInputs({
+      session: () => this.view.get().session,
+      read: (path31) => this.inputAt(path31),
+      run: (digest2) => this.view.get().run(digest2),
+      env: (name) => this.view.get().env(name),
+      drawnAt: () => drawnDepth(this.colorCompatibility())
+    });
+  }
+  store;
+  registry;
+  source;
+  // How many parts have derived since the view's first draw: what one draw
+  // adds is how many of its parts it evaluated.
+  evaluated = 0;
+  // [LAW:one-source-of-truth] The view's one scope. Its names are the
+  // store's when it is built, at the view's first draw: a view declares
+  // every variable before it is drawn.
+  scope;
+  binding;
+  facts;
+  look = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
+  });
+  layout;
+  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
+  // draw resolves its look — the look is what the rules decide — so while one
+  // is, the binding has neither look nor layout to give: a read is refused by
+  // name (renderLook, renderLayout), never answered with the last draw's.
+  // Read outside every kept part but the rule's own, which always runs here.
+  phase = { ruling: false };
+  gates = /* @__PURE__ */ new Map();
+  placements = /* @__PURE__ */ new Map();
+  rules = /* @__PURE__ */ new Map();
+  slots = /* @__PURE__ */ new Map();
+  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
+  // and its slots read it as it stands, never a copy a draw wrote.
+  view;
+  terminalWidth = observable.box(null);
+  // The draw in progress's own facts — the payload fields its instant answers
+  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
+  // the projections over them, which only a draw reads.
+  projected = void 0;
+  drawnSlots = /* @__PURE__ */ new Map();
+  // What the view draws from: a session view's source is bound once; a caller
+  // drawing a fixed payload binds each.
+  bind(view) {
+    runInAction(() => this.view.set(view));
+  }
+  // [LAW:no-ambient-temporal-coupling] An older request's terminal width is
+  // visible to the templates in this draw only. Restore it before the outer
+  // action ends so subscription reactions see the canonical view's inputs.
+  withTerminalWidth(width, draw2) {
+    return runInAction(() => {
+      const before = this.terminalWidth.get();
+      this.terminalWidth.set(width);
+      try {
+        return draw2();
+      } finally {
+        this.terminalWidth.set(before);
+      }
+    });
+  }
+  // The selections in force.
+  selections() {
+    return this.view.get().selections();
+  }
+  // The draw's facts, before it reads a part, and the payload fields its own
+  // instant answers.
+  draw(facts, projected) {
+    this.draws++;
+    this.projected = projected;
+    this.drawnSlots.clear();
+    runInAction(() => Object.assign(this.facts, facts));
+  }
+  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
+  // answers it: a selection's `.effective` its slot, a field of the instant
+  // the draw in progress, every other the view's payload.
+  inputAt(path31) {
+    const slot = slotAt(path31);
+    if (slot !== void 0) return found(this.slotName(slot));
+    if (drawProjectionAt(path31) !== void 0)
+      return resolvePath2(this.projected, path31);
+    if (path31 === "term.cols") {
+      const width = this.terminalWidth.get();
+      if (width !== null) return found(width);
+    }
+    return resolvePath2(this.view.get().payload(), path31);
+  }
+  // The depth the view's colour setting draws at: its floor while the payload
+  // has not said, or says something no depth is.
+  depth;
+  colorCompatibility() {
+    return this.depth.read();
+  }
+  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
+  // the rule's answer. A rule that reads no instant is kept: settled in the
+  // turn what it reads changes, so a cache policy over the slot's
+  // `.effective` re-runs then, never at a draw. A pending answer keeps the
+  // name last settled (the floor before any); a failure is the floor with
+  // its warning, which every draw reading the slot reports.
+  slot(slot) {
+    let node = this.slots.get(slot);
+    if (node === void 0) {
+      let last2;
+      const settle3 = () => {
+        const selection2 = this.selections()[SELECTION_OF[slot]];
+        if (selection2.kind === "decided")
+          return settled2(selection2.name, null, null);
+        const rule = compiledRule(this.source, slot, selection2.source);
+        if (this.source.instant.has(rule.template))
+          return { kind: "per-draw", rule };
+        const outcome = this.rule(rule.template);
+        switch (outcome.kind) {
+          case "named": {
+            let warning = null;
+            last2 = decideSlot(
+              this.source,
+              slot,
+              outcome.name,
+              rule.where,
+              (m) => {
+                warning = m;
+              }
+            );
+            return settled2(last2, warning, null);
+          }
+          case "pending":
+            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
+          case "failed":
+            last2 = SLOT_FLOORS[slot];
+            return settled2(
+              last2,
+              ruleFloorMessage(
+                rule.where,
+                slot,
+                `the rule failed \u2014 ${outcome.error}`
+              ),
+              null
+            );
+        }
+      };
+      let held;
+      node = this.store.derive(`slot ${slot}`, "computed", () => {
+        const next2 = settle3();
+        if (held === void 0 || !sameSlot(held, next2)) held = next2;
+        return held;
+      });
+      this.slots.set(slot, node);
+    }
+    return node.read();
+  }
+  // The name a slot's `.effective` reads: its settled name, or what this
+  // draw's rule settled on.
+  slotName(slot) {
+    const state = this.slot(slot);
+    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
+  }
+  // What a per-draw rule settled on in the draw in progress.
+  drawnSlot(slot, name) {
+    this.drawnSlots.set(slot, name);
+  }
+  // Which draw is in progress: a part that reads the instant answers once in it.
+  draws = 0;
+  // The look the draw resolved, before its walk.
+  publishLook(look) {
+    runInAction(() => this.look.set(look));
+  }
+  // A layout node's own `when`, as the walk asks it.
+  gate(node) {
+    const { when: when2 } = node;
+    if (when2 === void 0) return gateOf(when2, this.scope);
+    let part = this.gates.get(node);
+    if (part === void 0) {
+      part = this.derive(
+        "when",
+        this.readsInstant(when2),
+        () => outsideSegments(
+          this.source.activeSegment,
+          () => gateOf(when2, this.scope)
+        )
+      );
+      this.gates.set(node, part);
+    }
+    return part.read();
+  }
+  placement(node) {
+    let parts = this.placements.get(node);
+    if (parts === void 0) {
+      parts = new Placement(this, node);
+      this.placements.set(node, parts);
+    }
+    return parts;
+  }
+  rule(template) {
+    let part = this.rules.get(template);
+    if (part === void 0) {
+      part = this.derive(
+        "rule",
+        this.readsInstant(template),
+        () => {
+          this.phase.ruling = true;
+          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
+          try {
+            return {
+              kind: "named",
+              name: template.evaluate(this.scope).map((f) => f.plain).join("")
+            };
+          } catch (e) {
+            const pending2 = readPending(e);
+            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
+              kind: "failed",
+              error: e instanceof Error ? e.message : String(e)
+            };
+          } finally {
+            bound?.[Symbol.dispose]();
+            this.phase.ruling = false;
+          }
+        }
+      );
+      this.rules.set(template, part);
+    }
+    return part.read();
+  }
+  readsInstant(...templates) {
+    return templates.some(
+      (template) => template !== void 0 && this.source.instant.has(template)
+    );
+  }
+  // [LAW:single-enforcer] Every part derives here: kept by the store, or
+  // derived at every read when it reads the instant, and counted.
+  // A part that reads the instant is derived once per draw however often the
+  // draw reads it — a body reads its colours, its lead and trail read both —
+  // since one draw is one instant over one store.
+  derive(name, readsInstant, deriver) {
+    const counted2 = () => {
+      this.evaluated++;
+      return deriver();
+    };
+    return this.store.derive(
+      `part ${name}`,
+      readsInstant ? "projection" : "computed",
+      readsInstant ? this.oncePerDraw(counted2) : counted2
+    );
+  }
+  oncePerDraw(deriver) {
+    let memo = null;
+    return () => {
+      if (memo?.draw !== this.draws) {
+        memo = { draw: this.draws, answer: answerOf3(deriver) };
+      }
+      return unwrap2(memo.answer);
+    };
+  }
+  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
+  // the rows a layout lays out are drawn by: a node's `when`, then a
+  // segment's own — and a segment either `when` of which throws is SHOWN,
+  // because the walk draws an error cell exactly there, where a container
+  // whose `when` throws draws nothing. A `when` not answered yet is shown,
+  // and under it a segment as its own `when` says, as the walk asks it. Edit
+  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
+  // part of it, while a name label stands in for its segment
+  // (`arrangedSegment`).
+  shown(node) {
+    const gate2 = this.gate(node);
+    if (node.kind === "container")
+      return gate2.kind === "shown" || gate2.kind === "pending";
+    if (arrangedSegment(node.name) === void 0) return false;
+    if (gate2.kind === "hidden") return false;
+    if (gate2.kind === "failed") return true;
+    return this.placement(node).gate().kind !== "hidden";
+  }
+};
+function bindView(source, store, registry, view) {
+  const parts = source.views.get(store);
+  if (parts !== void 0) {
+    parts.bind(view);
+    return parts;
+  }
+  const made = new ViewParts(store, registry, source, view);
+  source.views.set(store, made);
+  return made;
+}
+function partsOf(source, store) {
+  const parts = source.views.get(store);
+  if (parts === void 0) {
+    throw new Error(
+      "a store was drawn before its view was bound (bindView): its inputs have no source"
+    );
+  }
+  return parts;
+}
+var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
+var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
+function compiledRule(source, slot, rule) {
+  const compiled = source.globalExpressions.get(slot)?.get(rule);
+  if (compiled === void 0) {
+    throw new Error(
+      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
+    );
+  }
+  return compiled;
+}
+function decideSlot(source, slot, name, where, warn) {
+  switch (slot) {
+    case "palette":
+      return decideThemeName(name, where, warn).name;
+    case "style":
+      return decideStyleName(name, source.styles).name;
+    case "effect":
+      return decideEffectName(name).name;
+  }
+}
+var Placement = class {
+  // What the walk hands each part: where it draws the placement, then what
+  // the colours and the body evaluated to.
+  where = inlet(
+    sameBy({ palette: is, region: sameRegion })
+  );
+  ground = inlet(
+    sameBy({
+      colours: sameDealt,
+      bodyOpen: is
+    })
+  );
+  opened = inlet(
+    sameBy({
+      colours: sameDealt,
+      open: is
+    })
+  );
+  ownGate;
+  open;
+  colours;
+  body;
+  affixes;
+  constructor(view, node) {
+    const seg2 = view.source.segments[node.name];
+    const ref = view.source.activeSegment;
+    const scope = placementScope(view.scope, node.settings);
+    const { when: when2, bg, fg, template } = seg2;
+    const { lead, trail } = node;
+    const opens = node.opens?.open;
+    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
+      `${node.id} when`,
+      view.readsInstant(when2),
+      () => outsideSegments(ref, () => gateOf(when2, scope))
+    );
+    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
+      `${node.id} body gate`,
+      view.readsInstant(opens),
+      () => outsideSegments(ref, () => gateOf(opens, view.scope))
+    );
+    this.colours = view.derive(
+      `${node.id} colours`,
+      view.readsInstant(bg, fg),
+      () => {
+        const { palette, region } = this.where.get();
+        return coloursOf(
+          ref,
+          node,
+          palette,
+          region,
+          view.registry.drawnAt(),
+          bg,
+          fg,
+          scope
+        );
+      }
+    );
+    this.body = view.derive(
+      `${node.id} body`,
+      view.readsInstant(template),
+      () => {
+        const { colours, bodyOpen } = this.ground.get();
+        return bodyOf(ref, node, colours, template, bodyOpen, scope);
+      }
+    );
+    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
+      `${node.id} affixes`,
+      view.readsInstant(lead, trail),
+      () => {
+        const { colours, open: open2 } = this.opened.get();
+        return affixesOf(ref, node, colours, open2, lead, trail, scope);
+      }
+    );
+  }
+  gate() {
+    return this.ownGate.read();
+  }
+  bodyGate() {
+    return this.open.read();
+  }
+  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
+  // what the one before it evaluated to: the colours, then the body over its
+  // ground, then the lead and trail over what the body opened.
+  evaluate(palette, region) {
+    this.where.set({ palette, region });
+    const colours = this.colours.read();
+    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
+    const body = this.body.read();
+    this.opened.set({ colours, open: body.open });
+    return evaluated(colours, body, this.affixes.read());
+  }
+};
+function inlet(same2) {
+  const box = observable.box(void 0, {
+    deep: false,
+    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
+  });
+  return {
+    set: (value) => runInAction(() => box.set(value)),
+    // [LAW:no-defensive-null-guards] Filled before it is read (above).
+    get: () => box.get()
+  };
+}
+var sameHex = (a, b) => a.hex === b.hex;
+var sameDealt = sameBy({
+  palette: is,
+  drawnAt: is,
+  tint: sameHex,
+  text: sameHex,
+  bg: sameHex,
+  disclosure: sameDisclosure
+});
+function placeOf(node, colours) {
+  return {
+    segName: node.name,
+    placementId: node.id,
+    palette: colours.palette,
+    disclosure: colours.disclosure,
+    tint: colours.tint,
+    text: colours.text
+  };
+}
+var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
+function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
+  const dealt = {
+    palette,
+    drawnAt,
+    ...decorationFor(palette, region, drawnAt)
+  };
+  return inSegment(ref, placeOf(node, dealt), (active2) => {
+    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
+    return { ...dealt, bg: active2.bg, style };
+  });
+}
+function bodyOf(ref, node, colours, template, bodyOpen, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
+    const fragments = template.evaluate(scope);
+    return {
+      fragments,
+      drops: active2.drops,
+      open: active2.drops.length > 0 || bodyOpen
+    };
+  });
+}
+function affixesOf(ref, node, colours, open2, lead, trail, scope) {
+  return inSegment(ref, placeOf(node, colours), (active2) => {
+    active2.bg = open2 ? bandOf(colours).state : colours.bg;
+    return {
+      lead: lead?.evaluate(scope) ?? [],
+      trail: trail?.evaluate(scope) ?? [],
+      drops: active2.drops
+    };
+  });
+}
+var NO_AFFIXES = { lead: [], trail: [], drops: [] };
+function stylesOf(colours) {
+  const { palette, drawnAt, disclosure } = colours;
+  return {
+    closed: colours.style,
+    get trigger() {
+      return stateCell(palette, bandOf(colours).state, drawnAt);
+    },
+    get band() {
+      return stateCell(palette, bandOf(colours).plane, drawnAt);
+    },
+    get close() {
+      return closeCell(palette, bandOf(colours).state, drawnAt);
+    },
+    disclosure
+  };
+}
+function evaluated(colours, body, affixes) {
+  return {
+    styles: stylesOf(colours),
+    fragments: body.fragments,
+    lead: affixes.lead,
+    trail: affixes.trail,
+    drops: [...body.drops, ...affixes.drops],
+    open: body.open
+  };
+}
+function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
+  const colours = coloursOf(
+    ref,
+    node,
+    palette,
+    region,
+    drawnAt,
+    void 0,
+    void 0,
+    scope
+  );
+  return evaluated(
+    colours,
+    bodyOf(ref, node, colours, body, false, scope),
+    NO_AFFIXES
+  );
+}
+function decoratedStyles(ref, node, palette, region, drawnAt) {
+  return stylesOf(
+    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
+  );
+}
+
+// src/dsl/render.ts
+init_globals();
+
 // src/config/shell-env.ts
 init_globals();
 var SHELL_BASE_ENV = [
@@ -72109,1718 +76075,8 @@ function shellEnvOf(declared = []) {
   return [.../* @__PURE__ */ new Set([...SHELL_BASE_ENV, ...declared])].sort();
 }
 
-// src/var-system/sources.ts
-init_globals();
-
-// src/template-engine/engine.ts
-init_globals();
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
-init_globals();
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
-init_globals();
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/helpers.js
-init_globals();
-function applyStyleToFragment(child, style) {
-  const fragment = asFragment(child);
-  const result = fragment.copy();
-  result.style = layerStyle(fragment.style, style);
-  return result;
-}
-function asFragment(child) {
-  if (!(child instanceof RichText)) {
-    throw new TypeError(`template function expected a RichText fragment, got ${typeof child === "object" ? Object.prototype.toString.call(child) : typeof child}`);
-  }
-  return child;
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/style-funcs.js
-function attrFunc(style) {
-  return {
-    fn: ((child) => applyStyleToFragment(child, style)),
-    argTypes: ["liftable"],
-    arity: { kind: "exact" },
-    returnType: "T"
-  };
-}
-function colorSinkFunc(slot) {
-  return {
-    fn: ((spec, child) => applyStyleToFragment(child, new Style({ [slot]: ColorSpec.parse(spec) }))),
-    argTypes: ["string", "liftable"],
-    arity: { kind: "exact" },
-    returnType: "T"
-  };
-}
-function attrStyle(name, value) {
-  return new Style({ [name]: value });
-}
-function attributeFuncs() {
-  const out = {};
-  for (const name of ATTRIBUTE_NAMES) {
-    out[name] = attrFunc(attrStyle(name, true));
-    out[`not_${name}`] = attrFunc(attrStyle(name, false));
-  }
-  for (const [alias, canonical2] of Object.entries(ATTRIBUTE_SHORT_ALIASES)) {
-    out[alias] = attrFunc(attrStyle(canonical2, true));
-  }
-  return out;
-}
-var styleSpecFunc = {
-  fn: ((spec, child) => {
-    return applyStyleToFragment(child, Style.parse(spec));
-  }),
-  argTypes: ["string", "liftable"],
-  arity: { kind: "exact" },
-  returnType: "T"
-};
-var linkFunc = {
-  fn: ((url, child) => {
-    return applyStyleToFragment(child, new Style({ link: url }));
-  }),
-  argTypes: ["string", "liftable"],
-  arity: { kind: "exact" },
-  returnType: "T"
-};
-function richTextStyleFuncs() {
-  return {
-    fg: colorSinkFunc("color"),
-    bg: colorSinkFunc("bgcolor"),
-    ...attributeFuncs(),
-    link: linkFunc,
-    style: styleSpecFunc
-  };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/color-funcs.js
-init_globals();
-function asColor(value, func) {
-  let colour;
-  try {
-    colour = parseHexColor(value.trim());
-  } catch (cause) {
-    if (!(cause instanceof ColorParseError))
-      throw cause;
-    throw new TypeError(`${func} expected a color (#RRGGBB or #RRGGBBAA), got ${JSON.stringify(value)} \u2014 to use a palette name here, wrap it: ${func} (color ${JSON.stringify(value)}) \u2026`, { cause });
-  }
-  return computable(colour, func, JSON.stringify(value));
-}
-function computable(colour, func, written3) {
-  if (colour.alpha === 0) {
-    throw new RangeError(`${func} got ${written3}, which is fully transparent: it draws no colour of its own, so there is nothing to compute with \u2014 use the colour of the surface it sits on, e.g. (color "background")`);
-  }
-  return colour;
-}
-function colorFunc(argTypes, fn) {
-  return { fn, argTypes, arity: { kind: "exact" }, returnType: "string" };
-}
-function asAmount(value, func, param, range) {
-  const inRange = range === void 0 || value >= range.min && value <= range.max;
-  if (!Number.isFinite(value) || !inRange) {
-    const bound = range === void 0 ? "a finite number" : `within ${range.min}..${range.max} (${range.note})`;
-    throw new RangeError(`${func}'s ${param} must be ${bound}, got ${value}`);
-  }
-  return value;
-}
-var darkenFunc = colorFunc(["string", "int"], ((hex, levels) => darken(asColor(hex, "darken"), levels).hex));
-var lightenFunc = colorFunc(["string", "int"], ((hex, levels) => darken(asColor(hex, "lighten"), -levels).hex));
-var MIX_PCT_MAX = 100;
-var MIX_RANGE = { min: 0, max: MIX_PCT_MAX, note: "0 = from, 100 = toward" };
-var mixFunc = colorFunc(["string", "string", "float"], ((fromHex, towardHex, pct) => blendRgb(asColor(fromHex, "mix"), asColor(towardHex, "mix"), asAmount(pct, "mix", "percentage", MIX_RANGE) / MIX_PCT_MAX).hex));
-var RATIO_RANGE = {
-  min: 1,
-  max: 21,
-  note: "4.5 = AA body text, 3 = AA large text"
-};
-var contrastOnFunc = colorFunc(["string"], ((bgHex) => contrastFor(asColor(bgHex, "contrastOn")).hex));
-var TRUECOLOR = { depth: ColorDepth.TRUECOLOR };
-var readableOnFunc = (drawnAt) => colorFunc(["string", "string", "float"], ((fgHex, bgHex, ratio) => {
-  const { depth, terminal } = drawnAt();
-  return ensureContrast(asColor(fgHex, "readableOn"), asColor(bgHex, "readableOn"), asAmount(ratio, "readableOn", "ratio", RATIO_RANGE), depth, void 0, terminal).hex;
-}));
-var OKLCH_AXIS_FUNCS = {
-  hueShift: "shiftHue",
-  chromaScale: "scaleChroma",
-  lightnessScale: "scaleLightness",
-  lightnessShift: "shiftLightness"
-};
-function oklchAxisFuncs() {
-  const out = {};
-  for (const [axis, funcName] of Object.entries(OKLCH_AXIS_FUNCS)) {
-    const key = axis;
-    out[funcName] = colorFunc(["string", "float"], ((hex, amount) => {
-      const themeKey = {
-        ...IDENTITY,
-        [key]: asAmount(amount, funcName, "amount")
-      };
-      return Oklch.fromRgba(asColor(hex, funcName)).applyKey(themeKey).toRgba().hex;
-    }));
-  }
-  return out;
-}
-function colorFuncs(drawnAt = () => TRUECOLOR) {
-  return {
-    darken: darkenFunc,
-    lighten: lightenFunc,
-    mix: mixFunc,
-    contrastOn: contrastOnFunc,
-    readableOn: readableOnFunc(drawnAt),
-    ...oklchAxisFuncs()
-  };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/palette-funcs.js
-init_globals();
-function colorStops(tail, palette) {
-  if (tail.length % 2 !== 0) {
-    throw new RangeError(`ramp's last stop (position ${String(tail[tail.length - 1])}) has no color \u2014 stops are <position> <color> pairs`);
-  }
-  const stops = [];
-  for (let i2 = 0; i2 < tail.length; i2 += 2) {
-    stops.push({
-      at: tail[i2],
-      color: computable(resolveColorRef(palette, tail[i2 + 1]), "ramp", JSON.stringify(tail[i2 + 1]))
-    });
-  }
-  return stops;
-}
-function paletteFuncs(getPalette) {
-  const colorFunc2 = {
-    fn: ((ref) => resolveColorRef(getPalette(), ref).hex),
-    argTypes: ["string"],
-    arity: { kind: "exact" },
-    returnType: "string"
-  };
-  const rampFunc = {
-    fn: ((value, ease, ...tail) => new ColorRamp(parseEase(ease), colorStops(tail, getPalette())).at(value).hex),
-    argTypes: ["float", "string"],
-    arity: { kind: "alternating", minimum: 4 },
-    returnType: "string"
-  };
-  return { color: colorFunc2, ramp: rampFunc };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/animation-funcs.js
-init_globals();
-var HOST_CLOCK = Timeline.play(0);
-function pairs(what, tail, value) {
-  if (tail.length % 2 !== 0) {
-    throw new RangeError(`last hold (${String(tail[tail.length - 1])} s) has no ${what} \u2014 the arguments are <seconds> <${what}> pairs`);
-  }
-  const paired = [];
-  for (let i2 = 0; i2 < tail.length; i2 += 2) {
-    const seconds = tail[i2];
-    if (!Number.isFinite(seconds) || seconds <= 0) {
-      throw new RangeError(`hold ${i2 / 2} must be a positive number of seconds, got ${seconds}`);
-    }
-    paired.push({ seconds, value: value(tail[i2 + 1]) });
-  }
-  return paired;
-}
-var GLYPH_EFFECTS = {
-  ...GLYPH_EFFECT_CATALOGUE.loops,
-  typewriter: (element) => GLYPH_EFFECT_CATALOGUE.transitions.typewriter(element).effect,
-  scramble: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scramble(element).effect,
-  backspace: (element) => GLYPH_EFFECT_CATALOGUE.transitions.backspace(element).effect,
-  scrambleOut: (element) => GLYPH_EFFECT_CATALOGUE.transitions.scrambleOut(element).effect
-};
-function glyphEffect(name) {
-  if (!Object.hasOwn(GLYPH_EFFECTS, name)) {
-    throw new RangeError(`unknown glyph effect ${JSON.stringify(name)}; expected one of ${Object.keys(GLYPH_EFFECTS).map((n) => JSON.stringify(n)).join(", ")}`);
-  }
-  return GLYPH_EFFECTS[name];
-}
-function animationFuncs(frame2, options = {}) {
-  const timeline = options.timeline ?? (() => HOST_CLOCK);
-  const drawing2 = (what, animation, at) => [Timeline.run(timeline(), animation), finiteTime(what, at.time)];
-  const now2 = (what, animation) => {
-    const at = frame2();
-    const [drawn, t2] = drawing2(what, animation, at);
-    const shown = shownAt(drawn, t2, at);
-    at.onHold?.(holdOf(shown, t2));
-    return shown.value;
-  };
-  const startedAt = (start, animation) => Timeline.run(Timeline.play(start), animation);
-  const framesFunc = {
-    fn: ((...tail) => {
-      const frames = pairs("frame", tail, asFragment).map(({ seconds, value }) => ({ seconds, text: value }));
-      const at = frame2();
-      return textFrameAt(...drawing2("frames", new FrameSequence(frames), at), at);
-    }),
-    argTypes: ["float", "liftable"],
-    arity: { kind: "alternating", minimum: 2 },
-    returnType: "T"
-  };
-  const steppedFunc = {
-    fn: ((...tail) => {
-      const steps2 = pairs("color", tail, (v) => asColor(v, "stepped"));
-      return steps2[now2("stepped", beat(steps2.map((step4) => step4.seconds)))].value.hex;
-    }),
-    argTypes: ["float", "string"],
-    arity: { kind: "alternating", minimum: 2 },
-    returnType: "string"
-  };
-  const tweenFunc = {
-    fn: ((seconds, ease, start, from, to) => now2("tween", startedAt(start, tween(from, to, { seconds, ease: parseEase(ease) })))),
-    argTypes: ["float", "string", "float", "float", "float"],
-    arity: { kind: "exact" },
-    returnType: "float"
-  };
-  const loopFunc = {
-    fn: ((seconds, start) => now2("loop", startedAt(start, Animation.continuous(Phase.loop(seconds))))),
-    argTypes: ["float", "float"],
-    arity: { kind: "exact" },
-    returnType: "float"
-  };
-  const glyphsFunc = {
-    fn: ((name, start, child) => {
-      const make = glyphEffect(name);
-      const fragment = asFragment(child);
-      const key = fragment.plain;
-      const at = frame2();
-      const reglyphed = reglyphText(fragment, make({ z: cellSeed(key, 0, 0) }), { key, asciiOnly: at.asciiOnly === true });
-      return textFrameAt(...drawing2("glyphs", startedAt(start, reglyphed), at), at);
-    }),
-    argTypes: ["string", "float", "liftable"],
-    arity: { kind: "exact" },
-    returnType: "T"
-  };
-  return { frames: framesFunc, stepped: steppedFunc, tween: tweenFunc, loop: loopFunc, glyphs: glyphsFunc };
-}
-
-// node_modules/.pnpm/@promptctl+rich-js@0.27.0_@promptctl+go-template-js@0.10.0_mobx@7.0.6/node_modules/@promptctl/rich-js/dist/template-bindings/index.js
-function richTextFuncs(drawnAt) {
-  return { ...richTextStyleFuncs(), ...colorFuncs(drawnAt) };
-}
-var FALLBACK_ERROR_STYLE = new Style({ color: "red", dim: true });
-
-// src/template-engine/funcs.ts
-init_globals();
-var import_path = __toESM(require_path_browserify(), 1);
-
-// src/utils/formatters.ts
-init_globals();
-var CLAUDE_MODEL_PATTERN = /^(?:(?:global|apac|au|eu|us|us-east-\d|us-west-\d|eu-west-\d|eu-central-\d)\.)?(?:anthropic\.|azure_ai\/|bedrock\/|vertex_ai\/)?claude-(?:(?<family>opus|sonnet|haiku)-(?<newMajor>\d+)(?:-(?<newMinor>\d))?|(?<oldMajor>\d+)(?:-(?<oldMinor>\d))?-(?<oldFamily>opus|sonnet|haiku))(?:[-@]\d{8})?(?:-v\d+:\d+)?(?:-latest)?$/i;
-var FRIENDLY_MODEL_PATTERN = /^(?<family>opus|sonnet|haiku)\s+(?<major>\d+)(?:\.(?<minor>\d))?$/i;
-function formatModelName(rawName) {
-  if (!rawName) {
-    return "Claude";
-  }
-  const stripped = rawName.trim().replace(/\s*\([^)]*\)\s*$/, "").replace(/\s*\[[^\]]*\]\s*$/, "").trim();
-  const match = stripped.match(CLAUDE_MODEL_PATTERN);
-  if (match?.groups) {
-    const { family, newMajor, newMinor, oldMajor, oldMinor, oldFamily } = match.groups;
-    const modelFamily = family || oldFamily;
-    const major = newMajor || oldMajor;
-    const minor = newMinor || oldMinor;
-    if (modelFamily && major) {
-      const capitalizedFamily = modelFamily.charAt(0).toUpperCase() + modelFamily.slice(1).toLowerCase();
-      const version = minor ? `${major}.${minor}` : major;
-      return `${capitalizedFamily} ${version}`;
-    }
-  }
-  const friendly = stripped.match(FRIENDLY_MODEL_PATTERN);
-  if (friendly?.groups) {
-    const family = friendly.groups.family;
-    const major = friendly.groups.major;
-    const minor = friendly.groups.minor;
-    const capitalizedFamily = family.charAt(0).toUpperCase() + family.slice(1).toLowerCase();
-    const version = minor ? `${major}.${minor}` : major;
-    return `${capitalizedFamily} ${version}`;
-  }
-  return stripped || rawName;
-}
-function shortenModelName(formatted) {
-  const match = formatted.match(FRIENDLY_MODEL_PATTERN);
-  if (!match?.groups) return formatted;
-  const family = match.groups.family;
-  const major = match.groups.major;
-  const minor = match.groups.minor;
-  const initial2 = family.charAt(0).toUpperCase();
-  const version = minor ? `${major}.${minor}` : major;
-  return `${initial2}${version}`;
-}
-function abbreviatePath(path31) {
-  const segments = path31.split("/");
-  const lastIndex = segments.length - 1;
-  return segments.map((seg2, i2) => {
-    if (i2 === lastIndex) return seg2;
-    const abbreviated = seg2.match(/^\.*./);
-    return abbreviated ? abbreviated[0] : seg2;
-  }).join("/");
-}
-function formatInteger(n) {
-  return n.toLocaleString();
-}
-
-// src/template-engine/cascade.ts
-init_globals();
-function parseCascadeStops(specs) {
-  if (specs.length === 0) {
-    throw new Error('a cascade needs at least one stop, e.g. "0:calm"');
-  }
-  const stops = [];
-  for (const [i2, spec] of specs.entries()) {
-    const cut = spec.indexOf(":");
-    const at = cut < 0 ? Number.NaN : Number(spec.slice(0, cut));
-    if (!Number.isFinite(at)) {
-      throw new Error(
-        `cascade stop ${i2} ("${spec}") must be "<position>:<result>", e.g. "80:hot" \u2014 the position must be a number`
-      );
-    }
-    const prev = stops[i2 - 1];
-    if (prev !== void 0 && at < prev.at) {
-      throw new Error(
-        `cascade stops must be in ascending position order; stop ${i2} at ${at} follows stop ${i2 - 1} at ${prev.at}`
-      );
-    }
-    stops.push({ at, text: spec.slice(cut + 1) });
-  }
-  return stops;
-}
-function cascadeAt(value, stops) {
-  if (!Number.isFinite(value)) {
-    throw new Error(`a cascade needs a finite value, got ${value}`);
-  }
-  let lower2 = -1;
-  while (lower2 + 1 < stops.length && stops[lower2 + 1].at <= value) lower2++;
-  return (lower2 < 0 ? stops[0] : stops[lower2]).text;
-}
-
-// src/template-engine/sparkline.ts
-init_globals();
-var SPARK_LEVELS = [
-  "\u2581",
-  // ▁
-  "\u2582",
-  // ▂
-  "\u2583",
-  // ▃
-  "\u2584",
-  // ▄
-  "\u2585",
-  // ▅
-  "\u2586",
-  // ▆
-  "\u2587",
-  // ▇
-  "\u2588"
-  // █
-];
-var LEVELS2 = SPARK_LEVELS.length;
-function renderSparkline(values2, width) {
-  const window2 = width === void 0 ? values2 : width <= 0 ? [] : values2.slice(-width);
-  if (window2.length === 0) return "";
-  let min3 = window2[0];
-  let max3 = window2[0];
-  for (const v of window2) {
-    if (v < min3) min3 = v;
-    if (v > max3) max3 = v;
-  }
-  const range = max3 - min3;
-  let out = "";
-  for (const v of window2) {
-    const idx = range === 0 ? 0 : Math.round((v - min3) / range * (LEVELS2 - 1));
-    out += SPARK_LEVELS[idx];
-  }
-  return out;
-}
-function parseSeries(s) {
-  const out = [];
-  for (const tok of s.split(",")) {
-    const t2 = tok.trim();
-    if (t2 === "") continue;
-    const n = Number(t2);
-    if (!Number.isFinite(n)) {
-      throw new TypeError(
-        `sparkline: non-numeric series element ${JSON.stringify(tok)}`
-      );
-    }
-    out.push(n);
-  }
-  return out;
-}
-
-// src/template-engine/optional-tail.ts
-init_globals();
-function refuseSurplus(call, optional, surplus) {
-  if (surplus.length === 0) return;
-  throw new Error(
-    `${call}: takes at most ${optional.length} optional argument${optional.length === 1 ? "" : "s"} (${optional.join(", ")}), got ${optional.length + surplus.length}`
-  );
-}
-
-// src/template-engine/funcs.ts
-var THEMES_LIST = listResolvablePaletteNames();
-var ENDCAPS_LIST = [...ENDCAPS_SHAPES];
-function ccCandybarFuncs() {
-  return {
-    // Path operations absent from sprig in this package.
-    basename: {
-      fn: (s) => (0, import_path.basename)(s),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    },
-    dirname: {
-      fn: (s) => (0, import_path.dirname)(s),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    },
-    // [LAW:decomposition] Fish-style path abbreviation — one thing: shorten
-    // every segment but the leaf. Composes over the directory template's
-    // already-collapsed output (`~`/project-relative), never duplicating that
-    // logic. Impl in utils/formatters.ts, mirroring formatModelName's split.
-    abbreviatePath: {
-      fn: (s) => abbreviatePath(s),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    },
-    // [LAW:single-enforcer] Type casts delegate to var-system/types.ts.
-    // "value" argType: these funcs enforce their own constraints and emit
-    // a useful TypeError on ambiguous input — no need for the engine gate
-    // to pre-filter (it can't describe the partial-cast semantics anyway).
-    // `int` truncates toward zero, as sprig's does: an `int` parameter refuses
-    // a fractional at the gate, so this cast is how an author says "drop it".
-    int: {
-      fn: (v) => Math.trunc(toNumber(v)),
-      argTypes: ["value"],
-      arity: { kind: "exact" }
-    },
-    string: {
-      fn: (v) => toString2(v),
-      argTypes: ["value"],
-      arity: { kind: "exact" }
-    },
-    bool: {
-      fn: (v) => toBool(v),
-      argTypes: ["value"],
-      arity: { kind: "exact" }
-    },
-    // [LAW:single-enforcer] One URL-encoding function for click-verb URL
-    // construction in templates. encodeURIComponent matches the legacy
-    // src/segments/renderer.ts toolbar/tray renderers, so DSL-emitted
-    // cc-candybar://verb/<value> URLs are byte-identical to legacy ones.
-    // [LAW:types-are-the-program] Domain primitive surfaced by chunk-7/8
-    // migration (vhi.3) — the proposal explicitly budgets "may add one or
-    // two filters during migration." This is one of those.
-    urlEncode: {
-      fn: (s) => encodeURIComponent(s),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    },
-    // [LAW:one-source-of-truth] themes() and styles() are zero-arg
-    // projections of the daemon's canonical domain lists. A picker (or a
-    // hand-authored `range`) expresses "options come from list Y" by
-    // iterating these bindings; the same lists feed the set-state
-    // validator's allow-list checks, so the rendered options are exactly
-    // the values the next click will be allowed to write. No second
-    // enumeration in user config.
-    // [LAW:dataflow-not-control-flow] A range loop over a list IS the
-    // option primitive — `{{ range themes }}…{{ end }}` produces one
-    // rendered cell per allowed value. Adding a theme adds a cell;
-    // removing a theme removes a cell; no template branch on "how many
-    // themes are there."
-    themes: {
-      fn: () => THEMES_LIST,
-      argTypes: [],
-      arity: { kind: "exact" }
-    },
-    endcaps: {
-      fn: () => ENDCAPS_LIST,
-      argTypes: [],
-      arity: { kind: "exact" }
-    },
-    // [LAW:effects-at-boundaries] Pure trend renderer: a numeric series (the
-    // daemon-owned ring, projected through the payload as a delimited string)
-    // becomes a unicode mini-graph. The series crosses the scalar var-system
-    // seam as a string, so the FuncMap slot is "string"; `parseSeries` decodes
-    // it and `renderSparkline` draws it — neither accumulates state. The
-    // optional trailing "int" slot caps the glyph count to fit a cell: Go spells
-    // an optional parameter as a variadic one, so the gate owns the minimum and
-    // the body refuses a second cap. Returns a bare string;
-    // the engine lifts it to RichText so the segment's fg/bg palette colors the
-    // whole graph — no per-glyph color math here.
-    sparkline: {
-      fn: (series, width, ...extra) => {
-        refuseSurplus("sparkline", ["width"], extra);
-        return renderSparkline(parseSeries(series), width);
-      },
-      argTypes: ["string", "int"],
-      arity: { kind: "variadic" }
-    },
-    // A threshold cascade whose result is TEXT (brandon-template-funcs-jku): the
-    // same `<value> <stops…>` shape `{{ ramp }}` takes, minus the easing, because
-    // interpolating between two words is meaningless. It needs no palette — the
-    // results are the author's own strings — so unlike `{{ gauge }}` it lives here
-    // beside the sparkline rather than in render/segment-color.ts.
-    //
-    // Returns a bare string, which the engine lifts, so a cascade composes inside
-    // any template position a word can occupy — including a `fg:`, where it
-    // replaces the nested `if` chain that could not be read as a cascade at all.
-    cascade: {
-      fn: (value, ...stops) => cascadeAt(value, parseCascadeStops(stops)),
-      argTypes: ["float", "string"],
-      arity: { kind: "variadic" }
-    }
-  };
-}
-var MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1e3;
-function etaMinutes(usedPercentage, resetsAtSec, windowMinutes, nowMs) {
-  const elapsedMs2 = windowMinutes * 6e4 - (resetsAtSec * 1e3 - nowMs);
-  if (elapsedMs2 < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0) return -1;
-  const pctPerMs = usedPercentage / elapsedMs2;
-  return Math.max(0, Math.round((100 - usedPercentage) / pctPerMs / 6e4));
-}
-var relativeTimeFuncs = (clock) => ({
-  // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
-  // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
-  // `formatResetCountdown` helper (block/weekly, which adds the minute in
-  // progress) and the cacheTimer warmth countdown (numeric `le` thresholds,
-  // 0 = cold).
-  minutesUntilReset: {
-    fn: (epochSeconds) => Math.round(
-      Math.max(0, epochSeconds * 1e3 - clock.now().getTime()) / 6e4
-    ),
-    // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
-    // fractional or precision-losing carrier at the gate.
-    argTypes: ["int"],
-    arity: { kind: "exact" }
-  },
-  // `etaMinutes <used %> <resets at, epoch s> <window minutes>` — the bundled
-  // `block.etaMinutes`/`weekly.etaMinutes` variables.
-  etaMinutes: {
-    fn: (used, resetsAt, windowMinutes) => etaMinutes(used, resetsAt, windowMinutes, clock.now().getTime()),
-    argTypes: ["float", "int", "int"],
-    arity: { kind: "exact" }
-  }
-});
-function formatterFuncs() {
-  return {
-    // ─── Locale-grouped integer (context's "50,000") ──────────────────
-    // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
-    // (not migrated to a DSL helper). toLocaleString reads the host locale the
-    // daemon inherits, so grouping is locale-correct (en_US "50,000" /
-    // de_DE "50.000"). A regex helper would be a second, locale-blind producer
-    // of grouping policy — same parsing/formatting boundary that keeps
-    // formatModelName here.
-    formatInteger: {
-      fn: (n) => formatInteger(n),
-      // [LAW:types-are-the-program] Integer grouping is meaningful only for an
-      // integer; `int` rejects a fractional/precision-losing carrier at the gate.
-      argTypes: ["int"],
-      arity: { kind: "exact" }
-    },
-    // ─── Numeric helper (block/weekly's Math.round of pct) ────────────
-    // [LAW:one-source-of-truth] Math.round is a JS built-in shared between
-    // legacy and DSL — no wrapper indirection makes sense for it. The
-    // formatters.ts module documents domain-meaningful rules; rounding is
-    // not domain-meaningful, so it stays here.
-    round: {
-      fn: (n) => Math.round(n),
-      // [LAW:types-are-the-program] round takes a fractional value (e.g. a
-      // percentage) → `float` admits any finite number.
-      argTypes: ["float"],
-      arity: { kind: "exact" }
-    },
-    // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
-    // [LAW:one-source-of-truth] formatModelName / shortenModelName are regex-
-    // based normalizers; the DSL function set has no regex primitive, so the
-    // only honest way to express them is to wrap the canonical impls. The
-    // model binding can then move from "echo display_name verbatim" (only
-    // byte-parity for friendly names) to "echo normalized model name" (full
-    // behavioral parity, including raw IDs like "claude-sonnet-4-6").
-    formatModelName: {
-      fn: (raw) => formatModelName(raw),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    },
-    shortenModelName: {
-      fn: (formatted) => shortenModelName(formatted),
-      argTypes: ["string"],
-      arity: { kind: "exact" }
-    }
-  };
-}
-
-// src/template-engine/engine.ts
-var drawing = null;
-function bindClock(at, timeline) {
-  if (drawing !== null) {
-    throw new Error("a draw is already in progress: draws do not nest");
-  }
-  const bound = {
-    at,
-    timeline,
-    frame: {
-      time: at,
-      onHold: ({ nextChange }) => {
-        bound.soonest = Math.min(bound.soonest, nextChange);
-      }
-    },
-    soonest: Infinity
-  };
-  drawing = bound;
-  return {
-    heard: () => bound.soonest,
-    [Symbol.dispose]: () => {
-      drawing = null;
-    }
-  };
-}
-function drawInProgress(read2) {
-  if (isComputingDerivation()) {
-    throw new Error(
-      `the clock was read by a value that keeps its answer (${read2}): a template reaching a time variable or a clock function by a name it does not spell (index, get) is not known to read the instant \u2014 name it: {{ .clock }}`
-    );
-  }
-  if (drawing === null) {
-    throw new Error(`the clock was read outside a draw (${read2})`);
-  }
-  return drawing;
-}
-var CLOCK = {
-  now: () => dateOf(drawInProgress("now").at),
-  frame: () => drawInProgress("frame").frame,
-  timeline: () => drawInProgress("timeline").timeline
-};
-function animationPair(frame2, timeline) {
-  const { frames, stepped: stepped2 } = animationFuncs(
-    frame2,
-    timeline === void 0 ? {} : { timeline }
-  );
-  if (frames === void 0 || stepped2 === void 0) {
-    throw new Error(
-      "rich-js's animationFuncs no longer registers frames and stepped"
-    );
-  }
-  return { frames, stepped: stepped2 };
-}
-var SPRIG_CLOCK_READERS = /* @__PURE__ */ new Set(["now", "ago"]);
-function sprigDatetimeWhere(clock, readsClock) {
-  return Object.fromEntries(
-    Object.entries(sprigDatetime(clock)).filter(
-      ([name]) => SPRIG_CLOCK_READERS.has(name) === readsClock
-    )
-  );
-}
-var SPRIG_DATE_FUNCS = sprigDatetimeWhere(() => {
-  throw new Error(
-    "a sprig date function other than now and ago read the clock: add it to SPRIG_CLOCK_READERS"
-  );
-}, false);
-var CLOCK_FACTORIES = [
-  (clock) => sprigDatetimeWhere(clock.now, true),
-  (clock) => animationPair(clock.frame, clock.timeline),
-  (clock) => Object.fromEntries(
-    Object.entries(animationPair(clock.frame)).map(([name, func]) => [
-      `realtime${name.replace(/^./, (c) => c.toUpperCase())}`,
-      func
-    ])
-  ),
-  relativeTimeFuncs
-];
-function clockFuncs(factories) {
-  return Object.assign({}, ...factories.map((factory) => factory(CLOCK)));
-}
-var CLOCK_FUNCTIONS = new Set(
-  Object.keys(clockFuncs(CLOCK_FACTORIES))
-);
-function engineClockFunctions(extra) {
-  return /* @__PURE__ */ new Set([...CLOCK_FUNCTIONS, ...Object.keys(clockFuncs(extra))]);
-}
-var DEPTH_BINDINGS = { readableOn: readableOnFunc };
-function createCcCandybarEngine(opts) {
-  const { drawnAt, extraFuncs } = opts;
-  const depth = () => ({ depth: drawnAt() });
-  return createEngine({
-    fromString: (s) => new RichText(s),
-    toString: (rt) => rt.plain,
-    // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
-    // prints as Go prints a map, instead of leaking the object into the
-    // fragments as if it were text.
-    isT: (v) => v instanceof RichText,
-    // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
-    // not silently produce "<no value>". Callers (SourceRegistry, segments)
-    // depend on MissingFieldError to drive varDefault / defaultEmptyValue.
-    missingKey: "error",
-    funcs: {
-      ...sprigDefaults(),
-      ...sprigStrings(),
-      ...sprigLists(),
-      ...sprigMath(),
-      ...sprigConversions(),
-      // `fail` is how a stand-in for a dropped plugin's helper says why.
-      ...sprigFlow(),
-      // [LAW:types-are-the-program] `dict` is the substrate primitive a helper
-      // uses to receive more than one input through its single dot arg:
-      // `{{ template "budgetStatus" (dict "cost" .x "budget" .y "warn" .z) }}`.
-      // It makes a multi-input formatter's domain exactly {named scalars},
-      // decoupled from any payload's nesting — no per-payload helper variant.
-      ...sprigDicts(),
-      ...SPRIG_DATE_FUNCS,
-      ...richTextFuncs(depth),
-      ...Object.fromEntries(
-        Object.entries(DEPTH_BINDINGS).map(([name, bind]) => [
-          name,
-          bind(depth)
-        ])
-      ),
-      // [LAW:single-enforcer] Every function that reads the time, built over
-      // the one Clock.
-      ...clockFuncs([...CLOCK_FACTORIES, ...opts.clockFuncs ?? []]),
-      // Domain-specific overrides last (wins on collision with sprig aliases).
-      // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
-      // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`
-      // so a template's `int` keeps one meaning. Position is the override policy.
-      ...ccCandybarFuncs(),
-      // [LAW:one-source-of-truth] formatter funcs delegate to
-      // src/utils/formatters.ts. The only sprig collision is `round`:
-      // formatterFuncs' Math.round shadows sprigMath's precision-aware round,
-      // registered last so the domain meaning wins (revisited by the bdi
-      // cleanup ticket).
-      ...formatterFuncs(),
-      // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
-      // engine supplies the `action` + `picker` funcs; resolver-less compile-only
-      // paths do not). Last so a feature can override on collision.
-      ...extraFuncs ?? {}
-    }
-  });
-}
-
-// src/template-engine/scope.ts
-init_globals();
-function buildScope(store) {
-  const names = new Set(store.names());
-  return makeProxy(store, names, "");
-}
-function makeProxy(store, names, prefix) {
-  return new Proxy(/* @__PURE__ */ Object.create(null), {
-    has(_, key) {
-      if (typeof key !== "string") return false;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) return !absentDocument(store, fullKey);
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) return true;
-      }
-      return false;
-    },
-    get(_, key) {
-      if (typeof key !== "string") return void 0;
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (names.has(fullKey)) {
-        if (store.getKind(fullKey) !== "document") return store.read(fullKey);
-        const doc = store.readDocument(fullKey);
-        return doc.kind === "absent" ? void 0 : unwrapDocument(fullKey, doc);
-      }
-      const nsPrefix = `${fullKey}.`;
-      for (const n of names) {
-        if (n.startsWith(nsPrefix)) {
-          return makeProxy(store, names, fullKey);
-        }
-      }
-      return void 0;
-    }
-  });
-}
-function placementScope(scope, settings) {
-  return new Proxy(scope, {
-    has: (target, key) => key === "settings" || Reflect.has(target, key),
-    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
-  });
-}
-function absentDocument(store, name) {
-  return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
-}
-function unwrapDocument(name, doc) {
-  switch (doc.kind) {
-    case "ok":
-      return doc.value;
-    case "pending":
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not completed a scan`
-      );
-    case "failed":
-      throw new Error(`variable "${name}": ${doc.reason}`);
-  }
-}
-
-// src/facts/source-identity.ts
-init_globals();
-var runOf2 = (identity2) => ({ digest: digestOf(identity2), identity: identity2 });
-function keyHashOf(value) {
-  return crypto_default.createHash("sha256").update(value).digest("hex");
-}
-
-// src/var-system/sources.ts
-var TORN_WRITE_SETTLE_MS = 250;
-function parseDuration(s) {
-  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
-  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
-  const v = parseFloat(m[1]);
-  switch (m[2]) {
-    case "ms":
-      return v;
-    case "s":
-      return v * 1e3;
-    case "m":
-      return v * 6e4;
-    case "h":
-      return v * 36e5;
-    default:
-      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
-  }
-}
-function parserIdOf(parse3) {
-  switch (parse3.kind) {
-    case "text":
-      return { kind: "text" };
-    case "regex":
-      return { kind: "regex", pattern: parse3.pattern };
-    case "json":
-      return { kind: "json" };
-  }
-}
-var UNBOUND = {
-  session: () => {
-    throw new PendingValueError(
-      "session_id",
-      "the view's session has no value yet: no view source is bound"
-    );
-  },
-  read: () => pendingOf("unread"),
-  run: () => UNREAD_RUN,
-  env: () => UNREAD_ENV,
-  drawnAt: () => {
-    throw new PendingValueError(
-      "colorCompatibility.effective",
-      "the drawn depth has no value yet: no view source is bound"
-    );
-  }
-};
-var found = (value) => ({ kind: "found", value });
-function resolvePath2(obj, path31) {
-  let cur = obj;
-  let inDocument = false;
-  for (const part of path31.split(".")) {
-    if (!inDocument && isPending(cur)) return cur;
-    if (cur == null || typeof cur !== "object") return found(void 0);
-    inDocument ||= part === "value" && cur.kind === "ok";
-    cur = cur[part];
-  }
-  return !inDocument && isPending(cur) ? cur : found(cur);
-}
-function sourceReading(name, resolved) {
-  if (resolved.kind === "pending") return resolved;
-  const raw = resolved.value;
-  if (raw === void 0) {
-    return failed(
-      `variable "${name}": the view's payload has no "${name}": its declaration did not take the source the config declares`,
-      "read"
-    );
-  }
-  const kind = typeof raw === "object" && raw !== null ? raw.kind : void 0;
-  switch (kind) {
-    case "ok":
-    case "absent":
-    case "failed":
-      return raw;
-    default:
-      return failed(
-        `variable "${name}": the view's payload holds no source reading at "${name}"`,
-        "read"
-      );
-  }
-}
-function coerceToType(raw, type3) {
-  if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") {
-    throw new TypeError(
-      `Expected string|number|boolean from payload, got ${typeof raw}`
-    );
-  }
-  if (type3 === "string") return toString2(raw);
-  if (type3 === "number") return toNumber(raw);
-  return toBool(raw);
-}
-function zeroValue(type3) {
-  if (type3 === "number") return 0;
-  if (type3 === "boolean") return false;
-  return "";
-}
-var SourceRegistry = class _SourceRegistry {
-  // defaultEmptyValue is the global fallback of last resort — the config-level
-  // `default_empty_value` from the proposal. Defaults to empty string.
-  //
-  // sessionState lets the daemon inject its singleton so state-kind variables
-  // share one MobX atom and one disk-persistence layer with the click verbs.
-  // Omitted in tests that don't exercise state vars.
-  constructor(store, defaultEmptyValue = "", sessionState, parent = null) {
-    this.store = store;
-    this.defaultEmptyValue = defaultEmptyValue;
-    this.parent = parent;
-    this.sessionState = sessionState;
-    this.cleanups.push(observe(this.subscriptionsNow, () => {
-    }));
-    this.cleanups.push(observe(this.envNow, () => {
-    }));
-  }
-  store;
-  defaultEmptyValue;
-  parent;
-  lastErrors = /* @__PURE__ */ new Map();
-  // A cache policy that cannot fire is a STANDING fault, not a read's
-  // outcome: a read that succeeds afterwards says nothing about whether the
-  // source will ever run again, so no read outcome clears it. A key template
-  // that throws lives until the key evaluates again. One map, since a
-  // variable has one policy. Observable, since the bar draws each fault as a
-  // refresh warning.
-  policyFaults = observable.map(void 0, {
-    deep: false
-  });
-  // The run's own standing fault, as the host reads it: the judge refused
-  // the run, or its watch cannot hear every place its path changes. Its own
-  // map, written by the run's fault alone, so a policy's outcome and a run's
-  // never clear each other.
-  runFaults = observable.map(void 0, {
-    deep: false
-  });
-  // Collects all cleanup callbacks (MobX reaction disposers) so dispose()
-  // tears everything down in one call.
-  cleanups = [];
-  // [LAW:one-source-of-truth] The run each `shell` and `file` source names,
-  // by variable name: a derivation of its identity's inputs, pending while a
-  // policy over values has nothing answered to name, failed while its key
-  // failed before ever answering. A derivation, never a
-  // value a reaction writes, so whoever reads the runs inside a batch — a
-  // turn handed a world state from within the host's reaction — reads them as
-  // the turn's input moved them. The host runs them (src/daemon/source-runs.ts),
-  // and their readings come back through the view's input source.
-  runs = observable.map(
-    void 0,
-    { deep: false }
-  );
-  runSourcesNow = computed(
-    () => new Map([...this.runs].map(([name, run3]) => [name, run3.get()]))
-  );
-  namedNow = computed(
-    () => new Map(
-      [...this.runSourcesNow.get()].flatMap(
-        ([name, run3]) => run3.kind === "ok" ? [[name, run3.value]] : []
-      )
-    )
-  );
-  // Every `shell` and `file` source by variable name, with the run it names
-  // or why it names none: what the render event counts, so a source whose key
-  // never answers, or failed, is still told.
-  runSources() {
-    return this.runSourcesNow.get();
-  }
-  // The run each source names, by variable name: what a request waits on and
-  // what names `check`'s stragglers.
-  namedRuns() {
-    return this.namedNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry needs run, deduped by
-  // digest, in digest order, so an output is the same whatever order a config
-  // declares in. Computed and observed for the registry's life (the
-  // constructor), so a turn in which nothing moved sorts nothing: a computed
-  // read outside a reaction is derived again on every read.
-  subscriptionsNow = computed(
-    () => [
-      ...new Map(
-        [...this.namedNow.get().values()].map((run3) => [run3.digest, run3])
-      )
-    ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, run3]) => run3)
-  );
-  subscriptions() {
-    return this.subscriptionsNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry's inputs are derived from
-  // (`bindInputs`), and so the depth the terminal draws this view's renders at
-  // — the one depth every contrast floor reads, in this registry's variable
-  // templates and in the render engine alike. Derived from the view's own
-  // settings, so a template variable whose `readableOn` read it recomputes in
-  // the turn the setting moves (edit mode staging a depth included), never at
-  // a draw.
-  inputs = observable.box(UNBOUND, {
-    deep: false
-  });
-  drawnAt = () => this.inputs.get().drawnAt();
-  // Shared engine instance — parse() is expensive; the engine is reused for
-  // all key: template compilations.
-  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
-  engine = createCcCandybarEngine({ drawnAt: this.drawnAt });
-  // The names of this registry's own async sources (shell, file), whose
-  // stored values `published` reads.
-  sourceNames = observable.array([], { deep: false });
-  // The variables this registry's `env` sources read.
-  envNames = observable.array([], { deep: false });
-  // [LAW:one-source-of-truth] What this registry needs of the session's
-  // environment: each variable once, sorted, so an output is the same
-  // whatever order a config declares in.
-  envNow = computed(
-    () => [...new Set(this.envNames)].sort(),
-    { equals: compareStructural }
-  );
-  envSubscriptions() {
-    return this.envNow.get();
-  }
-  // [LAW:one-source-of-truth] What this registry's sources have published, as
-  // one value that changes exactly when one of their stored values or
-  // standing faults does: the store writes a value only when its own compare
-  // finds it changed, and a fault is written only when its reason does, so a
-  // re-read that found what was stored moves nothing. A session's view reacts
-  // to it, and so its feed wakes on a publish that changed what the bar can
-  // show (openView).
-  publishedNow = computed(
-    () => ({
-      values: this.sourceNames.map((name) => this.store.stored(name)),
-      faults: [...this.policyFaults.values(), ...this.runFaults.values()]
-    })
-  );
-  published() {
-    return this.publishedNow.get();
-  }
-  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
-  // so tests can substitute a fake and the daemon shares its singleton.
-  // Absent in non-daemon contexts; declareState() rejects loudly in that case
-  // rather than silently returning empty strings.
-  sessionState;
-  // [LAW:one-source-of-truth] A session's view of this directory home
-  // (brandon-unfiled-3248.8ro6, step 2): a registry of its own over a store of
-  // its own, which reads through to this one. The session's values are
-  // declared there, so its inputs, its state and its derivations are its own,
-  // and what its sources fail with is recorded there; a directory value it
-  // reads is this home's one node, and its failure this home's one record. It
-  // shares the daemon's session state, and is disposed on its
-  // own: a session leaving the directory disposes nothing of it.
-  view() {
-    return new _SourceRegistry(
-      new VariableStore(this.store.clock, this.store),
-      this.defaultEmptyValue,
-      this.sessionState,
-      this
-    );
-  }
-  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
-  // variable it declares lives there, and the renderer reads back through it.
-  // Exposing it read-only lets a caller that already holds the registry obtain
-  // the one store without threading a second reference that could diverge (the
-  // action runtime reads current values from this exact store).
-  get variableStore() {
-    return this.store;
-  }
-  // ─── Synchronous source kinds ─────────────────────────────────────────────
-  // literal: type inferred from value; box written once at declaration and never again.
-  declareLiteral(name, value) {
-    this.store.defineBox(name, typeOf(value), value);
-  }
-  // A document that is a known failure for as long as it is declared.
-  declareFailedDocument(name, reason) {
-    this.store.defineDocument(name, failed(reason, "parse"));
-  }
-  // A plugin's source: a document derived from the reading its view's payload
-  // carries at the source's own name — ok, absent or failed as the storage
-  // owner read the session's file, or pending while it has not answered.
-  // [LAW:no-silent-failure] A payload with nothing there is a declaration
-  // that did not take the source the config declares: a bug, read as a failure
-  // naming the variable, never as absent.
-  declareSourceDocument(name) {
-    this.store.defineDerivedDocument(
-      name,
-      () => sourceReading(name, this.inputs.get().read(name))
-    );
-  }
-  // [LAW:single-enforcer] A handle the registry's owner holds for as long as
-  // the registry lives — a render state's hold on a plugin's storage folder —
-  // released by the registry's one teardown (`dispose`), with everything else
-  // it holds.
-  own(release3) {
-    this.cleanups.push(release3);
-  }
-  // input: a derived value of its path in the bound InputSource, cast to its
-  // type. [LAW:types-are-the-program] Before its source answers it holds no
-  // value: it is not answered yet, never its default, which answers a payload
-  // that lacks the path (brandon-unfiled-3248.8ro6). A path the draw's own
-  // instant answers (DRAW_PROJECTIONS) is a projection, read by each draw.
-  declareInput(name, path31, type3, varDefault, derivation) {
-    this.store.defineDerived(
-      name,
-      type3,
-      derivation,
-      () => this.inputAt(name, path31, type3, varDefault)
-    );
-  }
-  // [LAW:single-enforcer] The one reading of an input: its path's value cast
-  // to its type, else the fallback chain with the failure recorded.
-  inputAt(name, path31, type3, varDefault) {
-    const resolved = this.inputs.get().read(path31);
-    if (resolved.kind === "pending") {
-      this.lastErrors.delete(name);
-      throw new PendingValueError(
-        name,
-        `variable "${name}" has no value yet: its source has not answered`
-      );
-    }
-    const raw = resolved.value;
-    if (raw === void 0) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        `input path "${path31}" not found in payload`
-      );
-    }
-    try {
-      const value = coerceToType(raw, type3);
-      this.lastErrors.delete(name);
-      return value;
-    } catch (e) {
-      return this.fallbackOf(
-        name,
-        type3,
-        varDefault,
-        e instanceof Error ? e.message : String(e)
-      );
-    }
-  }
-  // env: a variable of the session's environment, which the host holds and
-  // hands in as this one variable's value (`InputSource.env`). Pending until
-  // it is handed in; an unset variable is the fallback, with the reason on
-  // the variable. Always a string: env vars are text by nature.
-  declareEnv(name, envVar, varDefault) {
-    const fallback = this.stringInitial(varDefault);
-    this.store.defineBox(name, "string", pendingOf("unread"));
-    runInAction(() => this.envNames.push(envVar));
-    this.cleanups.push(
-      reaction(
-        () => this.inputs.get().env(envVar),
-        (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
-        },
-        { fireImmediately: true }
-      )
-    );
-  }
-  // ─── Async source kinds ───────────────────────────────────────────────────
-  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
-  declareShell(name, command, opts) {
-    this.declareSource(
-      name,
-      { kind: "shell", command, cwd: opts.cwd, env: opts.env },
-      opts.cache,
-      opts.parse
-    );
-  }
-  // file: read the file at path (whole, or its first line) as the text the
-  // parser sees.
-  declareFile(name, filePath2, opts) {
-    this.declareSource(
-      name,
-      { kind: "file", path: filePath2, readMode: opts.readMode ?? "whole" },
-      opts.cache,
-      opts.parse
-    );
-  }
-  // [LAW:single-enforcer] THE user-source declaration: the source's node, and
-  // the one reaction that publishes into it the reading of the run it names,
-  // as the view's input source has it (the host runs it: read → parse). The
-  // cache policy names WHICH run, through the identity it names
-  // (registerCachePolicy), never whether the node exists
-  // [LAW:dataflow-not-control-flow].
-  //
-  // [LAW:types-are-the-program] Only an answered reading is published: the
-  // node holds its fallback until the first run answers, and on a key's move
-  // it holds the old run's answer until the new run's lands — the old `ok` is
-  // simply not overwritten yet, so a key change draws no pending flash (spec
-  // section 19).
-  declareSource(name, read2, cache2, parse3) {
-    const publish = this.publisherFor(name, parse3);
-    const refreshOf = this.registerCachePolicy(name, cache2);
-    const run3 = computed(
-      () => {
-        const refresh = refreshOf();
-        return refresh.kind === "ok" ? ok(
-          runOf2({ read: read2, parse: parserIdOf(parse3), refresh: refresh.value })
-        ) : refresh;
-      },
-      // A failure is a failure whatever it says: its text is the variable's
-      // standing fault, so a key throwing a moving message moves no run.
-      {
-        equals: (a, b) => a.kind === "ok" && b.kind === "ok" ? a.value.digest === b.value.digest : a.kind === b.kind
-      }
-    );
-    runInAction(() => {
-      this.sourceNames.push(name);
-      this.runs.set(name, run3);
-    });
-    this.cleanups.push(
-      // The run's fault, as the host reads it, is the variable's standing
-      // fault for as long as this source names that run.
-      reaction(
-        () => this.runFact(name)?.fault ?? null,
-        (fault) => this.noteFault(
-          this.runFaults,
-          name,
-          fault === null ? ok(void 0) : failed(fault, "read")
-        ),
-        { fireImmediately: true }
-      ),
-      reaction(
-        () => this.runFact(name)?.reading,
-        (reading) => {
-          if (reading === void 0 || reading.kind === "pending") return;
-          const { at: _at, ...outcome } = reading;
-          publish(outcome);
-        },
-        { fireImmediately: true }
-      )
-    );
-  }
-  // The reading of the run `name` names, or nothing while its policy names
-  // none (one over values not answered yet).
-  runFact(name) {
-    const run3 = this.runs.get(name)?.get();
-    return run3?.kind === "ok" ? this.inputs.get().run(run3.value.digest) : void 0;
-  }
-  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
-  // the node it publishes: the text arms publish a string box, the json arm a
-  // document. Selected once, at declaration — the pipeline never asks again.
-  // The run parsed by the arm's own parser (source-runs.ts), so its value is
-  // the arm's type.
-  publisherFor(name, parse3) {
-    switch (parse3.kind) {
-      case "text":
-      case "regex":
-        return this.scalarPublisher(name, parse3.default);
-      case "json":
-        return this.documentPublisher(name, parse3.default);
-    }
-  }
-  scalarPublisher(name, varDefault) {
-    const fallback = this.stringInitial(varDefault);
-    this.store.defineBox(name, "string", fallback);
-    return (outcome) => {
-      this.noteOutcome(name, outcome);
-      this.store.setBox(name, orElse(outcome, fallback));
-    };
-  }
-  // A document's fallback is the declared default, or NO document: without a
-  // default the node is pending until its first scan, then holds what the scan
-  // found — absent when it had nothing to read, failed with its reason after a
-  // bad one — which the scope proxy surfaces naming the variable
-  // [LAW:no-silent-failure]: a document has no honest empty value the way a
-  // string has "".
-  //
-  // The default stands in for a run that had nothing to READ — a missing
-  // file, a command that failed, blank output — never for text that was read
-  // and is not a document (failed in its parse phase): that is a broken
-  // writer, and reads as its failure (⚠) whatever the default says
-  // (brandon-plugins-ktag.8fv).
-  //
-  // [LAW:no-ambient-temporal-coupling] A writer rewriting a file in place
-  // (truncate, then write) is caught mid-update by any read that lands
-  // between the two, and the text it sees is not a document. Text that does
-  // not parse is therefore held back while a document is showing: the document
-  // stays, and the failure is published only if no read replaces it within
-  // TORN_WRITE_SETTLE_MS — the writer's own final write is an event that
-  // re-reads and supersedes it. A writer that is truly broken shows ⚠ after
-  // that settle; a document that was never good shows it at once.
-  documentPublisher(name, varDefault) {
-    const fallback = varDefault === void 0 ? pendingOf("unread") : ok(varDefault);
-    this.store.defineDocument(name, fallback);
-    let clearSettling;
-    let showingRead = false;
-    this.cleanups.push(() => clearSettling?.());
-    return (raw) => {
-      clearSettling?.();
-      const outcome = raw;
-      this.noteOutcome(name, outcome);
-      const readText = outcome.kind === "ok" || outcome.kind === "failed" && outcome.failedAt === "parse";
-      const next = readText || varDefault === void 0 ? outcome : fallback;
-      const torn2 = showingRead && readText && outcome.kind !== "ok";
-      const show2 = () => {
-        showingRead = outcome.kind === "ok";
-        this.store.setDocument(name, next);
-      };
-      if (torn2) {
-        clearSettling = this.store.clock.after(TORN_WRITE_SETTLE_MS, show2);
-      } else {
-        show2();
-      }
-    };
-  }
-  // template: a variable whose value is derived by evaluating a go-template
-  // against the current variable store.  MobX auto-tracks every store.read()
-  // made during evaluation — no explicit dep declarations needed.
-  // [LAW:dataflow-not-control-flow] A derived template is a MobX computed, its
-  // invalidation graph built from the template's read pattern; a projection
-  // (one that reads the instant: src/config/loader/projections.ts) is derived
-  // again by every read, at the draw in progress.
-  declareTemplate(name, template, opts) {
-    const parsedTpl = this.engine.parse(template);
-    this.declareDerived(
-      name,
-      opts.type,
-      opts.derivation,
-      () => parsedTpl.evaluate(buildScope(this.store)).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // time: the instant of the draw in progress in a Go reference-time layout —
-  // a template over `now` (`{{ date <layout> now }}`), and so a projection.
-  // [LAW:one-type-per-behavior] The engine's own `date` formats it: one Go
-  // layout implementation, the one a template calling `date` gets.
-  declareTime(name, opts) {
-    const parsedTpl = this.engine.parse("{{ date .layout now }}");
-    const scope = { layout: opts.format };
-    this.declareDerived(
-      name,
-      "string",
-      "projection",
-      () => parsedTpl.evaluate(scope).map((f) => f.plain).join(""),
-      opts.varDefault
-    );
-  }
-  // [LAW:one-type-per-behavior] The one shape of a derived string variable — a
-  // template and a time variable differ only in what they compute, and a
-  // computed and a projection only in whether the store keeps the answer.
-  // Evaluated at its first read, never at declaration: a projection has no
-  // instant to read until a draw binds one, and cycles are the loader's to
-  // refuse (validateNoCycles) [LAW:single-enforcer].
-  declareDerived(name, type3, derivation, derive, fallback) {
-    this.store.defineDerived(name, type3, derivation, () => {
-      try {
-        const result = coerceToType(derive(), type3);
-        this.lastErrors.delete(name);
-        return result;
-      } catch (e) {
-        const pending2 = readPending(e);
-        if (pending2 !== void 0) {
-          this.lastErrors.delete(name);
-          throw pending2;
-        }
-        const message2 = e instanceof Error ? e.message : String(e);
-        this.recordError(name, message2);
-        if (fallback === void 0) {
-          throw new Error(`variable "${name}": ${message2}`);
-        }
-        return fallback;
-      }
-    });
-  }
-  // state: read-through to SessionState. The computed reads two deps — the
-  // bound view's session (`session()`) and SessionState itself (MobX-tracked
-  // via its internal atom). A click verb that mutates SessionState
-  // invalidates this computed.
-  // Persistence rides on SessionState's disk backing — no extra wiring.
-  //
-  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
-  // determine the result, never whether code runs.
-  declareState(name, opts) {
-    if (!this.sessionState) {
-      throw new Error(
-        `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
-      );
-    }
-    const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(void 0);
-    this.store.defineComputed(name, "string", () => {
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
-    });
-  }
-  // [LAW:one-source-of-truth] The revision of the session state this render's
-  // `state` variables read (SessionStateReader.revision), found the way they
-  // find it: through the session id the render was handed. A registry with no
-  // session state reads none — one state that never changes.
-  stateRevision() {
-    return this.sessionState !== void 0 ? this.sessionState.revision(this.session()) : 0;
-  }
-  // The session the bound view draws for (InputSource.session): pending, as
-  // every input is, before a view is bound.
-  session() {
-    return this.inputs.get().session();
-  }
-  // ─── The view's source ────────────────────────────────────────────────────
-  // [LAW:single-enforcer] What this registry's inputs, and the depth, are
-  // derived from: bound once by the view that owns the registry, whose source
-  // reads its payload as it stands. A directory binds none: it reads no
-  // payload and no depth — a source whose key reads one is a view's
-  // (src/dsl/variable-scope.ts).
-  bindInputs(source) {
-    runInAction(() => this.inputs.set(source));
-  }
-  // ─── Diagnostics ─────────────────────────────────────────────────────────
-  // Returns the recorded error for a variable, or undefined if the last
-  // resolution succeeded (or the variable has never been resolved).
-  getLastError(name) {
-    if (!this.declaredHere(name)) return this.parent?.getLastError(name);
-    const read2 = this.lastErrors.get(name);
-    const fault = this.standingFault(name);
-    if (fault === void 0) return read2;
-    return read2 === void 0 || read2.message === fault.message ? fault : {
-      timestamp: read2.timestamp,
-      message: `${fault.message}; ${read2.message}`
-    };
-  }
-  // Every variable that cannot refresh, with why: its cache policy cannot
-  // fire, or the host refused or cannot hear its run. Each render reports
-  // them (`RenderWarning` kind `refresh`), since the bar draws such a
-  // variable's last value or fallback with nothing of its own to say so.
-  cachePolicyFaults() {
-    const names = /* @__PURE__ */ new Set([
-      ...this.policyFaults.keys(),
-      ...this.runFaults.keys()
-    ]);
-    return new Map([
-      ...this.parent?.cachePolicyFaults() ?? [],
-      ...[...names].map((name) => [name, this.standingFault(name)])
-    ]);
-  }
-  // A variable's standing fault: its policy's and its run's, joined when
-  // both stand, so neither hides the other.
-  standingFault(name) {
-    const policy = this.policyFaults.get(name);
-    const run3 = this.runFaults.get(name);
-    return policy === void 0 || run3 === void 0 ? policy ?? run3 : {
-      timestamp: policy.timestamp,
-      message: `${policy.message}; ${run3.message}`
-    };
-  }
-  // Whether `name` lives in this registry's own store, not its directory's.
-  declaredHere(name) {
-    return this.store.has(name) && !(this.parent?.store.has(name) ?? false);
-  }
-  // ─── Lifecycle ────────────────────────────────────────────────────────────
-  // Tear down all TTL timers, fs watchers, MobX reactions, and in-flight
-  // reads registered by async source kinds.
-  // Call when the registry is no longer needed (e.g. on daemon shutdown or
-  // config hot-reload). Returns how many computeds the store released, for
-  // the caller's log line.
-  dispose() {
-    for (const cleanup of this.cleanups) cleanup();
-    this.cleanups.length = 0;
-    return this.store.dispose();
-  }
-  // ─── Private helpers ──────────────────────────────────────────────────────
-  // [LAW:single-enforcer] One place that maps every CachePolicy kind to the
-  // refresh of the identity the source names: a period, a watched path or
-  // nothing is the run's own refresh, fixed at declaration; a policy over what
-  // the source reads is the hash of what that answered, pending until it
-  // first answers. Adding a new policy kind means adding one case here.
-  registerCachePolicy(name, policy) {
-    switch (policy.kind) {
-      case "never":
-        return () => ok({ kind: "never" });
-      case "ttl":
-        return () => ok({ kind: "ttl", durationMs: policy.durationMs });
-      case "watch_file":
-        return () => ok({ kind: "watch_file", path: policy.path });
-      case "key": {
-        const parsedKey = this.engine.parse(policy.template);
-        return this.answeredUnder(name, () => {
-          try {
-            return ok(
-              parsedKey.evaluate(buildScope(this.store)).map((f) => f.plain).join("")
-            );
-          } catch (e) {
-            return readPending(e) !== void 0 ? pendingOf("unread") : failed(
-              `cache key: ${e instanceof Error ? e.message : String(e)}`,
-              "read"
-            );
-          }
-        });
-      }
-      case "depends_on": {
-        return this.answeredUnder(name, () => {
-          const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
-        });
-      }
-    }
-  }
-  // [LAW:one-type-per-behavior] Both policies over what a source reads — its
-  // key, the variables it depends on — name the hash of the last value what
-  // they read answered. Over a value not answered yet (a view's inputs before
-  // its first payload) they name nothing (pending) rather than reading, so a first value
-  // is one read, not a read under no value and another when the value arrives
-  // (brandon-unfiled-3248.8ro6). One that throws, or reads a value not
-  // answered, keeps the last answer, so a key failing for a moment and coming
-  // back unchanged names nothing new; what it failed with is the variable's
-  // standing fault (noteFault). One that has never answered names its
-  // failure, so the render event says failed rather than unread.
-  answeredUnder(name, reads) {
-    const answer2 = computed(reads, { equals: compareStructural });
-    this.cleanups.push(
-      reaction(
-        () => answer2.get(),
-        (now2) => this.noteFault(this.policyFaults, name, now2),
-        { fireImmediately: true }
-      )
-    );
-    let last2;
-    return () => {
-      const now2 = answer2.get();
-      if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
-    };
-  }
-  // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
-  // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
-  // backstop is the only "silent" path and exists because the caller has already
-  // recorded the error — downstream reads get a safe typed value, not an exception.
-  fallbackOf(name, type3, varDefault, errorMessage) {
-    this.recordError(name, errorMessage);
-    if (varDefault !== void 0) return varDefault;
-    try {
-      return coerceToType(this.defaultEmptyValue, type3);
-    } catch {
-      return zeroValue(type3);
-    }
-  }
-  // Initial string value for shell/file boxes before the first async run.
-  stringInitial(varDefault) {
-    if (varDefault !== void 0) return varDefault;
-    if (typeof this.defaultEmptyValue === "string")
-      return this.defaultEmptyValue;
-    return "";
-  }
-  recordError(name, message2) {
-    this.lastErrors.set(name, {
-      timestamp: this.store.clock.now(),
-      message: message2
-    });
-  }
-  // The one fold from an outcome (whether the policy can fire, whether the
-  // host can run the run) to the variable's standing fault in `faults`.
-  // A fault standing for the same reason keeps its record, so it moves
-  // nothing that draws it.
-  noteFault(faults, name, outcome) {
-    runInAction(() => {
-      if (outcome.kind !== "failed") faults.delete(name);
-      else if (faults.get(name)?.message !== outcome.reason)
-        faults.set(name, {
-          timestamp: this.store.clock.now(),
-          message: outcome.reason
-        });
-    });
-  }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
-    else
-      this.recordError(
-        name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
-      );
-  }
-};
-
 // src/render/fill.ts
 init_globals();
-
-// src/template-engine/layout.ts
-init_globals();
-function evaluateWhen(template, scope) {
-  if (template === void 0) return true;
-  const fragments = template.evaluate(scope);
-  return fragments.map((f) => f.plain).join("") !== "false";
-}
-var HIDDEN = { kind: "hidden" };
-var SHOWN = { kind: "shown" };
-function gateOf2(template, scope) {
-  try {
-    return evaluateWhen(template, scope) ? SHOWN : HIDDEN;
-  } catch (e) {
-    const pending2 = readPending(e);
-    return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-      kind: "failed",
-      message: e instanceof Error ? e.message : String(e)
-    };
-  }
-}
-function collapseToCell(cells, baseStyle) {
-  const merged = RichText.fromFragments(cells);
-  merged.end = "";
-  merged.overflow = "ignore";
-  if (baseStyle !== void 0 && !baseStyle.isNull) merged.style = baseStyle;
-  return merged;
-}
-function sizeCell(cell3, width, how) {
-  if (cell3.cellLength > width) {
-    cell3.truncate(width, { mode: how.truncate, marker: "\u2026" });
-  } else if (cell3.cellLength < width) {
-    cell3.align(how.justify, width);
-  }
-}
-function cellParts({ lead, text: text4, trail }) {
-  return [
-    ...lead === void 0 ? [] : [lead],
-    text4,
-    ...trail === void 0 ? [] : [trail]
-  ];
-}
-function heldCell({ text: text4, placement, lead, trail }) {
-  return {
-    text: unlinked(text4),
-    placement,
-    ...lead !== void 0 && { lead: unlinked(lead) },
-    ...trail !== void 0 && { trail: unlinked(trail) }
-  };
-}
-function unlinked(text4) {
-  const copy3 = text4.blankCopy(text4.plain);
-  copy3.style = resolvedStyle(text4.style).clearMetaAndLinks();
-  for (const { start, end, style } of text4.spans)
-    copy3.stylize(resolvedStyle(style).clearMetaAndLinks(), start, end);
-  return copy3;
-}
-function stripItem(cell3) {
-  const parts = cellParts(cell3);
-  if (parts.length === 1) return cell3.text;
-  const joined = collapseToCell(parts);
-  joined.style = cell3.text.style;
-  return joined;
-}
-function applySegmentLayout(cells, options) {
-  const {
-    width,
-    justify,
-    truncate,
-    baseStyle,
-    padding,
-    placement,
-    lead = [],
-    trail = []
-  } = options;
-  if (cells.length === 0) return [];
-  const cell3 = collapseToCell(cells, baseStyle).pad(padding);
-  const pad = new RichText(" ".repeat(padding));
-  const tail = {
-    placement,
-    ...lead.length > 0 && {
-      lead: collapseToCell([pad, ...lead], baseStyle)
-    },
-    ...trail.length > 0 && {
-      trail: collapseToCell([...trail, pad], baseStyle)
-    }
-  };
-  if (width === "auto") return [{ text: cell3, ...tail }];
-  const how = { justify, truncate };
-  if (width === "fill") return [{ text: cell3, fill: how, ...tail }];
-  sizeCell(cell3, width, how);
-  return [{ text: cell3, ...tail }];
-}
-
-// src/render/fill.ts
 function wrapOffsets(plain, line, indent2) {
   const held = "x".repeat(Math.min(indent2, line)).replace(/x$/, " ");
   const wrapping = held + plain;
@@ -73917,772 +76173,24 @@ function beginRecord(source, returned2) {
 }
 var HIDDEN_RECORD = { kind: "hidden" };
 
-// src/themes/index.ts
-init_globals();
-
-// src/template-engine/index.ts
-init_globals();
-
-// src/template-engine/cells.ts
-init_globals();
-function fragmentsToCells(fragments, baseStyle) {
-  const cells = [];
-  let group = [];
-  const flush = () => {
-    if (!group.length) return;
-    const cell3 = buildCell(group, baseStyle);
-    if (cell3.plain.length > 0) cells.push(cell3);
-    group = [];
-  };
-  for (const frag of fragments) {
-    const item = { frag, style: resolvedStyle(frag.style) };
-    if (item.style.link) {
-      flush();
-      const cell3 = buildCell([item], baseStyle);
-      if (cell3.plain.length > 0) cells.push(cell3);
-    } else {
-      group.push(item);
-    }
-  }
-  flush();
-  return cells;
-}
-function buildCell(items, baseStyle) {
-  const base = baseStyle !== void 0 && !baseStyle.isNull ? baseStyle : void 0;
-  const layered = items.map(
-    (item) => withStyle(item.frag, base ? base.add(item.style) : item.style)
-  );
-  const cell3 = RichText.fromFragments(layered);
-  cell3.end = "";
-  cell3.overflow = "ignore";
-  if (layered.length === 1) {
-    cell3.style = layered[0].style;
-  } else if (base !== void 0) {
-    cell3.style = base;
-  }
-  return cell3;
-}
-function withStyle(frag, style) {
-  const copy3 = frag.copy();
-  copy3.style = style;
-  return copy3;
-}
-
-// src/render/action.ts
-init_globals();
-
-// src/config/layout-ops.ts
-init_globals();
-function encodeLayoutOp(op) {
-  return op.op === "remove" ? `remove:${op.target}` : `insert:${op.segment}:${op.anchor}:${op.relation}`;
-}
-function decodeLayoutOp(token) {
-  const parts = token.split(":");
-  if (parts[0] === "remove" && parts.length === 2 && parts[1]) {
-    return { op: "remove", target: parts[1] };
-  }
-  if (parts[0] === "insert" && parts.length === 4 && parts[1] && parts[2] && (parts[3] === "before" || parts[3] === "after")) {
-    return {
-      op: "insert",
-      segment: parts[1],
-      anchor: parts[2],
-      relation: parts[3]
-    };
-  }
-  return null;
-}
-function mintPlacement(segment, anchor, trees) {
-  const taken2 = new Set(
-    trees.map(placementIds).filter((held) => held.includes(anchor)).flat()
-  );
-  const id2 = freePlacementId(segment, taken2);
-  return id2 === segment ? { seg: segment } : { seg: segment, id: id2 };
-}
-
-// src/render/action.ts
-function renderBinding(runtime, reader) {
-  if (runtime.bound === void 0) {
-    throw new Error(
-      `${reader} ran outside a render: no render bound its store and clocks`
-    );
-  }
-  return runtime.bound;
-}
-function renderLook(runtime, reader) {
-  const { look } = renderBinding(runtime, reader);
-  if (look === void 0) {
-    throw new Error(`${reader} read the render's look before it was resolved`);
-  }
-  return look;
-}
-function renderLayout(runtime, reader) {
-  const { layout } = renderBinding(runtime, reader);
-  if (layout === void 0) {
-    throw new Error(`${reader} read the render's rows before they were laid`);
-  }
-  return layout();
-}
-function bindRender(runtime, binding) {
-  if (runtime.bound !== void 0) {
-    throw new Error("a render bound a compile another render holds");
-  }
-  runtime.bound = binding;
-  return {
-    [Symbol.dispose]: () => {
-      runtime.bound = void 0;
-    }
-  };
-}
-function compileActions(parse3, actions, stateKeyToVar, perConfigDomains) {
-  const out = /* @__PURE__ */ new Map();
-  const entries = Object.entries(actions);
-  for (const [name, action2] of [
-    ...entries.filter(([, a]) => !("do" in a)),
-    ...entries.filter(([, a]) => "do" in a)
-  ]) {
-    out.set(
-      name,
-      compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, out)
-    );
-  }
-  return out;
-}
-function compileAction(parse3, name, action2, stateKeyToVar, perConfigDomains, compiled) {
-  if ("set" in action2) {
-    const stateVar = stateKeyToVar.get(action2.set) ?? action2.set;
-    if ("to" in action2) {
-      return {
-        kind: "set-literal",
-        key: action2.set,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "set-option",
-        key: action2.set,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    if ("int" in action2) {
-      return { kind: "set-int", key: action2.set, stateVar };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "set-cycle",
-        key: action2.set,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    return {
-      kind: "set-bounded",
-      key: action2.set,
-      by: action2.by
-    };
-  }
-  if ("persist" in action2) {
-    const layer = action2.layer ?? "user";
-    const stateVar = CONFIG_KEY_TO_EFFECTIVE_VAR.get(action2.persist) ?? action2.persist;
-    if ("to" in action2) {
-      return {
-        kind: "persist-literal",
-        key: action2.persist,
-        layer,
-        value: action2.to,
-        stateVar
-      };
-    }
-    if ("from" in action2) {
-      const domain = resolveOptionDomain(action2.from, perConfigDomains);
-      return {
-        kind: "persist-option",
-        key: action2.persist,
-        layer,
-        stateVar,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    if ("cycle" in action2) {
-      return {
-        kind: "persist-cycle",
-        key: action2.persist,
-        layer,
-        stateVar,
-        members: action2.cycle
-      };
-    }
-    if ("removeSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        layer,
-        op: { op: "remove", target: action2.removeSegment }
-      };
-    }
-    if ("insertSegment" in action2) {
-      return {
-        kind: "layout-op",
-        key: action2.persist,
-        layer,
-        op: {
-          op: "insert",
-          segment: action2.insertSegment,
-          anchor: action2.anchor,
-          relation: action2.relation
-        }
-      };
-    }
-    if ("insertSegmentFrom" in action2) {
-      const domain = resolveOptionDomain(
-        action2.insertSegmentFrom,
-        perConfigDomains
-      );
-      return {
-        kind: "layout-op-option",
-        key: action2.persist,
-        layer,
-        anchor: action2.anchor,
-        relation: action2.relation,
-        options: [...domain.members],
-        paletteOf: domain.paletteOf,
-        labelOf: domain.labelOf,
-        library: domain.library
-      };
-    }
-    return {
-      kind: "persist-bounded",
-      key: action2.persist,
-      layer,
-      by: action2.by
-    };
-  }
-  if ("copy" in action2) {
-    return {
-      kind: "copy",
-      text: parseActionTemplate(parse3, action2.copy, name)
-    };
-  }
-  if ("open" in action2) {
-    return {
-      kind: "open",
-      target: parseActionTemplate(parse3, action2.open, name)
-    };
-  }
-  if ("reset" in action2) {
-    return { kind: "reset", key: action2.reset, layer: action2.layer ?? "user" };
-  }
-  if ("slash" in action2) return { kind: "slash", line: action2.slash };
-  if ("run" in action2) {
-    return {
-      kind: "run",
-      name,
-      declaration: runDeclaration(action2),
-      argv: action2.run.map((item) => parseActionTemplate(parse3, item, name)),
-      env: Object.entries(action2.env).map(
-        ([variable, value]) => [variable, parseActionTemplate(parse3, value, name)]
-      )
-    };
-  }
-  if ("undo" in action2) return { kind: "undo" };
-  if ("redo" in action2) return { kind: "redo" };
-  if ("back" in action2) return { kind: "back" };
-  if ("rewind" in action2) return { kind: "rewind" };
-  if ("save" in action2) return { kind: "save", layer: action2.layer ?? "user" };
-  if ("preset" in action2) {
-    const layer = action2.layer ?? "user";
-    return action2.preset === "save" ? { kind: "preset-save", layer } : {
-      kind: "preset-delete",
-      layer,
-      name: parseActionTemplate(parse3, action2.name, name)
-    };
-  }
-  if ("themeDefault" in action2)
-    return { kind: "theme-default-save", layer: action2.layer ?? "user" };
-  const [head, ...rest2] = action2.do.map((member) => {
-    const c = compiled.get(member);
-    if (c === void 0) {
-      throw new Error(
-        `action "${name}" fires "${member}", which is not declared in this config`
-      );
-    }
-    return c;
-  });
-  return { kind: "do", head, rest: rest2 };
-}
-function presentedAction(c) {
-  return c.kind === "do" ? presentedAction(c.head) : c;
-}
-function bindsTemplateValue(c) {
-  const presented = presentedAction(c);
-  switch (presented.kind) {
-    case "set-option":
-    case "set-int":
-    case "persist-option":
-    case "layout-op-option":
-      return true;
-    case "set-literal":
-    case "set-bounded":
-    case "set-cycle":
-    case "copy":
-    case "open":
-    case "persist-literal":
-    case "persist-bounded":
-    case "persist-cycle":
-    case "reset":
-    case "layout-op":
-    case "undo":
-    case "redo":
-    case "back":
-    case "rewind":
-    case "save":
-    case "preset-save":
-    case "preset-delete":
-    case "theme-default-save":
-    case "slash":
-    case "run":
-    case "do":
-      return false;
-  }
-}
-function parseActionTemplate(parse3, src, name) {
-  try {
-    return parse3(src);
-  } catch (e) {
-    throw new Error(
-      `Template parse error in actions.${name}: ${e.message}`,
-      { cause: e }
-    );
-  }
-}
-function readVar(store, name) {
-  return store.has(name) ? toString2(store.read(name)) : "";
-}
-function clickSession(runtime, reader) {
-  return renderBinding(runtime, reader).registry.session();
-}
-function evalTemplate(tpl, scope) {
-  return tpl.evaluate(scope).map((f) => f.plain).join("");
-}
-function linkFragment(text4, url, active2, base) {
-  const rt = new RichText(text4, {
-    style: Style.combine([base, new Style({ link: url, bold: active2 })])
-  });
-  rt.overflow = "ignore";
-  rt.end = "";
-  return rt;
-}
-function linkOver(cell3, url, current = false) {
-  const link = new Style({ link: url, bold: current ? true : void 0 });
-  const linked = new RichText(cell3.plain, {
-    style: Style.combine([resolvedStyle(cell3.style), link])
-  });
-  for (const span of cell3.spans) {
-    linked.stylize(
-      Style.combine([resolvedStyle(span.style), link]),
-      span.start,
-      span.end
-    );
-  }
-  linked.overflow = "ignore";
-  linked.end = "";
-  return linked;
-}
-function cycleIndex(c, store) {
-  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
-}
-function realize(c, display, boundValue, store, sessionId2, signer) {
-  switch (c.kind) {
-    case "set-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, c.value] }],
-        active: current === c.value
-      };
-    }
-    case "set-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-int": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, value] }],
-        active: current === value
-      };
-    }
-    case "set-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [{ verb: VERB_SET_STATE, args: [sessionId2, c.key, next] }],
-        active: false
-      };
-    }
-    case "set-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_STATE,
-            args: [sessionId2, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "copy":
-      return {
-        effects: [
-          {
-            verb: VERB_COPY,
-            args: [evalTemplate(c.text, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    case "open":
-      return {
-        effects: [
-          {
-            verb: VERB_OPEN_VSCODE,
-            args: [evalTemplate(c.target, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
-    // verbatim (same literal/option/cycle/bounded semantics), only the wire
-    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
-    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
-    // the write durable, not the click itself.
-    case "persist-literal": {
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, c.value] }
-        ],
-        active: current === c.value
-      };
-    }
-    case "persist-option": {
-      const value = boundValue ?? display;
-      const current = readVar(store, c.stateVar);
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, value] }
-        ],
-        active: current === value
-      };
-    }
-    case "persist-cycle": {
-      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length];
-      return {
-        effects: [
-          { verb: VERB_SET_CONFIG, args: [sessionId2, c.layer, c.key, next] }
-        ],
-        active: false
-      };
-    }
-    case "persist-bounded": {
-      return {
-        effects: [
-          {
-            verb: VERB_STEP_CONFIG,
-            args: [sessionId2, c.layer, c.key, String(c.by)]
-          }
-        ],
-        active: false
-      };
-    }
-    case "reset":
-      return {
-        effects: [
-          { verb: VERB_RESET_CONFIG, args: [sessionId2, c.layer, c.key] }
-        ],
-        active: false
-      };
-    // [LAW:one-source-of-truth] No key to carry — the click just says "step
-    // the history", and which entry moves is entirely server-side state
-    // (never wire input, so there is nothing here to gate). Never "active":
-    // a history step is a one-shot trigger, not a current-selection toggle.
-    case "undo":
-      return {
-        effects: [{ verb: VERB_UNDO, args: [sessionId2] }],
-        active: false
-      };
-    case "redo":
-      return {
-        effects: [{ verb: VERB_REDO, args: [sessionId2] }],
-        active: false
-      };
-    case "back":
-      return {
-        effects: [{ verb: VERB_BACK, args: [sessionId2] }],
-        active: false
-      };
-    // One-shot, like undo: which steps it takes back is server-side state.
-    case "rewind":
-      return {
-        effects: [{ verb: VERB_REWIND, args: [sessionId2] }],
-        active: false
-      };
-    // [LAW:no-silent-failure] A save that asks writes the layer its click
-    // binds, and one drawn without a layer to bind is the author's error,
-    // said on the bar — never a write to some layer it did not name.
-    case "save": {
-      const layer = c.layer === "ask" ? layerRoleOf(boundValue) : c.layer;
-      if (layer === null)
-        throw new Error(
-          `a save that asks which layer it writes binds the layer as its value \u2014 {{ action "<save>" "\u{1F4BE} project" "project" }} \u2014 and ${boundValue === void 0 ? "none was bound" : `${JSON.stringify(boundValue)} is not one of ${LAYER_ROLES.join(", ")}`}`
-        );
-      return {
-        effects: [{ verb: VERB_SAVE, args: [sessionId2, layer] }],
-        active: false
-      };
-    }
-    // Never "active": one-shot triggers, like save.
-    case "preset-save":
-      return {
-        effects: [{ verb: VERB_SAVE_PRESET, args: [sessionId2, c.layer] }],
-        active: false
-      };
-    case "theme-default-save":
-      return {
-        effects: [
-          { verb: VERB_SAVE_THEME_DEFAULT, args: [sessionId2, c.layer] }
-        ],
-        active: false
-      };
-    case "preset-delete":
-      return {
-        effects: [
-          {
-            verb: VERB_DELETE_PRESET,
-            args: [sessionId2, c.layer, evalTemplate(c.name, buildScope(store))]
-          }
-        ],
-        active: false
-      };
-    // Never "active": typing a command is a one-shot trigger.
-    case "slash":
-      return {
-        effects: [{ verb: VERB_SLASH, args: [sessionId2, c.line] }],
-        active: false
-      };
-    // [LAW:one-source-of-truth] The one evaluation of a run: here, in the
-    // draw, as copy's text is. The link carries what was evaluated and its
-    // mac, so the click runs what the bar showed and nothing a URL made up.
-    // Never "active": a run is a one-shot trigger.
-    case "run": {
-      const scope = buildScope(store);
-      const evaluated2 = JSON.stringify({
-        run: c.argv.map((item) => evalTemplate(item, scope)),
-        env: Object.fromEntries(
-          c.env.map(([variable, value]) => [
-            variable,
-            evalTemplate(value, scope)
-          ])
-        )
-      });
-      const mac = signer.sign({
-        sessionId: sessionId2,
-        action: c.name,
-        declaration: c.declaration,
-        evaluated: evaluated2
-      });
-      return {
-        effects: [
-          { verb: VERB_RUN, args: [sessionId2, c.name, evaluated2, mac] }
-        ],
-        active: false
-      };
-    }
-    // [LAW:one-source-of-truth] The op is fixed at compile time (see
-    // compileAction) — the click just delivers it. `apply-layout-op`'s
-    // handler does read-current-append-write (see verbs/index.ts), unlike
-    // persist-literal's plain overwrite, so it is its own verb rather than
-    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
-    // trigger, not a current-selection toggle.
-    case "layout-op":
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.layer, c.key, encodeLayoutOp(c.op)]
-          }
-        ],
-        active: false
-      };
-    case "do": {
-      const head = realize(
-        c.head,
-        display,
-        boundValue,
-        store,
-        sessionId2,
-        signer
-      );
-      return {
-        effects: [
-          ...head.effects,
-          ...c.rest.flatMap(
-            (m) => realize(m, display, void 0, store, sessionId2, signer).effects
-          )
-        ],
-        active: head.active
-      };
-    }
-    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
-    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
-    // relation are the compiled literals. Same wire shape a literal layout-op
-    // emits, so the daemon's apply-layout-op handler and undo/redo need no
-    // knowledge of where the segment name came from. Never "active": a
-    // structural edit is a one-shot trigger, not a current-selection toggle.
-    case "layout-op-option": {
-      const segment = boundValue ?? display;
-      const op = {
-        op: "insert",
-        segment,
-        anchor: c.anchor,
-        relation: c.relation
-      };
-      return {
-        effects: [
-          {
-            verb: VERB_APPLY_LAYOUT_OP,
-            args: [sessionId2, c.layer, c.key, encodeLayoutOp(op)]
-          }
-        ],
-        active: false
-      };
-    }
-  }
-}
-function selectDisplay(name, action2, displays, store) {
-  if (displays.length === 0) {
-    throw new Error(`action "${name}" needs a display (the clickable text)`);
-  }
-  if (action2.kind === "set-cycle" || action2.kind === "persist-cycle") {
-    const display = pickCycleDisplay(
-      `action "${name}"`,
-      displays,
-      action2.members.length,
-      cycleIndex(action2, store)
-    );
-    return { display, boundValue: void 0 };
-  }
-  if (displays.length > 2) {
-    throw new Error(
-      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`
-    );
-  }
-  return { display: displays[0], boundValue: displays[1]?.plain };
-}
-function renderAction(name, displays, runtime) {
-  const declared = runtime.compiled.get(name);
-  if (!declared) {
-    throw new Error(`action "${name}" is not declared in this config`);
-  }
-  const store = renderBinding(runtime, `action "${name}"`).store;
-  const { display, boundValue } = selectDisplay(
-    name,
-    presentedAction(declared),
-    displays,
-    store
-  );
-  const sessionId2 = clickSession(runtime, `action "${name}"`);
-  const { effects, active: active2 } = realize(
-    declared,
-    display.plain,
-    boundValue,
-    store,
-    sessionId2,
-    runtime.signer
-  );
-  return linkOver(display, effectsUrl(effects), active2);
-}
-function actionFuncs(runtime) {
-  return {
-    action: {
-      fn: (name, ...displays) => renderAction(name, displays, runtime),
-      argTypes: ["string", "liftable"],
-      arity: { kind: "variadic" },
-      returnType: "T"
-    }
-  };
-}
-
 // src/render/disclosure-close.ts
 init_globals();
 function disclosureCloseFragment(sessionId2, key) {
   return linkFragment(
     DISCLOSURE_GLYPH_CLOSE,
-    effectsUrl([
-      {
+    {
+      kind: "action",
+      effect: {
         verb: VERB_SET_STATE,
         args: [sessionId2, key, DISCLOSURE_CLOSED]
       }
-    ]),
+    },
     false
   );
 }
 
 // src/render/picker.ts
 init_globals();
-
-// src/render/band-style.ts
-init_globals();
-function stateCell(palette, background, drawnAt) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(background),
-    color: ColorSpec.fromRgba(textOn2(palette, background, drawnAt))
-  });
-}
-function decoratedCell({
-  tint,
-  text: text4
-}) {
-  return new Style({
-    bgcolor: ColorSpec.fromRgba(tint),
-    color: ColorSpec.fromRgba(text4)
-  });
-}
-function closeOn(palette, ground, drawnAt) {
-  return new Style({
-    color: ColorSpec.fromRgba(
-      ensureContrast(
-        palette.get(DISCLOSURE_CLOSE_ROLE),
-        ground,
-        TEXT_MIN_CONTRAST,
-        drawnAt
-      )
-    )
-  });
-}
-function closeCell(palette, background, drawnAt) {
-  return Style.combine([
-    stateCell(palette, background, drawnAt),
-    closeOn(palette, background, drawnAt)
-  ]);
-}
-function bandItemStyle(active2, step4, drawnAt) {
-  return decoratedCell(
-    bandItem(active2.palette, active2.disclosure, step4, drawnAt)
-  );
-}
 
 // src/render/option-paint.ts
 init_globals();
@@ -74787,65 +76295,6 @@ function chunk2(items, size) {
 }
 function fitCells(text4, width) {
   return new RichText(text4).truncate(width, { marker: "\u2026" }).plain;
-}
-
-// src/render/active-segment.ts
-init_globals();
-function createActiveSegmentRef(drawnAt) {
-  return { current: null, drawnAt };
-}
-function openSegment(ref, segName, placementId2, palette, disclosure, tint, text4) {
-  const active2 = {
-    segName,
-    placementId: placementId2,
-    palette,
-    disclosure,
-    tint,
-    text: text4,
-    bg: void 0,
-    drops: []
-  };
-  ref.current = active2;
-  return active2;
-}
-function inSegment(ref, place, run3) {
-  return publishing(
-    ref,
-    () => run3(
-      openSegment(
-        ref,
-        place.segName,
-        place.placementId,
-        place.palette,
-        place.disclosure,
-        place.tint,
-        place.text
-      )
-    )
-  );
-}
-function outsideSegments(ref, run3) {
-  return publishing(ref, () => {
-    ref.current = null;
-    return run3();
-  });
-}
-function publishing(ref, run3) {
-  const prior = ref.current;
-  try {
-    return run3();
-  } finally {
-    ref.current = prior;
-  }
-}
-function requireActiveSegment(ref, spelling) {
-  const active2 = ref.current;
-  if (active2 === null) {
-    throw new Error(
-      `${spelling} is only available inside a segment's templates \u2014 there is no active segment here. Segment-scoped functions cannot be used in variable declarations or layout-node "when" predicates, which are evaluated outside any segment.`
-    );
-  }
-  return active2;
 }
 
 // src/render/picker.ts
@@ -75009,21 +76458,21 @@ function renderPicker(applyName, apply, page2, close, paged, runtime, itemPaint,
   if (pageIdx > 0) {
     nav.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
-  const next = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
+  const next2 = pageIdx < pages.length - 1 ? [linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false)] : [];
   if (catalogue === void 0) {
     const indices = pageSections.flatMap((section) => section.indices);
     return [
       assemble([
         ...nav,
         ...indices.map((i2) => optionCell(gridFaces[i2], i2)),
-        ...next
+        ...next2
       ])
     ];
   }
   const bold = new Style({ bold: true });
   const position = pages.length > 1 ? ` ${pageIdx + 1}/${pages.length}` : "";
   const where = pageSections.length === 1 ? [new RichText(`${pageSections[0].label}${position}`, { style: bold })] : [];
-  const lines2 = [assemble([...nav, ...where, ...next])];
+  const lines2 = [assemble([...nav, ...where, ...next2])];
   for (const section of pageSections) {
     if (pageSections.length > 1) {
       lines2.push(assemble([new RichText(section.label, { style: bold })]));
@@ -75733,1037 +77182,6 @@ function variableScopes(config) {
     SCOPES.set(config, scopes);
   }
   return scopes;
-}
-
-// src/dsl/parts.ts
-init_globals();
-
-// src/dsl/node-registry.ts
-init_globals();
-
-// src/render/split-lines.ts
-init_globals();
-function splitCellsIntoLines(cells) {
-  const lines2 = [];
-  let current = [];
-  for (const cell3 of cells) {
-    if (!cell3.contains("\n")) {
-      current.push(cell3);
-      continue;
-    }
-    const pieces = cell3.split("\n");
-    current.push(pieces[0]);
-    for (let i2 = 1; i2 < pieces.length; i2++) {
-      lines2.push(current);
-      current = [pieces[i2]];
-    }
-  }
-  lines2.push(current);
-  return lines2;
-}
-
-// src/dsl/node-registry.ts
-function rowIdentities(lines2) {
-  const counts = /* @__PURE__ */ new Map();
-  return lines2.map((line) => {
-    const kind = `${line.place}.${line.band}`;
-    const nth = counts.get(kind) ?? 0;
-    counts.set(kind, nth + 1);
-    return { line, row: `${kind}#${nth}` };
-  });
-}
-var visibilityOf = (gate2) => gate2.kind === "failed" ? HIDDEN : gate2;
-function within2(parent, own2) {
-  return own2.kind === "shown" || own2.kind === "failed" && parent.kind === "pending" ? parent : own2;
-}
-function returnedBy(id2, lines2) {
-  const own2 = [];
-  const deeper = [];
-  let ground;
-  for (const line of lines2) {
-    (line.band === "own" ? own2 : deeper).push(line);
-    ground ??= line.cells.find((cell3) => cell3.placement.id === id2)?.placement.ground;
-  }
-  return {
-    drawing: ground === void 0 ? null : { own: own2, opened: deeper.length > 0, ground },
-    deeper
-  };
-}
-function heldLine(line) {
-  return { ...line, cells: line.cells.map(heldCell) };
-}
-function composeBlocks(direction, blocks) {
-  const above = blocks.flatMap((b) => b.filter((l) => l.place === "above"));
-  const flow3 = blocks.map((b) => b.filter((l) => l.place === "flow"));
-  return [...above, ...composeFlow(direction, flow3)];
-}
-function composeFlow(direction, blocks) {
-  switch (direction) {
-    case "vertical":
-      return blocks.flatMap((b) => b);
-    case "horizontal": {
-      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      if (height === 0) return [];
-      const row0 = {
-        cells: blocks.flatMap((b) => b[0]?.cells ?? []),
-        band: "own",
-        place: "flow"
-      };
-      const drops = blocks.flatMap((b) => b.slice(1));
-      return [row0, ...drops];
-    }
-  }
-}
-function layoutRows(node, shown) {
-  const lines2 = (n, address) => {
-    if (!shown(n)) return [];
-    if (n.kind === "segment") {
-      return [
-        {
-          cells: [{ name: n.name, address, settings: n.settings }],
-          band: "own",
-          place: "flow"
-        }
-      ];
-    }
-    return composeBlocks(
-      n.direction,
-      n.children.map(
-        (child, index) => lines2(child, [...address, childStep(n, index)])
-      )
-    );
-  };
-  return lines2(node, []).map((line) => [...line.cells]);
-}
-function childStep(node, index) {
-  return node.steps[index];
-}
-function spanOf(node) {
-  if (node.kind === "segment" || node.unit === true) {
-    return { width: 1, reach: 1 };
-  }
-  const laid = laidOut(node);
-  return { width: widthOf2(laid), reach: reachOf(laid) };
-}
-function laidOut(node) {
-  const spans = node.children.map(spanOf);
-  const ownLine = (index) => node.direction === "vertical" && spans.slice(0, index).some(({ width }) => width > 0);
-  if (node.direction === "vertical" || node.unit === true) {
-    return spans.map((span, i2) => ({ start: 0, span, ownLine: ownLine(i2) }));
-  }
-  let start = 0;
-  return spans.map((span, i2) => {
-    const at = start;
-    start += span.width;
-    return { start: at, span, ownLine: ownLine(i2) };
-  });
-}
-var widthOf2 = (laid) => laid.reduce((sum2, { span, ownLine }) => sum2 + (ownLine ? 0 : span.width), 0);
-var reachOf = (laid) => laid.reduce((most, { start, span }) => Math.max(most, start + span.reach), 0);
-function placeChildren(node, at) {
-  const laid = laidOut(node);
-  if (at?.axis === "cell") {
-    return laid.map(({ start, span, ownLine }) => {
-      const index = at.index + start;
-      return ownLine ? { ...at, index, lineStart: index, lineEnd: index + span.width - 1 } : { ...at, index };
-    });
-  }
-  const axis = AXIS_OF[node.direction];
-  const distribution = placedBy(node.distribution);
-  const [places, count, lineEnd] = axis === "row" ? [laid.map((_, index) => index), laid.length, laid.length - 1] : [laid.map(({ start }) => start), reachOf(laid), widthOf2(laid) - 1];
-  return places.map((index) => ({
-    index,
-    count,
-    distribution,
-    axis,
-    lineStart: 0,
-    lineEnd
-  }));
-}
-var containerType = {
-  compile(node, cctx) {
-    const steps2 = placeChildren(node, cctx.at);
-    return {
-      kind: "container",
-      direction: node.direction,
-      when: cctx.when,
-      steps: steps2,
-      children: node.children.map(
-        (child, i2) => cctx.compileChild(child, childPath(cctx.path, i2), steps2[i2])
-      )
-    };
-  },
-  render(node, ctx) {
-    if (ctx.gate.kind === "failed") ctx.gate.report();
-    return composeBlocks(
-      node.direction,
-      node.children.map(
-        (child, index) => ctx.renderChild(child, visibilityOf(ctx.gate), childStep(node, index))
-      )
-    );
-  }
-};
-var BODY_PLACE = {
-  drop: (line) => line.place,
-  above: () => "above"
-};
-var OPEN_LEAD = {
-  drop: (inline, close) => ({ lead: close(), stays: inline }),
-  above: (inline) => ({
-    lead: inline.slice(0, 1).flatMap((line) => line.cells),
-    stays: inline.slice(1)
-  })
-};
-var segmentType = {
-  compile(node, cctx) {
-    return {
-      kind: "segment",
-      when: cctx.when,
-      name: node.name,
-      id: placementId(node),
-      settings: cctx.placementSettings(node),
-      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
-      // predicate by the one `disclosureGate` every disclosure reads through.
-      ...node.opens !== void 0 && {
-        opens: {
-          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
-          // A body roots a band: its first step is placed afresh.
-          body: cctx.compileChild(
-            node.opens.body,
-            bodyPath(cctx.path),
-            void 0
-          ),
-          key: node.opens.ref.key,
-          placement: node.opens.placement
-        }
-      },
-      ...node.lead !== void 0 && {
-        lead: cctx.parse(node.lead, "lead")
-      },
-      ...node.trail !== void 0 && {
-        trail: cctx.parse(node.trail, "trail")
-      }
-    };
-  },
-  // [LAW:dataflow-not-control-flow] Every way a placement's drawing ends —
-  // hidden, gated off, drawn, broken — is reported to the session's record, so
-  // one that stops drawing leaves the bar as it was last drawn.
-  render: (node, ctx) => ctx.placed(node.id, drawSegment(node, ctx))
-};
-function drawSegment(node, ctx) {
-  const seg2 = ctx.lookupSegment(node.name);
-  if (seg2 === void 0) {
-    throw new Error(`Layout segment "${node.name}" has no matching segment`);
-  }
-  if (ctx.gate.kind === "hidden") return [];
-  const scope = placementScope(ctx.scope, node.settings);
-  if (ctx.gate.kind === "failed") {
-    return brokenSegment(node, scope, ctx, ctx.gate.message);
-  }
-  try {
-    const parts = ctx.placement(node);
-    const gate2 = within2(ctx.gate, parts.gate());
-    if (gate2.kind === "failed") {
-      return brokenSegment(node, scope, ctx, gate2.message);
-    }
-    if (gate2.kind === "hidden") return [];
-    const ownBodyGate = parts.bodyGate();
-    const bodyGate = ownBodyGate.kind === "failed" && gate2.kind === "pending" ? gate2 : ownBodyGate;
-    if (bodyGate.kind === "failed") {
-      return brokenSegment(node, scope, ctx, bodyGate.message);
-    }
-    const palette = placementPalette(node.settings.theme, ctx.palette);
-    const placement = {
-      id: node.id,
-      effect: node.settings.effect,
-      ground: groundOf(palette)
-    };
-    const layoutOf = (baseStyle) => ({
-      width: seg2.width ?? "auto",
-      justify: seg2.justify ?? "left",
-      truncate: seg2.truncate ?? "right",
-      baseStyle,
-      // [LAW:dataflow-not-control-flow] Padding is uniform across every
-      // line a segment contributes — inline rows AND dropped menu bands —
-      // one value, no per-line-kind branch. The picker reserves 2×padding
-      // at its pagination seam so a padded band still fits the width
-      // budget.
-      padding: ctx.padding,
-      placement
-    });
-    const bodyOpen = bodyGate.kind === "shown";
-    const waits = gate2.kind === "pending" ? gate2 : bodyGate;
-    const own2 = waits.kind === "pending" ? waitingOn(waits.variable) : ownAnswer(() => parts.evaluate(palette, ctx.region));
-    const drawn = own2.kind === "drawn" ? drawnRows2(own2.segment, layoutOf) : waitingRows(
-      node,
-      scope,
-      ctx,
-      own2.variable,
-      palette,
-      bodyOpen,
-      layoutOf
-    );
-    if (drawn === null) return [];
-    const { styles, inline: inlineLines, drops: dropLines } = drawn;
-    const opens = node.opens;
-    const bodyLines = opens === void 0 ? [] : ctx.renderBody(opens.body, bodyOpen ? gate2 : HIDDEN, styles.disclosure).map((line) => ({
-      ...line,
-      place: BODY_PLACE[opens.placement](line)
-    }));
-    const leadCell = (text4, style, padding) => applySegmentLayout(fragmentsToCells([text4], style), {
-      ...layoutOf(style),
-      width: "auto",
-      padding
-    });
-    const firstOwn = bodyLines.findIndex((l) => l.band === "own");
-    const { lead: openLead, stays } = opens !== void 0 && firstOwn !== -1 ? OPEN_LEAD[opens.placement](
-      inlineLines,
-      () => leadCell(ctx.closeDisclosure(opens.key), styles.close, ctx.padding)
-    ) : { lead: [], stays: inlineLines };
-    const holdLead = openLead.flatMap(
-      (cell3) => leadCell(
-        new RichText(" ".repeat(cellsWidth(cellParts(cell3)))),
-        styles.trigger,
-        0
-      )
-    );
-    const leadOf = (line, i2) => line.band !== "own" ? [] : i2 === firstOwn ? openLead : holdLead;
-    const ledBody = bodyLines.map((line, i2) => ({
-      cells: [...leadOf(line, i2), ...line.cells],
-      band: "deeper",
-      place: line.place
-    }));
-    const laidLines = [...stays, ...dropLines];
-    ctx.segments.set(
-      node.id,
-      [
-        ...laidLines.flatMap((line) => line.cells),
-        ...bodyLines.flatMap(leadOf)
-      ].flatMap(cellParts)
-    );
-    return [...laidLines, ...ledBody];
-  } catch (err) {
-    return brokenSegment(
-      node,
-      scope,
-      ctx,
-      err.message ?? String(err)
-    );
-  }
-}
-var waitingOn = (variable) => ({
-  kind: "waiting",
-  variable
-});
-function ownAnswer(evaluate) {
-  try {
-    return { kind: "drawn", segment: evaluate() };
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 === void 0) throw err;
-    return waitingOn(pending2.variable);
-  }
-}
-function drawnRows2(segment, layoutOf) {
-  const { styles, fragments, lead, trail, drops, open: open2 } = segment;
-  const baseStyle = open2 ? styles.trigger : styles.closed;
-  const layout = layoutOf(baseStyle);
-  const inline = splitCellsIntoLines(
-    fragmentsToCells(fragments, baseStyle)
-  ).map((line, i2) => ({
-    cells: applySegmentLayout(line, {
-      ...layout,
-      lead: i2 === 0 ? fragmentsToCells(lead, baseStyle) : [],
-      trail: i2 === 0 ? fragmentsToCells(trail, baseStyle) : []
-    }),
-    band: "own",
-    place: "flow"
-  }));
-  return {
-    styles,
-    inline,
-    drops: drops.map((body) => ({
-      cells: applySegmentLayout(fragmentsToCells([body], styles.band), {
-        ...layout,
-        baseStyle: styles.band
-      }),
-      band: "deeper",
-      place: "flow"
-    }))
-  };
-}
-var LOADING_GLYPH = "\u2026";
-function waitingRows(node, scope, ctx, variable, palette, bodyOpen, layoutOf) {
-  ctx.waited(variable);
-  const last2 = ctx.lastDrawn(node.id);
-  if (last2?.kind === "hidden") return null;
-  const styles = ctx.decorations(node, palette);
-  const style = bodyOpen ? styles.trigger : styles.closed;
-  const lead = fragmentsToCells(errorAffix(node.lead, node, scope, ctx), style);
-  const trail = fragmentsToCells(
-    errorAffix(node.trail, node, scope, ctx),
-    style
-  );
-  const rows = last2 === void 0 || last2.drawing.own.length === 0 ? [["auto"]] : last2.drawing.own.map(
-    (line) => line.cells.map((cell3) => cell3.text.cellLength)
-  );
-  return {
-    styles,
-    inline: rows.map((widths, row) => ({
-      cells: widths.flatMap((width, i2) => {
-        const first2 = row === 0 && i2 === 0;
-        return applySegmentLayout(
-          fragmentsToCells([new RichText(first2 ? LOADING_GLYPH : " ")], style),
-          {
-            ...layoutOf(style),
-            width,
-            justify: "left",
-            truncate: "right",
-            lead: first2 ? lead : [],
-            trail: first2 ? trail : []
-          }
-        );
-      }),
-      band: "own",
-      place: "flow"
-    })),
-    drops: []
-  };
-}
-function cellsWidth(cells) {
-  return cells.reduce((width, cell3) => width + cell3.cellLength, 0);
-}
-function brokenSegment(node, scope, ctx, message2) {
-  ctx.brokenPlacement(node.id, message2);
-  const oneLine = message2.replace(/\s*\n\s*/g, " ");
-  return [
-    {
-      cells: applySegmentLayout(
-        [new RichText(`\u26A0 ${node.id}: ${oneLine}`, { end: "" })],
-        {
-          width: "auto",
-          justify: "left",
-          truncate: "right",
-          padding: 0,
-          // It follows the bar, and fades in from the bar's ground: the
-          // failure it reports may be the read of this placement's own
-          // settings.
-          placement: {
-            id: node.id,
-            effect: FOLLOW_BAR,
-            ground: groundOf(ctx.palette)
-          },
-          lead: errorAffix(node.lead, node, scope, ctx),
-          trail: errorAffix(node.trail, node, scope, ctx)
-        }
-      ),
-      band: "own",
-      place: "flow"
-    }
-  ];
-}
-function errorAffix(affix, node, scope, ctx) {
-  if (affix === void 0) return [];
-  try {
-    return ctx.evaluateOnce(node, scope, ctx.palette, affix).fragments;
-  } catch (err) {
-    const pending2 = readPending(err);
-    if (pending2 !== void 0) ctx.waited(pending2.variable);
-    else ctx.brokenPlacement(node.id, err.message ?? String(err));
-    return [];
-  }
-}
-var REGISTRY = {
-  container: containerType,
-  segment: segmentType
-};
-function nodeType(kind) {
-  return REGISTRY[kind];
-}
-
-// src/dsl/parts.ts
-var SELECTION_OF = {
-  palette: "theme",
-  style: "style",
-  effect: "effect"
-};
-var COLOR_PATH = CONFIG_KEY_TO_EFFECTIVE_VAR.get("colorCompatibility");
-var COLOR_FLOOR = "truecolor";
-var UNDRAWN = {
-  width: 0,
-  chromeCols: 0,
-  padding: 0,
-  seamCols: 0,
-  preset: ""
-};
-function answerOf3(deriver) {
-  try {
-    return { ok: true, value: deriver() };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-function unwrap2(answer2) {
-  if (answer2.ok) return answer2.value;
-  throw answer2.error;
-}
-var always = (value) => ({ read: () => value });
-var sameLook = sameBy({
-  basePalette: is,
-  palette: is,
-  decor: sameDecor
-});
-var ViewParts = class {
-  constructor(store, registry, source, view) {
-    this.store = store;
-    this.registry = registry;
-    this.source = source;
-    this.view = observable.box(view, { deep: false });
-    this.scope = buildScope(store);
-    this.depth = store.derive("drawn depth", "computed", () => {
-      const said2 = this.inputAt(COLOR_PATH);
-      return said2.kind === "found" && typeof said2.value === "string" && isColorCompatibility(said2.value) ? said2.value : COLOR_FLOOR;
-    });
-    const drawn = observable(UNDRAWN, void 0, { deep: false });
-    this.facts = drawn;
-    const look = this.look;
-    const phase = this.phase;
-    const layout = () => this.layout.read();
-    this.binding = {
-      store,
-      registry,
-      get width() {
-        return drawn.width;
-      },
-      get chromeCols() {
-        return drawn.chromeCols;
-      },
-      get padding() {
-        return drawn.padding;
-      },
-      get seamCols() {
-        return drawn.seamCols;
-      },
-      get look() {
-        return phase.ruling ? void 0 : look.get();
-      },
-      get layout() {
-        return phase.ruling ? void 0 : layout;
-      }
-    };
-    this.layout = this.derive("layout", source.layoutReadsInstant, () => {
-      const root = source.roots.get(drawn.preset);
-      const palette = look.get().palette;
-      return layoutRows(root, (node) => this.shown(node)).map(
-        (row) => row.flatMap(({ name: placedName, address, settings }) => {
-          const name = arrangedSegment(placedName);
-          return name === void 0 ? [] : [
-            {
-              name,
-              address,
-              palette: placementPalette(settings.theme, palette)
-            }
-          ];
-        })
-      );
-    });
-    registry.bindInputs({
-      session: () => this.view.get().session,
-      read: (path31) => this.inputAt(path31),
-      run: (digest2) => this.view.get().run(digest2),
-      env: (name) => this.view.get().env(name),
-      drawnAt: () => drawnDepth(this.colorCompatibility())
-    });
-  }
-  store;
-  registry;
-  source;
-  // How many parts have derived since the view's first draw: what one draw
-  // adds is how many of its parts it evaluated.
-  evaluated = 0;
-  // [LAW:one-source-of-truth] The view's one scope. Its names are the
-  // store's when it is built, at the view's first draw: a view declares
-  // every variable before it is drawn.
-  scope;
-  binding;
-  facts;
-  look = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && sameLook(a, b)
-  });
-  layout;
-  // [LAW:no-ambient-temporal-coupling] A globals rule is evaluated before the
-  // draw resolves its look — the look is what the rules decide — so while one
-  // is, the binding has neither look nor layout to give: a read is refused by
-  // name (renderLook, renderLayout), never answered with the last draw's.
-  // Read outside every kept part but the rule's own, which always runs here.
-  phase = { ruling: false };
-  gates = /* @__PURE__ */ new Map();
-  placements = /* @__PURE__ */ new Map();
-  rules = /* @__PURE__ */ new Map();
-  slots = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What the view draws from (`bind`): its inputs
-  // and its slots read it as it stands, never a copy a draw wrote.
-  view;
-  // The draw in progress's own facts — the payload fields its instant answers
-  // (DRAW_PROJECTIONS) — and the names its per-draw rules settled on: read by
-  // the projections over them, which only a draw reads.
-  projected = void 0;
-  drawnSlots = /* @__PURE__ */ new Map();
-  // What the view draws from: a session view's source is bound once; a caller
-  // drawing a fixed payload binds each.
-  bind(view) {
-    runInAction(() => this.view.set(view));
-  }
-  // The selections in force.
-  selections() {
-    return this.view.get().selections();
-  }
-  // The draw's facts, before it reads a part, and the payload fields its own
-  // instant answers.
-  draw(facts, projected) {
-    this.draws++;
-    this.projected = projected;
-    this.drawnSlots.clear();
-    runInAction(() => Object.assign(this.facts, facts));
-  }
-  // [LAW:dataflow-not-control-flow] The value at a payload path, by who
-  // answers it: a selection's `.effective` its slot, a field of the instant
-  // the draw in progress, every other the view's payload.
-  inputAt(path31) {
-    const slot = slotAt(path31);
-    if (slot !== void 0) return found(this.slotName(slot));
-    if (drawProjectionAt(path31) !== void 0)
-      return resolvePath2(this.projected, path31);
-    return resolvePath2(this.view.get().payload(), path31);
-  }
-  // The depth the view's colour setting draws at: its floor while the payload
-  // has not said, or says something no depth is.
-  depth;
-  colorCompatibility() {
-    return this.depth.read();
-  }
-  // [LAW:one-source-of-truth] A selection slot's node: the decided name, or
-  // the rule's answer. A rule that reads no instant is kept: settled in the
-  // turn what it reads changes, so a cache policy over the slot's
-  // `.effective` re-runs then, never at a draw. A pending answer keeps the
-  // name last settled (the floor before any); a failure is the floor with
-  // its warning, which every draw reading the slot reports.
-  slot(slot) {
-    let node = this.slots.get(slot);
-    if (node === void 0) {
-      let last2;
-      const settle3 = () => {
-        const selection2 = this.selections()[SELECTION_OF[slot]];
-        if (selection2.kind === "decided")
-          return settled2(selection2.name, null, null);
-        const rule = compiledRule(this.source, slot, selection2.source);
-        if (this.source.instant.has(rule.template))
-          return { kind: "per-draw", rule };
-        const outcome = this.rule(rule.template);
-        switch (outcome.kind) {
-          case "named": {
-            let warning = null;
-            last2 = decideSlot(
-              this.source,
-              slot,
-              outcome.name,
-              rule.where,
-              (m) => {
-                warning = m;
-              }
-            );
-            return settled2(last2, warning, null);
-          }
-          case "pending":
-            return settled2(last2 ?? SLOT_FLOORS[slot], null, outcome.variable);
-          case "failed":
-            last2 = SLOT_FLOORS[slot];
-            return settled2(
-              last2,
-              ruleFloorMessage(
-                rule.where,
-                slot,
-                `the rule failed \u2014 ${outcome.error}`
-              ),
-              null
-            );
-        }
-      };
-      let held;
-      node = this.store.derive(`slot ${slot}`, "computed", () => {
-        const next = settle3();
-        if (held === void 0 || !sameSlot(held, next)) held = next;
-        return held;
-      });
-      this.slots.set(slot, node);
-    }
-    return node.read();
-  }
-  // The name a slot's `.effective` reads: its settled name, or what this
-  // draw's rule settled on.
-  slotName(slot) {
-    const state = this.slot(slot);
-    return state.kind === "settled" ? state.name : this.drawnSlots.get(slot) ?? SLOT_FLOORS[slot];
-  }
-  // What a per-draw rule settled on in the draw in progress.
-  drawnSlot(slot, name) {
-    this.drawnSlots.set(slot, name);
-  }
-  // Which draw is in progress: a part that reads the instant answers once in it.
-  draws = 0;
-  // The look the draw resolved, before its walk.
-  publishLook(look) {
-    runInAction(() => this.look.set(look));
-  }
-  // A layout node's own `when`, as the walk asks it.
-  gate(node) {
-    const { when: when2 } = node;
-    if (when2 === void 0) return gateOf2(when2, this.scope);
-    let part = this.gates.get(node);
-    if (part === void 0) {
-      part = this.derive(
-        "when",
-        this.readsInstant(when2),
-        () => outsideSegments(
-          this.source.activeSegment,
-          () => gateOf2(when2, this.scope)
-        )
-      );
-      this.gates.set(node, part);
-    }
-    return part.read();
-  }
-  placement(node) {
-    let parts = this.placements.get(node);
-    if (parts === void 0) {
-      parts = new Placement(this, node);
-      this.placements.set(node, parts);
-    }
-    return parts;
-  }
-  rule(template) {
-    let part = this.rules.get(template);
-    if (part === void 0) {
-      part = this.derive(
-        "rule",
-        this.readsInstant(template),
-        () => {
-          this.phase.ruling = true;
-          const bound = this.source.runtime.bound === this.binding ? null : bindRender(this.source.runtime, this.binding);
-          try {
-            return {
-              kind: "named",
-              name: template.evaluate(this.scope).map((f) => f.plain).join("")
-            };
-          } catch (e) {
-            const pending2 = readPending(e);
-            return pending2 !== void 0 ? { kind: "pending", variable: pending2.variable } : {
-              kind: "failed",
-              error: e instanceof Error ? e.message : String(e)
-            };
-          } finally {
-            bound?.[Symbol.dispose]();
-            this.phase.ruling = false;
-          }
-        }
-      );
-      this.rules.set(template, part);
-    }
-    return part.read();
-  }
-  readsInstant(...templates) {
-    return templates.some(
-      (template) => template !== void 0 && this.source.instant.has(template)
-    );
-  }
-  // [LAW:single-enforcer] Every part derives here: kept by the store, or
-  // derived at every read when it reads the instant, and counted.
-  // A part that reads the instant is derived once per draw however often the
-  // draw reads it — a body reads its colours, its lead and trail read both —
-  // since one draw is one instant over one store.
-  derive(name, readsInstant, deriver) {
-    const counted2 = () => {
-      this.evaluated++;
-      return deriver();
-    };
-    return this.store.derive(
-      `part ${name}`,
-      readsInstant ? "projection" : "computed",
-      readsInstant ? this.oncePerDraw(counted2) : counted2
-    );
-  }
-  oncePerDraw(deriver) {
-    let memo = null;
-    return () => {
-      if (memo?.draw !== this.draws) {
-        memo = { draw: this.draws, answer: answerOf3(deriver) };
-      }
-      return unwrap2(memo.answer);
-    };
-  }
-  // [LAW:one-source-of-truth] The walk's visibility less edit chrome, which
-  // the rows a layout lays out are drawn by: a node's `when`, then a
-  // segment's own — and a segment either `when` of which throws is SHOWN,
-  // because the walk draws an error cell exactly there, where a container
-  // whose `when` throws draws nothing. A `when` not answered yet is shown,
-  // and under it a segment as its own `when` says, as the walk asks it. Edit
-  // mode's `+`/`-` and reset banner are affordances over the arrangement, not
-  // part of it, while a name label stands in for its segment
-  // (`arrangedSegment`).
-  shown(node) {
-    const gate2 = this.gate(node);
-    if (node.kind === "container")
-      return gate2.kind === "shown" || gate2.kind === "pending";
-    if (arrangedSegment(node.name) === void 0) return false;
-    if (gate2.kind === "hidden") return false;
-    if (gate2.kind === "failed") return true;
-    return this.placement(node).gate().kind !== "hidden";
-  }
-};
-function bindView(source, store, registry, view) {
-  const parts = source.views.get(store);
-  if (parts !== void 0) {
-    parts.bind(view);
-    return parts;
-  }
-  const made = new ViewParts(store, registry, source, view);
-  source.views.set(store, made);
-  return made;
-}
-function partsOf(source, store) {
-  const parts = source.views.get(store);
-  if (parts === void 0) {
-    throw new Error(
-      "a store was drawn before its view was bound (bindView): its inputs have no source"
-    );
-  }
-  return parts;
-}
-var settled2 = (name, warning, waited) => ({ kind: "settled", name, warning, waited });
-var sameSlot = (a, b) => a.kind === "settled" ? b.kind === "settled" && a.name === b.name && a.warning === b.warning && a.waited === b.waited : b.kind === "per-draw" && a.rule === b.rule;
-function compiledRule(source, slot, rule) {
-  const compiled = source.globalExpressions.get(slot)?.get(rule);
-  if (compiled === void 0) {
-    throw new Error(
-      `the ${slot} rule ${JSON.stringify(rule)} reached the view but no compiled template exists \u2014 the compile and the resolution disagree about isExpression`
-    );
-  }
-  return compiled;
-}
-function decideSlot(source, slot, name, where, warn) {
-  switch (slot) {
-    case "palette":
-      return decideThemeName(name, where, warn).name;
-    case "style":
-      return decideStyleName(name, source.styles).name;
-    case "effect":
-      return decideEffectName(name).name;
-  }
-}
-var Placement = class {
-  // What the walk hands each part: where it draws the placement, then what
-  // the colours and the body evaluated to.
-  where = inlet(
-    sameBy({ palette: is, region: sameRegion })
-  );
-  ground = inlet(
-    sameBy({
-      colours: sameDealt,
-      bodyOpen: is
-    })
-  );
-  opened = inlet(
-    sameBy({
-      colours: sameDealt,
-      open: is
-    })
-  );
-  ownGate;
-  open;
-  colours;
-  body;
-  affixes;
-  constructor(view, node) {
-    const seg2 = view.source.segments[node.name];
-    const ref = view.source.activeSegment;
-    const scope = placementScope(view.scope, node.settings);
-    const { when: when2, bg, fg, template } = seg2;
-    const { lead, trail } = node;
-    const opens = node.opens?.open;
-    this.ownGate = when2 === void 0 ? always(SHOWN) : view.derive(
-      `${node.id} when`,
-      view.readsInstant(when2),
-      () => outsideSegments(ref, () => gateOf2(when2, scope))
-    );
-    this.open = opens === void 0 ? always(HIDDEN) : view.derive(
-      `${node.id} body gate`,
-      view.readsInstant(opens),
-      () => outsideSegments(ref, () => gateOf2(opens, view.scope))
-    );
-    this.colours = view.derive(
-      `${node.id} colours`,
-      view.readsInstant(bg, fg),
-      () => {
-        const { palette, region } = this.where.get();
-        return coloursOf(
-          ref,
-          node,
-          palette,
-          region,
-          view.registry.drawnAt(),
-          bg,
-          fg,
-          scope
-        );
-      }
-    );
-    this.body = view.derive(
-      `${node.id} body`,
-      view.readsInstant(template),
-      () => {
-        const { colours, bodyOpen } = this.ground.get();
-        return bodyOf(ref, node, colours, template, bodyOpen, scope);
-      }
-    );
-    this.affixes = lead === void 0 && trail === void 0 ? always(NO_AFFIXES) : view.derive(
-      `${node.id} affixes`,
-      view.readsInstant(lead, trail),
-      () => {
-        const { colours, open: open2 } = this.opened.get();
-        return affixesOf(ref, node, colours, open2, lead, trail, scope);
-      }
-    );
-  }
-  gate() {
-    return this.ownGate.read();
-  }
-  bodyGate() {
-    return this.open.read();
-  }
-  // [LAW:dataflow-not-control-flow] The parts in their one order, each handed
-  // what the one before it evaluated to: the colours, then the body over its
-  // ground, then the lead and trail over what the body opened.
-  evaluate(palette, region) {
-    this.where.set({ palette, region });
-    const colours = this.colours.read();
-    this.ground.set({ colours, bodyOpen: this.open.read().kind === "shown" });
-    const body = this.body.read();
-    this.opened.set({ colours, open: body.open });
-    return evaluated(colours, body, this.affixes.read());
-  }
-};
-function inlet(same2) {
-  const box = observable.box(void 0, {
-    deep: false,
-    equals: (a, b) => a !== void 0 && b !== void 0 && same2(a, b)
-  });
-  return {
-    set: (value) => runInAction(() => box.set(value)),
-    // [LAW:no-defensive-null-guards] Filled before it is read (above).
-    get: () => box.get()
-  };
-}
-var sameHex = (a, b) => a.hex === b.hex;
-var sameDealt = sameBy({
-  palette: is,
-  drawnAt: is,
-  tint: sameHex,
-  text: sameHex,
-  bg: sameHex,
-  disclosure: sameDisclosure
-});
-function placeOf(node, colours) {
-  return {
-    segName: node.name,
-    placementId: node.id,
-    palette: colours.palette,
-    disclosure: colours.disclosure,
-    tint: colours.tint,
-    text: colours.text
-  };
-}
-var bandOf = (colours) => bandFor(colours.palette, colours.disclosure, colours.drawnAt);
-function coloursOf(ref, node, palette, region, drawnAt, bg, fg, scope) {
-  const dealt = {
-    palette,
-    drawnAt,
-    ...decorationFor(palette, region, drawnAt)
-  };
-  return inSegment(ref, placeOf(node, dealt), (active2) => {
-    const style = resolveSegmentColors(active2, drawnAt, bg, fg, scope);
-    return { ...dealt, bg: active2.bg, style };
-  });
-}
-function bodyOf(ref, node, colours, template, bodyOpen, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = bodyOpen ? bandOf(colours).state : colours.bg;
-    const fragments = template.evaluate(scope);
-    return {
-      fragments,
-      drops: active2.drops,
-      open: active2.drops.length > 0 || bodyOpen
-    };
-  });
-}
-function affixesOf(ref, node, colours, open2, lead, trail, scope) {
-  return inSegment(ref, placeOf(node, colours), (active2) => {
-    active2.bg = open2 ? bandOf(colours).state : colours.bg;
-    return {
-      lead: lead?.evaluate(scope) ?? [],
-      trail: trail?.evaluate(scope) ?? [],
-      drops: active2.drops
-    };
-  });
-}
-var NO_AFFIXES = { lead: [], trail: [], drops: [] };
-function stylesOf(colours) {
-  const { palette, drawnAt, disclosure } = colours;
-  return {
-    closed: colours.style,
-    get trigger() {
-      return stateCell(palette, bandOf(colours).state, drawnAt);
-    },
-    get band() {
-      return stateCell(palette, bandOf(colours).plane, drawnAt);
-    },
-    get close() {
-      return closeCell(palette, bandOf(colours).state, drawnAt);
-    },
-    disclosure
-  };
-}
-function evaluated(colours, body, affixes) {
-  return {
-    styles: stylesOf(colours),
-    fragments: body.fragments,
-    lead: affixes.lead,
-    trail: affixes.trail,
-    drops: [...body.drops, ...affixes.drops],
-    open: body.open
-  };
-}
-function evaluateOnce(ref, node, palette, region, drawnAt, body, scope) {
-  const colours = coloursOf(
-    ref,
-    node,
-    palette,
-    region,
-    drawnAt,
-    void 0,
-    void 0,
-    scope
-  );
-  return evaluated(
-    colours,
-    bodyOf(ref, node, colours, body, false, scope),
-    NO_AFFIXES
-  );
-}
-function decoratedStyles(ref, node, palette, region, drawnAt) {
-  return stylesOf(
-    coloursOf(ref, node, palette, region, drawnAt, void 0, void 0, {})
-  );
 }
 
 // src/dsl/view-source.ts
@@ -77627,7 +78045,6 @@ init_globals();
 // src/config/dsl-loader.ts
 init_globals();
 var import_node_path28 = __toESM(require_path_browserify(), 1);
-var import_json54 = __toESM(require_dist(), 1);
 
 // src/config/loader/layout.ts
 init_globals();
@@ -78875,8 +79292,8 @@ function floorProblems(settings) {
       ];
     }
     const chain2 = [name];
-    for (let next = floor3; next !== void 0; next = floorOf3(next)) {
-      if (next === name) {
+    for (let next2 = floor3; next2 !== void 0; next2 = floorOf3(next2)) {
+      if (next2 === name) {
         return chain2.every((member) => name <= member) ? [
           {
             setting: name,
@@ -78884,8 +79301,8 @@ function floorProblems(settings) {
           }
         ] : [];
       }
-      if (chain2.includes(next)) return [];
-      chain2.push(next);
+      if (chain2.includes(next2)) return [];
+      chain2.push(next2);
     }
     return [];
   });
@@ -79400,12 +79817,12 @@ function validateNoCycles(ctx, cfg, within3 = () => true) {
   function dfs(node) {
     color.set(node, GRAY);
     stack.push(node);
-    for (const next of graph.get(node) ?? []) {
-      if (!within3(next)) continue;
-      const c = color.get(next);
+    for (const next2 of graph.get(node) ?? []) {
+      if (!within3(next2)) continue;
+      const c = color.get(next2);
       if (c === GRAY) {
-        const cycleStart = stack.indexOf(next);
-        const cycle = [...stack.slice(cycleStart), next];
+        const cycleStart = stack.indexOf(next2);
+        const cycle = [...stack.slice(cycleStart), next2];
         const firstNode = cycle[0];
         const info = nodeInfo.get(firstNode);
         ctx.issues.push({
@@ -79418,7 +79835,7 @@ function validateNoCycles(ctx, cfg, within3 = () => true) {
         });
         return true;
       }
-      if (c === WHITE2 && dfs(next)) return true;
+      if (c === WHITE2 && dfs(next2)) return true;
     }
     color.set(node, BLACK);
     stack.pop();
@@ -79479,21 +79896,18 @@ function validateNoNesting(ctx, cfg, names) {
 init_globals();
 var import_node_path27 = __toESM(require_path_browserify(), 1);
 var CONFIG_EXTENSIONS = ["json5", "json"];
-function configLocations(locs, projectDir) {
-  const project = projectDir ? [
-    { role: "local", base: import_node_path27.default.join(projectDir, PROJECT_BASES.local) },
-    { role: "project", base: import_node_path27.default.join(projectDir, PROJECT_BASES.project) }
+var configQuery = (projectDir, target) => target.source === "argument-only" ? { kind: "file", path: target.path } : { kind: "chain", projectDir, path: target.path };
+function configLocations(locs, query, extensions = CONFIG_EXTENSIONS) {
+  const named2 = query.path === void 0 ? void 0 : { role: "user", candidates: [{ file: query.path, extension: null }] };
+  const at = (role, base) => ({
+    role,
+    candidates: extensions.map((extension) => ({ file: base + "." + extension, extension })).filter(({ file }) => file !== query.path)
+  });
+  const project = query.kind === "chain" && query.projectDir !== void 0 ? [
+    at("local", import_node_path27.default.join(query.projectDir, PROJECT_BASES.local)),
+    at("project", import_node_path27.default.join(query.projectDir, PROJECT_BASES.project))
   ] : [];
-  return [...project, { role: "user", base: xdgConfigBase(locs) }];
-}
-function configCandidates(locs, { projectDir, configFile }) {
-  if (configFile !== void 0) return [{ file: configFile, role: "user" }];
-  return configLocations(locs, projectDir).flatMap(
-    ({ role, base }) => CONFIG_EXTENSIONS.map((ext) => ({ file: `${base}.${ext}`, role }))
-  );
-}
-function dslConfigCandidatePaths(locs, query) {
-  return configCandidates(locs, query).map(({ file }) => file);
+  return [...project, named2 ?? at("user", xdgConfigBase(locs))];
 }
 var PROJECT_BASES = {
   project: ".cc-candybar",
@@ -79503,39 +79917,32 @@ function xdgConfigBase(locs) {
   return import_node_path27.default.join(locs.configHome, "cc-candybar", "config");
 }
 var scopeOf2 = (role) => role === "user" ? "plugins" : "repo";
-function isUserFile(locs, candidate) {
-  return CONFIG_EXTENSIONS.some(
-    (e) => candidate === `${xdgConfigBase(locs)}.${e}`
-  );
+function userConfigDefault(locs) {
+  return xdgConfigBase(locs) + "." + CONFIG_EXTENSIONS[0];
 }
-function userHome(locs, layers) {
-  return layers.find((l) => isUserFile(locs, l.path))?.path ?? `${xdgConfigBase(locs)}.${CONFIG_EXTENSIONS[0]}`;
-}
-function placeOf2(resolved, layers, { projectDir, configFile }, role) {
-  if (role === "user") return resolved.home;
-  if (configFile !== void 0 || projectDir === void 0 || resolved.repos.plugins === null)
-    return null;
-  return layers.find((l) => l.role === role)?.path ?? `${import_node_path27.default.join(projectDir, PROJECT_BASES[role])}.${CONFIG_EXTENSIONS[0]}`;
-}
-function chainPlaces(resolved, query) {
-  const layers = resolved.kind === "chain" ? resolved.layers : [];
+function chainPlaces(resolved, locations2) {
   return LAYER_ROLES.flatMap((role) => {
-    const place = placeOf2(resolved, layers, query, role);
-    return place === null ? [] : [{ path: place, role }];
+    if (role === "user") return [{ path: resolved.home, role }];
+    if (resolved.repos.plugins === null) return [];
+    const place = resolved.layers.find((layer) => layer.role === role)?.path ?? locations2.find((location) => location.role === role)?.candidates[0]?.file;
+    return place === void 0 ? [] : [{ path: place, role }];
   });
 }
 function configResolutionNotice(resolution) {
-  return noticeLines(resolution).join("\n") || null;
+  return [
+    ...noticeLines(resolution),
+    ...resolution.unchecked.map(
+      (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
+    )
+  ].join("\n") || null;
 }
 function noticeLines(resolution) {
   switch (resolution.kind) {
     case "chain":
-      return resolution.unchecked.map(
-        (u) => `Config location could not be checked: ${u.path} \u2014 ${u.error}`
-      );
+      return [];
     case "missing":
       return [
-        `Config file not found: ${resolution.path} \u2014 rendering the bundled default until it appears`
+        `Config file not found: ${resolution.path} \u2014 using the bundled base until it appears`
       ];
     // The file's layer fails the load, which names it.
     case "unreadable":
@@ -79960,7 +80367,10 @@ function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolva
   })).raw;
 }
 function parseDslFile(filePath2, source, allowedPalettes, under2) {
-  const json2 = parseJson5OrThrow(filePath2, source);
+  const syntax = parseJson5Syntax(source);
+  if (syntax.kind === "invalid")
+    throw new ConfigError(filePath2, [syntax.issue]);
+  const json2 = syntax.value;
   const notice = editabilityNotice(filePath2, source);
   const warnings = [
     ...notice === null ? [] : [notice],
@@ -80008,21 +80418,6 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
   return { raw, warnings, layer };
 }
 var NO_INHERITED_SEGMENTS = /* @__PURE__ */ new Set();
-function parseJson5OrThrow(filePath2, source) {
-  try {
-    return import_json54.default.parse(source);
-  } catch (err) {
-    const e = err;
-    throw new ConfigError(filePath2, [
-      {
-        path: "",
-        message: `JSON5 syntax error: ${e.message}`,
-        line: e.lineNumber,
-        col: e.columnNumber
-      }
-    ]);
-  }
-}
 function validateTopLevel(ctx, raw, inheritedSegments, home, file) {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
@@ -81762,8 +82157,8 @@ function composePayload(facts, inputs, draw2) {
     ...effectiveInputs(effective),
     history: draw2.history,
     navigation: { back: draw2.back },
-    // [LAW:one-source-of-truth] The width the bar is drawn to, as the client
-    // measured it (`renderWidth`), the one value the draw's options carry.
+    // The live width for feeds and source keys. A waiting request can
+    // project its own columns into its draw without replacing this payload.
     term: { cols: renderWidth(hints) },
     ...settingCounts2,
     ...configPath !== null && { configPath },
@@ -81802,7 +82197,7 @@ function composePayload(facts, inputs, draw2) {
   return payload;
 }
 var sourceFactOf = (facts, name) => facts.sources[name] ?? pendingOf("unread");
-function sourcesFactOf(names, runs, facts) {
+function sourceSummaryOf(names, runs, facts) {
   const named2 = [
     ...names.map((name) => [name, sourceFactOf(facts, name)]),
     ...[...runs].map(
@@ -81813,11 +82208,20 @@ function sourcesFactOf(names, runs, facts) {
     )
   ];
   return {
-    sources: String(named2.length),
-    sourcesPending: named2.flatMap(
-      ([name, fact]) => fact.kind === "pending" ? [`${name}:${fact.why}`] : []
-    ).join(",") || "-",
-    sourcesFailed: named2.flatMap(([name, fact]) => fact.kind === "failed" ? [name] : []).join(",") || "-"
+    count: named2.length,
+    pending: named2.flatMap(
+      ([name, fact]) => fact.kind === "pending" ? [{ name, why: fact.why }] : []
+    ),
+    failed: named2.flatMap(
+      ([name, fact]) => fact.kind === "failed" ? [name] : []
+    )
+  };
+}
+function sourceFieldsOf(summary) {
+  return {
+    sources: String(summary.count),
+    sourcesPending: summary.pending.map(({ name, why: why2 }) => `${name}:${why2}`).join(",") || "-",
+    sourcesFailed: summary.failed.join(",") || "-"
   };
 }
 function projectSources(names, read2) {
@@ -82131,17 +82535,14 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         { by: "feed", fps },
         feeds
       );
-      const signed = signingFrames(parts.linkSigner);
-      const bar = signed(drawn.body);
-      const answer2 = RENDER_ANSWERS.ansi(bar);
+      const bar = drawn.body;
       const statusline = statuslineOf(
         sessionId2,
         setup.state.writable,
         drawn,
         handedOffTo(lanes, following)
       );
-      const resp = JSON.stringify(answer2);
-      const statuslineResp = statusline === drawn.body ? resp : JSON.stringify(RENDER_ANSWERS.ansi(signed(statusline)));
+      const handoff = statusline === bar ? null : statusline;
       keepDraw(parts, setup, kept);
       deliver(parts, {
         session: sessionId2,
@@ -82151,8 +82552,7 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         eventsShown: []
       });
       return {
-        bar,
-        answers: { resp, statusline: statuslineResp },
+        frame: { kind: "drawn", bar, handoff },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -82165,11 +82565,8 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
   } catch (error) {
     const outcome = renderFailure(failureOf(error));
     const { level, line } = drawEvent("render", facts, outcome);
-    const answer2 = failedWith(outcome.message);
-    const failed3 = JSON.stringify(answer2);
     return {
-      bar: renderFailedFrame(answer2.error),
-      answers: { resp: failed3, statusline: failed3 },
+      frame: { kind: "failed", message: outcome.message },
       evaluated: 0,
       cellBreaks: 0,
       failure: { level, line: `frame ${line}` }
@@ -82216,22 +82613,8 @@ function contextFacts(req, facts) {
   });
 }
 var hintsErrorOf = (req) => refusedHintsError(refusedHints(req, req.hints));
-function configureSession(parts, req, worldState, facts) {
-  runInAction(() => {
-    takeContext(parts, req, worldState, facts);
-    openSession(parts, req);
-  });
-}
-function takeContext(parts, req, worldState, facts) {
-  contextFacts(req, facts);
-  noteFacts(facts, { encoding: req.encoding });
-  runInAction(() => {
-    parts.worldStates.take(worldState);
-    parts.worldStates.heard(req);
-  });
-}
-function openSession(parts, req) {
-  holdSessionAt(parts, req)[Symbol.dispose]();
+function openSession(parts, session) {
+  holdSessionAt(parts, parts.worldStates.requestOf(session))[Symbol.dispose]();
 }
 function retireSession(parts, session) {
   runInAction(() => {
@@ -82242,10 +82625,10 @@ function retireSession(parts, session) {
 function holdSessionAt(parts, req) {
   return parts.renderCache.holdSession(req.requested, req);
 }
-function setUpRender(parts, req, readings, facts) {
+function setUpRender(parts, req, readings, facts, terminal) {
   const hintsError = hintsErrorOf(req);
   const hold2 = holdSessionAt(parts, req);
-  return setUpDraw(parts, hold2, req, hintsError, readings, facts);
+  return setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal);
 }
 function setUpFrame(parts, sessionId2, readings, facts) {
   const { renderCache } = parts;
@@ -82266,7 +82649,7 @@ function setUpFrame(parts, sessionId2, readings, facts) {
   }
   return setUpDraw(parts, hold2, req, hintsError, readings, facts);
 }
-function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
+function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   try {
     const { entry, state, view } = hold2;
     noteFacts(facts, { at: readings.at.toFixed(3) });
@@ -82279,6 +82662,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
       state,
       view,
       hintsError,
+      terminal,
       [Symbol.dispose]: () => hold2[Symbol.dispose]()
     };
   } catch (e) {
@@ -82286,7 +82670,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts) {
     throw e;
   }
 }
-function drawRender(parts, setup, drawing2, feeds) {
+function drawRender(parts, setup, drawing2, feeds, inspect2) {
   const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
@@ -82301,8 +82685,9 @@ function drawRender(parts, setup, drawing2, feeds) {
     // The preset the session's settings resolve to, which the draw uses.
     preset: effective.preset
   });
-  const hints = view.source.hints();
-  const width = payload.term.cols;
+  const { terminal } = setup;
+  const width = terminal === void 0 ? payload.term.cols : renderWidth(terminal);
+  const rows = viewerRowCap((terminal ?? view.source.hints()).termRows);
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
@@ -82324,7 +82709,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     ),
     said2("click", clickShown?.text)
   ].flatMap(
-    ({ about, text: text4, copy: copy3, ...named2 }) => about && text4 && copy3 ? [{ ...named2, about, text: text4, copy: copy3 }] : []
+    ({ about, text: text4, copy: copy2, ...named2 }) => about && text4 && copy2 ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
   const configWatch = entry.snapshot.watch;
   const { daemon: daemon2 } = document;
@@ -82384,14 +82769,12 @@ function drawRender(parts, setup, drawing2, feeds) {
     ...instantFacts(document.builtins, at)
   };
   const metrics = isPending(payload.metrics) ? void 0 : payload.metrics;
-  noteFacts(
-    facts,
-    sourcesFactOf(
-      [...view.state.sources.keys()],
-      view.registry.runSources(),
-      document
-    )
+  const sources = sourceSummaryOf(
+    [...view.state.sources.keys()],
+    view.registry.runSources(),
+    document
   );
+  noteFacts(facts, sourceFieldsOf(sources));
   noteFacts(facts, {
     prompts: String(metrics?.messageCount ?? "-"),
     nonPrompts: String(metrics?.nonPrompts ?? "-"),
@@ -82400,15 +82783,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   });
   const renderOpts = renderOptionsOf(effective, width);
   const effects = effectSessions.of(sessionId2);
-  const {
-    frame: frame2,
-    memory,
-    warnings: drawnWarnings,
-    segments,
-    evaluated: evaluated2,
-    cellBreaks,
-    rules
-  } = drawDsl(
+  const draw2 = () => drawDsl(
     state.config,
     state.compiled,
     view.store,
@@ -82428,6 +82803,15 @@ function drawRender(parts, setup, drawing2, feeds) {
       idleSince: idleSince ?? void 0
     }
   );
+  const {
+    frame: frame2,
+    memory,
+    warnings: drawnWarnings,
+    segments,
+    evaluated: evaluated2,
+    cellBreaks,
+    rules
+  } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
   const keys2 = copyKeys(diagnostics);
   const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
   noteFacts(facts, {
@@ -82436,7 +82820,7 @@ function drawRender(parts, setup, drawing2, feeds) {
   const recorded2 = renderWarnings.moves(sessionId2, drawing2.by, drawnWarnings);
   const geometry = {
     width,
-    rows: viewerRowCap(hints.termRows),
+    rows,
     // [LAW:one-source-of-truth] What stands in the frame's place is drawn at
     // the depth the frame is encoded at.
     colorCompatibility: frame2.depth
@@ -82465,7 +82849,7 @@ function drawRender(parts, setup, drawing2, feeds) {
       case "load":
       case "facts":
       case "config-watch":
-      case "repository-vars":
+      case "repository-local-env":
       case "lifeline":
       case "launch-pipes":
       case "renderer-ended":
@@ -82532,6 +82916,13 @@ function drawRender(parts, setup, drawing2, feeds) {
     eventsShown,
     copies,
     lanes,
+    inspection: inspect2 === true ? {
+      preset: effective.preset,
+      faults,
+      unreadSources: sources.pending.flatMap(
+        ({ name, why: why2 }) => why2 === "unread" ? [name] : []
+      )
+    } : void 0,
     kept: {
       session: sessionId2,
       by: drawing2.by,
@@ -82581,34 +82972,35 @@ function subjectOf(w) {
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
-function answerRequest(parts, req, facts) {
+function answerRequest(parts, req, presentation, facts, inspect2) {
   var _stack = [];
   try {
     const { time, feeds } = parts;
+    const sessionId2 = req.hookData.session_id;
     const setup = __using(_stack, setUpRender(
       parts,
       req,
       { at: time.at, tick: time.tick },
-      facts
+      facts,
+      presentation
     ));
-    const sessionId2 = req.hookData.session_id;
-    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
+    const { drawn, clickShown, eventsShown, copies, lanes, kept, inspection } = drawRender(
       parts,
       setup,
       ANSWERING,
-      feeds.feedsOf(sessionId2, time.tick)
+      feeds.feedsOf(sessionId2, time.tick),
+      inspect2
     );
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
-    const toStatusline = roleOf(req.hints.client ?? null) === "statusline";
-    const frame2 = signingFrames(parts.linkSigner)(
-      toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body
-    );
+    const toStatusline = roleOf(presentation.client ?? null) === "statusline";
+    const frame2 = toStatusline ? statuslineOf(sessionId2, setup.state.writable, drawn, elsewhere) : drawn.body;
     keepDraw(parts, setup, kept);
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-"
     });
     return {
       frame: frame2,
+      inspection,
       delivery: {
         session: sessionId2,
         by: ANSWERING.by,
@@ -82703,6 +83095,9 @@ var TurnTime = class {
     this.held.add(deferral);
     return () => void this.held.delete(deferral);
   }
+  deferrals() {
+    return this.held.size;
+  }
   // The earliest tick held work is due at, or null when none is held.
   next() {
     return earliestOf([...this.held].map(({ until: until2 }) => until2));
@@ -82767,21 +83162,27 @@ var MenuIdle = class {
   }
   // The earliest tick a session's menus close at, or null when none shows a
   // menu.
-  next() {
+  next(busy) {
     return earliestOf(
-      [...this.sessions.values()].map(
-        (idle) => idle.shown ? closesAt(idle.since, idle.timeoutS) : null
+      [...this.sessions].map(
+        ([session, idle]) => this.expiryOf(session, idle, busy)
       )
     );
+  }
+  // [LAW:single-enforcer] A pending click can restart the idle period. Until
+  // it lands, the renderer neither takes nor schedules that session's close.
+  expiryOf(session, idle, busy) {
+    return idle.shown && !busy?.has(session) ? closesAt(idle.since, idle.timeoutS) : null;
   }
   // The sessions whose idle period has run out by `tick`, each taken as
   // closed: what its last draw showed no longer stands, and a new period
   // begins, so a close that fails is tried again a timeout later, never at
   // once, and a session that stops drawing is never closed again.
-  due(tick) {
+  due(tick, busy) {
     const due = [];
     for (const [session, idle] of this.sessions) {
-      if (!idle.shown || closesAt(idle.since, idle.timeoutS) > tick) continue;
+      const expiry = this.expiryOf(session, idle, busy);
+      if (expiry === null || expiry > tick) continue;
       due.push({
         session,
         idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
@@ -82843,6 +83244,17 @@ var WAKE_CAUSES = [
 var RATE_WINDOW_S = 1;
 var TIMER_RESOLUTION_S = 2e-3;
 var SUMMARY_EVERY_S2 = 60;
+function sameDraw(previous2, next2, lane) {
+  if (next2.kind === "failed")
+    return previous2?.kind === "failed" && previous2.message === next2.message;
+  if (previous2?.kind !== "drawn") return false;
+  const forLane = ({ bar, handoff }) => answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const before = forLane(previous2);
+  const after = forLane(next2);
+  return before.depth === after.depth && before.rows.length === after.rows.length && before.rows.every(
+    ({ runs }, row) => compareStructural(runs, after.rows[row]?.runs)
+  );
+}
 var paceOf = (period) => Math.round(1e3 / period);
 var Feeds = class {
   constructor(deps) {
@@ -82908,8 +83320,8 @@ var Feeds = class {
     runEach(
       [...this.feeds.values()].flatMap(
         (feed2) => feed2.next !== null && feed2.next <= tick ? [{ feed: feed2, next: feed2.next }] : []
-      ).map(({ feed: feed2, next }) => () => {
-        recordMs(feed2.lateness, (tick - next) * 1e3);
+      ).map(({ feed: feed2, next: next2 }) => () => {
+        recordMs(feed2.lateness, (tick - next2) * 1e3);
         try {
           const frame2 = this.drawOne(feed2, readings);
           if (frame2 !== null) frames.push(frame2);
@@ -82957,7 +83369,7 @@ var Feeds = class {
       next: tick,
       change: null,
       last: -Infinity,
-      answers: null,
+      frame: null,
       rates: /* @__PURE__ */ new Map(),
       opened: tick,
       summarizedAt: tick,
@@ -83023,20 +83435,23 @@ var Feeds = class {
     this.drawnTotal++;
     feed2.evaluated += drawn.evaluated;
     feed2.cellBreaks += drawn.cellBreaks;
-    const before = feed2.answers;
-    const changed = (lane) => before === null || (lane === null ? before.resp !== drawn.answers.resp || before.statusline !== drawn.answers.statusline : answerOf(before, lane) !== answerOf(drawn.answers, lane));
+    const before = feed2.frame;
+    const { frame: frame2 } = drawn;
     if (drawn.failure !== null) {
       feed2.failed++;
-      if (changed(null)) this.deps.log(drawn.failure.level, drawn.failure.line);
+      if (!sameDraw(before, frame2, "statusline"))
+        this.deps.log(drawn.failure.level, drawn.failure.line);
     }
     for (const [lane, rate] of feed2.rates)
-      if (changed(lane)) noteSent(rate, tick);
-    feed2.answers = drawn.answers;
-    this.schedule(feed2, drawn.bar, drawAt, tick);
-    return {
-      session: feed2.sessionId,
-      answers: drawn.answers
-    };
+      if (!sameDraw(before, frame2, lane)) noteSent(rate, tick);
+    feed2.frame = frame2;
+    this.schedule(
+      feed2,
+      frame2.kind === "drawn" ? frame2.bar.nextChange : Infinity,
+      drawAt,
+      tick
+    );
+    return { session: feed2.sessionId, frame: frame2 };
   }
   // [LAW:no-ambient-temporal-coupling] The next frame falls due when the bar
   // next changes, measured from the instant this one was drawn for — no
@@ -83047,16 +83462,16 @@ var Feeds = class {
   // between two frames moves no schedule.
   // [LAW:dataflow-not-control-flow] One clamp over values: a still bar's next
   // change is Infinity, and an unseen bar's spacing is the still period.
-  schedule(feed2, bar, drawAt, tick) {
+  schedule(feed2, nextChange, drawAt, tick) {
     const { moving, still } = this.deps.periods;
-    const until2 = (bar.nextChange - drawAt) * 1e3;
+    const until2 = (nextChange - drawAt) * 1e3;
     const shownPeriod = Math.min(Math.max(until2, moving), still);
     const { shown } = feed2.viewers;
     if (shownPeriod < still && shown) feed2.moving++;
     if (shownPeriod < still && !shown) feed2.unseen++;
     const period = shown ? shownPeriod : still;
     feed2.next = tick + period / 1e3;
-    feed2.change = Number.isFinite(bar.nextChange) ? bar.nextChange : null;
+    feed2.change = Number.isFinite(nextChange) ? nextChange : null;
   }
   // [LAW:nothing-unseen] A feed's frames are not render requests, so they
   // write no render event each: a feed says what it drew in a summary, when
@@ -83081,11 +83496,8 @@ var lanesOf = (viewers) => Object.entries(viewers.lanes).map(([lane, seen]) => `
 
 // src/renderer/click.ts
 init_globals();
-function clickTurn({ verbs }, { verb, value, arrival, context }, effects, record2) {
-  const handler = verbs.handler(verb);
-  if (handler === void 0)
-    throw new BadVerbArgs(`unknown click verb: ${verb}`);
-  handler(value, { arrival, context, effects, record: record2 });
+function clickTurn({ verbs }, { click: click2, arrival, context }, effects, record2) {
+  verbs.click(click2, { arrival, context, effects, record: record2 });
 }
 
 // src/renderer/verbs/port.ts
@@ -83854,11 +84266,11 @@ function requireValueTarget(key) {
   }
   return target;
 }
-function writeLayerOf(snapshot, role, configFile, home) {
+function writeLayerOf(snapshot, role, isolatedFile, home) {
   const layer = snapshot.chain.find((l) => l.role === role);
   if (layer === void 0)
     throw new BadVerbArgs(
-      `the ${role} layer is not writable: ${configFile !== null ? `${configFile} is the session's one config layer (it was named explicitly), so there is no ${role} layer to write` : `the ${role} layer is the project's, and this session has no approved project`}`
+      `the ${role} layer is not writable: ${isolatedFile !== null ? `${isolatedFile} is the session's only config layer (--config-only), so there is no ${role} layer to write` : `the ${role} layer is the project's, and this session has no approved project`}`
     );
   if (!writable(layer.content))
     throw new BadVerbArgs(
@@ -84445,8 +84857,8 @@ var SettingsHistory = class {
   get state() {
     return this.held;
   }
-  set state(next) {
-    runInAction(() => this.held.replace(next));
+  set state(next2) {
+    runInAction(() => this.held.replace(next2));
   }
   // [LAW:one-source-of-truth] The sessions whose history moved since the
   // host was last told, in the order they last moved (`drain`).
@@ -84478,7 +84890,7 @@ var SettingsHistory = class {
   begin(files) {
     const held = heldWrites(this.sessionState);
     const working = /* @__PURE__ */ new Map();
-    const click3 = {
+    const click2 = {
       held,
       files,
       historyOf: (sessionId2) => working.get(sessionId2) ?? this.history(sessionId2),
@@ -84507,8 +84919,8 @@ var SettingsHistory = class {
           (c) => c.before !== c.after
         );
         if (changes.length > 0)
-          click3.move(sessionId2, {
-            past: capped([...click3.historyOf(sessionId2).past, changes]),
+          click2.move(sessionId2, {
+            past: capped([...click2.historyOf(sessionId2).past, changes]),
             future: []
           });
       }
@@ -84529,11 +84941,11 @@ var SettingsHistory = class {
       },
       undo: (sessionId2) => {
         step4();
-        return this.undo(click3, sessionId2);
+        return this.undo(click2, sessionId2);
       },
       redo: (sessionId2) => {
         step4();
-        return this.redo(click3, sessionId2);
+        return this.redo(click2, sessionId2);
       },
       commit: () => {
         step4();
@@ -84544,14 +84956,14 @@ var SettingsHistory = class {
       }
     };
   }
-  undo(click3, sessionId2) {
-    const history = click3.historyOf(sessionId2);
+  undo(click2, sessionId2) {
+    const history = click2.historyOf(sessionId2);
     const step4 = history.past.at(-1);
     if (step4 === void 0) {
       throw new BadVerbArgs("undo: nothing to undo");
     }
     this.apply(
-      click3,
+      click2,
       sessionId2,
       step4,
       "before",
@@ -84560,8 +84972,8 @@ var SettingsHistory = class {
     );
     return step4;
   }
-  redo(click3, sessionId2) {
-    const history = click3.historyOf(sessionId2);
+  redo(click2, sessionId2) {
+    const history = click2.historyOf(sessionId2);
     const { past, future } = history;
     const step4 = future.at(-1);
     if (step4 === void 0) {
@@ -84569,7 +84981,7 @@ var SettingsHistory = class {
     }
     const all2 = [...past, step4];
     const kept = capped(all2);
-    this.apply(click3, sessionId2, step4, "after", "redo", {
+    this.apply(click2, sessionId2, step4, "after", "redo", {
       past: kept,
       future: future.slice(0, -1)
     });
@@ -84584,14 +84996,14 @@ var SettingsHistory = class {
   // file never stops it. [LAW:single-enforcer] That text has not been loaded
   // by anyone, so it passes the gate every click's write passes before it
   // lands.
-  apply(click3, sessionId2, step4, to, verb, then) {
-    const stepped2 = step4.map((c) => stepOf(click3, sessionId2, c, to));
+  apply(click2, sessionId2, step4, to, verb, then) {
+    const stepped2 = step4.map((c) => stepOf(click2, sessionId2, c, to));
     const stale = stepped2.flatMap((s) => s.kind === "moved" ? [s] : []);
     if (stale.length > 0) {
-      click3.move(
+      click2.move(
         sessionId2,
         forgotten(
-          click3.historyOf(sessionId2),
+          click2.historyOf(sessionId2),
           new Set(stale.map((s) => s.target))
         )
       );
@@ -84603,54 +85015,54 @@ var SettingsHistory = class {
     const stepTexts = new Map(files.map(({ file, text: text4 }) => [file, text4]));
     const read2 = (file) => {
       const text4 = stepTexts.get(file);
-      return text4 === void 0 ? click3.files.read(file) : contentOfText(text4);
+      return text4 === void 0 ? click2.files.read(file) : contentOfText(text4);
     };
-    for (const { file, text: text4 } of files) click3.files.prove(file, text4, read2);
+    for (const { file, text: text4 } of files) click2.files.prove(file, text4, read2);
     for (const { file, text: text4 } of files)
-      click3.files.land(
+      click2.files.land(
         file,
-        requireLayerText(file, click3.files.read(file)),
+        requireLayerText(file, click2.files.read(file)),
         text4
       );
     for (const s of stepped2)
       if (s.kind === "session")
-        if (s.value === null) click3.held.clear(sessionId2, s.key);
-        else click3.held.set(sessionId2, s.key, s.value);
-    click3.move(sessionId2, then);
+        if (s.value === null) click2.held.clear(sessionId2, s.key);
+        else click2.held.set(sessionId2, s.key, s.value);
+    click2.move(sessionId2, then);
   }
   // Move-to-end keeps insertion order as recency, so the bounds drop the
   // session that changed least recently.
   put(sessionId2, history) {
-    const next = new Map(this.state);
-    next.delete(sessionId2);
-    if (!holdsNothing(history)) next.set(sessionId2, history);
+    const next2 = new Map(this.state);
+    next2.delete(sessionId2);
+    if (!holdsNothing(history)) next2.set(sessionId2, history);
     this.moved.delete(sessionId2);
     this.moved.add(sessionId2);
-    this.adopt(next);
+    this.adopt(next2);
   }
   // [LAW:single-enforcer] The one enforcer of the bounds, over what the
   // profile handed in and over every step: each session the bounds trim or
   // drop is told.
-  adopt(next) {
-    const before = new Map(next);
-    this.bound(next);
+  adopt(next2) {
+    const before = new Map(next2);
+    this.bound(next2);
     for (const [sessionId2, history] of before)
-      if (next.get(sessionId2) !== history) {
+      if (next2.get(sessionId2) !== history) {
         this.moved.delete(sessionId2);
         this.moved.add(sessionId2);
       }
-    this.state = next;
+    this.state = next2;
   }
-  bound(next) {
-    while (next.size > MAX_SESSIONS5 || weight(next) > MAX_BYTES) {
-      const [oldest, h] = next.entries().next().value;
-      if (next.size > 1) {
-        next.delete(oldest);
+  bound(next2) {
+    while (next2.size > MAX_SESSIONS5 || weight(next2) > MAX_BYTES) {
+      const [oldest, h] = next2.entries().next().value;
+      if (next2.size > 1) {
+        next2.delete(oldest);
         continue;
       }
       const trimmed = withoutOldestStep(h);
-      if (holdsNothing(trimmed)) next.delete(oldest);
-      else next.set(oldest, trimmed);
+      if (holdsNothing(trimmed)) next2.delete(oldest);
+      else next2.set(oldest, trimmed);
       this.logger(
         "info",
         `settings-history: trimmed an old step for session ${oldest}`
@@ -84685,20 +85097,20 @@ function without2(steps2, gone) {
   return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
 }
 function describeStep(step4) {
-  return step4.map(describe3).join(", ");
+  return step4.map(describe2).join(", ");
 }
-function describe3(change) {
+function describe2(change) {
   return change.kind === "session" ? `session setting "${change.key}"` : `the ${change.role} layer`;
 }
-function stepOf(click3, sessionId2, change, to) {
+function stepOf(click2, sessionId2, change, to) {
   const from = to === "before" ? "after" : "before";
   if (change.kind === "session")
-    return click3.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
+    return click2.held.get(sessionId2, change.key) === change[from] ? { kind: "session", key: change.key, value: change[to] } : {
       kind: "moved",
       target: identity(change),
       what: `session setting "${change.key}"`
     };
-  const file = click3.files.pathOf(change.role);
+  const file = click2.files.pathOf(change.role);
   if (file === null || digestOf(file) !== change.digest)
     return {
       kind: "moved",
@@ -84706,7 +85118,7 @@ function stepOf(click3, sessionId2, change, to) {
       what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`
     };
   const applied3 = applyChanges(
-    requireLayerText(file, click3.files.read(file)),
+    requireLayerText(file, click2.files.read(file)),
     diffChanges(change[from], change[to])
   );
   return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
@@ -84753,18 +85165,15 @@ function heldWrites(store) {
 }
 
 // src/renderer/verbs/index.ts
-function requireSessionId(value) {
-  const parsed2 = parseSessionId(value);
-  if (!parsed2.ok) throw new BadVerbArgs(`session id ${parsed2.problem}`);
-  return parsed2.id;
-}
-function oneArg(value) {
-  return decodeWire(() => decodeURIComponent(value));
-}
 function ask(ctx, act) {
   ctx.acts.ask(ctx.effects, act);
 }
-var copy = (value, ctx) => ask(ctx, { kind: "copy", session: ctx.session, text: oneArg(value) });
+function globalAct(step4, ctx, session) {
+  ask(
+    ctx,
+    step4.verb === VERB_COPY ? { kind: "copy", session, text: step4.value } : { kind: "open", session, target: step4.value }
+  );
+}
 var DRAWERS = /* @__PURE__ */ new Set([
   "request",
   "feed"
@@ -84774,11 +85183,9 @@ function requireDrawer(by) {
     throw new BadVerbArgs(`unknown renderer ${JSON.stringify(by)}`);
   return by;
 }
-var copyDiagnostic = (value, ctx) => {
-  const [sessionId2 = "", by = "", key = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var copyDiagnostic = (args, ctx) => {
+  const [by = "", key = ""] = args;
+  const sid = ctx.session;
   const text4 = ctx.diagnosticCopy(sid, requireDrawer(by), key);
   if (text4 === void 0)
     throw new BadVerbArgs(
@@ -84786,11 +85193,9 @@ var copyDiagnostic = (value, ctx) => {
     );
   ask(ctx, { kind: "copy", session: sid, text: text4 });
 };
-var openVscode = (value, ctx) => ask(ctx, { kind: "open", session: ctx.session, target: oneArg(value) });
-var setState = (rawValue, ctx) => {
-  const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
-  const sid = requireSessionId(sessionId2);
-  const config = sessionConfig(ctx, sid);
+var setState = (rest2, ctx) => {
+  const sid = ctx.session;
+  const config = sessionConfig(ctx);
   const gate2 = ctx.gates.state.gateFor(config);
   if (rest2.length === 0)
     throw new BadVerbArgs(
@@ -84816,7 +85221,7 @@ var setState = (rawValue, ctx) => {
     }
     validated.push({ key, value: result.value });
   }
-  refuseDisorderedPicks(ctx, sid, "set-state", validated);
+  refuseDisorderedPicks(ctx, "set-state", validated);
   ctx.menu.choose(sid, validated, () => menuContext(ctx, sid, config));
   const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
@@ -84828,11 +85233,9 @@ function stepWithin(current, by, min3, max3) {
   if (n < min3) return current === min3 ? max3 : min3;
   return n;
 }
-var stepState = (rawValue, ctx) => {
-  const [sessionId2 = "", key = "", byRaw = ""] = decodeWire(
-    () => decodeSegments(rawValue)
-  );
-  const sid = requireSessionId(sessionId2);
+var stepState = (args, ctx) => {
+  const [key = "", byRaw = ""] = args;
+  const sid = ctx.session;
   if (!key) {
     throw new BadVerbArgs(
       "step-state: <key> is required (shape: <sessionId>/<key>/<by>)"
@@ -84844,7 +85247,7 @@ var stepState = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
-  const config = sessionConfig(ctx, sid);
+  const config = sessionConfig(ctx);
   const gate2 = ctx.gates.state.gateFor(config);
   const params = gate2.rangeParamsFor(key);
   if (!params) {
@@ -84859,10 +85262,10 @@ var stepState = (rawValue, ctx) => {
     params,
     stateKeySeed(config, (k) => ctx.sessionState.get(sid, k), key)
   );
-  const next = stepWithin(clamped, by, params.min, params.max);
-  const result = gate2.validate(key, String(next));
+  const next2 = stepWithin(clamped, by, params.min, params.max);
+  const result = gate2.validate(key, String(next2));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
-  refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
+  refuseDisorderedPicks(ctx, "step-state", [{ key, value: result.value }]);
   ctx.menu.choose(
     sid,
     [{ key, value: result.value }],
@@ -84873,12 +85276,12 @@ var stepState = (rawValue, ctx) => {
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
   );
 };
-function refuseDisorderedPicks(ctx, sid, verb, writes) {
+function refuseDisorderedPicks(ctx, verb, writes) {
   const picks = writes.filter((w) => w.key.startsWith(PLACEMENT_DRAFT_NS));
   if (picks.length === 0) return;
   const problems = placementPickProblems(
-    sessionConfig(ctx, sid),
-    (k) => ctx.sessionState.get(sid, k),
+    sessionConfig(ctx),
+    (k) => ctx.sessionState.get(ctx.session, k),
     picks
   );
   if (problems.length > 0) {
@@ -84897,20 +85300,13 @@ function stepFrom(verb, key, params, declared) {
   }
   return clampTo(params, parseInt(declared, 10));
 }
-function originOf(context, sid) {
-  return contextFor(context, sid)?.durable.origin ?? null;
-}
-function contextFor(context, sid) {
-  return context?.session === sid ? context : null;
-}
-function sessionOrigin(ctx, sid) {
-  const origin = originOf(ctx.context, sid);
-  if (origin === null) {
+function sessionOrigin(ctx) {
+  if (ctx.context === null) {
     throw new BadVerbArgs(
-      `session ${sid} has not rendered yet \u2014 no config to act on`
+      `session ${ctx.session} has not rendered yet \u2014 no config to act on`
     );
   }
-  return origin;
+  return ctx.context.durable.origin;
 }
 function changeDone(ctx, id2, outcome, effects) {
   const landed = ctx.configWrites.settled(id2, outcome);
@@ -84943,8 +85339,8 @@ function proveLoadsAsLayer(ctx, origin, file, text4, read2) {
     );
   proveLoads(heldLayer2(ctx, origin, layer.role), text4, read2);
 }
-function sessionConfig(ctx, sid) {
-  return ctx.configFor(sessionOrigin(ctx, sid));
+function sessionConfig(ctx) {
+  return ctx.configFor(sessionOrigin(ctx));
 }
 function menuContext(ctx, sid, config) {
   return {
@@ -84953,29 +85349,24 @@ function menuContext(ctx, sid, config) {
     edit: ctx.edits.draft(sid)?.navigationScope ?? null
   };
 }
-function nestOf(ctx, context, sid) {
-  const origin = originOf(context, sid);
+function nestOf(ctx, origin) {
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
 }
 function heldLayer2(ctx, origin, role) {
   return writeLayerOf(
     ctx.snapshotFor(origin),
     role,
-    origin.target.path ?? null,
+    origin.target.source === "argument-only" ? origin.target.path : null,
     ctx.locations.home
   );
 }
-function configWire(verb, raw) {
-  const [sessionId2 = "", layer = "", ...args] = decodeWire(
-    () => decodeSegments(raw)
-  );
-  const sid = requireSessionId(sessionId2);
+function configArgs(verb, [layer = "", ...args]) {
   const role = layerRoleOf(layer);
   if (role === null)
     throw new BadVerbArgs(
       `${verb}: "${layer}" is not a config layer (one of ${LAYER_ROLES.join(", ")})`
     );
-  return { sid, role, args };
+  return { role, args };
 }
 function editStore(ctx, sid) {
   return {
@@ -84983,13 +85374,13 @@ function editStore(ctx, sid) {
     record: (file, before, after) => ctx.journal.file(sid, file, before, after)
   };
 }
-var setConfig = (rawValue, ctx) => {
+var setConfig = (args, ctx) => {
+  const sid = ctx.session;
   const {
-    sid,
     role,
     args: [key = "", incoming = ""]
-  } = configWire("set-config", rawValue);
-  const origin = sessionOrigin(ctx, sid);
+  } = configArgs("set-config", args);
+  const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(config);
   if (!key) {
@@ -85011,12 +85402,12 @@ var setConfig = (rawValue, ctx) => {
     `set-config: ${landing.key}=${result.value} \u2192 ${into.path} (session=${sid})`
   );
 };
-var stepConfig = (rawValue, ctx) => {
+var stepConfig = (args, ctx) => {
+  const sid = ctx.session;
   const {
-    sid,
     role,
     args: [key = "", byRaw = ""]
-  } = configWire("step-config", rawValue);
+  } = configArgs("step-config", args);
   if (!key) {
     throw new BadVerbArgs(
       "step-config: <key> is required (shape: <sessionId>/<layer>/<key>/<by>)"
@@ -85028,7 +85419,7 @@ var stepConfig = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
-  const origin = sessionOrigin(ctx, sid);
+  const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(config);
   const params = gate2.rangeParamsFor(key);
@@ -85054,8 +85445,8 @@ var stepConfig = (rawValue, ctx) => {
     params,
     configKeySeed(landing.globals, key)
   );
-  const next = stepWithin(current, by, params.min, params.max);
-  const result = gate2.validate(key, String(next));
+  const next2 = stepWithin(current, by, params.min, params.max);
+  const result = gate2.validate(key, String(next2));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
   writeValues(editStore(ctx, sid), into, [[landing.key, result.value]]);
   ctx.log(
@@ -85063,9 +85454,10 @@ var stepConfig = (rawValue, ctx) => {
     `step-config: ${landing.key} ${current}\u2192${result.value} (by ${by}) \u2192 ${into.path} (session=${sid})`
   );
 };
-var save = (value, ctx) => {
-  const { sid, role } = configWire("save", value);
-  const origin = sessionOrigin(ctx, sid);
+var save = (args, ctx) => {
+  const sid = ctx.session;
+  const { role } = configArgs("save", args);
+  const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const pick2 = (key) => ctx.sessionState.get(sid, key);
   const drafts = settingDrafts(config, pick2);
@@ -85106,9 +85498,10 @@ function gatePlacements(verb, gate2, placements) {
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
-var savePreset = (value, ctx) => {
-  const { sid, role } = configWire("save-preset", value);
-  const origin = sessionOrigin(ctx, sid);
+var savePreset = (args, ctx) => {
+  const sid = ctx.session;
+  const { role } = configArgs("save-preset", args);
+  const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const snapshot = presetSnapshot(
     config,
@@ -85142,9 +85535,10 @@ var savePreset = (value, ctx) => {
     `save-preset: ${[`${name} from=${snapshot.from}`, ...picks.map(([k, v]) => `${k}=${v}`), ...snapshot.placements.map(placementLog)].join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
-var saveThemeDefault = (value, ctx) => {
-  const { sid, role } = configWire("save-theme-default", value);
-  const origin = sessionOrigin(ctx, sid);
+var saveThemeDefault = (args, ctx) => {
+  const sid = ctx.session;
+  const { role } = configArgs("save-theme-default", args);
+  const origin = sessionOrigin(ctx);
   const config = ctx.configFor(origin);
   const save2 = themeDefaultSave(
     config,
@@ -85175,27 +85569,28 @@ var saveThemeDefault = (value, ctx) => {
     `save-theme-default: ${save2.theme} ${THEME_DEFAULT_FIELDS.map((f) => `${f}=${save2.look[f]}`).join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
-var deletePreset2 = (value, ctx) => {
+var deletePreset2 = (args, ctx) => {
+  const sid = ctx.session;
   const {
-    sid,
     role,
     args: [name = ""]
-  } = configWire("delete-preset", value);
+  } = configArgs("delete-preset", args);
   if (!name) {
     throw new BadVerbArgs(
       "delete-preset: <name> is required (shape: <sessionId>/<layer>/<name>)"
     );
   }
-  const origin = sessionOrigin(ctx, sid);
+  const origin = sessionOrigin(ctx);
   const into = heldLayer2(ctx, origin, role);
   deletePreset(editStore(ctx, sid), into, name);
   const key = SETTINGS.preset.sessionKey;
   if (ctx.sessionState.get(sid, key) === name) ctx.sessionState.clear(sid, key);
   ctx.log("info", `delete-preset: ${name} \u2190 ${into.path} (session=${sid})`);
 };
-var resetConfig = (value, ctx) => {
-  const { sid, role, args: keys2 } = configWire("reset-config", value);
-  const origin = sessionOrigin(ctx, sid);
+var resetConfig = (args, ctx) => {
+  const sid = ctx.session;
+  const { role, args: keys2 } = configArgs("reset-config", args);
+  const origin = sessionOrigin(ctx);
   const known = ctx.gates.config.gateFor(ctx.configFor(origin)).listKeys();
   const unknown = keys2.length === 0 ? [""] : keys2.filter((k) => !known.includes(k));
   if (unknown.length > 0) {
@@ -85236,13 +85631,13 @@ function endedSessionKeys(ended, configuring) {
     ...member === configuring ? [EDIT_CONFIGURE_KEY] : []
   ]);
 }
-var applyLayoutOp2 = (rawValue, ctx) => {
+var applyLayoutOp2 = (args, ctx) => {
+  const sid = ctx.session;
   const {
-    sid,
     role,
     args: [key = "", opToken = ""]
-  } = configWire("apply-layout-op", rawValue);
-  const origin = sessionOrigin(ctx, sid);
+  } = configArgs("apply-layout-op", args);
+  const origin = sessionOrigin(ctx);
   const before = ctx.configFor(origin);
   const gate2 = ctx.gates.config.gateFor(before);
   if (!key) {
@@ -85275,23 +85670,22 @@ var applyLayoutOp2 = (rawValue, ctx) => {
     `apply-layout-op: ${key} ${result.value} \u2192 ${into.path} placed=${JSON.stringify(placed2)} released=${JSON.stringify(released)} (session=${sid})`
   );
 };
-var undo = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var undo = (_args, ctx) => {
+  const sid = ctx.session;
   const step4 = ctx.journal.undo(sid);
   ctx.log("info", `undo: restored ${describeStep(step4)} (session=${sid})`);
 };
-var back = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
+var back = (_args, ctx) => {
+  const sid = ctx.session;
   const { writes, discarded } = ctx.menu.back(
     sid,
-    menuContext(ctx, sid, sessionConfig(ctx, sid))
+    menuContext(ctx, sid, sessionConfig(ctx))
   );
-  const restored = writes.map(({ key, value: value2 }) => `${key}=${value2 ?? "\u2205"}`).join(" ");
+  const restored = writes.map(({ key, value }) => `${key}=${value ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
-var rewind = (value, ctx) => {
-  const sid = requireSessionId(oneArg(value));
+var rewind = (_args, ctx) => {
+  const sid = ctx.session;
   if (ctx.edits.draft(sid) === null)
     throw new BadVerbArgs(
       "rewind: edit mode has no transaction \u2014 nothing to cancel"
@@ -85299,17 +85693,16 @@ var rewind = (value, ctx) => {
   ctx.finishEdit("cancel");
   ctx.log("info", `rewind: discarded draft (session=${sid})`);
 };
-var redo = (value, ctx) => {
-  const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var redo = (_args, ctx) => {
+  const sid = ctx.session;
   const step4 = ctx.journal.redo(sid);
   ctx.log("info", `redo: re-applied ${describeStep(step4)} (session=${sid})`);
 };
-var slash = (value, ctx) => {
-  const [sessionId2 = "", line = ""] = decodeWire(() => decodeSegments(value));
-  const sid = requireSessionId(sessionId2);
+var slash = (args, ctx) => {
+  const [line = ""] = args;
+  const sid = ctx.session;
   const declared = Object.values(
-    ctx.configFor(sessionOrigin(ctx, sid)).actions
+    ctx.configFor(sessionOrigin(ctx)).actions
   ).filter((a) => "slash" in a);
   const action2 = declared.find((a) => a.slash === line);
   if (action2 === void 0) {
@@ -85317,7 +85710,7 @@ var slash = (value, ctx) => {
       `${JSON.stringify(line)} is not a command this config declares (it declares: ${[...new Set(declared.map((a) => a.slash))].join(", ") || "none"})`
     );
   }
-  const live = contextFor(ctx.context, sid)?.live ?? null;
+  const live = ctx.context?.live ?? null;
   if (live === null)
     throw new BadVerbArgs(
       `${line} was not typed: the daemon holds no request of session ${sid}, so its pane is not known until its next request`
@@ -85332,9 +85725,9 @@ var slash = (value, ctx) => {
     line: action2.slash
   });
 };
-function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx) {
-  const sid = requireSessionId(sessionId2);
-  const origin = sessionOrigin(ctx, sid);
+function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
+  const sid = ctx.session;
+  const origin = sessionOrigin(ctx);
   const actions = ctx.configFor(origin).actions;
   const decl = Object.hasOwn(actions, action2) ? actions[action2] : void 0;
   if (decl === void 0 || !("run" in decl)) {
@@ -85378,18 +85771,10 @@ function runOf3([sessionId2 = "", action2 = "", evaluated2 = "", mac = ""], ctx)
     }))
   };
 }
-var run2 = (value, ctx) => ask(
-  ctx,
-  runOf3(
-    decodeWire(() => decodeSegments(value)),
-    ctx
-  )
-);
-var repoConfig = (value, ctx) => {
-  const [sessionId2 = "", dir = "", answer2 = "", mac = ""] = decodeWire(
-    () => decodeSegments(value)
-  );
-  const sid = requireSessionId(sessionId2);
+var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
+var repoConfig = (args, ctx) => {
+  const [dir = "", answer2 = "", mac = ""] = args;
+  const sid = ctx.session;
   const answered = REPO_ANSWERS.find((known) => known === answer2);
   if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
     throw new BadVerbArgs(
@@ -85398,63 +85783,55 @@ var repoConfig = (value, ctx) => {
   }
   ctx.configWrites.answer(dir, answered);
 };
-var LEAF_VERBS = /* @__PURE__ */ new Map([
-  [VERB_COPY, copy],
-  [VERB_OPEN_VSCODE, openVscode],
-  [VERB_SET_STATE, setState],
-  [VERB_STEP_STATE, stepState],
-  [VERB_SET_CONFIG, setConfig],
-  [VERB_STEP_CONFIG, stepConfig],
-  [VERB_RESET_CONFIG, resetConfig],
-  [VERB_SAVE, save],
-  [VERB_SAVE_PRESET, savePreset],
-  [VERB_SAVE_THEME_DEFAULT, saveThemeDefault],
-  [VERB_DELETE_PRESET, deletePreset2],
-  [VERB_APPLY_LAYOUT_OP, applyLayoutOp2],
-  [VERB_UNDO, undo],
-  [VERB_REDO, redo],
-  [VERB_BACK, back],
-  [VERB_REWIND, rewind],
-  [VERB_SLASH, slash],
-  [VERB_RUN, run2],
-  [VERB_REPO_CONFIG, repoConfig],
-  [VERB_COPY_DIAGNOSTIC, copyDiagnostic]
-]);
-function stepsOf(verb, value) {
-  return batchAdjacentWrites(
-    verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }]
-  );
-}
-function foldEffects(steps2, sid, ctx) {
+var SESSION_HANDLERS = {
+  [VERB_SET_STATE]: setState,
+  [VERB_STEP_STATE]: stepState,
+  [VERB_SET_CONFIG]: setConfig,
+  [VERB_STEP_CONFIG]: stepConfig,
+  [VERB_RESET_CONFIG]: resetConfig,
+  [VERB_SAVE]: save,
+  [VERB_SAVE_PRESET]: savePreset,
+  [VERB_SAVE_THEME_DEFAULT]: saveThemeDefault,
+  [VERB_DELETE_PRESET]: deletePreset2,
+  [VERB_APPLY_LAYOUT_OP]: applyLayoutOp2,
+  [VERB_UNDO]: undo,
+  [VERB_REDO]: redo,
+  [VERB_BACK]: back,
+  [VERB_REWIND]: rewind,
+  [VERB_SLASH]: slash,
+  [VERB_RUN]: run2,
+  [VERB_REPO_CONFIG]: repoConfig,
+  [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
+};
+function foldEffects(steps2, log, perform, recordErrors) {
   const errors2 = [];
   let operational = false;
-  for (const { verb, value } of steps2) {
-    const leaf = LEAF_VERBS.get(verb);
-    if (!leaf) {
-      errors2.push(`unknown effect verb "${verb}"`);
+  for (const step4 of steps2) {
+    if (step4.kind === "invalid") {
+      errors2.push(step4.reason);
       continue;
     }
     try {
-      leaf(value, ctx);
+      perform(step4);
     } catch (e) {
       const failure2 = failureOf(e);
       if (failure2.kind !== "bad-request" && failure2.kind !== "threw") {
-        if (errors2.length > 0) ctx.log("warn", `click: ${errors2.join("; ")}`);
+        if (errors2.length > 0) log("warn", `click: ${errors2.join("; ")}`);
         throw e;
       }
       if (failure2.kind === "threw") operational = true;
-      errors2.push(`${verb}: ${failure2.message}`);
+      errors2.push(`${step4.verb}: ${failure2.message}`);
     }
   }
   if (errors2.length > 0) {
-    if (sid !== null)
-      holdClickError(ctx.sessionState, sid, errors2.join("\n"), ctx.now());
+    recordErrors(errors2.join("\n"));
     const message2 = errors2.join("; ");
     throw operational ? new Error(message2) : new BadVerbArgs(message2);
   }
 }
 function journaled(verb, sid, context, ctx, effects, handler) {
-  const origin = sid === null ? null : originOf(context, sid);
+  const held = context?.session === sid ? context : null;
+  const origin = held?.durable.origin ?? null;
   ctx.configWrites.begin(verb, () => {
     if (origin === null)
       throw new BadVerbArgs(
@@ -85469,8 +85846,8 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text4, read2) => proveLoadsAsLayer(ctx, origin, file, text4, read2)
   };
-  const draft = sid === null || origin === null || ctx.edits.snapshot(origin, sid) === null ? null : ctx.edits.draft(sid);
-  const scoped = draft === null || sid === null ? ctx : {
+  const draft = origin === null || ctx.edits.snapshot(origin, sid) === null ? null : ctx.edits.draft(sid);
+  const scoped = draft === null ? ctx : {
     ...ctx,
     snapshotFor: (of) => ctx.edits.snapshot(of, sid) ?? ctx.snapshotFor(of),
     configFor: (of) => ctx.configFor(of, sid)
@@ -85483,7 +85860,7 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   const failures = [];
   const sessionState = closingView(
     journal.sessionState,
-    (sid2) => nestOf(scoped, context, sid2),
+    (target) => target === sid ? nestOf(scoped, origin) : NO_NEST,
     (line) => ctx.log("info", line)
   );
   const navigation = ctx.navigation.begin(
@@ -85494,12 +85871,12 @@ function journaled(verb, sid, context, ctx, effects, handler) {
     handler({
       ...scoped,
       session: sid,
-      context,
+      context: held,
       sessionState,
       journal,
       readConfigFile: (edit?.files ?? files).read,
       finishEdit: (finish) => {
-        if (edit === void 0 || sid === null) return;
+        if (edit === void 0) return;
         requested.finish = finish;
         sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
       },
@@ -85529,13 +85906,13 @@ function journaled(verb, sid, context, ctx, effects, handler) {
       failed3.push(e);
     }
     try {
-      const writes = sid === null ? null : journal.writes(sid);
+      const writes = journal.writes(sid);
       const mode = writes?.get(EDIT_MODE_KEY);
       let moved2 = false;
       if (edit === void 0) journal.commit();
       else if (saved !== null) saved.commit();
       else moved2 = edit.commit();
-      if (sid !== null && origin !== null) {
+      if (origin !== null) {
         if (edit !== void 0 && (saved !== null || mode !== void 0 && mode !== EDIT_MODE_ARRANGE)) {
           ctx.edits.close(sid);
           ctx.editViewChanged(sid);
@@ -85560,31 +85937,37 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   }
   throwAll(failures);
 }
-function click(verb) {
-  return (value, ctx) => {
-    const session = clickSessionOf(verb, value);
-    const sid = session?.ok ? session.id : null;
-    const steps2 = stepsOf(verb, value);
-    journaled(verb, sid, ctx.context, ctx, ctx.effects, (c) => {
-      try {
-        foldEffects(steps2, sid, c);
-      } finally {
-        if (sid !== null) ctx.clickLanded(sid);
+function runClick(click2, ctx) {
+  if (click2.scope === "global") {
+    foldEffects(
+      click2.steps,
+      ctx.log,
+      (step4) => globalAct(step4, ctx, null),
+      () => {
       }
-    });
-  };
+    );
+    return;
+  }
+  const sid = click2.session;
+  journaled(click2.verb, sid, ctx.context, ctx, ctx.effects, (c) => {
+    try {
+      foldEffects(
+        click2.steps,
+        c.log,
+        (step4) => {
+          if (step4.kind === "global") globalAct(step4, c, sid);
+          else SESSION_HANDLERS[step4.verb](step4.args, c);
+        },
+        (message2) => holdClickError(c.sessionState, sid, message2, c.now())
+      );
+    } finally {
+      ctx.clickLanded(sid);
+    }
+  });
 }
-var VERBS = new Map(
-  [...LEAF_VERBS.keys(), VERB_DISPATCH].map(
-    (verb) => [verb, click(verb)]
-  )
-);
-var VERB_NAMES = Object.freeze([
-  ...VERBS.keys()
-]);
 function closeIdleMenus(sid, context, idle, ctx, effects) {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
-    const nest = nestOf(c, context, sid);
+    const nest = nestOf(c, c.context?.durable.origin ?? null);
     const depth = c.edits.draft(sid)?.depth();
     const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo > 0;
     const roots = openRoots(nest, (key) => c.sessionState.get(sid, key)).filter(
@@ -85593,7 +85976,7 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
     c.menu.choose(
       sid,
       roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
-      () => menuContext(c, sid, sessionConfig(c, sid))
+      () => menuContext(c, sid, sessionConfig(c))
     );
     c.log(
       "info",
@@ -85605,10 +85988,7 @@ function closeIdleMenus(sid, context, idle, ctx, effects) {
 // src/renderer/verbs/port.ts
 function verbsOver(ctx) {
   return {
-    handler: (verb) => {
-      const handler = VERBS.get(verb);
-      return handler && ((value, facts) => handler(value, { ...ctx, ...facts }));
-    },
+    click: (click2, facts) => runClick(click2, { ...ctx, ...facts }),
     closeIdle: (sessionId2, context, idle, effects) => closeIdleMenus(sessionId2, context, idle, ctx, effects),
     changeDone: (id2, outcome, effects) => changeDone(ctx, id2, outcome, effects),
     landing: () => ctx.configWrites.landing()
@@ -85916,8 +86296,8 @@ var NavigationHistory = class {
   // does not land publishes neither.
   begin(store, choose) {
     const before = /* @__PURE__ */ new Map();
-    const next = /* @__PURE__ */ new Map();
-    const timelineOf = (sid) => next.get(sid) ?? this.timelines.get(sid) ?? EMPTY4;
+    const next2 = /* @__PURE__ */ new Map();
+    const timelineOf = (sid) => next2.get(sid) ?? this.timelines.get(sid) ?? EMPTY4;
     const endVisit = (sid) => {
       const start = before.get(sid);
       if (start === void 0) return;
@@ -85929,7 +86309,7 @@ var NavigationHistory = class {
         ...visits.slice(0, cursor),
         { from: start.view, to }
       ].slice(-MAX_VISITS);
-      next.set(sid, { visits: followed, cursor: followed.length });
+      next2.set(sid, { visits: followed, cursor: followed.length });
     };
     return {
       choose: (sid, writes, contextOf) => {
@@ -85946,7 +86326,7 @@ var NavigationHistory = class {
         const { destination, invalid } = previous(timeline, at, context);
         const discarded = invalid.size;
         const cursor = Math.max(0, timeline.cursor - discarded - 1);
-        next.set(sid, {
+        next2.set(sid, {
           visits: timeline.visits.filter((visit) => !invalid.has(visit)),
           cursor
         });
@@ -85972,8 +86352,8 @@ var NavigationHistory = class {
       },
       commit: () => {
         for (const sid of before.keys()) endVisit(sid);
-        this.publish(next);
-        next.clear();
+        this.publish(next2);
+        next2.clear();
       }
     };
   }
@@ -86095,62 +86475,70 @@ var ActsOnTheirWay = class {
 // src/renderer/world-states.ts
 init_globals();
 var WorldStates = class {
-  contexts = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] One document per session, the newest handed in.
-  documents = observable.map(
-    void 0,
-    { deep: false }
-  );
-  // [LAW:no-ambient-temporal-coupling] The host hands each session's documents
-  // in `seq` order, from its collector alone; a document older than the one
-  // held breaks that order, and an equal `seq` that is not the held document is
-  // a second minting of one number. Both are the host's bug, said, never
-  // drawn. The held document stays itself when handed in again, so nothing
-  // reading it wakes.
-  take(document) {
-    const held = this.documents.get(document.session);
-    if (held !== void 0 && document.seq <= held.seq) {
-      if (document.seq === held.seq && compareStructural(document, held))
-        return;
+  live = observable.map(void 0, {
+    deep: false
+  });
+  open(context, document) {
+    const session = context.hookData.session_id;
+    if (document.session !== session)
       throw new Error(
-        `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`
+        `world state for session ${JSON.stringify(document.session)} arrived with context for ${JSON.stringify(session)}`
       );
-    }
-    runInAction(() => this.documents.set(document.session, document));
+    const held = this.live.get(session);
+    const next2 = nextDocument(document, held?.document);
+    if (held?.context === context && held.document === next2) return;
+    runInAction(() => this.live.set(session, { context, document: next2 }));
   }
-  // [LAW:no-defensive-null-guards] The host delivers a session's `context`,
-  // which carries its document, ahead of each of its requests, and a `retire`
-  // drops the document with the view: a session with none here is the host's
-  // bug, so the read throws, naming it.
+  // [LAW:no-ambient-temporal-coupling] Only context can admit a session.
+  // A world update that arrives after retirement cannot bring it back.
+  take(document) {
+    const held = this.live.get(document.session);
+    if (held === void 0) return false;
+    const next2 = nextDocument(document, held.document);
+    if (next2 !== held.document)
+      runInAction(
+        () => this.live.set(document.session, {
+          context: held.context,
+          document: next2
+        })
+      );
+    return true;
+  }
   of(session) {
-    const document = this.documents.get(session);
-    if (document === void 0)
+    return this.require(session).document;
+  }
+  requestOf(session) {
+    return this.require(session).context;
+  }
+  sessions() {
+    return [...this.live.keys()];
+  }
+  contextOf(session) {
+    const held = this.live.get(session);
+    return held === void 0 ? null : heardContextOf(held.context);
+  }
+  drop(session) {
+    runInAction(() => this.live.delete(session));
+  }
+  // [LAW:no-silent-failure] The host admits a session before asking for its
+  // first draw. A request outside that lifetime reports what went wrong.
+  require(session) {
+    const held = this.live.get(session);
+    if (held === void 0)
       throw new Error(
         `no world state for session ${JSON.stringify(session)}: the host hands one in with the context ahead of every request`
       );
-    return document;
-  }
-  // [LAW:one-source-of-truth] Every session the renderer holds a document
-  // of: from its context until its retire.
-  sessions() {
-    return [...this.documents.keys()];
-  }
-  // A session's context, as its `context` handed it in: kept beside its
-  // document, for as long as it, so a live session's context is always the
-  // one its document was read at.
-  heard(req) {
-    this.contexts.set(req.hookData.session_id, heardContextOf(req));
-  }
-  // The newest context of a live session, or null for one the renderer does
-  // not hold.
-  contextOf(session) {
-    return this.contexts.get(session) ?? null;
-  }
-  drop(session) {
-    this.contexts.delete(session);
-    runInAction(() => this.documents.delete(session));
+    return held;
   }
 };
+function nextDocument(document, held) {
+  if (held === void 0 || document.seq > held.seq) return document;
+  if (document.seq === held.seq && compareStructural(document, held))
+    return held;
+  throw new Error(
+    `world state seq ${document.seq} for session ${JSON.stringify(document.session)} does not follow the held seq ${held.seq}`
+  );
+}
 
 // src/renderer/session-source.ts
 init_globals();
@@ -86600,18 +86988,27 @@ function fallbackState(cwd2, snapshot, deps) {
 }
 var DIRECTORY_SCOPE = /* @__PURE__ */ new Set(["directory"]);
 var VIEW_SCOPE = /* @__PURE__ */ new Set(["view"]);
-function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
+function standaloneRequest(facts) {
+  const requested = observable.box(facts, { deep: false });
+  return {
+    read: () => requested.get(),
+    update: (next2) => {
+      if (next2 !== requested.get()) runInAction(() => requested.set(next2));
+    }
+  };
+}
+function openView(state, cwd2, facts, { source: sourceOf, changed, log }, currentRequest) {
   const sessionId2 = facts.hookData.session_id;
   const registry = state.registry.view();
   declareDslVariables(state.config, registry, cwd2, VIEW_SCOPE);
-  const requested = observable.box(facts, { deep: false });
+  const request2 = currentRequest === void 0 ? standaloneRequest(facts) : { read: currentRequest, update: void 0 };
   let source;
   try {
     source = sourceOf({
       sessionId: sessionId2,
       state,
       store: registry.variableStore,
-      requested: () => requested.get()
+      requested: request2.read
     });
   } catch (e) {
     registry.dispose();
@@ -86641,11 +87038,8 @@ function openView(state, cwd2, facts, { source: sourceOf, changed, log }) {
     store: registry.variableStore,
     registry,
     source,
-    // [LAW:single-enforcer] A request is taken once.
-    requested: (next) => {
-      if (next !== requested.get()) runInAction(() => requested.set(next));
-    },
-    facts: () => requested.get(),
+    requested: request2.update,
+    facts: request2.read,
     frames: /* @__PURE__ */ new Map(),
     lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
     retire: stopChanged,
@@ -86950,7 +87344,7 @@ var RenderCache = class {
     if (current?.state === state) {
       this.views.delete(sessionId2);
       this.views.set(sessionId2, current);
-      current.requested(facts);
+      current.requested?.(facts);
       return current;
     }
     this.views.delete(sessionId2);
@@ -86970,11 +87364,18 @@ var RenderCache = class {
     const sessionId2 = facts.hookData.session_id;
     let view;
     try {
-      view = openView(state, entry.cwd, facts, {
-        source: this.deps.source,
-        changed: (sid) => this.observers.onViewChanged?.(sid),
-        log: this.log
-      });
+      const { currentRequest } = this.deps;
+      view = openView(
+        state,
+        entry.cwd,
+        facts,
+        {
+          source: this.deps.source,
+          changed: (sid) => this.observers.onViewChanged?.(sid),
+          log: this.log
+        },
+        currentRequest === void 0 ? void 0 : () => currentRequest(sessionId2)
+      );
     } catch (error) {
       this.openFailures.set(sessionId2, { error });
       throw error;
@@ -87472,13 +87873,55 @@ function mainRenderer(parts, pushed, drained) {
     configs: [],
     wake: null
   };
+  const opening = /* @__PURE__ */ new Set();
   let parked = [];
-  const waits = (origin, event, record2) => {
-    if (origin === null || parts.renderCache.holdsConfig(origin)) return false;
-    parked = [...parked, { origin, event }];
-    record2.push(["parked", event.kind]);
-    return true;
+  const configFailures = /* @__PURE__ */ new Map();
+  const parkedContext = (click2) => {
+    const { session } = click2;
+    if (click2.kind === "live")
+      return heardContextOf(parts.worldStates.requestOf(session));
+    return parts.worldStates.contextOf(session) ?? {
+      session,
+      durable: click2.durable,
+      live: null
+    };
   };
+  const takeClicks = (matches) => {
+    const ready = [];
+    parked = parked.filter((click2) => {
+      if (!matches(click2)) return true;
+      ready.push(click2);
+      return false;
+    });
+    return ready;
+  };
+  const throwConfigFailure = (origin) => {
+    const failure2 = configFailures.get(originKey(origin));
+    if (failure2 !== void 0) throw new CrossedFailure(failure2);
+  };
+  const failClicks = (clicks, failure2) => {
+    for (const { session } of clicks)
+      holdClickError(parts.sessionState, session, failure2.message, time.at);
+  };
+  const resume = (ready, effects, record2) => ready.map((click2) => () => {
+    try {
+      clickTurn(
+        parts,
+        { ...click2.event, context: parkedContext(click2) },
+        effects,
+        record2
+      );
+    } catch (thrown2) {
+      holdClickError(
+        parts.sessionState,
+        click2.session,
+        failureOf(thrown2).message,
+        time.at
+      );
+      throw thrown2;
+    }
+  });
+  const parkedClickSessions = () => new Set(parked.map((click2) => click2.session));
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start":
@@ -87494,37 +87937,85 @@ function mainRenderer(parts, pushed, drained) {
           )
         ]);
         return;
-      case "context":
-        if (parts.edits.moved(
-          event.context.hookData.session_id,
-          event.context.requested
-        ))
-          parts.renderCache.retireSession(event.context.hookData.session_id);
-        if (parts.renderCache.holdsConfig(event.context.requested))
-          configureSession(parts, event.context, event.worldState, record2);
-        else {
-          takeContext(parts, event.context, event.worldState, record2);
-          waits(event.context.requested, event, record2);
-        }
+      case "context": {
+        const { context, worldState } = event;
+        const session = context.hookData.session_id;
+        const previous2 = parts.worldStates.contextOf(session);
+        const origin = context.requested;
+        contextFacts(context, record2);
+        noteFacts(record2, { encoding: context.encoding });
+        runInAction(() => {
+          parts.worldStates.open(context, worldState);
+          const editMoved = parts.edits.moved(session, origin);
+          if (editMoved || previous2 !== null && originKey(previous2.durable.origin) !== originKey(origin))
+            parts.renderCache.retireSession(session);
+          const failure2 = configFailures.get(originKey(origin));
+          if (failure2 !== void 0) {
+            opening.delete(session);
+            failClicks(
+              takeClicks((click2) => click2.session === session),
+              failure2
+            );
+            throw new CrossedFailure(failure2);
+          }
+          if (!parts.renderCache.holdsConfig(origin)) {
+            opening.add(session);
+            record2.push(["parked", "context"]);
+            return;
+          }
+          opening.delete(session);
+          const ready = takeClicks((click2) => click2.session === session);
+          runEach([
+            () => openSession(parts, session),
+            ...resume(ready, effects, record2)
+          ]);
+        });
         return;
+      }
       case "config": {
         const key = originKey(event.origin);
-        const ready = parked.filter((p2) => originKey(p2.origin) === key);
-        parked = parked.filter((p2) => originKey(p2.origin) !== key);
+        const recovering = configFailures.has(key);
+        const sessions = (recovering ? parts.worldStates.sessions() : [...opening]).filter(
+          (session) => originKey(parts.worldStates.requestOf(session).requested) === key
+        );
+        for (const session of sessions) opening.delete(session);
+        const ready = takeClicks(
+          (click2) => originKey(parkedContext(click2).durable.origin) === key
+        );
+        try {
+          parts.renderCache.configure(event.origin, event.config);
+        } catch (thrown2) {
+          const failure2 = failureOf(thrown2);
+          configFailures.set(key, failure2);
+          failClicks(ready, failure2);
+          throw thrown2;
+        }
+        configFailures.delete(key);
         runEach([
-          () => parts.renderCache.configure(event.origin, event.config),
           () => runEach(
             parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
           ),
-          ...ready.map(({ event: waited }) => () => {
-            if (waited.kind === "context") openSession(parts, waited.context);
-            else turn(waited, record2, effects, frames);
-          })
+          ...sessions.map((session) => () => openSession(parts, session)),
+          ...resume(ready, effects, record2)
         ]);
         return;
       }
       case "request": {
-        const { frame: frame2, delivery } = answerRequest(parts, event.context, record2);
+        const current = parts.worldStates.requestOf(
+          event.context.hookData.session_id
+        );
+        throwConfigFailure(current.requested);
+        if (!parts.renderCache.holdsConfig(current.requested))
+          throw new Error(
+            `config is pending for session ${JSON.stringify(current.hookData.session_id)}`
+          );
+        const { frame: frame2, delivery, inspection } = answerRequest(
+          parts,
+          current,
+          event.context.hints,
+          record2,
+          event.inspect
+        );
         const id2 = parts.mint();
         deliveries.set(id2, delivery);
         effects.push({
@@ -87533,17 +88024,18 @@ function mainRenderer(parts, pushed, drained) {
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
-          frame: frame2
+          frame: frame2,
+          ...inspection === void 0 ? {} : { inspection }
         });
         return;
       }
       case "world-state":
-        parts.worldStates.take(event.worldState);
+        if (!parts.worldStates.take(event.worldState))
+          record2.push(["world-state", "no-live-session"]);
         return;
       case "retire":
-        parked = parked.filter(
-          (p2) => p2.event.kind !== "context" || p2.event.context.hookData.session_id !== event.session
-        );
+        opening.delete(event.session);
+        parked = parked.filter((click2) => click2.session !== event.session);
         menuIdle.retire(event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
@@ -87561,20 +88053,39 @@ function mainRenderer(parts, pushed, drained) {
         return;
       }
       case "click": {
-        if (waits(event.context?.durable.origin ?? null, event, record2)) return;
-        clickTurn(parts, event, effects, record2);
+        const { click: click2 } = event;
+        const live = click2.scope === "session" ? parts.worldStates.contextOf(click2.session) : null;
+        const context = click2.scope === "session" ? live ?? event.context : null;
+        if (context !== null) {
+          const { origin } = context.durable;
+          throwConfigFailure(origin);
+          if (!parts.renderCache.holdsConfig(origin)) {
+            const { context: _input, ...intent } = event;
+            const waiting = { session: context.session, event: intent };
+            parked = [
+              ...parked,
+              live === null ? { ...waiting, kind: "cold", durable: context.durable } : { ...waiting, kind: "live" }
+            ];
+            record2.push(["parked", "click"]);
+            return;
+          }
+        }
+        clickTurn(parts, { ...event, context }, effects, record2);
         return;
       }
       case "viewers":
         feeds.view(event.viewers, time.tick);
         return;
-      case "due":
+      case "due": {
+        const busy = parkedClickSessions();
+        for (const session of event.pendingClicks ?? []) busy.add(session);
         runEach([
           () => time.runDue(),
-          () => closeIdleMenus2(parts, effects),
+          () => closeIdleMenus2(parts, effects, busy),
           () => feeds.drawDue({ at: time.at, tick: time.tick }, frames)
         ]);
         return;
+      }
     }
   };
   const subscribed = () => {
@@ -87601,14 +88112,21 @@ function mainRenderer(parts, pushed, drained) {
       configs.set(originKey(origin), origin);
     for (const origin of parts.renderCache.origins())
       configs.set(originKey(origin), origin);
-    for (const { origin } of parked) configs.set(originKey(origin), origin);
+    for (const click2 of parked) {
+      const origin = parkedContext(click2).durable.origin;
+      configs.set(originKey(origin), origin);
+    }
     return {
       sources: views,
       lanes,
       configs: [...configs.values()],
       // [LAW:one-source-of-truth] The tick the renderer next wants a turn
       // at: the earliest any owner of a tick holds.
-      wake: earliestOf([time.next(), menuIdle.next(), feeds.next()])
+      wake: earliestOf([
+        time.next(),
+        menuIdle.next(parked.length === 0 ? void 0 : parkedClickSessions()),
+        feeds.next()
+      ])
     };
   };
   let stored = [];
@@ -87620,9 +88138,10 @@ function mainRenderer(parts, pushed, drained) {
       } finally {
         stored = drained();
         subscriptions = subscribed();
-        parts.renderCache.prune(
-          new Set(subscriptions.configs.map((o) => originKey(o)))
-        );
+        const origins = new Set(subscriptions.configs.map(originKey));
+        parts.renderCache.prune(origins);
+        for (const key of configFailures.keys())
+          if (!origins.has(key)) configFailures.delete(key);
       }
       return { kind: "answered", value };
     } catch (thrown2) {
@@ -87633,7 +88152,13 @@ function mainRenderer(parts, pushed, drained) {
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) => time.during(input, () => {
-      const ended = ending(() => pushed(input.push));
+      const ended = ending(
+        () => pushed(input.push, {
+          parked: opening.size + parked.length,
+          presents: deliveries.size,
+          deferrals: time.deferrals()
+        })
+      );
       return {
         ...ended.kind === "answered" ? { kind: "replied", reply: ended.value } : ended,
         subscriptions,
@@ -87656,8 +88181,8 @@ function mainRenderer(parts, pushed, drained) {
     })
   });
 }
-function closeIdleMenus2(parts, effects) {
-  for (const { session, idle } of parts.menuIdle.due(parts.time.tick)) {
+function closeIdleMenus2(parts, effects, busy) {
+  for (const { session, idle } of parts.menuIdle.due(parts.time.tick, busy)) {
     try {
       parts.verbs.closeIdle(
         session,
@@ -87708,6 +88233,7 @@ function mainRendererOf(inputs, host) {
       locations: inputs.locations,
       sessionState: edits.view,
       editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
+      currentRequest: (session) => worldStates.requestOf(session),
       log,
       storage: host.storage,
       signer: linkSigner2,
@@ -87800,7 +88326,7 @@ function mainRendererOf(inputs, host) {
     links: linkSigner2,
     diagnosticCopy: (sessionId2, by, key) => renderCache.drawnCopy(sessionId2, by, key)
   };
-  const pushed = (push) => {
+  const pushed = (push, rendererTurns) => {
     switch (push.kind) {
       case "stats":
         return {
@@ -87814,6 +88340,7 @@ function mainRendererOf(inputs, host) {
               revision: sessionState.latestRevision()
             },
             menuIdle: menuIdle.stats(),
+            rendererTurns,
             framesDrawn: feeds.drawn()
           }
         };
@@ -87943,16 +88470,14 @@ function moved(store, key, value) {
 
 // src/daemon/config-discovery/config-discovery.ts
 init_globals();
-var import_node_path33 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/discover.ts
 init_globals();
-var import_node_path32 = __toESM(require_path_browserify(), 1);
-var import_json56 = __toESM(require_dist(), 1);
+var import_node_path33 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/config-search.ts
 init_globals();
-var import_node_path31 = __toESM(require_path_browserify(), 1);
+var import_node_path32 = __toESM(require_path_browserify(), 1);
 
 // src/daemon/config-discovery/plugin-folders.ts
 init_globals();
@@ -87974,11 +88499,13 @@ var REPO_PLUGIN_DIR = import_node_path30.default.join(".cc-candybar", "plugins")
 function listFolders(root) {
   try {
     const entries = fs_default.readdirSync(root, { withFileTypes: true }).filter((e) => !e.name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    const isFolder = (e) => e.isDirectory() || isDirectoryLink(root, e);
-    return {
-      folders: entries.filter(isFolder).map((e) => e.name),
-      files: entries.filter((e) => !isFolder(e)).map((e) => e.name)
-    };
+    const folders = [];
+    const files = [];
+    for (const entry of entries) {
+      const list2 = entry.isDirectory() || isDirectoryLink(root, entry) ? folders : files;
+      list2.push(entry.name);
+    }
+    return { folders, files };
   } catch (e) {
     return e.code === "ENOENT" ? { folders: [], files: [] } : { path: root, error: e.message };
   }
@@ -87992,165 +88519,244 @@ function isDirectoryLink(root, e) {
   }
 }
 
-// src/daemon/config-discovery/config-search.ts
-function searchConfig(locs, answers, query) {
-  const { projectDir, configFile } = query;
-  const unchecked = [];
-  const atLocation = /* @__PURE__ */ new Map();
-  for (const { file: candidate, role } of configCandidates(locs, query)) {
-    const p2 = presence(candidate);
-    if (p2 === "absent") continue;
-    if (p2 !== "present") {
-      unchecked.push(p2);
-      continue;
+// src/daemon/config-discovery/discovery-files.ts
+init_globals();
+var import_node_path31 = __toESM(require_path_browserify(), 1);
+var diskFiles = {
+  presence,
+  realpath(file) {
+    try {
+      return fs_default.realpathSync.native(file);
+    } catch (e) {
+      return { path: file, error: e.message };
     }
-    const dir = realDirOf(import_node_path31.default.dirname(candidate));
-    if (typeof dir !== "string") {
-      unchecked.push({ path: candidate, error: dir.error });
-      continue;
+  },
+  folders: listFolders,
+  text(file) {
+    try {
+      return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
+    } catch (e) {
+      const err = e;
+      return {
+        kind: "unreadable",
+        error: err.code === "EISDIR" ? "not a file" : err.message
+      };
     }
-    const location = import_node_path31.default.join(
-      dir,
-      import_node_path31.default.basename(candidate).replace(/\.(json5|json)$/, "")
-    );
-    if (!atLocation.has(location)) {
-      atLocation.set(location, {
-        file: candidate,
-        role,
-        repo: role === "user" ? null : { dir, link: worktreeLink(dir) }
-      });
-    }
-  }
-  const found2 = [...atLocation.values()];
-  const repoDirs = new Map(
-    found2.flatMap((f) => f.repo === null ? [] : [[f.repo.dir, f.repo]])
-  );
-  const unseen = [];
-  const project = repoProject(projectDir, unseen);
-  const dirs = [...repoDirs.values()];
-  const repos = gateRepos(answers, dirs, project);
-  const question = repoQuestion(answers, dirs, project);
-  const kept = found2.filter((f) => f.repo === null || repos.approved.includes(f.repo.dir)).reverse();
-  const layers = kept.map((f) => ({ path: f.file, role: f.role }));
-  const resolved = (resolution) => ({ resolution, question });
-  if (configFile === void 0) {
-    return resolved({
-      kind: "chain",
-      layers,
-      home: userHome(locs, layers),
-      unchecked: [...unchecked, ...unseen],
-      repos
-    });
-  }
-  const [own2] = unchecked;
-  const home = configFile;
-  if (layers.length > 0) {
-    return resolved({
-      kind: "chain",
-      layers,
-      home,
-      unchecked: [...unchecked, ...unseen],
-      repos
-    });
-  }
-  return resolved(
-    own2 === void 0 ? { kind: "missing", path: configFile, home, repos } : { kind: "unreadable", ...own2, home, repos }
-  );
+  },
+  worktree: worktreeLink,
+  checkout: checkoutOf
+};
+function readNamedText(files, directory, name) {
+  const entry = import_node_path31.default.join(directory, import_node_path31.default.basename(name));
+  const resolved = files.realpath(entry);
+  const physical = typeof resolved === "string" ? resolved : entry;
+  const read2 = files.text(physical);
+  return read2.kind === "unreadable" ? { ...read2, error: read2.error.replace(`'${physical}'`, () => `'${name}'`) } : read2;
 }
-function realDirOf(dir) {
-  try {
-    return fs_default.realpathSync.native(dir);
-  } catch (e) {
-    return { path: dir, error: e.message };
-  }
-}
-function repoProject(projectDir, unseen = []) {
-  if (projectDir === void 0 || presence(projectDir) !== "present") {
-    return null;
-  }
-  const listed = listFolders(import_node_path31.default.join(projectDir, REPO_PLUGIN_DIR));
-  const dir = realDirOf(projectDir);
-  if (typeof dir !== "string") {
-    unseen.push(dir);
-    return null;
-  }
-  return {
-    dir,
-    link: worktreeLink(dir),
-    path: projectDir,
-    ships: !("error" in listed) && listed.folders.length > 0
+function oncePerPath(read2) {
+  const readings = /* @__PURE__ */ new Map();
+  return (file) => {
+    const held = readings.get(file);
+    if (held !== void 0) return held;
+    const observed = read2(file);
+    readings.set(file, observed);
+    return observed;
   };
 }
-function detectConfigCollisions(locs, projectDir) {
-  const existing = dslConfigCandidatePaths(locs, { projectDir }).filter(
-    (candidate) => presence(candidate) === "present"
-  );
-  const groups = /* @__PURE__ */ new Map();
-  for (const candidate of existing) {
-    const dir = import_node_path31.default.dirname(candidate);
-    const base = import_node_path31.default.basename(candidate).replace(/\.(json5|json)$/, "");
-    const key = import_node_path31.default.join(dir, base);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(candidate);
-  }
-  const collisions = [...groups.values()].filter((g) => g.length > 1);
-  if (collisions.length === 0) return null;
-  const lines2 = collisions.map((g) => {
-    const [winner, ...shadowed] = g;
-    return `${winner} shadows ${shadowed.join(", ")}`;
+function discoveryFiles(files = diskFiles) {
+  return {
+    presence: oncePerPath(files.presence),
+    realpath: oncePerPath(files.realpath),
+    folders: oncePerPath(files.folders),
+    text: oncePerPath(files.text),
+    worktree: oncePerPath(files.worktree),
+    checkout: oncePerPath(files.checkout)
+  };
+}
+
+// src/daemon/config-discovery/config-search.ts
+function observeConfigLocations(locations2, files, selectedBase = null) {
+  return locations2.map((location) => {
+    const present = [];
+    const unchecked = [];
+    const candidates = [];
+    for (const candidate of location.candidates) {
+      const observed = files.presence(candidate.file);
+      if (observed === "present" && location.role !== "user" && selectedBase !== null && files.realpath(candidate.file) === selectedBase)
+        continue;
+      candidates.push(candidate);
+      if (observed === "absent") continue;
+      if (observed !== "present") {
+        unchecked.push(observed);
+        continue;
+      }
+      const dir = files.realpath(import_node_path32.default.dirname(candidate.file));
+      if (typeof dir !== "string") {
+        unchecked.push({ path: candidate.file, error: dir.error });
+        continue;
+      }
+      present.push({ candidate, directory: dir });
+    }
+    const [winner, ...shadowed] = present;
+    const scope = { role: location.role, candidates, unchecked };
+    return winner === void 0 ? { ...scope, kind: "no-winner" } : {
+      ...scope,
+      kind: "found",
+      winner: winner.candidate,
+      shadowed: shadowed.map(({ candidate }) => candidate),
+      directory: winner.directory
+    };
   });
-  return `config-extension collision: ${lines2.join("; ")} \u2014 remove the duplicate`;
+}
+var NO_REPOS = {
+  plugins: null,
+  approved: [],
+  awaiting: [],
+  declined: [],
+  unproven: [],
+  unread: null
+};
+function searchConfig(locs, readAnswers, query, files = discoveryFiles()) {
+  const searched = configLocations(locs, query);
+  const selected = query.kind === "chain" && query.projectDir !== void 0 && query.path !== void 0 ? files.realpath(query.path) : null;
+  const locations2 = observeConfigLocations(
+    searched,
+    files,
+    typeof selected === "string" ? selected : null
+  );
+  const candidates = searched.flatMap(
+    ({ candidates: candidates2 }) => candidates2.map(({ file }) => file)
+  );
+  const found2 = locations2.flatMap(
+    (location) => location.kind === "found" ? [location] : []
+  );
+  const repoDirs = /* @__PURE__ */ new Map();
+  for (const { role, directory } of found2) {
+    if (role === "user" || repoDirs.has(directory)) continue;
+    repoDirs.set(directory, {
+      dir: directory,
+      link: files.worktree(directory)
+    });
+  }
+  const dirs = [...repoDirs.values()];
+  const seen = repoProject(
+    query.kind === "chain" ? query.projectDir : void 0,
+    files
+  );
+  const answers = query.kind === "file" ? null : readAnswers();
+  const repos = answers === null ? NO_REPOS : gateRepos(answers, dirs, seen.project);
+  const question = answers === null ? null : repoQuestion(answers, dirs, seen.project);
+  const layers = found2.filter(
+    ({ role, directory }) => role === "user" || repos.approved.includes(directory)
+  ).reverse().map(({ role, winner }) => ({ role, path: winner.file }));
+  const user = locations2.find(({ role }) => role === "user");
+  const home = user?.kind === "found" ? user.winner.file : query.path ?? userConfigDefault(locs);
+  const namedFailure = query.path !== void 0 && user?.kind !== "found";
+  const unchecked = locations2.flatMap(
+    (location) => namedFailure && location === user ? [] : location.unchecked
+  );
+  const common = {
+    layers,
+    home,
+    repos,
+    unchecked: seen.unchecked === null ? unchecked : [...unchecked, seen.unchecked]
+  };
+  const problem = user?.unchecked[0];
+  const resolution = !namedFailure ? { ...common, kind: "chain" } : problem === void 0 ? { ...common, kind: "missing", path: home } : { ...common, kind: "unreadable", ...problem };
+  return { resolution, question, locations: locations2, candidates };
+}
+function repoProject(projectDir, files = discoveryFiles()) {
+  if (projectDir === void 0) return { project: null, unchecked: null };
+  const present = files.presence(projectDir);
+  if (present !== "present")
+    return { project: null, unchecked: present === "absent" ? null : present };
+  const dir = files.realpath(projectDir);
+  if (typeof dir !== "string") return { project: null, unchecked: dir };
+  const listed = files.folders(import_node_path32.default.join(projectDir, REPO_PLUGIN_DIR));
+  return {
+    project: {
+      dir,
+      link: files.worktree(dir),
+      path: projectDir,
+      ships: !("error" in listed) && listed.folders.length > 0
+    },
+    unchecked: null
+  };
+}
+function configCollisionNotice(locations2) {
+  const collisions = locations2.flatMap(
+    (location) => location.kind === "found" && location.shadowed.length > 0 ? [
+      `${location.winner.file} shadows ${location.shadowed.map(({ file }) => file).join(", ")}`
+    ] : []
+  );
+  return collisions.length === 0 ? null : `config-extension collision: ${collisions.join("; ")} \u2014 remove the duplicate`;
 }
 
 // src/daemon/config-discovery/discover.ts
-function readShared(world) {
+function readShared(world, source = diskFiles) {
+  const files = discoveryFiles(source);
+  const included = /* @__PURE__ */ new Map();
+  let answers;
   return {
     locs: world.locations,
-    answers: repoConfigs(world.stateDir).read(),
-    installed: installedRoots(world.locations)
+    answers: () => answers ??= repoConfigs(world.stateDir).read(),
+    installed: installedRoots(world.locations, files),
+    files,
+    // The same bytes can name different physical files relative to their
+    // layers. Parse the reference names once and resolve them at each layer.
+    references: (text4) => {
+      const held = included.get(text4);
+      if (held !== void 0) return held;
+      const names = pluginRefs(text4);
+      included.set(text4, names);
+      return names;
+    }
   };
 }
-function installedRoots(locs) {
-  return pluginRoots(locs, null).map(listRoot);
+function installedRoots(locs, files = discoveryFiles()) {
+  return pluginRoots(locs, null).map((root) => listRoot(root, files));
 }
-function listRoot({ dir, scope }) {
-  const listed = listFolders(dir);
+function listRoot({ dir, scope }, files) {
+  const listed = files.folders(dir);
   return {
     root: dir,
     scope,
     listed: "error" in listed ? listed : {
       folders: listed.folders.map(
-        (name) => readDefinition(import_node_path32.default.join(dir, name, DEFINITION_FILE), scope)
+        (name) => readDefinition(
+          import_node_path33.default.join(dir, name, DEFINITION_FILE),
+          scope,
+          files
+        )
       ),
       files: listed.files
     }
   };
 }
-function readDefinition(file, scope) {
-  if (import_node_path32.default.basename(file) !== DEFINITION_FILE) {
+function readDefinition(file, scope, files = diskFiles) {
+  const badPath = pluginDefinitionProblem(file);
+  if (badPath !== null)
     return {
       scope,
       path: file,
-      definition: {
-        kind: "unreadable",
-        error: `not read: a plugin's definition is its folder's ${DEFINITION_FILE}`
-      }
+      definition: { kind: "unreadable", error: badPath }
     };
-  }
-  try {
-    const text4 = fs_default.readFileSync(file, "utf-8");
-    const dir = fs_default.realpathSync(import_node_path32.default.dirname(file));
-    return { scope, path: file, definition: { kind: "text", text: text4, dir } };
-  } catch (e) {
+  const dir = files.realpath(import_node_path33.default.dirname(file));
+  if (typeof dir !== "string")
     return {
       scope,
       path: file,
-      definition: { kind: "unreadable", error: e.message }
+      definition: { kind: "unreadable", error: dir.error }
     };
-  }
+  const read2 = readNamedText(files, dir, file);
+  return {
+    scope,
+    path: file,
+    definition: read2.kind === "text" ? { ...read2, dir } : read2
+  };
 }
-function sessionPlugins(locs, installed, repo2, cwd2) {
-  const repoRoots = pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map(listRoot);
+function sessionPlugins(locs, installed, repo2, cwd2, files = discoveryFiles()) {
+  const repoRoots = pluginRoots(locs, repo2).filter((r) => r.scope === "repo").map((root) => listRoot(root, files));
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
@@ -88162,12 +88768,12 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
       continue;
     }
     for (const file of listed.folders) {
-      const key = `${scope}\0${import_node_path32.default.basename(import_node_path32.default.dirname(file.path))}`;
+      const key = `${scope}\0${import_node_path33.default.basename(import_node_path33.default.dirname(file.path))}`;
       byNs.delete(key);
       byNs.set(key, file);
     }
     for (const name of listed.files)
-      strays.push({ path: import_node_path32.default.join(root, name), scope });
+      strays.push({ path: import_node_path33.default.join(root, name), scope });
   }
   return {
     plugins: [...byNs.values()],
@@ -88178,19 +88784,14 @@ function sessionPlugins(locs, installed, repo2, cwd2) {
     // [LAW:nothing-unseen] exception: nothing watches for a `.git` appearing
     // above it, since an ancestor watch per session is the cost; the next
     // rediscovery reads the new checkout.
-    checkout: checkoutOf(cwd2)
+    checkout: files.checkout(cwd2)
   };
 }
-function readLayer(file) {
-  try {
-    return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
-  } catch (e) {
-    const error = e.code === "EISDIR" ? "not a file" : e.message;
-    return { kind: "unreadable", error };
-  }
-}
-function layerOf(role, file, content, home) {
-  const refs = content.kind === "text" ? pluginRefs(content.text) : [];
+function layerOf(role, file, content, home, batch = {
+  files: diskFiles,
+  references: pluginRefs
+}) {
+  const refs = content.kind === "text" ? batch.references(content.text) : [];
   return {
     role,
     path: file,
@@ -88198,18 +88799,15 @@ function layerOf(role, file, content, home) {
     listed: Object.fromEntries(
       refs.map((ref) => [
         ref,
-        readDefinition(listedPath(ref, file, home), scopeOf2(role))
+        readDefinition(listedPath(ref, file, home), scopeOf2(role), batch.files)
       ])
     )
   };
 }
 function pluginRefs(text4) {
-  let json2;
-  try {
-    json2 = import_json56.default.parse(text4);
-  } catch {
-    return [];
-  }
+  const syntax = parseJson5Syntax(text4);
+  if (syntax.kind === "invalid") return [];
+  const json2 = syntax.value;
   return typeof json2 === "object" && json2 !== null && "plugins" in json2 ? pluginList(json2.plugins) ?? [] : [];
 }
 function snapshotOf(session, chain2) {
@@ -88224,23 +88822,25 @@ function snapshotOf(session, chain2) {
   };
 }
 function discover(query, shared) {
-  const { locs, answers } = shared;
-  const { resolution, question } = searchConfig(locs, answers, query);
+  const { locs, answers, files } = shared;
+  const search = searchConfig(locs, answers, query, files);
+  const { resolution, question, locations: locations2, candidates } = search;
   const { repos } = resolution;
   const session = sessionPlugins(
     locs,
     shared.installed,
     repos.plugins,
-    query.cwd
+    query.cwd,
+    files
   );
-  const places = chainPlaces(resolution, query).map(
-    (place) => contentAt(locs, query, resolution, place)
+  const places = chainPlaces(resolution, locations2).map(
+    (place) => contentAt(search, place, files)
   );
   const chain2 = places.map(
-    (at) => layerOf(at.role, at.path, at.content, locs.home)
+    (at) => layerOf(at.role, at.path, at.content, locs.home, shared)
   );
   const notices = [
-    detectConfigCollisions(locs, query.projectDir),
+    configCollisionNotice(locations2),
     configResolutionNotice(resolution),
     repoUnreadNotice(repos),
     ...session.notices
@@ -88248,111 +88848,125 @@ function discover(query, shared) {
   return {
     snapshot: { ...snapshotOf(session, chain2), repo: question, notices },
     targets: {
-      candidates: dslConfigCandidatePaths(locs, query),
-      roots: pluginRoots(locs, repos.plugins).map((r) => r.dir)
+      candidates,
+      roots: [
+        .../* @__PURE__ */ new Set([
+          ...pluginRoots(locs, repos.plugins).map((r) => r.dir),
+          // A chain must hear a new repository plugin even before approval.
+          ...query.kind === "chain" && query.projectDir !== void 0 ? [import_node_path33.default.join(query.projectDir, REPO_PLUGIN_DIR)] : []
+        ])
+      ]
     },
     repos
   };
 }
-function contentAt(locs, query, resolution, place) {
+function contentAt({ resolution, locations: locations2 }, place, files) {
   const at = (path31, content) => ({
     role: place.role,
     path: path31,
     content
   });
-  switch (resolution.kind) {
-    case "missing":
-      return at(place.path, { kind: "absent" });
-    case "unreadable":
-      return at(place.path, { kind: "unreadable", error: resolution.error });
-    case "chain": {
-      const found2 = resolution.layers.find((l) => l.role === place.role);
-      if (found2 !== void 0) return at(found2.path, readLayer(found2.path));
-      const roles = new Map(
-        configCandidates(locs, query).map((c) => [c.file, c.role])
-      );
-      const unseen = resolution.unchecked.find(
-        (u) => roles.get(u.path) === place.role
-      );
-      return at(
-        place.path,
-        unseen === void 0 ? { kind: "absent" } : { kind: "unreadable", error: unseen.error }
-      );
-    }
-  }
+  if (place.role === "user" && resolution.kind === "missing")
+    return at(place.path, { kind: "absent" });
+  if (place.role === "user" && resolution.kind === "unreadable")
+    return at(place.path, { kind: "unreadable", error: resolution.error });
+  const location = locations2.find(({ role }) => role === place.role);
+  if (location?.kind === "found" && location.winner.file === place.path)
+    return at(place.path, readNamedText(files, location.directory, place.path));
+  const unchecked = location?.unchecked[0];
+  return unchecked === void 0 ? at(place.path, { kind: "absent" }) : at(unchecked.path, { kind: "unreadable", error: unchecked.error });
 }
 
 // src/daemon/config-discovery/config-discovery.ts
 var ConfigDiscovery = class {
   constructor(deps) {
     this.deps = deps;
+    this.watches = deps.watchers.batch(() => {
+      const keys2 = [...this.invalidated];
+      this.invalidated.clear();
+      this.heard(keys2, "config-watch");
+    });
     const answers = repoConfigsPath(deps.stateDir);
-    this.answersWatch = deps.watchers.acquire(
+    this.answersWatch = this.watches.acquire(
       `repo-configs:${answers}`,
       { dirs: [], polled: [answers] },
-      () => this.heard(this.asking(), "answers-watch")
+      () => {
+        for (const key of this.asking()) this.invalidated.add(key);
+      }
     );
   }
   deps;
   followed = /* @__PURE__ */ new Map();
+  watches;
+  invalidated = /* @__PURE__ */ new Set();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
   answersWatch;
   closed = false;
-  // [LAW:single-enforcer] The origins followed become exactly `origins`. Each
-  // new one is discovered, all in one batch over one read of what origins
-  // share, and its watch acquired before any let go is released, so a
+  // [LAW:single-enforcer] Use the same holder to name demands, send a config
+  // turn and resolve edits. A queued reload for a dropped origin cannot read
+  // through another renderer's hold.
+  forRenderer(renderer) {
+    const held = (origin) => {
+      const followed = this.followed.get(originKey(origin));
+      return followed?.renderers.has(renderer) ? followed.snapshot : void 0;
+    };
+    return {
+      follow: (origins) => this.follow(renderer, origins),
+      snapshotOf: (origin) => held(origin) ?? null,
+      path: (origin, role) => {
+        const snapshot = held(origin);
+        return snapshot === void 0 ? void 0 : snapshot.chain.find((layer) => layer.role === role)?.path ?? null;
+      },
+      repoDir: (origin) => {
+        const snapshot = held(origin);
+        return snapshot === void 0 ? void 0 : snapshot.repo?.dir ?? null;
+      },
+      landed: (files, answered) => this.landed(renderer, files, answered)
+    };
+  }
+  // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
+  // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
-  follow(origins) {
+  follow(renderer, origins) {
     if (this.closed) return;
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
-    const gone = [...this.followed].filter(([key]) => !wanted.has(key));
-    if (fresh.length + gone.length === 0) return;
     if (fresh.length > 0) {
-      const shared = readShared(this.deps);
+      const shared = readShared(this.deps, this.deps.files);
       for (const [key, origin] of fresh)
-        this.followed.set(key, this.discovered(origin, shared, null));
+        this.followed.set(key, {
+          ...this.discovered(origin, shared, null),
+          renderers: /* @__PURE__ */ new Set([renderer])
+        });
     }
-    for (const [key, { watch: watch2 }] of gone) {
+    let released = 0;
+    for (const [key, { renderers, watch: watch2 }] of this.followed) {
+      if (wanted.has(key)) {
+        renderers.add(renderer);
+        continue;
+      }
+      if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
       watch2.handle.release();
+      released++;
     }
+    if (fresh.length + released === 0) return;
     this.deps.log(
       "info",
-      `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${gone.length}`
+      `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`
     );
   }
-  // What discovery found at `origin` last: null while it is not followed.
-  snapshotOf(origin) {
-    return this.followed.get(originKey(origin))?.snapshot ?? null;
-  }
-  // [LAW:single-enforcer] The file `role` names in `origin`'s chain, as
-  // discovery last found it: what a write naming that layer lands in.
-  // Undefined while the origin is not followed; null when its chain holds no
-  // such layer.
-  path(origin, role) {
-    const followed = this.followed.get(originKey(origin));
-    if (followed === void 0) return void 0;
-    return followed.snapshot.chain.find((l) => l.role === role)?.path ?? null;
-  }
-  // The repository `origin`'s directories ask about: undefined while the
-  // origin is not followed, null when they hold nothing to ask about.
-  repoDir(origin) {
-    const followed = this.followed.get(originKey(origin));
-    return followed === void 0 ? void 0 : followed.snapshot.repo?.dir ?? null;
-  }
-  // A turn's changes landed on `files`, and, when `answered`, answers to the
-  // trust book: every origin whose chain holds one of the files, or, for an
-  // answer, every origin with a repository to ask about, is discovered again.
-  // Answers those whose snapshot moved.
-  landed(files, answered) {
+  // Rediscover origins watching one of the files the turn actually wrote, or
+  // asking about repository trust when the turn answered the book.
+  // The writer reloads in this slot; the other holders get their own turns.
+  landed(writer, files, answered) {
     const changed = new Set(files);
     const touched = [...this.followed].filter(
       ([, { snapshot, filePaths }]) => answered && snapshot.repo !== null || filePaths.some((file) => changed.has(file))
     ).map(([key]) => key);
-    return this.rediscovered(touched, "landed");
+    return this.publish(this.rediscovered(touched, "landed"), writer);
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
@@ -88362,6 +88976,7 @@ var ConfigDiscovery = class {
   close() {
     if (this.closed) return;
     this.closed = true;
+    this.invalidated.clear();
     this.answersWatch.release();
     for (const { watch: watch2 } of this.followed.values()) watch2.handle.release();
     this.followed.clear();
@@ -88374,22 +88989,45 @@ var ConfigDiscovery = class {
   // moved go to the renderer.
   heard(keys2, why2) {
     if (this.closed) return;
-    const moved2 = this.rediscovered(keys2, why2);
-    if (moved2.length > 0) this.deps.moved(moved2);
+    this.publish(this.rediscovered(keys2, why2), null);
+  }
+  // [LAW:single-enforcer] The snapshot's current holders define recipients
+  // for both a watch and a landed write. Only the writer already has a slot.
+  publish(moved2, writer) {
+    const byRenderer = /* @__PURE__ */ new Map();
+    for (const { origin, renderers } of moved2)
+      for (const renderer of renderers) {
+        const origins = byRenderer.get(renderer) ?? [];
+        origins.push(origin);
+        byRenderer.set(renderer, origins);
+      }
+    for (const [renderer, origins] of byRenderer)
+      if (renderer !== writer) this.deps.moved(renderer, origins);
+    return writer === null ? [] : byRenderer.get(writer) ?? [];
   }
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
   rediscovered(keys2, why2) {
     if (keys2.length === 0) return [];
-    const shared = readShared(this.deps);
+    const shared = readShared(this.deps, this.deps.files);
     const moved2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
-      const now2 = this.discovered(was.origin, shared, was.watch);
-      this.followed.set(key, now2);
-      if (now2.digest !== was.digest) moved2.push(now2.origin);
+      try {
+        const now2 = {
+          ...this.discovered(was.origin, shared, was.watch),
+          renderers: was.renderers
+        };
+        this.followed.set(key, now2);
+        if (now2.digest !== was.digest) moved2.push(now2);
+      } catch (thrown2) {
+        this.deps.log(
+          "error",
+          `config discovery why=${why2} origin=${JSON.stringify(key)} failed: ${failureOf(thrown2).detail}`
+        );
+      }
     }
     this.deps.log(
       "info",
@@ -88403,23 +89041,20 @@ var ConfigDiscovery = class {
   discovered(origin, shared, held) {
     const found2 = discover(
       {
-        projectDir: origin.projectDir,
-        configFile: origin.target.path,
+        ...configQuery(origin.projectDir, origin.target),
         cwd: origin.cwd
       },
       shared
     );
     const key = originKey(origin);
-    const paths2 = watchTargetsFor(origin, found2);
+    const paths2 = watchTargetsFor(found2);
     const spec = {
       ...paths2,
       key: `config:${JSON.stringify(key)}:${paths2.key}`
     };
-    const { watch: watch2, move } = this.deps.watchers.follow(
-      held,
-      spec,
-      () => this.heard([key], "config-watch")
-    );
+    const { watch: watch2, move } = this.watches.follow(held, spec, () => {
+      this.invalidated.add(key);
+    });
     if (move === "rebound") this.bound(origin, paths2);
     const snapshot = {
       ...found2.snapshot,
@@ -88449,14 +89084,9 @@ var ConfigDiscovery = class {
       );
   }
 };
-function watchTargetsFor(origin, found2) {
+function watchTargetsFor(found2) {
   const { snapshot, targets } = found2;
-  const roots = [
-    .../* @__PURE__ */ new Set([
-      ...targets.roots,
-      import_node_path33.default.join(origin.projectDir, REPO_PLUGIN_DIR)
-    ])
-  ];
+  const { roots } = targets;
   return watchTargetsOf({
     named: [
       ...targets.candidates,
@@ -88472,12 +89102,19 @@ function watchTargetsFor(origin, found2) {
 
 // src/daemon/daemon.ts
 function createDaemon(inputs) {
-  const { bundle, memoryLimitBytes: memoryLimitBytes2, clock, exit: exit2, paths: paths2, gates, host } = inputs;
+  const { bundle, memoryLimitBytes: memoryLimitBytes2, clock, exit: exit2, paths: paths2, gates, world } = inputs;
+  const { host } = world;
   const locs = locations(host);
   const instant = () => instantAt(clock);
-  const closing = new AbortController();
-  let closed = false;
-  const log = (level, msg) => inputs.daemonLog.log(level, closed ? `after close: ${msg}` : msg);
+  let phase = { kind: "building" };
+  const currentPhase = () => phase;
+  const serving = () => phase.kind === "serving" || phase.kind === "armed";
+  const cancelling = () => phase.kind === "closing" || phase.kind === "closed";
+  const cancelWork = new AbortController();
+  const log = (level, msg) => inputs.daemonLog.log(
+    level,
+    phase.kind === "closed" ? `after close: ${msg}` : msg
+  );
   const stats = new RuntimeStats(clock);
   const watcherRegistry = new WatcherRegistry({
     clock,
@@ -88495,19 +89132,27 @@ function createDaemon(inputs) {
   );
   let rendererEnded = null;
   let actFailed = null;
+  log("info", `launches withhold ${world.withheld.join(",")}`);
+  const admissionFaults = world.fault === null ? [] : [
+    {
+      kind: "repository-local-env",
+      message: `${world.fault}, so the branch and PR shown may come from the repository of the shell that started the daemon, until the daemon restarts`
+    }
+  ];
+  for (const fault of admissionFaults) log("warn", fault.message);
   function restateFaults() {
     runInAction(
       () => daemonFaults.set({
         fileEvents: fileEventsWarnings(fileEvents.delivery()),
-        launcher: launcher.standing(),
+        launcher: [...admissionFaults, ...launcher.standing()],
         rendererEnded,
         actFailed
       })
     );
   }
-  const launcher = inputs.launcher({
+  const launcher = world.launcher.forOwner({
     stats: stats.launchStats,
-    signal: closing.signal,
+    signal: cancelWork.signal,
     // [LAW:one-source-of-truth] Pipe events are stamped on the clock renders
     // hold them against.
     now: instant,
@@ -88521,10 +89166,11 @@ function createDaemon(inputs) {
           change.fault === null ? "info" : "warn",
           change.fault === null ? "launch lifeline running again" : `launch lifeline ${change.fault}; the next launch starts another`
         );
-      restateFaults();
+      if (phase.kind !== "building") restateFaults();
     }
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
+  const publishFrame = publishingFrames(linkSigner2);
   const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
   const preparedRenderer = inputs.renderer({
@@ -88545,7 +89191,6 @@ function createDaemon(inputs) {
       const key = inputs.linkKey();
       return {
         stored: stores.current(),
-        digest: bundle.digest,
         host: { ...host, env: plainEnvironment(host.env) },
         memoryLimitBytes: memoryLimitBytes2,
         linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
@@ -88564,7 +89209,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => link.process()
+    renderer: () => serving() ? link.process() : null
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
@@ -88608,7 +89253,7 @@ function createDaemon(inputs) {
         socket: paths2.socket
       }
     },
-    closing: () => closing.signal.aborted,
+    closing: cancelling,
     log
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -88628,6 +89273,7 @@ function createDaemon(inputs) {
     log
   );
   const frameFeeds = new FrameFeeds({
+    publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
     deliver: (make) => parts.renderer.deliver(
@@ -88660,20 +89306,6 @@ function createDaemon(inputs) {
   }) {
     return tmux3 === null || tmux3 === void 0 ? [] : [tmux3.socket];
   }
-  fileEvents.subscribe((notice) => {
-    switch (notice.kind) {
-      case "period":
-        watcherRegistry.judge();
-        return;
-      case "caught-up":
-        restateFaults();
-        configDiscovery.again("events-resumed");
-        return;
-      case "moved":
-        restateFaults();
-        return;
-    }
-  });
   const binaryWatch = makeBinaryWatch({
     clock,
     targets: bundle.targets,
@@ -88712,14 +89344,15 @@ function createDaemon(inputs) {
     log,
     clock,
     // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session whose newest request the host holds
-    // gets its context with its latest stamp, all in the one `start` turn, so
+    // request would: every live session gets the context of its latest stamp,
+    // all in the one `start` turn, so
     // its output names every session it serves; and who watches each, so its
     // feeds open. All through the host's one path to the renderer, each turn
     // recorded there.
     // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
     // every input after it finds its sessions handed in.
     start: async () => {
+      if (!serving()) return;
       const started2 = await parts.renderer.start(() => {
         const viewers = frameFeeds.viewers();
         frameFeeds.handedIn(viewers);
@@ -88728,12 +89361,7 @@ function createDaemon(inputs) {
           event: {
             kind: "start",
             viewers,
-            sessions: [...collector.liveDocuments()].flatMap(
-              ([sessionId2, worldState]) => {
-                const req = frameFeeds.latest(sessionId2);
-                return req === null ? [] : [{ context: located(req, checkoutLocation), worldState }];
-              }
-            )
+            sessions: collector.liveSessions()
           }
         };
       }, [["why", "renderer-start"]]);
@@ -88747,24 +89375,16 @@ function createDaemon(inputs) {
       restateFaults();
     }
   });
+  const configRenderers = /* @__PURE__ */ new Map();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     log,
-    moved: (origins) => parts.renderer.moved(origins)
+    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins)
   });
-  let served = false;
-  const serve = () => {
-    closing.signal.throwIfAborted();
-    if (served) return;
-    stores.load();
-    sessionBook.load();
-    link.serve();
-    served = true;
-  };
   const parts = {
-    closing: closing.signal,
+    closing: cancelWork.signal,
     home: host.home,
     launcher,
     log,
@@ -88774,6 +89394,7 @@ function createDaemon(inputs) {
     sessionBook,
     stats,
     linkSigner: linkSigner2,
+    publishFrame,
     renderSightings,
     watcherRegistry,
     refreshLedger,
@@ -88806,8 +89427,8 @@ function createDaemon(inputs) {
       {
         perform: (act) => acts.perform(act),
         stateDir: paths2.state,
-        configs: configDiscovery,
-        closing: () => closing.signal.aborted,
+        configs: configDiscovery.forRenderer(inputs.rendererName),
+        closing: cancelling,
         // [LAW:no-silent-failure] Joined to the last while it is owed, by the
         // one rule for events that follow each other.
         unheard: (text4) => {
@@ -88817,87 +89438,145 @@ function createDaemon(inputs) {
       }
     )
   };
-  return {
+  configRenderers.set(parts.renderer.name, parts.renderer);
+  fileEvents.subscribe((notice) => {
+    switch (notice.kind) {
+      case "period":
+        watcherRegistry.judge();
+        return;
+      case "caught-up":
+        restateFaults();
+        configDiscovery.again("events-resumed");
+        return;
+      case "moved":
+        restateFaults();
+        return;
+    }
+  });
+  const admit3 = (run3, refuse4) => serving() ? run3() : refuse4();
+  const served = {
     stats,
     launcher,
     log,
     memoryLimitBytes: memoryLimitBytes2,
     clock,
     exit: exit2,
-    // [LAW:single-enforcer] A closed daemon serves nothing, and this surface is
-    // the way in. A click that got in waits its turn in the renderer's
-    // mailbox: one ahead of the close runs whole, and one behind it is
-    // refused; a subscribe its request reached as the daemon closed is
-    // refused here and opens no feed.
-    handle: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return handleRequest(parts, req, timedOut, accepted, clientLeft);
-    },
-    reply: async (req, timedOut, accepted, clientLeft) => {
-      closing.signal.throwIfAborted();
-      return replyTo(parts, req, timedOut, accepted, clientLeft);
-    },
-    subscribe: (sessionId2, subscriber) => {
-      closing.signal.throwIfAborted();
-      return frameFeeds.subscribe(sessionId2, subscriber);
-    },
-    rediscover: () => {
-      closing.signal.throwIfAborted();
-      configDiscovery.again("asked");
-    },
-    serve,
+    close,
+    handle: (req, timedOut, accepted, clientLeft) => admit3(
+      () => handleRequest(parts, req, timedOut, accepted, clientLeft),
+      () => Promise.resolve(refuseClosingInbound(parts, req, accepted))
+    ),
+    reply: (req, timedOut, accepted, clientLeft) => admit3(
+      () => replyTo(parts, req, timedOut, accepted, clientLeft),
+      () => Promise.resolve(refuseClosingReply(parts, req.kind, accepted))
+    ),
+    subscribe: (sessionId2, subscriber) => admit3(
+      () => frameFeeds.subscribe(sessionId2, subscriber),
+      () => {
+        log(
+          "info",
+          `feed sid=${JSON.stringify(sessionId2)} refused lane=${subscriber.lane} daemon-closed`
+        );
+        subscriber.refused(
+          failedWith(new DaemonClosing("subscribe").message)
+        );
+        return () => {
+        };
+      }
+    ),
+    rediscover: () => admit3(
+      () => configDiscovery.again("asked"),
+      () => {
+      }
+    ),
     arm() {
-      closing.signal.throwIfAborted();
-      serve();
+      if (!serving()) throw new DaemonClosing("arm");
+      if (phase.kind === "armed") return;
+      phase = { kind: "armed" };
       fileEvents.start(paths2.watchProbe);
       binaryWatch.arm();
       limits.arm();
       link.arm();
-    },
-    async close() {
-      const rendererStep = (kind) => () => parts.renderer.ask({ kind });
-      const teardown = [
-        // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
-        // ends is not started again, so no step below waits on a fresh boot.
-        // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
-        // from here, so no turn the renderer holds for later runs into the
-        // close's.
-        ["renderer wake close", () => parts.renderer.closeWake()],
-        ["renderer close begins", () => link.beginClose()],
-        // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
-        // every click ahead of it lands whole, and none behind it begins.
-        ["renderer journal close", rendererStep("close-journal")],
-        // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
-        // is in flight is terminated, whichever owner's work it was, and the
-        // launcher's lifeline goes.
-        ["launches abort", () => closing.abort(new Error("the daemon closed"))],
-        ["frameFeeds close", () => frameFeeds.close()],
-        ["binaryWatch close", () => binaryWatch.close()],
-        ["limits disarm", () => limits.disarm()],
-        // Before the sources and the storage its states hold.
-        ["collector close", () => collector.close()],
-        // Before the views close: a `config` made after it finds its origin
-        // let go, and hands the closed cache nothing.
-        ["configDiscovery close", () => configDiscovery.close()],
-        ["renderer views close", rendererStep("close-views")],
-        ...payloadProviders.closes,
-        ["runs close", () => runs.close()],
-        // After the collector, which holds every session's runs: its close
-        // releases them first, so this close drops nothing still held.
-        ["sourceRuns close", () => sourceRuns.close()],
-        ["fileEvents close", () => fileEvents.close()],
-        ["watcherRegistry close", () => watcherRegistry.closeAll()],
-        // Last of the stores' writers: a run that ends in the teardown holds
-        // its click error first.
-        ["stores close", () => stores.close()],
-        ["sessionBook close", () => sessionBook.close()],
-        ["renderer process close", () => link.close()]
-      ];
-      await runTeardown(teardown, log);
-      closed = true;
-      return { settled: launcher.settled() };
     }
   };
+  phase = { kind: "built" };
+  function serve() {
+    if (serving()) return served;
+    if (phase.kind !== "built") throw new DaemonClosing("serve");
+    const starting = { kind: "starting" };
+    phase = starting;
+    try {
+      stores.load();
+      sessionBook.load();
+      if (currentPhase() !== starting) throw new DaemonClosing("serve");
+      link.serve();
+      if (currentPhase() !== starting) throw new DaemonClosing("serve");
+      phase = { kind: "serving" };
+      return served;
+    } catch (error) {
+      if (currentPhase() === starting) phase = { kind: "built" };
+      throw error;
+    }
+  }
+  function close() {
+    if ("done" in phase) return phase.done;
+    const wasServing = serving();
+    const done = Promise.resolve().then(
+      () => tearDown(wasServing, done)
+    );
+    phase = { kind: "draining", done };
+    return done;
+  }
+  async function tearDown(wasServing, done) {
+    const rendererStep = (kind) => () => wasServing ? parts.renderer.ask({ kind }) : void 0;
+    const teardown = [
+      // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
+      // ends is not started again, so no step below waits on a fresh boot.
+      // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
+      // from here, so no turn the renderer holds for later runs into the
+      // close's.
+      ["renderer wake close", () => parts.renderer.closeWake()],
+      ["renderer close begins", () => link.beginClose()],
+      // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
+      // every click ahead of it lands whole, and none behind it begins.
+      ["renderer journal close", rendererStep("close-journal")],
+      // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
+      // is in flight is terminated, whichever owner's work it was, and the
+      // launcher's lifeline goes.
+      [
+        "launches abort",
+        () => {
+          phase = { kind: "closing", done };
+          cancelWork.abort(new DaemonClosing("work"));
+        }
+      ],
+      ["frameFeeds close", () => frameFeeds.close()],
+      ["binaryWatch close", () => binaryWatch.close()],
+      ["limits disarm", () => limits.disarm()],
+      // Before the sources and the storage its states hold.
+      ["collector close", () => collector.close()],
+      // Before the views close: a `config` made after it finds its origin
+      // let go, and hands the closed cache nothing.
+      ["configDiscovery close", () => configDiscovery.close()],
+      ["renderer views close", rendererStep("close-views")],
+      ...payloadProviders.closes,
+      ["runs close", () => runs.close()],
+      // After the collector, which holds every session's runs: its close
+      // releases them first, so this close drops nothing still held.
+      ["sourceRuns close", () => sourceRuns.close()],
+      ["fileEvents close", () => fileEvents.close()],
+      ["watcherRegistry close", () => watcherRegistry.closeAll()],
+      // Last of the stores' writers: a run that ends in the teardown holds
+      // its click error first.
+      ["stores close", () => stores.close()],
+      ["sessionBook close", () => sessionBook.close()],
+      ["renderer process close", () => link.close()]
+    ];
+    await runTeardown(teardown, log);
+    phase = { kind: "closed", done };
+    return { settled: launcher.settled() };
+  }
+  return { launcher, close, serve };
 }
 
 // src/daemon/foundations/gates.ts
@@ -90080,7 +90759,6 @@ function productionAdapters(paths2, daemonLog, world) {
   const machine = world.clock;
   return {
     daemonLog,
-    launcher: (own2) => world.launcher.forOwner(own2),
     profile: (name, log) => fileStorage(profilePaths(paths2, name), log, machine),
     sessionBook: (log) => new SessionFile(SESSION_BOOK_FILE, paths2.sessionBook, machine, 500, log),
     linkKey: linkKeyFromFile(linkKeyFile(paths2.state), daemonLog.log),
@@ -90352,8 +91030,8 @@ function seedWorld(state) {
   });
   repo = state;
 }
-function updateRepo(next) {
-  repo = { ...repo, ...next };
+function updateRepo(next2) {
+  repo = { ...repo, ...next2 };
   vol.writeFileSync(`${GIT}/index`, JSON.stringify(repo));
   vol.writeFileSync(`${GIT}/refs/heads/${repo.branch}`, `${repo.head}
 `);
@@ -90363,6 +91041,7 @@ programs.set("awk", () => RESIDENT);
 programs.set("ps", () => ok2(""));
 programs.set("git", (args) => {
   const line = args.join(" ");
+  if (line === "rev-parse --local-env-vars") return ok2("GIT_DIR\nGIT_WORK_TREE\n");
   if (line.startsWith("status --porcelain=v2 --branch")) {
     const rows = [
       `# branch.oid ${repo.head}`,
@@ -90418,7 +91097,7 @@ var clockAt = (at) => nowSec() - (t - at);
 var id = (prefix) => `${prefix}_${(serial++).toString(36)}`;
 var onClock = ({ headAt, ...rest2 }) => headAt === void 0 ? rest2 : { ...rest2, headTime: Math.floor(clockAt(headAt)) };
 seedWorld(onClock(INITIAL_REPO));
-var WORLD = processWorld();
+var WORLD = admit2(processWorld(), askGit("unbounded"));
 var HOST = WORLD.host;
 var paths = daemonPaths(HOST);
 var adapters = productionAdapters(paths, new DaemonLog(paths.log, WORLD.clock), WORLD);
@@ -90426,7 +91105,7 @@ var pageDaemon = createDaemon({
   ...adapters,
   gates: createGates(),
   paths,
-  host: HOST,
+  world: WORLD,
   bundle: {
     digest: null,
     path: "/app/dist/index.mjs",
@@ -90447,8 +91126,7 @@ var pageDaemon = createDaemon({
   exit: (code2) => {
     throw new Error(`the page's daemon asked to exit ${code2}`);
   }
-});
-pageDaemon.serve();
+}).serve();
 function lines(entry, at) {
   const base = { timestamp: new Date(clockAt(at) * 1e3).toISOString(), sessionId, cwd: REPO, isSidechain: false, uuid: id("u") };
   const usage = (output) => ({
@@ -90557,7 +91235,7 @@ async function render2(size) {
   const drawn = await frame(size);
   return { ansi: composeBar(drawn), links: linksOf(drawn).map((l) => ({ ...l, does: describeLink(l, sessionId) })), refused: null };
 }
-function copy2(text4) {
+function copy(text4) {
   let writing;
   try {
     writing = navigator.clipboard.writeText(text4);
@@ -90569,12 +91247,12 @@ function copy2(text4) {
     (e) => `the browser did not copy (${e instanceof Error ? e.message : String(e)}); the text: ${text4}`
   );
 }
-async function click2(url, size) {
+async function click(url, size) {
   const effects = effectsOf(url);
   const host = effects.filter((e) => HOST_VERBS.has(e.verb));
   if (host.length > 0) {
     const copiesOnly = effects.every((e) => e.verb === VERB_COPY);
-    const refused3 = copiesOnly ? await copy2(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
+    const refused3 = copiesOnly ? await copy(effects.map((e) => e.args.join("/")).join("\n")) : `not sent: on a real machine this ${host.map((e) => HOST_VERBS.get(e.verb)).join(", ")}`;
     return { ...await render2(size), refused: refused3 };
   }
   let refused2 = null;
@@ -90620,7 +91298,7 @@ var transport = {
   landscape: "landscape/",
   frame,
   render: render2,
-  click: click2,
+  click,
   // A new session over the bundled config: what the visitor's clicks wrote is
   // undone, and the daemon re-reads the config now, as a save's click does after it writes.
   restart: async (size) => {
