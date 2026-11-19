@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-842",
+      "ref": "refs/pull/842/merge",
+      "sha": "3b595f444e3b0259c279c750e47f63d6091a6866",
+      "timestamp": "2026-11-19T10:19:54.135Z",
+      "commits": [
+        {
+          "sha": "3b595f444e3b0259c279c750e47f63d6091a6866",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:18:50Z",
+          "message": "Merge 8641bc56afd0511f92d55e13bd840281ad3c251c into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "8641bc56afd0511f92d55e13bd840281ad3c251c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:00-07:00",
+          "message": "fix(client): make native reconnect consume the passive outcome\n"
+        },
+        {
+          "sha": "6bbb812673e4c644ffa5146037a2667f5640e279",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:16-07:00",
+          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-840",
       "ref": "refs/pull/840/merge",
       "sha": "c509779a3bb96ed8549aaa2fa4578885543b675e",
@@ -172,35 +201,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:57-07:00",
           "message": "fix(launch): a repository reader's children read each session's repository, not the shell's that started it (9gbg)\n\ngit finds its repository from GIT_DIR, GIT_WORK_TREE and the other names\n`git rev-parse --local-env-vars` prints, ahead of its working directory,\nand gh honours GH_REPO. A daemon, doctor, check or plugin install started\nfrom a git hook, a `rebase --exec` or a vcsh shell read every session's\nbranch, status and PR from that shell's repository.\n\nA launch scope now names what its children do not inherit. The child\nenvironment is the inherited environment, read at each launch, less those\nnames, under each launch's overlay: one place for every launch form. The\nprocess's own environment is untouched, since it is also what the process\nreports as the session's.\n\nThe daemon, doctor, check and plugin install ask git once, as they start,\nand withhold its names and GH_REPO; the relay and every other process ask\nnothing. A git that cannot answer (or an old one that echoes the flag) is a\nfault carrying git's words: the daemon logs it, still starts and draws, and\nstands a warning on every bar through its launcher's facts; the doctor\nfails a new \"repository reads\" row; plugin install exits 1 with the reason.\nPlugin install's own overlay that unset the same names is gone. The Pages\nsite's simulated git answers the ask.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-842",
-      "ref": "refs/pull/842/merge",
-      "sha": "4e6ce433914c7534f055602ba563a5174e1848a4",
-      "timestamp": "2026-11-19T10:10:11.300Z",
-      "commits": [
-        {
-          "sha": "4e6ce433914c7534f055602ba563a5174e1848a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:09:07Z",
-          "message": "Merge 463655ae27a88da9080500efabb266a8a49e205f into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "463655ae27a88da9080500efabb266a8a49e205f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:00-07:00",
-          "message": "fix(client): make native reconnect consume the passive outcome\n"
-        },
-        {
-          "sha": "9f3b603644f93354d67f6a5d7702cc74846b02ab",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:59:16-07:00",
-          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
         }
       ]
     },
