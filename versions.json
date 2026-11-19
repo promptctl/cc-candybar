@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-902",
+      "ref": "refs/pull/902/merge",
+      "sha": "8dc364a511eb4c545588bb8e37b3bdf82b288081",
+      "timestamp": "2026-11-19T18:59:17.050Z",
+      "commits": [
+        {
+          "sha": "8dc364a511eb4c545588bb8e37b3bdf82b288081",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T18:58:20Z",
+          "message": "Merge 04165808301f8535b065c51e4990225af8382ce8 into ca59b705bf84552eb3ec9b216786363ccde4b4da\n"
+        },
+        {
+          "sha": "04165808301f8535b065c51e4990225af8382ce8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:53:32-07:00",
+          "message": "test(client): reserve independent directories for concurrent feedback cases\n"
+        },
+        {
+          "sha": "b3339472cdd87d018f495f5015630fab64d4227d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:44:16-07:00",
+          "message": "fix(daemon): skip abandoned statusline draws\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "ca59b705bf84552eb3ec9b216786363ccde4b4da",
@@ -49,35 +78,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-902",
-      "ref": "refs/pull/902/merge",
-      "sha": "c89dc0c1e8b1b73e857bb59fc3233aa31405690d",
-      "timestamp": "2026-11-19T18:54:38.297Z",
-      "commits": [
-        {
-          "sha": "c89dc0c1e8b1b73e857bb59fc3233aa31405690d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T18:53:40Z",
-          "message": "Merge 65f98e66779afd869d5a493c65b6efa2ec5c67dd into 2d21da5a247382b00e6ea729e0e1081bcecc4376\n"
-        },
-        {
-          "sha": "65f98e66779afd869d5a493c65b6efa2ec5c67dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:53:32-07:00",
-          "message": "test(client): reserve independent directories for concurrent feedback cases\n"
-        },
-        {
-          "sha": "ffbecde3471b9f34444a29e9dc7bddda0c5c0363",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:44:16-07:00",
-          "message": "fix(daemon): skip abandoned statusline draws\n"
         }
       ]
     },
