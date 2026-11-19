@@ -16,11 +16,8 @@ import { systemTimekeeper } from "../src/time";
 import type { PostMortem } from "../src/daemon/foundations/memory-limit";
 import type { Asked } from "../src/doctor/checks";
 import { daemonSighted } from "../src/daemon/cache/doctor";
-import {
-  DOCTOR_RUN_NAME_NOTE,
-  DOCTOR_RUN_NOTE,
-  readDoctorNote,
-} from "../src/renderer-interface/noted-doctor";
+import { readDoctorNote } from "../src/renderer-interface/noted-doctor";
+import { DOCTOR_ASKED_FIELD } from "../src/renderer/doctor";
 import { valueOf, type Field } from "../src/utils/logfmt";
 import {
   emptyStores,
@@ -133,6 +130,17 @@ const GHOSTTY: TerminalFixture = {
 // and the Claude Code directory it runs with: the location its bar's settings
 // chain is read at, the click's own.
 const sessionAt = () => ({ projectDir: "/tmp/proj", claudeConfigDir: dir });
+
+// How each doctor click asked the session's run, as its record says, in
+// order: "started run=<name>" or "joined run=<name>".
+const askedOn = (record: readonly Field[]): string[] =>
+  record.flatMap(([key, value], i) =>
+    key === DOCTOR_ASKED_FIELD ? [`${value} ${record[i + 1]?.join("=")}`] : [],
+  );
+
+// The run the record's last doctor note reports.
+const lastNotedRun = (record: readonly Field[]): number =>
+  readDoctorNote(record.findLast(([key]) => key === "doctor")![1]).run;
 
 // Each report the record notes, as one line: its verdicts by check, then
 // every field the run reasoned over that follows its note.
@@ -528,24 +536,23 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     await rt.openTools();
     await rt.clickVerb(VERB_DOCTOR_RUN);
     const run = rt.urlOfVerb(VERB_DOCTOR_RUN)!;
-    expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
+    const fix = rt.urlOfVerb(VERB_DOCTOR_FIX)!;
+    expect(fix).toBeDefined();
     await clickUrl(run, rt.ctx);
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeUndefined();
     // A second click while the run is on its way asks no other, and its
-    // record says it joined that run.
+    // record says it joined that run; so does a fix clicked meanwhile.
     const asked = rt.ctx.doctorRuns.subscriptions().get(S1);
-    const askedOn = (): string[] =>
-      rt.ctx.record
-        .filter(
-          ([key]) => key === DOCTOR_RUN_NOTE || key === DOCTOR_RUN_NAME_NOTE,
-        )
-        .map(([, value]) => value);
-    const before = askedOn();
+    if (asked?.kind !== "doctor") throw new Error("the run asks the host");
+    const at = `run=${asked.ask.run}`;
     await clickUrl(run, rt.ctx);
     expect(rt.ctx.doctorRuns.subscriptions().get(S1)).toEqual(asked);
-    const name = String(rt.ctx.doctorRuns.waiting(S1));
-    expect(before.slice(-2)).toEqual(["started", name]);
-    expect(askedOn().slice(before.length)).toEqual(["joined", name]);
+    await expect(clickUrl(fix, rt.ctx)).rejects.toThrow(/being read/);
+    expect(askedOn(rt.ctx.record).slice(-3)).toEqual([
+      `started ${at}`,
+      `joined ${at}`,
+      `joined ${at}`,
+    ]);
     await rt.click(run);
     expect(rt.urlOfVerb(VERB_DOCTOR_FIX)).toBeDefined();
   });
@@ -627,6 +634,10 @@ describe("🍫 › 🧰 tools › 🩺 doctor", () => {
     );
 
     await rt.clickVerb(VERB_DOCTOR_FIX);
+    // The fix starts the run its report is.
+    expect(askedOn(rt.ctx.record).at(-1)).toBe(
+      `started run=${lastNotedRun(rt.ctx.record)}`,
+    );
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       statusLine: {
         type: "command",

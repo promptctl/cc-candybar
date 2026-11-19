@@ -40,9 +40,12 @@ import {
   type DoctorReadInput,
 } from "../../src/daemon/cache/doctor";
 import type { DoctorRuns } from "../../src/renderer/doctor";
-import type { DoctorRead } from "../../src/doctor/gather";
+import { nextRunName, type DoctorRead } from "../../src/doctor/gather";
 import { ofRun } from "../../src/daemon/readings";
 import { NOT_HELD } from "../../src/doctor/checks";
+
+// The run a gather outside any renderer reads as: one name, minted once.
+const RUN = nextRunName(instantOf(new Date(0)), null);
 
 // The machine's edge and the config a test's run judges.
 export type GatherEdge = DoctorEdge & {
@@ -64,7 +67,7 @@ export async function gatherFacts(
   const machine = await readDoctor(
     edge,
     hints,
-    doctorAsk(0, load, sessionPick, { via: "command" }),
+    doctorAsk(RUN, load, sessionPick, { via: "command" }),
     { cwd: origin.cwd, projectDir: origin.projectDir },
     sighted,
   );
@@ -73,7 +76,7 @@ export async function gatherFacts(
     install: _i,
     ...facts
   } = doctorFacts(
-    { run: 0, kind: "read", machine, install: NOT_HELD },
+    { run: RUN, kind: "read", machine, install: NOT_HELD },
     load,
     origin.target,
     stores,
@@ -108,7 +111,7 @@ export function applyFix(
         null,
         () =>
           writableSettingsFiles({
-            run: 0,
+            run: RUN,
             kind: "read",
             machine: facts,
             install: facts.install,

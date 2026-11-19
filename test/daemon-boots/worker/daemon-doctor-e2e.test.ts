@@ -55,6 +55,11 @@ import { daemonSighted } from "../../../src/daemon/cache/doctor";
 import { sessionIdOf } from "../../../src/daemon/foundations/session-id";
 import type { StatsSnapshot } from "../../../src/daemon/foundations/stats-snapshot";
 import { fieldsOf } from "../../../src/utils/logfmt";
+import {
+  DOCTOR_ASKED_FIELD,
+  DOCTOR_RUN_FIELD,
+} from "../../../src/renderer/doctor";
+import { readDoctorNote } from "../../../src/renderer-interface/noted-doctor";
 import type { ClientHints } from "../../../src/daemon/foundations/protocol";
 import { answerRepo } from "../../helpers/repo-approval";
 import { until } from "../../helpers/until";
@@ -549,8 +554,8 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     expect(run).toBeDefined();
     // Each run's report is noted on the record of the turn that took its
     // reading. [LAW:no-ambient-temporal-coupling] A click while the session's
-    // run waits for its reading starts no run, so each click waits for the
-    // run before it to be noted.
+    // run waits for its reading starts no run, so no click comes before the
+    // run ahead of it has reported: its row drawn, or its note logged.
     const doctorLines = (lines: readonly string[]) =>
       lines.filter((l) => {
         const fields = fieldsOf(l);
@@ -566,7 +571,6 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     const moves =
       "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close), but its statusLine sets no refreshInterval";
     await click(daemon, run!);
-    await runs(1);
     await reported(draw, moves);
 
     // Still, but drawn under the open menu the doctor is clicked from, which
@@ -576,7 +580,6 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     writeFileSync(projectConfig, barOf("at rest"));
     await reported(draw, "at rest");
     await click(daemon, run!);
-    await runs(2);
     await reported(draw, moves);
 
     // The same bar with its menu closed is still, and passes.
@@ -586,7 +589,7 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     );
     await draw();
     await click(daemon, run!);
-    await runs(3);
+    const noted = await runs(3);
     await click(
       daemon,
       urlWriting(await draw(), SETTINGS_ANCHOR, SETTINGS_OPEN),
@@ -607,11 +610,24 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // the first run's bar animates its template; the second's is at rest but
     // drawn under the open menu it was clicked from, which counts down to its
     // close; the third's menu is closed, so its bar is still.
-    expect((await runs(3)).map((l) => fieldsOf(l).get("frames"))).toEqual([
+    expect(noted.map((l) => fieldsOf(l).get("frames"))).toEqual([
       "1/0/0/0/0",
       "1/0/0/0/0",
       "0/0/1/0/0",
     ]);
+    // Each click started the run it waited for, and each report names it.
+    const asks = logLines(env).filter((l) => {
+      const fields = fieldsOf(l);
+      return fields.has(DOCTOR_ASKED_FIELD) && fields.get("sid") === SID;
+    });
+    expect(asks.map((l) => fieldsOf(l).get(DOCTOR_ASKED_FIELD))).toEqual([
+      "started",
+      "started",
+      "started",
+    ]);
+    expect(asks.map((l) => Number(fieldsOf(l).get(DOCTOR_RUN_FIELD)))).toEqual(
+      noted.map((l) => readDoctorNote(fieldsOf(l).get("doctor")!).run),
+    );
   } finally {
     await daemon.stop();
     removeTmpDirs();

@@ -144,7 +144,6 @@ import {
   GLYPH_MARKS,
   checkByName,
   describeFix,
-  type DoctorFacts,
   type GlyphMark,
 } from "../../doctor/checks";
 import type { RenderOrigin } from "../../config-hint";
@@ -152,8 +151,19 @@ import { withMark } from "../../doctor/mark-book";
 import type { ClickArrival } from "../../doctor/sightings";
 import type { ConfigLoad, DoctorDocuments } from "../../doctor/ports";
 import { tmuxPaneOf } from "../../claude-input/typing";
-import { readSources, readThrough, settingChange } from "../../doctor/gather";
-import type { DoctorRuns } from "../doctor";
+import {
+  readSources,
+  readThrough,
+  settingChange,
+  type RunName,
+} from "../../doctor/gather";
+import {
+  DOCTOR_ASKED_FIELD,
+  DOCTOR_RUN_FIELD,
+  type DoctorRuns,
+  type ReportedRun,
+  type RunAsked,
+} from "../doctor";
 import {
   BadVerbArgs,
   decodeWire,
@@ -163,11 +173,6 @@ import {
   noteFacts,
   type RequestFacts,
 } from "../../daemon/foundations/request-event";
-import {
-  DOCTOR_RUN_NAME_NOTE,
-  DOCTOR_RUN_NOTE,
-  type RunAsked,
-} from "../../renderer-interface/noted-doctor";
 import type { ActsOnTheirWay } from "../acts";
 import {
   parseSessionId,
@@ -1220,10 +1225,10 @@ function askRun(ctx: ClickContext, sid: SessionId): void {
 }
 
 // [LAW:nothing-unseen] The click's record names the run it asked, and how.
-function noteRun(ctx: ClickContext, asked: RunAsked, run: number): void {
+function noteRun(ctx: ClickContext, asked: RunAsked, run: RunName): void {
   noteFacts(ctx.record, {
-    [DOCTOR_RUN_NOTE]: asked,
-    [DOCTOR_RUN_NAME_NOTE]: String(run),
+    [DOCTOR_ASKED_FIELD]: asked,
+    [DOCTOR_RUN_FIELD]: String(run),
   });
 }
 
@@ -1235,9 +1240,9 @@ function reportedFacts(
   ctx: ClickContext,
   sid: SessionId,
   verb: string,
-): DoctorFacts {
-  const facts = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
-  if (facts !== null) return facts;
+): ReportedRun {
+  const reported = ctx.doctorRuns.facts(sid, ctx.arrival, ctx.now());
+  if (reported !== null) return reported;
   askRun(ctx, sid);
   throw new BadVerbArgs(
     `${verb}: the doctor's report is being read — click again once it is in`,
@@ -1263,7 +1268,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const facts = reportedFacts(ctx, sid, "doctor-fix");
+  const { run, facts } = reportedFacts(ctx, sid, "doctor-fix");
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(
@@ -1297,7 +1302,7 @@ const doctorFix: VerbHandler = (value, ctx) => {
       ctx.doctorRuns.report(
         ctx.sessionState,
         sid,
-        { ...facts, daemon: { ...facts.daemon, read } },
+        { run, facts: { ...facts, daemon: { ...facts.daemon, read } } },
         ctx.record,
       );
       return;
@@ -1321,7 +1326,7 @@ const doctorMark: VerbHandler = (value, ctx) => {
       `doctor-mark: the mark is ${JSON.stringify(mark)}, not ${GLYPH_MARKS.join(" or ")}`,
     );
   }
-  const facts = reportedFacts(ctx, sid, "doctor-mark");
+  const { run, facts } = reportedFacts(ctx, sid, "doctor-mark");
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.sighting === undefined) {
     throw new BadVerbArgs(
@@ -1341,7 +1346,12 @@ const doctorMark: VerbHandler = (value, ctx) => {
     "info",
     `doctor-mark: ${check.name} ${mark} on ${verdict.sighting.id} (session=${sid})`,
   );
-  ctx.doctorRuns.report(ctx.sessionState, sid, { ...facts, marks }, ctx.record);
+  ctx.doctorRuns.report(
+    ctx.sessionState,
+    sid,
+    { run, facts: { ...facts, marks } },
+    ctx.record,
+  );
 };
 
 // ─── Slash commands (brandon-context-ceiling-xta.7xt) ───────────────────────

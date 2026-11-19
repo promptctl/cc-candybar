@@ -6,6 +6,10 @@ import {
   readDoctorNote,
   type NotedReport,
 } from "../../src/renderer-interface/noted-doctor";
+import { nextRunName } from "../../src/doctor/gather";
+import { instantOf } from "../../src/utils/instant";
+
+const RUN = nextRunName(instantOf(new Date(0)), null);
 
 const REPORTS: readonly NotedReport[] = [
   { name: "config", label: "config", verdict: { ok: true } },
@@ -28,19 +32,28 @@ const REPORTS: readonly NotedReport[] = [
 ];
 
 test("a note reads back as the run it was written from", () => {
-  const reported = { kind: "reported", reports: REPORTS } as const;
+  const reported = { run: RUN, kind: "reported", reports: REPORTS } as const;
   expect(readDoctorNote(doctorNote(reported))).toEqual(reported);
-  const failed = { kind: "failed", reason: "the probe was refused" } as const;
+  const failed = {
+    run: RUN,
+    kind: "failed",
+    reason: "the probe was refused",
+  } as const;
   expect(readDoctorNote(doctorNote(failed))).toEqual(failed);
 });
 
 const reported = (reports: string): string =>
-  `{"kind":"reported","reports":${reports}}`;
+  `{"run":1,"kind":"reported","reports":${reports}}`;
 
 test.each([
   ["not an object", `[]`, /neither reported nor failed/],
   ["a failed run with no reason", `{"kind":"failed"}`, /has no reason/],
   ["reports that are not a list", reported(`{}`), /not a JSON array/],
+  [
+    "a note that names no run",
+    `{"kind":"reported","reports":[]}`,
+    /names no run/,
+  ],
   [
     "a report with no label",
     reported(`[{"name":"x","verdict":{"ok":true}}]`),

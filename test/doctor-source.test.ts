@@ -12,7 +12,12 @@ import {
   daemonSighted,
   type DoctorReadInput,
 } from "../src/daemon/cache/doctor";
-import { doctorAsk, type DoctorReading } from "../src/doctor/gather";
+import {
+  doctorAsk,
+  nextRunName,
+  type DoctorReading,
+} from "../src/doctor/gather";
+import { instantOf } from "../src/utils/instant";
 import { NOT_HELD, held } from "../src/doctor/checks";
 import { installFacts } from "../src/doctor/edge";
 import type { DoctorMachineEdge } from "../src/doctor/ports";
@@ -78,7 +83,7 @@ const input = (
   hints: { tmux: null, ssh: false, claudeConfigDir: dir },
   origin: { cwd: dir, projectDir: dir },
   ask: doctorAsk(
-    1,
+    nextRunName(instantOf(new Date(0)), null),
     {
       layers: [],
       error: null,

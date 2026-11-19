@@ -5,15 +5,10 @@
 // [LAW:one-source-of-truth] The renderer writes the note and the host reads
 // it, so both spellings live here, in the zone both processes load.
 
+import type { RunName } from "../doctor/gather";
+
 // The field the note rides in.
 export const DOCTOR_NOTE = "doctor";
-
-// [LAW:nothing-unseen] The fields a doctor click's record names the session's
-// run in: whether the click started it or joined the one already on its way,
-// and the run's name, so a click that starts nothing is seen doing so.
-export const DOCTOR_RUN_NOTE = "doctorRun";
-export const DOCTOR_RUN_NAME_NOTE = "doctorRunName";
-export type RunAsked = "started" | "joined";
 
 // [LAW:types-are-the-program] One check's verdict as the record carries it:
 // ok, with what the check could not judge where it says so; or failed, with
@@ -36,10 +31,12 @@ export interface NotedReport {
 }
 
 // [LAW:no-silent-failure] How a run ended: its reports, or why there are
-// none, so a reader waiting on the note hears a failed run as one.
-export type NotedRun =
+// none, so a reader waiting on the note hears a failed run as one. Either
+// names its run, as the click that asked it and the host's read of it do.
+export type NotedRun = { readonly run: RunName } & (
   | { readonly kind: "reported"; readonly reports: readonly NotedReport[] }
-  | { readonly kind: "failed"; readonly reason: string };
+  | { readonly kind: "failed"; readonly reason: string }
+);
 
 export const doctorNote = (run: NotedRun): string => JSON.stringify(run);
 
@@ -55,13 +52,24 @@ export function readDoctorNote(value: string): NotedRun {
   if (run.kind === "failed") {
     if (!text(run.reason))
       throw new Error(`a failed run has no reason: ${value}`);
-    return { kind: "failed", reason: run.reason };
+    return { run: runOf(run.run, value), kind: "failed", reason: run.reason };
   }
   if (run.kind !== "reported")
     throw new Error(`a doctor note is neither reported nor failed: ${value}`);
   if (!Array.isArray(run.reports))
     throw new Error(`a reported run's reports are not a JSON array: ${value}`);
-  return { kind: "reported", reports: readReports(run.reports, value) };
+  return {
+    run: runOf(run.run, value),
+    kind: "reported",
+    reports: readReports(run.reports, value),
+  };
+}
+
+// The run a note names, as the renderer that wrote it minted it.
+function runOf(run: unknown, value: string): RunName {
+  if (!Number.isSafeInteger(run))
+    throw new Error(`a doctor note names no run: ${value}`);
+  return run as RunName;
 }
 
 function readReports(

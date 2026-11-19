@@ -26,6 +26,7 @@ import type {
 } from "./checks.js";
 import { privateGlyphsIn, stripPrivateGlyphs } from "../render/strip.js";
 import type { ConfigTarget } from "../config-hint.js";
+import type { Instant } from "../utils/instant.js";
 import { handlerProvenBy, type ClickArrival } from "./sightings.js";
 import type { StoresRead } from "../daemon/foundations/stats-snapshot.js";
 import type { DoctorDocuments, ConfigLoad } from "./ports.js";
@@ -55,13 +56,25 @@ export const readStores = (stores: DoctorDocuments): StoresRead => ({
   postMortemsRead: stores.postMortemsRead.read(),
 });
 
+declare const RUN_NAME: unique symbol;
+
+// [LAW:types-are-the-program] A doctor run's name: the millisecond its click
+// ran, kept rising by the renderer that mints it, so a bare number is never
+// taken for one.
+export type RunName = number & { readonly [RUN_NAME]: true };
+
+// [LAW:single-enforcer] The one mint of a run's name: the millisecond `at`
+// its click ran, or past `last`, the name minted before it, when that is later.
+export const nextRunName = (at: Instant, last: RunName | null): RunName =>
+  Math.max(Math.round(at * 1000), (last ?? 0) + 1) as RunName;
+
 // [LAW:types-are-the-program] What a run asks of the machine, decided by the
 // config it judges: the glyphs to ask the terminal's font about (none, "",
 // asks nothing) and the outside data a placed segment needs. `arrival` is how
 // the click that asked it came, which is what the run knows of the URL
 // handler. `run` names the run, so a new run is a new ask, read again.
 export interface DoctorAsk {
-  readonly run: number;
+  readonly run: RunName;
   readonly glyphs: string;
   readonly needs: DataNeeds;
   readonly arrival: ClickArrival;
@@ -88,7 +101,7 @@ export type MachineFacts = Omit<
 // clients that drew the session's bars ran — or why it was not read. A
 // failure names its run too, so one left from an earlier run is never taken
 // for the run after it (src/daemon/readings.ts).
-export type DoctorReading = { readonly run: number } & (
+export type DoctorReading = { readonly run: RunName } & (
   | {
       readonly kind: "read";
       readonly machine: MachineFacts;
@@ -105,7 +118,7 @@ export type DoctorRead = Extract<DoctorReading, { kind: "read" }>;
 // every one the config's own text writes — a Nerd icon in a template or a
 // menu glyph is drawn as surely as a cap.
 export function doctorAsk(
-  run: number,
+  run: RunName,
   load: ConfigLoad,
   sessionPick: (key: string) => string | null,
   arrival: ClickArrival,

@@ -322,10 +322,10 @@ describe("the daemon's side of the round trip", () => {
     await d.click(VERB_DOCTOR_RUN, "s1");
     const now = instantAt(systemTimekeeper);
     expect(
-      d.ctx.doctorRuns.facts(S1, { via: "tmux-status" }, now)?.urlHandler,
+      d.ctx.doctorRuns.facts(S1, { via: "tmux-status" }, now)?.facts.urlHandler,
     ).toMatchObject({ kind: "registered" });
     expect(
-      d.ctx.doctorRuns.facts(S1, link(FORWARDED), now)?.urlHandler,
+      d.ctx.doctorRuns.facts(S1, link(FORWARDED), now)?.facts.urlHandler,
     ).toEqual({ kind: "arrived", delivery: FORWARDED });
   });
 

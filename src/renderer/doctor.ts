@@ -19,9 +19,11 @@ import type { Instant } from "../utils/instant";
 import {
   doctorAsk,
   doctorFacts,
+  nextRunName,
   readStores,
   type DoctorAsk,
   type DoctorRead,
+  type RunName,
 } from "../doctor/gather";
 import type { ConfigLoad, DoctorDocuments } from "../doctor/ports";
 import { CHECKS, runDoctor, type DoctorFacts } from "../doctor/checks";
@@ -42,6 +44,21 @@ import {
 } from "../daemon/foundations/request-event";
 
 type Log = (level: "info" | "warn" | "error", msg: string) => void;
+
+// [LAW:nothing-unseen] The fields a doctor click's record names the session's
+// run in: whether the click started it or joined the one already on its way,
+// and the run, under the name the host's read of it and its report's note
+// give it, so a click that starts nothing is seen doing so.
+export const DOCTOR_ASKED_FIELD = "doctorRun";
+export const DOCTOR_RUN_FIELD = "run";
+export type RunAsked = "started" | "joined";
+
+// A run's report as a fix or a mark judges it: the facts the run wrote, and
+// the run they are.
+export interface ReportedRun {
+  readonly run: RunName;
+  readonly facts: DoctorFacts;
+}
 
 // One run of a session's doctor: what it asked, what it judges, how its click
 // arrived, and the host's reading once it is in, with when it landed.
@@ -88,7 +105,7 @@ export interface DoctorRunsDeps {
 
 export class DoctorRuns {
   private readonly runs = new Map<SessionId, Run>();
-  private last = 0;
+  private last: RunName | null = null;
 
   constructor(private readonly deps: DoctorRunsDeps) {}
 
@@ -103,9 +120,9 @@ export class DoctorRuns {
     store: SessionStateRW,
     session: SessionId,
     request: RunRequest,
-  ): number {
+  ): RunName {
     store.setBatch(session, UNRUN);
-    this.last = Math.max(Math.round(request.at * 1000), this.last + 1);
+    this.last = nextRunName(request.at, this.last);
     this.runs.set(session, {
       ask: doctorAsk(this.last, request.load, request.pick, request.arrival),
       load: request.load,
@@ -118,7 +135,7 @@ export class DoctorRuns {
 
   // The name of the session's run on its way (asked, its reading not in), or
   // null when it has none.
-  waiting(session: SessionId): number | null {
+  waiting(session: SessionId): RunName | null {
     const run = this.runs.get(session);
     return run === undefined || run.reading !== null ? null : run.ask.run;
   }
@@ -153,17 +170,22 @@ export class DoctorRuns {
       return;
     const reading = doctor.value;
     if (reading.kind === "failed")
-      return this.fail(session, reading.reason, record);
+      return this.fail(session, run.ask.run, reading.reason, record);
     try {
       this.report(
         this.deps.sessionState,
         session,
-        this.judged(run, reading, run.arrival),
+        { run: run.ask.run, facts: this.judged(run, reading, run.arrival) },
         record,
       );
       run.reading = { read: reading, at: doctor.at };
     } catch (e) {
-      this.fail(session, e instanceof Error ? e.message : String(e), record);
+      this.fail(
+        session,
+        run.ask.run,
+        e instanceof Error ? e.message : String(e),
+        record,
+      );
     }
   }
 
@@ -175,12 +197,12 @@ export class DoctorRuns {
     session: SessionId,
     arrival: ClickArrival,
     now: Instant,
-  ): DoctorFacts | null {
+  ): ReportedRun | null {
     const run = this.runs.get(session);
     const reading = run?.reading ?? null;
     return run === undefined || reading === null || now - reading.at > FRESH_FOR
       ? null
-      : this.judged(run, reading.read, arrival);
+      : { run: run.ask.run, facts: this.judged(run, reading.read, arrival) };
   }
 
   // [LAW:single-enforcer] One write of the whole report, through setBatch —
@@ -193,7 +215,7 @@ export class DoctorRuns {
   report(
     store: SessionStateRW,
     session: SessionId,
-    facts: DoctorFacts,
+    { run, facts }: ReportedRun,
     record: RequestFacts,
   ): void {
     const reports = runDoctor(facts);
@@ -201,6 +223,7 @@ export class DoctorRuns {
     store.setBatch(session, doctorReportPairs(reports));
     noteFacts(record, {
       [DOCTOR_NOTE]: doctorNote({
+        run,
         kind: "reported",
         reports: notedReports(reports),
       }),
@@ -214,11 +237,16 @@ export class DoctorRuns {
 
   // [LAW:no-silent-failure] A failed run shows why on its session's bar, and
   // its turn's record says so, for a reader waiting on the run's note.
-  private fail(session: SessionId, reason: string, record: RequestFacts): void {
+  private fail(
+    session: SessionId,
+    run: RunName,
+    reason: string,
+    record: RequestFacts,
+  ): void {
     this.runs.delete(session);
     this.deps.failed(session, `doctor: ${reason}`);
     noteFacts(record, {
-      [DOCTOR_NOTE]: doctorNote({ kind: "failed", reason }),
+      [DOCTOR_NOTE]: doctorNote({ run, kind: "failed", reason }),
     });
   }
 
