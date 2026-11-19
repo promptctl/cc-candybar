@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-877",
+      "ref": "refs/pull/877/merge",
+      "sha": "203bea54bb31b1b08efd854ef3c4633904f75be7",
+      "timestamp": "2026-11-19T16:26:30.161Z",
+      "commits": [
+        {
+          "sha": "203bea54bb31b1b08efd854ef3c4633904f75be7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:25:29Z",
+          "message": "Merge 1656261ede70ee482d8a839771c798988e33348f into 03baa57993b3a897e0b565221c250228f2873fb9\n"
+        },
+        {
+          "sha": "1656261ede70ee482d8a839771c798988e33348f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:52:22-07:00",
+          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "03baa57993b3a897e0b565221c250228f2873fb9",
@@ -93,28 +115,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-877",
-      "ref": "refs/pull/877/merge",
-      "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
-      "timestamp": "2026-11-19T15:42:41.705Z",
-      "commits": [
-        {
-          "sha": "ce19440aeacd7eec9e7b9de0a28a5f1725ae039f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:41:26Z",
-          "message": "Merge 4f2bb5513ff17eaa9d15382699ba3c507f827cb2 into 72652bd631655794e7e9adc79fe7ffbddceb93f3\n"
-        },
-        {
-          "sha": "4f2bb5513ff17eaa9d15382699ba3c507f827cb2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:52:22-07:00",
-          "message": "fix(actions): centralize template value binding (ibyq.a8c)\n"
         }
       ]
     },

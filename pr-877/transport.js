@@ -40294,10 +40294,10 @@ function wheel(curve, z) {
     const { colors, fills, depth, theme: theme24 } = drawn;
     const own2 = (terminal, color) => !terminal && colors.has(color.hex);
     const boundWith = (color, other, theirs) => fills.has(color.hex) || !theirs ? color.hex : other.hex;
-    const keyOf2 = (color, bound) => `${color.hex} ${bound}`;
+    const keyOf = (color, bound) => `${color.hex} ${bound}`;
     const bounds = settled3.get(theme24, () => new Memo()).get(drawnKey(drawn), () => turnedBounds(drawn.pairs, depth, (pair, side) => {
       const other = side === "fg" ? "bg" : "fg";
-      return own2(pair.terminal[side], pair[side]) ? keyOf2(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
+      return own2(pair.terminal[side], pair[side]) ? keyOf(pair[side], boundWith(pair[side], pair[other], own2(pair.terminal[other], pair[other]))) : void 0;
     }));
     const indexed = measuredIndexed(depth, theme24);
     const placeOf2 = segmentsOf(drawn);
@@ -40305,10 +40305,10 @@ function wheel(curve, z) {
       const written3 = /* @__PURE__ */ new Map();
       const choose = (color, bound, place) => {
         const turn = hueTurned(color, turned(place, t2));
-        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf2(color, bound)) ?? UNBOUNDED);
+        return nearestWithin(turn.looks, color, depth === ColorDepth.TRUECOLOR ? turn.either.map(measured2) : indexed, bounds.get(keyOf(color, bound)) ?? UNBOUNDED);
       };
       const write = (color, bound, place) => {
-        const key = `${keyOf2(color, bound)} ${place.row}:${place.centre}`;
+        const key = `${keyOf(color, bound)} ${place.row}:${place.centre}`;
         const found2 = written3.get(key) ?? choose(color, bound, place);
         written3.set(key, found2);
         return found2;
@@ -42210,11 +42210,12 @@ var NO_MOTION = {
   }
 };
 var SessionEffects = class {
-  constructor(key) {
+  constructor(key, kept = NO_MOTION) {
     this.key = key;
+    this.kept = kept;
   }
   key;
-  kept = NO_MOTION;
+  kept;
   // The latest frame's effects: the bar's, at what t, how many of its rows'
   // effects were made fresh rather than reused — one made every frame pays
   // rich-js's share settling every frame — and each placement's own.
@@ -42444,39 +42445,6 @@ var SessionEffects = class {
         passages: basis === "off" ? null : passages
       })
     };
-  }
-};
-var MAX_SESSIONS = 256;
-var EffectSessions = class {
-  constructor(maxSessions = MAX_SESSIONS) {
-    this.maxSessions = maxSessions;
-  }
-  maxSessions;
-  sessions = /* @__PURE__ */ new Map();
-  // The session's memory as a draw reads it: a session with none kept yet
-  // draws from a fresh one, held only once its frame is kept.
-  of(sessionId2) {
-    return this.sessions.get(sessionId2) ?? new SessionEffects(sessionId2);
-  }
-  // [LAW:single-enforcer] The one writer: the turn that drew the session's
-  // frame keeps the motion it returned, as the most recently rendered.
-  keep(sessionId2, motion) {
-    const known = this.of(sessionId2);
-    known.keep(motion);
-    this.sessions.delete(sessionId2);
-    this.sessions.set(sessionId2, known);
-    for (const oldest of this.sessions.keys()) {
-      if (this.sessions.size <= this.maxSessions) break;
-      this.sessions.delete(oldest);
-    }
-  }
-  // [LAW:nothing-unseen] What this memory holds, for the daemon's stats: every
-  // effect made for a row keeps rich-js's settled shares, so their count is the
-  // size that grows.
-  getStats() {
-    let effects = 0;
-    for (const session of this.sessions.values()) effects += session.heldCount;
-    return { sessions: this.sessions.size, effects };
   }
 };
 
@@ -46957,20 +46925,28 @@ function collectDiagnostics(sessionId2, by, errors2, notices, warnings) {
     ...notices,
     ...warnings.flatMap((w) => plainOf3(w, WARNING_SEVERITY))
   ].sort((a, b) => rankOf(a) - rankOf(b));
-  const keys2 = copyKeys(list2);
+  const seen = /* @__PURE__ */ new Map();
   const minted = list2.map(
-    (m, i2) => plain.has(m) ? {
-      ...m,
-      lines: [
-        [
-          diagnosticSpan(
-            m.lines[0][0].text,
-            copyLink(sessionId2, by, keys2[i2], i2 + 1)
-          )
-        ],
-        ...m.lines.slice(1)
-      ]
-    } : m
+    (message2, i2) => {
+      const id2 = identityOf(message2);
+      const occurrence = seen.get(id2) ?? 0;
+      seen.set(id2, occurrence + 1);
+      const stop2 = id2 * OCCURRENCES + Math.min(occurrence, OCCURRENCES - 1);
+      if (!plain.has(message2)) return { ...message2, stop: stop2 };
+      return {
+        ...message2,
+        stop: stop2,
+        lines: [
+          [
+            diagnosticSpan(
+              message2.lines[0][0].text,
+              copyLink(sessionId2, by, pageKey(stop2, 0), i2 + 1)
+            )
+          ],
+          ...message2.lines.slice(1)
+        ]
+      };
+    }
   );
   return minted;
 }
@@ -46978,8 +46954,10 @@ function plainMessage({ about, text: message2, copy: copy2 }, severity) {
   const [first2, ...rest2] = message2.split(/\r\n|\r|\n/).map((line) => diagnosticSpan(line, null)).filter((span) => span.text !== "").map((span) => [span]);
   return first2 === void 0 ? [] : [{ severity, about, message: message2, copy: copy2, lines: [first2, ...rest2] }];
 }
-function copyKeys(list2) {
-  return stopsOf(list2).map((stop2) => String(stop2 * PAGES + 1));
+function diagnosticCopies(list2) {
+  return new Map(
+    list2.map((message2) => [pageKey(message2.stop, 0), message2.copy])
+  );
 }
 function copyLink(sessionId2, by, key, position) {
   return actionTarget(
@@ -47000,17 +46978,9 @@ function identityOf(message2) {
   ).digest("hex");
   return Number.parseInt(digest2.slice(0, IDENTITY_BITS / 4 + 1), 16) % 2 ** IDENTITY_BITS;
 }
-function stopsOf(list2) {
-  const seen = /* @__PURE__ */ new Map();
-  return list2.map((m) => {
-    const id2 = identityOf(m);
-    const n = seen.get(id2) ?? 0;
-    seen.set(id2, n + 1);
-    return id2 * OCCURRENCES + Math.min(n, OCCURRENCES - 1);
-  });
-}
+var pageKey = (stop2, page2) => String(stop2 * PAGES + page2 + 1);
 function viewerKey(list2, at, page2) {
-  return String(stopsOf(list2)[at] * PAGES + page2 + 1);
+  return pageKey(list2[at].stop, page2);
 }
 var INDICATOR_CAP = 9;
 function diagnosticsProjection(list2) {
@@ -47026,7 +46996,8 @@ function diagnosticsProjection(list2) {
 }
 function viewedIndex(raw, list2) {
   const key = Number(raw) - 1;
-  const at = stopsOf(list2).indexOf(Math.floor(key / PAGES));
+  const stop2 = Math.floor(key / PAGES);
+  const at = list2.findIndex((message2) => message2.stop === stop2);
   return raw === null || at === -1 ? null : { index: at + 1, page: key % PAGES };
 }
 var MAX_VIEWER_ROWS = 20;
@@ -56310,9 +56281,9 @@ function synthesizePlacementMenus(config, issues) {
         const { apply, options } = call;
         const member = menuMember(apply);
         const stateKey = menuStateKey(id2, apply, options.key);
-        const pageKey = menuPageKey(stateKey);
+        const pageKey2 = menuPageKey(stateKey);
         const owner = options.key !== void 0 ? `key ${options.key}` : `ind ${id2} ${apply}`;
-        const clashKey = [stateKey, pageKey].find((k) => {
+        const clashKey = [stateKey, pageKey2].find((k) => {
           const prior2 = ownerBySynthKey.get(k);
           return prior2 !== void 0 && prior2 !== owner;
         });
@@ -56324,7 +56295,7 @@ function synthesizePlacementMenus(config, issues) {
           continue;
         }
         ownerBySynthKey.set(stateKey, owner);
-        ownerBySynthKey.set(pageKey, owner);
+        ownerBySynthKey.set(pageKey2, owner);
         const identity2 = menuActionName(stateKey, member);
         const claimant = `${node.name}\0${index}`;
         const prior = claimed.get(identity2);
@@ -56338,8 +56309,8 @@ function synthesizePlacementMenus(config, issues) {
         claimed.set(identity2, claimant);
         actions[identity2] = disclosureCycleAction(stateKey, member);
         variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
-        variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
-        actions[pageKey] = { set: pageKey, int: true };
+        variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
+        actions[pageKey2] = { set: pageKey2, int: true };
       }
     }
   }
@@ -57886,15 +57857,15 @@ function insertTerm(ctx, anchor, relation) {
     relation
   };
   const member = menuMember(applyName);
-  const pageKey = menuPageKey(stateKey);
+  const pageKey2 = menuPageKey(stateKey);
   const identity2 = menuActionName(stateKey, member);
   artifacts.variables[stateKey] = {
     ...disclosureStateVar(stateKey, DISCLOSURE_CLOSED),
     within: [EDIT_MODE_REF]
   };
-  artifacts.variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+  artifacts.variables[pageKey2] = { kind: "state", key: pageKey2, default: "0" };
   artifacts.actions[identity2] = disclosureCycleAction(stateKey, member);
-  artifacts.actions[pageKey] = { set: pageKey, int: true };
+  artifacts.actions[pageKey2] = { set: pageKey2, int: true };
   const open2 = disclosureTerm({ variable: stateKey, key: stateKey, member });
   const add2 = `readableOn (color "success") (bgOf) ${TEXT_MIN_CONTRAST}`;
   return {
@@ -64311,6 +64282,310 @@ function laneHandoff(sessionId2, writable2, lanes, remaining) {
   };
 }
 
+// src/renderer/presented-frames.ts
+init_globals();
+
+// src/renderer-interface/noted-faults.ts
+init_globals();
+var KEPT_FAULTS = "kept";
+var spelledFaults = (faults) => JSON.stringify(faults);
+var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
+
+// src/renderer/menu-idle.ts
+init_globals();
+function idleAfterDraw(prior, menu) {
+  const { tick, shown, timeoutS } = menu;
+  if (prior === void 0) return { since: tick, shown, timeoutS };
+  if (tick < prior.since) return prior;
+  const since = shown && !prior.shown ? tick : prior.since;
+  return { since, shown, timeoutS };
+}
+var MenuIdle = class {
+  constructor(sessions = /* @__PURE__ */ new Map()) {
+    this.sessions = sessions;
+  }
+  sessions;
+  // What the session's draw at `tick` showed: whether a menu row, and the
+  // timeout its settings resolve to. A menu shown where the last draw showed
+  // none begins its idle period here, so one nobody clicked open (a group
+  // open by default, a reload) is not closed by a click from long ago.
+  drew(sessionId2, tick, shown, timeoutS) {
+    this.sessions.set(
+      sessionId2,
+      idleAfterDraw(this.sessions.get(sessionId2), { tick, shown, timeoutS })
+    );
+  }
+  // A click of the session landed: a new idle period begins. A session that
+  // has not drawn has no menu to count down.
+  clicked(sessionId2, tick) {
+    const idle = this.sessions.get(sessionId2);
+    if (idle !== void 0)
+      this.sessions.set(sessionId2, { ...idle, since: tick });
+  }
+  // When the idle period of the menus the session's last draw showed began,
+  // on the wall the draw is made on, or null while it showed none: a menu
+  // that appears now has only begun.
+  // [LAW:one-source-of-truth] Derived from the period's tick, so the flash
+  // the draw shows ends where the close lands however the wall has stepped.
+  since(sessionId2, { at, tick }) {
+    const idle = this.sessions.get(sessionId2);
+    return idle?.shown === true ? at - (tick - idle.since) : null;
+  }
+  retire(sessionId2) {
+    this.sessions.delete(sessionId2);
+  }
+  // The earliest tick a session's menus close at, or null when none shows a
+  // menu.
+  next(busy) {
+    return earliestOf(
+      [...this.sessions.entries()].map(
+        ([session, idle]) => this.expiryOf(session, idle, busy)
+      )
+    );
+  }
+  // [LAW:single-enforcer] A pending click can restart the idle period. Until
+  // it lands, the renderer neither takes nor schedules that session's close.
+  expiryOf(session, idle, busy) {
+    return idle.shown && !busy?.has(session) ? closesAt(idle.since, idle.timeoutS) : null;
+  }
+  // The sessions whose idle period has run out by `tick`, each taken as
+  // closed: what its last draw showed no longer stands, and a new period
+  // begins, so a close that fails is tried again a timeout later, never at
+  // once, and a session that stops drawing is never closed again.
+  due(tick, busy) {
+    const due = [];
+    for (const [session, idle] of this.sessions.entries()) {
+      const expiry = this.expiryOf(session, idle, busy);
+      if (expiry === null || expiry > tick) continue;
+      due.push({
+        session,
+        idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
+      });
+      this.sessions.set(session, { ...idle, since: tick, shown: false });
+    }
+    return due;
+  }
+  // The sessions whose period is kept, and those with a menu counting down.
+  stats() {
+    let sessions = 0;
+    let armed = 0;
+    for (const [, idle] of this.sessions.entries()) {
+      sessions++;
+      if (idle.shown) armed++;
+    }
+    return { sessions, armed };
+  }
+};
+
+// src/renderer/render-warnings.ts
+init_globals();
+function describeWarning(warning) {
+  const { kind, message: message2 } = warning;
+  let subject;
+  switch (kind) {
+    case "rule":
+      subject = warning.slot;
+      break;
+    case "refresh":
+      subject = warning.variable;
+      break;
+    case "segment":
+      subject = warning.placement;
+      break;
+    case "when":
+      subject = warning.where;
+      break;
+  }
+  return {
+    warning,
+    subject,
+    tag: kind === "when" ? kind : `${kind}:${subject}`,
+    key: JSON.stringify([
+      kind,
+      subject,
+      message2,
+      "error" in warning ? warning.error : null
+    ])
+  };
+}
+function frameWarnings(warnings, faults) {
+  return { warnings, faults: spelledFaults(faults) };
+}
+function warningChanges(next2, prior) {
+  const warnings = prior?.warnings ?? [];
+  return {
+    moved: warnings.length !== next2.warnings.length || warnings.some(({ key }, i2) => key !== next2.warnings[i2]?.key),
+    faults: faultsNote(next2.faults, prior?.faults)
+  };
+}
+function combinedWarnings(records) {
+  const listed = [];
+  const seen = /* @__PURE__ */ new Map();
+  for (const record2 of records) {
+    const earlier = new Map(seen);
+    for (const warning of record2.warnings) {
+      const { key } = warning;
+      const count = earlier.get(key) ?? 0;
+      if (count > 0) earlier.set(key, count - 1);
+      else {
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+        listed.push(warning);
+      }
+    }
+  }
+  return listed;
+}
+
+// src/renderer/presented-frames.ts
+var SURFACES = ["request", "feed"];
+var MAX_SESSIONS = 256;
+var latestOf = ({ request: request2, feed: feed2 }) => request2 !== void 0 && (feed2 === void 0 || request2.id > feed2.id) ? request2 : feed2;
+var PresentedFrames = class {
+  constructor(evicted = () => {
+  }, maxSessions = MAX_SESSIONS) {
+    this.evicted = evicted;
+    this.maxSessions = maxSessions;
+  }
+  evicted;
+  maxSessions;
+  sessions = /* @__PURE__ */ new Map();
+  configs = /* @__PURE__ */ new WeakMap();
+  menuIdle = new MenuIdle({
+    get: (session) => this.sessions.get(session)?.idle,
+    set: (session, idle) => {
+      const prior = this.sessions.get(session) ?? { surfaces: {} };
+      this.store(session, { ...prior, idle });
+    },
+    delete: (session) => {
+      const prior = this.sessions.get(session);
+      if (prior !== void 0)
+        this.sessions.set(session, { ...prior, idle: void 0 });
+    },
+    entries: () => this.idleEntries()
+  });
+  *idleEntries() {
+    for (const [session, { idle }] of this.sessions)
+      if (idle !== void 0) yield [session, idle];
+  }
+  store(session, value) {
+    if (this.sessions.has(session)) {
+      this.sessions.set(session, value);
+      return;
+    }
+    this.sessions.set(session, value);
+    for (const oldest of this.sessions.keys()) {
+      if (this.sessions.size <= this.maxSessions) break;
+      this.sessions.delete(oldest);
+      this.evicted(oldest);
+    }
+  }
+  // [LAW:no-shared-mutable-globals] The token identifies a config without
+  // holding that config alive once its view's layout has retired.
+  configOf(config) {
+    const held = this.configs.get(config);
+    if (held !== void 0) return held;
+    const token = /* @__PURE__ */ Symbol();
+    this.configs.set(config, token);
+    return token;
+  }
+  accept(id2, { session, by, target, frame: frame2 }) {
+    const prior = this.sessions.get(session) ?? { surfaces: {} };
+    const previous2 = prior.surfaces[by];
+    if (previous2 !== void 0 && id2 <= previous2.id) return null;
+    const latest = latestOf(prior.surfaces);
+    const { motion, menu, ...surface } = frame2;
+    const next2 = { ...surface, id: id2, target };
+    const newer = latest === void 0 || id2 > latest.id;
+    const change = warningChanges(surface.diagnostics, previous2?.diagnostics);
+    this.sessions.delete(session);
+    this.store(session, {
+      surfaces: { ...prior.surfaces, [by]: next2 },
+      // [LAW:one-source-of-truth] Keep one motion cache, even when both
+      // surfaces retain their layout. An older receipt cannot rewind it.
+      motion: newer ? motion : prior.motion,
+      idle: newer ? idleAfterDraw(prior.idle, menu) : prior.idle
+    });
+    return { faults: change.faults === KEPT_FAULTS ? null : change.faults };
+  }
+  on(session, by) {
+    return this.sessions.get(session)?.surfaces[by];
+  }
+  layout(session, by, target) {
+    const held = this.on(session, by);
+    return held?.target === target ? held.layout ?? void 0 : void 0;
+  }
+  latestLayout(session, targets) {
+    const drawn = (by) => {
+      const frame2 = this.on(session, by);
+      return frame2?.target === targets[by] && frame2.layout !== null ? frame2 : void 0;
+    };
+    return latestOf({ request: drawn("request"), feed: drawn("feed") })?.layout ?? void 0;
+  }
+  diagnostics(session, by) {
+    return this.on(session, by)?.diagnostics;
+  }
+  warnings(session, by, config) {
+    return combinedWarnings(
+      SURFACES.flatMap((surface) => {
+        const held = this.on(session, surface);
+        return held !== void 0 && (surface === by || held.config === config) ? [held.diagnostics] : [];
+      })
+    );
+  }
+  effects(session) {
+    return new SessionEffects(session, this.sessions.get(session)?.motion);
+  }
+  copy(session, by, key) {
+    return this.on(session, by)?.copies?.get(key);
+  }
+  retireView(session, targets, successor) {
+    const prior = this.sessions.get(session);
+    if (prior === void 0) return;
+    const surfaces = { ...prior.surfaces };
+    for (const by of SURFACES) {
+      const held = surfaces[by];
+      if (held === void 0 || successor && held.target !== targets[by])
+        continue;
+      surfaces[by] = {
+        ...held,
+        layout: null,
+        copies: successor ? held.copies : null
+      };
+    }
+    this.sessions.set(session, { ...prior, surfaces });
+  }
+  stopDrawing(session, by) {
+    const prior = this.sessions.get(session);
+    const held = prior?.surfaces[by];
+    if (prior === void 0 || held === void 0) return;
+    this.sessions.set(session, {
+      ...prior,
+      surfaces: {
+        ...prior.surfaces,
+        [by]: { ...held, layout: null, copies: null }
+      }
+    });
+  }
+  retire(session) {
+    this.sessions.delete(session);
+  }
+  stats() {
+    let sessions = 0;
+    let effects = 0;
+    let passages = 0;
+    for (const held of this.sessions.values()) {
+      if (held.motion !== void 0) {
+        sessions++;
+        for (const effectsOfRow of held.motion.made.values())
+          effects += effectsOfRow.size;
+      }
+      for (const by of SURFACES)
+        passages += held.surfaces[by]?.layout?.record.passages?.size ?? 0;
+    }
+    return { effects: { sessions, effects }, passages };
+  }
+};
+
 // src/dsl/render.ts
 init_globals();
 
@@ -67437,7 +67712,7 @@ function renderMenu(applyName, displays, options, runtime) {
   const placement = requireActiveSegment(runtime.activeSegment, "{{ menu }}");
   const action2 = runtime.action;
   const stateKey = menuStateKey(placement.placementId, applyName, options.key);
-  const pageKey = menuPageKey(stateKey);
+  const pageKey2 = menuPageKey(stateKey);
   const member = menuMember(applyName);
   const store = renderBinding(action2, "menu").store;
   const open2 = readVar(store, stateKey) === member;
@@ -67448,7 +67723,7 @@ function renderMenu(applyName, displays, options, runtime) {
     actionTarget([
       {
         verb: VERB_SET_STATE,
-        args: [sessionId2, stateKey, successor, pageKey, "0"]
+        args: [sessionId2, stateKey, successor, pageKey2, "0"]
       }
     ]),
     false
@@ -67464,12 +67739,12 @@ function renderMenu(applyName, displays, options, runtime) {
     return renderPicker(
       applyName,
       apply,
-      { key: pageKey, stateVar: pageKey },
+      { key: pageKey2, stateVar: pageKey2 },
       {
         kind: "own",
         writes: [
           [stateKey, DISCLOSURE_CLOSED],
-          [pageKey, "0"]
+          [pageKey2, "0"]
         ],
         onPick: options.closeOnPick
       },
@@ -70287,8 +70562,7 @@ function openView(state, cwd2, facts, {
     source,
     requested: request2.update,
     facts: request2.read,
-    frames: /* @__PURE__ */ new Map(),
-    lastRenderCellsBySegment: /* @__PURE__ */ new Map(),
+    presentationTargets: { request: /* @__PURE__ */ Symbol(), feed: /* @__PURE__ */ Symbol() },
     retire: stopChanged,
     dispose: () => {
       stopChanged();
@@ -70335,14 +70609,13 @@ var RenderCache = class {
   // [LAW:one-source-of-truth] Each session's ONE view: of the entry its latest
   // render resolved to. A render from another entry replaces it.
   views = /* @__PURE__ */ new Map();
-  // [LAW:one-source-of-truth] What each diagnostic a session's renderers last
-  // delivered copies, by the key its copy click names (src/render/
-  // diagnostics.ts), one map per renderer, since a request and a feed frame
-  // list different messages and a click names the surface it came from. Held
-  // by session, not by view, because a frame on screen outlives the view it
-  // was drawn from (a reload's successor); dropped when the session has no
-  // view. No link carries the text it copies.
-  copies = /* @__PURE__ */ new Map();
+  presentations = new PresentedFrames((session) => {
+    const view = this.views.get(session);
+    if (view !== void 0) {
+      view.presentationTargets.request = /* @__PURE__ */ Symbol();
+      view.presentationTargets.feed = /* @__PURE__ */ Symbol();
+    }
+  });
   // Every view the cache serves or served, until reclaimed.
   viewHolds = /* @__PURE__ */ new Map();
   // [LAW:no-ambient-temporal-coupling] The sessions an open feed draws, by
@@ -70674,7 +70947,12 @@ var RenderCache = class {
   retireView(view, reason) {
     if (this.views.get(view.sessionId) === view)
       this.views.delete(view.sessionId);
-    if (!this.views.has(view.sessionId)) this.copies.delete(view.sessionId);
+    const successor = this.views.has(view.sessionId);
+    this.presentations.retireView(
+      view.sessionId,
+      view.presentationTargets,
+      successor
+    );
     view.retire();
     const lease = this.leaseOf(view);
     lease.retired = { reason, held: lease.holders };
@@ -70695,6 +70973,7 @@ var RenderCache = class {
     this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
+    this.presentations.retire(sessionId2);
     this.dropDraft(sessionId2);
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
@@ -70782,10 +71061,6 @@ var RenderCache = class {
     for (const lease of this.viewHolds.values()) {
       if (lease.retired !== null) retiredViews++;
     }
-    let passages = 0;
-    for (const view of this.views.values())
-      for (const record2 of view.frames.values())
-        passages += record2.passages?.size ?? 0;
     return {
       size: this.entries.size,
       held,
@@ -70794,7 +71069,7 @@ var RenderCache = class {
       views: this.views.size,
       pinned: this.pins.size,
       retiredViews,
-      passages,
+      passages: this.presentations.stats().passages,
       accountedBytes: this.accountedBytes(),
       budgetBytes: this.budgetBytes()
     };
@@ -70943,26 +71218,24 @@ var RenderCache = class {
   latestView() {
     return [...this.views.values()].at(-1) ?? null;
   }
-  // The renderer `by` delivered a frame of the session's bar listing
-  // `copies`. A session with no view is closed: nothing it delivers is kept.
-  delivered(sessionId2, by, copies) {
-    if (!this.views.has(sessionId2)) return;
-    const drawn = this.copies.get(sessionId2) ?? /* @__PURE__ */ new Map();
-    this.copies.set(sessionId2, drawn.set(by, copies));
+  // [LAW:single-enforcer] Receipt targets live as long as their view and
+  // surface do. The owner accepts only an observation from the current one.
+  acceptFrame(id2, candidate) {
+    const { session, by, target } = candidate;
+    return this.views.get(session)?.presentationTargets[by] === target ? this.presentations.accept(id2, candidate) : null;
   }
   // What the diagnostic under `key` copies in the frame renderer `by` last
   // delivered for the session; undefined while that renderer's last frame
   // did not list it. Reads, never opens, like latestView.
   drawnCopy(sessionId2, by, key) {
-    return this.copies.get(sessionId2)?.get(by)?.get(key);
+    return this.presentations.copy(sessionId2, by, key);
   }
-  // The renderer no longer draws the session's bar (its feed closed): what
-  // its last frame listed is on no surface now, so a click naming it is
-  // refused rather than copying a list gone stale, and the surface's next
-  // frame, if it opens again, is a first frame that fades nothing in.
+  // Closing a feed retires that surface's presentation and the receipts
+  // still on their way to it.
   stopDrawing(sessionId2, by) {
-    this.copies.get(sessionId2)?.delete(by);
-    this.views.get(sessionId2)?.frames.delete(by);
+    const view = this.views.get(sessionId2);
+    if (view !== void 0) view.presentationTargets[by] = /* @__PURE__ */ Symbol();
+    this.presentations.stopDrawing(sessionId2, by);
   }
 };
 
@@ -72981,14 +73254,14 @@ var RENDER_ANSWERS = {
 };
 
 // src/renderer/draw-bar.ts
-function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
+function renderFrame(parts, sessionId2, fps, readings, following, feeds, prepare) {
   const facts = [];
   try {
     var _stack = [];
     try {
       const setup = __using(_stack, setUpFrame(parts, sessionId2, readings, facts));
       if (setup === null) return null;
-      const { drawn, evaluated: evaluated2, cellBreaks, copies, lanes, kept } = drawRender(
+      const { drawn, evaluated: evaluated2, cellBreaks, lanes, candidate } = drawRender(
         parts,
         setup,
         { by: "feed", fps },
@@ -73002,16 +73275,13 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
         handedOffTo(lanes, following)
       );
       const handoff = statusline === bar ? null : statusline;
-      keepDraw(parts, setup, kept);
-      deliver(parts, {
-        session: sessionId2,
-        by: "feed",
-        copies,
+      const receipt = prepare({
+        candidate,
         clickShown: null,
         eventsShown: []
       });
       return {
-        frame: { kind: "drawn", bar, handoff },
+        frame: { kind: "drawn", receipt, bar, handoff },
         evaluated: evaluated2,
         cellBreaks,
         failure: null
@@ -73130,10 +73400,13 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds) {
-  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
+  const {
+    sessionState,
+    renderCache: { presentations }
+  } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
-  const idleSince = menuIdle.since(sessionId2, readings);
+  const idleSince = presentations.menuIdle.since(sessionId2, readings);
   const payload = view.source.payload();
   const effective = view.source.effective();
   const failure2 = view.source.failure();
@@ -73173,18 +73446,20 @@ function drawRender(parts, setup, drawing2, feeds) {
     ),
     said2("click", clickShown?.text)
   ].flatMap(
-    ({ about, text: text4, copy: copy2, ...named2 }) => about && text4 && copy2 ? [{ ...named2, about, text: text4, copy: copy2 }] : []
+    ({ about, text: text4, copy: copy2, ...named2 }) => text4 != null && copy2 != null ? [{ ...named2, about, text: text4, copy: copy2 }] : []
   );
   const configWatch = entry.snapshot.watch;
   const { daemon: daemon2 } = document;
   const launched = launcherWarningsAt(daemon2.launcher, at, drawing2.by);
-  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const launchEvents = launched.flatMap(
+    (warning) => "event" in warning ? [warning] : []
+  );
   const held = [
     daemonEventAt("renderer-ended", daemon2.rendererEnded, at, drawing2.by),
     daemonEventAt("act-failed", daemon2.actFailed, at, drawing2.by)
   ].flatMap((w) => w === void 0 ? [] : [w]);
-  const eventsShown = [pipeWarning?.event, ...held.map((w) => w.event)].flatMap(
-    (e) => e === void 0 ? [] : [e]
+  const eventsShown = [...launchEvents, ...held].map(
+    (warning) => warning.event
   );
   const standing2 = [
     ...daemon2.fileEvents,
@@ -73204,7 +73479,8 @@ function drawRender(parts, setup, drawing2, feeds) {
       }
     ]
   ];
-  const scope = { config: state.config };
+  const config = presentations.configOf(state.config);
+  const target = view.presentationTargets[drawing2.by];
   const diagnostics = collectDiagnostics(
     sessionId2,
     drawing2.by,
@@ -73219,10 +73495,10 @@ function drawRender(parts, setup, drawing2, feeds) {
         text: w.message,
         copy: w.message
       })),
-      ...renderWarnings.ofSession(sessionId2, drawing2.by, scope).map((w) => ({
-        about: `${w.kind}\0${w.message}`,
-        text: w.message,
-        copy: w.message
+      ...presentations.warnings(sessionId2, drawing2.by, config).map(({ key, warning }) => ({
+        about: key,
+        text: warning.message,
+        copy: warning.message
       }))
     ]
   );
@@ -73246,7 +73522,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     feeds: feedsFact(projected.feeds)
   });
   const renderOpts = renderOptionsOf(effective, width);
-  const effects = effectSessions.of(sessionId2);
+  const effects = presentations.effects(sessionId2);
   const draw2 = () => drawDsl(
     state.config,
     state.compiled,
@@ -73263,7 +73539,7 @@ function drawRender(parts, setup, drawing2, feeds) {
     {
       ...effective,
       effects,
-      record: view.frames.get(drawing2.by),
+      record: presentations.layout(sessionId2, drawing2.by, target)?.record,
       idleSince: idleSince ?? void 0
     }
   );
@@ -73276,12 +73552,10 @@ function drawRender(parts, setup, drawing2, feeds) {
     cellBreaks,
     rules
   } = width === payload.term.cols ? draw2() : partsOf(state.compiled, view.store).withTerminalWidth(width, draw2);
-  const keys2 = copyKeys(diagnostics);
-  const copies = new Map(diagnostics.map((m, i2) => [keys2[i2], m.copy]));
+  const copies = diagnosticCopies(diagnostics);
   noteFacts(facts, {
     menuIdle: idleSince === null ? "-" : `${(at - idleSince).toFixed(1)}s/${effective.menuTimeout}s`
   });
-  const recorded2 = renderWarnings.moves(sessionId2, drawing2.by, drawnWarnings);
   const geometry = {
     width,
     rows,
@@ -73300,36 +73574,27 @@ function drawRender(parts, setup, drawing2, feeds) {
   const fx = memory.motion.frame;
   const own2 = fx.own.map((o) => `${o.placement}:${o.effect}@${o.t.toFixed(3)}`).join(",") || "-";
   const passages = (frames) => frames.map((f) => `${f.placement}@${f.t.toFixed(3)}`).join(",") || "-";
-  const tagOf = (w) => {
-    switch (w.kind) {
-      case "rule":
-        return `rule:${w.slot}`;
-      case "refresh":
-        return `refresh:${w.variable}`;
-      case "segment":
-        return `segment:${w.placement}`;
-      case "file-events":
-        return `${w.kind}:${w.state}`;
-      case "load":
-      case "facts":
-      case "config-watch":
-      case "lifeline":
-      case "launch-pipes":
-      case "renderer-ended":
-      case "act-failed":
-      case "when":
-        return w.kind;
-    }
-  };
-  const warned = [...standing2, ...drawnWarnings].map(tagOf).join(",") || "-";
+  const warnings = drawnWarnings.map(describeWarning);
+  const warned = [
+    ...standing2.map(
+      (w) => w.kind === "file-events" ? `${w.kind}:${w.state}` : w.kind
+    ),
+    ...warnings.map(({ tag }) => tag)
+  ].join(",") || "-";
   const faults = [
     ...errors2.map((e) => faultOf("error", e.kind, e.text, e.subject)),
     ...standing2.map((w) => faultOf("warning", w.kind, w.message)),
-    ...drawnWarnings.map(
-      (w) => faultOf("warning", w.kind, w.message, subjectOf(w))
+    ...warnings.map(
+      ({ warning, subject }) => faultOf("warning", warning.kind, warning.message, subject)
     )
   ];
+  const diagnosticsRecord = frameWarnings(warnings, faults);
+  const change = warningChanges(
+    diagnosticsRecord,
+    presentations.diagnostics(sessionId2, drawing2.by)
+  );
   noteFacts(facts, {
+    faults: change.faults,
     effect: fx.effect,
     effectT: fx.t.toFixed(3),
     // The rate the session's animation clock ran at for this frame.
@@ -73355,14 +73620,14 @@ function drawRender(parts, setup, drawing2, feeds) {
     err: errors2.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: pipeWarning?.hold ?? "-",
+    pipeEvent: launchEvents[0]?.hold ?? "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
     // What the indicator counted, and whether this frame's warnings moved
     // its renderer's record (`new`) or matched it (`kept`).
     diag: String(diagnostics.length),
-    warnRecord: recorded2 ? "new" : "kept",
+    warnRecord: change.moved ? "new" : "kept",
     // The message the viewer showed in the body's place, `-` while closed.
     viewer: viewing === null ? "-" : `${viewing.index}/${diagnostics.length}p${viewing.page + 1}`
   });
@@ -73377,54 +73642,27 @@ function drawRender(parts, setup, drawing2, feeds) {
     cellBreaks,
     clickShown,
     eventsShown,
-    copies,
     lanes,
-    kept: {
+    candidate: {
       session: sessionId2,
       by: drawing2.by,
-      record: memory.record,
-      motion: memory.motion,
-      warnings: { scope, list: drawnWarnings, faults },
-      // What this frame drew is what the session's idle close follows.
-      menu: {
-        tick: readings.tick,
-        shown: frame2.rows.some((row) => row.kind === "menu"),
-        timeoutS: effective.menuTimeout
-      },
-      segments
+      target,
+      frame: {
+        config,
+        layout: { record: memory.record, segments },
+        motion: memory.motion,
+        diagnostics: diagnosticsRecord,
+        copies,
+        menu: {
+          tick: readings.tick,
+          shown: frame2.rows.some((row) => row.kind === "menu"),
+          timeoutS: effective.menuTimeout
+        }
+      }
     }
   };
 }
-function keepDraw(parts, setup, kept) {
-  const { session, by, record: record2, motion, warnings, menu, segments } = kept;
-  const { view } = setup;
-  view.frames.set(by, record2);
-  view.lastRenderCellsBySegment = segments;
-  parts.effectSessions.keep(session, motion);
-  noteFacts(setup.facts, {
-    faults: parts.renderWarnings.keep(
-      session,
-      by,
-      warnings.scope,
-      warnings.list,
-      warnings.faults
-    )
-  });
-  parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
-}
 var faultOf = (level, kind, message2, subject) => ({ level, kind, subject, message: message2 });
-function subjectOf(w) {
-  switch (w.kind) {
-    case "rule":
-      return w.slot;
-    case "refresh":
-      return w.variable;
-    case "segment":
-      return w.placement;
-    case "when":
-      return w.where;
-  }
-}
 function daemonEventAt(kind, event, at, render3) {
   return event === null || eventHoldAt(event, DAEMON_EVENT_HOLD_S, at, render3) === "over" ? void 0 : { kind, message: event.text, event };
 }
@@ -73440,7 +73678,7 @@ function answerRequest(parts, req, presentation, facts) {
       facts,
       presentation
     ));
-    const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(
+    const { drawn, clickShown, eventsShown, lanes, candidate } = drawRender(
       parts,
       setup,
       ANSWERING,
@@ -73449,16 +73687,13 @@ function answerRequest(parts, req, presentation, facts) {
     const elsewhere = handedOffTo(lanes, feeds.following(sessionId2));
     const toStatusline = roleOf(presentation.client ?? null) === "statusline";
     const frame2 = toStatusline ? statuslineOf(setup, parts.sessionState, drawn, elsewhere) : drawn.body;
-    keepDraw(parts, setup, kept);
     noteFacts(facts, {
       handoff: (toStatusline ? elsewhere : []).join(",") || "-"
     });
     return {
       frame: frame2,
       delivery: {
-        session: sessionId2,
-        by: ANSWERING.by,
-        copies,
+        candidate,
         clickShown,
         eventsShown
       }
@@ -73469,12 +73704,14 @@ function answerRequest(parts, req, presentation, facts) {
     __callDispose(_stack, _error, _hasError);
   }
 }
-function deliver(parts, delivery) {
-  const { session, by, copies, clickShown, eventsShown } = delivery;
-  parts.renderCache.delivered(session, by, copies);
+function deliver(parts, id2, delivery) {
+  const { candidate, clickShown, eventsShown } = delivery;
+  const accepted = parts.renderCache.acceptFrame(id2, candidate);
+  if (accepted === null) return null;
   if (clickShown !== null)
-    answeredClickError(parts.sessionState, session, clickShown);
+    answeredClickError(parts.sessionState, candidate.session, clickShown);
   for (const event of eventsShown) parts.eventAnswered(event);
+  return accepted;
 }
 function statuslineOf({ sessionId: sessionId2, state, view }, picks, drawn, elsewhere) {
   const first2 = elsewhere[0];
@@ -73595,82 +73832,6 @@ var TurnTime = class {
     now: () => this.at * 1e3,
     after: (ms, run2) => this.after(ms, run2)
   };
-};
-
-// src/renderer/menu-idle.ts
-init_globals();
-var MenuIdle = class {
-  sessions = /* @__PURE__ */ new Map();
-  // What the session's draw at `tick` showed: whether a menu row, and the
-  // timeout its settings resolve to. A menu shown where the last draw showed
-  // none begins its idle period here, so one nobody clicked open (a group
-  // open by default, a reload) is not closed by a click from long ago.
-  drew(sessionId2, tick, shown, timeoutS) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle === void 0) {
-      this.sessions.set(sessionId2, { since: tick, timeoutS, shown });
-      return;
-    }
-    if (shown && !idle.shown) idle.since = tick;
-    idle.shown = shown;
-    idle.timeoutS = timeoutS;
-  }
-  // A click of the session landed: a new idle period begins. A session that
-  // has not drawn has no menu to count down.
-  clicked(sessionId2, tick) {
-    const idle = this.sessions.get(sessionId2);
-    if (idle !== void 0) idle.since = tick;
-  }
-  // When the idle period of the menus the session's last draw showed began,
-  // on the wall the draw is made on, or null while it showed none: a menu
-  // that appears now has only begun.
-  // [LAW:one-source-of-truth] Derived from the period's tick, so the flash
-  // the draw shows ends where the close lands however the wall has stepped.
-  since(sessionId2, { at, tick }) {
-    const idle = this.sessions.get(sessionId2);
-    return idle?.shown === true ? at - (tick - idle.since) : null;
-  }
-  retire(sessionId2) {
-    this.sessions.delete(sessionId2);
-  }
-  // The earliest tick a session's menus close at, or null when none shows a
-  // menu.
-  next(busy) {
-    return earliestOf(
-      [...this.sessions].map(
-        ([session, idle]) => this.expiryOf(session, idle, busy)
-      )
-    );
-  }
-  // [LAW:single-enforcer] A pending click can restart the idle period. Until
-  // it lands, the renderer neither takes nor schedules that session's close.
-  expiryOf(session, idle, busy) {
-    return idle.shown && !busy?.has(session) ? closesAt(idle.since, idle.timeoutS) : null;
-  }
-  // The sessions whose idle period has run out by `tick`, each taken as
-  // closed: what its last draw showed no longer stands, and a new period
-  // begins, so a close that fails is tried again a timeout later, never at
-  // once, and a session that stops drawing is never closed again.
-  due(tick, busy) {
-    const due = [];
-    for (const [session, idle] of this.sessions) {
-      const expiry = this.expiryOf(session, idle, busy);
-      if (expiry === null || expiry > tick) continue;
-      due.push({
-        session,
-        idle: { idleS: tick - idle.since, timeoutS: idle.timeoutS }
-      });
-      idle.since = tick;
-      idle.shown = false;
-    }
-    return due;
-  }
-  // The sessions whose period is kept, and those with a menu counting down.
-  stats() {
-    let armed = 0;
-    for (const idle of this.sessions.values()) if (idle.shown) armed++;
-    return { sessions: this.sessions.size, armed };
-  }
 };
 
 // src/renderer/feeds.ts
@@ -73818,7 +73979,7 @@ var Feeds = class {
   // feed is its own error boundary, so one that throws keeps no other's frame
   // from going out, and it is due again a still period on: a feed that throws
   // on every frame throws once a still period, never at every turn.
-  drawDue(readings, frames) {
+  drawDue(readings, frames, prepare) {
     const { tick } = readings;
     runEach(
       [...this.feeds.values()].flatMap(
@@ -73826,7 +73987,7 @@ var Feeds = class {
       ).map(({ feed: feed2, next: next2 }) => () => {
         recordMs(feed2.lateness, (tick - next2) * 1e3);
         try {
-          const frame2 = this.drawOne(feed2, readings);
+          const frame2 = this.drawOne(feed2, readings, prepare);
           if (frame2 !== null) frames.push(frame2);
           if (tick - feed2.summarizedAt >= SUMMARY_EVERY_S)
             this.summarize(feed2, "running", tick);
@@ -73917,7 +74078,7 @@ var Feeds = class {
     const { moving, still } = this.deps.periods;
     return (feed2.viewers.shown ? moving : still) / 1e3;
   }
-  drawOne(feed2, readings) {
+  drawOne(feed2, readings, prepare) {
     const { at, tick } = readings;
     const drawAt = feed2.change !== null && feed2.change >= at && feed2.change - at <= TIMER_RESOLUTION_S ? feed2.change : at;
     const drawn = this.deps.draw(
@@ -73925,7 +74086,8 @@ var Feeds = class {
       paceOf(this.spacingOf(feed2) * 1e3),
       { at: drawAt, tick },
       this.following(feed2.sessionId),
-      this.feedsOf(feed2.sessionId, tick)
+      this.feedsOf(feed2.sessionId, tick),
+      prepare
     );
     if (drawn === null) {
       feed2.noView++;
@@ -76881,84 +77043,6 @@ var NavigationHistory = class {
   }
 };
 
-// src/renderer/render-warnings.ts
-init_globals();
-
-// src/renderer-interface/noted-faults.ts
-init_globals();
-var KEPT_FAULTS = "kept";
-var spelledFaults = (faults) => JSON.stringify(faults);
-var faultsNote = (spelled2, last2) => last2 === spelled2 ? KEPT_FAULTS : spelled2;
-
-// src/renderer/render-warnings.ts
-var MAX_RECORDS = 512;
-var RENDERERS = ["request", "feed"];
-var generations = /* @__PURE__ */ new WeakMap();
-var nextGeneration = 0;
-var generationOf = (config) => {
-  const held = generations.get(config);
-  if (held !== void 0) return held;
-  const minted = nextGeneration++;
-  generations.set(config, minted);
-  return minted;
-};
-var RenderWarningRecords = class {
-  constructor(maxRecords = MAX_RECORDS) {
-    this.maxRecords = maxRecords;
-  }
-  maxRecords;
-  records = /* @__PURE__ */ new Map();
-  // The warnings `by` last recorded for `sessionId`; none before its first.
-  of(sessionId2, by) {
-    return this.records.get(keyOf(sessionId2, by))?.warnings ?? [];
-  }
-  // The session's warnings as `by` draws them in `scope`: its own record, and
-  // every other renderer's drawn from the same config, each warning once
-  // across renderers (a warning two renderers met is one fact).
-  ofSession(sessionId2, by, scope) {
-    const generation = generationOf(scope.config);
-    const listed = [];
-    for (const renderer of RENDERERS) {
-      const held = this.records.get(keyOf(sessionId2, renderer));
-      const own2 = renderer === by ? this.of(sessionId2, by) : held?.generation === generation ? held.warnings : [];
-      const earlier = listed.map((w) => JSON.stringify(w));
-      for (const w of own2) {
-        const at = earlier.indexOf(JSON.stringify(w));
-        if (at === -1) listed.push(w);
-        else earlier.splice(at, 1);
-      }
-    }
-    return listed;
-  }
-  // Whether a frame that warned `warnings` changes what the renderer's next
-  // frame shows.
-  moves(sessionId2, by, warnings) {
-    return JSON.stringify(this.of(sessionId2, by)) !== JSON.stringify(warnings);
-  }
-  // [LAW:single-enforcer] The one writer: the turn that drew a frame records
-  // what it warned and the faults it met, and answers the note its record
-  // carries of them. The note is made only with the record it is compared
-  // with, so a frame that kept nothing noted nothing a later `kept` could be
-  // read against. A record evicted, or none yet, makes the note whole.
-  keep(sessionId2, by, scope, warnings, faults) {
-    const key = keyOf(sessionId2, by);
-    const spelled2 = spelledFaults(faults);
-    const last2 = this.records.get(key)?.faults;
-    this.records.delete(key);
-    this.records.set(key, {
-      generation: generationOf(scope.config),
-      warnings,
-      faults: spelled2
-    });
-    for (const oldest of this.records.keys()) {
-      if (this.records.size <= this.maxRecords) break;
-      this.records.delete(oldest);
-    }
-    return faultsNote(spelled2, last2);
-  }
-};
-var keyOf = (sessionId2, by) => `${by}\0${sessionId2}`;
-
 // src/renderer/acts.ts
 init_globals();
 var ActsOnTheirWay = class {
@@ -77291,6 +77375,11 @@ function serializeSegmentCells(cells, colorCompatibility) {
 function mainRenderer(parts, pushed, drained) {
   const { time, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
+  const prepare = (delivery) => {
+    const id2 = parts.mint();
+    deliveries.set(id2, delivery);
+    return id2;
+  };
   let subscriptions = {
     sources: {},
     lanes: {},
@@ -77439,11 +77528,9 @@ function mainRenderer(parts, pushed, drained) {
           event.context.hints,
           record2
         );
-        const id2 = parts.mint();
-        deliveries.set(id2, delivery);
         effects.push({
           kind: "present",
-          id: id2,
+          id: prepare(delivery),
           session: event.context.hookData.session_id,
           surface: "statusline",
           request: event.id,
@@ -77458,7 +77545,6 @@ function mainRenderer(parts, pushed, drained) {
       case "retire":
         opening.delete(event.session);
         parked = parked.filter((click2) => click2.session !== event.session);
-        menuIdle.retire(event.session);
         parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -77471,7 +77557,11 @@ function mainRenderer(parts, pushed, drained) {
             `effect-done for effect ${event.of}, which is no present, change or act on its way`
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") deliver(parts, delivery);
+        if (event.outcome.kind === "ok") {
+          const accepted = deliver(parts, event.of, delivery);
+          if (delivery.candidate.by === "feed" && accepted !== null && accepted.faults !== null)
+            record2.push(["surface", "feed"], ["faults", accepted.faults]);
+        }
         return;
       }
       case "click": {
@@ -77504,7 +77594,7 @@ function mainRenderer(parts, pushed, drained) {
         runEach([
           () => time.runDue(),
           () => closeIdleMenus2(parts, effects, busy),
-          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames)
+          () => feeds.drawDue({ at: time.at, tick: time.tick }, frames, prepare)
         ]);
         return;
       }
@@ -77625,7 +77715,6 @@ function mainRendererOf(inputs, host) {
   const gates = createGates();
   const time = new TurnTime();
   const now2 = () => time.at;
-  const menuIdle = new MenuIdle();
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
   for (const sid of Object.keys(inputs.stored.sessions))
@@ -77646,8 +77735,6 @@ function mainRendererOf(inputs, host) {
   const actFailed = (session, reason) => holdClickError(sessionState, session, reason, now2());
   const acts = new ActsOnTheirWay(mint, actFailed);
   const navigationHistory = new NavigationHistory();
-  const effectSessions = new EffectSessions();
-  const renderWarnings = new RenderWarningRecords();
   const worldStates = new WorldStates();
   const renderCache = new RenderCache(
     {
@@ -77695,6 +77782,7 @@ function mainRendererOf(inputs, host) {
       }
     }
   );
+  const { menuIdle } = renderCache.presentations;
   const pin = (sessionId2) => {
     const unhold = renderCache.pin(sessionId2);
     const unwatch = reaction(
@@ -77708,7 +77796,15 @@ function mainRendererOf(inputs, host) {
     };
   };
   const feeds = new Feeds({
-    draw: (sessionId2, fps, readings, following, laneFeeds) => renderFrame(parts, sessionId2, fps, readings, following, laneFeeds),
+    draw: (sessionId2, fps, readings, following, laneFeeds, prepare) => renderFrame(
+      parts,
+      sessionId2,
+      fps,
+      readings,
+      following,
+      laneFeeds,
+      prepare
+    ),
     pin,
     log,
     periods: FEED_PERIODS
@@ -77719,9 +77815,6 @@ function mainRendererOf(inputs, host) {
     sessionState: edits.view,
     renderCache,
     worldStates,
-    renderWarnings,
-    effectSessions,
-    menuIdle,
     feeds
   };
   const verbCtx = {
@@ -77752,7 +77845,7 @@ function mainRendererOf(inputs, host) {
           kind: "stats",
           stats: {
             renderCache: renderCache.stats,
-            effectCache: effectSessions.getStats(),
+            effectCache: renderCache.presentations.stats().effects,
             sessionState: {
               sessions: sessionState.size(),
               observers: sessionState.observers(),
@@ -77766,7 +77859,7 @@ function mainRendererOf(inputs, host) {
       case "debug":
         return {
           kind: "debug",
-          snapshot: debugOf(renderCache.latestView(), push.what)
+          snapshot: debugOf(renderCache, push.what)
         };
       // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
       // runs whole, so none is in flight.
@@ -77793,7 +77886,12 @@ function mainRendererOf(inputs, host) {
     drained
   );
 }
-function debugOf(view, what) {
+function debugOf(cache2, what) {
+  const view = cache2.latestView();
+  const frame2 = what === "segments" && view !== null ? cache2.presentations.latestLayout(
+    view.sessionId,
+    view.presentationTargets
+  ) : void 0;
   return buildDebugSnapshot(
     what,
     view === null ? null : {
@@ -77801,8 +77899,8 @@ function debugOf(view, what) {
       registry: view.registry,
       config: view.state.config,
       compiled: view.state.compiled,
-      lastRenderBySegment: what === "segments" ? serializeSegmentCells(
-        view.lastRenderCellsBySegment,
+      lastRenderBySegment: frame2 !== void 0 ? serializeSegmentCells(
+        frame2.segments,
         view.state.config.globals.colorCompatibility ?? floorOf2("colorCompatibility")
       ) : EMPTY_RENDER_MAP
     }
@@ -77843,9 +77941,8 @@ function localLink(name, build2, clock) {
     },
     arm: () => {
     },
-    // Nothing restarts in process.
-    beginClose: () => {
-    },
+    // Only a renderer already built by serve can take the close's steps.
+    beginClose: () => built === null ? "closed" : "closing",
     close: async () => {
     },
     process: () => null
@@ -77986,14 +78083,6 @@ function writeAtomic(at, text4, mode) {
     text4,
     mode ?? (kept === void 0 ? void 0 : kept & 511)
   );
-}
-function readConfigText(file) {
-  try {
-    return fs_default.readFileSync(file, "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT") return null;
-    throw e;
-  }
 }
 function resolvedTarget(at) {
   return linkChain(at).at(-1);
@@ -81344,18 +81433,6 @@ function recorded(facts, delivered) {
 async function answerStatusline(host, publish, collector, clock, closing, log, locate, arrived2, environment, id2, waitEndsAt, facts) {
   const req = located(arrived2, locate);
   const session = req.hookData.session_id;
-  const done = (effect, reason) => void host.deliver(
-    () => ({
-      kind: "event",
-      event: {
-        kind: "effect-done",
-        session: effect.session,
-        of: effect.id,
-        outcome: reason === null ? { kind: "ok" } : { kind: "failed", reason }
-      }
-    }),
-    [["effect", String(effect.id)]]
-  );
   const unlessClosing = (event) => () => closing.aborted ? failureOf(new DaemonClosing("render")) : { kind: "event", event };
   const worldState = collector.requested(req, environment);
   const release3 = collector.holding(session);
@@ -81404,6 +81481,7 @@ async function answerStatusline(host, publish, collector, clock, closing, log, l
     release3();
   }
   recorded(facts, delivered);
+  const done = delivered.settlePresentation;
   noteFacts(facts, {
     configured: msOf2(configured.turnMs),
     drew: msOf2(delivered.turnMs),
@@ -84318,6 +84396,16 @@ function withRegularTextFile(path31, use) {
 function readRegularTextSync(path31) {
   return withRegularTextFile(path31, (file) => file.text());
 }
+function readTextIfPresent(path31, read2 = readRegularTextSync) {
+  try {
+    return read2(path31);
+  } catch (error) {
+    const native2 = types.isNativeError(error);
+    if (native2 && "code" in error && error.code === "ENOENT") return null;
+    const detail = native2 ? error.message : String(error);
+    throw new Error(`${path31}: ${detail}`, { cause: error });
+  }
+}
 
 // src/utils/git-root.ts
 function holdsGit(dir) {
@@ -86099,7 +86187,8 @@ async function runTeardown(steps2, log) {
   const failed3 = [];
   for (const [name, run2] of steps2) {
     try {
-      await run2();
+      const waiting = run2();
+      if (waiting !== void 0) await waiting;
     } catch (e) {
       log("warn", `${name} failed: ${inspect(e)}`);
       failed3.push(name);
@@ -86118,7 +86207,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.0";
+var PACKAGE_VERSION = "1.235.2";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -87470,6 +87559,11 @@ var failedFeed = (refusal) => {
   const encoded = JSON.stringify(refusal);
   return { resp: encoded, statusline: encoded };
 };
+function settleWrite(write, delivered) {
+  const done = write.done;
+  write.done = void 0;
+  done?.(delivered);
+}
 function encodeFeed(frame2, publish, source) {
   if (frame2.kind === "failed") return failedFeed(failedWith(frame2.message));
   const resp = JSON.stringify(RENDER_ANSWERS.ansi(publish(frame2.bar, source)));
@@ -87540,8 +87634,14 @@ var FrameFeeds = class {
       this.watched.set(sessionId2, watched);
       this.stopWatching ??= this.deps.watching();
     }
-    watched.followers.set(sub2, { sent: null, joined: ++this.joins });
-    this.send(watched, sub2);
+    if (watched.followers.has(sub2))
+      return () => this.unsubscribe(sessionId2, sub2);
+    watched.followers.set(sub2, {
+      confirmed: null,
+      joined: ++this.joins,
+      writes: /* @__PURE__ */ new Set()
+    });
+    if (watched.last !== null) this.send(sessionId2, watched, sub2, watched.last);
     this.deps.log(
       "info",
       `feed sid=${JSON.stringify(sessionId2)} subscribed lane=${sub2.lane} subscribers=${watched.followers.size} view=${sessionId2 in this.lanes ? "Y" : "N"}`
@@ -87632,27 +87732,54 @@ var FrameFeeds = class {
   }
   // The frames a renderer's turn drew: each kept as its session's last, and
   // sent to each of its subscribers whose lane's answer it changed.
-  took(renderer, frames) {
-    for (const { session, frame: frame2 } of frames) {
+  took(renderer, frames, settled3) {
+    for (const pushed of frames) {
+      const { session, frame: frame2 } = pushed;
       const watched = this.watched.get(session);
-      if (watched === void 0) continue;
+      if (watched === void 0) {
+        settled3(pushed, false);
+        continue;
+      }
+      let encoded;
+      let drawn = frame2.kind === "drawn";
       try {
-        watched.last = encodeFeed(frame2, this.deps.publishFrame, {
+        encoded = encodeFeed(frame2, this.deps.publishFrame, {
           renderer,
           session
         });
       } catch (error) {
         const refused2 = renderFailed(error);
-        const failed3 = failedFeed(refused2);
-        if (watched.last?.resp !== failed3.resp)
+        encoded = failedFeed(refused2);
+        if (watched.last?.resp !== encoded.resp)
           this.deps.log(
             "error",
             `frame sid=${JSON.stringify(session)} error=${JSON.stringify(refused2.error)}`
           );
-        watched.last = failed3;
+        drawn = false;
       }
-      for (const sub2 of watched.followers.keys()) this.send(watched, sub2);
+      watched.last = encoded;
+      if (drawn) {
+        this.publish(session, watched, encoded, (ok3) => settled3(pushed, ok3));
+      } else {
+        this.publish(session, watched, encoded);
+        settled3(pushed, false);
+      }
     }
+  }
+  publish(session, watched, encoded, settled3) {
+    const subscribers = [...watched.followers.keys()];
+    let remaining = subscribers.length;
+    let complete = false;
+    const done = settled3 && ((delivered) => {
+      if (complete) return;
+      if (delivered || --remaining === 0) {
+        complete = true;
+        settled3(delivered);
+      }
+    });
+    if (remaining === 0) settled3?.(false);
+    for (const sub2 of subscribers)
+      this.send(session, watched, sub2, encoded, done);
   }
   // The session of the newest request `match` accepts, among the latest
   // request of each session the daemon holds, or null when none does.
@@ -87698,7 +87825,9 @@ var FrameFeeds = class {
   }
   unsubscribe(sessionId2, sub2) {
     const watched = this.watched.get(sessionId2);
-    if (watched === void 0 || !watched.followers.delete(sub2)) return;
+    const follower = watched?.followers.get(sub2);
+    if (watched === void 0 || follower === void 0) return;
+    watched.followers.delete(sub2);
     if (watched.followers.size === 0) {
       this.watched.delete(sessionId2);
       this.deps.log(
@@ -87711,21 +87840,53 @@ var FrameFeeds = class {
       }
     }
     this.announce();
+    const writes = [...follower.writes];
+    follower.writes.clear();
+    for (const write of writes) settleWrite(write, false);
   }
   shown(sessionId2) {
     const noted2 = this.requests.get(sessionId2);
     return noted2 === void 0 || this.deps.shown(noted2.req);
   }
-  // The last frame's answer for `sub`'s lane, unless it was sent that already.
-  send(watched, sub2) {
+  // The offered frame's answer for this lane. An identical outstanding write
+  // can carry the latest candidate, but only the writer can confirm it.
+  send(session, watched, sub2, encoded, done) {
     const follower = watched.followers.get(sub2);
-    if (watched.last === null || follower === void 0) return;
-    const json2 = answerOf2(watched.last, sub2.lane);
-    if (follower.sent === json2) return;
-    follower.sent = json2;
+    if (follower === void 0) {
+      done?.(false);
+      return;
+    }
+    const json2 = answerOf2(encoded, sub2.lane);
+    let latest;
+    for (const write2 of follower.writes) latest = write2;
+    if (latest?.json === json2) {
+      const superseded = latest.done;
+      latest.done = done;
+      superseded?.(false);
+      return;
+    }
+    if (latest === void 0 && follower.confirmed === json2) {
+      done?.(true);
+      return;
+    }
+    const write = { json: json2, done };
+    follower.writes.add(write);
     this.pushed++;
     watched.pushed++;
-    sub2.frame(json2);
+    const finished = (delivered) => {
+      if (!follower.writes.delete(write)) return;
+      if (delivered) follower.confirmed = json2;
+      settleWrite(write, delivered);
+    };
+    try {
+      sub2.frame(json2, finished);
+    } catch (error) {
+      this.deps.log(
+        "error",
+        `frame sid=${JSON.stringify(session)} lane=${sub2.lane} send failed: ${inspect(error)}`
+      );
+      finished(false);
+    }
   }
   // A subscription its lane's toggle refuses, told why.
   refuse(sessionId2, sub2) {
@@ -88637,8 +88798,8 @@ var refused = (reason) => ({
   kind: "refused",
   reason: `${reason} \u2014 nothing was written`
 });
-function landsIn(target, layers) {
-  const file = layers.path(target.origin, target.role);
+function landsIn(target, files) {
+  const file = files.path(target.origin, target.role);
   if (file === void 0)
     return {
       kind: "refused",
@@ -88652,12 +88813,12 @@ function landsIn(target, layers) {
   return { kind: "at", file };
 }
 var originText = (origin) => `projectDir=${origin.projectDir} cwd=${origin.cwd} configFile=${origin.target.path ?? "-"}`;
-function performChanges(changes, book, layers) {
+function performChanges(changes, book, files) {
   const rewrites = /* @__PURE__ */ new Map();
   const local = /* @__PURE__ */ new Set();
   let answered = [];
   for (const { origin, dir } of book?.answers ?? []) {
-    const asked = layers.repoDir(origin);
+    const asked = files.repoDir(origin);
     if (asked === void 0)
       return refused(
         `the answer for ${dir} names an origin config discovery does not follow (${originText(origin)})`
@@ -88669,12 +88830,12 @@ function performChanges(changes, book, layers) {
   }
   try {
     for (const { target, changes: list2 } of changes) {
-      const named2 = landsIn(target, layers);
+      const named2 = landsIn(target, files);
       if (named2.kind === "refused") return refused(named2.reason);
       const file = resolvedTarget(named2.file);
       if (target.role === "local") local.add(file);
       const prior = rewrites.get(file);
-      const was = prior === void 0 ? readConfigText(file) : prior.was;
+      const was = prior === void 0 ? files.readText(file) : prior.was;
       const applied3 = applyChanges(
         prior === void 0 ? was : prior.will,
         list2,
@@ -88688,7 +88849,7 @@ function performChanges(changes, book, layers) {
     }
     for (const { file, was, will } of [...rewrites.values()]) {
       if (was !== null || will === null || !local.has(file)) continue;
-      const excluded = excludeRewrite(file, rewrites);
+      const excluded = excludeRewrite(file, rewrites, files.readText);
       if (excluded.kind === "failed")
         return {
           kind: "failed",
@@ -88708,7 +88869,7 @@ function performChanges(changes, book, layers) {
       answered = planned.value.said;
       if (text4 !== null) {
         const at = resolvedTarget(file);
-        rewrites.set(at, { file: at, was: readConfigText(at), will: text4 });
+        rewrites.set(at, { file: at, was: files.readText(at), will: text4 });
       }
     }
   } catch (e) {
@@ -88726,14 +88887,14 @@ function performChanges(changes, book, layers) {
     return { kind: "failed", reason: putBack(written3, e) };
   }
 }
-function excludeRewrite(file, rewrites) {
+function excludeRewrite(file, rewrites, readText) {
   const root = gitRootOf(import_node_path29.default.dirname(file));
   if (root === void 0) return ABSENT2;
   const at = sharedExcludeOf(root);
   if (at.kind !== "ok") return at.kind === "absent" ? ABSENT2 : at;
   const exclude = resolvedTarget(at.value);
   const prior = rewrites.get(exclude);
-  const was = prior === void 0 ? readConfigText(exclude) : prior.was;
+  const was = prior === void 0 ? readText(exclude) : prior.was;
   const text4 = prior === void 0 ? was ?? "" : prior.will ?? "";
   const entry = `/${import_node_path29.default.relative(root, file).split(import_node_path29.default.sep).join("/").replace(/[\\*?[]/g, "\\$&")}`;
   if (text4.split("\n").some((line) => line.trimEnd() === entry)) return ABSENT2;
@@ -88887,6 +89048,7 @@ var THREW_AS = {
 };
 function rendererHost(name, clock, renderer, log, collector, world) {
   const mailbox = new KeyedSerialQueue();
+  let generation = 0;
   const stamped = stampedOf(clock);
   let holder = null;
   let queued = 0;
@@ -88917,6 +89079,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       failure: failure2,
       record: [],
       effects: [],
+      settlePresentation: receiptFor(generation),
       queuedMs,
       turnMs: null,
       hopMs: null
@@ -88924,6 +89087,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     settled: Promise.resolve([])
   });
   const inSlot = async (input, queuedMs, captures = []) => {
+    if (input.event.kind === "start") generation++;
+    const receipt = receiptFor(generation);
     const session = sessionOf(input.event);
     let release3 = () => {
     };
@@ -88944,6 +89109,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const { subscriptions, frames, stored, turnMs, ...answer3 } = output;
     const turn = {
       ...answer3,
+      settlePresentation: receipt,
       queuedMs,
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
@@ -88951,7 +89117,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const { settled: settled3, configFailure } = await landInSlot(
       input.event,
       output,
-      captures
+      captures,
+      receipt
     );
     return {
       turn: configFailure === null ? turn : { ...turn, configFailure },
@@ -88960,7 +89127,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       )
     };
   };
-  const landInSlot = async (event, output, captures) => {
+  const landInSlot = async (event, output, captures, receipt) => {
     recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
@@ -88974,7 +89141,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       output.subscriptions,
       output.frames,
       output.stored,
-      requested
+      requested,
+      receipt
     );
     let configFailure = null;
     const waited = [];
@@ -89083,11 +89251,26 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       return null;
     }
   };
-  const took = (subscriptions, frames, stored, requested) => {
+  const took = (subscriptions, frames, stored, requested, receipt) => {
     recordTaken("wake declaration", () => wake.declare(subscriptions.wake));
     recordTaken("stored writes", () => collector.stored(stored));
     recordTaken("subscriptions", () => collector.subscribed(subscriptions));
-    recordTaken("frames", () => collector.frames(frames));
+    if (frames.length > 0) {
+      const owed = new Set(
+        frames.flatMap(
+          ({ frame: frame2 }) => frame2.kind === "drawn" ? [frame2.receipt] : []
+        )
+      );
+      const settled3 = ({ session, frame: frame2 }, delivered) => {
+        if (frame2.kind === "drawn" && owed.delete(frame2.receipt))
+          receipt(
+            { session, id: frame2.receipt },
+            delivered ? null : "no subscriber took the frame"
+          );
+      };
+      if (recordTaken("frames", () => collector.frames(frames, settled3)) === null)
+        for (const frame2 of frames) settled3(frame2, false);
+    }
     const named2 = [];
     try {
       const next2 = /* @__PURE__ */ new Map();
@@ -89160,6 +89343,20 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       outcome
     }
   });
+  const receiptFor = (issuer) => (effect, reason) => {
+    if (issuer !== generation) return;
+    const retired2 = "the renderer that drew the frame has ended";
+    unawaited(
+      "frame receipt",
+      deliver2(
+        () => issuer === generation ? doneOf(
+          effect,
+          reason === null ? { kind: "ok" } : { kind: "failed", reason }
+        ) : { kind: "down", message: retired2, detail: retired2 },
+        [["effect", String(effect.id)]]
+      )
+    );
+  };
   const settle3 = async (effect, outcome) => {
     const failed3 = outcome.kind === "failed" || outcome.kind === "refused" ? outcome.reason : null;
     if (failed3 !== null && effect.session === null) world.unheard(failed3);
@@ -89265,7 +89462,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           push,
           ...readingsAt(clock)
         });
-        const followed = took(subscriptions, [], stored, null);
+        const followed = took(
+          subscriptions,
+          [],
+          stored,
+          null,
+          receiptFor(generation)
+        );
         if (followed.kind === "following")
           for (const origin of followed.named) {
             const config = await configInSlot(origin, "config-subscribed");
@@ -89969,6 +90172,9 @@ var ConfigDiscovery = class {
         const snapshot = held(origin);
         return snapshot === void 0 ? void 0 : snapshot.repo?.dir ?? null;
       },
+      // [LAW:one-source-of-truth] Writes reobserve the destination using the
+      // same descriptor cache as discovery. The held snapshots only name it.
+      readText: (file) => readTextIfPresent(file, (at) => this.texts.read(at).text),
       landed: (files, answered) => this.landed(renderer, files, answered)
     };
   }
@@ -90243,6 +90449,7 @@ function createDaemon(inputs) {
   const currentPhase = () => phase;
   const serving = () => phase.kind === "serving" || phase.kind === "armed";
   const cancelling = () => phase.kind === "closing" || phase.kind === "closed";
+  const cancelRenders = new AbortController();
   const cancelWork = new AbortController();
   const log = (level, msg) => inputs.daemonLog.log(
     level,
@@ -90376,7 +90583,9 @@ function createDaemon(inputs) {
         socket: paths2.socket
       }
     },
-    closing: cancelling,
+    // [LAW:single-enforcer] The pane queue reads the same phase as ingress
+    // before any new operation reaches tmux.
+    closing: () => !serving(),
     log
   });
   const retiredTmuxStatus = new RetiredTmuxStatus(
@@ -90574,10 +90783,14 @@ function createDaemon(inputs) {
           });
           aggregate();
         },
-        frames: (frames) => frameFeeds.took(
-          name,
-          frames.filter(({ session }) => nameOf2(session) === name)
-        ),
+        frames: (frames, settled3) => {
+          const routed = frames.filter((frame2) => {
+            if (nameOf2(frame2.session) === name) return true;
+            settled3(frame2, false);
+            return false;
+          });
+          frameFeeds.took(name, routed, settled3);
+        },
         stored: (writes) => stores.take(writes),
         holding: (session) => collector.holding(session),
         recorded: () => {
@@ -90671,7 +90884,7 @@ function createDaemon(inputs) {
   };
   const parts = {
     accountHome: inputs.accountHome,
-    closing: cancelWork.signal,
+    closing: cancelRenders.signal,
     home: host.home,
     launcher,
     log,
@@ -90780,36 +90993,40 @@ function createDaemon(inputs) {
   }
   function close() {
     if ("done" in phase) return phase.done;
-    const wasServing = serving();
     const done = Promise.resolve().then(
-      () => tearDown(wasServing, done)
+      () => tearDown(done)
     );
     phase = { kind: "draining", done };
+    cancelRenders.abort(new DaemonClosing("render"));
     return done;
   }
-  async function tearDown(wasServing, done) {
-    const rendererSteps = (kind) => wasServing ? [...renderers.values()].map(({ renderer }) => [
+  async function tearDown(done) {
+    const attached = [...renderers.values()];
+    const draining = [];
+    await runTeardown(
+      [
+        ...attached.map(
+          ({ renderer }) => [
+            `${renderer.name} wakes close`,
+            () => renderer.closeWake()
+          ]
+        ),
+        ...attached.map(
+          ({ renderer, link }) => [
+            `${renderer.name} close begins`,
+            () => {
+              if (link.beginClose() === "closing") draining.push(renderer);
+            }
+          ]
+        )
+      ],
+      log
+    );
+    const rendererSteps = (kind) => draining.map((renderer) => [
       `${renderer.name} ${kind}`,
       () => renderer.ask({ kind })
-    ]) : [];
+    ]);
     const teardown = [
-      // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
-      // ends is not started again, so no step below waits on a fresh boot.
-      // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
-      // from here, so no turn the renderer holds for later runs into the
-      // close's.
-      [
-        "renderer wakes close",
-        () => {
-          for (const { renderer } of renderers.values()) renderer.closeWake();
-        }
-      ],
-      [
-        "renderer close begins",
-        () => {
-          for (const { link } of renderers.values()) link.beginClose();
-        }
-      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
       ...rendererSteps("close-journal"),
@@ -90841,14 +91058,14 @@ function createDaemon(inputs) {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, stores }) => [
           `${renderer.name} stores close`,
           () => stores.close()
         ]
       ),
       ["sessionBook close", () => sessionBook.close()],
-      ...[...renderers.values()].map(
+      ...attached.map(
         ({ renderer, link }) => [
           `${renderer.name} renderer close`,
           () => link.close()
