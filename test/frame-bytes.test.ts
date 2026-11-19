@@ -22,7 +22,6 @@ import { SessionState } from "../src/renderer/session-state";
 import { textOf, ansiOf, type Frame } from "../src/render/frame";
 import {
   COLOR_COMPATIBILITIES,
-  listResolvablePaletteNames,
   type ColorCompatibility,
 } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -70,7 +69,6 @@ function rig(
   const config = parseAndValidate(
     "<user>",
     src,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();

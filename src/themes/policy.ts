@@ -22,6 +22,7 @@ import {
   listThemePalettes,
   type LoopName,
   type ThemeKey,
+  type ThemeName,
 } from "@promptctl/rich-js";
 import {
   SHADES,
@@ -58,10 +59,10 @@ export function retiredThemeNote(name: unknown): string {
 }
 
 // [LAW:one-source-of-truth] The theme domain's floor: the palette a render wears
-// when nothing above it decided. Spelled once because three things reach it — a
-// config declaring no `palette`, a stale session pick, and an EXPRESSION whose
-// result names nothing (brandon-themes-dzl) — and, unlike the style's floor, it
-// is a SPECIFIC theme rather than an identity.
+// when nothing above it decided. Spelled once because two things reach it — no
+// rung naming an installed theme, and an EXPRESSION whose result names nothing
+// (brandon-themes-dzl) — and, unlike the style's floor, it is a SPECIFIC theme
+// rather than an identity.
 export const THEME_FLOOR = "textual-dark";
 
 // --- The one globals resolution ---
@@ -132,6 +133,15 @@ export function effectiveGlobal<T>(
   };
 }
 
+// [LAW:types-are-the-program] A pick a fold passed over, as data: the setting
+// it was stored for and the spelling stored. Nothing here says what the bar
+// wears in its place, since a rule's answer is known only to the draw, which
+// composes the report (`stalePick`).
+export interface StaleMiss<S extends string = string> {
+  readonly setting: S;
+  readonly stored: string;
+}
+
 // [LAW:one-source-of-truth] A stale pick as the bar reports it: the setting it
 // was stored for, the spelling stored, and the sentence saying what the bar
 // wears instead. Its own kind, apart from a rule that named nothing, so a
@@ -143,12 +153,14 @@ export interface StalePick {
   readonly message: string;
 }
 
-// `wears` is what the bar wears in the pick's place, as `fallbackMessage`
-// takes it.
+// THE sentence of a stale pick. `wears` is the name the bar wears in its
+// place, and `note` what the setting's domain adds about the spelling stored
+// (a retired theme's successor).
 export function stalePick(
   setting: string,
   stored: string,
   wears: string,
+  note: string,
 ): StalePick {
   return {
     kind: "stale",
@@ -156,17 +168,16 @@ export function stalePick(
     stored,
     message: fallbackMessage(
       `the session's ${setting}`,
-      wears,
-      `its stored "${stored}" is not one this build and config offer`,
+      wornName(wears),
+      `its stored "${stored}" is not one this build and config offer${note}`,
     ),
   };
 }
 
 // [LAW:one-source-of-truth] The one spelling of "this could not be honoured,
 // so the bar wears something else": where it was written, what the bar wears
-// instead (a quoted name, or a phrase where only the draw knows the name), and
-// why — a stale pick, a rule that threw, a rule's result naming no installed
-// theme.
+// instead, and why — a stale pick, a rule that threw, a rule's result naming
+// no installed theme.
 export function fallbackMessage(
   where: string,
   wears: string,
@@ -178,14 +189,39 @@ export function fallbackMessage(
 // A name as `fallbackMessage` shows what the bar wears.
 export const wornName = (name: string): string => `"${name}"`;
 
-// [LAW:one-source-of-truth] The set of names that resolve to a concrete Palette
-// is exactly the registry's names — no alias, so every name is its palette's
-// own and a label always names the palette the bar wears. "custom" and "random" are
-// deliberately absent: neither names a concrete palette (custom needs inline
-// colors; random is a per-session sentinel). Config validators that gate a
-// palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
+// [LAW:one-source-of-truth] A setting value as a session spells it: the one
+// speller a pick is written in, and a value is compared and shown in.
+export function spellSetting(value: string | number | boolean): string {
+  return typeof value === "boolean"
+    ? value
+      ? BOOLEAN_TRUE
+      : BOOLEAN_FALSE
+    : String(value);
+}
+
+// [LAW:single-enforcer] THE installed themes: the registry's names, with no
+// alias, so every name is its palette's own and a label always names the
+// palette the bar wears. "custom" and "random" are deliberately absent:
+// neither names a concrete palette. The loader, the session's write gate, a
+// theme pick's read, a placement's `theme`, the `themes` option domain and the
+// template `themes` list all read this one list.
+// The list and its membership test are read once: the registry is fixed for
+// the life of the process.
+const INSTALLED_LIST: readonly string[] = listThemePalettes();
 export function listResolvablePaletteNames(): readonly string[] {
-  return listThemePalettes();
+  return INSTALLED_LIST;
+}
+
+// Membership in that list. It narrows to the registry's own name type, so the
+// palette a member names is fetched with no second membership question.
+const INSTALLED_THEMES: ReadonlySet<string> = new Set(INSTALLED_LIST);
+export function isInstalledTheme(name: string): name is ThemeName {
+  return INSTALLED_THEMES.has(name);
+}
+
+// That list as a refusal names it.
+export function describeInstalledThemes(): string {
+  return [...INSTALLED_LIST].sort().join(", ");
 }
 
 // [LAW:types-are-the-program] What a placement's `theme` setting may hold
@@ -198,16 +234,6 @@ export const FOLLOW_BAR = "bar";
 
 export function placementThemeNames(): readonly string[] {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
-}
-
-// [LAW:single-enforcer] THE membership test of the installed themes: the
-// session's write gate, a theme pick's read, and a placement's `theme` all ask
-// it. The installed themes are fixed for the life of the process, so the set
-// is built once.
-let installedThemes: ReadonlySet<string> | undefined;
-export function isInstalledTheme(name: string): boolean {
-  installedThemes ??= new Set(listResolvablePaletteNames());
-  return installedThemes.has(name);
 }
 
 // Membership in `placementThemeNames`, which the render asks of every
@@ -380,8 +406,10 @@ function namedStyle(
   name: string,
   declaredStyles: Readonly<Record<string, ThemeKey>>,
 ): DecidedStyle | null {
-  const value = declaredStyles[name];
-  return value === undefined ? null : { kind: "decided", name, value };
+  // An own property: an inherited name (`constructor`) is no declared style.
+  return Object.hasOwn(declaredStyles, name)
+    ? { kind: "decided", name, value: declaredStyles[name]! }
+    : null;
 }
 
 // [LAW:single-enforcer] The membership policy for a style NAME, wherever the name

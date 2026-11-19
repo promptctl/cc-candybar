@@ -36,15 +36,13 @@ import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { registerDslConfig } from "../src/dsl/render";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { systemTimekeeper } from "../src/time";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const load = (source: string): ValidatedConfig =>
-  parseAndValidate("<user>", source, ALLOWED, DEFAULT_DSL_CONFIG);
+  parseAndValidate("<user>", source, DEFAULT_DSL_CONFIG);
 
 // ─── 1. The loader ───────────────────────────────────────────────────────────
 

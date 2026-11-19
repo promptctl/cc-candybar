@@ -20,7 +20,6 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { deriveActionValidators } from "../src/daemon/foundations/state-validators";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
@@ -38,7 +37,6 @@ import { ADD_GLYPH, CONFIGURE_GLYPH, REMOVE_GLYPH } from "../src/config/edit-gly
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-help");
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 
 // [LAW:single-enforcer] The codebase's one display-width measure, the same one
@@ -67,7 +65,6 @@ function helpBar(src: string = TWO_SEGMENT_ROOT) {
     source: src,
     label: "<user>",
     base: DEFAULT_DSL_CONFIG,
-    palettes: ALLOWED,
     sessionId: SID,
   });
   const { config, ctx, click } = rig;

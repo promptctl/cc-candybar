@@ -21,7 +21,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf, type Frame } from "../../../src/render/frame";
-import { render } from "../../helpers/daemon-e2e";
+import { click, render, urlWriting } from "../../helpers/daemon-e2e";
 import { indicatorOf, readDiagnostics } from "../../helpers/diagnostics-viewer";
 import {
   startDaemon,
@@ -51,6 +51,9 @@ const CONFIGS = {
   dup: `{ ${GLOBALS}, segments: { mark: { template: 'mark', template: 'mark' } }, root: { h: ['mark'] } }`,
   clock: `{ globals: { palette: '{{ if or (eq (mod (int (unixEpoch now)) 4) 0) (eq (mod (int (unixEpoch now)) 4) 1) }}no-such-theme{{ else }}dracula{{ end }}' }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
   stuck: `{ ${GLOBALS}, variables: { stamp: { kind: "shell", command: "echo hi", cache: { key: '{{ fail "no key" }}' } } }, segments: { mark: { template: 'mark' } }, root: { h: ['mark'] } }`,
+  // `clean` with one more style, and a cell that picks it: the pick a session
+  // stores here names nothing `clean` declares.
+  picks: `{ ${GLOBALS}, styles: { gone: {} }, actions: { pickGone: { set: 'style', to: 'gone' } }, segments: { mark: { template: '{{ action "pickGone" "mark" }}' } }, root: { h: ['mark'] } }`,
 };
 
 const fieldOf =
@@ -160,6 +163,28 @@ describe("a daemon render's event names every warning, and the indicator offers 
     },
   );
 
+  test("a pick stored under another config: the event says stale:<setting>, and the viewer names the pick", async () => {
+    const sid = "stale-good";
+    await click(
+      daemon,
+      urlWriting(
+        await render(daemon, sid, projectDir, {}, argsOf("picks")),
+        "style",
+        "gone",
+      ),
+    );
+    const args = argsOf("clean");
+    await render(daemon, sid, projectDir, {}, args);
+    const bar = await render(daemon, sid, projectDir, {}, args);
+    expect(indicatorOf(bar)).toBe("⚠ 1");
+    const events = (await renderLines(env, sid, 3)).map(fieldOf("warn"));
+    expect(events).toEqual(["-", "stale:style", "stale:style"]);
+    const pages = await readDiagnostics(daemon, sid, projectDir, bar, {}, args);
+    expect(pages.map((p) => p.text)).toEqual([
+      expect.stringContaining('"gone"'),
+    ]);
+  });
+
   test("the record follows every frame: the count holds across frames, and opening the viewer moves nothing", async () => {
     // `-bad` makes the palette rule name no theme.
     const sid = "record-once-bad";
@@ -206,7 +231,9 @@ describe("a daemon render's event names every warning, and the indicator offers 
       expect(indicatorOf(bar)).toBe("⚠ 2");
       const pages = await readDiagnostics(daemon, sid, dir, bar, {}, []);
       expect(pages.map((p) => p.text)).toEqual([
-        expect.stringContaining(`config watch: cannot follow a link chain — ${link}`),
+        expect.stringContaining(
+          `config watch: cannot follow a link chain — ${link}`,
+        ),
         expect.stringContaining(`could not be checked: ${link}`),
       ]);
       const events = (await renderLines(env, sid, 1)).map(fieldOf("warn"));
@@ -223,7 +250,8 @@ describe("a daemon render's event names every warning, and the indicator offers 
           rmSync(link, { force: true });
           writeFileSync(link, `{ segments: {} }`);
         },
-        async () => indicatorOf((healed = await render(daemon, sid, dir))) === "ℹ 1",
+        async () =>
+          indicatorOf((healed = await render(daemon, sid, dir))) === "ℹ 1",
         "the bar once the loop is broken",
       );
       const left = await readDiagnostics(daemon, sid, dir, healed, {}, []);
@@ -272,7 +300,14 @@ describe("a daemon render's event names every warning, and the indicator offers 
       await everyRenderReads(failedSid, 1, "warn", "config-watch");
       await everyRenderReads(failedSid, 1, "err", "Y");
       await everyRenderReads(failedSid, 1, "diag", "2");
-      const both = await readDiagnostics(daemon, failedSid, dir, failed, {}, args);
+      const both = await readDiagnostics(
+        daemon,
+        failedSid,
+        dir,
+        failed,
+        {},
+        args,
+      );
       expect(both.map((p) => p.text)).toEqual([
         expect.stringContaining(`Invalid config in ${broken}`),
         expect.stringContaining(refusal),

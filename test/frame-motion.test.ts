@@ -31,7 +31,6 @@ function frameOf(
   const config = parseAndValidate(
     "<test>",
     `{ globals: ${globals}, segments: { cell: { template: ${JSON.stringify(template)} } }, root: ${root} }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);

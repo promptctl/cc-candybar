@@ -18,6 +18,7 @@ import {
 import { effectsOf } from "./helpers/click";
 import { linkUrls } from "./helpers/frame";
 import { buildRig, type Rig } from "./helpers/rig";
+import { configurePlacement } from "./helpers/configure";
 import { globalsFor } from "./helpers/selection";
 import {
   effectiveInputs,
@@ -25,6 +26,11 @@ import {
 } from "../src/renderer/render-payload";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import type { DrawnFrame, RenderWarning } from "../src/dsl/render";
+import { retiredThemeNote, stalePick, THEME_FLOOR } from "../src/themes/policy";
+import { CLICK_VERBS } from "./helpers/click";
+import { VERB_SAVE_PRESET } from "../src/click/wire";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { SessionState } from "../src/renderer/session-state";
 
 const SID = sessionIdOf("stale-1");
 
@@ -82,29 +88,48 @@ const shown = (drawn: DrawnFrame): readonly string[] =>
     .exec(textOf(drawn.frame))![0]
     .split("|");
 
-const staleMessage = (setting: string, stored: string, wears: string) =>
-  `the session's ${setting} rendered "${wears}": its stored "${stored}" is not one this build and config offer`;
+// The warning the draw reports, from the sentence builder the draw uses.
+const staleWarning = (
+  setting: string,
+  stored: string,
+  wears: string,
+  note = "",
+): RenderWarning => stalePick(setting, stored, wears, note);
 
 describe("a stale session pick draws the fallback and says so", () => {
   test.each([
-    ["theme", "dark"],
-    ["theme", "no-such-theme"],
-    ["style", "gone"],
-    ["effect", "retired-loop"],
-    ["preset", "removed"],
-    ["endcaps", "wavy"],
-    ["padding", "99"],
-  ])("%s stored as %j", (setting, stored) => {
+    ["theme", "dark", retiredThemeNote("dark")],
+    ["theme", "no-such-theme", ""],
+    ["style", "gone", ""],
+    ["effect", "retired-loop", ""],
+    ["preset", "removed", ""],
+    ["endcaps", "wavy", ""],
+    ["padding", "99", ""],
+  ])("%s stored as %j", (setting, stored, note) => {
     const drawn = drawOf(rigOver(source(), { [setting]: stored }));
     expect(shown(drawn)).toEqual(FALLBACK);
     const wears = FALLBACK[SHOWN.indexOf(setting)]!;
     expect(staleOf(drawn.warnings)).toEqual([
-      {
-        kind: "stale",
-        setting,
-        stored,
-        message: staleMessage(setting, stored, wears),
-      },
+      staleWarning(setting, stored, wears, note),
+    ]);
+  });
+
+  test("a retired theme's warning names the theme to write", () => {
+    const [warning] = staleOf(
+      drawOf(rigOver(source(), { theme: "dark" })).warnings,
+    );
+    expect(warning?.message).toContain('write "textual-dark"');
+  });
+
+  test("under a rule-decided theme it names the theme the rule decided", () => {
+    const ruled = source().replace(
+      'palette: "nord"',
+      'palette: "{{ if true }}dracula{{ else }}nord{{ end }}"',
+    );
+    const drawn = drawOf(rigOver(ruled, { theme: "no-such-theme" }));
+    expect(shown(drawn)[0]).toBe("dracula");
+    expect(staleOf(drawn.warnings)).toEqual([
+      staleWarning("theme", "no-such-theme", "dracula"),
     ]);
   });
 
@@ -186,16 +211,17 @@ describe("a placement's stale theme", () => {
   }`;
   const KEY = placementDraftKey("default", "here", "theme");
 
-  test("draws the bar's theme and names the placement's setting", () => {
+  test("draws the bar's theme and names it, and the placement's setting", () => {
     const drawn = drawOf(rigOver(SRC, { [KEY]: "no-such-theme" }));
     expect(textOf(drawn.frame)).toContain("cell");
     expect(staleOf(drawn.warnings)).toEqual([
-      {
-        kind: "stale",
-        setting: "here.theme",
-        stored: "no-such-theme",
-        message: staleMessage("here.theme", "no-such-theme", "bar"),
-      },
+      staleWarning("here.theme", "no-such-theme", THEME_FLOOR),
+    ]);
+  });
+
+  test("a retired theme names the theme to write", () => {
+    expect(staleOf(drawOf(rigOver(SRC, { [KEY]: "dark" })).warnings)).toEqual([
+      staleWarning("here.theme", "dark", THEME_FLOOR, retiredThemeNote("dark")),
     ]);
   });
 
@@ -203,6 +229,20 @@ describe("a placement's stale theme", () => {
     expect(
       staleOf(drawOf(rigOver(SRC, { [KEY]: "dracula" })).warnings),
     ).toEqual([]);
+  });
+
+  test("configuring it draws its label beside it, and the slot they share is said once", () => {
+    const rig = rigOver(SRC, {
+      [KEY]: "no-such-theme",
+      [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
+    });
+    configurePlacement(rig.sessionState, SID, "default", "here");
+    const drawn = drawOf(rig);
+    // The label names the placement, beside the cell it labels.
+    expect(textOf(drawn.frame)).toMatch(/here.*cell/);
+    expect(staleOf(drawn.warnings)).toEqual([
+      staleWarning("here.theme", "no-such-theme", THEME_FLOOR),
+    ]);
   });
 });
 
@@ -220,5 +260,97 @@ describe("the stepper and the render agree on an out-of-range stored integer", (
     const after = drawOf(rig);
     expect(shown(after)[5]).toBe("4");
     expect(staleOf(after.warnings)).toEqual([]);
+  });
+
+  test("a plain state key's stored value out of range steps from its default", async () => {
+    const rig = rigOver(
+      `{
+        variables: { count: { kind: "state", key: "count", default: "2" } },
+        actions: { bump: { set: "count", min: 0, max: 9, by: 1 } },
+        segments: { c: { template: '{{ action "bump" "+" }}' } },
+        root: { h: ["c"] },
+      }`,
+      { count: "abc" },
+    );
+    const ups = linkUrls(drawOf(rig).frame).filter((u) =>
+      effectsOf(u).some((e) => e.args[1] === "count"),
+    );
+    expect(ups).toHaveLength(1);
+    await rig.click(ups[0]!);
+    expect(rig.sessionState.get(SID, "count")).toBe("3");
+  });
+
+  test("in edit mode + steps from the staged value the bar wears", async () => {
+    const rig = rigOver(source({ extra: "editGlobals: { padding: 7 }," }), {
+      padding: "99",
+      [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE,
+      [EDIT_LIVE_KEY]: DISCLOSURE_OPEN,
+    });
+    const before = drawOf(rig);
+    expect(shown(before)[5]).toBe("7");
+    const ups = linkUrls(before.frame).filter((u) =>
+      effectsOf(u).some((e) => e.args[1] === "padding"),
+    );
+    expect(ups).toHaveLength(1);
+    await rig.click(ups[0]!);
+    expect(rig.sessionState.get(SID, "padding")).toBe("8");
+  });
+});
+
+describe("a placement's stale setting is the draw's to report only where it reads it", () => {
+  const SRC = `{
+    segments: {
+      reads: {
+        template: 'r-{{ .settings.form }}',
+        settings: { form: { label: 'form', domain: ['short', 'long'], default: 'short' } },
+      },
+      ignores: {
+        template: 'i',
+        settings: { form: { label: 'form', domain: ['short', 'long'], default: 'short' } },
+      },
+    },
+    root: { v: [{ h: [{ seg: "reads", id: "r" }, { seg: "ignores", id: "i" }] }] },
+  }`;
+
+  test("the reading placement reports, the other draws past in silence", () => {
+    const drawn = drawOf(
+      rigOver(SRC, {
+        [placementDraftKey("default", "r", "form")]: "medium",
+        [placementDraftKey("default", "i", "form")]: "medium",
+      }),
+    );
+    expect(textOf(drawn.frame)).toContain("r-short");
+    expect(staleOf(drawn.warnings)).toEqual([
+      staleWarning("r.form", "medium", "short"),
+    ]);
+  });
+});
+
+describe("a save keeps a stale pick stored", () => {
+  let durable: DurableConfig;
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-stale-save-");
+  });
+  afterEach(() => {
+    durable.dispose();
+  });
+
+  test("save as preset writes the bar and leaves the stale pick in the session", async () => {
+    const src = source();
+    durable.write(src);
+    const sessionState = new SessionState();
+    durable.seedOrigin(sessionState, SID);
+    const rig = buildRig({
+      source: src,
+      sessionId: SID,
+      sessionState,
+      history: durable.historyFor(sessionState),
+      host: durable.host,
+    });
+    rig.sessionState.set(SID, "style", "gone");
+    rig.sessionState.set(SID, "padding", "5");
+    await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rig.ctx);
+    expect(rig.sessionState.get(SID, "style")).toBe("gone");
+    expect(rig.sessionState.get(SID, "padding")).toBeNull();
   });
 });

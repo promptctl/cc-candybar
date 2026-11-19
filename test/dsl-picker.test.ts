@@ -31,7 +31,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
 
 // The standard theme picker: a trigger that opens the menu (literal 0 on the
@@ -213,7 +212,7 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
 
 describe("2de.13 — picker gate derivation (int arm)", () => {
   test("derives an apply allow-list + a page int spec from the action table", () => {
-    const config = parseAndValidate("<test>", pickerConfig(true, true), ALLOWED);
+    const config = parseAndValidate("<test>", pickerConfig(true, true));
     const derived = deriveActionValidators(config);
     const byKey = new Map(derived.map((d) => [d.key, d.spec]));
     expect(byKey.get("theme-pick")).toEqual({
@@ -226,7 +225,7 @@ describe("2de.13 — picker gate derivation (int arm)", () => {
   });
 
   test("the int gate accepts any integer (-1 closed, page indices) and rejects non-int", () => {
-    const config = parseAndValidate("<test>", pickerConfig(true, true), ALLOWED);
+    const config = parseAndValidate("<test>", pickerConfig(true, true));
     const gate = stateGate(config);
     expect(gate.validate("theme-page", "-1").ok).toBe(true);
     expect(gate.validate("theme-page", "0").ok).toBe(true);
@@ -243,8 +242,8 @@ describe("2de.13 — picker loader validation", () => {
       segments: { menu: { template: '{{ picker "applyTheme" "nope" true true }}', bg: 'surface', fg: 'foreground' } },
       root: 'menu',
     }`;
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(ConfigError);
-    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/nope/);
+    expect(() => parseAndValidate("<test>", src)).toThrow(ConfigError);
+    expect(() => parseAndValidate("<test>", src)).toThrow(/nope/);
   });
 
   test("paginate: infinite width yields one page; finite width fills greedily", () => {

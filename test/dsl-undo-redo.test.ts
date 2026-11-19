@@ -30,7 +30,6 @@ import { dirname } from "node:path";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { clickUrl, effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -53,7 +52,6 @@ const B = sessionIdOf("b");
 const OLD = sessionIdOf("old");
 const NEW = sessionIdOf("new");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function ownUrls(rendered: Frame): string[] {
   const urls = linkUrls(rendered);
@@ -76,7 +74,6 @@ describe("undo/redo loader shape", () => {
     const config = parseAndValidate(
       "<test>",
       base(`{ back: { undo: true } }`),
-      ALLOWED,
     );
     expect(config.actions.back).toEqual({ undo: true });
   });
@@ -85,14 +82,13 @@ describe("undo/redo loader shape", () => {
     const config = parseAndValidate(
       "<test>",
       base(`{ fwd: { redo: true } }`),
-      ALLOWED,
     );
     expect(config.actions.fwd).toEqual({ redo: true });
   });
 
   test("undo: false is rejected — a marker's only legal value is true", () => {
     expect(() =>
-      parseAndValidate("<test>", base(`{ back: { undo: false } }`), ALLOWED),
+      parseAndValidate("<test>", base(`{ back: { undo: false } }`)),
     ).toThrow(ConfigError);
   });
 
@@ -101,7 +97,6 @@ describe("undo/redo loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ back: { undo: true, to: 'x' } }`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -111,7 +106,6 @@ describe("undo/redo loader shape", () => {
       parseAndValidate(
         "<test>",
         base(`{ back: { undo: 'palette' } }`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
   });
@@ -128,7 +122,6 @@ describe("deriveConfigActionValidators over undo/redo actions", () => {
         actions: { back: { undo: true }, fwd: { redo: true } },
         root: 'bar',
       }`,
-      ALLOWED,
     );
     expect(ownValidators(config, deriveConfigActionValidators(config))).toEqual(
       [],
@@ -157,7 +150,6 @@ function undoBar(
   const rig = buildRig({
     source: src,
     label: "<test>",
-    palettes: ALLOWED,
     sessionId,
     sessionState,
     history,
@@ -172,7 +164,7 @@ function undoBar(
     configFor: () => current,
   };
   onLanded(ctx, () => {
-    current = parseAndValidate("<test>", durable.text()!, ALLOWED);
+    current = parseAndValidate("<test>", durable.text()!);
   });
   // The whole URL through the verb table, exactly as the daemon's handleClick
   // does — one click, one journal, one step.

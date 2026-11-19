@@ -1,18 +1,13 @@
-// Memoized Palette construction over rich-js. cc-candybar moves theme
-// NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
-// memos live here: a theme name -> base palette, and a (palette, ThemeKey) ->
-// transposed palette. They compose — the per-render base palette feeds the
-// per-render style transposition.
+// Palette construction over rich-js. cc-candybar moves theme NAMES and
+// ThemeKey axes (data); rich-js owns every color value operation, and keeps
+// each theme's base palette once built. One memo lives here: a (palette,
+// ThemeKey) -> transposed palette, which the per-render base palette feeds.
 //
-// [LAW:no-shared-mutable-globals] Single owner: this module. Both are pure
-// memos of pure rich-js functions, keyed by immutable inputs (resolved theme
-// name; the palette object + the four ThemeKey axes). rich-js palettes are
-// immutable, so a cached palette never goes stale. Key spaces are bounded by
-// #themes and #themes × #declared styles (style axes bounded by the loaded
-// configs' styles blocks) — both small. Shared on purpose: a theme's base
-// palette and its gruvbox-under-`vivid` transposition are each computed once
-// per process, not once per RenderCache entry or per render. Read/written only
-// through the two functions below.
+// [LAW:no-shared-mutable-globals] Single owner: this module. It is a pure
+// memo of a pure rich-js function, keyed by immutable inputs (the palette
+// object + the four ThemeKey axes), bounded by #themes × #declared styles.
+// Shared on purpose: a theme's gruvbox-under-`vivid` transposition is
+// computed once per process, not once per RenderCache entry or per render.
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
 import type { ThemeKey, Palette } from "@promptctl/rich-js";
@@ -30,31 +25,23 @@ import {
   type Selection,
 } from "./policy.js";
 
-const baseCache = new Map<string, Palette>();
-
 /**
- * The Palette for a theme name. Memoized.
+ * The Palette for a theme name a domain already holds: a theme setting's
+ * value, an option of the `themes` domain. rich-js builds each palette once,
+ * on first request, and keeps it.
  *
- * [LAW:single-enforcer] The one place a theme name becomes a Palette —
- * the per-render base palette and every placement's pinned `theme` both flow
- * through here. A name that does not resolve is registry/resolver drift, never
- * user error: every name reaching here is an installed one (`isInstalledTheme`
- * — the loader, the write gate and the session's read all ask it), so by the
- * time a name reaches here it must resolve. [LAW:no-defensive-null-guards] the
- * throw is the loud failure for that broken invariant, not a fallback.
+ * [LAW:no-defensive-null-guards] Every name reaching here passed
+ * `isInstalledTheme`, the one membership test, where it was read: one that
+ * did not is a value read past its domain, and the throw names it.
  */
 export function paletteForThemeName(name: string): Palette {
-  const hit = baseCache.get(name);
-  if (hit !== undefined) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) {
+  if (!isInstalledTheme(name)) {
     throw new Error(
-      `Palette "${name}" did not resolve in the theme registry — allowed ` +
-        `names and the registry are inconsistent`,
+      `Palette "${name}" is not an installed theme: a theme name reached the ` +
+        `palette without being read through its domain`,
     );
   }
-  baseCache.set(name, palette);
-  return palette;
+  return getThemePalette(name);
 }
 
 // [LAW:one-source-of-truth] THE palette a placement renders in, from its
@@ -114,7 +101,7 @@ export type DecidedTheme = Decided<Palette>;
 // draws cannot disagree.
 function namedTheme(name: string): DecidedTheme | null {
   return isInstalledTheme(name)
-    ? { kind: "decided", name, value: paletteForThemeName(name) }
+    ? { kind: "decided", name, value: getThemePalette(name) }
     : null;
 }
 

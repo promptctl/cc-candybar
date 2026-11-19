@@ -55,7 +55,6 @@ const row = (middle: string, seat: Seat = "middle"): ValidatedConfig =>
       },
       root: { h: [${SEATS[seat](middle)}] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 const PULSE = `{ seg: "middle", settings: { effect: "pulse" } }`;
@@ -252,7 +251,6 @@ describe("a placement's effect setting", () => {
         },
         root: { h: ["left", { seg: "picker", settings: { effect: "none" } }] },
       }`,
-      undefined,
       DEFAULT_DSL_CONFIG,
     );
     const open = renderer(config, {
@@ -277,7 +275,6 @@ describe("a placement's effect setting", () => {
       parseAndValidate(
         "<test>",
         `{ segments: { x: { template: 'x', settings: { effect: { label: "e", domain: ["a"], default: "a" } } } } }`,
-        undefined,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(/setting "effect" is one every placement already has/);

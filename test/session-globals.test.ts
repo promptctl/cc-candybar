@@ -38,7 +38,6 @@ const S_OTHER = sessionIdOf("s-other");
 const S_CLEAR = sessionIdOf("s-clear");
 
 const BASE_THEME = "textual-dark";
-const ALLOWED = new Set([BASE_THEME]);
 
 // Two cells in one row. Padding is applied INSIDE each cell's background fill,
 // so a padding change is visible as the rendered line's width.
@@ -72,7 +71,6 @@ function resolved(
   const config = parseAndValidate(
     "<resolved>",
     JSON.stringify({ globals, ...(staged && { editGlobals: staged }) }),
-    ALLOWED,
   );
   const session: Record<string, string> = staged
     ? { ...picks, [EDIT_MODE_KEY]: EDIT_MODE_ARRANGE }
@@ -91,7 +89,6 @@ function globalsBar(padding: number = CONFIG_PADDING) {
       rig = buildRig({
         source: src(padding),
         label: "<session-globals>",
-        palettes: ALLOWED,
         sessionId: sid,
         sessionState,
       });
@@ -256,18 +253,12 @@ describe("a session value outside the domain is not a session value", () => {
 });
 
 // [LAW:behavior-not-structure] The precedence this PR's shared resolver
-// applies to EVERY pickable global, pinned on the three fields that had their
-// own spelling before it: a stale session pick is an ABSENT session pick, so it
-// falls through to the config default and reaches the floor only when there is
-// no config default either.
-//
-// This is a deliberate change. The old per-field spellings collapsed a stale
-// pick straight to the floor, skipping the user's own declared default — so a
-// config saying `endcaps: "capsule"` rendered powerline the moment a session
-// entry went stale. Every existing regression test passed `undefined` as the
-// config default, where both rules agree, which is exactly why the change could
-// land unnoticed; these cases are the ones that can tell them apart.
-describe("a stale session pick falls to the config default, not the floor", () => {
+// applies to EVERY pickable global: a stale session pick is passed over, so the
+// bar draws the config default and reaches the floor only when there is no
+// config default either. A config saying `endcaps: "capsule"` keeps drawing
+// capsule while a session entry is stale; a case passing `undefined` as the
+// config default cannot tell the two apart.
+describe("a stale session pick draws the config default beneath it", () => {
   // Identity adaptations / empty fragments: these resolvers read only the KEYS
   // (is this name declared?), so the values need to typecheck and nothing more.
   const IDENTITY: ThemeKey = {
@@ -354,7 +345,6 @@ describe("padding's bound is one declaration, not three copies", () => {
       parseAndValidate(
         "<over-range>",
         `{ globals: { padding: ${PADDING_RANGE.max + 1} } }`,
-        ALLOWED,
       ),
     ).toThrow(new RegExp(String(PADDING_RANGE.max)));
   });
@@ -363,7 +353,6 @@ describe("padding's bound is one declaration, not three copies", () => {
     const config = parseAndValidate(
       "<at-range>",
       `{ globals: { padding: ${PADDING_RANGE.max} } }`,
-      ALLOWED,
     );
     expect(config.globals.padding).toBe(PADDING_RANGE.max);
   });
@@ -377,7 +366,6 @@ describe("colour depth has no session half", () => {
     const config = parseAndValidate(
       "<no-session-half>",
       `{ globals: { palette: '${BASE_THEME}', colorCompatibility: '256' } }`,
-      ALLOWED,
     );
     const picks: Record<string, string> = {
       colorCompatibility: "none",
@@ -394,7 +382,6 @@ describe("colour depth has no session half", () => {
         parseAndValidate(
           "<set-config-only>",
           `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { set: '${key}', to: 'x' } } }`,
-          ALLOWED,
         ),
       ).toThrow(
         new RegExp(
@@ -409,7 +396,6 @@ describe("colour depth has no session half", () => {
       parseAndValidate(
         "<persist-config-only>",
         `{ globals: { palette: '${BASE_THEME}' }, actions: { pick: { persist: 'colorCompatibility', from: 'colorCompatibilities' } } }`,
-        ALLOWED,
       ),
     ).not.toThrow();
   });

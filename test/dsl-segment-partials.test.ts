@@ -39,7 +39,6 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
   const raw = parseDslConfig(
     "<test>",
     source,
-    undefined,
     inheritableSegmentNames(dflt),
   );
   const config = validateConfig(

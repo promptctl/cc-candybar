@@ -33,7 +33,6 @@ const CONFIG = parseAndValidate(
     segments: { probe: { template: "[{{ .s }}]" } },
     root: "probe",
   }`,
-  undefined,
   DEFAULT_DSL_CONFIG,
 );
 

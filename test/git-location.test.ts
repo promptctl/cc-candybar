@@ -10,7 +10,6 @@ import path from "node:path";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { checkoutLocation } from "../src/utils/git-root";
 import { instantOf } from "../src/utils/instant";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -61,7 +60,6 @@ function drawAll(
   const config = parseAndValidate(
     "<user>",
     JSON.stringify({ variables, root: { h: ["directory", "gitaculous"] } }),
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);

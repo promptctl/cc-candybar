@@ -7,28 +7,24 @@ import { effectivePresetName, presetGlobals } from "./presets.js";
 import { EDIT_MODE_ARRANGE, EDIT_MODE_KEY } from "./loader/edit-mode.js";
 import type { DslConfig, Globals } from "./dsl-types.js";
 import {
+  perValuedField,
   settingNameOf,
-  VALUED_FIELDS,
   valuedRow,
   type SessionField,
-  type SettingName,
   type ValuedField,
   type ValuedGlobals,
 } from "./globals-fields.js";
 import {
-  BOOLEAN_FALSE,
-  BOOLEAN_TRUE,
   resolveStyleSelection,
   type StyleSelection,
   resolveEffectSelection,
   type EffectSelection,
   effectiveGlobal,
   readStored,
-  stalePick,
-  wornName,
+  spellSetting,
   type Folded,
   type Selection,
-  type StalePick,
+  type StaleMiss,
 } from "../themes/policy.js";
 import {
   resolveThemeSelection,
@@ -90,10 +86,13 @@ export type EffectiveGlobals = ValuedGlobals & {
   readonly separator: string | undefined;
   // [LAW:no-silent-failure] Each pick the session stores outside its
   // setting's domain, where the session's rung would have been in force: the
-  // fold's own answer, so a staged value that outranks a pick hides it. The
-  // draw reports each, beside the fallback it draws.
-  readonly stale: readonly StalePick[];
+  // folds' own answer, so a staged value that outranks a pick hides it. The
+  // draw reports each, naming what the bar wears in its place.
+  readonly stale: ReadonlyArray<StaleMiss<FoldedName>>;
 };
+
+// The name each fold of the resolution publishes its value under.
+export type FoldedName = ValuedField | "preset" | "theme" | "style" | "effect";
 
 // [LAW:single-enforcer] A display's checkbox admits its feed through its
 // effective configuration, however that configuration was authored.
@@ -140,37 +139,17 @@ export function presetOf(
   );
 }
 
-// [LAW:one-source-of-truth] A setting's resolved value in the spelling its
-// SessionState key uses — the spelling a pick writes, decided by the value's
-// own primitive, so a setting declared in its row spells with no edit here.
-// A selection chosen by RULE has no name until a render evaluates it, so it
-// is `null`.
+// [LAW:one-source-of-truth] A resolved value in the spelling its SessionState
+// key uses — the spelling a pick writes (`spellSetting`). A selection chosen
+// by RULE has no name until a render evaluates it, so it is `null`.
 export function spelledSetting(
-  e: Pick<EffectiveGlobals, SettingName>,
-  name: SettingName,
+  e: { readonly [K in FoldedName]: EffectiveGlobals[K] },
+  name: FoldedName,
 ): string | null {
   const value: string | number | boolean | Selection<unknown> = e[name];
-  switch (typeof value) {
-    case "boolean":
-      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-    case "number":
-      return String(value);
-    case "string":
-      return value;
-    default:
-      return value.kind === "decided" ? value.name : null;
-  }
+  if (typeof value !== "object") return spellSetting(value);
+  return value.kind === "decided" ? value.name : null;
 }
-
-// Every fold the resolution makes, under the name the resolution publishes it
-// as — a controlled field's under its setting's name.
-type Folds = { readonly [K in ValuedField]: Folded<ValuedGlobals[K]> } & {
-  readonly preset: Folded<string>;
-  readonly theme: Folded<ThemeSelection>;
-  readonly style: Folded<StyleSelection>;
-  readonly effect: Folded<EffectSelection>;
-};
-type FoldedValues = { readonly [K in keyof Folds]: Folds[K]["value"] };
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
 // chain uses the session’s pick and whether the active preset was customized.
@@ -180,76 +159,67 @@ export function resolveEffectiveGlobals(
   sessionPick: (key: string) => string | null,
   presetCustomized: (preset: string) => boolean,
 ): EffectiveGlobals {
-  // The preset resolves FIRST: every field below reads globals, and which
-  // globals is exactly what the preset decides.
-  const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset.value);
+  const { stale, take } = foldTaker();
+  // The preset resolves FIRST: every field below reads the globals it picks.
+  const preset = take("preset", presetOf(config, sessionPick));
+  const declared = presetGlobals(config, preset);
   // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
-  // mode is off" is the EMPTY value — the identity fragment, exactly as
-  // PRESET_FLOOR's is. Every field below is resolved by the same expression
-  // whether or not edit mode is on; only the contents of `staged` differ.
+  // mode is off" is the EMPTY value — the identity fragment, no branch.
   const staged: Partial<Globals> =
     sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
-  // The theme resolves before the look, because the look's config-default
-  // rung is the THEME's default folded under the declared globals
-  // (src/config/theme-defaults.ts): which theme decides which fragment.
-  // [LAW:one-source-of-truth] Every pick is read under the key the settings
-  // write it under.
-  const theme = resolveThemeSelection(
-    staged.palette,
-    sessionPick(settingNameOf("palette")),
-    declared.palette,
+  // The theme resolves before the look: the look's config default is the
+  // THEME's default under the declared globals (src/config/theme-defaults.ts).
+  const theme = take(
+    "theme",
+    resolveThemeSelection(
+      staged.palette,
+      sessionPick(settingNameOf("palette")),
+      declared.palette,
+    ),
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme.value, config.themeDefaults),
+    themeDefaultsOf(theme, config.themeDefaults),
   );
-  const folds: Folds = {
-    ...(Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, sessionPick, globals),
-      ]),
-    ) as { readonly [K in ValuedField]: Folded<ValuedGlobals[K]> }),
-    preset,
-    theme,
-    style: resolveStyleSelection(
-      staged.style,
-      sessionPick(settingNameOf("style")),
-      globals.style,
-      config.styles,
-    ),
-    effect: resolveEffectSelection(
-      staged.effect,
-      sessionPick(settingNameOf("effect")),
-      globals.effect,
-    ),
-  };
-  const entries = Object.entries(folds) as ReadonlyArray<
-    [keyof Folds, Folded<unknown>]
-  >;
-  const values = Object.fromEntries(
-    entries.map(([name, folded]) => [name, folded.value]),
-  ) as FoldedValues;
+  const style = resolveStyleSelection(
+    staged.style,
+    sessionPick(settingNameOf("style")),
+    globals.style,
+    config.styles,
+  );
+  const effect = resolveEffectSelection(
+    staged.effect,
+    sessionPick(settingNameOf("effect")),
+    globals.effect,
+  );
   return {
-    ...values,
-    presetCustomized: presetCustomized(preset.value),
-    // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
-    // config` — the same `??`, minus the rungs it does not have.
+    ...perValuedField((field) =>
+      take(field, resolveValued(field, staged, sessionPick, globals)),
+    ),
+    preset,
+    presetCustomized: presetCustomized(preset),
+    theme,
+    style: take("style", style),
+    effect: take("effect", effect),
+    // [LAW:one-source-of-truth] The separator has no SessionState half, so
+    // its chain is `staged ?? config` — the same `??`, minus the rungs.
     separator: staged.default_separator ?? globals.default_separator,
-    // [LAW:no-silent-failure] What each fold passed over, saying what the bar
-    // wears in its place. Only a setting has a session rung to pass over, and a
-    // selection its rule decides has no name until the draw evaluates the rule.
-    stale: entries.flatMap(([name, folded]) => {
-      if (folded.stale === null) return [];
-      const wears = spelledSetting(values, name as SettingName);
-      return [
-        stalePick(
-          name,
-          folded.stale,
-          wears === null ? "its rule's answer" : wornName(wears),
-        ),
-      ];
-    }),
+    stale,
+  };
+}
+
+// [LAW:no-silent-failure] Takes each fold's value with what it passed over:
+// a fold published untaken is a `Folded` where a value is due, a type error.
+function foldTaker(): {
+  readonly stale: Array<StaleMiss<FoldedName>>;
+  readonly take: <T>(setting: FoldedName, folded: Folded<T>) => T;
+} {
+  const stale: Array<StaleMiss<FoldedName>> = [];
+  return {
+    stale,
+    take: (setting, folded) => {
+      if (folded.stale !== null) stale.push({ setting, stored: folded.stale });
+      return folded.value;
+    },
   };
 }

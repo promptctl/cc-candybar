@@ -38,7 +38,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-presets");
 const THEME = "textual-dark";
-const ALLOWED = new Set([THEME]);
 
 // ─── Loader validation ────────────────────────────────────────────────────────
 
@@ -49,7 +48,7 @@ describe("presets block — loader validation", () => {
   // run through the full pipeline the daemon runs.
   const parseIssues = (src: string): string => {
     try {
-      parseAndValidate("<presets>", src, ALLOWED);
+      parseAndValidate("<presets>", src);
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       return (e as ConfigError).message;
@@ -105,7 +104,6 @@ describe("presets block — loader validation", () => {
     const config = parseAndValidate(
       "<test>",
       `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
-      ALLOWED,
     );
     const resets = Object.entries(config.actions)
       .filter(([name]) => name.endsWith(".resetLayout"))
@@ -123,7 +121,6 @@ describe("presets block — loader validation", () => {
       parseAndValidate(
         "<test>",
         `{ presets: { compact: {}, verbose: {} } }`,
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -166,7 +163,6 @@ describe("presets block — loader validation", () => {
             tight: { globals: { padding: 0 } },
           },
         }`,
-        ALLOWED,
       ),
     ).not.toThrow();
   });
@@ -185,7 +181,7 @@ describe("preset compile diagnostics name the authored path", () => {
   // (cross-ref), the compile being where anything synthesized is parsed.
   const compileError = (src: string): string => {
     try {
-      buildRig({ source: src, label: "<presets>", palettes: ALLOWED });
+      buildRig({ source: src, label: "<presets>" });
     } catch (e) {
       return (e as Error).message;
     }
@@ -281,7 +277,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   function presetBar(src: string = SRC) {
     // Rendered by default: a click is gated by the config its session renders,
     // so the click below resolves this config and passes through its real gate.
-    const rig = buildRig({ source: src, label: "<presets>", palettes: ALLOWED, sessionId: SID });
+    const rig = buildRig({ source: src, label: "<presets>", sessionId: SID });
     const { config, sessionState } = rig;
     // The daemon's exact order: resolve the preset, take ITS globals, render.
     const resolve = () =>
@@ -369,7 +365,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   // [LAW:no-silent-failure] The stale-name gate. A name a prior config's
   // vocabulary admitted must not throw and must not render some other
   // arrangement while a label claims it is active.
-  test("a stale session pick collapses to the floor, visibly", () => {
+  test("a stale session pick draws the preset beneath it, visibly", () => {
     const rt = presetBar();
     try {
       // Written straight into SessionState: this is exactly the state a click
@@ -378,7 +374,7 @@ describe("preset selection — the arrangement the bar renders", () => {
       rt.sessionState.set(SID, "preset", "deleted-preset");
       expect(rt.resolve().preset).toBe(PRESET_FLOOR);
       // "Says so": the resolved name — the one the payload publishes as
-      // preset.effective — is the floor, not the stale pick, so a menu label
+      // preset.effective — is the rung beneath, not the stale pick, so a menu label
       // reading it cannot name an arrangement the bar is not in.
       expect(() => rt.render()).not.toThrow();
       expect(textOf(rt.render())).toContain("ALPHA");
@@ -459,7 +455,7 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
   // Asked of the MERGED tree, before validateConfig materializes an explicit
   // root for every preset (the same seam RenderCache's authoredRoots reads).
   const merged = (src: string) =>
-    mergeWithDefault(parseDslConfig("<presets>", src, ALLOWED), DEFAULT_DSL_CONFIG);
+    mergeWithDefault(parseDslConfig("<presets>", src), DEFAULT_DSL_CONFIG);
 
   test("an empty rows map restages nothing: the preset renders the config's root, authored at `root`", () => {
     const cfg = merged(`{ presets: { P: { root: { rows: {} } } } }`);

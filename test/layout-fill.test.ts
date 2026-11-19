@@ -33,7 +33,6 @@ import { drawStripCells } from "../src/render/strip";
 import type { CellSizing, LaidCell } from "../src/template-engine/layout";
 import type { BuildLineOptions } from "../src/render/strip";
 import {
-  listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -398,7 +397,6 @@ describe("a fill segment fills wherever the walk places it", () => {
         },
         root: ${root},
       }`,
-      new Set(listResolvablePaletteNames()),
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,

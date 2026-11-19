@@ -662,20 +662,18 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // a root drawing the very rows of DEFAULT_DSL_CONFIG.root (the
   // canonical container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
-    const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
       { h: ["host","directory","gitaculous"] },
       { h: ["model","context","cacheTimer","block","weekly","activity"] }
     ] } }`;
-    const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
+    const rawA = parseDslConfig("<test>", A_SRC);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
     const configA = validateConfig(
       { config: mergedA, raw: rawA, source: A_SRC },
       "<test>",
-      ALLOWED,
     );
 
-    const configDefault = parseAndValidate("<default>", SERIALIZED, ALLOWED);
+    const configDefault = parseAndValidate("<default>", SERIALIZED);
 
     const payload = {
       hook_event_name: "Status",
@@ -714,7 +712,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // and { kind: 'container', direction: 'vertical', children: [...] } must render identically —
   // both are spellings of the same canonical tree.
   test("A-grammar terse form { v:[{ h:[...] }] } is render-equivalent to verbose kind+direction form", () => {
-    const ALLOWED = new Set(listResolvablePaletteNames());
     const SEGMENTS = `{
       sa: { template: ' A ', bg: 'surface', fg: 'foreground' },
       sb: { template: ' B ', bg: 'surface', fg: 'foreground' },
@@ -731,8 +728,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
           children: [{ kind: 'segment', name: 'sc' }, { kind: 'segment', name: 'sd' }] },
       ],
     } }`;
-    const configA = parseAndValidate("<test>", srcA, ALLOWED);
-    const configVerbose = parseAndValidate("<test>", srcVerbose, ALLOWED);
+    const configA = parseAndValidate("<test>", srcA);
+    const configVerbose = parseAndValidate("<test>", srcVerbose);
 
     const payload = {
       hook_event_name: "Status",

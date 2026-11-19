@@ -20,7 +20,6 @@ import { linkUrls } from "./helpers/frame";
 import { configurePlacement } from "./helpers/configure";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { clickUrl, effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { linkClick } from "./helpers/click";
@@ -64,7 +63,6 @@ import { MENU_PAGE_NS } from "../src/config/reserved-names";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 
 // One segment declaring a setting of each domain shape, placed twice — once
@@ -130,7 +128,7 @@ function configureBar(src: string, preset?: string) {
     configFor: () => current,
   };
   onLanded(ctx, () => {
-    current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
+    current = parseAndValidate("<reloaded>", durable.text()!);
   });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   // A link whose click writes `value` to `key` — or, for a stepper
@@ -400,7 +398,7 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(textOf(rt.render())).not.toContain("◀ form ▶");
   });
 
-  test("a pick the declaration does not admit reads as no pick", () => {
+  test("a pick the declaration does not admit is passed over, and is no draft", () => {
     durable.write(SRC);
     const rt = configureBar(SRC);
     rt.sessionState.set(SID, draftKey("vcs2", "depth"), "9");
@@ -409,6 +407,24 @@ describe("configure mode: one placement's settings at a time", () => {
     expect(
       placementDrafts(rt.config, (k) => rt.sessionState.get(SID, k)),
     ).toEqual([]);
+  });
+
+  test("a stale pick's control shows, centres on and steps from the value the placement draws", async () => {
+    durable.write(SRC);
+    const rt = configureBar(SRC);
+    rt.sessionState.set(SID, draftKey("vcs2", "depth"), "9");
+    rt.sessionState.set(SID, draftKey("vcs2", "form"), "medium");
+    configurePlacement(rt.sessionState, SID, "default", "vcs2");
+    const out = rt.render();
+    expect(textOf(out)).toContain("d-long-2");
+    // The stepper names the depth drawn, never the stored 9.
+    expect(textOf(out)).toMatch(/◀ depth 2 ▶/);
+    // The carousel centres on `long`, so both its arrows offer `short`.
+    expect(rt.urlWriting(out, draftKey("vcs2", "form"), "short")).toBeDefined();
+    // ▶ steps from the 2 drawn, past the stored 9.
+    await rt.click(rt.urlWriting(out, draftKey("vcs2", "depth"), "1"));
+    expect(rt.sessionState.get(SID, draftKey("vcs2", "depth"))).toBe("3");
+    expect(textOf(rt.render())).toContain("d-long-3");
   });
 });
 
@@ -468,7 +484,7 @@ describe("configure mode's drafts are saved into the placement", () => {
     expect(saved).toContain(
       `{ seg: 'vcs', id: 'vcs2', settings: { form: 'long', detail: true } }`,
     );
-    const reloaded = parseAndValidate("<saved>", saved, ALLOWED);
+    const reloaded = parseAndValidate("<saved>", saved);
     expect(placementOf(reloaded, "vcs").settings).toEqual({ depth: 3 });
     expect(placementOf(reloaded, "vcs2").settings).toEqual({
       form: "long",
@@ -569,7 +585,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
     await rt.click(rt.urlWriting(rt.render(), key, "true"));
     await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
     expect(rt.sessionState.get(SID, key)).toBeNull();
-    const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
+    const saved = parseAndValidate("<saved>", durable.text()!);
     const settingsIn = (preset: string) =>
       [...walkNodes(presetRoot(saved, preset).node)].find(
         (n): n is SegmentNode =>
@@ -601,7 +617,7 @@ describe("placement drafts are settings, to undo and to save as a preset", () =>
         rt.urlWriting(rt.render(), draftKey("vcs2", "detail"), "true"),
       );
       await CLICK_VERBS.get(VERB_SAVE_PRESET)!(`${SID}/user`, rt.ctx);
-      const saved = parseAndValidate("<saved>", durable.text()!, ALLOWED);
+      const saved = parseAndValidate("<saved>", durable.text()!);
       const settingsIn = (preset: string) =>
         [...walkNodes(presetRoot(saved, preset).node)].find(
           (n): n is SegmentNode =>

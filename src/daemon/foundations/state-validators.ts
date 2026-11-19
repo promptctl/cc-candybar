@@ -16,8 +16,8 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import {
+  describeInstalledThemes,
   isInstalledTheme,
-  listResolvablePaletteNames,
   ENDCAPS_SHAPES,
 } from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
@@ -64,7 +64,7 @@ const validateTheme: KeyValidator = (raw) => {
   if (!isInstalledTheme(raw)) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${listResolvablePaletteNames().join(", ")})`,
+      reason: `unknown theme "${raw}" (have: ${describeInstalledThemes()})`,
     };
   }
   return { ok: true, value: raw };

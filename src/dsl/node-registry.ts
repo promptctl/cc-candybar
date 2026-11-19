@@ -45,7 +45,7 @@ import { groundOf } from "../template-engine/colors.js";
 import {
   FOLLOW_BAR,
   type PlacementEffect,
-  type StalePick,
+  type StaleMiss,
 } from "../themes/policy.js";
 import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
@@ -88,8 +88,9 @@ export interface CompiledSegmentNode {
   readonly id: string;
   readonly settings: PlacementSettings;
   // [LAW:no-silent-failure] The picks of its settings the session stores
-  // outside their domains, read through the same fold `settings` is.
-  readonly stale: () => readonly StalePick[];
+  // outside their domains and the draw reads, from the same fold `settings`
+  // reads.
+  readonly stale: () => readonly PlacementMiss[];
   // The disclosure body this segment opens (SegmentNode.opens), with its
   // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
   // gate is derived from the same pair the trigger's cycle writes.
@@ -220,7 +221,18 @@ export type PlacementSettings = Readonly<Record<string, SettingValue>> & {
 
 export interface ResolvedPlacement {
   readonly settings: PlacementSettings;
-  readonly stale: () => readonly StalePick[];
+  readonly stale: () => readonly PlacementMiss[];
+}
+
+// [LAW:types-are-the-program] A placement setting's stale pick, as data: the
+// setting as a reader names it (`<placement>.<name>`) and the spelling stored,
+// the slot's key — its identity, which a name label holding the placement's
+// `theme` slot shares — the setting's name, and the value the placement draws
+// in its place. The draw says what that value wears (`bar` is the bar's own).
+export interface PlacementMiss extends StaleMiss {
+  readonly key: string;
+  readonly name: string;
+  readonly value: SettingValue;
 }
 
 // [LAW:types-are-the-program] A node's own `when` as the driver evaluated it,
@@ -284,7 +296,7 @@ export interface NodeRenderCtx {
   readonly brokenPlacement: (placementId: string, message: string) => void;
   // [LAW:no-silent-failure] A pick of a drawn placement's setting the session
   // stores outside the setting's domain, which the placement draws past.
-  readonly stalePick: (pick: StalePick) => void;
+  readonly stalePick: (miss: PlacementMiss) => void;
   // [LAW:locality-or-seam] The segment seam, injected as a capability so this
   // module never imports the menu or color features — it only names a
   // placement and gets back its parts as the view keeps them

@@ -19,7 +19,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { stateGate } from "./helpers/gates";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { SETTINGS } from "../src/config/setting-projections";
@@ -48,7 +47,6 @@ import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
   endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
@@ -59,7 +57,7 @@ const OPTS = {
 const PAYLOAD = { session_id: "s1", workspace: { current_dir: "/tmp/proj" } };
 
 function load(src: string): DslConfig {
-  return parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+  return parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG);
 }
 
 // The actions of a config that write `key` in the session.
@@ -216,7 +214,6 @@ describe("a global the menu has never seen gets its control from the generator",
       },
       root: { v: ['zoomer', 'zoomlist'] },
     }`,
-      ALLOWED,
       {
         ...DEFAULT_DSL_CONFIG,
         variables: { ...DEFAULT_DSL_CONFIG.variables, ...control.variables },

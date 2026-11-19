@@ -11,7 +11,12 @@ import {
   type FieldRow,
   type GlobalField,
 } from "../globals-fields.js";
-import { isExpression, retiredThemeNote } from "../../themes/policy.js";
+import {
+  describeInstalledThemes,
+  isExpression,
+  isInstalledTheme,
+  retiredThemeNote,
+} from "../../themes/policy.js";
 import {
   describeType,
   isPlainObject,
@@ -306,10 +311,10 @@ export function validateThemeDefaults(
   const out: Record<string, ThemeDefault> = {};
   for (const [theme, value] of Object.entries(raw)) {
     const path = `themeDefaults.${theme}`;
-    if (!ctx.allowedPalettes.has(theme)) {
+    if (!isInstalledTheme(theme)) {
       ctx.issues.push({
         path,
-        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        message: `${path}: "${theme}" is not an installed theme${retiredThemeNote(theme)}. Expected one of: ${describeInstalledThemes()}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme]),
       });
       continue;

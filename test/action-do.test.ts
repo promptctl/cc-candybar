@@ -12,7 +12,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import {
@@ -27,7 +26,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const OPTS = {
   endcaps: "powerline" as const,
   colorCompatibility: "truecolor" as const,
@@ -52,7 +50,7 @@ function config(actions: string, template: string): string {
 }
 
 function runtime(src: string) {
-  const cfg = parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+  const cfg = parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);
@@ -127,7 +125,6 @@ describe("do: load errors", () => {
       parseAndValidate(
         "<user>",
         config(actions, "x"),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       );
     } catch (e) {
@@ -158,7 +155,6 @@ describe("do: load errors", () => {
            editAndClose: { do: ['edit.toggle', 'closePanel'] },`,
           '{{ action "editAndClose" "✎" }}',
         ),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).not.toThrow();

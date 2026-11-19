@@ -17,7 +17,6 @@ import { configurePlacement } from "./helpers/configure";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { effectsOf, CLICK_VERBS } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
 import { configureMember, EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
@@ -27,7 +26,6 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 // A theme whose decoration never wears its `warning`: textual-dark's `accent`
 // IS its warning (#FEA62B), so a calm accent cell there draws the very colour
@@ -39,7 +37,7 @@ const withRoot = (root: string): string => `{ root: ${root} }`;
 const BLOCK_ONLY = withRoot("{ v: [ { h: ['block'] } ] }");
 
 const load = (src: string) =>
-  parseAndValidate("<test>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+  parseAndValidate("<test>", src, DEFAULT_DSL_CONFIG);
 
 let durable: DurableConfig;
 beforeEach(() => {
@@ -57,7 +55,6 @@ function thresholdBar(src: string, utilization: number) {
     source: src,
     label: "<test>",
     base: DEFAULT_DSL_CONFIG,
-    palettes: ALLOWED,
     sessionId: SID,
     sessionState,
     history: durable.historyFor(sessionState),

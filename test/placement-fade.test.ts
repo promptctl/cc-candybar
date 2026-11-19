@@ -68,7 +68,6 @@ const config = (globals = "{}", middle = '"middle"'): ValidatedConfig =>
         { kind: "group", name: "more", label: "more", children: ["extra"] },
       ] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 const ROW = config();

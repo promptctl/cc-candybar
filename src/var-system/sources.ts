@@ -31,7 +31,13 @@ import {
   readPending,
   type JsonValue,
 } from "./types.js";
-import { VariableStore, type Derivation, type StoredValue } from "./store.js";
+import {
+  VariableStore,
+  type Derivation,
+  type Derived,
+  type StoredValue,
+} from "./store.js";
+import type { Folded } from "../themes/policy.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -911,20 +917,53 @@ export class SourceRegistry {
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
   declareState(name: string, opts: StateOptions): void {
-    if (!this.sessionState) {
+    const read = this.stateReader(name);
+    const fallback = opts.varDefault ?? this.stringInitial(undefined);
+    this.store.defineComputed(name, "string", () => read(opts.key) ?? fallback);
+  }
+
+  // A state variable whose key is read against a domain: `fold` reads the
+  // session's value at `key` into the value in force and the spelling it passed
+  // over, kept as ONE derived value of the store. The variable is that value
+  // spelled, which every template, picker mark and carousel reads, and
+  // `foldedState` hands the whole fold to the draw that reports the miss.
+  declareFoldedState<T extends VarValue>(
+    name: string,
+    key: string,
+    fold: (raw: string | null) => Folded<T>,
+    spell: (value: T) => string,
+  ): void {
+    const read = this.stateReader(name);
+    const folded = this.store.derive(name, "computed", () => fold(read(key)));
+    this.folds.set(name, folded);
+    this.store.defineComputed(name, "string", () => spell(folded.read().value));
+  }
+
+  // [LAW:no-defensive-null-guards] Asked only of a name `declareFoldedState`
+  // declared; any other is a caller's drift, named.
+  foldedState(name: string): Folded<VarValue> {
+    const folded = this.folds.get(name);
+    if (folded === undefined) {
+      throw new Error(`"${name}" is no state variable read against a domain`);
+    }
+    return folded.read();
+  }
+
+  private readonly folds = new Map<string, Derived<Folded<VarValue>>>();
+
+  // [LAW:single-enforcer] How every state variable reads the session's stored
+  // value at a key: through the view's checked session, the same one the
+  // payload hands `session.id`. Asked at declaration, so a registry with no
+  // SessionState refuses the variable loudly rather than reading empty strings.
+  private stateReader(name: string): (key: string) => string | null {
+    const sessionState = this.sessionState;
+    if (sessionState === undefined) {
       throw new Error(
         `declareState("${name}"): SourceRegistry was constructed without a SessionState — ` +
           `state-kind variables require a SessionState (the daemon provides one; tests must supply one)`,
       );
     }
-    const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(undefined);
-    this.store.defineComputed(name, "string", () => {
-      // [LAW:parse-dont-validate] The view's checked session, the same one
-      // the payload hands `session.id`.
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
-    });
+    return (key) => sessionState.get(this.session(), key);
   }
 
   // [LAW:one-source-of-truth] The revision of the session state this render's

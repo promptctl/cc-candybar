@@ -22,7 +22,6 @@ import {
 } from "../src/renderer/render-payload";
 import { resolveEffectiveGlobals } from "../src/config/effective-globals";
 import {
-  listResolvablePaletteNames,
   type ColorCompatibility,
 } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -45,7 +44,6 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
   const config = parseAndValidate(
     "<test>",
     "{ globals: { colorCompatibility: 'none' } }",
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();

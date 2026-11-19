@@ -50,9 +50,8 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-theme-expr");
 // Four visibly different installed themes: the floor, plus three the expression
-// picks between. Every one is in ALLOWED so the by-name reference configs load.
+// picks between.
 const NAMED = ["nord", "solarized-light", "dracula"] as const;
-const ALLOWED = new Set<string>([THEME_FLOOR, ...NAMED, "tokyo-night"]);
 
 const OPTS = {
   endcaps: "powerline" as const,
@@ -92,7 +91,7 @@ interface Painted {
 // The bar these tests draw: a rig over `source`, drawn at a context percentage,
 // with the render warnings it raised and each segment's own colour read back.
 function themeBar(source = src(RULE)) {
-  const rig = buildRig({ source, label: "<theme-expr>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({ source, label: "<theme-expr>", sessionId: SID });
   const warnings: RenderWarning[] = [];
   const render = (pct: number): Painted => {
     const drawn = rig.draw({ payload: { session_id: SID, ctx: { pct } } });
@@ -298,7 +297,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
     // drawDsl takes no base-palette argument any more, so the default must be
     // the config's own declared theme — substituting the floor would silently
     // repaint every compile-only render (`cc-candybar check`, tests).
-    const config = parseAndValidate("<theme-default>", src("nord"), ALLOWED);
+    const config = parseAndValidate("<theme-default>", src("nord"));
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
@@ -326,7 +325,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
   });
 
   test("a session with no picks evaluates a RULE too, rather than falling to the floor", () => {
-    const config = parseAndValidate("<theme-default-rule>", src(RULE), ALLOWED);
+    const config = parseAndValidate("<theme-default-rule>", src(RULE));
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
       "",
@@ -355,7 +354,7 @@ describe("globals.palette as an expression — a theme chosen by data", () => {
 
 describe("globals.palette as an expression — loader", () => {
   const load = (source: string): void => {
-    parseAndValidate("<theme-expr-load>", source, ALLOWED);
+    parseAndValidate("<theme-expr-load>", source);
   };
 
   test("a rule is exempt from the palette-name check; a plain unknown name is not", () => {
@@ -390,7 +389,6 @@ describe("globals.palette as an expression — loader", () => {
     const config = parseAndValidate(
       "<theme-expr-bad>",
       src("{{ if ge (int .ctx.pct) 50 }}nord"),
-      ALLOWED,
     );
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store,
@@ -515,7 +513,7 @@ describe("a rule inside a preset's globals", () => {
       store: VariableStore,
     ) => R,
   ): R => {
-    const config = parseAndValidate("<theme-expr-preset>", source, ALLOWED);
+    const config = parseAndValidate("<theme-expr-preset>", source);
     const store = new VariableStore(systemTimekeeper);
     const registry = new SourceRegistry(store, "", new SessionState());
     try {
@@ -634,14 +632,14 @@ describe("a rule inside a preset's globals", () => {
 
   test("a style NAME in a preset's globals or in editGlobals must be a declared style", () => {
     expect(() =>
-      parseAndValidate("<look-preset>", presetSrc(RULE, "vivd"), ALLOWED),
+      parseAndValidate("<look-preset>", presetSrc(RULE, "vivd")),
     ).toThrow(/presets\.ruled\.globals\.style "vivd" does not match any declared style/);
     const staged = `{
       editGlobals: { style: 'dimm' },
       segments: { plain: { template: 'x' } },
       root: { v: ['plain'] },
     }`;
-    expect(() => parseAndValidate("<look-staged>", staged, ALLOWED)).toThrow(
+    expect(() => parseAndValidate("<look-staged>", staged)).toThrow(
       /editGlobals\.style "dimm" does not match any declared style/,
     );
   });
@@ -652,12 +650,12 @@ describe("a rule inside a preset's globals", () => {
       segments: { plain: { template: 'x' } },
       root: { v: ['plain'] },
     }`;
-    expect(() => parseAndValidate("<theme-expr-staged>", staged, ALLOWED)).toThrow(
+    expect(() => parseAndValidate("<theme-expr-staged>", staged)).toThrow(
       /editGlobals\.palette: a rule is not allowed here/,
     );
     const stagedStyle = staged.replace("palette:", "style:");
     expect(() =>
-      parseAndValidate("<theme-expr-staged>", stagedStyle, ALLOWED),
+      parseAndValidate("<theme-expr-staged>", stagedStyle),
     ).toThrow(/editGlobals\.style: a rule is not allowed here/);
   });
 });

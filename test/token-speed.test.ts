@@ -30,7 +30,6 @@ import type { SpeedSample } from "../src/facts/world-state";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -394,14 +393,12 @@ describe("speedPayloadOf — the ring's projection", () => {
 
 // ─── speed segment render ─────────────────────────────────────────────────────
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function renderSpeed(payload: Record<string, unknown>): Frame {
-  const raw = parseDslConfig("<test>", `{ root: { h: ["speed"] } }`, ALLOWED);
+  const raw = parseDslConfig("<test>", `{ root: { h: ["speed"] } }`);
   const cfg = validateConfig(
     { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: "{}" },
     "<test>",
-    ALLOWED,
   );
   const store = new VariableStore(systemTimekeeper);
   // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now

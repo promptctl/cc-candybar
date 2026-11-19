@@ -9,27 +9,41 @@ import {
 } from "../../config/dsl-types";
 import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { SESSION_KEY_TO_SETTING } from "../../config/setting-projections";
-import { draftSlotValue, sessionSettingValue } from "../setting-drafts";
+import {
+  effectiveGlobal,
+  parseSessionInt,
+  readStored,
+  type Folded,
+} from "../../themes/policy";
+import type { RangeParams } from "../../daemon/foundations/validator-registry";
+import { draftSlotShows, settingShows } from "../setting-drafts";
 
 // [LAW:one-source-of-truth] What a stepped SessionState key shows, in the
-// session whose config and picks these are — what a step steps from. A
-// setting's, or a placement setting's draft slot's, is the value its fold
-// resolves the session's pick to (the bar and its control show the same, a
-// stale pick included); any other key's is its stored value, else its `state`
-// variable's `default`. null when the config declares none of them.
+// session whose config and picks these are — what a step steps from, with the
+// stored spelling it passed over. A setting's is its fold in the session's
+// full resolution, edit mode's staged value included, and a placement setting
+// draft slot's is its slot's fold: the values the bar and the control show.
+// Any other key's is its stored value read against its range, over its
+// `state` variable's `default`, so a stored value out of range is a miss, as
+// a setting's is. A null value: the config declares no value for the key.
 export function stateKeyShows(
   config: DslConfig,
   sessionPick: (key: string) => string | null,
   key: string,
-): string | null {
+  range: RangeParams,
+): Folded<string | null> {
   const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting !== undefined) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
+  if (setting !== undefined) return settingShows(config, sessionPick, setting);
   return (
-    draftSlotValue(config, sessionPick, key) ??
-    sessionPick(key) ??
-    stateDefault(config, key)
+    draftSlotShows(config, sessionPick, key) ??
+    effectiveGlobal<string | null>(
+      undefined,
+      readStored(sessionPick(key), (raw) =>
+        parseSessionInt(raw, range) === null ? null : raw,
+      ),
+      stateDefault(config, key),
+      null,
+    )
   );
 }
 

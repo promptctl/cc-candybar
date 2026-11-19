@@ -56,7 +56,6 @@ const SRC = `{
 // global door into every config, and that cell states its own colour.
 const DECLARED = ["plain", "pickers"] as const;
 
-const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
 /** One render: the frame, and the background each named segment painted. */
 interface Painted {
@@ -65,7 +64,7 @@ interface Painted {
 }
 
 function recolorBar() {
-  const rig = buildRig({ source: SRC, label: "<recolor>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({ source: SRC, label: "<recolor>", sessionId: SID });
   // [LAW:one-source-of-truth] Resolve the theme per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently

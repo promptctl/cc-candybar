@@ -34,7 +34,6 @@ import {
 } from "../src/config/loader/variables";
 import type { ConfigIssue } from "../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { ownDeclNames } from "./helpers/ambient-chrome";
 import { rootNode, rootOf } from "../src/config/root";
@@ -44,9 +43,8 @@ const FILE = "/tmp/test.json5";
 // The bundled default supplies `gitaculous`; merging a user file on top of it is
 // the real production cascade. Palettes must be allow-listed because the default
 // declares `globals.palette`.
-const ALL_PALETTES = new Set(listResolvablePaletteNames());
 function validateAgainstDefault(source: string) {
-  return parseAndValidate(FILE, source, ALL_PALETTES, DEFAULT_DSL_CONFIG);
+  return parseAndValidate(FILE, source, DEFAULT_DSL_CONFIG);
 }
 
 // Convenience builder for vertical stacks of horizontal rows.
@@ -952,7 +950,6 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       {
         source: "",
         issues,
-        allowedPalettes: new Set(),
         groups: [],
         unplaced: [],
         inherited: [],
@@ -1111,7 +1108,7 @@ describe("loadDslConfig — segments", () => {
   // the inherited set may omit its template, any other name may not.
   test("a delta over an inherited name may omit its template; any other name may not", () => {
     const parse = (source: string) =>
-      parseDslConfig("<test>", source, new Set(["nord"]), new Set(["cwd"]));
+      parseDslConfig("<test>", source, new Set(["cwd"]));
     expect(
       parse(`{ segments: { cwd: { palette: "nord" } } }`).segments,
     ).toEqual({
@@ -1196,7 +1193,6 @@ describe("loadDslConfig — segments", () => {
 describe("loadDslConfig — palette switch", () => {
   // Inject a tiny set so validation behavior is independent of registry
   // contents; "real" names (gruvbox/monokai/nord) exercise the default path.
-  const ALLOWED = new Set(["gruvbox", "monokai", "solar"]);
 
   test("globals.palette is preserved when a known name", () => {
     const cfg = parseAndValidate(
@@ -1243,29 +1239,6 @@ describe("loadDslConfig — palette switch", () => {
       path: "globals.palette",
       message: "globals.palette must be a string",
     });
-  });
-
-  test("injected allowed set overrides the default registry", () => {
-    // A name in the injected set passes even though it is not a real theme.
-    const ok = parseAndValidate(
-      FILE,
-      `{ globals: { palette: "solar" } }`,
-      ALLOWED,
-    );
-    expect(ok.globals.palette).toBe("solar");
-
-    // A real theme name fails when the injected set excludes it — proving the
-    // injected set is authoritative, not merely additive.
-    const err = (() => {
-      try {
-        parseAndValidate(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
-      } catch (e) {
-        if (e instanceof ConfigError) return e;
-        throw e;
-      }
-      throw new Error("expected ConfigError");
-    })();
-    expect(err.issues.some((i) => i.path === "globals.palette")).toBe(true);
   });
 });
 

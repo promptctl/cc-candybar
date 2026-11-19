@@ -22,17 +22,25 @@ import {
   type CacheDecl,
   type LayoutNode,
   type ParseDecl,
+  type DraftSlot,
+  type SegmentDecl,
   type SegmentNode,
   type SettingDecl,
   type SettingValue,
   type SourceDefault,
+  EFFECT_SETTING,
   parseArm,
-  placementSetting,
-  settingSpelling,
+  placementPick,
+  savedSetting,
   settingsOf,
   stateVarDecls,
+  THEME_SETTING,
 } from "../config/dsl-types.js";
-import type { EffectiveGlobals } from "../config/effective-globals.js";
+import type {
+  EffectiveGlobals,
+  FoldedName,
+} from "../config/effective-globals.js";
+import type { ValuedField } from "../config/globals-fields.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { configOptionDomains } from "../config/edit-chrome.js";
 import { EDIT_NS } from "../config/reserved-names.js";
@@ -79,7 +87,10 @@ import {
 import {
   ANIMATION_SPEEDS,
   FOLLOW_BAR,
+  retiredThemeNote,
+  spellSetting,
   stalePick,
+  type Folded,
   type StalePick,
 } from "../themes/policy.js";
 import type { DrawnMotion } from "../render/drawn-motion.js";
@@ -136,7 +147,8 @@ import {
   projectionsOf,
   templateInstants,
 } from "../config/loader/projections.js";
-import { valueReads } from "../config/loader/value-reads.js";
+import { valueReads, type ValueReads } from "../config/loader/value-reads.js";
+import { SETTINGS_SCOPE } from "../template-engine/scope.js";
 import { SEGMENT_TEMPLATE_FIELDS } from "../config/loader/plugins.js";
 import {
   barRoot,
@@ -165,6 +177,7 @@ import {
   type CompiledSegment,
   type CompiledSegments,
   type CompiledSegmentNode,
+  type PlacementMiss,
   type PlacementSettings,
   type ResolvedPlacement,
   type RenderedLine,
@@ -373,12 +386,25 @@ function declareOne(
       });
       break;
 
-    case "state":
-      registry.declareState(name, {
-        key: decl.key,
-        ...(decl.default !== undefined && { varDefault: decl.default }),
-      });
+    // A placement setting's draft slot reads its key through the setting's own
+    // fold, kept in the store, so everything reading the slot reads its fold.
+    case "state": {
+      const { setting } = decl;
+      if (setting === undefined) {
+        registry.declareState(name, {
+          key: decl.key,
+          ...(decl.default !== undefined && { varDefault: decl.default }),
+        });
+        break;
+      }
+      registry.declareFoldedState(
+        name,
+        decl.key,
+        (raw) => placementPick(setting.decl, setting.saved, raw),
+        spellSetting,
+      );
       break;
+    }
   }
 }
 
@@ -855,50 +881,96 @@ export function compileDslConfig({
   // [LAW:parse-dont-validate] A placement's settings, resolved once against
   // its segment's declaration: the loader proved every value it sets is
   // declared and in its domain, so resolution is a fill of the defaults.
-  // [LAW:one-source-of-truth] A setting configure mode can change reads
-  // through its draft variable (SegmentNode.drafts), whose default IS the
-  // value filled here — so the render shows a session's unsaved pick the
-  // moment it lands, and the file's value while there is none. A stale pick
-  // folds to the file's value, and `stale` says so through the same fold.
+  // [LAW:one-source-of-truth] A setting configure mode can change reads its
+  // draft slot's fold (SegmentNode.drafts), kept in the view's store — the
+  // value its control, a picker's mark and a carousel read too — so the render
+  // shows a session's unsaved pick the moment it lands, the file's value while
+  // there is none, and the file's value in place of a stale pick, which the
+  // same fold carries for the draw to report.
+  // [LAW:no-silent-failure] The settings a placement's draw reads: its theme
+  // and its effect, which colour and move its cells, and each one its
+  // templates read (`.settings.<name>`) — its segment's, the actions they
+  // bind, and its own `when`. A stale pick nothing reads changes nothing
+  // drawn, so only these are the draw's to report. Each segment's reads are
+  // walked once per compile.
+  const segmentReads = new Map<SegmentDecl, ValueReads>();
+  const settingsRead = (
+    seg: SegmentDecl,
+    node: SegmentNode,
+    names: readonly string[],
+  ): ReadonlySet<string> => {
+    let reads = segmentReads.get(seg);
+    if (reads === undefined) {
+      reads = valueReads({
+        names: new Set(),
+        helpers: { ...config.helpers, ...seg.partials },
+        actions: config.actions,
+      });
+      segmentReads.set(seg, reads);
+    }
+    const paths = [...SEGMENT_TEMPLATE_FIELDS.map((f) => seg[f]), node.when]
+      .flatMap((text) => (text === undefined ? [] : reads.ofTemplate(text)))
+      .map(({ path }) => path);
+    const readsSetting = (name: string): boolean =>
+      paths.some(
+        (path) =>
+          path === SETTINGS_SCOPE ||
+          path === `${SETTINGS_SCOPE}.${name}` ||
+          path.startsWith(`${SETTINGS_SCOPE}.${name}.`),
+      );
+    return new Set([
+      THEME_SETTING,
+      EFFECT_SETTING,
+      ...names.filter(readsSetting),
+    ]);
+  };
   const resolvedSettings = (node: SegmentNode): ResolvedPlacement => {
     // [LAW:no-defensive-null-guards] cross-ref proved every placed segment
     // is declared.
-    const decls = settingsOf(config.segments[node.name]!);
-    const fold = (name: string, decl: SettingDecl) =>
-      placementSetting(node, name, decl, (draft) =>
-        String(
-          renderBinding(actionRuntime, `setting ${name}`).store.read(
+    const seg = config.segments[node.name]!;
+    const decls = settingsOf(seg);
+    const fold = (
+      name: string,
+      decl: SettingDecl,
+      draft: DraftSlot | undefined,
+    ): Folded<SettingValue> =>
+      draft === undefined
+        ? { value: savedSetting(node, name, decl), stale: null }
+        : renderBinding(actionRuntime, `setting ${name}`).registry.foldedState(
             draft.variable,
-          ),
-        ),
-      );
+          );
     const out = Object.create(null) as Record<string, SettingValue>;
     for (const [name, decl] of Object.entries(decls)) {
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: () => fold(name, decl).value,
+        get: () => fold(name, decl, node.drafts?.[name]).value,
       });
     }
+    const read = settingsRead(seg, node, Object.keys(decls));
     return {
       // settingsOf always declares `theme` and `effect`, over domains whose
       // values are names (an effect's, the placement effects) — the one cast
       // from the record to what it provably holds.
       settings: Object.freeze(out) as PlacementSettings,
-      // Only a drafted setting has a pick to pass over. A slot is named by the
-      // placement that owns it, which a name label holding another
-      // placement's `theme` slot is not; configure mode drafts only declared
-      // settings.
+      // Only a drafted setting the draw reads has a pick it draws past. A slot
+      // is named by the placement that owns it, which a name label holding
+      // another placement's `theme` slot is not, and by its key, which the
+      // two share.
       stale: () =>
-        Object.entries(node.drafts ?? {}).flatMap(([name, slot]) => {
-          const { value, stale } = fold(name, decls[name]!);
+        Object.entries(decls).flatMap(([name, decl]): PlacementMiss[] => {
+          const draft = node.drafts?.[name];
+          if (draft === undefined || !read.has(name)) return [];
+          const { value, stale } = fold(name, decl, draft);
           return stale === null
             ? []
             : [
-                stalePick(
-                  `${slot.id}.${name}`,
-                  stale,
-                  wornName(settingSpelling(value)),
-                ),
+                {
+                  key: draft.key,
+                  setting: `${draft.id}.${name}`,
+                  name,
+                  stored: stale,
+                  value,
+                },
               ];
         }),
     };
@@ -1291,13 +1363,7 @@ export type RenderWarning =
 // required — a caller hands over the whole resolution.
 export type DrawSelection = Pick<
   EffectiveGlobals,
-  | "preset"
-  | "variation"
-  | "shade"
-  | "transitions"
-  | "animationSpeed"
-  | "menuTimeout"
-  | "stale"
+  ValuedField | "preset" | "stale"
 > & {
   // The session's effect memory: when its effect came into force (the effect's
   // own t = 0) and the effects already made for its rows. The daemon hands
@@ -1351,6 +1417,10 @@ export function bindPayload(
   return drawn;
 }
 
+// What a stale pick's report adds: a retired theme's name, the one to write.
+const noteOf = (setting: string, stored: string): string =>
+  setting === THEME_SETTING ? retiredThemeNote(stored) : "";
+
 export function drawDsl(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -1370,9 +1440,10 @@ export function drawDsl(
   const warnings: RenderWarning[] = [];
   const warn = (warning: RenderWarning): void => void warnings.push(warning);
   // [LAW:no-silent-failure] Each stale pick the bar draws past, once by its
-  // setting: the session's globals the fold passed over, and each drawn
-  // placement's, whose slot two placements can hold.
-  const stale = new Map(selection.stale.map((pick) => [pick.setting, pick]));
+  // identity — a global's setting, a placement slot's key, which a name label
+  // shares with its placement — said here, where what the bar wears in its
+  // place is known.
+  const stale = new Map<string, StalePick>();
   const segments = new Map<string, readonly RichText[]>();
   // [LAW:one-source-of-truth] The session's animation clock, read once at the
   // render's instant: its templates' `frames` run through this timeline, and
@@ -1480,6 +1551,38 @@ export function drawDsl(
     decidedEffect.kind === "decided"
       ? decidedEffect
       : decideEffectName(slotted("effect"));
+  // What the bar wears for each setting it passed a pick over: a selection's
+  // decided name, a rule's answer included, else the value in its spelling.
+  const decided = { theme, style, effect };
+  const wornFor = (setting: FoldedName): string =>
+    setting === "theme" || setting === "style" || setting === "effect"
+      ? decided[setting].name
+      : spellSetting(selection[setting]);
+  for (const { setting, stored } of selection.stale) {
+    stale.set(
+      setting,
+      stalePick(setting, stored, wornFor(setting), noteOf(setting, stored)),
+    );
+  }
+  // A placement following the bar wears the bar's own theme and effect.
+  const follows = new Map([
+    [THEME_SETTING, theme.name],
+    [EFFECT_SETTING, effect.name],
+  ]);
+  const placementStale = (miss: PlacementMiss): void => {
+    const own = spellSetting(miss.value);
+    const wears =
+      miss.value === FOLLOW_BAR ? (follows.get(miss.name) ?? own) : own;
+    stale.set(
+      miss.key,
+      stalePick(
+        miss.setting,
+        miss.stored,
+        wears,
+        noteOf(miss.name, miss.stored),
+      ),
+    );
+  };
   // [LAW:one-source-of-truth] The render's BASE palette: a picker over a
   // colour-valued domain paints each option in the palette picking it would put
   // in force, and a style's answer is this base transposed by that style's key —
@@ -1576,7 +1679,7 @@ export function drawDsl(
           placement,
           message: `segment "${placement}": ${message}`,
         }),
-      stalePick: (pick) => void stale.set(pick.setting, pick),
+      stalePick: placementStale,
       placement: (node) => parts.placement(node),
       evaluateOnce: (node, scope, palette, body) =>
         evaluateOnce(
@@ -1620,8 +1723,9 @@ export function drawDsl(
   // return several lines (FlexStrip width-overflow wrap); each is a Row of the
   // kind its composed line is, the one place that kind is known.
   // [LAW:no-defensive-null-guards] The active preset's compiled tree. By the
-  // time a name reaches here it must be a member: effectivePresetName collapses
-  // unknown names to the floor, and every merged config declares the floor — so
+  // time a name reaches here it must be a member: effectivePresetName resolves
+  // an undeclared pick to the rung below it, a declared preset or the floor,
+  // and every merged config declares the floor — so
   // the throw is the loud failure for a broken invariant (a hand-built config
   // missing the bundled presets block), never a silent fall back to some other
   // arrangement than the one the bar's own label claims is active.
@@ -1629,8 +1733,9 @@ export function drawDsl(
   if (root === undefined) {
     throw new Error(
       `Preset "${preset}" has no compiled layout — the config compiler builds ` +
-        `one per declared preset and effectivePresetName collapses unknown ` +
-        `names to "${PRESET_FLOOR}"; a miss here is merge/policy drift ` +
+        `one per declared preset and effectivePresetName resolves an ` +
+        `undeclared pick to a declared preset or "${PRESET_FLOOR}"; a miss ` +
+        `here is merge/policy drift ` +
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }

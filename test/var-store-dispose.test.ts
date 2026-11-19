@@ -14,7 +14,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { instantOf } from "../src/utils/instant";
 import { configDisposeLine } from "../src/renderer/render-cache";
@@ -59,7 +58,6 @@ function renderedEntry(
   const config = parseAndValidate(
     "<test>",
     "{}",
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
@@ -142,7 +140,6 @@ describe("VariableStore.dispose releases every computed's subscriptions", () => 
       parseAndValidate(
         "<test>",
         "{}",
-        new Set(listResolvablePaletteNames()),
         DEFAULT_DSL_CONFIG,
       ),
       registry,

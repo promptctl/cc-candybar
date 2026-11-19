@@ -17,7 +17,6 @@ import { renderOptionsOf } from "../../src/renderer/render-payload";
 import type { Frame } from "../../src/render/frame";
 import { SessionState } from "../../src/renderer/session-state";
 import { registerDslConfig, type RenderWarning } from "../../src/dsl/render";
-import { listResolvablePaletteNames } from "../../src/themes/policy";
 import type { Instant } from "../../src/utils/instant";
 import { SourceRegistry } from "../../src/var-system/sources";
 import { VariableStore } from "../../src/var-system/store";
@@ -55,7 +54,6 @@ export function sessionBar(configSource: string, cols: number): SessionBar {
   const config = parseAndValidate(
     "<user>",
     configSource,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const session = new SessionState();

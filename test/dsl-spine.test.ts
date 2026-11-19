@@ -39,7 +39,6 @@ const HOOK_DATA = {
 // validation does not depend on the filesystem — only the bundled registry.
 // [LAW:one-source-of-truth] Names are the source of truth; the resolver is
 // derived from them at render time via getThemePalette.
-const ALLOWED_PALETTES = new Set(["textual-dark", "gruvbox"]);
 
 const FIXTURE_SOURCE = readFileSync(
   join(process.cwd(), "test", "fixtures", "steel-thread.json5"),
@@ -58,11 +57,9 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   function spineBar(
     cwd: string,
     source: string = FIXTURE_SOURCE,
-    palettes: ReadonlySet<string> = ALLOWED_PALETTES,
   ) {
     const rig = buildRig({
       source,
-      palettes,
       cwd,
       env: ENV,
       sessionId: SESSION_ID,
@@ -73,7 +70,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   test("parseDslConfig accepts the committed fixture", () => {
     // Validates the fixture is syntactically correct and cross-reference-clean.
     expect(() =>
-      parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES),
+      parseAndValidate("<test>", FIXTURE_SOURCE),
     ).not.toThrow();
   });
 
@@ -155,7 +152,6 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const withBasePaletteOnly = spineBar(
       HOOK_DATA.workspace.current_dir,
       noSegmentPaletteSource,
-      new Set(["textual-dark"]),
     ).drawHook();
 
     expect(withGruvboxPalette.rows).not.toEqual(withBasePaletteOnly.rows);

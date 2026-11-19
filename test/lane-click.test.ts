@@ -1,6 +1,5 @@
 import { SessionState } from "../src/renderer/session-state";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { LANES } from "../src/config/lanes";
@@ -17,7 +16,6 @@ const SID = sessionIdOf("lane-click");
 const CONFIG = parseAndValidate(
   "<test>",
   "{}",
-  new Set(listResolvablePaletteNames()),
   DEFAULT_DSL_CONFIG,
 );
 

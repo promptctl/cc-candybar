@@ -41,7 +41,6 @@ describe("a view's session", () => {
   test("a state variable reads the view's own session", () => {
     const rig = buildRig({
       source: CONFIG,
-      palettes: new Set(["textual-dark"]),
       sessionId: OWN,
     });
     rig.sessionState.set(OTHER, "pick", "other's");
@@ -52,7 +51,6 @@ describe("a view's session", () => {
   test("a write to the view's own session moves its next draw", () => {
     const rig = buildRig({
       source: CONFIG,
-      palettes: new Set(["textual-dark"]),
       sessionId: OWN,
     });
     expect(textOf(rig.draw().frame)).toContain("pick=(unset)");
@@ -63,7 +61,6 @@ describe("a view's session", () => {
   test("a click names the view's own session", () => {
     const rig = buildRig({
       source: CONFIG,
-      palettes: new Set(["textual-dark"]),
       sessionId: OWN,
     });
     const writes = linkUrls(rig.draw().frame)
@@ -76,7 +73,6 @@ describe("a view's session", () => {
   test("a template's {{ .session.id }} is the view's own session", () => {
     const rig = buildRig({
       source: CONFIG,
-      palettes: new Set(["textual-dark"]),
       sessionId: OWN,
     });
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);
@@ -92,7 +88,6 @@ describe("a view's session", () => {
       declared,
       DEFAULT_DSL_CONFIG,
       noProject("/home"),
-      new Set(["textual-dark"]),
     );
     expect(loaded.warnings).toEqual([
       expect.stringMatching(
@@ -101,7 +96,6 @@ describe("a view's session", () => {
     ]);
     const rig = buildRig({
       source: declared,
-      palettes: new Set(["textual-dark"]),
       sessionId: OWN,
     });
     expect(textOf(rig.draw().frame)).toContain(`sid=${OWN}`);

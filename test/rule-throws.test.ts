@@ -28,7 +28,6 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-const ALLOWED = new Set<string>([THEME_FLOOR, "nord"]);
 
 const src = (slot: string, rule: string): string => `{
   globals: { ${slot}: '${rule}' },
@@ -46,7 +45,7 @@ const src = (slot: string, rule: string): string => `{
 }`;
 
 function runtime(source: string) {
-  const config = parseAndValidate("<rule-throws>", source, ALLOWED);
+  const config = parseAndValidate("<rule-throws>", source);
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });

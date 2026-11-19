@@ -98,11 +98,12 @@ export function presetNames(
 }
 
 // [LAW:one-type-per-behavior] The preset domain's instance of the shared
-// per-config-member resolver — the same call shape effectiveStyleName makes, one
-// dimension over. A pick naming no declared preset falls one rung onward and is
-// reported as passed over, and the caller publishes this RESOLVED name as
-// `preset.effective` so the bar's label and the bar's layout can never
-// disagree.
+// per-config-member resolver (`effectiveMemberName`), which a style's name
+// resolves through too. A pick naming no declared preset falls one rung onward
+// — the file's preset, else the floor — and the fold carries the pick it passed
+// over, and the caller publishes this RESOLVED name as `preset.effective` so
+// the bar's label and the bar's layout can never disagree
+// [LAW:no-silent-failure].
 export function effectivePresetName(
   sessionPreset: string | null,
   globalsPreset: string | undefined,
@@ -126,8 +127,8 @@ export function effectivePresetName(
 // [LAW:single-enforcer] The one place an effective preset NAME becomes the
 // fragment a render reads — a declared preset, or the floor's identity fragment
 // layered under them so the floor never depends on being declared. By the time
-// a name reaches here it must be one of those: effectivePresetName collapses
-// unknown names to the floor.
+// a name reaches here it must be one of those: effectivePresetName resolves an
+// undeclared pick to the rung below it, which is declared or the floor.
 // [LAW:no-defensive-null-guards] the throw is the loud failure for that broken
 // invariant (a caller that skipped the resolution and passed a raw session
 // string), never a silent empty-fragment fallback that would render one
@@ -141,7 +142,7 @@ export function presetByName(
   if (preset === undefined) {
     throw new Error(
       `Preset "${name}" is not declared in this config — effectivePresetName ` +
-        `collapses unknown names to "${PRESET_FLOOR}", which always resolves; ` +
+        `resolves an undeclared pick to a declared preset or "${PRESET_FLOOR}"; ` +
         `a miss here means a raw name reached this function without going ` +
         `through that resolution`,
     );

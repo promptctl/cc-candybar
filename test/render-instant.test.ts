@@ -115,7 +115,6 @@ describe("a stored instant is read against the frame's instant", () => {
       },
       root: { h: ["ages"] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
   const AT = 1_700_000_000;

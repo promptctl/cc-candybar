@@ -1112,8 +1112,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // session via the `style` SessionState key (an action `{ set: "style", from:
   // "styles" }` + a `{{ menu }}`), exactly the theme/endcaps selection seam.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib — including the "none" identity floor effectiveStyleName collapses
-  // to — is present in every merged config by construction.
+  // stdlib — including the "none" identity floor a style resolves to last
+  // — is present in every merged config by construction.
   styles: {
     // [LAW:dataflow-not-control-flow] "none" is just the identity style — the
     // resolution floor as a value, not a special case (rich-js's isIdentityKey

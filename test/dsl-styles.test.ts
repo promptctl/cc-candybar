@@ -32,7 +32,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-looks");
 const THEME = "textual-dark";
-const ALLOWED = new Set([THEME]);
 
 // The truecolor background of the row containing a marker. Row-scoped: each
 // root row holds exactly one segment here, so the row's first background IS that
@@ -52,7 +51,7 @@ const bgOf = ({ rows }: Frame, marker: string): string => {
 describe("styles block — loader validation", () => {
   const parseIssues = (src: string): string => {
     try {
-      parseDslConfig("<looks>", src, ALLOWED);
+      parseDslConfig("<looks>", src);
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       return (e as ConfigError).message;
@@ -98,11 +97,11 @@ describe("styles block — loader validation", () => {
 
   test("globals.style must name a declared style on the MERGED config", () => {
     const merged = mergeWithDefault(
-      parseDslConfig("<looks>", `{ globals: { style: "vapor" } }`, ALLOWED),
+      parseDslConfig("<looks>", `{ globals: { style: "vapor" } }`),
       DEFAULT_DSL_CONFIG,
     );
     expect(() =>
-      validateConfig(unauthored(merged), "<looks>", ALLOWED),
+      validateConfig(unauthored(merged), "<looks>"),
     ).toThrow(
       /globals\.style "vapor" does not match any declared style \(have: none, vivid, muted, dim, bright, inverted\)/,
     );
@@ -110,11 +109,11 @@ describe("styles block — loader validation", () => {
 
   test("globals.style naming a BUNDLED style passes (cross-ref runs post-merge)", () => {
     const merged = mergeWithDefault(
-      parseDslConfig("<looks>", `{ globals: { style: "vivid" } }`, ALLOWED),
+      parseDslConfig("<looks>", `{ globals: { style: "vivid" } }`),
       DEFAULT_DSL_CONFIG,
     );
     expect(() =>
-      validateConfig(unauthored(merged), "<looks>", ALLOWED),
+      validateConfig(unauthored(merged), "<looks>"),
     ).not.toThrow();
   });
 });
@@ -128,10 +127,10 @@ describe("the renamed keys refuse their old spellings", () => {
   const issues = (src: string): string => {
     try {
       const merged = mergeWithDefault(
-        parseDslConfig("<renames>", src, ALLOWED),
+        parseDslConfig("<renames>", src),
         DEFAULT_DSL_CONFIG,
       );
-      validateConfig(unauthored(merged), "<renames>", ALLOWED);
+      validateConfig(unauthored(merged), "<renames>");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       return (e as ConfigError).message;
@@ -180,10 +179,10 @@ describe("the renamed keys refuse their old spellings", () => {
 
   test("a style may share a name with an endcaps shape `style` never held", () => {
     const merged = mergeWithDefault(
-      parseDslConfig("<renames>", `{ styles: { flame: {} } }`, ALLOWED),
+      parseDslConfig("<renames>", `{ styles: { flame: {} } }`),
       DEFAULT_DSL_CONFIG,
     );
-    validateConfig(unauthored(merged), "<renames>", ALLOWED);
+    validateConfig(unauthored(merged), "<renames>");
     expect(merged.styles).toHaveProperty("flame");
   });
 
@@ -218,7 +217,6 @@ describe("styles block — normalization and merge", () => {
     const raw = parseDslConfig(
       "<looks>",
       `{ styles: { vapor: { hueShift: 30 } } }`,
-      ALLOWED,
     );
     expect(raw.styles).toEqual({
       vapor: {
@@ -234,7 +232,6 @@ describe("styles block — normalization and merge", () => {
     const raw = parseDslConfig(
       "<looks>",
       `{ styles: { vivid: { chromaScale: 2 }, mine: { hueShift: 10 } } }`,
-      ALLOWED,
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     // The identity floor is always present — effectiveStyleName's collapse
@@ -278,7 +275,7 @@ describe('from: "styles" — rendered options and the derived gate share the con
   }`;
 
   test("deriveActionValidators gates key `style` to exactly the declared names", () => {
-    const config = parseAndValidate("<looks>", SRC, ALLOWED);
+    const config = parseAndValidate("<looks>", SRC);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "style",
@@ -294,7 +291,6 @@ describe('from: "styles" — rendered options and the derived gate share the con
     const rig = buildRig({
       source: SRC,
       label: "<looks>",
-      palettes: ALLOWED,
       sessionId: SID,
     });
     try {
@@ -337,7 +333,6 @@ describe("style click — live whole-bar recolor over the active theme", () => {
     const rig = buildRig({
       source: SRC,
       label: "<looks>",
-      palettes: ALLOWED,
       sessionId: SID,
     });
     const render = (): Frame => rig.draw({ payload: { session_id: SID } }).frame;
@@ -435,7 +430,6 @@ describe("globals.style as an expression — a style chosen by data", () => {
     const rig = buildRig({
       source: src,
       label: "<looks-expr>",
-      palettes: ALLOWED,
       sessionId: SID,
     });
     const { config, sessionState } = rig;
@@ -621,23 +615,21 @@ describe("globals.style as an expression — a style chosen by data", () => {
       parseDslConfig(
         "<looks-expr>",
         `{ globals: { style: '{{ .x }}' } }`,
-        ALLOWED,
       ),
       DEFAULT_DSL_CONFIG,
     );
     expect(() =>
-      validateConfig(unauthored(withExpr), "<looks-expr>", ALLOWED),
+      validateConfig(unauthored(withExpr), "<looks-expr>"),
     ).not.toThrow();
     const withName = mergeWithDefault(
       parseDslConfig(
         "<looks-expr>",
         `{ globals: { style: "vapor" } }`,
-        ALLOWED,
       ),
       DEFAULT_DSL_CONFIG,
     );
     expect(() =>
-      validateConfig(unauthored(withName), "<looks-expr>", ALLOWED),
+      validateConfig(unauthored(withName), "<looks-expr>"),
     ).toThrow(/globals\.style "vapor" does not match any declared style/);
   });
 
@@ -649,7 +641,6 @@ describe("globals.style as an expression — a style chosen by data", () => {
           `style: '{{ if .ctx.pct }}hot',`,
         ),
         label: "<looks-expr>",
-        palettes: ALLOWED,
       }),
     ).toThrow(/globals\.style/);
   });

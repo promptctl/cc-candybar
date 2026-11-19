@@ -59,7 +59,6 @@ describe("unresolvedReads", () => {
       const { config, placed, dropped } = parseAndPlace(
         path,
         source,
-        undefined,
         dflt,
       );
       expect(dropped).toEqual([]);

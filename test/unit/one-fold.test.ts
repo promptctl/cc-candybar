@@ -9,13 +9,11 @@ import { unauthored } from "../../src/config/dsl-loader";
 import { declaredVariables } from "../../src/config/loader/refs";
 import { ConfigError } from "../../src/config/loader/diagnostics";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { listResolvablePaletteNames } from "../../src/themes/policy";
 import {
   parseAndValidate,
   validateConfig,
 } from "../helpers/parse-and-validate";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // Every pair of declared names one of which starts the other.
 function nested(config: DslConfig): string[] {
@@ -31,7 +29,7 @@ function nested(config: DslConfig): string[] {
 }
 
 const overDefault = (src: string): DslConfig =>
-  parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+  parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG);
 
 const MENU = `{{ menu "applyTheme" "theme ▸" "theme ▾" }}`;
 

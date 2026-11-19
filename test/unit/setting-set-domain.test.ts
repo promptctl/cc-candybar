@@ -15,7 +15,6 @@ const load = (action: string) =>
   parseAndValidate(
     "<set-domain>",
     `{ actions: { pick: ${action} } }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 
@@ -167,7 +166,6 @@ describe("a set on a setting key is checked against the setting's domain", () =>
             b: { set: 'preset', to: '${Object.keys(DEFAULT_DSL_CONFIG.presets)[0]}' },
           },
         }`,
-        undefined,
         DEFAULT_DSL_CONFIG,
       ),
     ).not.toThrow();

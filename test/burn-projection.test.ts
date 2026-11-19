@@ -20,7 +20,6 @@ import { ABSENT, ok } from "../src/utils/outcome";
 import { validateConfig } from "./helpers/parse-and-validate";
 import { mergeWithDefault, parseDslConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -162,7 +161,6 @@ describe("payloadOf — burn projection lane", () => {
 
 // ─── burnrate segment render ────────────────────────────────────────────────────
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function renderBurnrate(
   payload: Record<string, unknown>,
@@ -171,12 +169,10 @@ function renderBurnrate(
   const raw = parseDslConfig(
     "<test>",
     `{ root: { h: ["burnrate"] } }`,
-    ALLOWED,
   );
   const cfg = validateConfig(
     { config: mergeWithDefault(raw, DEFAULT_DSL_CONFIG), raw, source: "{}" },
     "<test>",
-    ALLOWED,
   );
   const store = new VariableStore(systemTimekeeper);
   // The settings menu references `edit.toggle`, so `edit.mode` — a `state` var — is now

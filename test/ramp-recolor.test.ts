@@ -48,7 +48,6 @@ const SRC = `{
   root: { v: ['viaRamp', 'viaName'] },
 }`;
 
-const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
 
 // Each bar's source registry, released after the test that built it.
 const rigs: Rig[] = [];
@@ -59,7 +58,7 @@ afterEach(() => {
 function rampBar() {
   // The click gate is the config this session renders, so the theme and style
   // clicks travel the road a real click travels.
-  const rig = buildRig({ source: SRC, label: "<ramp-recolor>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({ source: SRC, label: "<ramp-recolor>", sessionId: SID });
   rigs.push(rig);
   const render = (payload: { pct: number; stop: string }): Frame =>
     rig.draw({ payload: { session_id: SID, ...payload } }).frame;

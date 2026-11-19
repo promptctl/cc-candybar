@@ -324,8 +324,10 @@ const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
 const TIME_VAR_REMOVED = noCachePolicy(
   "a time variable reads the instant its render is drawn at",
 );
-// `within` is synthesis-only: no file may author it.
-const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind" | "within">> = {
+// `within` and `setting` are synthesis-only: no file may author them.
+const STATE_FIELDS: FieldSpecMap<
+  Omit<StateVarDecl, "kind" | "within" | "setting">
+> = {
   key: requireStringSpec(),
   default: optionalStringSpec(),
 };

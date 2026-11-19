@@ -25,14 +25,12 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { BuildLineOptions } from "../src/render/strip";
 import { osc8Sequences } from "@promptctl/rich-js";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // OSC-8 grammar: open = ESC ] 8 ; <params> ; <URI> ST, close = ESC ] 8 ; ; ST.
 // The close has an EMPTY URI; an open has a non-empty one. rich-js's
@@ -66,7 +64,7 @@ function osc8Walk(rendered: string): {
 }
 
 function render(src: string, opts: BuildLineOptions): Frame {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);

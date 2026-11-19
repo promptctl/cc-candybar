@@ -53,7 +53,7 @@ const at = (seconds: number): Instant => (START + seconds) as Instant;
 
 // The bundled bar, so every row, seam and link a real bar draws is under the
 // effect — the settings door's links included.
-const BAR = parseAndValidate("<test>", "{}", undefined, DEFAULT_DSL_CONFIG);
+const BAR = parseAndValidate("<test>", "{}", DEFAULT_DSL_CONFIG);
 
 // The bundled bar with a rule choosing the effect, and a row saying which
 // effect the render settled on.
@@ -66,7 +66,6 @@ const RULED = parseAndValidate(
       effect: '{{ if .activity.tool.running }}shimmer{{ else }}none{{ end }}',
     },
   }`,
-  undefined,
   DEFAULT_DSL_CONFIG,
 );
 
@@ -280,7 +279,6 @@ describe("globals.effect: the whole bar wears a looping effect", () => {
             "bottom",
           ] },
         }`,
-        undefined,
         DEFAULT_DSL_CONFIG,
       );
     const closed = renderer(grouped(false));
@@ -321,7 +319,6 @@ describe("the wheel paces each segment by where it sits", () => {
       },
       root: { rows: { wheeled: { h: ["a", "gap1", "b", "gap2", "c"] } } },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 

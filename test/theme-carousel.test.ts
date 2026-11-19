@@ -72,7 +72,6 @@ import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("ef6");
 
 function opts(
@@ -97,7 +96,6 @@ function rig(
   const config: ValidatedConfig = parseAndValidate(
     "<user>",
     source,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
@@ -346,7 +344,6 @@ describe("the carousel rotates by applying", () => {
         "<user>",
         `{ segments: { ring: { template: '{{ carousel "noSuchApply" "noSuchApply" "l" }}' } },
            root: { rows: { identity: { h: ['ring'] }, status: { h: [] } } } }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(
@@ -360,7 +357,6 @@ describe("the carousel rotates by applying", () => {
         "<user>",
         `{ segments: { demo: { template: '{{ themePreview "noSuchApply" }}' } },
            root: { rows: { identity: { h: ['demo'] }, status: { h: [] } } } }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(
@@ -804,7 +800,6 @@ describe("the preset control's list carries the layout beneath it", () => {
     const config = parseAndValidate(
       "<user>",
       "{}",
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     const registry = new SourceRegistry(

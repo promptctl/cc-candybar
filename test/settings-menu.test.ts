@@ -26,7 +26,6 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { POWERLINE } from "./helpers/powerline";
 import type { RichText } from "@promptctl/rich-js";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
@@ -62,7 +61,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The lines an open menu stacks over the bar: its two door lines, then the
 // body of the tab a fresh session opens it on (⚡ session: the quick actions,
@@ -246,7 +244,6 @@ describe("placement is a position, not a mode", () => {
     const config = parseAndValidate(
       "<user>",
       userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // Including `compact`, whose whole point is being narrow, and `verbose`.
@@ -268,7 +265,6 @@ describe("placement is a position, not a mode", () => {
           alt: { root: { v: ['${SETTINGS_ANCHOR}', { h: ['model'] }] } },
         },
       }`,
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // The alt preset put the menu FIRST; the splice left it there rather than
@@ -291,7 +287,6 @@ describe("the anchor may be placed at most once", () => {
         userConfig(
           `{ v: [{ h: ['directory', '${SETTINGS_ANCHOR}'] }, '${SETTINGS_ANCHOR}'] }`,
         ),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(ConfigError);
@@ -302,7 +297,6 @@ describe("the anchor may be placed at most once", () => {
       parseAndValidate(
         "<user>",
         userConfig(`{ h: ['${SETTINGS_ANCHOR}', '${SETTINGS_ANCHOR}'] }`),
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       );
       throw new Error("expected a ConfigError");
@@ -322,7 +316,6 @@ describe("the anchor may be placed at most once", () => {
           root: { h: ['directory', '${SETTINGS_ANCHOR}'] },
           presets: { wide: { root: { rows: { extra: { h: ['${SETTINGS_ANCHOR}'] } } } } },
         }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       );
       throw new Error("expected a ConfigError");
@@ -342,7 +335,6 @@ describe("the anchor may be placed at most once", () => {
           segments: { '${SETTINGS_NS}mine': { template: 'x' } },
           root: { h: ['directory'] },
         }`,
-        ALLOWED,
         DEFAULT_DSL_CONFIG,
       ),
     ).toThrow(/reserved/);
@@ -376,7 +368,7 @@ describe("the menu's second line is five tabs, one open at a time", () => {
 
 
   test("every setting's control is in exactly one place: the door's first line or one tab", () => {
-    const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), ALLOWED, DEFAULT_DSL_CONFIG);
+    const config = parseAndValidate("<user>", userConfig(TWO_SEGMENT_ROW), DEFAULT_DSL_CONFIG);
     const door = [...walkNodes(resolvedRoot(config))].find(
       (n) => n.kind === "segment" && n.name === SETTINGS_ANCHOR,
     );
@@ -440,7 +432,6 @@ describe("the default placement never inherits an author's gate", () => {
     const config = parseAndValidate(
       "<user>",
       withFlag(root),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
@@ -452,7 +443,6 @@ describe("the default placement never inherits an author's gate", () => {
       withFlag(
         `{ v: [{ h: ['directory','model'], when: '${GATE}' }, { h: ['context'] }] }`,
       ),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     // Lifting the menu out of the gate must not lift the row out of it too.
@@ -481,7 +471,6 @@ describe("the default placement never inherits an author's gate", () => {
     const config = parseAndValidate(
       "<user>",
       withFlag(root),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
@@ -519,7 +508,7 @@ describe("the default placement never inherits an author's gate", () => {
     ],
   ])("an author placement %s is a load error", (_label, root) => {
     expect(() =>
-      parseAndValidate("<user>", withFlag(root), ALLOWED, DEFAULT_DSL_CONFIG),
+      parseAndValidate("<user>", withFlag(root), DEFAULT_DSL_CONFIG),
     ).toThrow(/may not be gated/);
   });
 
@@ -602,7 +591,6 @@ describe("the menu in a config that declares no variables", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello', '${SETTINGS_ANCHOR}'] },
       }`,
-      ALLOWED,
     );
     const placed = segmentNames(resolvedRoot(config));
     for (const name of placed) {
@@ -613,7 +601,7 @@ describe("the menu in a config that declares no variables", () => {
   });
 
   test("a config declaring nothing is given the payload inputs the chrome reads", () => {
-    const bare = parseAndValidate("<user>", BARE, ALLOWED);
+    const bare = parseAndValidate("<user>", BARE);
     const ensured = Object.keys(bare.variables).filter(
       (name) => !isReservedName(name),
     );
@@ -638,7 +626,6 @@ describe("the menu in a config that declares no variables", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,
-        ALLOWED,
       ).variables.project_dir,
     ).toEqual(PAYLOAD_INPUTS.project_dir);
   });
@@ -671,7 +658,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
   for (const key of ["candybar.pickers", "candybar-pickers", "candybar_pickers"]) {
     test(`the key "${key}" is a load error naming the reserved namespace`, () => {
       try {
-        parseAndValidate("<user>", withKey(key), ALLOWED);
+        parseAndValidate("<user>", withKey(key));
         throw new Error(`expected a ConfigError for key "${key}"`);
       } catch (err) {
         expect(err).toBeInstanceOf(ConfigError);
@@ -690,7 +677,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
   // must not have to remember to extend a second list [LAW:carrying-cost].
   for (const key of ["groups.main", "edit.things", "menus.mine"]) {
     test(`the key "${key}" is refused too — the rule is the one namespace list`, () => {
-      expect(() => parseAndValidate("<user>", withKey(key), ALLOWED)).toThrow(
+      expect(() => parseAndValidate("<user>", withKey(key))).toThrow(
         ConfigError,
       );
     });
@@ -701,7 +688,7 @@ describe("a user menu cannot join a synthesized accordion", () => {
   // accordion key and keeps working.
   for (const key of ["settings", "pickers", "mysettings"]) {
     test(`the ordinary key "${key}" still loads and owns its own state key`, () => {
-      const config = parseAndValidate("<user>", withKey(key), ALLOWED);
+      const config = parseAndValidate("<user>", withKey(key));
       const stateKey = sharedMenuStateKey(key);
       expect(Object.keys(config.variables)).toContain(stateKey);
       // …and it is not the settings pickers' key, which is what "does not share
@@ -744,7 +731,6 @@ describe("a user menu cannot join a synthesized accordion", () => {
         segments: { hello: { template: 'hi' } },
         root: { h: ['hello'] },
       }`,
-      ALLOWED,
     );
     const pickerStateKey = sharedMenuStateKey(`${SETTINGS_NS}pickers`);
     expect(Object.keys(config.variables)).toContain(pickerStateKey);
@@ -762,7 +748,6 @@ describe("the menu is chrome-exempt", () => {
     const config = parseAndValidate(
       "<user>",
       userConfig(TWO_SEGMENT_ROW),
-      ALLOWED,
       DEFAULT_DSL_CONFIG,
     );
     const removals = Object.values(config.actions).flatMap((a) =>
@@ -832,7 +817,7 @@ describe("globals.menuGlyph", () => {
     ],
   ])("%s is a load error", (src, message) => {
     expect(() =>
-      parseAndValidate("<user>", src, ALLOWED, DEFAULT_DSL_CONFIG),
+      parseAndValidate("<user>", src, DEFAULT_DSL_CONFIG),
     ).toThrow(message);
   });
 });
@@ -846,7 +831,6 @@ describe("every settings control has a setting projection", () => {
   const config = parseAndValidate(
     "<user>",
     userConfig(TWO_SEGMENT_ROW),
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   // A picker also mints the machinery of its list of options under its apply

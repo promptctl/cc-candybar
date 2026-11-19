@@ -11,7 +11,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { DISCLOSURE_GLYPH_CLOSE } from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
@@ -49,7 +48,6 @@ function renderOf(
       segments: { s: { template: ${JSON.stringify(template)} } },
       root: { rows: { identity: { h: [${host}] }, status: { h: [] } } },
     }`,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);
@@ -132,7 +130,6 @@ describe("{{ picker }} over a catalogue", () => {
         },
         root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
       }`,
-      new Set(listResolvablePaletteNames()),
       DEFAULT_DSL_CONFIG,
     );
     const store = new VariableStore(systemTimekeeper);

@@ -69,7 +69,7 @@ export function mergeWithDefault(
     // [LAW:one-source-of-truth] presets merge by name then by field, the
     // segments overlay — a user retunes one arrangement's root without
     // restating its globals; the bundled stdlib (incl. the "default"
-    // empty-fragment floor effectivePresetName collapses to) survives every
+    // empty-fragment floor effectivePresetName resolves to last) survives every
     // merge by construction, exactly as styles' "none" does.
     presets: overlayByName(
       dflt.presets,

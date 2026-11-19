@@ -20,7 +20,6 @@ import { presetNames } from "../src/config/presets";
 import { renderOptionsOf, todayOf } from "../src/renderer/render-payload";
 import { drawDsl } from "../src/dsl/render";
 import { ansiOf } from "../src/render/frame";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { AT, openSettled, sessionRig } from "./helpers/session-rig";
 
@@ -87,7 +86,6 @@ describe("a sample session payload", () => {
   const config = parseAndValidate(
     "<user>",
     "{}",
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
 

@@ -75,7 +75,6 @@ import type {
 } from "../navigation-history";
 import {
   placementId,
-  settingSpelling,
   walkNodes,
   type DslConfig,
   type Globals,
@@ -95,8 +94,10 @@ import {
   type PlacementDraft,
   resetLayers,
   settingDrafts,
+  stalePickKeys,
   themeDefaultSave,
 } from "../setting-drafts";
+import { spellSetting } from "../../themes/policy";
 import {
   SETTING_PROJECTIONS,
   SETTINGS,
@@ -436,15 +437,22 @@ const stepState: VerbHandler = (args, ctx) => {
         `(have keys: ${gate.listKeys().join(", ")})`,
     );
   }
-  // [LAW:one-source-of-truth] Stepped from what the bar shows for the key: a
-  // setting's stored pick read through its setting's own fold, so a stale
-  // pick steps from the value the bar wears in its place.
-  const current = stepFrom(
-    "step-state",
+  // [LAW:one-source-of-truth] Stepped from what the bar shows for the key: its
+  // stored value read through its own fold, so a stale pick steps from the
+  // value the bar wears in its place, and is reported, never stepped from.
+  const shown = stateKeyShows(
+    config,
+    (k) => ctx.sessionState.get(sid, k),
     key,
     params,
-    stateKeyShows(config, (k) => ctx.sessionState.get(sid, k), key),
   );
+  if (shown.stale !== null) {
+    ctx.log(
+      "warn",
+      `step-state: "${key}" stores ${JSON.stringify(shown.stale)}, outside its range; stepping from ${JSON.stringify(shown.value)} (session=${sid})`,
+    );
+  }
+  const current = stepFrom("step-state", key, params, shown.value);
   const next = stepWithin(current, by, params.min, params.max);
   const result = gate.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
@@ -809,7 +817,7 @@ const save: VerbHandler = (args, ctx) => {
 // [LAW:single-enforcer] A placement's value re-crosses the gate its control's
 // click passed, as a display setting's does.
 const placementLog = (p: PlacementDraft): string =>
-  `${p.preset}/${p.id}.settings.${p.setting}=${settingSpelling(p.value)}`;
+  `${p.preset}/${p.id}.settings.${p.setting}=${spellSetting(p.value)}`;
 
 function gatePlacements(
   verb: string,
@@ -817,7 +825,7 @@ function gatePlacements(
   placements: readonly PlacementDraft[],
 ): void {
   for (const p of placements) {
-    const result = gate.validate(p.key, settingSpelling(p.value));
+    const result = gate.validate(p.key, spellSetting(p.value));
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
@@ -856,10 +864,12 @@ const savePreset: VerbHandler = (args, ctx) => {
     picks,
     snapshot.placements,
   );
+  // A stale pick is no part of what the preset holds, so it stays stored.
+  const stale = stalePickKeys(config, (key) => ctx.sessionState.get(sid, key));
   for (const key of [
     ...SETTING_PROJECTIONS.map((p) => p.sessionKey),
     ...snapshot.placements.map((p) => p.key),
-  ]) {
+  ].filter((key) => !stale.has(key))) {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
@@ -902,12 +912,14 @@ const saveThemeDefault: VerbHandler = (args, ctx) => {
     save.look,
   );
   const pick = (key: string) => ctx.sessionState.get(sid, key);
-  const drafted = new Set(
-    settingDrafts(written, pick).map((d) => d.sessionKey),
-  );
+  // A stale pick is no draft and no part of the look written, so it stays.
+  const kept = new Set([
+    ...settingDrafts(written, pick).map((d) => d.sessionKey),
+    ...stalePickKeys(written, pick),
+  ]);
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey,
-  ).filter((key) => !drafted.has(key));
+  ).filter((key) => !kept.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",

@@ -23,7 +23,6 @@ const authored = (source: string) => {
   const raw = parseDslConfig(
     "<test>",
     source,
-    undefined,
     inheritableSegmentNames(EMPTY_DEFAULT),
   );
   return { config: mergeWithDefault(raw, EMPTY_DEFAULT), raw, source };

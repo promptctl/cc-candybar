@@ -7,7 +7,6 @@ import type { Frame } from "../src/render/frame";
 import { linkUrls } from "./helpers/frame";
 import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { buildRig } from "./helpers/rig";
@@ -19,7 +18,6 @@ import { resolvedStyle } from "../src/render/rich-theme.js";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 function placementBar(src: string) {
   const rig = buildRig({ source: src, sessionId: S1 });
@@ -182,7 +180,6 @@ describe("a placement is named by its id", () => {
           b: { root: { h: [{ seg: 'menuB', id: 'picker' }] } },
         },
       }`,
-      ALLOWED,
     );
     expect(config.variables["menus.picker.applyTheme"]).toBeDefined();
   });
@@ -195,13 +192,12 @@ describe("a placement is named by its id", () => {
         segments: { picker: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}' } },
         root: { h: ['picker', { seg: 'picker', id: 'picker-2' }] },
       }`,
-      ALLOWED,
     );
     expect(config.variables["menus.k"]).toBeDefined();
   });
 
   test("edit mode labels each placement with its id", () => {
-    const config = parseAndValidate("<test>", CLOCK_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", CLOCK_SRC);
     expect(config.segments["edit.label:utcClock:clock"]?.template).toBe('{{ "utcClock" }}');
     expect(config.segments["edit.label:clock:clock"]?.template).toBe('{{ "clock" }}');
     expect(arrangedSegment("edit.label:utcClock:clock")).toBe("clock");
@@ -217,7 +213,7 @@ describe("load errors", () => {
   const BOOL = `on: { label: 'On', domain: 'bool', default: false }`;
   const refusal = (src: string): string => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
       return (e as ConfigError).message;

@@ -58,6 +58,8 @@ import {
 import {
   EXPRESSION_SLOTS,
   isExpression,
+  describeInstalledThemes,
+  isInstalledTheme,
   isStyleEraEndcaps,
   retiredThemeNote,
 } from "../../themes/policy.js";
@@ -251,7 +253,7 @@ export function validateCrossReferences(
   // over — the same post-merge membership check against the same kind of
   // per-config block, for the same reason (a user's default may name a
   // bundled preset). A typo'd DEFAULT is a load error, while a stale
-  // SESSION pick draws the floor under a warning: the config file is authored
+  // SESSION pick draws the rung below it under a warning: the config file is authored
   // and re-readable, so naming a preset that does not exist is a mistake we can
   // point at; a session pick is a click made against a config that has since
   // changed, so it is reported where it draws and kept [LAW:no-silent-failure].
@@ -1452,13 +1454,10 @@ export function validateDeclarations(
       });
       continue;
     }
-    if (
-      target.scope === "theme-default" &&
-      !ctx.allowedPalettes.has(target.theme)
-    ) {
+    if (target.scope === "theme-default" && !isInstalledTheme(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${describeInstalledThemes()})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;

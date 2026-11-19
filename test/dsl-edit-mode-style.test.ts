@@ -30,7 +30,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const SID = sessionIdOf("s-edit-look");
 const BASE_THEME = "textual-dark";
-const ALLOWED = new Set([BASE_THEME]);
 
 // Two cells in one row, so a joiner runs BETWEEN them — that inter-cell seam is
 // exactly what the staged style reshapes. `session.id` is declared because any
@@ -60,7 +59,7 @@ function editLookBar(source: string) {
   // derives — the sole authority on what a click may write. The rig records the
   // render and hands the click the config it rendered with, so the set-state
   // calls below travel the same road a real click travels.
-  const rig = buildRig({ source, label: "<edit-look>", palettes: ALLOWED, sessionId: SID });
+  const rig = buildRig({ source, label: "<edit-look>", sessionId: SID });
   const { config, sessionState } = rig;
   rigOf.set(sessionState, rig);
 
@@ -218,14 +217,12 @@ describe("editGlobals — the loader's contract", () => {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { preset: 'compact' },`),
-        ALLOWED,
       ),
     ).toThrow(ConfigError);
     try {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { preset: 'compact' },`),
-        ALLOWED,
       );
     } catch (err) {
       expect(String(err)).toContain(
@@ -239,7 +236,6 @@ describe("editGlobals — the loader's contract", () => {
       parseAndValidate(
         "<edit-look>",
         src(`editGlobals: { stripStyle: 'plain' },`),
-        ALLOWED,
       ),
     ).toThrow(/editGlobals key/);
   });
@@ -250,7 +246,6 @@ describe("editGlobals — the loader's contract", () => {
     const config: ValidatedConfig = parseAndValidate(
       "<edit-look>",
       `{ editGlobals: { default_separator: ' ~ ' } }`,
-      undefined,
       DEFAULT_DSL_CONFIG,
     );
     expect(config.editGlobals.default_separator).toBe(" ~ ");

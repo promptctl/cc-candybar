@@ -78,11 +78,14 @@ function makeProxy(
 // every render — so nothing here allocates per read.
 export function placementScope(scope: object, settings: object): object {
   return new Proxy(scope, {
-    has: (target, key) => key === "settings" || Reflect.has(target, key),
+    has: (target, key) => key === SETTINGS_SCOPE || Reflect.has(target, key),
     get: (target, key) =>
-      key === "settings" ? settings : Reflect.get(target, key),
+      key === SETTINGS_SCOPE ? settings : Reflect.get(target, key),
   });
 }
+
+// The name a placement's templates read its own settings under.
+export const SETTINGS_SCOPE = "settings";
 
 // [LAW:one-source-of-truth] Absent is a missing field, for every document:
 // one with nothing to read (no file yet, blank text, no default) is no key at

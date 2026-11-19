@@ -53,7 +53,6 @@ function rig(template: string) {
       segments: { s: { template: ${JSON.stringify(template)} } },
       root: { rows: { identity: { h: ['s'] }, status: { h: [] } } },
     }`,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const store = new VariableStore(systemTimekeeper);

@@ -83,8 +83,7 @@ const TEST_CONFIG_SOURCE = `{
 function buildPopulatedState(): DaemonDslState {
   const config = parseAndValidate(
     "<debug-test>",
-    TEST_CONFIG_SOURCE,
-    new Set<string>(), // no palette validation needed — segments don't set one
+    TEST_CONFIG_SOURCE, // no palette validation needed — segments don't set one
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store,

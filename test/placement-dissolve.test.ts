@@ -59,7 +59,6 @@ const config = (gated: "segment" | "container"): ValidatedConfig =>
         { kind: "group", name: "more", label: "more", children: ["extra"] },
       ] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 
@@ -259,7 +258,6 @@ describe("a trigger replays its own row only while nothing hangs open under it",
         { h: ["left", { kind: "group", name: "more", label: "MORE", when: '{{ .shown }}', children: ["extra"] }] },
       ] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
   // Its toggle hidden by data, with the group open or closed since before the
@@ -364,7 +362,6 @@ describe("another width ends every dissolve in flight; another palette does not"
       },
       root: { v: [{ h: ["left", "middle", "right"] }] },
     }`,
-    undefined,
     DEFAULT_DSL_CONFIG,
   );
 

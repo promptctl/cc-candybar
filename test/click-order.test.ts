@@ -34,7 +34,6 @@ import {
 } from "./helpers/click";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { durableConfig } from "./helpers/durable-config";
 import { systemTimekeeper, type Timekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -42,7 +41,6 @@ import { NO_LAYERS, undoOf } from "./helpers/history-step";
 import { heldClock } from "./helpers/held-clock";
 import { FOREGROUND_BURST } from "../src/utils/keyed-serial-queue";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const A = sessionIdOf("session-a");
 const S = sessionIdOf("s");
 

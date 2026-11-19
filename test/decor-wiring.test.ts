@@ -27,7 +27,6 @@ import { registerDslConfig } from "../src/dsl/render";
 import { childStep, type CompiledNode } from "../src/dsl/node-registry";
 import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { PRESET_FLOOR } from "../src/config/presets";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import { EDIT_LIVE_KEY } from "../src/config/edit-chrome";
@@ -47,7 +46,6 @@ import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
 const S1 = sessionIdOf("s1");
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
 
 // The depth every bar here is drawn at, and the one its expected tints are
@@ -90,7 +88,7 @@ function segmentAddresses(root: CompiledNode): { name: string; address: Address 
 }
 
 function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
-  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
+  const config = parseAndValidate("<test>", src, dflt);
   const store = new VariableStore(systemTimekeeper);
   const sessionState = new SessionState();
   const registry = new SourceRegistry(store, "", sessionState);

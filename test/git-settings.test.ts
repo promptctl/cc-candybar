@@ -10,7 +10,6 @@ import { registerDslConfig } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { placementDraftKey } from "../src/config/edit-chrome";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
@@ -58,7 +57,6 @@ function renderPair(
         ],
       },
     }),
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
@@ -147,7 +145,6 @@ describe("gitaculous settings", () => {
           },
         },
       }),
-      new Set(listResolvablePaletteNames()),
       DEFAULT_DSL_CONFIG,
     );
     expect(Object.keys(config.segments.gitaculous!.settings ?? {})).toEqual(
@@ -162,7 +159,6 @@ describe("gitaculous settings", () => {
     parseAndValidate(
       "<user>",
       JSON.stringify({ ...decl, root: { h: ["mySha"] } }),
-      new Set(listResolvablePaletteNames()),
       DEFAULT_DSL_CONFIG,
     );
   test("a segment calling a piece must declare its setting", () => {

@@ -22,13 +22,11 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { POWERLINE } from "./helpers/powerline";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 
 // The powerline arrow, drawn at the lead, between items and at the tail, and
 // U+E0B1, the thin divider, which no join draws.
@@ -49,7 +47,7 @@ function chevronCount(rendered: Pick<Frame, "rows">): number {
 }
 
 function render(src: string, hookData: Record<string, unknown>): Frame {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+  const config = parseAndValidate("<test>", src);
   const sessionState = new SessionState();
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", sessionState);

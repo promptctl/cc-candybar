@@ -36,14 +36,8 @@ export const EMPTY_DEFAULT: DslConfig = {
 export function validateConfig(
   authored: AuthoredConfig,
   filePath = "<config>",
-  allowedPalettes?: ReadonlySet<string>,
 ): ValidatedConfig {
-  const { config, dropped } = validateRenderable(
-    authored,
-    new Map(),
-    filePath,
-    allowedPalettes,
-  );
+  const { config, dropped } = validateRenderable(authored, new Map(), filePath);
   if (dropped.length > 0) throw dropped[0];
   return config;
 }
@@ -54,15 +48,9 @@ export function validateConfig(
 function authoredOf(
   filePath: string,
   source: string,
-  allowedPalettes: ReadonlySet<string> | undefined,
   dflt: DslConfig,
 ): AuthoredConfig {
-  const raw = parseDslConfig(
-    filePath,
-    source,
-    allowedPalettes,
-    inheritableSegmentNames(dflt),
-  );
+  const raw = parseDslConfig(filePath, source, inheritableSegmentNames(dflt));
   return { config: mergeWithDefault(raw, dflt), raw, source };
 }
 
@@ -71,26 +59,19 @@ function authoredOf(
 export function parseAndPlace(
   filePath: string,
   source: string,
-  allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
 ): Renderable {
   return validateRenderable(
-    authoredOf(filePath, source, allowedPalettes, dflt),
+    authoredOf(filePath, source, dflt),
     new Map(),
     filePath,
-    allowedPalettes,
   );
 }
 
 export function parseAndValidate(
   filePath: string,
   source: string,
-  allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
 ): ValidatedConfig {
-  return validateConfig(
-    authoredOf(filePath, source, allowedPalettes, dflt),
-    filePath,
-    allowedPalettes,
-  );
+  return validateConfig(authoredOf(filePath, source, dflt), filePath);
 }

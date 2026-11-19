@@ -475,7 +475,6 @@ test("an entry, a compile and a view hold no more than the cache charges for the
     const config = parseAndValidate(
       "<test>",
       "{}",
-      undefined,
       DEFAULT_DSL_CONFIG,
     );
     const compiled = compileDslConfig(compileInputOf(config));

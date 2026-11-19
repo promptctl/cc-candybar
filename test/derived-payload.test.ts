@@ -214,7 +214,6 @@ test("a cache key over the burn-rate history loads", () => {
       "<test>",
       `{ variables: { p: { kind: "shell", command: "true",
         cache: { key: "{{ .speed.history }}" } } } }`,
-      undefined,
       DEFAULT_DSL_CONFIG,
     ),
   ).not.toThrow();
@@ -222,7 +221,7 @@ test("a cache key over the burn-rate history loads", () => {
 
 describe("a policy or rule over what the draw answers is refused at load", () => {
   const load = (source: string) => () =>
-    parseAndValidate("<test>", source, undefined, DEFAULT_DSL_CONFIG);
+    parseAndValidate("<test>", source, DEFAULT_DSL_CONFIG);
   const TTL = /re-run it on a period instead: cache: \{ ttl: "<duration>" \}/;
 
   test("a key over a lane's feeds", () => {

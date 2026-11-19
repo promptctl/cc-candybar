@@ -37,7 +37,6 @@ import {
   PLACEMENT_EFFECTS,
   readStored,
   type Folded,
-  type Stored,
 } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -494,7 +493,7 @@ export interface DslConfig {
   // [LAW:one-source-of-truth] The effective style set: name → full ThemeKey.
   // Merges by name with the bundled default (user wins per name), like
   // segments/actions/variables — so the default's `none` (the identity style and
-  // the resolution floor of effectiveStyleName) is present in EVERY merged
+  // the floor a style resolves to last) is present in EVERY merged
   // config by construction. An action `{ set: …, from: "styles" }` ranges these
   // names; the derived click gate and the rendered options read this one map.
   readonly styles: Readonly<Record<string, ThemeKey>>;
@@ -723,6 +722,13 @@ export interface StateVarDecl {
   // returns what hangs in it (src/config/disclosure-nest.ts). Synthesis-only,
   // like `SegmentNode.opens`: the loader's variable schema does not list it.
   readonly within?: readonly DisclosureRef[];
+  // A placement setting's draft slot (configure mode): the key read through
+  // the setting's own domain, over the value the placement saves, in place of
+  // a `default` (`placementPick`). Synthesis-only, like `within`.
+  readonly setting?: {
+    readonly decl: SettingDecl;
+    readonly saved: SettingValue;
+  };
 }
 
 // [LAW:dataflow-not-control-flow] The discriminator is "which key is present"
@@ -1041,64 +1047,37 @@ export function inSettingDomain(
   return typeof value === "string" && domain.includes(value);
 }
 
-// [LAW:one-source-of-truth] A setting value as a SessionState string, and
-// back. A session holds strings, so a pick crosses the click wire in this
-// spelling and the render parses it against the declaration (`Stored`): a
-// string the domain does not hold is a pick made before the declaration
-// changed, kept as written.
-export function settingSpelling(value: SettingValue): string {
-  return String(value);
+// The value a placement saves for one of its settings: its own, else its
+// declaration's default.
+export function savedSetting(
+  node: SegmentNode,
+  name: string,
+  decl: SettingDecl,
+): SettingValue {
+  return node.settings?.[name] ?? decl.default;
 }
 
-// [LAW:single-enforcer] THE read of a placement setting's stored spelling:
-// every reader of a draft slot — the render, the drafts a save writes, the
-// order check, the stepper — reads it here.
-export function parseSettingSpelling(
+// [LAW:one-type-per-behavior] THE fold of a placement setting's draft slot,
+// one every setting folds by: the session's pick, read against the setting's
+// own domain, over the value the placement saves. The slot's state variable
+// is this fold, kept in the store (src/dsl/render.ts), so the bar, the
+// slot's control, a picker's mark and a carousel all read one value; a click,
+// which reads no store, folds the session's key here.
+export function placementPick(
   decl: SettingDecl,
+  saved: SettingValue,
   raw: string | null,
-): Stored<SettingValue> {
+): Folded<SettingValue> {
   const { domain } = decl;
-  return readStored(raw, (spelled): SettingValue | null => {
+  const member = (spelled: string): SettingValue | null => {
     if (typeof domain === "object" && "min" in domain) {
       return parseSessionInt(spelled, domain);
     }
     const value: SettingValue =
       domain === "bool" ? (parseSessionBoolean(spelled) ?? spelled) : spelled;
     return inSettingDomain(decl, value) ? value : null;
-  });
-}
-
-// [LAW:one-type-per-behavior] A placement setting's fold, the one every
-// setting folds by: the session's pick over the placement's own value (`saved`,
-// itself the placement's value or else the declaration's default).
-export function placementPick(
-  decl: SettingDecl,
-  saved: SettingValue,
-  raw: string | null,
-): Folded<SettingValue> {
-  return effectiveGlobal(
-    undefined,
-    parseSettingSpelling(decl, raw),
-    undefined,
-    saved,
-  );
-}
-
-// [LAW:single-enforcer] What one setting of a placement holds: the session's
-// pick through the setting's draft slot (SegmentNode.drafts), folded over the
-// placement's own value, else the declaration's default. `pick` reads a slot.
-export function placementSetting(
-  node: SegmentNode,
-  name: string,
-  decl: SettingDecl,
-  pick: (draft: DraftSlot) => string | null,
-): Folded<SettingValue> {
-  const draft = node.drafts?.[name];
-  return placementPick(
-    decl,
-    node.settings?.[name] ?? decl.default,
-    draft === undefined ? null : pick(draft),
-  );
+  };
+  return effectiveGlobal(undefined, readStored(raw, member), undefined, saved);
 }
 
 // How a domain reads in a message: `true or false`, `one of "a", "b"`, or

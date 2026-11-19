@@ -41,10 +41,9 @@ const SRC = `{
   root: { h: ['a', 'b'] },
 }`;
 
-const ALLOWED = new Set([BASE_THEME]);
 
 function reshapeBar() {
-  const rig = buildRig({ source: SRC, sessionId: SID, palettes: ALLOWED });
+  const rig = buildRig({ source: SRC, sessionId: SID });
   const { config, sessionState } = rig;
 
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
@@ -105,7 +104,7 @@ describe("endcaps resolve session over config over floor", () => {
     picks: Readonly<Record<string, string>>,
   ): string =>
     globalsFor(
-      parseAndValidate("<endcaps>", `{ globals: { ${globals} } }`, ALLOWED),
+      parseAndValidate("<endcaps>", `{ globals: { ${globals} } }`),
       (key) => picks[key] ?? null,
     ).endcaps;
   test("session pick wins over config default and floor", () => {

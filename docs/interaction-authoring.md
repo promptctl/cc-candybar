@@ -549,9 +549,10 @@ boolean, so it takes a two-member `cycle`; `padding` is a bounded range, so it t
 session's own pick, over the persisted default, over the config file's value,
 over the built-in floor.**
 A session value outside the field's domain — a stale entry from when the range
-or vocabulary was wider — is treated as no session value at all and falls
-through to the default, rather than throwing or rendering something the label
-disagrees with.
+or vocabulary was wider — is passed over: the bar draws the next rung down, its
+control shows that same value, and a `⚠` names the stored value and what the
+bar wears instead. The stored value stays put until a pick or a reset replaces
+it, so a config that offers it again draws it again.
 
 ```json5 check:pass
 {
@@ -1842,8 +1843,8 @@ Four things to know about that slot:
   outranks the expression; the expression is the *default*, one rung down. That
   includes picking `none` explicitly — a pick is a decision, so a hot bar does
   not override it.
-- **A result naming no declared style becomes `none`**, exactly as a stale
-  session pick does. A typo makes the bar plain, never broken.
+- **A result naming no declared style becomes `none`.** A typo makes the bar
+  plain, never broken.
 - **A template that fails when it runs also wears `none`, and says so** — a
   `fail`, or a field the payload does not carry. The bar still renders, the
   diagnostic above it names the slot:

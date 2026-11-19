@@ -21,12 +21,10 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { SourceRuns } from "../src/daemon/source-runs";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const EXAMPLES_DIR = join(__dirname, "..", "examples");
 
 const exampleFiles = readdirSync(EXAMPLES_DIR).filter((f) =>
@@ -55,9 +53,8 @@ describe("shipped examples load and render through the real cascade", () => {
     // merges ON TOP of the bundled default, with the default's own segment
     // names as the delta-able set.
     const config = validateConfig(
-      loadFile(path, DEFAULT_DSL_CONFIG, NO_PROJECT, ALLOWED),
+      loadFile(path, DEFAULT_DSL_CONFIG, NO_PROJECT),
       path,
-      ALLOWED,
     );
 
     const sessionState = new SessionState();

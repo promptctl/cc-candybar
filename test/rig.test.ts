@@ -41,15 +41,9 @@ describe("buildRig", () => {
     }
   });
 
-  test("a different source, base, or palette set is a different parse", () => {
-    const palettes = new Set(["tokyo-night"]);
-    const base = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes);
-    const other = parsedConfig(
-      "<test>",
-      SOURCE,
-      DEFAULT_DSL_CONFIG,
-      new Set(["tokyo-night", "nord"]),
-    );
+  test("a different source or base is a different parse", () => {
+    const base = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG);
+    const other = parsedConfig("<test>", `${SOURCE} `, DEFAULT_DSL_CONFIG);
     const emptyBase = buildRig({ source: SOURCE });
     try {
       expect(other).not.toBe(base);
@@ -59,47 +53,24 @@ describe("buildRig", () => {
     }
   });
 
-  test("a palette set built afresh with the same names hits the same parse", () => {
-    const names = ["tokyo-night", "nord"];
-    expect(
-      parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, new Set(names)),
-    ).toBe(
-      parsedConfig(
-        "<test>",
-        SOURCE,
-        DEFAULT_DSL_CONFIG,
-        new Set([...names].reverse()),
-      ),
-    );
-  });
-
   test("a parse under a registered option domain is not the parse made without it", () => {
-    const palettes = new Set(["tokyo-night"]);
-    const without = parsedConfig(
-      "<test>",
-      SOURCE,
-      DEFAULT_DSL_CONFIG,
-      palettes,
-    );
+    const without = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG);
     const unregister = registerOptionDomain("rigTestDomain", () => ["a"]);
     try {
-      expect(
-        parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes),
-      ).not.toBe(without);
+      expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG)).not.toBe(
+        without,
+      );
     } finally {
       unregister();
     }
-    expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes)).toBe(
-      without,
-    );
+    expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG)).toBe(without);
   });
 
   test("a parse under a domain registered again over other members is not the earlier parse", () => {
-    const palettes = new Set(["tokyo-night"]);
     const unregisterOne = registerOptionDomain("rigTestDomain", () => ["a"]);
     let one: ReturnType<typeof parsedConfig>;
     try {
-      one = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes);
+      one = parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG);
     } finally {
       unregisterOne();
     }
@@ -108,9 +79,7 @@ describe("buildRig", () => {
       "b",
     ]);
     try {
-      expect(
-        parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG, palettes),
-      ).not.toBe(one);
+      expect(parsedConfig("<test>", SOURCE, DEFAULT_DSL_CONFIG)).not.toBe(one);
     } finally {
       unregisterTwo();
     }

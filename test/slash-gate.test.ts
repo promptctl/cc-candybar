@@ -16,7 +16,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { type EffectiveGlobals } from "../src/config/effective-globals";
 import { globalsFor } from "./helpers/selection";
@@ -67,7 +66,6 @@ async function bar(
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, root: { h: ['commands', 'autocompact'] } }`,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const deps = {

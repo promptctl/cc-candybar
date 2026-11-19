@@ -16,7 +16,6 @@ import { PAYLOAD_INPUTS } from "../src/config/payload-inputs";
 import { buildRig } from "./helpers/rig";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
 // Minimal config — one input (session.id), one state-kind var bound to
 // SessionState's "theme" key, one segment that prints the state value.
@@ -44,7 +43,6 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   function cascadeBar(source: string = CONFIG_SRC) {
     const rig = buildRig({
       source,
-      palettes: ALLOWED_PALETTES,
       sessionId: SESSION_ID,
     });
     const render = () => textOf(rig.draw().frame);

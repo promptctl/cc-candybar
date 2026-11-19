@@ -16,7 +16,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { resolvedStyle } from "../src/render/rich-theme.js";
 import { NO_FILL } from "../src/template-engine/colors";
 import { instantOf } from "../src/utils/instant";
@@ -38,7 +37,6 @@ function render() {
   const config = parseAndValidate(
     "<test>",
     SRC,
-    new Set(listResolvablePaletteNames()),
   );
   const store = new VariableStore(systemTimekeeper);
   const registry = new SourceRegistry(store, "", new SessionState());

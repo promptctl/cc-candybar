@@ -151,9 +151,10 @@ function controlDomainOf(domain: SettingDecl["domain"]): ControlDomain {
 
 // The control, and the actions it writes `key` through — named `name` (and
 // `name.down`/`name.up` for a stepper). `readVar` is the variable holding the
-// value the bar renders with, which a stepper shows between its arrows and the
-// theme picker names while open (an option picker reads its own through its
-// action's key). `listKey` is the accordion a picker's list joins: the lists
+// value the bar renders with — the setting's fold, a stale pick passed over —
+// which a stepper shows between its arrows and the theme picker names while
+// open (an option picker marks its own through its action's state variable,
+// the same fold). `listKey` is the accordion a picker's list joins: the lists
 // of one caller's controls share it, so one is open at a time.
 //
 // [LAW:single-enforcer] Nothing here declares a gate: every action is a `set`

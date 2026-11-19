@@ -27,7 +27,6 @@ import { ABSENT, ok, pendingOf } from "../src/utils/outcome";
 import { settledLane } from "../src/utils/reading";
 import type { DaemonFacts } from "../src/facts/world-state";
 import { perSetting } from "../src/config/setting-projections";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import {
   AT,
@@ -262,7 +261,6 @@ describe("the all-pending document", () => {
   const config = parseAndValidate(
     "<user>",
     "{}",
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
   const waiting = {

@@ -15,7 +15,6 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
 import { SessionState } from "../src/renderer/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
@@ -40,7 +39,6 @@ import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 
 const PAYLOAD = {
@@ -69,7 +67,6 @@ function rig(width: number, userSegments = "") {
   const config = parseAndValidate(
     "<user>",
     `{ globals: {}, segments: { ${userSegments} }, root: { h: ['directory', 'model'] } }`,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();

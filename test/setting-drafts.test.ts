@@ -13,7 +13,6 @@ import {
 } from "../src/config/loader/persist-target";
 import { presetGlobals } from "../src/config/presets";
 import { settingDrafts } from "../src/renderer/setting-drafts";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { EMPTY_DEFAULT, parseAndValidate } from "./helpers/parse-and-validate";
 import { SETTINGS } from "../src/config/setting-projections";
 import { writeValues } from "../src/renderer/config-file-store";
@@ -23,9 +22,8 @@ import { join } from "node:path";
 import JSON5 from "json5";
 import { EDITS_IN_PLACE, soleLayer } from "./helpers/history-step";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const config = (source: string) =>
-  parseAndValidate("<user>", source, ALLOWED, DEFAULT_DSL_CONFIG);
+  parseAndValidate("<user>", source, DEFAULT_DSL_CONFIG);
 const picks =
   (p: Record<string, string>) =>
   (key: string): string | null =>

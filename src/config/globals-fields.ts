@@ -612,6 +612,18 @@ export const VALUED_FIELDS = ROWS.filter(
   ([, row]) => row.kind === "session" || row.kind === "config",
 ).map(([field]) => field) as readonly ValuedField[];
 
+// [LAW:types-are-the-program] The valued globals, each field's value its own
+// row's type: the one place the totality `Object.fromEntries` cannot see is
+// asserted, as `perSetting` does for settings, so a caller's record is total
+// by construction.
+export function perValuedField(
+  value: <K extends ValuedField>(field: K) => ValuedGlobals[K],
+): ValuedGlobals {
+  return Object.fromEntries(
+    VALUED_FIELDS.map((field) => [field, value(field)]),
+  ) as ValuedGlobals;
+}
+
 export const CONTROLLED_FIELDS = ROWS.filter(
   ([, row]) => row.kind === "session" || row.kind === "selection",
 ).map(([field]) => field) as readonly ControlledField[];

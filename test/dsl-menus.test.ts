@@ -145,7 +145,7 @@ function ownUrls(rendered: Frame): string[] {
 }
 
 function menuBar(src: string, sessionId: SessionId = S1, look?: string) {
-  const rig = buildRig({ source: src, palettes: ALLOWED, sessionId });
+  const rig = buildRig({ source: src, sessionId });
   const palette = getThemePalette("textual-dark");
   // The cells of the latest draw, read through `segments` after a render.
   let latest: ReadonlyMap<string, readonly RichText[]> = new Map();
@@ -197,7 +197,7 @@ const PKEY = menuPageKey(TKEY);
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
-    const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", MENU_SRC);
     expect(config.variables[TKEY]).toEqual({
       kind: "state",
       key: TKEY,
@@ -233,7 +233,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['plain'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -251,7 +251,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -268,7 +268,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -290,7 +290,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -307,7 +307,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -324,7 +324,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -342,7 +342,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -358,7 +358,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -376,7 +376,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { rows: { r: { h: ['s'], when: '{{ menu "applyTheme" "▸" "▾" }}' } } },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -394,7 +394,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -413,14 +413,13 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       segments: { depthControl: { template: '{{ menu "applyDepth" "▸" "▾" }}' } },
       root: { rows: { terminal: { h: ['depthControl'] } } },
     }`,
-    ALLOWED,
     DEFAULT_DSL_CONFIG,
   );
 
   test("a `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected — counted over the tree that renders", () => {
     const src = `{ root: { rows: { extra: { h: ['depthControl'] } } } }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
+      parseAndValidate("<test>", src, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -433,7 +432,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
   test("a preset's `{ rows }` fragment re-placing a menu host under the id the inherited rows already use is rejected at the preset", () => {
     const src = `{ presets: { wide: { root: { rows: { extra: { h: ['depthControl'] } } } } } }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED, MENU_HOST_BASE);
+      parseAndValidate("<test>", src, MENU_HOST_BASE);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -453,7 +452,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       root: { h: ['s'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -480,7 +479,7 @@ const srcFor = (segTemplate: string, extraVars = ""): string => `{
 const load =
   (segTemplate: string, extraVars = ""): (() => void) =>
   () =>
-    parseAndValidate("<test>", srcFor(segTemplate, extraVars), ALLOWED);
+    parseAndValidate("<test>", srcFor(segTemplate, extraVars));
 
 describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
 
@@ -884,7 +883,7 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
       root: { h: ['a', 'b'] },
     }`;
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
@@ -909,7 +908,7 @@ const TESTER_SRC = `{
 
 describe('the "theme tester" — N menus in one segment', () => {
   test("each menu is a DISTINCT addressable disclosure (no identity collision)", () => {
-    const config = parseAndValidate("<test>", TESTER_SRC, ALLOWED);
+    const config = parseAndValidate("<test>", TESTER_SRC);
     expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
     expect(config.variables["menus.tester.applyEndcaps"]).toBeDefined();
     expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
@@ -1140,7 +1139,7 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
   // disclosure is a load error in the rule's own words.
   test("three displays on a two-state disclosure is a load error", () => {
     expect(() =>
-      parseAndValidate("<test>", BOTH("", `"a" "b" "c"`), ALLOWED),
+      parseAndValidate("<test>", BOTH("", `"a" "b" "c"`)),
     ).toThrow(/cycles 2 members; bind one display per member \(2\)/);
   });
 });
@@ -1201,13 +1200,13 @@ describe("a menu's `distribution` option places its band", () => {
   });
 
   test("an unknown distribution name is a load error naming the five", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distribution" "spiral"'), ALLOWED)).toThrow(
+    expect(() => parseAndValidate("<test>", WITH('"distribution" "spiral"'))).toThrow(
       /"distribution" must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
     );
   });
 
   test("the unknown-option error lists `distribution` in the vocabulary", () => {
-    expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED)).toThrow(
+    expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'))).toThrow(
       /unknown \{\{ menu \}\} option "distributon".*"distribution" \(one of "van-der-corput"/,
     );
   });

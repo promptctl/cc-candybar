@@ -35,7 +35,6 @@ import {
   type RawDslConfig,
   type ValidatedConfig,
 } from "./dsl-types.js";
-import { listResolvablePaletteNames } from "../themes/policy.js";
 import {
   ConfigError,
   editabilityNotice,
@@ -220,7 +219,6 @@ export function loadConfigSource(
   source: string,
   dflt: DslConfig,
   ctx: LoadContext,
-  allowedPalettes?: ReadonlySet<string>,
 ): LoadedFile & { config: DslConfig } {
   // [LAW:one-source-of-truth] The plugins the file lists are one layer of the
   // same merge: bundled < plugins < this file. Each plugin is validated over
@@ -228,13 +226,12 @@ export function loadConfigSource(
   // rather than the config that lists it. The names the file may author as a
   // delta are the segments of that very layer.
   // A name a dropped plugin owns is a delta too: its stand-in is the base.
-  const parsed = parseDslFile(path, source, allowedPalettes, (refs, names) => {
+  const parsed = parseDslFile(path, source, (refs, names) => {
     const layer = layPlugins(
       listedPlugins(refs, path, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
       path,
-      allowedPalettes,
     );
     const owning = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -272,10 +269,9 @@ function layPlugins(
   ctx: PluginContext,
   base: PluginBase,
   label: string,
-  allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
   return applyPlugins(files, ctx, base, (c, plugin, replaces) =>
-    checkPlugin(c, plugin, replaces, label, allowedPalettes),
+    checkPlugin(c, plugin, replaces, label),
   );
 }
 
@@ -286,14 +282,12 @@ function installedLayer(
   files: readonly PluginFile[],
   ctx: PluginContext,
   dflt: DslConfig,
-  allowedPalettes: ReadonlySet<string> | undefined,
 ): PluginLayer {
   return layPlugins(
     files,
     ctx,
     { config: dflt, rendering: new Map() },
     "<installed plugins>",
-    allowedPalettes,
   );
 }
 
@@ -312,8 +306,7 @@ export function definitionProblems(
   checkout: Checkout,
   home: string,
 ): readonly DroppedPlugin[] {
-  return installedLayer(definitions, { checkout, home }, dflt, undefined)
-    .dropped;
+  return installedLayer(definitions, { checkout, home }, dflt).dropped;
 }
 
 // The drop a loose file in a plugin root is: a plugin is a folder.
@@ -354,16 +347,14 @@ export function loadSnapshot(
   home: string,
   dflt: DslConfig,
   trace: ChainTrace,
-  allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
   const { ctx, plugins, base, layers } = mergeChain(
     snapshot,
     home,
     dflt,
     trace,
-    allowedPalettes,
   );
-  return validateChain(ctx, plugins, base, layers, trace, allowedPalettes);
+  return validateChain(ctx, plugins, base, layers, trace);
 }
 
 /**
@@ -392,14 +383,13 @@ function mergeChain(
   home: string,
   dflt: DslConfig,
   trace: ChainTrace,
-  allowedPalettes?: ReadonlySet<string>,
 ) {
   const ctx: PluginContext = { checkout: snapshot.checkout, home };
   // [LAW:one-source-of-truth] Installed plugins are the layer every file
   // merges over: bundled < installed < the chain's files (and what each
   // lists). A file names an installed plugin's segment exactly as it names a
   // bundled one.
-  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
+  const merged = installedLayer(snapshot.plugins, ctx, dflt);
   const plugins = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)],
@@ -436,7 +426,6 @@ function mergeChain(
           rendering: below?.rendering ?? plugins.rendering,
         },
       },
-      allowedPalettes,
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path });
@@ -450,7 +439,6 @@ function validateChain(
   base: DslConfig,
   layers: MergedLayers,
   trace: ChainTrace,
-  allowedPalettes?: ReadonlySet<string>,
 ): LoadedChain {
   // [LAW:no-silent-failure] An installed plugin is on only where a config
   // places it, so its drop is the config's problem only where the config
@@ -490,14 +478,7 @@ function validateChain(
       layers,
       base,
       installed,
-      ...renderable(
-        validateRenderable(
-          noFile(base),
-          rendering,
-          "<default>",
-          allowedPalettes,
-        ),
-      ),
+      ...renderable(validateRenderable(noFile(base), rendering, "<default>")),
     };
   }
   try {
@@ -510,7 +491,6 @@ function validateChain(
           top,
           rendering,
           top.path,
-          allowedPalettes,
           layers.slice(0, -1).reverse(),
         ),
       ),
@@ -526,7 +506,6 @@ function validateChain(
         layer,
         layer.plugins.rendering,
         layer.path,
-        allowedPalettes,
         layers.slice(0, i).reverse(),
       );
     throw e;
@@ -608,16 +587,10 @@ function checkPlugin(
   ns: string,
   replaces: boolean,
   filePath: string,
-  allowedPalettes: ReadonlySet<string> | undefined,
 ): void {
   if (replaces) {
     // [LAW:single-enforcer] The bar's own judgment of what fails a config.
-    validateRenderable(
-      unauthored(config),
-      new Map(),
-      filePath,
-      allowedPalettes,
-    );
+    validateRenderable(unauthored(config), new Map(), filePath);
     return;
   }
   const owned = ownedBy(ns);
@@ -626,7 +599,6 @@ function checkPlugin(
   const ctx: ValidateCtx = {
     source: "",
     issues,
-    allowedPalettes: new Set(),
     groups: [],
     unplaced: [],
     inherited: [],
@@ -700,7 +672,6 @@ export function validateRenderable(
   // here draws nothing and is no error (plugin-scope.ts).
   rendering: ReadonlyMap<string, NamedDefinition>,
   filePath = "<config>",
-  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
@@ -725,7 +696,6 @@ export function validateRenderable(
     return judgeRenderable(
       authoredConfig,
       filePath,
-      allowedPalettes,
       beneath,
       inserted.config,
       presence,
@@ -785,7 +755,6 @@ export function validateRenderable(
 function judgeRenderable(
   { raw, source }: AuthoredConfig,
   filePath: string,
-  allowedPalettes: ReadonlySet<string>,
   beneath: readonly AuthoredLayer[],
   merged: DslConfig,
   presence: (name: string) => SegmentPresence,
@@ -796,7 +765,6 @@ function judgeRenderable(
   const ctx: ValidateCtx = {
     source,
     issues,
-    allowedPalettes,
     groups: [],
     unplaced: [],
     inherited: [],
@@ -994,10 +962,8 @@ function droppedByFile(
  *
  * Returned shape preserves absence: top-level keys are optional in RawDslConfig.
  *
- * `allowedPalettes` is the set of palette names a `palette:` field may name.
- * It defaults to every name that resolves to a concrete Palette, so production
- * always validates loudly against the real registry. Tests inject a custom set
- * to exercise validation without depending on registry contents.
+ * [LAW:one-source-of-truth] A theme name is checked against the installed
+ * themes alone (`isInstalledTheme`), the authority the bar draws by.
  *
  * `inheritedSegments` is the set of segment names the source may declare as a
  * DELTA (template omitted): the segments of the default it will be merged
@@ -1007,10 +973,9 @@ function droppedByFile(
 export function parseDslConfig(
   filePath: string,
   source: string,
-  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
   inheritedSegments: ReadonlySet<string> = NO_INHERITED_SEGMENTS,
 ): RawDslConfig {
-  return parseDslFile(filePath, source, allowedPalettes, () => ({
+  return parseDslFile(filePath, source, () => ({
     inherited: inheritedSegments,
     layer: null,
   })).raw;
@@ -1025,7 +990,6 @@ export function parseDslConfig(
 function parseDslFile<L>(
   filePath: string,
   source: string,
-  allowedPalettes: ReadonlySet<string> | undefined,
   // The layer the file merges over, built from the plugins it lists, and the
   // segment names that layer lets the file author as a delta.
   under: (
@@ -1060,7 +1024,6 @@ function parseDslFile<L>(
   const ctx: ValidateCtx = {
     source,
     issues,
-    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: [],

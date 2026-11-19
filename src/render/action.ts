@@ -316,8 +316,12 @@ export interface RenderBinding {
   // The depth the render draws at, its view's (SourceRegistry.drawnAt). Its
   // instant is no part of the binding: the engine's clock reads the draw in
   // progress (template-engine/engine.ts, bindClock).
-  // And the session its view draws for, which every click URL names.
-  readonly registry: Pick<SourceRegistry, "drawnAt" | "session">;
+  // And the session its view draws for, which every click URL names, and the
+  // fold of each placement setting's draft slot, which a placement draws.
+  readonly registry: Pick<
+    SourceRegistry,
+    "drawnAt" | "session" | "foldedState"
+  >;
   // [LAW:locality-or-seam] The width the render's strip wraps to (the value
   // `term.cols` carries), so fitting a row reads no variable a config must
   // declare.

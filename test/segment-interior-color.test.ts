@@ -16,7 +16,6 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/renderer/session-state";
 import { registerDslConfig } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { listResolvablePaletteNames } from "../src/themes/policy";
 import { instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 
@@ -58,7 +57,6 @@ function render(): Frame {
   const config = parseAndValidate(
     "<interior-color>",
     userSource,
-    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
 

@@ -290,7 +290,6 @@ function loaderAccepts(source: string): boolean {
     const raw = parseDslConfig(
       "<test>",
       source,
-      undefined,
       inheritableSegmentNames(DEFAULT_DSL_CONFIG),
     );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);

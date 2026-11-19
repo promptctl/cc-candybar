@@ -42,7 +42,6 @@ import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { onLanded } from "./helpers/click";
 
-const ALLOWED = new Set(listResolvablePaletteNames());
 const SID = sessionIdOf("s1");
 const PIN = "nord";
 const BAR_A = "gruvbox";
@@ -105,7 +104,7 @@ function themeBar(src: string) {
     configFor: () => current,
   };
   onLanded(ctx, () => {
-    current = parseAndValidate("<reloaded>", durable.text()!, ALLOWED);
+    current = parseAndValidate("<reloaded>", durable.text()!);
   });
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   return { ...rig, render, bgOf, click, ctx };
@@ -172,7 +171,7 @@ describe("a placement's theme recolours that placement alone", () => {
 describe("load errors", () => {
   const refusal = (src: string): string => {
     try {
-      parseAndValidate("<test>", src, ALLOWED);
+      parseAndValidate("<test>", src);
     } catch (e) {
       return (e as Error).message;
     }
