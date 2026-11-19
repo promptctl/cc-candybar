@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-889",
+      "ref": "refs/pull/889/merge",
+      "sha": "73bc0050d46cdccece6da6b3e1875c71405cbfd4",
+      "timestamp": "2026-11-19T17:33:21.168Z",
+      "commits": [
+        {
+          "sha": "73bc0050d46cdccece6da6b3e1875c71405cbfd4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T17:31:43Z",
+          "message": "Merge e6b8a8d2ab9aab0719a6956beb9e4ac02f260a1d into e04e83316aabc769ec7d2a322cf9ecc6ff181f44\n"
+        },
+        {
+          "sha": "e6b8a8d2ab9aab0719a6956beb9e4ac02f260a1d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:39:56-07:00",
+          "message": "test(daemon): assert source values in delivered pane frames\n"
+        }
+      ]
+    },
+    {
       "version": "pr-891",
       "ref": "refs/pull/891/merge",
       "sha": "ab9f56df7bcbbbd0c2fcef3aa8248f1367fc3142",
@@ -86,28 +108,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T08:59:22-07:00",
           "message": "fix(config): give re-added placements a fresh id and keep edit-mode state in the edit\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-889",
-      "ref": "refs/pull/889/merge",
-      "sha": "9ce615eeb7cb8285d0d84c0b506bbf5c13ac71d6",
-      "timestamp": "2026-11-19T16:41:55.880Z",
-      "commits": [
-        {
-          "sha": "9ce615eeb7cb8285d0d84c0b506bbf5c13ac71d6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:40:44-07:00",
-          "message": "Merge d0b3b56309d606ef94244a3843d66777a5f91ebd into d5df8f6d8a5a3e24c1189a1486241b29febe8053\n"
-        },
-        {
-          "sha": "d0b3b56309d606ef94244a3843d66777a5f91ebd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:39:56-07:00",
-          "message": "test(daemon): assert source values in delivered pane frames\n"
         }
       ]
     },
