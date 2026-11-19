@@ -130,6 +130,13 @@ Subcommands:
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
+  record start FILE [--renderer NAME]
+  record stop [--renderer NAME]
+                           Record one renderer on the running daemon.
+                           Stop publishes the recording to FILE. NAME
+                           defaults to CC_CANDYBAR_NAME or main.
+  replay FILE [--frames]   Verify an entire recording offline. --frames
+                           prints the verified frames as JSON lines.
   frames --lane LANE [--config PATH | --config-only PATH]
                            One session's bar as the daemon pushes it — up to
                            30 frames a second while it moves, at once on a

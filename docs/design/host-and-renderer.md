@@ -380,11 +380,21 @@ Every renderer's panel is the same, because there is one kind of renderer. Watch
 ## 11. Testing
 
 - The production build follows runtime imports from the renderer process entry, including its transport, core, shared modules and packages. It fails if an import reaches the Node filesystem or the bundler cannot account for a module in that graph. The host owns the transcript reader and its cache. The renderer combines the supplied context and metrics with the hook values reported by Claude Code.
-- **The seam test.** The recorder captures a renderer's whole input stream. Replaying it into a fresh renderer gives byte-identical outputs, frames, effects, subscriptions and records, with zero filesystem reads, zero clock reads and zero spawned processes over the entire run, not only over draws. This is the acceptance test for the split, and it holds forever. [LAW:verifiable-goals]
+- **The seam test.** The recording starts with a worker's construction and pairs each subsequent renderer input with its answer in order. Offline replay gives each input to a fresh renderer and compares frames, effects, records, store writes, subscriptions, wake, replies, failures and diagnostics. Host-side execution, elapsed transport time, PIDs and host receipt names stay outside the recording. The replay core needs no filesystem reads, clock reads or process launches. The CLI reads the recording at the boundary. [LAW:verifiable-goals]
 - **Renderer tests** feed inputs and assert outputs. They need no mocks, because the renderer has nothing to mock.
 - **Host part tests** run each part over fake ports for the world.
 - **The transport contract test.** The in-process and socket transports give identical outputs for one recorded stream.
 - **The latency check** measures A-1 and A-5 from the host's own event, not from a benchmark.
+
+### Recording an installed renderer
+
+`cc-candybar record start <file> [--renderer NAME]` asks the running daemon to capture one generation. The client resolves the path from its working directory. An existing renderer is replaced between turns so its build and startup inputs serve as the first entry. This resets transient menus and drafts for that renderer. Unbound names are armed for their next start. The daemon continues serving the other renderers from the same shared caches.
+
+`cc-candybar record stop [--renderer NAME]` publishes the complete file without overwriting a destination. An orderly daemon shutdown also finishes a complete capture. A failed recording or an unexpected worker exit leaves the target unpublished. Both commands default to `CC_CANDYBAR_NAME`, then `main`.
+
+Recording preserves the original accepted data. It drops the entire capture if a declared `env` source has returned a value or a `run` action contains an environment overlay. Raw session environments stay with the host. A saved file can still contain project config, paths and displayed data and should be treated as private.
+
+`cc-candybar replay <file> [--frames]` recomputes each reply without executing its effects. A turn mismatch names the turn and field path and exits unsuccessfully. With `--frames`, the CLI publishes JSON lines for statusline presents, pane draws and distinct statusline handoffs only after verifying the terminal entry and the entire file. Its verification summary then goes to stderr.
 
 ## 12. Implementation plan
 

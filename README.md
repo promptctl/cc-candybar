@@ -84,6 +84,22 @@ The running bar shows config and source diagnostics under `⚠`. From a source c
 
 Saving the file triggers a hot-reload of every active session.
 
+## Record and replay a renderer
+
+With the daemon running, start a capture, reproduce the bar behavior, and stop the capture to save it.
+
+```sh
+cc-candybar record start ./bar.jsonl
+cc-candybar record stop
+cc-candybar replay ./bar.jsonl
+```
+
+Both record commands accept `--renderer NAME`. The default is `CC_CANDYBAR_NAME`, then `main`. Starting replaces a running worker between turns, resetting its open menus and edit drafts. The host and other renderers keep running. A name that has never been used starts recording when that renderer first starts. Choose a new file. The host publishes it when you stop recording or when the daemon shuts down normally with a complete capture.
+
+Replay runs offline and verifies the whole recording before reporting success. Add `--frames` to print JSON lines containing `session`, `surface`, and `frame` on stdout. The summary goes to stderr in this mode.
+
+Treat recordings as private. They include config snapshots and displayed data. The host excludes the session environment and refuses to save a recording if a configured `env` source supplied a value or a run action supplied an environment overlay. Fix syntax errors in recorded config and use a fresh renderer profile if a recording is refused because the saved state contains values of unknown origin.
+
 ## Architecture
 
 ```
