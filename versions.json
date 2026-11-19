@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "059ece30eb17a3358d9abdd230f2cd671892624c",
+      "timestamp": "2026-11-19T18:41:57.777Z",
+      "commits": [
+        {
+          "sha": "059ece30eb17a3358d9abdd230f2cd671892624c",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T18:40:41Z",
+          "message": "chore(release): set `package.json` to 1.235.7\n\n## [1.235.7](https://github.com/promptctl/cc-candybar/compare/v1.235.6...v1.235.7) (2026-11-19)\n\n### Bug Fixes\n\n* **sources:** preserve pending observations and distinguish dependency keys ([#893](https://github.com/promptctl/cc-candybar/issues/893)) ([03ed302](https://github.com/promptctl/cc-candybar/commit/03ed3028670db49aa13cedc4dad7687564282cfc))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-900",
       "ref": "refs/pull/900/merge",
       "sha": "3e7c5a8f9bbb0e879d3602b43f0d75e6fed7b716",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:36:07-07:00",
           "message": "fix(client): show startup and timeout feedback in the statusline\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "03ed3028670db49aa13cedc4dad7687564282cfc",
-      "timestamp": "2026-11-19T18:34:49.850Z",
-      "commits": [
-        {
-          "sha": "03ed3028670db49aa13cedc4dad7687564282cfc",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:33:38-07:00",
-          "message": "fix(sources): preserve pending observations and distinguish dependency keys (#893)\n\nfix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)"
         }
       ]
     },
