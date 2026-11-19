@@ -1,3 +1,9 @@
+## [1.234.0](https://github.com/promptctl/cc-candybar/compare/v1.233.2...v1.234.0) (2026-11-19)
+
+### Features
+
+* **daemon:** route named renderers through one shared host ([#864](https://github.com/promptctl/cc-candybar/issues/864)) ([9df2afa](https://github.com/promptctl/cc-candybar/commit/9df2afa5338a7144c675bbd4ff228c85f32fe868))
+
 ## [1.233.2](https://github.com/promptctl/cc-candybar/compare/v1.233.1...v1.233.2) (2026-11-19)
 
 ### Bug Fixes
