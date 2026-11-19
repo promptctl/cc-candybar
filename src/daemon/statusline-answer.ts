@@ -165,12 +165,15 @@ export async function answerStatusline(
       noteFacts(facts, { renderer: host.name });
       return failed(host, configured.failure, "its context turn: ");
     }
-    // Rules 1 and 2 of the model: the answer shows what this request
-    // carried, so it waits for the first value of every fact of its world
-    // state it waits on, until its client's deadline. A warm session's world
-    // state is current already, so its request is delivered at once. What
-    // has not answered by then draws as pending, and lands for the next
-    // frame.
+    // [LAW:single-enforcer] The context's matching config turn is part of
+    // readiness. Its failure ends this request before the collector wait.
+    if (configured.configFailure !== undefined) {
+      noteFacts(facts, { renderer: host.name });
+      return failed(host, configured.configFailure, "its config turn: ");
+    }
+    // Wait for the session's sources until this client's deadline. A newer
+    // context can move those sources while this client still owns the reply.
+    // What has not answered by the deadline draws as pending.
     const waitFrom = clock.monotonic();
     const budget = waitEndsAt - waitFrom;
     noteFacts(facts, {

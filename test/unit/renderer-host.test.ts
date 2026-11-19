@@ -393,6 +393,65 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
 });
 
+test("a config named by a push reaches the renderer before the next queued event", async () => {
+  const origin = {
+    projectDir: "/p",
+    cwd: "/p",
+    target: { source: "search" as const },
+  };
+  const subscriptions = { ...NONE, configs: [origin] };
+  const seen: string[] = [];
+  const host = rendererHost(
+    MAIN_RENDERER,
+    clockAt({ wall: 0, mono: 0 }),
+    held(
+      rendererOf({
+        event: async ({ event }) => {
+          seen.push(event.kind);
+          return { ...answered(), subscriptions };
+        },
+        adapter: async () => {
+          seen.push("push");
+          return {
+            kind: "replied",
+            reply: { kind: "close-journal" },
+            subscriptions,
+            stored: [],
+          };
+        },
+      }),
+    ),
+    () => {},
+    {
+      subscribed: () => {},
+      frames: () => {},
+      stored: () => {},
+      recorded: () => {},
+      holding: () => () => {},
+    },
+    {
+      ...NO_ACTS,
+      configs: {
+        ...NO_ACTS.configs,
+        follow: () => {},
+        snapshotOf: () => ({
+          chain: [],
+          repo: null,
+          plugins: [],
+          strays: [],
+          checkout: { root: origin.cwd, git: false },
+          notices: [],
+          watch: null,
+        }),
+      },
+    },
+  );
+  const push = host.ask({ kind: "close-journal" });
+  const next = host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  await Promise.all([push, next]);
+  expect(seen).toEqual(["push", "config", "due"]);
+});
+
 test("a failed start's input does not keep the previous renderer's served config", async () => {
   const origin = { projectDir: "/p", cwd: "/p", target: { source: "search" as const } };
   const read: string[] = [];
