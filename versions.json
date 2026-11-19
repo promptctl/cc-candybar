@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-857",
+      "ref": "refs/pull/857/merge",
+      "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
+      "timestamp": "2026-11-19T11:39:12.887Z",
+      "commits": [
+        {
+          "sha": "0a5443e3d0882bcfac2f774b2c539b715cf006cc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:38:19-07:00",
+          "message": "Merge e244675b27ea3fe054976feff8190d3357745ddf into f2035fdda3d7aced7e27f485137b01e28691e13f\n"
+        },
+        {
+          "sha": "e244675b27ea3fe054976feff8190d3357745ddf",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:35:29-07:00",
+          "message": "fix(daemon): launches withhold the spawning shell's repository variables, asked of git once after admission\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "f2035fdda3d7aced7e27f485137b01e28691e13f",
