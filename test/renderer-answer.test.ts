@@ -31,6 +31,7 @@ import type {
   Effect,
   Present,
   Event,
+  Notification,
   Renderer,
   RendererOutput,
   RequestId,
@@ -381,7 +382,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     { ...NO_ACTS, configs: discovery },
   );
   cleanups.push(() => host.closeWake());
-  const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
+  const submit = (event: Notification) => host.answer(() => ({ kind: "event", event }));
   const draw = async () => {
     const { effects } = await submit({ kind: "request", id: REQUEST, context });
     return textOf(parseFrame(presentOf(effects).frame));

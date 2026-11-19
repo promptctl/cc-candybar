@@ -26,6 +26,7 @@
 // landing left.
 
 import {
+  isCommand,
   sessionOfEvent,
   type ConfigChange,
   type Command,
@@ -35,6 +36,7 @@ import {
   type EffectOutcome,
   type Event,
   type EventInput,
+  type Notification,
   type Present,
   type PushedFrame,
   type RendererOutput,
@@ -50,11 +52,12 @@ import { readingsAt } from "../utils/instant.js";
 import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
-import { writeLogLines, type DaemonLogger } from "../utils/logger";
+import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
+import { inspectionPayloadProblem } from "./foundations/inspection-reply.js";
 import {
   CrossedFailure,
   failureOf,
@@ -113,7 +116,8 @@ const finalizationFields = (
 // is none to send, which is the turn's failure. The host stamps it with the
 // slot's readings.
 type StartEvent = Extract<Event, { kind: "start" }>;
-type BeforeDiscovery = Exclude<Event, StartEvent> | Omit<StartEvent, "configs">;
+type StartRequest = Omit<StartEvent, "configs">;
+type BeforeDiscovery = Exclude<Notification, StartEvent> | StartRequest;
 
 interface MadeEvent<E = Event> {
   readonly kind: "event";
@@ -155,7 +159,7 @@ export interface RendererHost {
   // A fresh renderer's start, recorded on its own line: it heads the
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
-  start(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
+  start(make: () => Made<StartRequest>, about: TurnRecord): Promise<TurnOutcome>;
   // An inspection or teardown event, answered by its own reply.
   command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
@@ -181,16 +185,6 @@ const THREW_AS = {
   Failure["kind"],
   Exclude<EffectOutcome["kind"], "ok" | "skipped">
 >;
-
-const COMMAND_KINDS = {
-  stats: true,
-  debug: true,
-  "close-journal": true,
-  "close-views": true,
-} satisfies Record<Command["kind"], true>;
-
-const isCommand = (event: Event): event is Command =>
-  Object.hasOwn(COMMAND_KINDS, event.kind);
 
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
@@ -388,6 +382,8 @@ export function rendererHost(
       throw new Error(`${label} returned no ${event.what} snapshot`);
     if (reply.kind === "stats" && reply.stats == null)
       throw new Error(`${label} returned no stats snapshot`);
+    const problem = inspectionPayloadProblem(reply);
+    if (problem !== null) throw new Error(`${label} returned ${problem}`);
   };
 
   // [LAW:single-enforcer] The transport owns whether the renderer
@@ -421,14 +417,16 @@ export function rendererHost(
         // declarations. Their replies cannot publish a frame or act.
         const problem = `${commandLabel(input.event)} returned a frame or effect`;
         if (output.kind === "answered") throw new Error(problem);
-        log("error", problem);
+        recordDiagnostics([{ level: "error", line: problem }]);
         output = { ...output, frames: [], effects: [] };
       }
     } else if (output.kind === "answered" && output.reply !== undefined) {
-      log(
-        "error",
-        `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
-      );
+      recordDiagnostics([
+        {
+          level: "error",
+          line: `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
+        },
+      ]);
     }
     if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
@@ -656,8 +654,17 @@ export function rendererHost(
   const recordDiagnostics = (
     diagnostics: RendererOutput["diagnostics"],
   ): void => {
-    if (diagnostics === undefined) return;
-    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
+    for (const { level, line } of diagnostics ?? []) {
+      try {
+        log(level, line);
+      } catch (thrown) {
+        // A failed log sink cannot report its own failure. The daemon can
+        // still show the diagnostic and the reason it could not be written.
+        world.unheard(
+          `renderer ${name} could not log ${line}: ${failureOf(thrown).detail}`,
+        );
+      }
+    }
   };
 
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
@@ -781,7 +788,7 @@ export function rendererHost(
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made<Event> => {
+  const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
     const config = world.configs.snapshotOf(origin);
     return config === null
       ? {
@@ -844,7 +851,7 @@ export function rendererHost(
   const doneOf = (
     effect: Pick<Effect, "id" | "session">,
     outcome: EffectOutcome,
-  ): MadeEvent => ({
+  ): MadeEvent<Notification> => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -955,7 +962,7 @@ export function rendererHost(
   // One input through its slot: made there, and answered, its acts still
   // settling. `event` is null when its make failed, so no input was made.
   const throughSlot = (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place,
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
@@ -1025,7 +1032,7 @@ export function rendererHost(
   // One input from its arrival to its settling: its acts settled after its
   // slot.
   const taken = async (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place = "last",
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {

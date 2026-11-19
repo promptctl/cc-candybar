@@ -56,9 +56,11 @@ function hostOver(
     Partial<
       Pick<RendererOutput, "diagnostics" | "effects" | "frames" | "stored">
     >,
+  log?: (line: string) => void,
 ) {
   const taken: Subscriptions[] = [];
   const logged: string[] = [];
+  const unheard: string[] = [];
   const framed: PushedFrame[] = [];
   const stored: StoreWrite[] = [];
   const acted: HostAct[] = [];
@@ -69,7 +71,10 @@ function hostOver(
       answer: async ({ event }) =>
         event.kind === "effect-done" ? answered() : { ...answered(), ...output },
     }),
-    (_level, line) => void logged.push(line),
+    (_level, line) => {
+      log?.(line);
+      logged.push(line);
+    },
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: (frames) => void framed.push(...frames),
@@ -81,13 +86,14 @@ function hostOver(
     },
     {
       ...NO_ACTS,
+      unheard: (line) => void unheard.push(line),
       perform: async (effect) => {
         acted.push(effect);
         return { kind: "ok" };
       },
     },
   );
-  return { host, taken, logged, framed, stored, acted };
+  return { host, taken, logged, unheard, framed, stored, acted };
 }
 
 const commandSession = sessionIdOf("command-session");
@@ -151,6 +157,30 @@ test("a matching inspection cannot publish a frame or perform an effect", async 
   expect({ taken, framed, acted }).toEqual({ taken: [], framed: [], acted: [] });
 });
 
+test("truncated inspection results are refused before their stores or subscriptions land", async () => {
+  const vars = hostOver({
+    kind: "answered",
+    // @ts-expect-error A same-version renderer sent a truncated JSON result.
+    reply: { kind: "debug", snapshot: { what: "vars" } },
+    stored: [offeredWrite],
+  });
+  await expect(vars.host.command({ kind: "debug", what: "vars" })).rejects.toThrow(
+    "returned invalid vars snapshot",
+  );
+  expect([vars.stored, vars.taken]).toEqual([[], []]);
+
+  const stats = hostOver({
+    kind: "answered",
+    // @ts-expect-error A same-version renderer omitted the snapshot fields.
+    reply: { kind: "stats", stats: {} },
+    stored: [offeredWrite],
+  });
+  await expect(stats.host.command({ kind: "stats" })).rejects.toThrow(
+    "returned invalid stats snapshot",
+  );
+  expect([stats.stored, stats.taken]).toEqual([[], []]);
+});
+
 test("an answered command with no reply rejects", async () => {
   const { host } = hostOver({ kind: "answered" });
   await expect(host.command({ kind: "close-journal" })).rejects.toThrow(
@@ -169,6 +199,21 @@ test("a reply on an ordinary turn is reported and its declaration still lands", 
   expect(taken).toEqual([NONE]);
   expect(logged).toEqual([
     "renderer main returned an unasked command reply to due",
+  ]);
+});
+
+test("a failed diagnostic sink cannot discard a completed notification's writes", async () => {
+  const { host, taken, stored, unheard } = hostOver({
+    kind: "answered",
+    reply: { kind: "close-journal" },
+    stored: [offeredWrite],
+  }, () => { throw new Error("log unavailable"); });
+  const turn = await host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  expect(turn.kind).toBe("answered");
+  expect(taken).toEqual([NONE]);
+  expect(stored).toEqual([offeredWrite]);
+  expect(unheard).toEqual([
+    expect.stringMatching(/unasked command reply to due: .*log unavailable/),
   ]);
 });
 
