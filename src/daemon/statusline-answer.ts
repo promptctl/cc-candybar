@@ -29,6 +29,7 @@ import {
 } from "./foundations/verb-error.js";
 import type { Response } from "./foundations/protocol";
 import type { PublishFrame } from "./foundations/frame-publication.js";
+import { timeoutResponse } from "./foundations/request-deadline.js";
 import type { FrameSeen } from "./foundations/sightings";
 import type { Collector } from "./collector.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
@@ -51,6 +52,14 @@ export interface StatuslineAnswer {
 
 // What the sender of a reply that owes no one anything tells it.
 export const NOTHING_TO_SETTLE = (_delivered: boolean): void => {};
+
+// [LAW:types-are-the-program] No draw was sent, so there is no presentation
+// to settle. Its request still records an abandoned outcome.
+const DRAW_ABANDONED: Failure = {
+  kind: "abandoned",
+  message: "the statusline reply has no recipient",
+  detail: "the statusline reply has no recipient",
+};
 
 // [LAW:no-silent-failure] A request whose turn did not answer it is answered
 // with a failure naming the renderer, never with an empty bar. `error` is what
@@ -131,8 +140,10 @@ export async function answerStatusline(
   arrived: CheckedRenderRequest,
   environment: SessionEnvironment,
   id: RequestId,
-  // The monotonic moment the request's wait ends, the host's own reading.
-  waitEndsAt: number,
+  recipient: {
+    readonly waitEndsAt: number;
+    readonly gone: () => boolean;
+  },
   facts: RequestFacts,
 ): Promise<StatuslineAnswer> {
   const { req, error: checkoutError } = located(arrived, locate);
@@ -144,12 +155,13 @@ export async function answerStatusline(
     closing.aborted
       ? failureOf(new DaemonClosing("render"))
       : { kind: "event", event };
+  const abandoned = (): boolean => !closing.aborted && recipient.gone();
   const worldState = collector.requested(req, environment);
   // [LAW:no-ambient-temporal-coupling] The request holds its session from its
   // context to its answer, wait included, so no sweep retires it between.
   const release = collector.holding(session);
   let configured: HostTurn;
-  let delivered: HostTurn;
+  let delivered: HostTurn | null = null;
   try {
     // [LAW:no-ambient-temporal-coupling] The host owns the order: the
     // session's context goes first, with the world state read at the
@@ -178,62 +190,71 @@ export async function answerStatusline(
       noteFacts(facts, { renderer: host.name });
       return failed(host, configured.configFailure, "its config turn: ");
     }
-    // Wait for the session's sources until this client's deadline. A newer
-    // context can move those sources while this client still owns the reply.
-    // What has not answered by the deadline draws as pending.
-    const waitFrom = clock.monotonic();
-    const budget = waitEndsAt - waitFrom;
-    noteFacts(facts, {
-      deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
-    });
-    const ended = await waitWithin(
-      (signal) => collector.settled(session, signal),
-      budget,
-      // [LAW:no-silent-failure] The answer is drawn; a wait that fails after
-      // it is a bug, said against the session, never one that ends the
-      // daemon.
-      (e, how) =>
-        log(
-          "error",
-          `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`,
-        ),
-      clock.after,
-      closing,
-    );
-    // [LAW:nothing-unseen] How the wait went, on the render event: an answer
-    // drawn with values pending says so by name.
-    noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
-    // [LAW:no-ambient-temporal-coupling] Its readings are made as its turn
-    // comes, so it draws the instant it is drawn at, after every input
-    // ahead of it: a click that landed during the wait included.
-    delivered = await host.answer(
-      unlessClosing({
-        kind: "request",
-        id,
-        context: req,
-      }),
-    );
+    // [LAW:effects-at-boundaries] The context still serves the shared
+    // session, including panes. Only the source wait and one-off draw
+    // belong to the connection that asked for the reply.
+    if (!abandoned()) {
+      const waitFrom = clock.monotonic();
+      const budget = recipient.waitEndsAt - waitFrom;
+      noteFacts(facts, {
+        deadline: `${req.deadline.kind}:${Math.round(budget)}ms`,
+      });
+      const ended = await waitWithin(
+        (signal) => collector.settled(session, signal),
+        budget,
+        // [LAW:no-silent-failure] A late failure belongs to the session.
+        (e, how) =>
+          log(
+            "error",
+            `render wait failed after it ended ended=${how} sid=${JSON.stringify(session)}: ${inspect(e)}`,
+          ),
+        clock.after,
+        closing,
+      );
+      noteFacts(facts, { waited: `${elapsedMs(clock, waitFrom)}ms`, ended });
+
+      // [LAW:no-ambient-temporal-coupling] Admit the draw only while the
+      // reply has a recipient. A closure or deadline can land while the
+      // source wait or the mailbox is serving something else.
+      if (!abandoned()) {
+        const draw = unlessClosing({ kind: "request", id, context: req });
+        delivered = await host.answer(() =>
+          abandoned() ? DRAW_ABANDONED : draw(),
+        );
+      }
+    }
   } finally {
     release();
   }
-  recorded(facts, delivered);
-  const done = delivered.settlePresentation;
+  if (delivered !== null) recorded(facts, delivered);
   // [LAW:nothing-unseen] Both turns' times in the renderer, their waits in
   // the mailbox and their hops, beside `took`: what the renderer and reaching
   // it cost this request. `drew=` is what the draw's reserve is held to
   // (DRAW_RESERVE_MS), with `encoded=` for its bytes.
+  const drawHop = delivered === null ? 0 : delivered.hopMs;
   noteFacts(facts, {
     configured: msOf(configured.turnMs),
-    drew: msOf(delivered.turnMs),
-    mailbox: `${configured.queuedMs + delivered.queuedMs}ms`,
+    drew: msOf(delivered?.turnMs ?? null),
+    mailbox: `${configured.queuedMs + (delivered?.queuedMs ?? 0)}ms`,
     hop:
-      configured.hopMs === null || delivered.hopMs === null
+      configured.hopMs === null || drawHop === null
         ? "-"
-        : `${configured.hopMs + delivered.hopMs}ms`,
+        : `${configured.hopMs + drawHop}ms`,
+    renderer: host.name,
   });
+  if (
+    delivered === null ||
+    (delivered.kind === "threw" && delivered.failure === DRAW_ABANDONED)
+  )
+    return {
+      outcome: DRAW_ABANDONED,
+      resp: timeoutResponse(id, DRAW_ABANDONED.message),
+      seen: "failed",
+      settled: NOTHING_TO_SETTLE,
+    };
+  const done = delivered.settlePresentation;
   const { effects } = delivered;
   noteFacts(facts, {
-    renderer: host.name,
     effects:
       effects
         .map((e) => (e.kind === "present" ? `present:${e.surface}` : e.kind))

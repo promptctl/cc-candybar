@@ -20,7 +20,10 @@ import {
 import { replyOf, type HandledRequest, type Reply } from "./reply.js";
 import { type Lane } from "../config/lanes.js";
 import { newestWins } from "../utils/newest-wins.js";
-import { REQUEST_TIMEOUT_MS } from "./foundations/request-deadline.js";
+import {
+  REQUEST_TIMEOUT_MS,
+  timeoutResponse,
+} from "./foundations/request-deadline.js";
 
 // What a connection reads of its daemon.
 export type ConnectionDaemon = Pick<
@@ -316,8 +319,8 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
 
   // Per-request timeout protects the daemon from a single slow request
   // (e.g. a hung git call) blocking subsequent connections. It abandons the
-  // RESPONSE, not the work in hand — the handler promise keeps running — though
-  // a click still waiting for its turn is refused then (src/daemon/reply.ts).
+  // RESPONSE. The handler owns what can still land: shared session context
+  // and reads, a draw already sent, and clicks as their own rules admit.
   //
   // [LAW:one-source-of-truth] That is safe for the transcript-fs path because
   // the work is bounded + shared, not orphaned: the today aggregate and
@@ -330,13 +333,7 @@ export function handleConnection(daemon: ConnectionDaemon, sock: Duplex): void {
   const clearBackstop = daemon.clock.after(REQUEST_TIMEOUT_MS, () =>
     on({
       kind: "deadline",
-      answer: replyOf({
-        ok: false,
-        error: `request exceeded ${REQUEST_TIMEOUT_MS}ms`,
-        code: "TIMEOUT",
-        daemonV: PROTOCOL_VERSION,
-        request: accepted.id,
-      }),
+      answer: replyOf(timeoutResponse(accepted.id)),
     }),
   );
 

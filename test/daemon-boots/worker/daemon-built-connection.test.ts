@@ -15,18 +15,21 @@ import {
 } from "../../../src/time";
 import {
   PROTOCOL_VERSION,
+  type ReaderRenderRequest,
   type Request,
   type Response,
 } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
+import { rendererOf } from "../../../src/renderer-interface/interface";
 import { mainRendererOf } from "../../../src/renderer/main";
 import { textOf } from "../../../src/render/frame";
-import { render, renderBody } from "../../helpers/daemon-e2e";
+import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
 import {
   startDaemon,
+  statsOf,
   type InWorkerDaemon,
 } from "../../helpers/in-worker-daemon";
 import { openedOn, type Opened } from "../../helpers/opened-connection";
@@ -55,17 +58,28 @@ describe("a connection to a daemon built in this worker", () => {
     return started;
   };
 
-  const renderRequest = (sessionId: string, deadline: number): Request =>
-    ({
+  const renderRequest = (
+    sessionId: string,
+    deadline: number | undefined,
+    cost = 0,
+  ): ReaderRenderRequest => {
+    const body = renderBody(
+      sessionId,
+      projectDir,
+      { termCols: 200, termRows: 40 },
+      ["cc-candybar", "--config", config],
+    );
+    return {
       v: PROTOCOL_VERSION,
       kind: "render",
-      ...renderBody(sessionId, projectDir, { termCols: 200, termRows: 40 }, [
-        "cc-candybar",
-        "--config",
-        config,
-      ]),
+      ...body,
+      hookData: {
+        ...hookData(sessionId, projectDir),
+        cost: { total_cost_usd: cost },
+      },
       deadline,
-    }) as Request;
+    } as ReaderRenderRequest;
+  };
 
   const answered = async (opened: Opened): Promise<Response> => {
     await until(() => opened.received.length > 0, "the connection's answer");
@@ -101,7 +115,7 @@ describe("a connection to a daemon built in this worker", () => {
     config = path.join(root, "bar.json5");
     writeFileSync(
       config,
-      `{ globals: { experimentalStatusline: true }, segments: { mark: { template: 'a drawn mark' } }, root: { h: ['mark'] } }`,
+      `{ globals: { experimentalStatusline: true, experimentalPane: true }, segments: { mark: { template: 'a drawn mark {{ .session.cost }}' } }, root: { h: ['mark'] } }`,
     );
   });
 
@@ -157,8 +171,7 @@ describe("a connection to a daemon built in this worker", () => {
     monotonic += 500;
     opened.send(renderRequest("connection-clock", at.getTime() + 2_000));
 
-    // Read off the render's own event: a backstop that answered first abandons
-    // the answer, not the render, and the attempt is logged either way.
+    // The attempt still records its queue time after its reply budget ends.
     const [event] = await loggedLines(
       process.env,
       (lines) => renderEventsOf(lines, "connection-clock"),
@@ -214,4 +227,142 @@ describe("a connection to a daemon built in this worker", () => {
       release();
     }
   });
+
+  test("an embedded client with no deadline can still take a draw", async () => {
+    const clock = heldClock(new Date());
+    const entered = Promise.withResolvers<void>();
+    let draws = 0;
+    let release = () => {};
+    const renderer = inProcessRenderer((boot, reaches) => {
+      const held = holdable(mainRendererOf(boot, reaches));
+      return hearingEvents(held.renderer, ({ event }) => {
+        if (event.kind === "request") draws++;
+        if (event.kind === "context") {
+          release = held.hold();
+          entered.resolve();
+        }
+      });
+    });
+    const running = startDaemon(process.env, { clock, renderer });
+    started = running;
+    const answer = running.daemon.reply(
+      renderRequest("embedded", undefined, 17),
+      () => false,
+      running.daemon.stats.accept(),
+      () => false,
+    );
+    try {
+      await entered.promise;
+      await clock.settle(REQUEST_TIMEOUT_MS + 1);
+      release();
+      await clock.settle(0);
+      const { resp, settled } = await answer;
+      settled(true);
+      expect(draws).toBe(1);
+      expect(drawn(resp).length).toBeGreaterThan(0);
+    } finally {
+      release();
+    }
+  });
+
+  test.each([
+    { cause: "the socket backstop", budget: 2_000, expiry: REQUEST_TIMEOUT_MS },
+    { cause: "the client's deadline", budget: 100, expiry: 100 },
+  ])(
+    "drops abandoned draws at $cause and still updates the pane",
+    async ({ budget, expiry }) => {
+      const clock = heldClock(new Date());
+      const occupied = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const draws: string[] = [];
+      const contexts: string[] = [];
+      let occupyNext = false;
+      let occupiedTurn: ReturnType<typeof statsOf> | undefined;
+      const renderer = inProcessRenderer((boot, reaches) => {
+        const real = mainRendererOf(boot, reaches);
+        return rendererOf({
+          event: async (input) => {
+            const { event } = input;
+            if (event.kind === "context") {
+              const session = event.context.hookData.session_id;
+              contexts.push(session);
+              if (session === "draw-a" && occupyNext) {
+                occupyNext = false;
+                occupiedTurn = statsOf(running.daemon);
+              }
+            }
+            if (event.kind === "request")
+              draws.push(event.context.hookData.session_id);
+            return real.answer(input);
+          },
+          adapter: async (input) => {
+            if (input.push.kind === "stats" && occupiedTurn !== undefined) {
+              occupied.resolve();
+              await release.promise;
+            }
+            return real.answer(input);
+          },
+        });
+      });
+      const running = startDaemon(process.env, { clock, renderer });
+      started = running;
+      const send = (
+        session: string,
+        cost: number,
+        budgetMs = 2_000,
+      ): Opened => {
+        const opened = openedOn(running.connect());
+        opened.send(renderRequest(session, clock.now() + budgetMs, cost));
+        return opened;
+      };
+
+      let pane: Opened | undefined;
+      try {
+        expect(drawn(await answered(send("draw-a", 1)))).toContain(
+          "a drawn mark",
+        );
+        expect(drawn(await answered(send("draw-b", 2)))).toContain(
+          "a drawn mark",
+        );
+        await clock.settle(0);
+        draws.length = 0;
+        contexts.length = 0;
+        occupyNext = true;
+
+        const expiring = send("draw-a", 3, budget);
+        await occupied.promise;
+        await clock.settle(0);
+        const queuedDraw = statsOf(running.daemon);
+        const admittedBefore = running.daemon.stats.requestsTotal;
+        const departing = send("draw-b", 97);
+        await clock.settle(0);
+        expect(running.daemon.stats.requestsTotal).toBe(admittedBefore + 1);
+        departing.client.destroy();
+
+        await clock.settle(50);
+        // By the time its draw is admitted, this client is inside its draw
+        // reserve. Its full reply deadline remains ahead of the clock.
+        const fresh = send("draw-a", 11, expiry - 50 + 20);
+        pane = openedOn(running.connect());
+        pane.send({ ...SUBSCRIBE, sessionId: "draw-b", lane: "pane" });
+        await clock.settle(expiry - 50 + 1);
+        release.resolve();
+        expect(await answered(expiring)).toMatchObject({
+          ok: false,
+          code: "TIMEOUT",
+          request: expect.any(Number),
+        });
+        expect(drawn(await answered(fresh))).toContain("a drawn mark 11");
+        expect((await queuedDraw).mailbox.queued).toBeGreaterThan(0);
+        await clock.settle(0);
+        expect(drawn(await answered(pane))).toContain("a drawn mark 97");
+        expect(contexts).toEqual(["draw-a", "draw-b", "draw-a"]);
+        expect(expiring.received).toHaveLength(1);
+        expect(draws).toEqual(["draw-a"]);
+      } finally {
+        release.resolve();
+        pane?.client.destroy();
+      }
+    },
+  );
 });

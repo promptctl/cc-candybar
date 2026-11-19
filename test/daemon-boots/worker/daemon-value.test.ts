@@ -212,9 +212,11 @@ describe("the daemon is a value", () => {
     open = null;
   };
 
+  // [LAW:one-source-of-truth] These clients take replies directly. A case
+  // that states a deadline uses the wall clock of the daemon it drives.
   const renderRequest = (
     sessionId: string,
-    deadlineMs = 2_000,
+    deadline?: number,
   ): ReaderRenderRequest => ({
     v: PROTOCOL_VERSION,
     kind: "render",
@@ -224,7 +226,7 @@ describe("the daemon is a value", () => {
     cwd: projectDir,
     termCols: 200,
     termRows: 40,
-    deadline: Date.now() + deadlineMs,
+    ...(deadline === undefined ? {} : { deadline }),
     // The environment it runs in now, as a client started by Claude Code
     // reports its own.
     env: plainEnvironment(process.env),
@@ -550,7 +552,9 @@ describe("the daemon is a value", () => {
       const second = request(clickBody(clear));
       // The context uses the same mailbox. Once it reaches the renderer,
       // the second click has already handed its act to the pane queue.
-      const pending = request(renderRequest(session, 20_000));
+      const pending = request(
+        renderRequest(session, systemTimekeeper.now() + 20_000),
+      );
       await context.reached;
       expect(linesTyped).toEqual(["/compact"]);
       void daemon.close();
@@ -700,11 +704,13 @@ describe("the daemon is a value", () => {
       `{ segments: { at: { template: 'EPOCH={{ unixEpoch now }}' } }, root: { h: ['at'] } }`,
     );
     const frozen = new Date("2031-02-03T04:05:06Z");
-    const daemon = construct({
-      clock: { ...systemTimekeeper, now: () => frozen.getTime() },
-    });
+    const clock = { ...systemTimekeeper, now: () => frozen.getTime() };
+    const daemon = construct({ clock });
 
-    const bar = await answer(daemon, renderRequest("value-clock"));
+    const bar = await answer(
+      daemon,
+      renderRequest("value-clock", clock.now() + 2_000),
+    );
     expect(textOf(bar)).toContain(`EPOCH=${frozen.getTime() / 1000}`);
   });
 
@@ -727,7 +733,7 @@ describe("the daemon is a value", () => {
     daemon.arm();
 
     // A recorded session and a source waiting in the background.
-    await answer(daemon, renderRequest("value-close", 1));
+    await answer(daemon, renderRequest("value-close"));
     const { setting, on } = LANES.statusline.switch;
     await clickLink(
       daemon,
@@ -771,7 +777,9 @@ describe("the daemon is a value", () => {
     // A render waiting on the slow source as the daemon closes.
     await until(() => existsSync(ran), "the slow source running");
     const midWait = daemon.handle(
-      classifyInbound(renderRequest("value-close", 20_000)),
+      classifyInbound(
+        renderRequest("value-close", systemTimekeeper.now() + 20_000),
+      ),
       () => false,
       daemon.stats.accept(),
       () => false,
