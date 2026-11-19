@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-872",
+      "ref": "refs/pull/872/merge",
+      "sha": "e8f58468d58e1139eaffc983d25bfbd87bf6ef98",
+      "timestamp": "2026-11-19T14:28:40.968Z",
+      "commits": [
+        {
+          "sha": "e8f58468d58e1139eaffc983d25bfbd87bf6ef98",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:27:19Z",
+          "message": "Merge 256bc2b20da17f1420c77fafc95db2aa2148d59b into 37d262840eafee4764958df49f0086054dabe007\n"
+        },
+        {
+          "sha": "256bc2b20da17f1420c77fafc95db2aa2148d59b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:20:29-07:00",
+          "message": "fix(host): launch desktop and tmux actions from their reporting session\n"
+        },
+        {
+          "sha": "aad27301d40c47db062ce825720c3ee4d655e0d8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:13:47-07:00",
+          "message": "test(native): exercise cold and steady statusline ticks over the socket\n"
+        },
+        {
+          "sha": "939caf28b892febb706ad8b99bc4b84da7d11ca5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T07:09:38-07:00",
+          "message": "fix(host): admit compact renders through the shared checkpoint\n"
+        },
+        {
+          "sha": "c99a5e091b80f2c587f052e1765dc84918b0f78a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:27:19-07:00",
+          "message": "perf(host): reuse the reported environment for each session\n"
+        },
+        {
+          "sha": "ca64fb7f241153d05990ebd622702af96d2c6cfe",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:17:52-07:00",
+          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
+        },
+        {
+          "sha": "c64c879289238589ca2bf84822f419dc057ba2ee",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:10:17-07:00",
+          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "37d262840eafee4764958df49f0086054dabe007",
@@ -13,63 +70,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T14:25:04Z",
           "message": "chore(release): set `package.json` to 1.234.2\n\n## [1.234.2](https://github.com/promptctl/cc-candybar/compare/v1.234.1...v1.234.2) (2026-11-19)\n\n### Performance Improvements\n\n* **config:** share regular file bytes across discovery batches (ibyq.ysf) ([#873](https://github.com/promptctl/cc-candybar/issues/873)) ([3a30e23](https://github.com/promptctl/cc-candybar/commit/3a30e23db763050eca5ec970685f4d4872978e3e))\n* **host:** share checkout filesystem observations (x96a.uqq) ([#870](https://github.com/promptctl/cc-candybar/issues/870)) ([4521bf6](https://github.com/promptctl/cc-candybar/commit/4521bf6f3ff8442f1ade1eb3785e9b245dd454e6))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-872",
-      "ref": "refs/pull/872/merge",
-      "sha": "8e703fdfc7a277107b813851ce1bf782525bdaf2",
-      "timestamp": "2026-11-19T14:23:13.596Z",
-      "commits": [
-        {
-          "sha": "8e703fdfc7a277107b813851ce1bf782525bdaf2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:22:11Z",
-          "message": "Merge 8d40716bea9fefa465785b42eef38346d4951940 into 3a30e23db763050eca5ec970685f4d4872978e3e\n"
-        },
-        {
-          "sha": "8d40716bea9fefa465785b42eef38346d4951940",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:20:29-07:00",
-          "message": "fix(host): launch desktop and tmux actions from their reporting session\n"
-        },
-        {
-          "sha": "8429dd2dada84a1c24178224b337af002dbc91ae",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:13:47-07:00",
-          "message": "test(native): exercise cold and steady statusline ticks over the socket\n"
-        },
-        {
-          "sha": "10918aca6bebd17ea875bf635d35c1ae512f3a9e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:09:38-07:00",
-          "message": "fix(host): admit compact renders through the shared checkpoint\n"
-        },
-        {
-          "sha": "a2b8dc1c596d9d062c23a13331a60d7c7d2ad113",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:27:19-07:00",
-          "message": "perf(host): reuse the reported environment for each session\n"
-        },
-        {
-          "sha": "c0dd9bd2aa1d0d557bdc44e046b90d7680d9fa41",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:17:52-07:00",
-          "message": "perf(native): send session environments on demand (ibyq.lwo)\n"
-        },
-        {
-          "sha": "548d522e463e0b953e23f424476e350b52e62a31",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:10:17-07:00",
-          "message": "fix(host): run session-scoped desktop actions in the session environment\n"
         }
       ]
     },
