@@ -1,3 +1,9 @@
+## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)
+
+### Bug Fixes
+
+* **renderer:** keep writes and failures attached to their turn ([#908](https://github.com/promptctl/cc-candybar/issues/908)) ([4680c55](https://github.com/promptctl/cc-candybar/commit/4680c55df0a0905e549e817bb85a273c8c6dc221))
+
 ## [1.235.12](https://github.com/promptctl/cc-candybar/compare/v1.235.11...v1.235.12) (2026-11-19)
 
 ### Bug Fixes
