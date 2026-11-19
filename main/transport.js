@@ -90073,28 +90073,11 @@ function readShared(world, source = diskFiles) {
   };
 }
 function installedRoots(locs, files = discoveryFiles()) {
-  return installedPluginDirs(locs).map(
-    (root) => readDefinitions(
-      { root, scope: "plugins", listed: files.folders(root) },
-      files
-    )
-  );
-}
-function readDefinitions({ root, scope, listed }, files) {
-  return {
+  return installedPluginDirs(locs).map((root) => ({
     root,
-    scope,
-    listed: "error" in listed ? listed : {
-      folders: listed.folders.map(
-        (name) => readDefinition(
-          import_node_path32.default.join(root, name, DEFINITION_FILE),
-          scope,
-          files
-        )
-      ),
-      files: listed.files
-    }
-  };
+    scope: "plugins",
+    listed: files.folders(root)
+  }));
 }
 function readDefinition(file, scope, files = diskFiles) {
   const badPath = pluginDefinitionProblem(file);
@@ -90118,7 +90101,7 @@ function readDefinition(file, scope, files = diskFiles) {
     definition: read2.kind === "text" ? { ...read2, dir } : read2
   };
 }
-function sessionPlugins(roots, checkout) {
+function sessionPlugins(roots, checkout, files = discoveryFiles()) {
   const byNs = /* @__PURE__ */ new Map();
   const strays = [];
   const notices = [];
@@ -90129,10 +90112,10 @@ function sessionPlugins(roots, checkout) {
       );
       continue;
     }
-    for (const file of listed.folders) {
-      const key = `${scope}\0${import_node_path32.default.basename(import_node_path32.default.dirname(file.path))}`;
+    for (const name of listed.folders) {
+      const key = `${scope}\0${name}`;
       byNs.delete(key);
-      byNs.set(key, file);
+      byNs.set(key, { scope, path: import_node_path32.default.join(root, name, DEFINITION_FILE) });
     }
     for (const name of listed.files)
       strays.push({ path: import_node_path32.default.join(root, name), scope });
@@ -90140,7 +90123,9 @@ function sessionPlugins(roots, checkout) {
   if (checkout.kind === "failed")
     notices.push(`Checkout could not be read: ${checkout.reason}`);
   return {
-    plugins: [...byNs.values()],
+    plugins: [...byNs.values()].map(
+      (file) => readDefinition(file.path, file.scope, files)
+    ),
     strays,
     notices,
     checkout: checkout.kind === "ok" ? checkout.value : null
@@ -90186,10 +90171,11 @@ function discover(query, shared) {
   const { resolution, repoRoot, locations: locations2, watchedFiles } = search;
   const { project } = resolution;
   const session = sessionPlugins(
-    repoRoot === null ? shared.installed : [...shared.installed, readDefinitions(repoRoot, files)],
+    repoRoot === null ? shared.installed : [...shared.installed, repoRoot],
     // [LAW:nothing-unseen] exception: discovery observes a new ancestor .git
     // on its next pass. Watching every parent would add a watch per ancestor.
-    files.checkout(query.cwd)
+    files.checkout(query.cwd),
+    files
   );
   const places = chainPlaces(resolution, locations2).map(
     (place) => contentAt(search, place, files)

@@ -2,39 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-906",
-      "ref": "refs/pull/906/merge",
-      "sha": "f8a50cbc2c2090f130c72fe6fd625542675ad530",
-      "timestamp": "2026-11-19T20:13:27.698Z",
-      "commits": [
-        {
-          "sha": "f8a50cbc2c2090f130c72fe6fd625542675ad530",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T20:12:20Z",
-          "message": "Merge 08a5c5dbf1a8c29fcc89611774ef1492c344fc02 into 99736d58e59a636f23bf2fc28651bb8eeb1df4da\n"
-        },
-        {
-          "sha": "08a5c5dbf1a8c29fcc89611774ef1492c344fc02",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:31:16-07:00",
-          "message": "fix(config): select plugin definitions before reading them\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "99736d58e59a636f23bf2fc28651bb8eeb1df4da",
-      "timestamp": "2026-11-19T20:11:53.256Z",
+      "sha": "98df29e0562517e9beb1e1386c47a4f552e80236",
+      "timestamp": "2026-11-19T20:18:56.979Z",
       "commits": [
         {
-          "sha": "99736d58e59a636f23bf2fc28651bb8eeb1df4da",
+          "sha": "98df29e0562517e9beb1e1386c47a4f552e80236",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:10:51-07:00",
-          "message": "fix(config): recognize equivalent saved project directories (#896)"
+          "timestamp": "2026-11-19T13:17:50-07:00",
+          "message": "fix(config): select plugin definitions before reading them (#906)"
         }
       ]
     },
