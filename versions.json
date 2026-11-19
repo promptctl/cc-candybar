@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "9df2afa5338a7144c675bbd4ff228c85f32fe868",
+      "timestamp": "2026-11-19T13:09:53.988Z",
+      "commits": [
+        {
+          "sha": "9df2afa5338a7144c675bbd4ff228c85f32fe868",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:08:41-07:00",
+          "message": "feat(daemon): route named renderers through one shared host (#864)\n\n* feat(daemon): route named renderers through one shared host\n\n* style(test): format the named renderer process fixture\n\n* fix(daemon): admit named renderers from statusline push clients\n\n* fix(daemon): prepare the renderer before host timers start\n\n* test(host): measure named ingress from the built daemon\n\n* test(daemon): wait for a complete shutdown fixture pid"
+        }
+      ]
+    },
+    {
       "version": "pr-857",
       "ref": "refs/pull/857/merge",
       "sha": "b7b9ede18926abd5ba7edd97f0a0984c9c02e7f5",
@@ -60,63 +75,6 @@
       ]
     },
     {
-      "version": "pr-864",
-      "ref": "refs/pull/864/merge",
-      "sha": "41938b1e6e257eb63d6c3e5182ddd2f9451b6097",
-      "timestamp": "2026-11-19T13:03:09.013Z",
-      "commits": [
-        {
-          "sha": "41938b1e6e257eb63d6c3e5182ddd2f9451b6097",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:01:49Z",
-          "message": "Merge bd109c30d59d05caeb9dab15b4822fbad97e7905 into 16eb7713b80a9c10567f515cf183025faeca7db4\n"
-        },
-        {
-          "sha": "bd109c30d59d05caeb9dab15b4822fbad97e7905",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T06:01:41-07:00",
-          "message": "test(daemon): wait for a complete shutdown fixture pid\n"
-        },
-        {
-          "sha": "b4c6a5cca3c7fdd831bc5a88f31b98c7acc31da7",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:49:28-07:00",
-          "message": "test(host): measure named ingress from the built daemon\n"
-        },
-        {
-          "sha": "90e7db4f10762d4fd75354926b52a9a5b361efff",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:28:48-07:00",
-          "message": "fix(daemon): prepare the renderer before host timers start\n"
-        },
-        {
-          "sha": "67c76d8302a2060e5179f810329c201137bb0dcd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:20:10-07:00",
-          "message": "fix(daemon): admit named renderers from statusline push clients\n"
-        },
-        {
-          "sha": "e9379c7af21812ab4b880e7986a7e3179d0a9fee",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:18:06-07:00",
-          "message": "style(test): format the named renderer process fixture\n"
-        },
-        {
-          "sha": "f8d17a3c9cc1c0cdfcd4932d5f0b4b1d8458f2b9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:11:10-07:00",
-          "message": "feat(daemon): route named renderers through one shared host\n"
-        }
-      ]
-    },
-    {
       "version": "pr-870",
       "ref": "refs/pull/870/merge",
       "sha": "0886189c1082b1cf0fb2a62538828da29773e63e",
@@ -135,21 +93,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:58:00-07:00",
           "message": "perf(host): share checkout filesystem observations (x96a.uqq)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "16eb7713b80a9c10567f515cf183025faeca7db4",
-      "timestamp": "2026-11-19T12:54:41.939Z",
-      "commits": [
-        {
-          "sha": "16eb7713b80a9c10567f515cf183025faeca7db4",
-          "author_name": "semantic-release-bot",
-          "author_email": "semantic-release-bot@martynus.net",
-          "timestamp": "2026-11-19T12:53:27Z",
-          "message": "chore(release): set `package.json` to 1.233.2\n\n## [1.233.2](https://github.com/promptctl/cc-candybar/compare/v1.233.1...v1.233.2) (2026-11-19)\n\n### Bug Fixes\n\n* **config:** refuse non-regular files during discovery (ibyq.h8t) ([#869](https://github.com/promptctl/cc-candybar/issues/869)) ([23c326f](https://github.com/promptctl/cc-candybar/commit/23c326f89ca153631c98d23faf4844e8803a63d5))\n"
         }
       ]
     },

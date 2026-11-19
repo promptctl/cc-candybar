@@ -30482,6 +30482,13 @@ var import_node_path5 = __toESM(require_path_browserify(), 1);
 // src/daemon/foundations/renderer-name.ts
 init_globals();
 var MAIN_RENDERER = "main";
+function rendererNameOf(raw) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+    throw new Error(
+      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
+    );
+  return raw;
+}
 
 // src/daemon/paths.ts
 function xdgEnv(env2, name) {
@@ -50409,6 +50416,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       try {
         const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        const renderer2 = parts.rendererFor?.(checked.req, checked.environment, order2) ?? parts.renderer;
         sighted(checked.req, "drawing");
         frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
@@ -50416,7 +50424,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
         answered = await answerStatusline(
-          parts.renderer,
+          renderer2,
           parts.publishFrame,
           parts.collector,
           clock,
@@ -89051,33 +89059,20 @@ function createDaemon(inputs) {
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
-  const preparedRenderer = inputs.renderer({
-    name: inputs.rendererName,
-    build: (reaches2) => mainRendererOf(
-      {
-        stored: stores.current(),
-        linkSigner: linkSigner2,
-        locations: locs,
-        home: host.home,
-        gates,
-        memoryLimitBytes: memoryLimitBytes2
-      },
-      reaches2
-    ),
-    // The key crosses in base64, so the boot crosses as a line.
-    boot: () => {
-      const key = inputs.linkKey();
-      return {
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes: memoryLimitBytes2,
-        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
-      };
-    },
-    node: bundle.node
-  });
+  const primaryPrepared = prepareRenderer(
+    inputs.rendererName,
+    bundle.path,
+    inputs.rendererEntry ?? bundle.path
+  );
+  const renderers = /* @__PURE__ */ new Map();
+  const routes = /* @__PURE__ */ new Map();
+  const nameOf2 = (session) => routes.get(session)?.name ?? inputs.rendererName;
+  const viewersOf = (name, viewers) => Object.fromEntries(
+    Object.entries(viewers).filter(
+      ([session]) => nameOf2(session) === name
+    )
+  );
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -89089,7 +89084,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => serving() ? link.process() : null
+    renderer: () => serving() ? primary.link.process() : null
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
@@ -89156,10 +89151,23 @@ function createDaemon(inputs) {
     publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
-    deliver: (make) => parts.renderer.deliver(
-      () => ({ kind: "event", event: { kind: "viewers", viewers: make() } }),
-      []
-    ),
+    deliver: async (make) => {
+      const sent = await Promise.all(
+        [...renderers.values()].map(
+          ({ renderer }) => renderer.deliver(
+            () => ({
+              kind: "event",
+              event: {
+                kind: "viewers",
+                viewers: viewersOf(renderer.name, make())
+              }
+            }),
+            []
+          )
+        )
+      );
+      return sent.find((turn) => turn.kind === "threw") ?? { kind: "answered" };
+    },
     log
   });
   const paneVisibility = new PaneVisibility({
@@ -89199,7 +89207,15 @@ function createDaemon(inputs) {
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
-    deliver: (event) => parts.renderer.deliver(() => ({ kind: "event", event }), []),
+    deliver: (event) => {
+      const session = event.kind === "retire" ? event.session : event.worldState.session;
+      const route = routes.get(session);
+      const renderer = (renderers.get(nameOf2(session)) ?? primary).renderer;
+      return renderer.deliver(() => ({ kind: "event", event }), []).finally(() => {
+        if (event.kind === "retire" && routes.get(session) === route)
+          routes.delete(session);
+      });
+    },
     log
   });
   const reaches = {
@@ -89219,50 +89235,202 @@ function createDaemon(inputs) {
       release: (id2) => managedStorage.release(id2)
     }
   };
-  const link = preparedRenderer.start({
-    reaches,
-    log,
-    clock,
-    // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session gets the context of its latest stamp,
-    // all in the one `start` turn, so
-    // its output names every session it serves; and who watches each, so its
-    // feeds open. All through the host's one path to the renderer, each turn
-    // recorded there.
-    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
-    // every input after it finds its sessions handed in.
-    start: async () => {
-      if (!serving()) return;
-      const started2 = await parts.renderer.start(() => {
-        const viewers = frameFeeds.viewers();
-        frameFeeds.handedIn(viewers);
-        return {
-          kind: "event",
-          event: {
-            kind: "start",
-            viewers,
-            sessions: collector.liveSessions()
-          }
-        };
-      }, [["why", "renderer-start"]]);
-      if (started2.kind === "threw") {
-        frameFeeds.handedIn(null);
-        throw new CrossedFailure(started2.failure);
-      }
-    },
-    ended: (event) => {
-      rendererEnded = event;
-      restateFaults();
-    }
-  });
-  const configRenderers = /* @__PURE__ */ new Map();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     log,
-    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins)
+    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
+  const declared = /* @__PURE__ */ new Map();
+  const aggregate = () => {
+    const sources = {};
+    const lanes = {};
+    for (const [name, subscription2] of declared) {
+      for (const [id2, values2] of Object.entries(subscription2.sources))
+        if (nameOf2(id2) === name) sources[id2] = values2;
+      for (const [id2, values2] of Object.entries(subscription2.lanes))
+        if (nameOf2(id2) === name) lanes[id2] = values2;
+    }
+    collector.subscribed({ sources });
+    frameFeeds.switched(lanes);
+    declaredBarPanes.declare(lanes);
+  };
+  function prepareRenderer(name, reported, entry) {
+    const stores = new HeldStores(inputs.profile(name, log));
+    const prepared = inputs.renderer({
+      name,
+      entry,
+      build: (hostReaches) => mainRendererOf(
+        {
+          stored: stores.current(),
+          linkSigner: linkSigner2,
+          locations: locs,
+          home: host.home,
+          gates,
+          memoryLimitBytes: memoryLimitBytes2
+        },
+        hostReaches
+      ),
+      boot: () => {
+        const key = inputs.linkKey();
+        return {
+          stored: stores.current(),
+          host: { ...host, env: plainEnvironment(host.env) },
+          memoryLimitBytes: memoryLimitBytes2,
+          linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+        };
+      },
+      node: bundle.node
+    });
+    return { name, reported, entry, stores, prepared };
+  }
+  const connectRenderer = ({
+    name,
+    reported,
+    entry,
+    stores,
+    prepared
+  }) => {
+    const link = prepared.start({
+      reaches,
+      log,
+      clock,
+      // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
+      // mailbox and only rebuilds the sessions currently routed to it.
+      start: async () => {
+        if (!serving()) return;
+        const started2 = await renderer.start(() => {
+          const viewers = frameFeeds.viewers();
+          if (renderers.size === 1) frameFeeds.handedIn(viewers);
+          return {
+            kind: "event",
+            event: {
+              kind: "start",
+              viewers: viewersOf(name, viewers),
+              sessions: collector.liveSessions().filter(
+                ({ worldState }) => nameOf2(worldState.session) === name
+              )
+            }
+          };
+        }, [["why", "renderer-start"]]);
+        if (started2.kind === "threw") {
+          frameFeeds.handedIn(null);
+          throw new CrossedFailure(started2.failure);
+        }
+        if (renderers.size > 1) frameFeeds.announce();
+      },
+      ended: (event) => {
+        rendererEnded = event;
+        restateFaults();
+      }
+    });
+    const renderer = rendererHost(
+      name,
+      clock,
+      link.renderer,
+      log,
+      {
+        subscribed: (subscriptions) => {
+          declared.set(name, {
+            sources: subscriptions.sources,
+            lanes: subscriptions.lanes
+          });
+          aggregate();
+        },
+        frames: (frames) => frameFeeds.took(
+          frames.filter(({ session }) => nameOf2(session) === name)
+        ),
+        stored: (writes) => stores.take(writes),
+        holding: (session) => collector.holding(session),
+        recorded: () => {
+        }
+      },
+      {
+        perform: (act) => acts.perform(act),
+        stateDir: paths2.state,
+        configs: configDiscovery.forRenderer(name),
+        closing: cancelling,
+        unheard: (text4) => {
+          actFailed = joinedEvent(actFailed, text4, instant());
+          restateFaults();
+        }
+      }
+    );
+    return { reported, entry, stores, link, renderer };
+  };
+  const primary = connectRenderer(primaryPrepared);
+  renderers.set(inputs.rendererName, primary);
+  const canonicalEntry = (name, bundlePath) => {
+    try {
+      if (inputs.rendererEntryOf === void 0)
+        throw new Error("this host has no process entry resolver");
+      return inputs.rendererEntryOf(bundlePath);
+    } catch (error) {
+      throw new BadVerbArgs(
+        `renderer ${name} bundle ${JSON.stringify(bundlePath)}: ${String(error)}`
+      );
+    }
+  };
+  const rendererFor = (request2, environment, order2) => {
+    const session = request2.hookData.session_id;
+    const route = routes.get(session);
+    const asked = environment.kind === "ok" ? variableOf(environment.value, "CC_CANDYBAR_NAME") : null;
+    const client = request2.hints.client;
+    let name = client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
+    if (asked?.kind === "ok") {
+      try {
+        name = rendererNameOf(asked.value);
+      } catch (error) {
+        throw new BadVerbArgs(`CC_CANDYBAR_NAME: ${String(error)}`);
+      }
+    }
+    if (route !== void 0 && route.name !== name && route.order > order2)
+      throw new BadVerbArgs(
+        `session ${session} has already moved to renderer ${route.name}`
+      );
+    let target = renderers.get(name);
+    const binding = asked?.kind === "ok" ? client?.bundle : void 0;
+    if (target === void 0) {
+      if (binding === void 0)
+        throw new BadVerbArgs(
+          `renderer ${name} needs a statusline client's bundle`
+        );
+      target = connectRenderer(
+        prepareRenderer(name, binding, canonicalEntry(name, binding))
+      );
+      target.stores.load();
+      target.link.serve();
+      renderers.set(name, target);
+      if (phase.kind === "armed") target.link.arm();
+    } else if (binding !== void 0 && binding !== target.reported && binding !== target.entry && canonicalEntry(name, binding) !== canonicalEntry(name, target.entry)) {
+      throw new BadVerbArgs(
+        `renderer ${name} is bound to ${JSON.stringify(target.entry)}`
+      );
+    }
+    if (route === void 0 || order2 >= route.order) {
+      routes.set(session, { name, order: order2 });
+      if (route !== void 0 && route.name !== name) {
+        const former = renderers.get(route.name);
+        if (former !== void 0)
+          void former.renderer.deliver(
+            () => ({
+              kind: "event",
+              event: { kind: "retire", session }
+            }),
+            [["why", "renderer-moved"]]
+          ).catch((error) => {
+            log(
+              "error",
+              `renderer ${former.renderer.name} retire ${session}: ${String(error)}`
+            );
+          });
+        frameFeeds.handedIn(null);
+        frameFeeds.announce();
+      }
+    }
+    return target.renderer;
+  };
   const parts = {
     closing: cancelWork.signal,
     home: host.home,
@@ -89286,39 +89454,9 @@ function createDaemon(inputs) {
     frameFeeds,
     limits,
     collector,
-    renderer: rendererHost(
-      inputs.rendererName,
-      clock,
-      link.renderer,
-      log,
-      {
-        subscribed: (subscriptions) => {
-          collector.subscribed(subscriptions);
-          frameFeeds.switched(subscriptions.lanes);
-          declaredBarPanes.declare(subscriptions.lanes);
-        },
-        frames: (frames) => frameFeeds.took(frames),
-        stored: (writes) => stores.take(writes),
-        holding: (session) => collector.holding(session),
-        // The daemon waits on no turn's note.
-        recorded: () => {
-        }
-      },
-      {
-        perform: (act) => acts.perform(act),
-        stateDir: paths2.state,
-        configs: configDiscovery.forRenderer(inputs.rendererName),
-        closing: cancelling,
-        // [LAW:no-silent-failure] Joined to the last while it is owed, by the
-        // one rule for events that follow each other.
-        unheard: (text4) => {
-          actFailed = joinedEvent(actFailed, text4, instant());
-          restateFaults();
-        }
-      }
-    )
+    renderer: primary.renderer,
+    rendererFor
   };
-  configRenderers.set(parts.renderer.name, parts.renderer);
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
       case "period":
@@ -89376,7 +89514,7 @@ function createDaemon(inputs) {
       fileEvents.start(paths2.watchProbe);
       binaryWatch.arm();
       limits.arm();
-      link.arm();
+      for (const { link } of renderers.values()) link.arm();
     }
   };
   phase = { kind: "built" };
@@ -89386,10 +89524,10 @@ function createDaemon(inputs) {
     const starting = { kind: "starting" };
     phase = starting;
     try {
-      stores.load();
+      primary.stores.load();
       sessionBook.load();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
-      link.serve();
+      primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       phase = { kind: "serving" };
       return served;
@@ -89408,18 +89546,31 @@ function createDaemon(inputs) {
     return done;
   }
   async function tearDown(wasServing, done) {
-    const rendererStep = (kind) => () => wasServing ? parts.renderer.ask({ kind }) : void 0;
+    const rendererSteps = (kind) => wasServing ? [...renderers.values()].map(({ renderer }) => [
+      `${renderer.name} ${kind}`,
+      () => renderer.ask({ kind })
+    ]) : [];
     const teardown = [
       // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
       // ends is not started again, so no step below waits on a fresh boot.
       // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
       // from here, so no turn the renderer holds for later runs into the
       // close's.
-      ["renderer wake close", () => parts.renderer.closeWake()],
-      ["renderer close begins", () => link.beginClose()],
+      [
+        "renderer wakes close",
+        () => {
+          for (const { renderer } of renderers.values()) renderer.closeWake();
+        }
+      ],
+      [
+        "renderer close begins",
+        () => {
+          for (const { link } of renderers.values()) link.beginClose();
+        }
+      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
-      ["renderer journal close", rendererStep("close-journal")],
+      ...rendererSteps("close-journal"),
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.
@@ -89438,7 +89589,7 @@ function createDaemon(inputs) {
       // Before the views close: a `config` made after it finds its origin
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
-      ["renderer views close", rendererStep("close-views")],
+      ...rendererSteps("close-views"),
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close
@@ -89448,9 +89599,19 @@ function createDaemon(inputs) {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ["stores close", () => stores.close()],
+      ...[...renderers.values()].map(
+        ({ renderer, stores }) => [
+          `${renderer.name} stores close`,
+          () => stores.close()
+        ]
+      ),
       ["sessionBook close", () => sessionBook.close()],
-      ["renderer process close", () => link.close()]
+      ...[...renderers.values()].map(
+        ({ renderer, link }) => [
+          `${renderer.name} renderer close`,
+          () => link.close()
+        ]
+      )
     ];
     await runTeardown(teardown, log);
     phase = { kind: "closed", done };
@@ -90654,6 +90815,11 @@ function productionAdapters(paths2, daemonLog, machine) {
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
+    rendererEntryOf: (reported) => {
+      const entry = fs_default.realpathSync.native(reported);
+      if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
+      return entry;
+    },
     stat: fs_default.statSync
   };
 }
