@@ -155,7 +155,7 @@ export function readDefinition(
   // [LAW:one-source-of-truth] The same physical plugin folder determines
   // its definition read, sources and programs. Keep the original path for
   // the name, legacy data paths and diagnostics.
-  const dir = files.directory(path.dirname(file));
+  const dir = files.realpath(path.dirname(file));
   if (typeof dir !== "string")
     return {
       scope,

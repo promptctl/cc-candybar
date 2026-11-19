@@ -217,16 +217,27 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
   fs.symlinkSync(pluginDir, alias);
   const listed = path.join(alias, "plugin.json5");
   const config = path.join(dir, ".cc-candybar.json5");
-  fs.writeFileSync(config, JSON.stringify({ plugins: [listed, plugin] }));
+  const configText = JSON.stringify({ plugins: [listed, plugin] });
+  fs.writeFileSync(config, configText);
+  const configLinks = ["left.json5", "right.json5"].map((name) => {
+    const link = path.join(dir, name);
+    fs.symlinkSync(config, link);
+    return link;
+  });
   answerRepo(dir);
   const texts: string[] = [];
   const roots: string[] = [];
   const candidates: string[] = [];
+  const resolved: string[] = [];
   const files: DiscoveryFiles = {
     ...diskFiles,
     presence(file) {
       candidates.push(file);
       return diskFiles.presence(file);
+    },
+    realpath(file) {
+      resolved.push(file);
+      return diskFiles.realpath(file);
     },
     text(file) {
       texts.push(file);
@@ -250,6 +261,19 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
       layer?.listed[listed]?.definition,
     );
     expect(snapshot.plugins).toContainEqual(layer?.listed[plugin]);
+  }
+  for (const configFile of configLinks) {
+    for (const cwd of [dir, nested]) {
+      const { snapshot } = discover({ configFile, cwd }, shared);
+      expect(snapshot.chain).toEqual([
+        expect.objectContaining({
+          path: configFile,
+          content: { kind: "text", text: configText },
+        }),
+      ]);
+    }
+    expect(resolved.filter((file) => file === configFile)).toHaveLength(1);
+    expect(texts).not.toContain(configFile);
   }
   expect(candidates.filter((file) => file === config)).toHaveLength(1);
   expect(roots.filter((folder) => folder === pluginRoot)).toHaveLength(1);
