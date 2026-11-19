@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-838",
+      "ref": "refs/pull/838/merge",
+      "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
+      "timestamp": "2026-11-19T11:21:26.529Z",
+      "commits": [
+        {
+          "sha": "c25fdd012f542bc2635ac96aceac8bfd79c568fb",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T11:20:22Z",
+          "message": "Merge 9abf9f5d0b76113135496d1a06fb5281c91848e8 into ecf212eaa936d5cb5e72328591459059b6f50927\n"
+        },
+        {
+          "sha": "9abf9f5d0b76113135496d1a06fb5281c91848e8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:56:20-07:00",
+          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-856",
       "ref": "refs/pull/856/merge",
       "sha": "373369c1fbf9bf0bee4dc0a9eaa1ea6e4211968b",
@@ -155,28 +177,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T04:01:36-07:00",
           "message": "refactor(check): use typed render inspection (ibyq.62x)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-838",
-      "ref": "refs/pull/838/merge",
-      "sha": "dc88be0a53e0f57b2e2abbadf1c1b66c319b05ec",
-      "timestamp": "2026-11-19T11:01:34.472Z",
-      "commits": [
-        {
-          "sha": "dc88be0a53e0f57b2e2abbadf1c1b66c319b05ec",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:00:39Z",
-          "message": "Merge 138fa09be8f53cc25ac01fe270f2b4a69d11e8f0 into 19a035d767753cfdb962f8696891d8c5f54c8c6f\n"
-        },
-        {
-          "sha": "138fa09be8f53cc25ac01fe270f2b4a69d11e8f0",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:56:20-07:00",
-          "message": "fix(test): a test daemon is node itself, so the signal that stops it reaches its shutdown (f6eo)\n"
         }
       ]
     },

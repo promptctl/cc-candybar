@@ -28573,6 +28573,11 @@ function sessionKeyed(record2, refused2) {
   }
   return keyed;
 }
+function sessionIdOf(raw) {
+  const parsed2 = parseSessionId(raw);
+  if (!parsed2.ok) throw new Error(`session id ${parsed2.problem}`);
+  return parsed2.id;
+}
 
 // src/click/wire.ts
 var URL_SCHEME = "cc-candybar";
@@ -44426,16 +44431,16 @@ var ATTRIBUTE_SET = new Set(ATTRIBUTE_NAMES);
 var FOREGROUND_WORDS = ["not", "on", "link", ...ATTRIBUTE_NAMES, ...COLOR_NAMES];
 function editDistance(a, b) {
   let before = [];
-  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  let previous2 = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i2 = 1; i2 <= a.length; i2++) {
     const current = [i2];
     for (let j = 1; j <= b.length; j++) {
       const swap = i2 > 1 && j > 1 && a[i2 - 1] === b[j - 2] && a[i2 - 2] === b[j - 1];
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
+      current[j] = Math.min(previous2[j] + 1, current[j - 1] + 1, previous2[j - 1] + Number(a[i2 - 1] !== b[j - 1]), swap ? before[j - 2] + 1 : Infinity);
     }
-    [before, previous] = [previous, current];
+    [before, previous2] = [previous2, current];
   }
-  return previous[b.length];
+  return previous2[b.length];
 }
 function nearMiss(word, words2) {
   const typed = word.toLowerCase();
@@ -65795,7 +65800,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.13";
+var PACKAGE_VERSION = "1.232.14";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66274,9 +66279,9 @@ function memoryLimitBytes(env2) {
 }
 var DEFAULT_CHECK_INTERVAL = 60 * 1e3;
 var HEAP_SNAPSHOT_KEEP = 3;
-function readCharge(probed, previous) {
+function readCharge(probed, previous2) {
   if (probed.kind === "charged") return probed;
-  const gap = previous.kind === "unmeasured" ? 0 : previous.charge.kind === "charged" ? previous.rss - previous.charge.bytes : previous.charge.gap;
+  const gap = previous2.kind === "unmeasured" ? 0 : previous2.charge.kind === "charged" ? previous2.rss - previous2.charge.bytes : previous2.charge.gap;
   return { ...probed, bytes: probed.bytes - gap, gap };
 }
 function artifactFile(dir, kind, identity2) {
@@ -71601,9 +71606,7 @@ function synthesizeSettingsMenu(config) {
 var EDIT_LIVE_KEY = `${EDIT_NS}live`;
 var EDIT_LIVE_DISPLAY = ["\u2610 live", "\u2611 live"];
 var EDIT_DONE_SEG = `${EDIT_NS}done`;
-var EDIT_SAVE_ACTION = `${EDIT_NS}save`;
 var EDIT_CANCEL_SEG = `${EDIT_NS}cancel`;
-var EDIT_REWIND_ACTION = `${EDIT_NS}rewind`;
 var EDIT_CHANGES_VAR = `${EDIT_NS}changes`;
 var CHANGED = `(gt .${EDIT_CHANGES_VAR} 0)`;
 var TO_KEEP = `(or ${CHANGED} (gt .${UNSAVED_VAR} 0))`;
@@ -72022,18 +72025,12 @@ function synthesizeEditChrome(config) {
     type: "number",
     default: 0
   };
-  artifacts.actions[EDIT_SAVE_ACTION] = { save: true, layer: "user" };
-  artifacts.actions[EDIT_DONE_SEG] = {
-    do: [EDIT_SAVE_ACTION, EDIT_TOGGLE_ACTION]
-  };
+  artifacts.actions[EDIT_DONE_SEG] = { save: true, layer: "user" };
   artifacts.segments[EDIT_DONE_SEG] = {
     template: `{{ if ${TO_KEEP} }}{{ action "${EDIT_DONE_SEG}" "\u2713 save" }}{{ else }}{{ action "${EDIT_DONE_SEG}" "\u2713 done" }}{{ end }}`,
     when: EDIT_MODE_GATE
   };
-  artifacts.actions[EDIT_REWIND_ACTION] = { rewind: true };
-  artifacts.actions[EDIT_CANCEL_SEG] = {
-    do: [EDIT_REWIND_ACTION, EDIT_TOGGLE_ACTION]
-  };
+  artifacts.actions[EDIT_CANCEL_SEG] = { rewind: true };
   artifacts.segments[EDIT_CANCEL_SEG] = {
     template: `{{ action "${EDIT_CANCEL_SEG}" "\u21A9 cancel" }}`,
     when: `{{ and ${disclosureTerm(EDIT_MODE_REF)} ${CHANGED} }}`
@@ -82154,12 +82151,23 @@ function renderFrame(parts, sessionId2, fps, readings, following, feeds) {
     };
   }
 }
-function viewLanes(parts, sessionId2) {
+function viewLanes(parts, sessionId2, committed, editing) {
   var _stack = [];
   try {
     const { renderCache } = parts;
     const hold2 = __using(_stack, renderCache.holdView(sessionId2));
-    return hold2 === null ? null : laneSwitches(hold2.view.source.effective());
+    if (hold2 === null) return null;
+    if (!editing) return laneSwitches(hold2.view.source.effective());
+    const { config, authoredRoots: authoredRoots2 } = renderCache.getOrCreate(
+      hold2.entry.origin
+    ).state;
+    return laneSwitches(
+      resolveEffectiveGlobals(
+        config,
+        (key) => committed.get(sessionId2, key),
+        (preset) => authoredRoots2.has(preset)
+      )
+    );
   } catch (_) {
     var _error = _, _hasError = true;
   } finally {
@@ -83473,9 +83481,177 @@ var import_json55 = __toESM(require_dist(), 1);
 
 // src/config/config-snapshot.ts
 init_globals();
+function contentOfText(text4) {
+  return text4 === null ? { kind: "absent" } : { kind: "text", text: text4 };
+}
 function writable(content) {
   return content.kind !== "unreadable";
 }
+
+// src/renderer/config-writes.ts
+init_globals();
+function requireLayerText(file, content) {
+  switch (content.kind) {
+    case "absent":
+      return null;
+    case "text":
+      return content.text;
+    case "unreadable":
+      throw new BadVerbArgs(
+        `refused: ${file} could not be read (${content.error})`
+      );
+  }
+}
+var noLayers = () => {
+  throw new Error("a config layer was read with no click open");
+};
+var ConfigWrites = class {
+  constructor(mint) {
+    this.mint = mint;
+  }
+  mint;
+  // The open click's writes, by file: what it read first, and wrote last.
+  open = /* @__PURE__ */ new Map();
+  inFlight = null;
+  closed = false;
+  // The open click's changes to Claude Code's settings, which no renderer
+  answers = [];
+  // The open click's layers, asked for once it first reads one.
+  layersOf = noLayers;
+  layers = null;
+  // A click's journal opens over its session's layers: refused once the
+  // daemon's close has begun, so a click the close cut off writes nothing.
+  // [LAW:no-silent-failure] A landing still owed here is the host's bug: it
+  // hands a turn's `effect-done`s in before the next input.
+  begin(verb, layers) {
+    if (this.closed) throw new DaemonClosing(verb);
+    if (this.inFlight !== null)
+      throw new Error(
+        `${verb} began while a click's changes to ${this.inFlight.of.files.join(", ")} were still landing`
+      );
+    this.layersOf = layers;
+    this.layers = null;
+  }
+  // [LAW:one-source-of-truth] Use a click's own overlay where it already
+  // wrote, and the origin's held layer otherwise.
+  read(file) {
+    const written3 = this.open.get(file);
+    return written3 === void 0 ? this.layerAt(file).content : contentOfText(written3.after);
+  }
+  // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
+  // the chain does not hold is no layer a click of this session writes.
+  layerAt(file) {
+    const layer = this.held().chain.find((l) => l.path === file);
+    if (layer === void 0)
+      throw new BadVerbArgs(
+        `${file} is not a config file this session renders from \u2014 the click is not taken`
+      );
+    return layer;
+  }
+  held() {
+    return this.layers ??= this.layersOf();
+  }
+  // The role of the click's chain at `file`.
+  roleOf(file) {
+    return this.layerAt(file).role;
+  }
+  // The file of the click's chain at `role`: null when the chain holds no
+  // layer of that role.
+  pathOf(role) {
+    return this.held().chain.find((l) => l.role === role)?.path ?? null;
+  }
+  // A write of the open click, from the file as the click read it (`read`):
+  // one change per file, from the click's first read of it to its last write.
+  land(file, before, after) {
+    const open2 = this.open.get(file);
+    this.open.set(file, {
+      before: open2 === void 0 ? before : open2.before,
+      after
+    });
+  }
+  // The open click answers the trust book for `dir`: it lands with the
+  // click's changes.
+  answer(dir, answer2) {
+    this.answers.push({ origin: this.held().origin, dir, answer: answer2 });
+  }
+  // The open click is over. Its changes and its answers join its turn's
+  // effects, and its consequence waits for them; a click that changed no file
+  // and answered nothing has its consequence now.
+  seal(effects, session, consequence) {
+    const answers = this.answers;
+    this.answers = [];
+    let written3;
+    let origin = null;
+    try {
+      written3 = [...this.open].flatMap(([path31, { before, after }]) => {
+        const list2 = diffChanges(before, after);
+        return list2.length === 0 ? [] : [
+          {
+            path: path31,
+            origin: this.held().origin,
+            role: this.roleOf(path31),
+            list: list2
+          }
+        ];
+      });
+    } finally {
+      origin = this.layers?.origin ?? null;
+      this.layers = null;
+      this.layersOf = noLayers;
+      this.open.clear();
+    }
+    const files = written3.map(({ path: path31 }) => path31);
+    if (files.length === 0 && answers.length === 0) return consequence(effects);
+    if (session === null)
+      throw new Error(
+        `a click with no session wrote ${[...files, ...answers.map((a) => `the answer for ${a.dir}`)].join(", ")}`
+      );
+    const landing = [
+      ...written3.map(
+        ({ origin: origin2, role, list: list2 }) => ({
+          kind: "change",
+          id: this.mint(),
+          session,
+          target: { kind: "layer", origin: origin2, role },
+          changes: list2
+        })
+      ),
+      ...answers.map(({ origin: origin2, dir, answer: answer2 }) => ({
+        kind: "approve-repo",
+        id: this.mint(),
+        session,
+        origin: origin2,
+        dir,
+        answer: answer2
+      }))
+    ];
+    this.inFlight = {
+      of: { session, origin, files, consequence },
+      owed: new Set(landing.map((c) => c.id)),
+      missed: null
+    };
+    effects.push(...landing);
+  }
+  // A change's `effect-done`: the landing once its last change is settled,
+  // `owed` while others are still on their way, or undefined for an id no
+  // change of this renderer's holds.
+  settled(id2, outcome) {
+    const landing = this.inFlight;
+    if (landing === null || !landing.owed.delete(id2)) return void 0;
+    if (outcome.kind !== "ok") landing.missed ??= outcome;
+    if (landing.owed.size > 0) return "owed";
+    this.inFlight = null;
+    return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
+  }
+  // The origin of the click whose changes are on their way, if one's are.
+  landing() {
+    return this.inFlight?.of.origin ?? null;
+  }
+  // No click begins after this: the daemon is closing.
+  close() {
+    this.closed = true;
+  }
+};
 
 // src/renderer/config-file-store.ts
 var BOOLEAN_TRUTHY = /* @__PURE__ */ new Set(["1", "true"]);
@@ -83667,7 +83843,7 @@ function writeLayerOf(snapshot, role, configFile, home) {
 var rank = (role) => LAYER_ROLES.indexOf(role);
 function seenBy(layer, read2) {
   const held = (layers) => layers.flatMap((l) => {
-    const text4 = read2(l.path);
+    const text4 = requireLayerText(l.path, read2(l.path));
     return text4 === null ? [] : [heldLayer(l, text4)];
   });
   const { chain: chain2 } = layer.snapshot;
@@ -83823,7 +83999,7 @@ function writeValues(store, into, pairs2) {
 }
 function writeDrafts(store, layer, pairs2, placements) {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const under2 = inheritedOf(into);
   const valued = pairs2.reduce(
     (text4, [key, raw]) => setValue(
@@ -83890,7 +84066,7 @@ function deleteAtPath(text4, under2, path31) {
 function deleteValues(store, layer, keys2) {
   const into = seenBy(layer, (file) => store.read(file));
   const targets = keys2.map(requireTarget);
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   if (before === null) return;
   const under2 = inheritedOf(into);
   const after = targets.reduce(
@@ -83922,7 +84098,7 @@ function freePresetName(doc, under2, into) {
 }
 function writePreset(store, layer, from, globals, picks, placements) {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const doc = docOf(before ?? "");
   const under2 = inheritedOf(into);
   const name = freePresetName(doc, under2, into);
@@ -83963,7 +84139,7 @@ function writePreset(store, layer, from, globals, picks, placements) {
 }
 function writeThemeDefault(store, layer, theme24, look) {
   const into = seenBy(layer, (file) => store.read(file));
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const after = setValue(
     before ?? "",
     ["themeDefaults", theme24],
@@ -83981,7 +84157,7 @@ function deletePreset(store, layer, name) {
     );
   }
   const own2 = ["presets", name];
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const doc = docOf(before ?? "");
   if (before === null || doc === null || nodeAt(doc, own2) === void 0) {
     throw new BadVerbArgs(
@@ -84007,7 +84183,7 @@ function applyLayoutOp(store, layer, key, op) {
   if (target.scope !== "preset-root") {
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
-  const before = store.read(into.path);
+  const before = requireLayerText(into.path, store.read(into.path));
   const subject = op.op === "remove" ? op.target : op.anchor;
   const under2 = inheritedOf(into);
   const placement = writtenOnly(
@@ -84207,7 +84383,7 @@ var SessionState = class {
 
 // src/renderer-interface/history-storage.ts
 init_globals();
-var holdsNothing = (history) => history.past.length === 0 && history.future.length === 0 && history.savepoint === void 0;
+var holdsNothing = ({ past, future }) => past.length + future.length === 0;
 var SETTING_SESSION_KEYS = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey)
 );
@@ -84263,11 +84439,11 @@ var SettingsHistory = class {
     return writes;
   }
   depth(sessionId2) {
-    const { past, future, savepoint } = this.state.get(sessionId2) ?? EMPTY3;
+    const { past, future } = this.history(sessionId2);
     return {
       undo: past.length,
       redo: future.length,
-      sinceEdit: savepoint?.net.length ?? 0
+      sinceEdit: 0
     };
   }
   history(sessionId2) {
@@ -84292,43 +84468,29 @@ var SettingsHistory = class {
       );
       pending2.set(sessionId2, changes);
     };
-    const toggles = /* @__PURE__ */ new Map();
     const sessionState = recordingView(
       held,
-      (key) => isSettingKey(key) || key === EDIT_MODE_KEY,
+      isSettingKey,
       (sessionId2, key, before, after) => {
-        if (key === EDIT_MODE_KEY) {
-          const earlier = toggles.get(sessionId2);
-          toggles.set(sessionId2, {
-            before: earlier === void 0 ? before : earlier.before,
-            after
-          });
-          return;
-        }
         note(sessionId2, { kind: "session", key, before, after });
       }
     );
     const step4 = () => {
-      const committing = new Map(pending2);
-      const toggled = new Map(toggles);
-      pending2.clear();
-      toggles.clear();
-      for (const sessionId2 of /* @__PURE__ */ new Set([
-        ...committing.keys(),
-        ...toggled.keys()
-      ])) {
-        const changes = [...committing.get(sessionId2)?.values() ?? []].filter(
+      for (const [sessionId2, pendingChanges] of pending2) {
+        const changes = [...pendingChanges.values()].filter(
           (c) => c.before !== c.after
         );
-        const current = click3.historyOf(sessionId2);
-        const appended = changes.length === 0 ? current : afterAppend(current, changes);
-        const toggle = toggled.get(sessionId2);
-        const next = toggle === void 0 ? appended : withToggle(appended, toggle);
-        if (next !== current) click3.move(sessionId2, next);
+        if (changes.length > 0)
+          click3.move(sessionId2, {
+            past: capped([...click3.historyOf(sessionId2).past, changes]),
+            future: []
+          });
       }
+      pending2.clear();
     };
     return {
       sessionState,
+      writes: held.writes,
       file: (sessionId2, file, before, after) => {
         note(sessionId2, {
           kind: "layer",
@@ -84346,10 +84508,6 @@ var SettingsHistory = class {
       redo: (sessionId2) => {
         step4();
         return this.redo(click3, sessionId2);
-      },
-      rewind: (sessionId2) => {
-        step4();
-        return this.rewind(click3, sessionId2);
       },
       commit: () => {
         step4();
@@ -84376,44 +84534,6 @@ var SettingsHistory = class {
     );
     return step4;
   }
-  // [LAW:no-silent-failure] Cancel for edit mode: put every target edit mode
-  // changed back to what it held when edit mode opened — one step, landing
-  // whole or not at all — then give the stack back the shape it had, with
-  // nothing to redo, so neither `↶` nor `↷` can bring back what was discarded.
-  // A target changed since by anything else (a session pick, or a file one of
-  // whose settings the cancel steps) is not put back: overwriting it would
-  // destroy that change, and no later cancel could put it back either. Every
-  // other target is, and then the refusal names what was kept, loudly. Edit
-  // mode stays where it is — the click
-  // that cancels also leaves — so the savepoint is taken again at the stack as
-  // it now stands. Returns what it put back.
-  rewind(click3, sessionId2) {
-    const history = click3.historyOf(sessionId2);
-    const { savepoint } = history;
-    if (savepoint === void 0) {
-      throw new BadVerbArgs(
-        "rewind: edit mode has no savepoint \u2014 nothing to cancel"
-      );
-    }
-    const stale = savepoint.net.flatMap((c) => {
-      const stepped2 = stepOf(click3, sessionId2, c, "before");
-      return stepped2.kind === "moved" ? [stepped2] : [];
-    });
-    const gone = new Set(stale.map((s) => s.target));
-    const putBack2 = savepoint.net.filter((c) => !gone.has(identity(c)));
-    const past = capped(without2(pastAt(history, savepoint), gone));
-    this.apply(click3, sessionId2, putBack2, "before", "rewind", {
-      past,
-      future: [],
-      savepoint: { at: past.length, net: [], below: [] }
-    });
-    if (stale.length > 0) {
-      throw new BadVerbArgs(
-        `rewind: ${stale.map((s) => s.what).join(", ")} changed since edit mode opened \u2014 kept as it is; everything else edit mode changed was put back`
-      );
-    }
-    return putBack2;
-  }
   redo(click3, sessionId2) {
     const history = click3.historyOf(sessionId2);
     const { past, future } = history;
@@ -84425,8 +84545,7 @@ var SettingsHistory = class {
     const kept = capped(all2);
     this.apply(click3, sessionId2, step4, "after", "redo", {
       past: kept,
-      future: future.slice(0, -1),
-      ...savepointAfter(history.savepoint, all2.length - kept.length, step4)
+      future: future.slice(0, -1)
     });
     return step4;
   }
@@ -84458,11 +84577,15 @@ var SettingsHistory = class {
     const stepTexts = new Map(files.map(({ file, text: text4 }) => [file, text4]));
     const read2 = (file) => {
       const text4 = stepTexts.get(file);
-      return text4 === void 0 ? click3.files.read(file) : text4;
+      return text4 === void 0 ? click3.files.read(file) : contentOfText(text4);
     };
     for (const { file, text: text4 } of files) click3.files.prove(file, text4, read2);
     for (const { file, text: text4 } of files)
-      click3.files.land(file, click3.files.read(file), text4);
+      click3.files.land(
+        file,
+        requireLayerText(file, click3.files.read(file)),
+        text4
+      );
     for (const s of stepped2)
       if (s.kind === "session")
         if (s.value === null) click3.held.clear(sessionId2, s.key);
@@ -84495,29 +84618,24 @@ var SettingsHistory = class {
   bound(next) {
     while (next.size > MAX_SESSIONS5 || weight(next) > MAX_BYTES) {
       const [oldest, h] = next.entries().next().value;
-      if (next.size > 1) next.delete(oldest);
-      else if (h.past.length + h.future.length > 0) {
-        const trimmed = withoutOldestStep(h);
-        if (holdsNothing(trimmed)) next.delete(oldest);
-        else next.set(oldest, trimmed);
-      } else {
-        this.logger(
-          "warn",
-          `settings-history: edit mode's changes for session ${oldest} exceed ${MAX_BYTES} bytes; cancel is no longer available`
-        );
+      if (next.size > 1) {
         next.delete(oldest);
+        continue;
       }
+      const trimmed = withoutOldestStep(h);
+      if (holdsNothing(trimmed)) next.delete(oldest);
+      else next.set(oldest, trimmed);
+      this.logger(
+        "info",
+        `settings-history: trimmed an old step for session ${oldest}`
+      );
     }
   }
 };
 function weight(state) {
   let bytes = 0;
-  for (const { past, future, savepoint } of state.values()) {
-    for (const step4 of [
-      ...past,
-      ...future,
-      ...savepoint === void 0 ? [] : [savepoint.net, ...savepoint.below]
-    ]) {
+  for (const { past, future } of state.values()) {
+    for (const step4 of [...past, ...future]) {
       for (const c of step4) {
         bytes += (c.before?.length ?? 0) + (c.after?.length ?? 0);
       }
@@ -84525,89 +84643,17 @@ function weight(state) {
   }
   return bytes;
 }
-function withoutOldestStep({
-  past,
-  future,
-  savepoint
-}) {
-  return past.length > 0 ? { past: past.slice(1), future, ...savepointAfter(savepoint, 1, []) } : { past, future: future.slice(1), ...savepointAfter(savepoint, 0, []) };
+function withoutOldestStep({ past, future }) {
+  return past.length > 0 ? { past: past.slice(1), future } : { past, future: future.slice(1) };
 }
 function capped(steps2) {
   return steps2.slice(-MAX_STEPS);
 }
-var isOpen = (value) => value === EDIT_MODE_REF.member;
-function savepointAfter(savepoint, dropped, step4) {
-  return savepoint === void 0 ? {} : {
-    savepoint: {
-      at: Math.max(0, savepoint.at - dropped),
-      net: withNet(savepoint.net, step4),
-      below: savepoint.below
-    }
-  };
-}
-function withNet(net, step4) {
-  const byTarget = new Map(net.map((c) => [identity(c), c]));
-  for (const c of step4) {
-    const first2 = byTarget.get(identity(c));
-    byTarget.set(
-      identity(c),
-      first2 === void 0 ? c : { ...first2, after: c.after }
-    );
-  }
-  return [...byTarget.values()].filter((c) => c.before !== c.after);
-}
-var reversed = (step4) => step4.map((c) => ({ ...c, before: c.after, after: c.before }));
-function afterAppend(history, step4) {
-  const all2 = [...history.past, step4];
-  const past = capped(all2);
-  const { savepoint } = history;
-  const abandonedBelow = savepoint === void 0 ? 0 : Math.max(0, savepoint.at - history.past.length);
-  return {
-    past,
-    future: [],
-    ...savepointAfter(
-      savepoint && {
-        at: Math.min(savepoint.at, history.past.length),
-        net: savepoint.net,
-        below: [...redone(history.future, abandonedBelow), ...savepoint.below]
-      },
-      all2.length - past.length,
-      step4
-    )
-  };
-}
-function redone(future, count) {
-  const n = Math.min(count, future.length);
-  return future.slice(future.length - n).reverse();
-}
 function afterUndo(history, step4) {
   return {
     past: history.past.slice(0, -1),
-    future: capped([...history.future, step4]),
-    ...savepointAfter(history.savepoint, 0, reversed(step4))
+    future: capped([...history.future, step4])
   };
-}
-function pastAt(history, savepoint) {
-  const { past, future } = history;
-  const kept = past.slice(0, savepoint.at);
-  return [
-    ...kept,
-    ...redone(future, savepoint.at - kept.length),
-    ...savepoint.below
-  ];
-}
-function withToggle(history, toggle) {
-  if (isOpen(toggle.after) && !isOpen(toggle.before)) {
-    return {
-      ...history,
-      savepoint: { at: history.past.length, net: [], below: [] }
-    };
-  }
-  if (!isOpen(toggle.after) && isOpen(toggle.before)) {
-    const { past, future } = history;
-    return { past, future };
-  }
-  return history;
 }
 function without2(steps2, gone) {
   return steps2.map((step4) => step4.filter((c) => !gone.has(identity(c)))).filter((step4) => step4.length > 0);
@@ -84634,7 +84680,7 @@ function stepOf(click3, sessionId2, change, to) {
       what: `the ${change.role} layer (${file === null ? "this session renders from none now" : "it is another file now"})`
     };
   const applied3 = applyChanges(
-    click3.files.read(file),
+    requireLayerText(file, click3.files.read(file)),
     diffChanges(change[from], change[to])
   );
   return applied3.kind === "applied" ? { kind: "file", file, text: applied3.text } : {
@@ -84643,23 +84689,8 @@ function stepOf(click3, sessionId2, change, to) {
     what: `${addressText(applied3.at)} in the ${change.role} layer`
   };
 }
-function forgotten({ past, future, savepoint }, gone) {
-  return {
-    past: without2(past, gone),
-    future: without2(future, gone),
-    ...savepoint !== void 0 && {
-      savepoint: {
-        // A step left empty leaves the stack, so the position counts the
-        // steps below it that survive.
-        at: without2(
-          [...past, ...[...future].reverse()].slice(0, savepoint.at),
-          gone
-        ).length,
-        net: savepoint.net.filter((c) => !gone.has(identity(c))),
-        below: without2(savepoint.below, gone)
-      }
-    }
-  };
+function forgotten({ past, future }, gone) {
+  return { past: without2(past, gone), future: without2(future, gone) };
 }
 function heldWrites(store) {
   const held = /* @__PURE__ */ new Map();
@@ -84674,6 +84705,7 @@ function heldWrites(store) {
       return writes?.has(key) ? writes.get(key) : store.get(sessionId2, key);
     },
     revision: (sessionId2) => store.revision(sessionId2),
+    writes: (sessionId2) => held.get(sessionId2) ?? /* @__PURE__ */ new Map(),
     set: (sessionId2, key, value) => put(sessionId2, key, value),
     setBatch: (sessionId2, pairs2) => {
       for (const { key, value } of pairs2) put(sessionId2, key, value);
@@ -84732,7 +84764,8 @@ var openVscode = (value, ctx) => ask(ctx, { kind: "open", session: ctx.session, 
 var setState = (rawValue, ctx) => {
   const [sessionId2 = "", ...rest2] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId2);
-  const gate2 = ctx.gates.state.gateFor(sessionConfig(ctx, sid));
+  const config = sessionConfig(ctx, sid);
+  const gate2 = ctx.gates.state.gateFor(config);
   if (rest2.length === 0)
     throw new BadVerbArgs(
       `set-state: <key>/<value> is required (have keys: ${gate2.listKeys().join(", ")})`
@@ -84758,7 +84791,7 @@ var setState = (rawValue, ctx) => {
     validated.push({ key, value: result.value });
   }
   refuseDisorderedPicks(ctx, sid, "set-state", validated);
-  ctx.navigating.setBatch(sid, validated);
+  ctx.menu.choose(sid, validated, () => menuContext(ctx, sid, config));
   const summary = validated.map((p2) => `${p2.key}=${p2.value}`).join(" ");
   ctx.log("info", `set-state: ${summary} (session=${sid})`);
 };
@@ -84804,7 +84837,11 @@ var stepState = (rawValue, ctx) => {
   const result = gate2.validate(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
   refuseDisorderedPicks(ctx, sid, "step-state", [{ key, value: result.value }]);
-  ctx.navigating.set(sid, key, result.value);
+  ctx.menu.choose(
+    sid,
+    [{ key, value: result.value }],
+    () => menuContext(ctx, sid, config)
+  );
   ctx.log(
     "info",
     `step-state: ${key} ${clamped}\u2192${result.value} (by ${by}, session=${sid})`
@@ -84883,6 +84920,13 @@ function proveLoadsAsLayer(ctx, origin, file, text4, read2) {
 function sessionConfig(ctx, sid) {
   return ctx.configFor(sessionOrigin(ctx, sid));
 }
+function menuContext(ctx, sid, config) {
+  return {
+    gate: ctx.gates.state.gateFor(config),
+    nest: () => disclosureNest(config),
+    edit: ctx.edits.draft(sid)?.navigationScope ?? null
+  };
+}
 function nestOf(ctx, context, sid) {
   const origin = originOf(context, sid);
   return origin === null ? NO_NEST : disclosureNest(ctx.configFor(origin));
@@ -84909,7 +84953,7 @@ function configWire(verb, raw) {
 }
 function editStore(ctx, sid) {
   return {
-    read: (file) => ctx.configWrites.read(file),
+    read: ctx.readConfigFile,
     record: (file, before, after) => ctx.journal.file(sid, file, before, after)
   };
 }
@@ -84974,7 +85018,10 @@ var stepConfig = (rawValue, ctx) => {
     key
   );
   const store = editStore(ctx, sid);
-  const stored = readValue(store.read(into.path), landing.key);
+  const stored = readValue(
+    requireLayerText(into.path, store.read(into.path)),
+    landing.key
+  );
   const current = typeof stored === "number" ? clampTo(params, stored) : stepFrom(
     "step-config",
     key,
@@ -84999,6 +85046,7 @@ var save = (value, ctx) => {
   const placements = placementDrafts(config, pick2);
   if (drafts.length + placements.length === 0) {
     ctx.log("info", `save: nothing unsaved (session=${sid})`);
+    ctx.finishEdit("save");
     return;
   }
   const gate2 = ctx.gates.state.gateFor(config);
@@ -85016,6 +85064,7 @@ var save = (value, ctx) => {
   ]) {
     ctx.sessionState.clear(sid, key);
   }
+  ctx.finishEdit("save");
   ctx.log(
     "info",
     `save: ${[
@@ -85208,21 +85257,21 @@ var undo = (value, ctx) => {
 };
 var back = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const { step: step4, discarded } = ctx.navigation.back(
+  const { writes, discarded } = ctx.menu.back(
     sid,
-    ctx.sessionState,
-    ctx.gates.state.gateFor(sessionConfig(ctx, sid))
+    menuContext(ctx, sid, sessionConfig(ctx, sid))
   );
-  const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
+  const restored = writes.map(({ key, value: value2 }) => `${key}=${value2 ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
 };
 var rewind = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
-  const restored = ctx.journal.rewind(sid);
-  ctx.log(
-    "info",
-    `rewind: put back ${describeStep(restored) || "nothing"} as edit mode found it (session=${sid})`
-  );
+  if (ctx.edits.draft(sid) === null)
+    throw new BadVerbArgs(
+      "rewind: edit mode has no transaction \u2014 nothing to cancel"
+    );
+  ctx.finishEdit("cancel");
+  ctx.log("info", `rewind: discarded draft (session=${sid})`);
 };
 var redo = (value, ctx) => {
   const [sessionId2 = ""] = decodeWire(() => decodeSegments(value));
@@ -85387,40 +85436,94 @@ function journaled(verb, sid, context, ctx, effects, handler) {
       );
     return { origin, chain: ctx.snapshotFor(origin).chain };
   });
-  const journal = ctx.history.begin({
+  const files = {
     read: (file) => ctx.configWrites.read(file),
     land: (file, before, after) => ctx.configWrites.land(file, before, after),
     roleOf: (file) => ctx.configWrites.roleOf(file),
     pathOf: (role) => ctx.configWrites.pathOf(role),
     prove: (file, text4, read2) => proveLoadsAsLayer(ctx, origin, file, text4, read2)
-  });
-  const navigation = ctx.navigation.begin(journal.sessionState);
+  };
+  const draft = sid === null || origin === null || ctx.edits.snapshot(origin, sid) === null ? null : ctx.edits.draft(sid);
+  const scoped = draft === null || sid === null ? ctx : {
+    ...ctx,
+    snapshotFor: (of) => ctx.edits.snapshot(of, sid) ?? ctx.snapshotFor(of),
+    configFor: (of) => ctx.configFor(of, sid)
+  };
+  const edit = draft?.begin(
+    (file, text4, read2) => proveLoadsAsLayer(scoped, origin, file, text4, read2)
+  );
+  const journal = edit?.journal ?? ctx.history.begin(files);
+  const requested = {};
   const failures = [];
-  const closing = (store) => closingView(
-    store,
-    (sid2) => nestOf(ctx, context, sid2),
+  const sessionState = closingView(
+    journal.sessionState,
+    (sid2) => nestOf(scoped, context, sid2),
     (line) => ctx.log("info", line)
+  );
+  const navigation = ctx.navigation.begin(
+    journal.sessionState,
+    sessionState.setBatch
   );
   try {
     handler({
-      ...ctx,
+      ...scoped,
       session: sid,
       context,
-      sessionState: closing(journal.sessionState),
+      sessionState,
       journal,
-      navigating: closing(navigation.sessionState)
+      readConfigFile: (edit?.files ?? files).read,
+      finishEdit: (finish) => {
+        if (edit === void 0 || sid === null) return;
+        requested.finish = finish;
+        sessionState.set(sid, EDIT_MODE_KEY, DISCLOSURE_CLOSED);
+      },
+      menu: navigation
     });
   } catch (e) {
     failures.push(e);
   }
-  const consequence = () => {
-    const failed3 = [];
-    for (const step4 of [navigation, journal]) {
-      try {
-        step4.commit();
-      } catch (e) {
-        failed3.push(e);
+  let saved = null;
+  if (requested.finish === "save" && edit !== void 0 && origin !== null) {
+    try {
+      if (failures.length === 0) {
+        const destination = ctx.history.begin(files);
+        edit.save(destination, files, ctx.snapshotFor(origin));
+        saved = destination;
       }
+    } catch (e) {
+      failures.push(e);
+    }
+  }
+  const consequence = () => {
+    if (requested.finish === "save" && saved === null) return;
+    const failed3 = [];
+    try {
+      navigation.commit();
+    } catch (e) {
+      failed3.push(e);
+    }
+    try {
+      const writes = sid === null ? null : journal.writes(sid);
+      const mode = writes?.get(EDIT_MODE_KEY);
+      let moved2 = false;
+      if (edit === void 0) journal.commit();
+      else if (saved !== null) saved.commit();
+      else moved2 = edit.commit();
+      if (sid !== null && origin !== null) {
+        if (edit !== void 0 && (saved !== null || mode !== void 0 && mode !== EDIT_MODE_ARRANGE)) {
+          ctx.edits.close(sid);
+          ctx.editViewChanged(sid);
+        } else if (edit === void 0 && mode === EDIT_MODE_ARRANGE) {
+          ctx.sessionState.clear(sid, EDIT_MODE_KEY);
+          ctx.edits.open(sid, origin, ctx.snapshotFor(origin));
+          ctx.editViewChanged(sid);
+        } else if (moved2) {
+          ctx.edits.changed(sid);
+          ctx.editViewChanged(sid);
+        }
+      }
+    } catch (e) {
+      failed3.push(e);
     }
     throwAll(failed3);
   };
@@ -85455,13 +85558,16 @@ var VERB_NAMES = Object.freeze([
 ]);
 function closeIdleMenus(sid, context, idle, ctx, effects) {
   journaled("menu-idle", sid, context, ctx, effects, (c) => {
-    const roots = openRoots(
-      nestOf(c, context, sid),
-      (key) => c.navigating.get(sid, key)
+    const nest = nestOf(c, context, sid);
+    const depth = c.edits.draft(sid)?.depth();
+    const hasWork = depth !== void 0 && depth.sinceEdit + depth.redo > 0;
+    const roots = openRoots(nest, (key) => c.sessionState.get(sid, key)).filter(
+      (root) => !hasWork || !nest.inside(root).some(({ key }) => key === EDIT_MODE_KEY)
     );
-    c.navigating.setBatch(
+    c.menu.choose(
       sid,
-      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED }))
+      roots.map(({ key }) => ({ key, value: DISCLOSURE_CLOSED })),
+      () => menuContext(c, sid, sessionConfig(c, sid))
     );
     c.log(
       "info",
@@ -85483,112 +85589,376 @@ function verbsOver(ctx) {
   };
 }
 
-// src/renderer/navigation-history.ts
+// src/renderer/edit-transaction.ts
 init_globals();
-var MAX_STEPS2 = 20;
-var MAX_SESSIONS6 = 32;
-var isNavigationKey = (key) => !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
-var NavigationHistory = class {
-  // Observable, so a view's payload over a session's depth (`◁`) is
-  // recomputed in the turn a step lands.
-  past = observable.map(
-    void 0,
-    { deep: false }
-  );
-  // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
-  // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId2, store, gate2) {
-    return this.restorable(sessionId2, store, gate2).length;
-  }
-  // The steps going back would restore, oldest first: walking down from the
-  // newest over the state as each restore would leave it, a step is restored
-  // while every key it changed still holds what it left there and every value
-  // it would write back passes `gate` — the session's config's, as it reads
-  // now. Any other step is over a
-  // view that is gone — rewritten since (a layout edit releasing the placement
-  // it configured), or no longer one the config admits (that placement
-  // removed, a group renamed) — and is discarded rather than replayed.
-  restorable(sessionId2, store, gate2) {
-    const state = /* @__PURE__ */ new Map();
-    const read2 = (key) => state.has(key) ? state.get(key) : store.get(sessionId2, key);
-    const kept = [];
-    for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
-      const holds2 = step4.every(
-        (c) => read2(c.key) === c.after && (c.before === null || gate2.validate(c.key, c.before).ok)
-      );
-      if (!holds2) continue;
-      kept.unshift(step4);
-      for (const c of step4) state.set(c.key, c.before);
-    }
-    return kept;
-  }
-  // `store` is the click's own view of session state — the settings journal's,
-  // so a navigating click that also picks a setting still records the pick
-  // where undo reaches it.
-  begin(store) {
-    const pending2 = /* @__PURE__ */ new Map();
-    const sessionState = recordingView(
-      store,
-      isNavigationKey,
-      (sessionId2, key, before, after) => {
-        const changes = pending2.get(sessionId2) ?? /* @__PURE__ */ new Map();
-        const first2 = changes.get(key);
-        changes.set(key, { key, before: first2 ? first2.before : before, after });
-        pending2.set(sessionId2, changes);
-      }
+var EditDraft = class {
+  constructor(session, origin, base, committed, log) {
+    this.session = session;
+    this.origin = origin;
+    this.base = base;
+    this.committed = committed;
+    this.latest = this.snapshot = base;
+    this.history = new SettingsHistory(
+      {
+        get: (sid, key) => sid === session ? this.read(key) : committed.get(sid, key),
+        revision: (sid) => committed.revision(sid),
+        set: (sid, key, value) => this.put(sid, key, value),
+        setBatch: (sid, pairs2) => runInAction(() => {
+          for (const { key, value } of pairs2) this.put(sid, key, value);
+        }),
+        clear: (sid, key) => this.put(sid, key, null)
+      },
+      log
     );
+  }
+  session;
+  origin;
+  base;
+  committed;
+  navigationScope = /* @__PURE__ */ Symbol();
+  picks = /* @__PURE__ */ new Map();
+  files = /* @__PURE__ */ new Map();
+  history;
+  latest;
+  snapshot;
+  // [LAW:effects-at-boundaries] A transaction pins the content it edits.
+  // The host's current layer identities and plugin discovery still decide
+  // what it can load, including when the user revokes repository trust.
+  updated(latest) {
+    this.latest = latest;
+    this.refreshSnapshot();
+  }
+  refreshSnapshot() {
+    this.snapshot = {
+      ...this.latest,
+      chain: this.latest.chain.flatMap((layer) => {
+        const base = this.base.chain.find(
+          (candidate) => candidate.path === layer.path && candidate.role === layer.role
+        );
+        if (base === void 0) return [];
+        const value = this.files.get(layer.path);
+        const content = value === void 0 ? base.content : value === null ? { kind: "absent" } : { kind: "text", text: value };
+        return [{ ...layer, content }];
+      })
+    };
+  }
+  depth() {
     return {
-      sessionState,
+      ...this.history.depth(this.session),
+      sinceEdit: this.picks.size + this.files.size
+    };
+  }
+  read(key) {
+    if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
+    if (this.picks.has(key)) return this.picks.get(key);
+    return this.committed.get(this.session, key);
+  }
+  put(sid, key, value) {
+    if (sid === this.session) {
+      if (key === EDIT_MODE_KEY) return;
+      if (isSettingKey(key)) {
+        if (this.committed.get(sid, key) === value) this.picks.delete(key);
+        else this.picks.set(key, value);
+        return;
+      }
+    }
+    if (value === null) this.committed.clear(sid, key);
+    else this.committed.set(sid, key, value);
+  }
+  begin(prove) {
+    const working = new Map(this.files);
+    const layerAt = (file) => {
+      const layer = this.base.chain.find((layer2) => layer2.path === file);
+      if (layer === void 0)
+        throw new BadVerbArgs(`${file} is not a layer of this edit`);
+      return layer;
+    };
+    const files = {
+      read: (file) => working.has(file) ? contentOfText(working.get(file)) : layerAt(file).content,
+      land: (file, _before, after) => {
+        if (after === requireLayerText(file, layerAt(file).content))
+          working.delete(file);
+        else working.set(file, after);
+      },
+      roleOf: (file) => layerAt(file).role,
+      pathOf: (role) => this.base.chain.find((layer) => layer.role === role)?.path ?? null,
+      prove
+    };
+    const journal = this.history.begin(files);
+    return {
+      files,
+      journal,
       commit: () => {
-        for (const [sessionId2, changes] of pending2) {
-          const step4 = [...changes.values()].filter(
-            (c) => c.before !== c.after
+        const picksMoved = [...journal.writes(this.session)].some(
+          ([key, value]) => isSettingKey(key) && this.read(key) !== value
+        );
+        journal.commit();
+        if (sameFiles(working, this.files)) return picksMoved;
+        this.files = working;
+        this.refreshSnapshot();
+        return true;
+      },
+      save: (committedJournal, destination, latest) => {
+        const rewritten2 = /* @__PURE__ */ new Map();
+        for (const [path31, after] of working) {
+          const source = layerAt(path31);
+          const target = latest.chain.find(
+            (layer) => layer.role === source.role
           );
-          if (step4.length > 0) this.push(sessionId2, step4);
+          if (target?.path !== path31)
+            throw new BadVerbArgs(
+              `save: the ${source.role} layer for this edit moved`
+            );
+          const applied3 = applyChanges(
+            requireLayerText(path31, target.content),
+            diffChanges(requireLayerText(path31, source.content), after)
+          );
+          if (applied3.kind !== "applied")
+            throw new BadVerbArgs(
+              `save: ${addressText(applied3.at)} in the ${source.role} layer changed while editing`
+            );
+          rewritten2.set(path31, applied3.text);
         }
-        pending2.clear();
+        const read2 = (file) => rewritten2.has(file) ? contentOfText(rewritten2.get(file)) : destination.read(file);
+        for (const [file, text4] of rewritten2)
+          destination.prove(file, text4, read2);
+        for (const [file, text4] of rewritten2)
+          committedJournal.file(
+            this.session,
+            file,
+            requireLayerText(file, destination.read(file)),
+            text4
+          );
+        for (const [key, value] of new Map([
+          ...this.picks,
+          ...journal.writes(this.session)
+        ])) {
+          if (key === EDIT_MODE_KEY) continue;
+          if (value === null)
+            committedJournal.sessionState.clear(this.session, key);
+          else committedJournal.sessionState.set(this.session, key, value);
+        }
       }
     };
   }
-  // Restores the newest restorable step into `store` as one transaction and
-  // returns it, with how many steps it discarded (restorable). Written through
-  // the bare store, never a navigation journal, so going back is not itself a
-  // step.
-  back(sessionId2, store, gate2) {
-    const all2 = this.past.get(sessionId2) ?? [];
-    const steps2 = this.restorable(sessionId2, store, gate2);
-    const step4 = steps2.at(-1);
-    const discarded = all2.length - steps2.length;
-    if (step4 === void 0) {
-      this.put(sessionId2, steps2);
-      throw new BadVerbArgs(
-        `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
-      );
+};
+function sameFiles(left, right) {
+  return left.size === right.size && [...left].every(([key, value]) => right.get(key) === value);
+}
+var EditTransactions = class {
+  constructor(committed, log) {
+    this.committed = committed;
+    this.log = log;
+  }
+  committed;
+  log;
+  entries = observable.map(void 0, {
+    deep: false
+  });
+  view = {
+    get: (sid, key) => {
+      const draft = this.draft(sid);
+      if (draft !== null) return draft.read(key);
+      return key === EDIT_MODE_KEY ? null : this.committed.get(sid, key);
+    },
+    revision: (sid) => this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),
+    set: (sid, key, value) => this.committed.set(sid, key, value),
+    setBatch: (sid, pairs2) => this.committed.setBatch(sid, pairs2),
+    clear: (sid, key) => this.committed.clear(sid, key)
+  };
+  draft(sid) {
+    return this.entries.get(sid)?.draft ?? null;
+  }
+  snapshot(origin, sid) {
+    const draft = this.draft(sid);
+    return draft !== null && originKey(draft.origin) === originKey(origin) ? draft.snapshot : null;
+  }
+  configured(origin, snapshot) {
+    const key = originKey(origin);
+    const refreshed = [];
+    for (const [sid, { draft }] of this.entries) {
+      if (draft === null || originKey(draft.origin) !== key) continue;
+      draft.updated(snapshot);
+      refreshed.push(sid);
     }
-    runInAction(() => {
-      const restored = step4.flatMap(
-        ({ key, before }) => before === null ? [] : [{ key, value: before }]
-      );
-      if (restored.length > 0) store.setBatch(sessionId2, restored);
-      for (const { key, before } of step4) {
-        if (before === null) store.clear(sessionId2, key);
-      }
+    return refreshed;
+  }
+  depth(sid, committed) {
+    return this.draft(sid)?.depth() ?? committed.depth(sid);
+  }
+  open(sid, origin, snapshot) {
+    this.update(
+      sid,
+      new EditDraft(sid, origin, snapshot, this.committed, this.log)
+    );
+  }
+  close(sid) {
+    this.update(sid, null);
+  }
+  changed(sid) {
+    this.update(sid, this.draft(sid));
+  }
+  moved(sid, origin) {
+    const draft = this.draft(sid);
+    if (draft === null || originKey(draft.origin) === originKey(origin))
+      return false;
+    this.log(
+      "info",
+      `edit: draft discarded after the session changed config origin (session=${sid})`
+    );
+    this.close(sid);
+    return true;
+  }
+  retire(sid) {
+    runInAction(() => this.entries.delete(sid));
+  }
+  update(sid, draft) {
+    const revision = (this.entries.get(sid)?.revision ?? 0) + 1;
+    runInAction(() => this.entries.set(sid, { draft, revision }));
+  }
+};
+
+// src/renderer/navigation-history.ts
+init_globals();
+var EMPTY4 = { visits: [], cursor: 0 };
+var MAX_VISITS = 20;
+var MAX_SESSIONS6 = 32;
+var isMenuKey = (key) => key !== EDIT_MODE_KEY && !isSettingKey(key) && !isConfirmKey(key) && key !== DIAGNOSTICS_VIEWING;
+var menuKeys = /* @__PURE__ */ new WeakMap();
+function capture2(store, sid, { gate: gate2, edit }) {
+  let keys2 = menuKeys.get(gate2);
+  if (keys2 === void 0) {
+    keys2 = gate2.listKeys().filter(isMenuKey);
+    menuKeys.set(gate2, keys2);
+  }
+  const values2 = /* @__PURE__ */ new Map();
+  for (const key of keys2) {
+    const value = store.get(sid, key);
+    if (value !== null) values2.set(key, value);
+  }
+  return { values: values2, edit };
+}
+function movedKeys(from, to) {
+  return [.../* @__PURE__ */ new Set([...from.values.keys(), ...to.values.keys()])].filter(
+    (key) => from.values.get(key) !== to.values.get(key)
+  );
+}
+function inView(view, context, key) {
+  const value = view.values.get(key);
+  if (value === void 0 || view.edit === context.edit) return value;
+  const nested = context.nest().inside(EDIT_MODE_REF).find((at) => at.key === key);
+  return nested === void 0 || nested.outside.has(value) ? value : void 0;
+}
+function previous(timeline, current, context) {
+  const invalid = /* @__PURE__ */ new Set();
+  const values2 = new Map(current.values);
+  let destination = null;
+  let depth = 0;
+  for (let cursor = timeline.cursor - 1; cursor >= 0; cursor--) {
+    const visit = timeline.visits[cursor];
+    const keys2 = movedKeys(visit.from, visit.to);
+    const step4 = keys2.flatMap((key) => {
+      const from = inView(visit.from, context, key);
+      const to = inView(visit.to, context, key);
+      return from === to ? [] : [{ key, from, to }];
     });
-    this.put(sessionId2, steps2.slice(0, -1));
-    return { step: step4, discarded };
+    if (step4.length === 0 || !step4.every(
+      ({ key, from, to }) => values2.get(key) === to && (from === void 0 || context.gate.validate(key, from).ok)
+    )) {
+      invalid.add(visit);
+      continue;
+    }
+    for (const { key, from } of step4) {
+      if (from === void 0) values2.delete(key);
+      else values2.set(key, from);
+    }
+    destination ??= { values: new Map(values2), edit: context.edit };
+    depth++;
   }
-  push(sessionId2, step4) {
-    const steps2 = this.past.get(sessionId2) ?? [];
-    this.put(sessionId2, [...steps2, step4].slice(-MAX_STEPS2));
+  return { destination, depth, invalid };
+}
+var NavigationHistory = class {
+  timelines = observable.map(void 0, {
+    deep: false
+  });
+  depth(sessionId2, store, context) {
+    const timeline = this.timelines.get(sessionId2);
+    return timeline === void 0 || timeline.cursor === 0 ? 0 : previous(timeline, capture2(store, sessionId2, context), context).depth;
   }
-  // Move-to-end keeps insertion order as recency.
-  put(sessionId2, steps2) {
-    runInAction(() => {
-      this.past.delete(sessionId2);
-      if (steps2.length > 0) this.past.set(sessionId2, steps2);
-      while (this.past.size > MAX_SESSIONS6) {
-        this.past.delete(this.past.keys().next().value);
+  // [LAW:no-ambient-temporal-coupling] The transition and its navigation
+  // cursor are staged alongside the click's settings. A guarded write that
+  // does not land publishes neither.
+  begin(store, choose) {
+    const before = /* @__PURE__ */ new Map();
+    const next = /* @__PURE__ */ new Map();
+    const timelineOf = (sid) => next.get(sid) ?? this.timelines.get(sid) ?? EMPTY4;
+    const endVisit = (sid) => {
+      const start = before.get(sid);
+      if (start === void 0) return;
+      before.delete(sid);
+      const to = capture2(store, sid, start.context);
+      if (movedKeys(start.view, to).length === 0) return;
+      const { visits, cursor } = timelineOf(sid);
+      const followed = [
+        ...visits.slice(0, cursor),
+        { from: start.view, to }
+      ].slice(-MAX_VISITS);
+      next.set(sid, { visits: followed, cursor: followed.length });
+    };
+    return {
+      choose: (sid, writes, contextOf) => {
+        if (!before.has(sid) && writes.some(({ key }) => isMenuKey(key))) {
+          const context = contextOf();
+          before.set(sid, { view: capture2(store, sid, context), context });
+        }
+        choose(sid, writes);
+      },
+      back: (sid, context) => {
+        endVisit(sid);
+        const timeline = timelineOf(sid);
+        const at = capture2(store, sid, context);
+        const { destination, invalid } = previous(timeline, at, context);
+        const discarded = invalid.size;
+        const cursor = Math.max(0, timeline.cursor - discarded - 1);
+        next.set(sid, {
+          visits: timeline.visits.filter((visit) => !invalid.has(visit)),
+          cursor
+        });
+        if (destination === null)
+          throw new BadVerbArgs(
+            `back: nothing to go back to${discarded > 0 ? ` (${discarded} step(s) over a view since gone, discarded)` : ""}`
+          );
+        const writes = movedKeys(at, destination).map((key) => ({
+          key,
+          value: destination.values.get(key) ?? null
+        }));
+        runInAction(() => {
+          store.setBatch(
+            sid,
+            writes.flatMap(
+              ({ key, value }) => value === null ? [] : [{ key, value }]
+            )
+          );
+          for (const { key, value } of writes)
+            if (value === null) store.clear(sid, key);
+        });
+        return { writes, discarded };
+      },
+      commit: () => {
+        for (const sid of before.keys()) endVisit(sid);
+        this.publish(next);
+        next.clear();
       }
+    };
+  }
+  publish(timelines) {
+    runInAction(() => {
+      for (const [sid, timeline] of timelines) {
+        this.timelines.delete(sid);
+        if (timeline.visits.length > 0) this.timelines.set(sid, timeline);
+      }
+      while (this.timelines.size > MAX_SESSIONS6)
+        this.timelines.delete(this.timelines.keys().next().value);
     });
   }
 };
@@ -86272,6 +86642,7 @@ var registrySubscriptions = (registry) => [
   ...registry.subscriptions().map((run3) => ({ kind: "run", run: run3 })),
   ...registry.envSubscriptions().map((name) => ({ kind: "env", name }))
 ];
+var draftKey = (sessionId2) => `edit:${sessionId2}`;
 var RenderCache = class {
   entries = /* @__PURE__ */ new Map();
   // [LAW:one-source-of-truth] What discovery found at each origin the
@@ -86376,16 +86747,30 @@ var RenderCache = class {
   // same fields and a renderable state. The renderer reads the data; no
   // special-case branches between "first load", "reload",
   // "reload-after-error".
-  getOrCreate(origin) {
-    const key = originKey(origin);
+  getOrCreate(origin, editing) {
+    let key = originKey(origin);
+    let draft = null;
+    if (editing !== void 0) {
+      draft = this.deps.editSnapshot?.(origin, editing) ?? null;
+      if (draft !== null) key = draftKey(editing);
+    }
     const existing = this.entries.get(key);
-    if (existing) {
+    const priorRepo = existing?.snapshot.repo;
+    const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
+    if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
       this.entries.delete(key);
       this.entries.set(key, existing);
+      if (draft !== null && existing.snapshot !== draft)
+        this.reloadInto(
+          existing,
+          { snapshot: draft, digest: digestOf(draft) },
+          { kind: "edit" }
+        );
       return existing;
     }
+    if (existing !== void 0) this.drop(key, existing, "evict");
     const { projectDir, cwd: cwd2 } = origin;
-    const { snapshot, digest: digest2 } = this.held(origin);
+    const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
     const loaded = this.load(cwd2, snapshot, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
@@ -86448,7 +86833,8 @@ var RenderCache = class {
   // view draws by it from here, opened (openView) or kept (`requested`), so
   // no view is drawn for another request.
   holdSession(origin, facts) {
-    const held = this.hold(origin);
+    const entry = this.getOrCreate(origin, facts.hookData.session_id);
+    const held = this.holdState(entry, entry.state);
     let view;
     let lease;
     try {
@@ -86459,6 +86845,25 @@ var RenderCache = class {
       throw err;
     }
     return this.holdViewOf(held, view, lease);
+  }
+  // The edit turn switched the session's config input. Move its existing
+  // view now so pushed frames and click validation see the same draft.
+  refreshEditedView(sessionId2) {
+    const view = this.views.get(sessionId2);
+    if (view === void 0) return;
+    const { origin } = this.leaseOf(view).entry;
+    const requested = view.facts();
+    const entry = this.getOrCreate(origin, sessionId2);
+    if (this.views.get(sessionId2)?.state !== entry.state)
+      this.viewOf(entry, entry.state, requested, "reload");
+    if (this.deps.editSnapshot?.(origin, sessionId2) == null)
+      this.dropDraft(sessionId2);
+    this.observers.onViewChanged?.(sessionId2);
+  }
+  dropDraft(sessionId2) {
+    const key = draftKey(sessionId2);
+    const entry = this.entries.get(key);
+    if (entry !== void 0) this.drop(key, entry, "evict");
   }
   // [LAW:single-enforcer] A frame's door: the session's current view, held
   // for its synchronous draw as `holdSession` holds one, or none. It creates
@@ -86588,6 +86993,7 @@ var RenderCache = class {
     this.openFailures.delete(sessionId2);
     const view = this.views.get(sessionId2);
     if (view !== void 0) this.retireView(view, "idle");
+    this.dropDraft(sessionId2);
   }
   // [LAW:one-source-of-truth] What every session's open view needs read: the
   // plugin sources its config declares, at their storage folders, the runs
@@ -86599,7 +87005,13 @@ var RenderCache = class {
   // config is held as long as an entry at it lives, not as long as a session:
   // a session retires when idle while its entry stays to draw it again.
   origins() {
-    return [...this.entries.values()].map((e) => e.origin);
+    return [
+      ...new Map(
+        [...this.entries.values()].map(
+          ({ origin }) => [originKey(origin), origin]
+        )
+      ).values()
+    ];
   }
   subscriptions() {
     return {
@@ -87024,163 +87436,6 @@ function serializeSegmentCells(cells, colorCompatibility) {
   return out;
 }
 
-// src/renderer/config-writes.ts
-init_globals();
-var noLayers = () => {
-  throw new Error("a config layer was read with no click open");
-};
-var ConfigWrites = class {
-  constructor(mint) {
-    this.mint = mint;
-  }
-  mint;
-  // The open click's writes, by file: what it read first, and wrote last.
-  open = /* @__PURE__ */ new Map();
-  inFlight = null;
-  closed = false;
-  // The open click's changes to Claude Code's settings, which no renderer
-  answers = [];
-  // The open click's layers, asked for once it first reads one.
-  layersOf = noLayers;
-  layers = null;
-  // A click's journal opens over its session's layers: refused once the
-  // daemon's close has begun, so a click the close cut off writes nothing.
-  // [LAW:no-silent-failure] A landing still owed here is the host's bug: it
-  // hands a turn's `effect-done`s in before the next input.
-  begin(verb, layers) {
-    if (this.closed) throw new DaemonClosing(verb);
-    if (this.inFlight !== null)
-      throw new Error(
-        `${verb} began while a click's changes to ${this.inFlight.of.files.join(", ")} were still landing`
-      );
-    this.layersOf = layers;
-    this.layers = null;
-  }
-  // [LAW:one-source-of-truth] `file` as the open click left it: its last
-  // write, else the text its origin's snapshot holds, which every click ahead
-  // of it moved. A layer that could not be read is no layer here, as it is
-  // none of the merge.
-  read(file) {
-    const written3 = this.open.get(file);
-    if (written3 !== void 0) return written3.after;
-    const { content } = this.layerAt(file);
-    return content.kind === "text" ? content.text : null;
-  }
-  // [LAW:no-silent-failure] The layer of the click's chain at `file`: a file
-  // the chain does not hold is no layer a click of this session writes.
-  layerAt(file) {
-    const layer = this.held().chain.find((l) => l.path === file);
-    if (layer === void 0)
-      throw new BadVerbArgs(
-        `${file} is not a config file this session renders from \u2014 the click is not taken`
-      );
-    return layer;
-  }
-  held() {
-    return this.layers ??= this.layersOf();
-  }
-  // The role of the click's chain at `file`.
-  roleOf(file) {
-    return this.layerAt(file).role;
-  }
-  // The file of the click's chain at `role`: null when the chain holds no
-  // layer of that role.
-  pathOf(role) {
-    return this.held().chain.find((l) => l.role === role)?.path ?? null;
-  }
-  // A write of the open click, from the file as the click read it (`read`):
-  // one change per file, from the click's first read of it to its last write.
-  land(file, before, after) {
-    const open2 = this.open.get(file);
-    this.open.set(file, {
-      before: open2 === void 0 ? before : open2.before,
-      after
-    });
-  }
-  // The open click answers the trust book for `dir`: it lands with the
-  // click's changes.
-  answer(dir, answer2) {
-    this.answers.push({ origin: this.held().origin, dir, answer: answer2 });
-  }
-  // The open click is over. Its changes and its answers join its turn's
-  // effects, and its consequence waits for them; a click that changed no file
-  // and answered nothing has its consequence now.
-  seal(effects, session, consequence) {
-    const answers = this.answers;
-    this.answers = [];
-    let written3;
-    let origin = null;
-    try {
-      written3 = [...this.open].flatMap(([path31, { before, after }]) => {
-        const list2 = diffChanges(before, after);
-        return list2.length === 0 ? [] : [
-          {
-            path: path31,
-            origin: this.held().origin,
-            role: this.roleOf(path31),
-            list: list2
-          }
-        ];
-      });
-    } finally {
-      origin = this.layers?.origin ?? null;
-      this.layers = null;
-      this.layersOf = noLayers;
-      this.open.clear();
-    }
-    const files = written3.map(({ path: path31 }) => path31);
-    if (files.length === 0 && answers.length === 0) return consequence(effects);
-    if (session === null)
-      throw new Error(
-        `a click with no session wrote ${[...files, ...answers.map((a) => `the answer for ${a.dir}`)].join(", ")}`
-      );
-    const landing = [
-      ...written3.map(
-        ({ origin: origin2, role, list: list2 }) => ({
-          kind: "change",
-          id: this.mint(),
-          session,
-          target: { kind: "layer", origin: origin2, role },
-          changes: list2
-        })
-      ),
-      ...answers.map(({ origin: origin2, dir, answer: answer2 }) => ({
-        kind: "approve-repo",
-        id: this.mint(),
-        session,
-        origin: origin2,
-        dir,
-        answer: answer2
-      }))
-    ];
-    this.inFlight = {
-      of: { session, origin, files, consequence },
-      owed: new Set(landing.map((c) => c.id)),
-      missed: null
-    };
-    effects.push(...landing);
-  }
-  // A change's `effect-done`: the landing once its last change is settled,
-  // `owed` while others are still on their way, or undefined for an id no
-  // change of this renderer's holds.
-  settled(id2, outcome) {
-    const landing = this.inFlight;
-    if (landing === null || !landing.owed.delete(id2)) return void 0;
-    if (outcome.kind !== "ok") landing.missed ??= outcome;
-    if (landing.owed.size > 0) return "owed";
-    this.inFlight = null;
-    return { ...landing.of, outcome: landing.missed ?? { kind: "ok" } };
-  }
-  // The origin of the click whose changes are on their way, if one's are.
-  landing() {
-    return this.inFlight?.of.origin ?? null;
-  }
-  // No click begins after this: the daemon is closing.
-  close() {
-    this.closed = true;
-  }
-};
-
 // src/renderer/main.ts
 function mainRenderer(parts, pushed, drained) {
   const { time, feeds, menuIdle } = parts;
@@ -87214,6 +87469,11 @@ function mainRenderer(parts, pushed, drained) {
         ]);
         return;
       case "context":
+        if (parts.edits.moved(
+          event.context.hookData.session_id,
+          event.context.requested
+        ))
+          parts.renderCache.retireSession(event.context.hookData.session_id);
         if (parts.renderCache.holdsConfig(event.context.requested))
           configureSession(parts, event.context, event.worldState, record2);
         else {
@@ -87227,6 +87487,9 @@ function mainRenderer(parts, pushed, drained) {
         parked = parked.filter((p2) => originKey(p2.origin) !== key);
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
+          () => runEach(
+            parts.edits.configured(event.origin, event.config).map((sid) => () => parts.renderCache.refreshEditedView(sid))
+          ),
           ...ready.map(({ event: waited }) => () => {
             if (waited.kind === "context") openSession(parts, waited.context);
             else turn(waited, record2, effects, frames);
@@ -87256,6 +87519,7 @@ function mainRenderer(parts, pushed, drained) {
           (p2) => p2.event.kind !== "context" || p2.event.context.hookData.session_id !== event.session
         );
         menuIdle.retire(event.session);
+        parts.edits.retire(event.session);
         retireSession(parts, event.session);
         return;
       case "effect-done": {
@@ -87291,7 +87555,12 @@ function mainRenderer(parts, pushed, drained) {
     const views = parts.renderCache.subscriptions().sources;
     const lanes = {};
     for (const session of Object.keys(views)) {
-      const switches = viewLanes(parts, session);
+      const switches = viewLanes(
+        parts,
+        session,
+        parts.edits.committed,
+        parts.edits.draft(session) !== null
+      );
       if (switches !== null) lanes[session] = switches;
     }
     const configs = /* @__PURE__ */ new Map();
@@ -87386,6 +87655,9 @@ function mainRendererOf(inputs, host) {
   const menuIdle = new MenuIdle();
   const { log } = host;
   const sessionState = new SessionState(inputs.stored.sessions);
+  for (const sid of Object.keys(inputs.stored.sessions))
+    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
+  const edits = new EditTransactions(sessionState, log);
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -87408,7 +87680,8 @@ function mainRendererOf(inputs, host) {
     {
       clock: time.clock,
       locations: inputs.locations,
-      sessionState,
+      sessionState: edits.view,
+      editSnapshot: (origin, sid) => edits.snapshot(origin, sid),
       log,
       storage: host.storage,
       signer: linkSigner2,
@@ -87417,16 +87690,16 @@ function mainRendererOf(inputs, host) {
       // composed over its world state, its request, its picks and its
       // histories' depths.
       source: sessionSource({
-        sessionState,
+        sessionState: edits.view,
         worldStates,
         home: inputs.home,
-        history: (sessionId2) => settingsHistory.depth(sessionId2),
+        history: (sessionId2) => edits.depth(sessionId2, settingsHistory),
         // Measured against the gate of the config the view draws with.
-        navigation: (sessionId2, config) => navigationHistory.depth(
-          sessionId2,
-          sessionState,
-          gates.state.gateFor(config)
-        )
+        navigation: (sessionId2, config) => navigationHistory.depth(sessionId2, sessionState, {
+          gate: gates.state.gateFor(config),
+          nest: () => disclosureNest(config),
+          edit: edits.draft(sessionId2)?.navigationScope ?? null
+        })
       })
     },
     {
@@ -87452,7 +87725,7 @@ function mainRendererOf(inputs, host) {
   const pin = (sessionId2) => {
     const unhold = renderCache.pin(sessionId2);
     const unwatch = reaction(
-      () => sessionState.revision(sessionId2),
+      () => edits.view.revision(sessionId2),
       () => feeds.wake(sessionId2, "state", time.tick)
     );
     return () => {
@@ -87471,7 +87744,7 @@ function mainRendererOf(inputs, host) {
     ...host,
     time,
     linkSigner: linkSigner2,
-    sessionState,
+    sessionState: edits.view,
     renderCache,
     worldStates,
     renderWarnings,
@@ -87490,10 +87763,12 @@ function mainRendererOf(inputs, host) {
     acts,
     now: now2,
     history: settingsHistory,
+    edits,
+    editViewChanged: (sid) => renderCache.refreshEditedView(sid),
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
-    configFor: (origin) => renderCache.getOrCreate(origin).state.config,
+    configFor: (origin, sid) => renderCache.getOrCreate(origin, sid).state.config,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner2,
@@ -87538,6 +87813,7 @@ function mainRendererOf(inputs, host) {
       menuIdle,
       feeds,
       verbs: verbsOver(verbCtx),
+      edits,
       mint,
       acts
     },
@@ -89549,15 +89825,19 @@ function isChange(v) {
 function isSteps(v) {
   return Array.isArray(v) && v.every((step4) => Array.isArray(step4) && step4.every(isChange));
 }
-function isSavepoint(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  return Number.isInteger(o.at) && o.at >= 0 && Array.isArray(o.net) && o.net.every(isChange) && isSteps(o.below);
-}
 function parseSessionHistory(v) {
   if (!isPlainObject2(v)) return { kind: "failed", reason: "is not an object" };
-  const problem = !isSteps(v.past) ? "has a 'past' that is not a list of steps" : !isSteps(v.future) ? "has a 'future' that is not a list of steps" : v.savepoint !== void 0 && !isSavepoint(v.savepoint) ? "has a 'savepoint' that is not a savepoint" : null;
-  return problem === null ? { kind: "ok", value: v } : { kind: "failed", reason: problem };
+  if (!isSteps(v.past))
+    return {
+      kind: "failed",
+      reason: "has a 'past' that is not a list of steps"
+    };
+  if (!isSteps(v.future))
+    return {
+      kind: "failed",
+      reason: "has a 'future' that is not a list of steps"
+    };
+  return { kind: "ok", value: { past: v.past, future: v.future } };
 }
 function withoutRetiredKeys(history) {
   const retired2 = /* @__PURE__ */ new Set();
@@ -89567,20 +89847,8 @@ function withoutRetiredKeys(history) {
     return false;
   };
   const steps2 = (list2) => list2.map((step4) => step4.filter(keep)).filter((step4) => step4.length > 0);
-  const { savepoint } = history;
-  const past = steps2(history.past);
-  const future = steps2(history.future);
-  if (savepoint === void 0) return { history: { past, future }, retired: retired2 };
   return {
-    history: {
-      past,
-      future,
-      savepoint: {
-        at: steps2(history.past.slice(0, savepoint.at)).length,
-        net: savepoint.net.filter(keep),
-        below: steps2(savepoint.below)
-      }
-    },
+    history: { past: steps2(history.past), future: steps2(history.future) },
     retired: retired2
   };
 }
@@ -89594,7 +89862,7 @@ var HISTORY_FILE = {
     if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
     return {
       kind: "failed",
-      reason: stripped.retired.size > 0 ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting` : "holds nothing to undo, redo or cancel"
+      reason: stripped.retired.size > 0 ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting` : "holds nothing to undo or redo"
     };
   }
 };
