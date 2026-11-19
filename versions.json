@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-890",
+      "ref": "refs/pull/890/merge",
+      "sha": "5d813e39617906ca724496e4301a7912904dfe53",
+      "timestamp": "2026-11-19T17:32:44.910Z",
+      "commits": [
+        {
+          "sha": "5d813e39617906ca724496e4301a7912904dfe53",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:31:36-07:00",
+          "message": "Merge 0851d2154884b63fe9cc991c5ec737f654a06883 into e04e83316aabc769ec7d2a322cf9ecc6ff181f44\n"
+        },
+        {
+          "sha": "0851d2154884b63fe9cc991c5ec737f654a06883",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:49:37-07:00",
+          "message": "refactor(config): derive project layers and plugins from one decision\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "e04e83316aabc769ec7d2a322cf9ecc6ff181f44",
@@ -13,28 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:30:14-07:00",
           "message": "refactor(renderer): keep one origin and config layer projection (#888)"
-        }
-      ]
-    },
-    {
-      "version": "pr-890",
-      "ref": "refs/pull/890/merge",
-      "sha": "70cf474e4b6b4db9fbe09bfe6d1c037c1dd0397f",
-      "timestamp": "2026-11-19T17:28:08.815Z",
-      "commits": [
-        {
-          "sha": "70cf474e4b6b4db9fbe09bfe6d1c037c1dd0397f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T17:27:00Z",
-          "message": "Merge b695411fb46e10851802f7bfaa5ce48595e7dfd1 into 9da36ac5cf93db8fc262b083c7e18134a3a833b9\n"
-        },
-        {
-          "sha": "b695411fb46e10851802f7bfaa5ce48595e7dfd1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:49:37-07:00",
-          "message": "refactor(config): derive project layers and plugins from one decision\n"
         }
       ]
     },
