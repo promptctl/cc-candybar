@@ -1,3 +1,9 @@
+## [1.235.2](https://github.com/promptctl/cc-candybar/compare/v1.235.1...v1.235.2) (2026-11-19)
+
+### Bug Fixes
+
+* **daemon:** drain live renderers before closing links ([#882](https://github.com/promptctl/cc-candybar/issues/882)) ([67617a1](https://github.com/promptctl/cc-candybar/commit/67617a157063c21dd274bfef57d3c5f64d5d4c47))
+
 ## [1.235.1](https://github.com/promptctl/cc-candybar/compare/v1.235.0...v1.235.1) (2026-11-19)
 
 ### Bug Fixes
