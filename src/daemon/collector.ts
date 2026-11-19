@@ -92,19 +92,24 @@ export interface CollectorDeps {
   readonly log: DaemonLogger;
 }
 
-// What a session's holds were declared for: the keys of its newest request,
-// and the lanes that declaration took, written whole by each declaration so a
-// read never joins one request's keys to another's lanes.
-interface Declared {
-  readonly locator: Locator;
+interface CollectedRequest<Context extends ViewFacts> {
+  readonly context: Context;
+  readonly environment: SessionEnvironment;
+}
+
+// [LAW:one-source-of-truth] A declaration keeps its request beside the lanes
+// read at its keys. The same request can configure a replacement renderer.
+interface Declared<
+  Context extends ViewFacts,
+> extends CollectedRequest<Context> {
   readonly lanes: DeclaredLanes;
 }
 
 // What a declaration takes the session's holds for: its keys and its
 // subscriptions.
-interface DeclaredFor {
+interface DeclaredFor<Context extends ViewFacts> {
   readonly session: SessionId;
-  readonly locator: Locator;
+  readonly request: CollectedRequest<Context>;
   readonly subscriptions: Subscribed;
 }
 
@@ -116,9 +121,9 @@ interface Stamped {
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.
-interface Reader {
+interface Reader<Context extends ViewFacts> {
   readonly holds: Holds;
-  readonly declared: IObservableValue<Declared>;
+  readonly declared: IObservableValue<Declared<Context>>;
   // [LAW:one-source-of-truth] The one read of the owners a request's stamp
   // and every landing's stamp take, so a request's stamp is not taken again
   // by the reaction its declaration wakes.
@@ -127,13 +132,15 @@ interface Reader {
 
 // [LAW:types-are-the-program] A session the collector reads, or one whose
 // retire is on its way to the renderer, which holds nothing and reads nothing.
-interface Live extends Reader {
+interface Live<Context extends ViewFacts> extends Reader<Context> {
   readonly kind: "live";
   readonly stop: () => void;
 }
-type Phase = Live | { readonly kind: "retiring" };
+type Phase<Context extends ViewFacts> =
+  | Live<Context>
+  | { readonly kind: "retiring" };
 
-interface SessionRecord {
+interface SessionRecord<Context extends ViewFacts> {
   readonly session: SessionId;
   readonly stamped: Stamped;
   subscriptions: Subscribed;
@@ -142,7 +149,7 @@ interface SessionRecord {
   // The renderer's turns on the session still under way: each holds the
   // session as an open feed does.
   turns: number;
-  phase: Phase;
+  phase: Phase<Context>;
 }
 
 // What a stamp reads: what the session's owners read, or what stopped them
@@ -155,13 +162,13 @@ interface StampInputs {
   readonly daemon: DaemonFacts;
 }
 
-const locatorOf = (
-  req: ViewFacts,
-  environment: SessionEnvironment,
-): Locator => ({
-  hookData: req.hookData,
-  cwd: req.cwd,
-  hints: req.hints,
+const locatorOf = ({
+  context: { hookData, cwd, hints },
+  environment,
+}: CollectedRequest<ViewFacts>): Locator => ({
+  hookData,
+  cwd,
+  hints,
   environment,
 });
 
@@ -207,16 +214,19 @@ const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   a.env.every((name, i) => b.env[i] === name);
 
 // A live session's reads stop and its holds close.
-function release({ stop, holds }: Live): void {
+function release({
+  stop,
+  holds,
+}: Pick<Live<ViewFacts>, "stop" | "holds">): void {
   stop();
   holds.close();
 }
 
-export class Collector {
+export class Collector<Context extends ViewFacts = ViewFacts> {
   // [LAW:one-source-of-truth] Observable as far as a request's wait reads
   // them (`settled`): which sessions are read, each one's phase, its latest
   // stamp and its subscriptions.
-  private readonly records = observable.map<SessionId, SessionRecord>(
+  private readonly records = observable.map<SessionId, SessionRecord<Context>>(
     undefined,
     { deep: false },
   );
@@ -235,21 +245,21 @@ export class Collector {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req: ViewFacts, environment: SessionEnvironment): WorldState {
-    const locator = locatorOf(req, environment);
-    const sessionId = req.hookData.session_id;
+  requested(context: Context, environment: SessionEnvironment): WorldState {
+    const request = { context, environment };
+    const sessionId = context.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId);
       if (held === undefined) {
-        const opened = this.open(sessionId, locator);
+        const opened = this.open(sessionId, request);
         this.records.set(sessionId, opened);
         return opened.stamped.document;
       }
       held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
-        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
-      const live = phase.kind === "live" ? phase : this.live(held, locator);
+        phase.declared.set(this.declared({ ...held, request }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, request);
       held.phase = live;
       this.stamp(held, live.inputs.get());
       return held.stamped.document;
@@ -341,7 +351,7 @@ export class Collector {
         if (phase.kind === "live")
           phase.declared.set(
             this.declared(
-              { ...record, locator: phase.declared.get().locator },
+              { ...record, request: phase.declared.get() },
               phase.holds,
             ),
           );
@@ -365,14 +375,19 @@ export class Collector {
     };
   }
 
-  // Each session the collector reads now, with its latest stamp: what a
-  // renderer's complete start configures again. Unlike a request, it marks no
-  // session active, so a restart keeps none past a sweep that would retire it.
-  liveDocuments(): ReadonlyMap<SessionId, WorldState> {
-    return new Map(
-      [...this.records.values()].flatMap((r) =>
-        r.phase.kind === "live" ? [[r.session, r.stamped.document]] : [],
-      ),
+  // [LAW:one-source-of-truth] Every session the collector reads has its
+  // request at the keys of its latest stamp. Restarting reads that pair
+  // without reactivating a session or handing the renderer its environment.
+  liveSessions(): ReadonlyArray<{ context: Context; worldState: WorldState }> {
+    return [...this.records.values()].flatMap(({ phase, stamped }) =>
+      phase.kind === "live"
+        ? [
+            {
+              context: phase.declared.get().context,
+              worldState: stamped.document,
+            },
+          ]
+        : [],
     );
   }
 
@@ -402,13 +417,16 @@ export class Collector {
     runInAction(() => this.records.clear());
   }
 
-  private open(session: SessionId, locator: Locator): SessionRecord {
+  private open(
+    session: SessionId,
+    request: CollectedRequest<Context>,
+  ): SessionRecord<Context> {
     const subscriptions: Subscribed = {
       plugins: new Map(),
       runs: new Map(),
       env: [],
     };
-    const reader = this.reader({ session, locator, subscriptions });
+    const reader = this.reader({ session, request, subscriptions });
     const first = reader.inputs.get();
     // [LAW:no-silent-failure] A session's first stamp has no document to keep:
     // one that fails fails the request that named it, and takes nothing.
@@ -452,15 +470,18 @@ export class Collector {
 
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
-  private live(record: SessionRecord, locator: Locator): Live {
+  private live(
+    record: SessionRecord<Context>,
+    request: CollectedRequest<Context>,
+  ): Live<Context> {
     return this.watch(
       record.session,
       record.stamped,
-      this.reader({ ...record, locator }),
+      this.reader({ ...record, request }),
     );
   }
 
-  private reader(keys: DeclaredFor): Reader {
+  private reader(keys: DeclaredFor<Context>): Reader<Context> {
     const holds = new Holds();
     const declared = observable.box(this.declared(keys, holds), {
       deep: false,
@@ -480,7 +501,11 @@ export class Collector {
   // taken in a reaction's effect, not a derivation: a stamp is the instant of
   // its turn, and a computed that read the clock and its own prior answer
   // would answer by when it ran.
-  private watch(session: SessionId, stamped: Stamped, reader: Reader): Live {
+  private watch(
+    session: SessionId,
+    stamped: Stamped,
+    reader: Reader<Context>,
+  ): Live<Context> {
     const stop = reaction(
       () => reader.inputs.get(),
       (moved) =>
@@ -515,9 +540,9 @@ export class Collector {
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
   private declared(
-    { session, locator, subscriptions }: DeclaredFor,
+    { session, request, subscriptions }: DeclaredFor<Context>,
     holds: Holds,
-  ): Declared {
+  ): Declared<Context> {
     const sid = JSON.stringify(session);
     try {
       const {
@@ -525,7 +550,12 @@ export class Collector {
         acquired,
         released,
       } = holds.declare(() =>
-        declareLanes(this.deps.owners, holds, locator, subscriptions),
+        declareLanes(
+          this.deps.owners,
+          holds,
+          locatorOf(request),
+          subscriptions,
+        ),
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -537,14 +567,14 @@ export class Collector {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds.size}`,
         );
-      return { locator, lanes };
+      return { ...request, lanes };
     } catch (e) {
       this.deps.log(
         "error",
         `session declaration threw sid=${sid}: ${inspect(e)}`,
       );
       return {
-        locator,
+        ...request,
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions,
@@ -557,9 +587,9 @@ export class Collector {
     return { ...locator, deps: this.deps.owners };
   }
 
-  private read({ locator, lanes }: Declared): Ok<Readings> | Failed {
+  private read(declared: Declared<Context>): Ok<Readings> | Failed {
     try {
-      return ok(readingsOf(this.inputsOf(locator), lanes));
+      return ok(readingsOf(this.inputsOf(locatorOf(declared)), declared.lanes));
     } catch (e) {
       return failed(`reading the owners: ${String(e)}`, "read");
     }
@@ -570,7 +600,7 @@ export class Collector {
   // failed stamp keeps the prior readings and says why (`failedStamp`).
   // Answers whether the document moved.
   private stamp(
-    { session, stamped }: Pick<SessionRecord, "session" | "stamped">,
+    { session, stamped }: Pick<SessionRecord<Context>, "session" | "stamped">,
     moved: StampInputs,
   ): boolean {
     const prior = stamped.document;
@@ -620,7 +650,7 @@ export class Collector {
   // (src/renderer-interface/interface.ts), so the record goes either way. It goes only
   // from the retiring period this retire began: a record a request revived,
   // or one retired again since, is not this retire's to remove.
-  private retire(record: SessionRecord, live: Live): void {
+  private retire(record: SessionRecord<Context>, live: Live<Context>): void {
     release(live);
     const retiring = { kind: "retiring" } as const;
     runInAction(() => (record.phase = retiring));

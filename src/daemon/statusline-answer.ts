@@ -105,7 +105,10 @@ function recorded(facts: RequestFacts, delivered: TurnOutcome): void {
 export async function answerStatusline(
   host: RendererHost,
   publish: PublishFrame,
-  collector: Pick<Collector, "requested" | "holding" | "settled">,
+  collector: Pick<
+    Collector<CheckedRenderRequest>,
+    "requested" | "holding" | "settled"
+  >,
   clock: Pick<Timekeeper, "monotonic" | "now" | "after">,
   // The daemon's close, which ends the request's wait.
   closing: AbortSignal,
