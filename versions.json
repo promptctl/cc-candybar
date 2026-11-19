@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-844",
+      "ref": "refs/pull/844/merge",
+      "sha": "8db80c1f77faa0e41e8ba1577555698ba26f2de5",
+      "timestamp": "2026-11-19T10:24:43.861Z",
+      "commits": [
+        {
+          "sha": "8db80c1f77faa0e41e8ba1577555698ba26f2de5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:23:44Z",
+          "message": "Merge af91fc4409d840597d1cbf3f8a08138187b63ede into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
+        },
+        {
+          "sha": "af91fc4409d840597d1cbf3f8a08138187b63ede",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:23:38-07:00",
+          "message": "fix(daemon): reset config coverage for either start entry\n"
+        },
+        {
+          "sha": "a5618522ca878015245477d00dbf265f38c18d00",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:12:21-07:00",
+          "message": "test(daemon): cover failed starts and wake reporting\n"
+        },
+        {
+          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:46-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-838",
       "ref": "refs/pull/838/merge",
       "sha": "a9e4abe35c9542438bac1273643ee9d7500b32f8",
@@ -164,35 +200,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:08:06-07:00",
           "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-844",
-      "ref": "refs/pull/844/merge",
-      "sha": "9da9745959d472116fdb671826fcda19b33676ce",
-      "timestamp": "2026-11-19T10:13:22.708Z",
-      "commits": [
-        {
-          "sha": "9da9745959d472116fdb671826fcda19b33676ce",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:12:28Z",
-          "message": "Merge a5618522ca878015245477d00dbf265f38c18d00 into 9c3c4d50b83f048857e251023c9e60ea74e0a83d\n"
-        },
-        {
-          "sha": "a5618522ca878015245477d00dbf265f38c18d00",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:12:21-07:00",
-          "message": "test(daemon): cover failed starts and wake reporting\n"
-        },
-        {
-          "sha": "3da5befb66b28d5d85cae0924d6bececa98a80dd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:46-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
         }
       ]
     },

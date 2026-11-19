@@ -76189,6 +76189,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     } catch (thrown2) {
       made = failureOf(thrown2);
     }
+    if (at === "first" || made.kind === "event" && made.event.kind === "start")
+      served.clear();
     if (made.kind !== "event")
       return { event: null, slotted: unanswered(made, queuedMs) };
     holds2(made.event.kind);
@@ -76211,10 +76213,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     return turn;
   };
   const deliver2 = recorded2("last");
-  const start = (make, about) => recorded2("first")(() => {
-    served.clear();
-    return make();
-  }, about);
   const unawaited = (what, settling) => void settling.catch((thrown2) => {
     const text4 = `renderer ${name}'s ${what} did not settle: ${failureOf(thrown2).detail}`;
     log("error", text4);
@@ -76300,7 +76298,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     name,
     answer: answer2,
     deliver: deliver2,
-    start,
+    start: recorded2("first"),
     ask: ask2,
     tell,
     moved: moved2,
