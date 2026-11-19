@@ -26,7 +26,7 @@ Each entry is what the design must achieve, with where the need was stated and t
 | I-10 | A renderer stores no path, and `ProfilePath` is the host's alone. | A copied history must not be able to write the user's files. | goals.md R-13 | A path in a renderer's stored state or undo history. |
 | I-11 | Claude Code's request is answered with the frame of the renderer that session uses. | The client gets one answer, and it is the bar the session asked for. | goals.md R-9 | A session's statusline shows another renderer's frame. |
 | I-12 | The payload a template reads carries every value it reads, and metrics, activity and session are in it. | A value that reaches a template outside the payload is a second path. | goals.md R-5 | A template reads a fact from anywhere but the payload. |
-| I-13 | Nothing is decoded from rendered ANSI. | Decoding output to recover state inverts the pipeline. | goals.md R-1 | Any part reads a Frame back to learn what it said. |
+| I-13 | Nothing is decoded from rendered ANSI. | Decoding output to recover state inverts the pipeline. | goals.md R-1 | A state decision depends on decoding ANSI. |
 | I-14 | The design is built from generally useful primitives, in data, under the laws. | Primitives with no consumer yet are how later work becomes cheap. | goals.md C-1, C-2, C-3 | A part exists only to serve one feature, or variability lives in a branch instead of a value; or a step's laws review finds a violation the step does not mark as an exception. |
 
 ## 3. Assumptions
@@ -356,7 +356,7 @@ interface Program {
 
 ## 8. Addressing and lifetime
 
-- **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. launchd starts it on the first connect and restarts it when it exits (A-4). No client and no renderer starts the host, so no dependant chooses which code owns the world.
+- **The host** listens at the socket installed clients already dial, `/tmp/cc-candybar-<uid>/socket`. Ordinary Claude Code statusline ticks currently activate and recover it. Other clients and renderers connect to the available host. A future launchd owner (A-4) must preserve that ordinary statusline cold-start path.
 - **The host's bundle is a value the install sets.** The LaunchAgent names the bundle it runs, and installing from a bundle repoints it; the host exits when its bundle changes, as today's daemon does. Host code is tried from a worktree by installing it there, which moves every bar on the machine, as any change to the daemon does today. G-2 asks for the drawing to be iterated per session, and renderers give that.
 - **The host's environment is recorded, not inherited.** launchd starts a process with a minimal `PATH`, so the install records the paths of the tools the host itself runs (`node`, `tmux`, `git`, `gh`) into the LaunchAgent. Everything a session runs uses that session's environment, which its client sends (§7).
 - **What needs an install.** A new built-in field of world state, a change to how a source is read, a new effect or a new surface adapter is host code, tried by installing it.
@@ -369,7 +369,7 @@ interface Program {
 - **A profile is a function of the name alone.** The default name's profile is today's XDG layout, so an installed bar keeps its files; any other name is `<state root>/renderers/<name>/` with `state/`, `config/` and `cache/` beneath it. Its root is canonicalized once, where the profile is built, so no request reads the disk to compare spellings. Isolation is one value. [LAW:one-source-of-truth]
 - **Click admission resolves a session once.** The host sends an ordered list of decoded steps with a single session identity and its held context. Legacy links that only copy text or open a path can omit the session. A session click applies its steps in one renderer journal and returns external acts as effects.
 - **Clicks are isolated in the host, and the forwarder learns to be loud.** goals.md R-6 expects the URL handler to change for clicks to be isolated. Here the isolation is the host's: it verifies each link against its renderer's key and routes it by name, so the forwarder stays a pipe that passes the URL on unparsed and cannot be wrong about routing. Its change is that the host now replies to every URL, and the forwarder turns a refusal (a renderer the host does not know, one whose bundle is gone, a bad signature) into the macOS notification it already shows when the socket is unreachable, because a click with no bar to land on has only that place to be loud. Proposal 1's name-to-socket rule in Swift and its mirror in `check-protocol` are not needed.
-- **Links keep `to/<name>`.** The name is the address, and the host routes by it. The tmux row's constant binding and `@cc-candybar-renderer` option stand as Proposal 1 §18 specifies. A range id is the digest of its signed URL, so it needs no counter, table, persisted state or binding key; the renderer resolves an id against the links in its frame memory, and two distinct URLs with one id in a frame are a loud `⚠` raised by that frame's encoder.
+- **Links keep `to/<name>`.** The name is the address, and the host routes by it. The host publishes the same terminal link for the Claude Code statusline and tmux pane, and one ingress admits both. The eventual typed action address carries the arguments the frame drew. Browser presentation can use the same action contract.
 
 ## 9. Error handling
 
@@ -446,19 +446,19 @@ Each step leaves a working bar. The renderer leaves the host's process first, th
 | effects-at-boundaries | The renderer is pure in the full sense: no I/O, no clock, no log. The host is the only edge. | — |
 | one-way-deps | Host → renderer, launchd → host. Nothing points up. | — |
 | no-ambient-temporal-coupling | The host owns every order: per-renderer input, effects within a turn, a run before its refresh, a declared wake before its `due`. Every schedule is measured on ticks, which never run back. | — |
-| single-enforcer | The collector judges every read a renderer subscribes to, the interpreter every effect, the host every signed link, the renderer that drew a row every range id on it; repository trust has one keeper. | — |
+| single-enforcer | The collector judges every read a renderer subscribes to, the interpreter every effect, the host every signed link; repository trust has one keeper. | — |
 | types-are-the-program | Effects are typed operations; a config write is a `change` guarded per setting; inputs and outputs are closed unions. | The wire loses types, so each side parses what it receives. That is one parser per direction at the one boundary, not a duplicate check. |
 | one-source-of-truth | World state lives in the collector, renderer state in its renderer, durable state in the profile's files, written only by effects. | `subscriptions` make a loop from world state to keys to reads. It is the one loop and has one owner; it is not a second source. |
 | dataflow-not-control-flow | Renderers differ by name and bundle, values the supervisor is handed, never a branch. | — |
 | nothing-unseen | Every input, turn and effect lands on one event; the renderer's record is data. | — |
-| no-silent-failure | Stale clicks, restarts, refused effects and missing bundles are all loud. | — |
+| no-silent-failure | Malformed clicks, restarts, refused effects and missing bundles are reported. | — |
 | verifiable-goals | The replay test, the latency checks, and every falsifier in §2 and §3. | — |
 
 ## 15. What stands from Proposal 1
 
 **Stands:** §1, total facts, here world state, with pending as a value (not its measured cost, which was one session's), with its seam test widened in §11; §4's split of the hook into instantaneous fields and a locator, except that the host keeps the locator itself; §6's home, here the profile, refined by ADR-6, with `load-config` removed and the `env` source kept on the session's environment (§7); §8, recording as a primitive, which now records renderer inputs; §12, `SessionFacts`, here `WorldState`; §16's ordering invariant and its move of frame memory and animation clocks into Apply's state, here the state machine's, both now in §7; §17's derived paths and `HomePath`, here `ProfilePath`, under ADR-6, without the per-name socket, which ADR-7 removes; §18's link grammar and constant tmux binding, written by the host's tmux-status adapter; §19's source digest, shared runs and the key change served stale-while-revalidate, now carried by subscriptions.
 
-**Replaced:** §2 (Gather, here the collector, does only facts), §3 (Gather addressed by version), §5's performer, here the interpreter, §7 (how a session reaches a renderer), §9's table, §10 (order of work), §11 (its questions, answered by this draft or open in §17 here), §13 (the facts wire, deleted), §14 (the facts source, now the renderer transport), §15 (Gather's process, now the host's), §16's effects, §18's counter-minted range ids (now digests, §8), §19's `follow` and Gather's consistency guard (now the collector's judgement of each subscription, §7), §20, §21 and §22.
+**Replaced:** §2 (Gather, here the collector, does only facts), §3 (Gather addressed by version), §5's performer, here the interpreter, §7 (how a session reaches a renderer), §9's table, §10 (order of work), §11 (its questions, answered by this draft or open in §17 here), §13 (the facts wire, deleted), §14 (the facts source, now the renderer transport), §15 (Gather's process, now the host's), §16's effects, §18's retired tmux status ranges, §19's `follow` and Gather's consistency guard (now the collector's judgement of each subscription, §7), §20, §21 and §22.
 
 **Proposal 1's own claims this corrects:** a renderer was "a pure pipeline" while it performed every effect; every path a renderer used was "a pure function of the home" while config layers live in repositories; facts "flow one way" while the renderer sent the locator, declarations and keys up.
 

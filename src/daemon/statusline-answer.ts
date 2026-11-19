@@ -247,6 +247,11 @@ export async function answerStatusline(
             effect,
             `presents request ${effect.request}, not this turn's ${id}`,
           );
+        else if (effect.session !== session)
+          done(
+            effect,
+            `presents session ${JSON.stringify(effect.session)}, not this request's ${JSON.stringify(session)}`,
+          );
         else if (answer !== null)
           done(effect, `a second statusline frame for request ${id}`);
         else answer = effect;

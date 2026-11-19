@@ -291,6 +291,29 @@ test("a second frame for the request is refused, and the first answers it", asyn
   ]);
 });
 
+test("a present for another session cannot publish a frame or its inspection", async () => {
+  const other = {
+    ...present(1),
+    session: sessionIdOf("other-session"),
+    inspection: { preset: "other", faults: [], unreadSources: [] },
+  };
+  const { renderer, heard } = scripted(output([other]));
+  const { answered } = await answer(renderer);
+
+  expect(answered.resp).toMatchObject({ ok: false, code: "RENDER_FAILED" });
+  expect(answered.inspection).toBeUndefined();
+  await drained();
+  expect(heard).toContainEqual({
+    kind: "effect-done",
+    session: other.session,
+    of: other.id,
+    outcome: {
+      kind: "failed",
+      reason: `presents session "other-session", not this request's "${SESSION}"`,
+    },
+  });
+});
+
 test("a context turn's effects are refused, each owed its effect-done, and the request's present still answers it", async () => {
   const { renderer, heard } = scripted(
     output([present(1)]),
