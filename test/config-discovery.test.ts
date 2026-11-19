@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HOST } from "./helpers/host";
+import { heldClock } from "./helpers/held-clock";
 import { answerRepo } from "./helpers/repo-approval";
 import { untilHeard } from "./helpers/reload-signal";
 import { originOf } from "./helpers/config-host";
@@ -29,6 +30,8 @@ import {
   type RendererName,
 } from "../src/daemon/foundations/renderer-name";
 import {
+  DEBOUNCE_MS,
+  POLL_MS,
   WatcherRegistry,
   type WatcherCounters,
 } from "../src/daemon/cache/watchers";
@@ -72,7 +75,7 @@ function named(
 
 // A discovery over a real watcher registry; `moved` is every origin a watch
 // moved, by key, in order, and `logged` every line.
-function discoveryRig(files = diskFiles) {
+function discoveryRig(files = diskFiles, clock = systemTimekeeper) {
   const counters: WatcherCounters = {
     watchersOpened: 0,
     watchersClosed: 0,
@@ -82,7 +85,7 @@ function discoveryRig(files = diskFiles) {
     dirWatchesClosed: 0,
   };
   const watchers = new WatcherRegistry({
-    clock: systemTimekeeper,
+    clock,
     counters,
     logger: () => {},
   });
@@ -291,6 +294,93 @@ test("a landed write synchronously returns only the writer's reloads and routes 
   expect(delivered).toEqual([[name, originKey(origin)]]);
   expect(second.snapshotOf(origin)).toBe(first.snapshotOf(origin));
   expect(textOfLayer(second, origin, file)).toBe("{ globals: {} }");
+});
+
+test("a shared file's watch window reads it once for different held origins and stops on close", () => {
+  const { origin, file } = named("shared-first");
+  const dir = project("shared-next");
+  const other = originOf(dir, dir, file);
+  const name = rendererNameOf("next");
+  const clock = heldClock(new Date(0));
+  let reads = 0;
+  const { service, discovery, delivered } = discoveryRig(
+    {
+      ...diskFiles,
+      text(read) {
+        if (read === file) reads++;
+        return diskFiles.text(read);
+      },
+    },
+    clock,
+  );
+  const second = service.forRenderer(name);
+  discovery.follow([origin]);
+  second.follow([other]);
+  reads = 0;
+
+  const next = "{ globals: { padding: 1 } }";
+  fs.writeFileSync(file, next);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(reads).toBe(1);
+  expect(delivered).toEqual([
+    [MAIN_RENDERER, originKey(origin)],
+    [name, originKey(other)],
+  ]);
+  expect(textOfLayer(discovery, origin, file)).toBe(next);
+  expect(textOfLayer(second, other, file)).toBe(next);
+
+  fs.writeFileSync(file, "{}");
+  clock.advance(POLL_MS - DEBOUNCE_MS);
+  service.close();
+  expect(clock.pending()).toBe(0);
+  clock.advance(DEBOUNCE_MS);
+  expect(reads).toBe(1);
+  expect(delivered).toHaveLength(2);
+});
+
+test("one failed rediscovery leaves the writer and another holder the successful change and can retry", () => {
+  const a = named("published");
+  const b = named("failed-once");
+  const name = rendererNameOf("next");
+  let refuse = false;
+  const {
+    service,
+    discovery: writer,
+    delivered,
+    logged,
+  } = discoveryRig({
+    ...diskFiles,
+    text(read) {
+      if (refuse && read === b.file) throw new Error("rediscovery failed");
+      return diskFiles.text(read);
+    },
+  });
+  const second = service.forRenderer(name);
+  const origins = [a.origin, b.origin];
+  writer.follow(origins);
+  second.follow(origins);
+  const next = "{ globals: { padding: 1 } }";
+  for (const { file } of [a, b]) fs.writeFileSync(file, next);
+
+  refuse = true;
+  expect(writer.landed([a.file, b.file], false)).toEqual([a.origin]);
+  expect(delivered).toEqual([[name, originKey(a.origin)]]);
+  expect(textOfLayer(second, a.origin, a.file)).toBe(next);
+  expect(textOfLayer(second, b.origin, b.file)).toBe("{}");
+  expect(logged).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/why=landed .*failed-once.*rediscovery failed/),
+    ]),
+  );
+
+  refuse = false;
+  service.again("events-resumed");
+  expect(delivered).toEqual([
+    [name, originKey(a.origin)],
+    [MAIN_RENDERER, originKey(b.origin)],
+    [name, originKey(b.origin)],
+  ]);
+  expect(textOfLayer(second, b.origin, b.file)).toBe(next);
 });
 
 test("a batch reads shared layer, plugin root and definition paths once", () => {

@@ -27,6 +27,7 @@ import { digestOf } from "../../utils/plain.js";
 import type { DaemonLogger } from "../../utils/logger.js";
 import type { WatcherRegistry } from "../cache/watchers.js";
 import type { RendererName } from "../foundations/renderer-name.js";
+import { failureOf } from "../foundations/verb-error.js";
 import {
   watchFault,
   watchTargetsOf,
@@ -59,7 +60,7 @@ export interface RendererConfigs {
 }
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
-  readonly watchers: Pick<WatcherRegistry, "acquire" | "follow">;
+  readonly watchers: Pick<WatcherRegistry, "batch">;
   readonly files?: DiscoveryFiles;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
@@ -72,6 +73,8 @@ export interface ConfigDiscoveryDeps extends DiscoveryWorld {
 
 export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
+  private readonly watches: ReturnType<WatcherRegistry["batch"]>;
+  private readonly invalidated = new Set<string>();
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -79,11 +82,20 @@ export class ConfigDiscovery {
   private closed = false;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
+    // [LAW:single-enforcer] One watch delivery window for all config origins
+    // means one discovery batch for the paths an event made relevant.
+    this.watches = deps.watchers.batch(() => {
+      const keys = [...this.invalidated];
+      this.invalidated.clear();
+      this.heard(keys, "config-watch");
+    });
     const answers = repoConfigsPath(deps.stateDir);
-    this.answersWatch = deps.watchers.acquire(
+    this.answersWatch = this.watches.acquire(
       `repo-configs:${answers}`,
       { dirs: [], polled: [answers] },
-      () => this.heard(this.asking(), "answers-watch"),
+      () => {
+        for (const key of this.asking()) this.invalidated.add(key);
+      },
     );
   }
 
@@ -178,6 +190,7 @@ export class ConfigDiscovery {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.invalidated.clear();
     this.answersWatch.release();
     for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
@@ -228,12 +241,22 @@ export class ConfigDiscovery {
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
-      const now = {
-        ...this.discovered(was.origin, shared, was.watch),
-        renderers: was.renderers,
-      };
-      this.followed.set(key, now);
-      if (now.digest !== was.digest) moved.push(now);
+      // [LAW:no-silent-failure] An origin that cannot be observed keeps the
+      // last snapshot for a retry. Its failure cannot suppress a sibling's
+      // already-observed change or reverse a successful write.
+      try {
+        const now = {
+          ...this.discovered(was.origin, shared, was.watch),
+          renderers: was.renderers,
+        };
+        this.followed.set(key, now);
+        if (now.digest !== was.digest) moved.push(now);
+      } catch (thrown) {
+        this.deps.log(
+          "error",
+          `config discovery why=${why} origin=${JSON.stringify(key)} failed: ${failureOf(thrown).detail}`,
+        );
+      }
     }
     this.deps.log(
       "info",
@@ -271,9 +294,9 @@ export class ConfigDiscovery {
     // whole chain, so a higher-precedence file appearing supersedes a lower
     // one; which path changed does not filter it, as the origin already
     // scopes the watch set.
-    const { watch, move } = this.deps.watchers.follow(held, spec, () =>
-      this.heard([key], "config-watch"),
-    );
+    const { watch, move } = this.watches.follow(held, spec, () => {
+      this.invalidated.add(key);
+    });
     if (move === "rebound") this.bound(origin, paths);
     const snapshot: ConfigSnapshot = {
       ...found.snapshot,

@@ -119,6 +119,14 @@ interface Holder {
   readonly onInvalidate: (invalidation: Invalidation) => void;
 }
 
+interface InvalidationWindow {
+  readonly completed?: () => void;
+  pending: {
+    readonly changes: Map<WatcherSlot, Gathering>;
+    readonly cancel: () => void;
+  } | null;
+}
+
 interface WatcherSlot {
   readonly key: string;
   // The directories it was acquired for, and the watch it holds on each
@@ -130,8 +138,7 @@ interface WatcherSlot {
   // every window reaches every holder: `watch_file` sources in a directory
   // home and in each session's view share one key.
   readonly holders: Set<Holder>;
-  // The debounce window open now, and what it has seen so far.
-  debounce: { readonly cancel: () => void; window: Gathering } | null;
+  readonly window: InvalidationWindow;
 }
 
 // [LAW:nothing-unseen] Two kinds of fact. A slot is a consumer's watch:
@@ -288,6 +295,22 @@ export class WatcherRegistry {
     this.nodeWalksTrees = opts.nodeWalksTrees ?? process.platform === "linux";
   }
 
+  // [LAW:single-enforcer] A consumer that reloads several slots together can
+  // share their delivery window. Each slot still receives only its own paths.
+  // Keys acquired in this window belong to it until their last release.
+  batch(completed: () => void): Pick<WatcherRegistry, "acquire" | "follow"> {
+    const window: InvalidationWindow = { pending: null, completed };
+    const acquire: WatcherRegistry["acquire"] = (key, targets, onInvalidate) =>
+      this.acquired(key, targets, onInvalidate, window);
+    return {
+      acquire,
+      follow: (held, spec, onInvalidate) =>
+        this.followed(held, spec, (key, targets) =>
+          acquire(key, targets, onInvalidate),
+        ),
+    };
+  }
+
   // Acquire (or share) the watch keyed by `key`. Every acquire of a key is a
   // holder of one slot, and each holder's callback hears every window.
   // `targets` from the first acquire wins; subsequent acquires keep the
@@ -298,6 +321,15 @@ export class WatcherRegistry {
     key: string,
     targets: WatchTargets,
     onInvalidate: (invalidation: Invalidation) => void,
+  ): WatcherHandle {
+    return this.acquired(key, targets, onInvalidate);
+  }
+
+  private acquired(
+    key: string,
+    targets: WatchTargets,
+    onInvalidate: (invalidation: Invalidation) => void,
+    window?: InvalidationWindow,
   ): WatcherHandle {
     if (this.closed) {
       // Registry already shut down: nothing is watched or read, and the
@@ -316,6 +348,15 @@ export class WatcherRegistry {
       };
     }
     const shared = this.slots.get(key);
+    if (
+      shared !== undefined &&
+      (window === undefined
+        ? shared.window.completed !== undefined
+        : shared.window !== window)
+    )
+      throw new Error(
+        `watch ${valueOf(key)} belongs to another delivery window`,
+      );
     // [LAW:single-enforcer] Every acquire names its directories as they are
     // now: joining a slot judges and reconciles its directories as opening
     // one does.
@@ -330,7 +371,8 @@ export class WatcherRegistry {
       shared?.polled ??
         targets.polled.flatMap((at) => this.polled.get(at) ?? []),
     );
-    const slot = shared ?? this.opened(key, targets);
+    const slot =
+      shared ?? this.opened(key, targets, window ?? { pending: null });
     const holder: Holder = { onInvalidate };
     slot.holders.add(holder);
     return this.makeHandle(slot, holder);
@@ -342,9 +384,17 @@ export class WatcherRegistry {
     spec: WatchSpec,
     onInvalidate: (invalidation: Invalidation) => void,
   ): { readonly watch: HeldWatch; readonly move: WatchMove } {
-    const followed = followWatch(held, spec, (key, targets) =>
+    return this.followed(held, spec, (key, targets) =>
       this.acquire(key, targets, onInvalidate),
     );
+  }
+
+  private followed(
+    held: HeldWatch | null,
+    spec: WatchSpec,
+    acquire: Parameters<typeof followWatch>[2],
+  ): { readonly watch: HeldWatch; readonly move: WatchMove } {
+    const followed = followWatch(held, spec, acquire);
     // A rebound acquired, which sighted. A kept watch whose slot is gone (the
     // registry closed, or the holder released it) polls nothing to sight.
     if (followed.move === "kept")
@@ -368,14 +418,18 @@ export class WatcherRegistry {
         record.entry = UNSEEN;
   }
 
-  private opened(key: string, targets: WatchTargets): WatcherSlot {
+  private opened(
+    key: string,
+    targets: WatchTargets,
+    window: InvalidationWindow,
+  ): WatcherSlot {
     const slot: WatcherSlot = {
       key,
       targets: targets.dirs,
       listeners: new Map(),
       polled: [],
       holders: new Set(),
-      debounce: null,
+      window,
     };
     this.reconciled(slot, "acquire", null);
     for (const at of targets.polled) {
@@ -638,38 +692,48 @@ export class WatcherRegistry {
   }
 
   private fire(slot: WatcherSlot, invalidation: Gathering): void {
-    if (slot.debounce !== null) {
-      slot.debounce.window = folded(slot.debounce.window, invalidation);
-      return;
-    }
-    // A window is its slot's own: one event reaches every slot on the
-    // directory, and a fold into a shared set would hand a slot the paths
-    // another named.
-    const debounce = {
-      window:
-        invalidation.kind === "changed"
-          ? { kind: "changed" as const, paths: new Set(invalidation.paths) }
-          : invalidation,
-      cancel: this.clock.after(
-        DEBOUNCE_MS,
-        () => {
-          slot.debounce = null;
-          const heard = heardOf(debounce.window);
-          for (const holder of slot.holders) {
-            try {
-              holder.onInvalidate(heard);
-            } catch (e) {
-              this.logger(
-                "warn",
-                `watcher invalidate threw key=${valueOf(slot.key)}: ${(e as Error).message}`,
-              );
+    const { window } = slot;
+    if (window.pending === null) {
+      const changes = new Map<WatcherSlot, Gathering>();
+      window.pending = {
+        changes,
+        cancel: this.clock.after(
+          DEBOUNCE_MS,
+          () => {
+            window.pending = null;
+            for (const [changed, gathered] of changes) {
+              if (this.slots.get(changed.key) !== changed) continue;
+              const heard = heardOf(gathered);
+              for (const holder of changed.holders)
+                this.notify(changed.key, () => holder.onInvalidate(heard));
             }
-          }
-        },
-        { unref: true },
-      ),
-    };
-    slot.debounce = debounce;
+            if (window.completed !== undefined)
+              this.notify(null, window.completed);
+          },
+          { unref: true },
+        ),
+      };
+    }
+    const { changes } = window.pending;
+    const gathered = changes.get(slot);
+    changes.set(
+      slot,
+      gathered !== undefined
+        ? folded(gathered, invalidation)
+        : invalidation.kind === "changed"
+          ? { kind: "changed", paths: new Set(invalidation.paths) }
+          : invalidation,
+    );
+  }
+
+  private notify(key: string | null, take: () => void): void {
+    try {
+      take();
+    } catch (thrown) {
+      const why = thrown instanceof Error ? thrown.message : String(thrown);
+      const about = key === null ? "batch" : `key=${valueOf(key)}`;
+      this.logger("warn", `watcher invalidate threw ${about}: ${why}`);
+    }
   }
 
   private makeHandle(slot: WatcherSlot, holder: Holder): WatcherHandle {
@@ -705,9 +769,15 @@ export class WatcherRegistry {
   // slot on it: a slot that names the path again starts from what is there at
   // its own acquire.
   private closeSlot(slot: WatcherSlot, cause: string): void {
-    if (slot.debounce !== null) {
-      slot.debounce.cancel();
-      slot.debounce = null;
+    const { window } = slot;
+    const { pending } = window;
+    if (
+      pending !== null &&
+      pending.changes.delete(slot) &&
+      pending.changes.size === 0
+    ) {
+      pending.cancel();
+      window.pending = null;
     }
     for (const listener of slot.listeners.values()) this.left(listener, cause);
     for (const record of slot.polled) {
