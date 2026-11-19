@@ -3,9 +3,10 @@ import { hostOf } from "../../helpers/host";
 import { readFileSync } from "node:fs";
 
 import { effectsUrl, VERB_SET_STATE } from "../../../src/click/wire";
-import { sessionStatePath } from "../../../src/daemon/paths";
+import { leasePathFor, sessionStatePath } from "../../../src/daemon/paths";
+import { readLease } from "../../../src/daemon/socket-lease";
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { click, killAndWait, render, drawnLink } from "../../helpers/daemon-e2e";
+import { click, render, drawnLink } from "../../helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -13,7 +14,11 @@ import {
   type IsolatedDaemonHandle,
   type RunningDaemon,
 } from "../../helpers/spawn-isolated-daemon";
-import { sendDaemonRequest, waitForExit } from "../../helpers/daemon-wire";
+import {
+  sendDaemonRequest,
+  waitForExit,
+  type ExitResult,
+} from "../../helpers/daemon-wire";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight
@@ -26,6 +31,45 @@ import { sendDaemonRequest, waitForExit } from "../../helpers/daemon-wire";
 // was reached" — it has to be "process is gone".
 
 const SHUTDOWN_BUDGET_MS = 1500;
+
+// The pid the serving daemon wrote into its socket's lease, which is the process
+// whose shutdown runs the close. It is read from the daemon and not taken from
+// `child.pid`: were a wrapper to come back between the test and the daemon,
+// stopping `child.pid` would freeze the wrapper and leave the daemon running,
+// and the case would pass while proving nothing.
+function leasedPid(sockPath: string): number {
+  const lease = readLease(leasePathFor(sockPath));
+  if (lease.kind !== "owned") {
+    throw new Error(`no owner in the lease of ${sockPath}: ${JSON.stringify(lease)}`);
+  }
+  return lease.pid;
+}
+
+// Longer than the grace a signal-relaying wrapper gives its child before it
+// kills it (tsx's is about 60 ms), since that wrapper killing a daemon still
+// frozen is what this case guards against.
+const FROZEN_MS = 150;
+
+// [LAW:no-ambient-temporal-coupling] A loaded runner can leave the daemon
+// unscheduled across the signal that stops it. Freezing the daemon's own
+// process across the SIGTERM is that runner made certain: the signal waits,
+// pending, and the shutdown must still run when the daemon next gets the CPU.
+async function frozenAcrossSigterm(
+  daemon: RunningDaemon,
+  sockPath: string,
+): Promise<ExitResult> {
+  process.kill(leasedPid(sockPath), "SIGSTOP");
+  daemon.signalDaemon("SIGTERM");
+  await new Promise((r) => setTimeout(r, FROZEN_MS));
+  return daemon.stop("SIGCONT");
+}
+
+const stops: ReadonlyArray<
+  [string, (daemon: RunningDaemon, sockPath: string) => Promise<ExitResult>]
+> = [
+  ["a SIGTERM", (daemon) => daemon.stop("SIGTERM")],
+  [`a SIGTERM while the daemon is frozen ${FROZEN_MS} ms`, frozenAcrossSigterm],
+];
 
 async function spawnDaemon(): Promise<IsolatedDaemonHandle> {
   return spawnIsolatedDaemon("cc-candybar-shutdown");
@@ -96,7 +140,7 @@ describe("daemon shutdown contract", () => {
       expect(resp).toEqual({ ok: true, output: "" });
       await expectExitWithinBudget(handle.child);
     } finally {
-      handle.cleanup();
+      await handle.cleanup();
     }
   });
 
@@ -121,7 +165,7 @@ describe("daemon shutdown contract", () => {
       }
       await expectExitWithinBudget(handle.child);
     } finally {
-      handle.cleanup();
+      await handle.cleanup();
     }
   });
 
@@ -129,7 +173,7 @@ describe("daemon shutdown contract", () => {
   // end a daemon through one funnel, and a click's session write waits out the
   // file's debounce. So the close in that funnel is what keeps a click a recycled
   // daemon had not written yet, and only a real process has that funnel.
-  test("a session write still inside its debounce lands before a signal ends the daemon", async () => {
+  test.each(stops)("a session write still inside its debounce lands before %s ends the daemon", async (_, stop) => {
     const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-shutdown",
     );
@@ -144,12 +188,12 @@ describe("daemon shutdown contract", () => {
           { verb: VERB_SET_STATE, args: [sessionId, "padding", "4"] },
         ])),
       );
-      await killAndWait(daemon, "SIGTERM");
+      expect(await stop(daemon, sockPath)).toEqual({ code: 0, signal: null });
 
       const saved = JSON.parse(readFileSync(sessionStatePath(hostOf(env)), "utf8"));
       expect(saved[sessionId]).toMatchObject({ padding: "4" });
     } finally {
-      daemon?.killTree();
+      await daemon?.stop();
       removeTmpDirs();
     }
   });

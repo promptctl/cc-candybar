@@ -21,7 +21,7 @@ import {
   TOTAL_BUDGET_MS,
 } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
-import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
+import { renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import { field, landedEvents, only } from "../../helpers/request-event";
 import {
@@ -122,7 +122,7 @@ test("a render that outlives its request timeout writes timedOut=Y", async () =>
       sendDaemonRequest(sockPath, { v: PROTOCOL_VERSION, kind: "stats" }),
     ).resolves.toMatchObject({ ok: true, stats: { renderCache: { held: 0 } } });
   } finally {
-    await killAndWait(daemon);
+    await daemon.stop();
     rmSync(projectDir, { recursive: true, force: true });
     removeTmpDirs();
   }

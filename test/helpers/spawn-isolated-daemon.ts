@@ -20,13 +20,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { spawnTestDaemon } from "./spawn-test-daemon";
 import {
-  spawnTestDaemon,
-  TSX_SOURCE_ENTRY,
-  type DaemonEntry,
-} from "./spawn-test-daemon";
-import { daemonPool } from "./daemon-pool";
-import { sendDaemonRequest, type ExitResult } from "./daemon-wire";
+  sendDaemonRequest,
+  type ExitResult,
+} from "./daemon-wire";
 import { logPath } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/foundations/protocol";
 
@@ -116,7 +114,8 @@ export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
 
 export interface RunningDaemon {
   child: ChildProcess;
-  killTree(signal?: NodeJS.Signals): void;
+  signalDaemon(signal: NodeJS.Signals): void;
+  stop(signal?: NodeJS.Signals): Promise<ExitResult>;
 }
 
 // [LAW:verifiable-goals] Readiness is "the daemon completes a real
@@ -124,7 +123,7 @@ export interface RunningDaemon {
 // connect()-then-destroy proved the accept() loop was running (the
 // 452-corpse-adjacent incident that guarded against), but it does NOT prove
 // THIS process is the one that will still be listening a few milliseconds
-// later. A cold-restart caller (`killAndWait` then `spawnDaemonWithEnv`
+// later. A cold-restart caller (`stop` then `spawnDaemonWithEnv`
 // again against the same socket path) races the OLD daemon's own death: a
 // `SIGKILL`'d process can still be mid-teardown — its listener not yet torn
 // down, so a bare connect legitimately succeeds against it — for a few ms
@@ -152,7 +151,6 @@ export interface RunningDaemon {
 // binds, never a caller-supplied guess.
 export async function spawnDaemonWithEnv(
   env: NodeJS.ProcessEnv,
-  entry: DaemonEntry = TSX_SOURCE_ENTRY,
 ): Promise<RunningDaemon> {
   const sockPath = env.CC_CANDYBAR_SOCKET;
   if (!sockPath) {
@@ -161,25 +159,19 @@ export async function spawnDaemonWithEnv(
         "prepareIsolatedDaemonEnv to build env)",
     );
   }
-  const daemon = await spawnTestDaemon(env, daemonPool, entry);
-  const { child, killTree, stderrTail, release } = daemon;
+  const { child, signalDaemon, stop, stderrTail } = await spawnTestDaemon(env);
 
   const readiness = await awaitReadiness(child, sockPath);
   if (readiness.phase !== "serving") {
-    killTree();
-    release();
+    // Gone before the throw, since the caller's next step is removing the
+    // directories it writes into.
+    await stop();
     throw new Error(
       readinessFailure(readiness, sockPath, env, await stderrTail),
     );
   }
 
-  return {
-    child,
-    killTree: (signal) => {
-      killTree(signal);
-      release();
-    },
-  };
+  return { child, signalDaemon, stop };
 }
 
 // [LAW:one-source-of-truth] ONE readiness budget for every call site of this
@@ -239,9 +231,9 @@ type Readiness = { readonly phase: "serving" } | ReadinessFailure;
 // [LAW:no-ambient-temporal-coupling] Every failure this helper can diagnose is
 // awaited as a named fact; the budget bounds the one state that publishes none.
 // The daemon writes nothing before it binds — its first log line is `daemon up`,
-// AFTER the bind — so there is no earlier milestone to wait on inside `tsx`
-// boot, which is exactly the phase that times out. But a daemon that refuses to
-// boot EXITS, and the `tsx` wrapper propagates that exit, so every refusal the
+// AFTER the bind — so there is no earlier milestone to wait on inside the
+// source's compile, which is exactly the phase that times out. But a daemon that
+// refuses to boot EXITS, and it is the child this helper holds, so every refusal the
 // daemon diagnoses about itself (`refusing to boot`, the fork-bomb breaker,
 // `EADDRINUSE ... exiting`) is readable the instant it happens instead of at the
 // end of a budget. That is what lets the budget above be generous: it is no
@@ -349,7 +341,7 @@ export interface IsolatedDaemonHandle {
   child: ChildProcess;
   sockPath: string;
   stateDir: string;
-  cleanup(): void;
+  cleanup(): Promise<void>;
 }
 
 export async function spawnIsolatedDaemon(
@@ -368,12 +360,12 @@ export async function spawnIsolatedDaemon(
     child: daemon.child,
     sockPath,
     stateDir,
-    cleanup: (): void => {
-      // killTree signals the whole process group, not just the `tsx`
-      // wrapper — the wrapper forks its own worker (the process that
-      // actually binds the socket), which survives as an orphan if only
-      // the wrapper is signalled. Safe to call even after a graceful exit.
-      daemon.killTree();
+    cleanup: async (): Promise<void> => {
+      // The daemon is gone before its state directory is, since it would
+      // otherwise keep writing its log and lease into it. Safe to call again,
+      // or after the daemon's own exit, because once that exit is seen a stop
+      // sends nothing and only waits.
+      await daemon.stop();
       removeTmpDirs();
     },
   };

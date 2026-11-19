@@ -6,7 +6,8 @@ import { parse as parseYaml } from "yaml";
 // [LAW:single-enforcer] No CI step starts a daemon outside the five end-to-end
 // tests. The start judge sees jest only, so a script a workflow runs is judged
 // here: a step fails when the script it reaches, followed through package.json
-// and the script's relative imports, imports `daemonArgs` or `createDaemon`.
+// and the script's relative imports, imports `daemonArgs`, `daemonCommand` or
+// `createDaemon`.
 // The reach is the source files a step's command line names (node, tsx) and their
 // relative imports; a shell script, a composite action or a path alias is not followed.
 // Jest runs stay the judge's and are skipped. This core reads nothing itself:
@@ -14,7 +15,11 @@ import { parse as parseYaml } from "yaml";
 // [LAW:effects-at-boundaries]
 
 /** The symbols whose import means a module can start a daemon. */
-export const DAEMON_SYMBOLS: ReadonlySet<string> = new Set(["daemonArgs", "createDaemon"]);
+export const DAEMON_SYMBOLS: ReadonlySet<string> = new Set([
+  "daemonArgs",
+  "daemonCommand",
+  "createDaemon",
+]);
 
 export interface Repo {
   /** package.json `scripts`. */

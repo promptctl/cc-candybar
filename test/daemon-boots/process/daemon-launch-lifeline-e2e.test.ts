@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { PROTOCOL_VERSION } from "../../../src/daemon/foundations/protocol";
-import { killAndWait, renderBody } from "../../helpers/daemon-e2e";
+import { renderBody } from "../../helpers/daemon-e2e";
 import { sendDaemonRequest } from "../../helpers/daemon-wire";
 import {
   prepareIsolatedDaemonEnv,
@@ -63,7 +63,7 @@ describe("a launch child in flight dies with the daemon that launched it", () =>
         });
         await until(() => running(seconds), `the daemon's sleep ${seconds}`);
       } finally {
-        await killAndWait(daemon, signal);
+        await daemon.stop(signal);
       }
       await until(
         () => !running(seconds),

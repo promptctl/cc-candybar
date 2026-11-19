@@ -128,11 +128,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: await realStartTime(holderPid),
       });
 
-      const {
-        child: daemon,
-        killTree,
-        release,
-      } = await spawnTestDaemon(fx.env);
+      const { child: daemon, stop } = await spawnTestDaemon(fx.env);
       try {
         const result = await raceExit(daemon, BUDGET_MS);
         // Exits cleanly (attach-and-exit), never SIGKILL/crash.
@@ -141,12 +137,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         // The incumbent's socket file is untouched — no theft.
         expect(fs.readFileSync(fx.sockPath, "utf8")).toBe(MARKER);
       } finally {
-        // killTree signals the whole process group, not just the `tsx`
-        // wrapper `daemon` names — the wrapper forks its own worker (the
-        // process that actually binds the socket), which survives as an
-        // orphan if only the wrapper is signalled.
-        killTree();
-        release();
+        await stop();
       }
     } finally {
       holder.kill("SIGKILL");
@@ -202,8 +193,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        daemon.killTree();
-        await waitForExit(daemon.child);
+        await daemon.stop();
       }
     } finally {
       fx.cleanup();
@@ -252,8 +242,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        daemon.killTree();
-        await waitForExit(daemon.child);
+        await daemon.stop();
       }
     } finally {
       holder.kill("SIGKILL");
@@ -276,9 +265,7 @@ describe("a daemon's exit and the lease (integration)", () => {
       const own = readLease(fx.leasePath);
       expect(own.kind).toBe("owned");
 
-      const exited = waitForExit(daemon.child);
-      daemon.killTree("SIGTERM");
-      await exited;
+      await daemon.stop("SIGTERM");
 
       expect(readLease(fx.leasePath)).toEqual(own);
     } finally {

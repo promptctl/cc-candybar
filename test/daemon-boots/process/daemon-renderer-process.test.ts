@@ -34,8 +34,8 @@ describe("the daemon's renderer process", () => {
     handle = await spawnIsolatedDaemon("cc-candybar-rproc");
   });
 
-  afterEach(() => {
-    handle.cleanup();
+  afterEach(async () => {
+    await handle.cleanup();
     fs.rmSync(projectDir, { recursive: true, force: true });
   });
 
@@ -88,15 +88,17 @@ describe("the daemon's renderer process", () => {
       }
     };
     expect(alive()).toBe(true);
-    // The daemon alone, not its group: `handle.child` is tsx's wrapper, and a
-    // group's signal would reach the renderer itself and prove nothing.
-    const daemonPid = Number(
+    // The renderer is launched detached and leads a group of its own, so no
+    // signal to the daemon's group reaches it; its end here can only be the
+    // daemon's lifeline. The renderer's parent is the process the test holds,
+    // so that pid is the daemon's own.
+    const parent = Number(
       spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
         encoding: "utf8",
       }).stdout.trim(),
     );
-    expect(daemonPid).toBeGreaterThan(1);
-    process.kill(daemonPid, "SIGKILL");
+    expect(parent).toBe(handle.child.pid);
+    process.kill(parent, "SIGKILL");
     await until(
       () => !alive(),
       () => `renderer ${pid} to end with its daemon`,

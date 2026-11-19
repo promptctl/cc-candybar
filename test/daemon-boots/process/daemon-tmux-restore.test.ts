@@ -88,7 +88,7 @@ import { until } from "../../helpers/until";
         tmux.run("list-keys", "-T", "root", "MouseDown1Status").trimEnd(),
       ).toBe(originalBinding);
     } finally {
-      daemon.killTree();
+      await daemon.stop();
       tmux.kill();
       removeTmpDirs();
       rmSync(dir, { recursive: true, force: true });

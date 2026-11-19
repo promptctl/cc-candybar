@@ -44,7 +44,7 @@ const registryDir = fs.mkdtempSync(
   path.join(os.tmpdir(), "ccb-breaker-registry-"),
 );
 const fixtures: IsolatedDaemonEnv[] = [];
-// The daemons booted and not yet killed.
+// The daemons booted.
 const daemons = new Set<RunningDaemon>();
 
 // A daemon's environment, pointed at the shared registry under the tiny
@@ -67,23 +67,17 @@ const boot = (env: NodeJS.ProcessEnv): Promise<RunningDaemon> =>
     return daemon;
   });
 
-// Killed now, and so not again at the end, when its group's id may be
-// another's.
-const kill = (daemon: RunningDaemon): void => {
-  daemons.delete(daemon);
-  daemon.killTree();
-};
-
 // [LAW:single-enforcer] The one teardown, which jest runs after a timeout too:
-// every daemon killed before the directories it runs in are removed.
-afterAll(() => {
-  for (const daemon of daemons) daemon.killTree();
+// every daemon gone before the directories it runs in are removed. One the
+// test already stopped is only waited on, since a stop after its exit sends
+// nothing.
+afterAll(async () => {
+  for (const daemon of daemons) await daemon.stop();
   for (const { removeTmpDirs } of fixtures) removeTmpDirs();
   fs.rmSync(registryDir, { recursive: true, force: true });
 });
 
-// Who the registry names now: the daemon workers that hold its slots, not
-// their tsx wrappers.
+// Who the registry names now: the daemons that hold its slots.
 const registered = (): ProcessIdentity[] =>
   listRegistryFiles(registryDir).flatMap((file) => {
     const entry = readRegistryEntry(file);
@@ -97,13 +91,14 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
   jest.setTimeout(4 * READINESS_BUDGET_MS + 5_000);
 
   test("refuses the (ceiling+1)th isolated daemon; a dead sibling's slot is reclaimed", async () => {
-    await boot(fixture());
+    // Each entry names the process the test holds: the daemon is its child.
+    const d1 = await boot(fixture());
     const first = registered();
-    expect(first).toHaveLength(1);
+    expect(first.map(({ pid }) => pid)).toEqual([d1.child.pid]);
     const d1Entry = first[0]!;
     const d2 = await boot(fixture());
     const added = registered().filter(({ pid }) => pid !== d1Entry.pid);
-    expect(added).toHaveLength(1);
+    expect(added.map(({ pid }) => pid)).toEqual([d2.child.pid]);
     const d2Entry = added[0]!;
 
     // Ceiling is full (2/2 live isolated daemons registered). The 3rd must
@@ -119,13 +114,13 @@ describe("daemon-side fork-bomb circuit breaker (integration)", () => {
     // path (SIGKILL — the runaway/OOM case this epic fights) so its
     // registry entry is left behind as a stale file: the exact condition
     // admitDaemon()'s sweep exists to reclaim. It is waited out as the
-    // breaker reads it: a killed worker stays a zombie, still live, until it
+    // breaker reads it: a killed daemon stays a zombie, still live, until it
     // is reaped, and a reused pid with another start time is not it.
-    kill(d2);
+    await d2.stop();
     await until(
       async () =>
         !(await sameLiveProcess(d2Entry.pid, d2Entry.startTime, processProbe)),
-      `d2's worker (pid ${d2Entry.pid}) gone`,
+      `d2 (pid ${d2Entry.pid}) gone`,
     );
 
     // d3's own environment boots once a slot is free, so its refusal was the
