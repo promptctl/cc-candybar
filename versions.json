@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-836",
+      "ref": "refs/pull/836/merge",
+      "sha": "cc22b658a57819734c1881c3574c2bc1e4517771",
+      "timestamp": "2026-11-19T09:50:22.951Z",
+      "commits": [
+        {
+          "sha": "cc22b658a57819734c1881c3574c2bc1e4517771",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:49:34Z",
+          "message": "Merge 0884824c6ff0f7a1eb8d04d60819ccde57b705f2 into 664f8da27681e8e52d2e98d26bbd7dd358214e5e\n"
+        },
+        {
+          "sha": "0884824c6ff0f7a1eb8d04d60819ccde57b705f2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:39:00-07:00",
+          "message": "fix(edit): a placement's session state is owned by the file that authored its node\n\n- The merge decides authorship per row: the root cascade now yields each row's\n  author alongside the row itself, from the same branch. A node is its row's\n  author's, or its insert cell's file's; the bundled base authors its own.\n- The owner is the authoring file's digest. Each file is measured on the trees of\n  the chain up to it, so a file appearing that writes no row leaves every owner as\n  it was, and a file above that re-places a node ends nothing of the file below.\n- A view owns only what its chain renders, by the highest file authoring it; a\n  write to a placement nothing owns is refused.\n- Back restores only a step whose placements are owned now by the owners it names.\n"
+        },
+        {
+          "sha": "9576759040586c561776143c234b3a4da5735c85",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:15:18-07:00",
+          "message": "fix(edit): placements are measured on the trees each prefix renders, and history records keys as the store holds them\n\n- Each chain prefix is measured on its placed tree, insert cells included, from the\n  loader's own insert placing; the click's holds use the same measure.\n- Navigation records owned keys below the owner, so a step needs no owner of its own;\n  the gate reads a step through its owner-free spelling. A draft key is the owned form\n  only, so a history step over an owner-free draft retires at load.\n- A release that ends nothing logs that it ran; a click's release lines are logged once\n  the click landed.\n- Each key family is one template that generates its minting and readings; the owner is\n  a digest of the prefix's files; the regex escaper is shared.\n"
+        },
+        {
+          "sha": "3ab1a2cebb3a998e15de855cea8d0ed6a2d22a92",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-18T15:35:58-07:00",
+          "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
+        }
+      ]
+    },
+    {
       "version": "pr-838",
       "ref": "refs/pull/838/merge",
       "sha": "4cf51b4d27acfcbb333b283cbbf330de687e5ded",
@@ -35,35 +71,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T09:42:31Z",
           "message": "chore(release): set `package.json` to 1.232.11\n\n## [1.232.11](https://github.com/promptctl/cc-candybar/compare/v1.232.10...v1.232.11) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** a connection is one state, reads one frame, and answers an unencodable reply (df7i) ([#808](https://github.com/promptctl/cc-candybar/issues/808)) ([d136ccc](https://github.com/promptctl/cc-candybar/commit/d136cccfa79683af69b5dd8e2f57dd9cb53d1988))\n* **state:** a session id that is an array index is refused at the checkpoint, so no store's recency moves across a save (px80) ([#835](https://github.com/promptctl/cc-candybar/issues/835)) ([77b0e65](https://github.com/promptctl/cc-candybar/commit/77b0e659d9008283d4e326d77e02510c94fa4492))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-836",
-      "ref": "refs/pull/836/merge",
-      "sha": "ff0a5ce4867c7b8cc29d2c14dc899d68d9110611",
-      "timestamp": "2026-11-19T09:20:31.823Z",
-      "commits": [
-        {
-          "sha": "ff0a5ce4867c7b8cc29d2c14dc899d68d9110611",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T09:19:29Z",
-          "message": "Merge c5ee0b8dbd2c1aabf05ae99537bc742698f513ba into 77b0e659d9008283d4e326d77e02510c94fa4492\n"
-        },
-        {
-          "sha": "c5ee0b8dbd2c1aabf05ae99537bc742698f513ba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T02:15:18-07:00",
-          "message": "fix(edit): placements are measured on the trees each prefix renders, and history records keys as the store holds them\n\n- Each chain prefix is measured on its placed tree, insert cells included, from the\n  loader's own insert placing; the click's holds use the same measure.\n- Navigation records owned keys below the owner, so a step needs no owner of its own;\n  the gate reads a step through its owner-free spelling. A draft key is the owned form\n  only, so a history step over an owner-free draft retires at load.\n- A release that ends nothing logs that it ran; a click's release lines are logged once\n  the click landed.\n- Each key family is one template that generates its minting and readings; the owner is\n  a digest of the prefix's files; the regex escaper is shared.\n"
-        },
-        {
-          "sha": "807270431b1f5cbbba1c795346989f2b123d9d2e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-18T15:35:58-07:00",
-          "message": "fix(edit): a placement's session state is owned by the chain that placed it, and every load releases what that chain ended\n\nSeveral configs can place one preset and id, and a placement ends only\nbetween two loads of the files that placed it. So each placement-owned key\n(drafts, the configure list, the + libraries and their page cursors, and\nthe configure key's value) now names its owner: the ordered config files\nwhose merge placed it.\n\n- src/config/placement-keys.ts mints and reads back every family, in its\n  owner-free and owned forms. Each read is checked by re-minting.\n- The compile stays shared and names keys owner-free. The owner is added\n  at one seam (src/renderer/owned-store.ts), built once per render state\n  and once per click.\n- Every load that does not fail measures each prefix of its chain before\n  unplaced cells are dropped. Across every session in the store, it\n  releases each key whose owner is one of its prefixes and whose placement\n  that prefix no longer holds, and every family key naming no owner. A\n  failed load releases nothing. Author menu keys and keys of other owners\n  are left alone. Each release logs its session, owner, chain and keys.\n- A layout click releases the clicker's ended keys through the click's\n  journal, so its undo restores the drafts.\n- The raw session store refuses an owner-free family key on get, set and\n  setBatch.\n- Navigation steps record the owner they were made under, so going back\n  in one config never replays a step over another config's keys.\n\nTicket: brandon-unfiled-3248.gkjx\n"
         }
       ]
     }

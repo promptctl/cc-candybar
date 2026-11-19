@@ -36825,7 +36825,24 @@ var URL_FRAME_VERSIONS = /* @__PURE__ */ new Set([
   URL_FRAME_VERSION
 ]);
 var awaitsVerdict = (urlV) => typeof urlV === "number" && urlV >= 2;
+var ProtocolError = class extends Error {
+  constructor(message2) {
+    super(message2);
+    this.name = "ProtocolError";
+  }
+};
+var FRAME_HEADER_BYTES = 4;
 var MAX_FRAME_BYTES = 16 * 1024 * 1024;
+function encodeJsonFrame(json2) {
+  const body = import_buffer.Buffer.from(json2, "utf8");
+  if (body.length > MAX_FRAME_BYTES)
+    throw new ProtocolError(
+      `a frame of ${body.length} bytes is past the ${MAX_FRAME_BYTES}-byte cap`
+    );
+  const header = import_buffer.Buffer.alloc(FRAME_HEADER_BYTES);
+  header.writeUInt32BE(body.length, 0);
+  return import_buffer.Buffer.concat([header, body]);
+}
 function sanitizeClient(v) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) return void 0;
   const { kind, bundle, source } = v;
@@ -49176,12 +49193,26 @@ function plainOf2(runs) {
 }
 
 // src/daemon/foundations/render-answers.ts
+function framed(value, encode2, failure2) {
+  try {
+    return { sent: value, frame: encodeJsonFrame(encode2(value)), unsent: null };
+  } catch (e) {
+    const sent = failure2(renderFailed(e));
+    return {
+      sent,
+      frame: encodeJsonFrame(encode2(sent)),
+      unsent: e instanceof Error ? e : new Error(String(e))
+    };
+  }
+}
+var framedResponse = (resp) => framed(resp, JSON.stringify, (failed3) => failed3);
 var failedWith = (message2) => ({
   ok: false,
   error: message2,
   code: "RENDER_FAILED",
   daemonV: PROTOCOL_VERSION
 });
+var renderFailed = (err) => failedWith(failureOf(err).message);
 var renderFailure = (failure2) => ({
   ...failure2,
   kind: "threw"
@@ -50260,11 +50291,18 @@ function feedsFact(feeds) {
 }
 
 // src/daemon/reply.ts
-var stay = (resp) => ({
-  resp,
-  exitAfterFlush: null,
-  settled: NOTHING_TO_SETTLE
-});
+function replyOf(resp, exitAfterFlush = null, settled3 = NOTHING_TO_SETTLE) {
+  const { sent, frame: frame2, unsent } = framedResponse(resp);
+  return { resp: sent, frame: frame2, unsent, exitAfterFlush, settled: settled3 };
+}
+var stay = (resp) => replyOf(resp);
+function renderRecord(rendered) {
+  const reply = replyOf(rendered.resp, null, rendered.settled);
+  return {
+    reply,
+    outcome: reply.unsent === null ? rendered.outcome : renderFailure(failureOf(reply.unsent))
+  };
+}
 var replied = (reply) => ({ kind: "reply", ...reply });
 var REPLY_KINDS = {
   render: true,
@@ -50311,20 +50349,20 @@ async function handleRequest(parts, inbound, timedOut, accepted, clientLeft) {
         `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale \u2014 staying up`
       );
     }
-    return {
-      kind: "reply",
-      resp: {
-        ok: false,
-        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-        code: "VERSION_MISMATCH",
-        daemonV: PROTOCOL_VERSION
-      },
-      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
-      // Exit is sequenced on the response flush, so the client always sees
-      // the VERSION_MISMATCH diagnostic — never a dead socket.
-      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
-      settled: NOTHING_TO_SETTLE
-    };
+    return replied(
+      replyOf(
+        {
+          ok: false,
+          error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+          code: "VERSION_MISMATCH",
+          daemonV: PROTOCOL_VERSION
+        },
+        // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+        // Exit is sequenced on the response flush, so the client always sees
+        // the VERSION_MISMATCH diagnostic — never a dead socket.
+        req.v > PROTOCOL_VERSION ? 0 : null
+      )
+    );
   }
   if (req.kind === "subscribe") return subscription(req);
   if (typeof req.kind !== "string" || !Object.hasOwn(REPLY_KINDS, req.kind))
@@ -50349,11 +50387,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     sourceDigest: sourceDigest2
   } = parts;
   if (req.kind === "shutdown") {
-    return {
-      resp: { ok: true, output: "" },
-      exitAfterFlush: 0,
-      settled: NOTHING_TO_SETTLE
-    };
+    return replyOf({ ok: true, output: "" }, 0);
   }
   if (req.kind === "pane-session") {
     const { socket, pane } = req;
@@ -50437,7 +50471,8 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       parts.declaredStatusLines.arrived(checked.req.hookData.session_id);
     }
     const recorded2 = (rendered) => {
-      if (rendered.outcome.kind !== "ok") stats.requestsErrored++;
+      const { reply, outcome } = renderRecord(rendered);
+      if (outcome.kind !== "ok") stats.requestsErrored++;
       noteFacts(facts, {
         req: String(accepted.id),
         timedOut: timedOut() ? "Y" : "N",
@@ -50446,18 +50481,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       });
       const took = elapsedMs(clock, t0);
       stats.recordTook(took);
-      const { level, line } = requestEvent(
-        "render",
-        facts,
-        rendered.outcome,
-        took
-      );
+      const { level, line } = requestEvent("render", facts, outcome, took);
       parts.log(level, line);
-      return {
-        resp: rendered.resp,
-        exitAfterFlush: null,
-        settled: rendered.settled
-      };
+      return reply;
     };
     if (!checked.ok) return recorded2(refusedRender(checked.problems));
     const answered = await answerStatusline(
@@ -50496,8 +50522,9 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
     );
     noteFacts(facts, cacheTallyFacts(parts.payloadProviders));
     try {
-      sighted(checked.req, answered.seen);
-      return recorded2(answered);
+      const reply = recorded2(answered);
+      sighted(checked.req, reply.unsent === null ? answered.seen : "failed");
+      return reply;
     } catch (e) {
       answered.settled(false);
       throw e;
@@ -51115,7 +51142,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.232.10";
+var PACKAGE_VERSION = "1.232.11";
 
 // src/daemon/build-currency.ts
 init_globals();
@@ -54497,7 +54524,20 @@ function* fragmentNodePaths(fragment, key) {
   }
 }
 function mergeRoot(fragment, base) {
-  return isRowsFragment(fragment) ? { ...base, ...fragment, rows: { ...base.rows, ...fragment.rows } } : rootOf2(fragment);
+  return {
+    ...isRowsFragment(fragment) ? { ...base, ...fragment } : rootOf2(fragment),
+    rows: mergedRows(fragment, base.rows, (rows) => rows)
+  };
+}
+function rowAuthors(fragment, author, base) {
+  return mergedRows(
+    fragment,
+    base,
+    (rows) => Object.fromEntries(Object.keys(rows).map((name) => [name, author]))
+  );
+}
+function mergedRows(fragment, base, own2) {
+  return isRowsFragment(fragment) ? { ...base, ...own2(fragment.rows) } : own2(rootOf2(fragment).rows);
 }
 function insertCells(root, cells) {
   return cells.reduce(
@@ -60374,9 +60414,10 @@ function editModeArtifacts() {
 
 // src/config/placement-keys.ts
 init_globals();
-function chainOwner(paths2) {
-  return `o${digestOf([...paths2]).slice(0, 16)}`;
+function fileOwner(file) {
+  return `o${digestOf(file).slice(0, 16)}`;
 }
+var BASE_AUTHOR = "<bundled>";
 var FIELDS = {
   preset: "[A-Za-z0-9]+",
   id: "[A-Za-z0-9]+",
@@ -60517,17 +60558,32 @@ var KEY_FAMILIES = [
   paged(LIBRARIES)
 ];
 function ownedKey(key, by) {
-  const f = KEY_FAMILIES.find((family2) => family2.free(key) !== null);
-  return f === void 0 ? key : f.own(key, by());
+  for (const f of KEY_FAMILIES) {
+    const at = f.free(key);
+    if (at === null) continue;
+    const owner2 = by(at);
+    return owner2 === null ? null : f.own(key, owner2);
+  }
+  return key;
 }
 function ownedValue(key, value, by) {
-  return isOwnerFreeValue(key, value) ? CONFIGURING.own(value, by()) : value;
+  const at = isOwnerFreeValue(key, value) ? CONFIGURING.free(value) : null;
+  if (at === null) return value;
+  const owner2 = by(at);
+  return owner2 === null ? null : CONFIGURING.own(value, owner2);
 }
 function freeValue(key, value, by) {
   if (key !== EDIT_CONFIGURE_KEY || value === null || !isMember(value))
     return value;
   const read2 = CONFIGURING.read(value);
-  return read2 !== null && read2.owner === by() ? CONFIGURING.mint(read2.at) : null;
+  return read2 !== null && read2.owner === by(read2.at) ? CONFIGURING.mint(read2.at) : null;
+}
+function isCurrent(key, value, by) {
+  const named3 = [
+    ...KEY_FAMILIES.map((f) => f.read(key)),
+    key === EDIT_CONFIGURE_KEY && value !== null ? CONFIGURING.read(value) : null
+  ];
+  return named3.every((read2) => read2 === null || by(read2.at) === read2.owner);
 }
 function ownerFree(key, value) {
   return {
@@ -60565,29 +60621,68 @@ function classify(key, value) {
   return key.startsWith(PLACEMENT_DRAFT_NS) ? OLD : FOREIGN;
 }
 function holdsOf(chain2) {
-  const prefixes = [
-    { paths: [], trees: chain2.base },
-    ...chain2.layers.map((layer, i2) => ({
-      paths: chain2.layers.slice(0, i2 + 1).map((l) => l.path),
-      trees: layer.placed
-    }))
+  let rows = rowAuthors(chain2.base.root, BASE_AUTHOR, {});
+  let fragments = /* @__PURE__ */ new Map();
+  const hold2 = (file, merged, placed2, root, byPreset) => [
+    fileOwner(file),
+    {
+      file,
+      placed: authoredIn(
+        merged,
+        placed2,
+        file,
+        (preset) => rowAuthors(
+          presetByName(merged.presets, preset).root ?? EMPTY_ROWS,
+          byPreset.get(preset) ?? BASE_AUTHOR,
+          root
+        )
+      )
+    }
   ];
-  return new Map(
-    prefixes.map(({ paths: paths2, trees }) => [
-      chainOwner(paths2),
-      { paths: paths2, placed: placedIn(trees) }
-    ])
+  const holds2 = [hold2(BASE_AUTHOR, chain2.base, chain2.base, rows, fragments)];
+  for (const layer of chain2.layers) {
+    rows = rowAuthors(layer.raw.root ?? EMPTY_ROWS, layer.path, rows);
+    fragments = new Map([
+      ...fragments,
+      ...Object.entries(layer.raw.presets ?? {}).filter(([, preset]) => preset.root !== void 0).map(([name]) => [name, layer.path])
+    ]);
+    holds2.push(hold2(layer.path, layer.config, layer.placed, rows, fragments));
+  }
+  return new Map(holds2);
+}
+function authoredIn(merged, placed2, file, rowsOf) {
+  return new Set(
+    presetNames(placed2.presets).flatMap((preset) => {
+      const authors = rowsOf(preset);
+      const fragment = presetByName(merged.presets, preset).root ?? EMPTY_ROWS;
+      const byRow = new Map(
+        Object.entries(mergeRoot(fragment, merged.root).rows).flatMap(
+          ([name, row2]) => [...walkNodes(row2)].flatMap(
+            (n) => n.kind === "segment" ? [[placementId(n), authors[name]]] : []
+          )
+        )
+      );
+      return [...walkNodes(presetRoot(placed2, preset).node)].flatMap(
+        (n) => n.kind === "segment" && (n.insertedBy?.file ?? byRow.get(placementId(n))) === file ? [CONFIGURING.mint({ preset, id: placementId(n) })] : []
+      );
+    })
   );
 }
-function placedIn(trees) {
-  return new Set(
-    presetNames(trees.presets).flatMap(
-      (preset) => placementIds(presetRoot(trees, preset).node).map(
+function ownersOf(holds2, rendered) {
+  const shown = new Set(
+    presetNames(rendered.presets).flatMap(
+      (preset) => placementIds(presetRoot(rendered, preset).node).map(
         (id2) => CONFIGURING.mint({ preset, id: id2 })
       )
     )
   );
+  return new Map(
+    [...holds2].flatMap(
+      ([owner2, { placed: placed2 }]) => [...placed2].filter((member) => shown.has(member)).map((member) => [member, owner2])
+    )
+  );
 }
+var ownerIn = (owners) => (at) => owners.get(CONFIGURING.mint(at)) ?? null;
 
 // src/config/help.ts
 init_globals();
@@ -89066,17 +89161,23 @@ function heldWrites(store) {
 // src/renderer/owned-store.ts
 init_globals();
 function ownedStore(inner, ownerOf) {
-  const key = (sessionId2, k) => ownedKey(k, () => ownerOf(sessionId2));
+  const by = (sessionId2) => (at) => ownerOf(sessionId2, at);
+  const written3 = (k, owned) => {
+    if (owned === null)
+      throw new Error(
+        `session state: refused a write of ${k}, whose placement no config file places here, so nothing owns its state`
+      );
+    return owned;
+  };
   const pair = (sessionId2, { key: k, value }) => ({
-    key: key(sessionId2, k),
-    value: ownedValue(k, value, () => ownerOf(sessionId2))
+    key: written3(k, ownedKey(k, by(sessionId2))),
+    value: written3(`${k}=${value}`, ownedValue(k, value, by(sessionId2)))
   });
   return {
-    get: (sessionId2, k) => freeValue(
-      k,
-      inner.get(sessionId2, key(sessionId2, k)),
-      () => ownerOf(sessionId2)
-    ),
+    get: (sessionId2, k) => {
+      const key = ownedKey(k, by(sessionId2));
+      return key === null ? null : freeValue(k, inner.get(sessionId2, key), by(sessionId2));
+    },
     revision: (sessionId2) => inner.revision(sessionId2),
     keys: (sessionId2) => inner.keys(sessionId2),
     set: (sessionId2, k, value) => {
@@ -89087,7 +89188,10 @@ function ownedStore(inner, ownerOf) {
       sessionId2,
       pairs2.map((p2) => pair(sessionId2, p2))
     ),
-    clear: (sessionId2, k) => inner.clear(sessionId2, key(sessionId2, k))
+    clear: (sessionId2, k) => {
+      const key = ownedKey(k, by(sessionId2));
+      if (key !== null) inner.clear(sessionId2, key);
+    }
   };
 }
 function releaseEnded(store, sessions, holds2, by) {
@@ -89104,9 +89208,9 @@ function releaseEnded(store, sessions, holds2, by) {
       }
       for (const [owner2, keys2] of released) {
         for (const key of keys2) store.clear(sessionId2, key);
-        const chain2 = owner2 === "none" ? "-" : holds2.get(owner2).paths.join(",") || "<default>";
+        const file = owner2 === "none" ? "-" : holds2.get(owner2).file;
         lines2.push(
-          `placement-state released by=${by} session=${sessionId2} owner=${owner2} chain=${chain2} keys=${keys2.join(",")}`
+          `placement-state released by=${by} session=${sessionId2} owner=${owner2} file=${file} keys=${keys2.join(",")}`
         );
       }
     }
@@ -89668,7 +89772,8 @@ var back = (value, ctx) => {
   const { step: step4, discarded } = ctx.navigation.back(
     sid,
     ctx.journal.sessionState,
-    ctx.gates.state.gateFor(ctx.configFor(origin))
+    ctx.gates.state.gateFor(ctx.configFor(origin)),
+    ctx.ownerFor(origin)
   );
   const restored = step4.map((c) => `${c.key}=${c.before ?? "\u2205"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -89958,12 +90063,12 @@ function journaled(verb, sid, context, ctx, effects, handler) {
   });
   const lanes = sid === null ? null : laneMeter(ctx, sid, context);
   const owner2 = origin === null ? null : ctx.ownerFor(origin);
-  const owned = (store) => ownedStore(store, (session) => {
+  const owned = (store) => ownedStore(store, (session, at) => {
     if (session !== sid || owner2 === null)
       throw new BadVerbArgs(
         `${verb}: session ${session} has not rendered in this click \u2014 no config owns its placements`
       );
-    return owner2;
+    return owner2(at);
   });
   const journal = ctx.history.begin({
     read: (file) => ctx.configWrites.read(file),
@@ -90132,8 +90237,8 @@ var NavigationHistory = class {
   );
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(sessionId2, store, gate2) {
-    return this.restorable(sessionId2, store, gate2).length;
+  depth(sessionId2, store, gate2, owners) {
+    return this.restorable(sessionId2, store, gate2, owners).length;
   }
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
@@ -90143,10 +90248,11 @@ var NavigationHistory = class {
   // layout edit releasing the placement it configured), or no longer one the
   // config admits (that placement removed, a group renamed) — and is
   // discarded rather than replayed. A step names keys as the store holds them,
-  // owned (src/config/placement-keys.ts), so a step made in another config
-  // restores that config's keys alone; the gate, derived from the compile,
-  // names them owner-free.
-  restorable(sessionId2, store, gate2) {
+  // owned (src/config/placement-keys.ts), and is restored only while `owners`
+  // owns each placement it names as it names it: a step made where another
+  // file authored a placement is that file's state, which this view does not
+  // draw. The gate, derived from the compile, names keys owner-free.
+  restorable(sessionId2, store, gate2, owners) {
     const state = /* @__PURE__ */ new Map();
     const read2 = (key) => state.has(key) ? state.get(key) : store.get(sessionId2, key);
     const admits = (key, value) => {
@@ -90156,7 +90262,7 @@ var NavigationHistory = class {
     const kept = [];
     for (const step4 of [...this.past.get(sessionId2) ?? []].reverse()) {
       const holds2 = step4.every(
-        (c) => read2(c.key) === c.after && (c.before === null || admits(c.key, c.before))
+        (c) => isCurrent(c.key, c.before, owners) && isCurrent(c.key, c.after, owners) && read2(c.key) === c.after && (c.before === null || admits(c.key, c.before))
       );
       if (!holds2) continue;
       kept.unshift(step4);
@@ -90196,9 +90302,9 @@ var NavigationHistory = class {
   // returns it, with how many steps it discarded (restorable). Written through
   // the bare store, never a navigation journal, so going back is not itself a
   // step.
-  back(sessionId2, store, gate2) {
+  back(sessionId2, store, gate2, owners) {
     const all2 = this.past.get(sessionId2) ?? [];
-    const steps2 = this.restorable(sessionId2, store, gate2);
+    const steps2 = this.restorable(sessionId2, store, gate2, owners);
     const step4 = steps2.at(-1);
     const discarded = all2.length - steps2.length;
     if (step4 === void 0) {
@@ -90804,7 +90910,7 @@ function sessionSource(deps) {
           layers: layerFlags(state.writable)
         },
         history: deps.history(sessionId2),
-        back: deps.navigation(sessionId2, state.config)
+        back: deps.navigation(sessionId2, state)
       })
     );
     const document = () => deps.worldStates.of(sessionId2);
@@ -91091,8 +91197,9 @@ function buildRenderState(load, deps) {
     (l) => (l.raw.insert ?? []).map((cell3) => cell3.seg)
   );
   const warnings = [];
-  const owner2 = chainOwner(layers.map((l) => l.path));
-  const sessionState = ownedStore(deps.sessionState, () => owner2);
+  const holds2 = holdsOf(loaded);
+  const owners = ownerIn(ownersOf(holds2, loaded.placed));
+  const sessionState = ownedStore(deps.sessionState, (_sid, at) => owners(at));
   const store = new VariableStore(deps.clock);
   const registry = new SourceRegistry(
     store,
@@ -91124,8 +91231,8 @@ function buildRenderState(load, deps) {
     kind: "built",
     state: {
       config: config2,
-      owner: owner2,
-      holds: holdsOf(loaded),
+      holds: holds2,
+      owners,
       sessionState,
       dropped,
       compileKey: registration.compileKey,
@@ -92506,10 +92613,11 @@ function mainRendererOf(inputs, host) {
         history: (sessionId2) => settingsHistory.depth(sessionId2),
         // Measured against the gate of the config the view draws with, over
         // the store as the steps name its keys, owned.
-        navigation: (sessionId2, config2) => navigationHistory.depth(
+        navigation: (sessionId2, { config: config2, owners }) => navigationHistory.depth(
           sessionId2,
           sessionState,
-          gates.state.gateFor(config2)
+          gates.state.gateFor(config2),
+          owners
         )
       })
     },
@@ -92595,7 +92703,7 @@ function mainRendererOf(inputs, host) {
     // The config a session's last render resolved from — the same entry the
     // render drew the bar with, so a save compares against the bar the user saw.
     configFor: (origin) => renderCache.getOrCreate(origin).state.config,
-    ownerFor: (origin) => renderCache.getOrCreate(origin).state.owner,
+    ownerFor: (origin) => renderCache.getOrCreate(origin).state.owners,
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner2,
