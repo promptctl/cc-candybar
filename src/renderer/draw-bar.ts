@@ -68,8 +68,6 @@ import type { Fault } from "../renderer-interface/noted-faults.js";
 import type { FeedDraw, Feeds } from "./feeds.js";
 import type { MenuIdle } from "./menu-idle.js";
 import type { TurnTime } from "./turn-time.js";
-import type { LaneActs } from "./lane-acts.js";
-import type { Effect } from "../renderer-interface/interface.js";
 import {
   answeredClickError,
   clickErrorAt,
@@ -122,9 +120,6 @@ export interface RendererState {
   // [LAW:single-enforcer] The signer every link this renderer draws is
   // signed with, over the state directory's key.
   readonly linkSigner: LinkSigner;
-  // [LAW:single-enforcer] What turning a lane on or off asks of the host
-  // (src/renderer/lane-acts.ts).
-  readonly laneActs: Pick<LaneActs, "noted" | "clicked">;
   // Each session's idle period, which a draw reports what it showed to and
   // reads its flash from.
   readonly menuIdle: Pick<MenuIdle, "drew" | "since">;
@@ -256,31 +251,6 @@ export function viewLanes(
         hold.view.source.effective(),
         inTmux(hold.view.facts().hints.tmux),
       );
-}
-
-// The lanes `sessionId`'s settings switch on over the config `origin`
-// resolves to, as the render cache holds it, in the pane its live request
-// reported — the same request a click's setups follow (src/renderer/
-// lane-acts.ts). A session not heard since the daemon started has no pane
-// fact yet, so its switches are its settings alone: what the click moves is
-// owed to its next request, which settles it against the pane that request
-// reports, so a session outside tmux is owed nothing it can run.
-export function lanesAt(
-  parts: RendererParts,
-  origin: RenderOrigin,
-  sessionId: SessionId,
-  live: CheckedRenderRequest | null,
-): LaneSwitches {
-  const { renderCache } = parts;
-  using hold = renderCache.hold(origin);
-  // [LAW:dataflow-not-control-flow] exception: a click with no live request
-  // has no hint, and is measured as if in tmux so a tmux session's click owes
-  // its setup; the owed setup is settled against the session's own hint when
-  // its next request arrives.
-  return laneSwitches(
-    sessionGlobals(parts, sessionId, hold.state),
-    live === null || inTmux(live.hints.tmux),
-  );
 }
 
 // What a render of a checked request draws with, resolved once and held for
@@ -1121,7 +1091,6 @@ export function answerRequest(
   facts: RequestFacts,
   // The request's turn's effects, which the setups its session's clicks owe
   // join.
-  effects: Effect[],
 ): RequestAnswer {
   const { time, feeds } = parts;
   using setup = setUpRender(
@@ -1129,14 +1098,6 @@ export function answerRequest(
     req,
     { at: time.at, tick: time.tick },
     facts,
-  );
-  // [LAW:effects-at-boundaries] What the request's arrival starts beyond its
-  // own answer: the setups its session's clicks owe, by the lanes its
-  // settings switch on as it arrived. No draw starts one.
-  parts.laneActs.noted(
-    req,
-    laneSwitches(setup.view.source.effective(), inTmux(req.hints.tmux)),
-    effects,
   );
   const sessionId = req.hookData.session_id;
   const { drawn, clickShown, eventsShown, copies, lanes, kept } = drawRender(

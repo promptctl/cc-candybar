@@ -18,7 +18,6 @@ import {
   answerRequest,
   configureSession,
   deliver,
-  lanesAt,
   openSession,
   takeContext,
   renderFrame,
@@ -67,7 +66,6 @@ import { SettingsHistory } from "./settings-history.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
-import { LaneActs } from "./lane-acts.js";
 import { WorldStates } from "./world-states.js";
 import { DoctorRuns } from "./doctor.js";
 import { UpdateGate } from "./update-gate.js";
@@ -213,7 +211,6 @@ export function mainRenderer(
           parts,
           event.context,
           record,
-          effects,
         );
         const id = parts.mint();
         deliveries.set(id, delivery);
@@ -472,11 +469,6 @@ export function mainRendererOf(
   const actFailed = (session: SessionId, reason: string): void =>
     holdClickError(sessionState, session, reason, now());
   const acts = new ActsOnTheirWay(mint, actFailed);
-  const laneActs = new LaneActs({
-    ask: (effects, act) => acts.ask(effects, act),
-    refused: actFailed,
-    log,
-  });
   const navigationHistory = new NavigationHistory();
   // Each session's effect memory — when its effect came into force — held in
   // daemon memory only: a restarted daemon starts every session's effect again.
@@ -582,7 +574,6 @@ export function mainRendererOf(
     worldStates,
     renderWarnings,
     effectSessions,
-    laneActs,
     menuIdle,
     feeds,
   };
@@ -620,12 +611,6 @@ export function mainRendererOf(
     // The storage folders of the same entry `configFor` reads the config of.
     sourcesFor: (origin) => renderCache.getOrCreate(origin).state.sources,
     links: linkSigner,
-    lanes: {
-      of: (origin, sessionId, latest) =>
-        lanesAt(parts, origin, sessionId, latest),
-      clicked: (sessionId, latest, before, after, effects) =>
-        laneActs.clicked(sessionId, latest, before, after, effects),
-    },
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };

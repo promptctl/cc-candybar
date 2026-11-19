@@ -90,7 +90,6 @@ export function clickParts(
     // The renderer says what it does on the log its verbs write to.
     log: verbCtx.log,
     // No view is open, so no lane is read.
-    laneActs: { noted: () => {}, clicked: () => {} },
     // The readings each input carries, and the idle periods a `due` closes.
     time,
     menuIdle,

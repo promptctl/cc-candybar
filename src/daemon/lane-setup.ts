@@ -1,32 +1,5 @@
-// What turning an animation lane on or off takes beyond the daemon's own gate
-// (src/config/lanes.ts): a lane's toggle writes its switch, and the daemon's
-// FrameFeeds admit or refuse its subscriber by it, but each lane's subscriber
-// has to be RUNNING to subscribe, and none of them starts itself:
-//
-//   A, band       — the candybar-band mod (`<checkout>/mod`), loaded by Claude
-//                   Code: installed from the checkout's own marketplace, read
-//                   in place, then `/reload-plugins` loads it into the session.
-//   B, statusline — Claude Code started under cc-extra's attach launcher,
-//                   which ships beside the bundle (src/attach-launcher.ts) and
-//                   whose `statusline-push` seam feeds the statusline the
-//                   daemon's frames. It attaches only at process start
-//                   (cc-extra's SEAMS.md: JSC gives debug hooks only to code
-//                   compiled while a debugger is attached), so the session's
-//                   Claude Code is exited and started again under it, on the
-//                   same session.
-//   C, pane       — `cc-candybar bar-pane <pane>`, in a tmux pane split under
-//                   the session's.
-//   C, tmuxStatus — none: the daemon itself follows the session's frames and
-//                   writes them into its tmux status line while the switch is
-//                   on (src/daemon/tmux-status.ts).
-//
-// [LAW:effects-at-boundaries] Each lane's setup is a plan over `LaneEdge`, the
-// record holding its effects on tmux, the `claude` CLI and the process table,
-// so a test drives every plan with fakes. Claude Code's prompt is read and
-// typed into through the host's one input edge, handed to the step that uses
-// it. The renderer asks
-// for each as an act (src/renderer/lane-acts.ts), and the host performs it
-// (src/daemon/acts.ts).
+// Host operations over one edge for tmux, the Claude CLI and the process table.
+// The statusline toggle only gates the feed; attachment starts with a manual launch.
 
 import type { SessionId } from "./foundations/session-id.js";
 import path from "node:path";
