@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "30e873263e903714b0febd0021507e4d0bc6b95a",
-      "timestamp": "2026-11-19T22:00:17.404Z",
+      "sha": "6815d8573c5c838d7ac874225c050015cf78201b",
+      "timestamp": "2026-11-19T22:09:57.636Z",
       "commits": [
         {
-          "sha": "30e873263e903714b0febd0021507e4d0bc6b95a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:59:05-07:00",
-          "message": "fix(daemon): share managed plugin watches across renderer lifetimes (#909)\n\n* fix(daemon): share managed plugin watches across renderer lifetimes\n\n* fix(renderer): replay the last selected config observation\n\n* test(renderer): exercise replacement from a known host generation\n\n* test(daemon): measure shared disk reads across a bad config and restart\n\n* fix(host): resolve config authority before publishing resource demand\n\n* test(renderer): replay the boundary before removing the last callbacks\n\n* fix(host): admit managed sources through renderer discoveries\n\n* fix(protocol): distinguish worktree builds that carry selected config\n\n* fix(host): restore discovery demand after failed renderer start\n\n* docs(renderer): describe config and state delivery on replacement\n\n* fix(renderer): retire last-good config after approval withdrawal\n\n* docs(renderer): describe last-good state across project decisions\n\n* fix(renderer): refresh bundled fallback from current discovery\n\n* docs(renderer): distinguish authored and bundled recovery"
+          "sha": "6815d8573c5c838d7ac874225c050015cf78201b",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T22:08:49Z",
+          "message": "chore(release): set `package.json` to 1.235.14\n\n## [1.235.14](https://github.com/promptctl/cc-candybar/compare/v1.235.13...v1.235.14) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** share managed plugin watches across renderer lifetimes ([#909](https://github.com/promptctl/cc-candybar/issues/909)) ([30e8732](https://github.com/promptctl/cc-candybar/commit/30e873263e903714b0febd0021507e4d0bc6b95a))\n"
         }
       ]
     },
