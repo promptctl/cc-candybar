@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-858",
+      "ref": "refs/pull/858/merge",
+      "sha": "c023d50395bf3be742b50dfaa5827fc58f99ed78",
+      "timestamp": "2026-11-19T11:45:36.885Z",
+      "commits": [
+        {
+          "sha": "c023d50395bf3be742b50dfaa5827fc58f99ed78",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:44:31-07:00",
+          "message": "Merge 8398481e1d4b7667a6832133da9563b7b56bee58 into f2035fdda3d7aced7e27f485137b01e28691e13f\n"
+        },
+        {
+          "sha": "8398481e1d4b7667a6832133da9563b7b56bee58",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:44:12-07:00",
+          "message": "fix(themes): a stored theme pick naming nothing installed is reported beside the theme the bar wore\n\nA session's theme pick loaded from the profile can name a palette this\nbuild does not ship (a retired name such as 'dark', a renamed or removed\ntheme). The fold read that pick through the same null arm as no pick, so\nthe bar wore the config's theme and nothing said why.\n\nThe pick is now parsed into its own type, which tells an uninstalled\npick from no pick. The fold still moves past it, and the render reports\nit in the palette slot's report, naming the pick and the theme the bar\nwore. The pick stays stored, so a build that ships it again draws it.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-856",
       "ref": "refs/pull/856/merge",
       "sha": "b6d5eeb3c6e31001de3fcd7b5bebe3167566953d",
