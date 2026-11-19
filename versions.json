@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-894",
+      "ref": "refs/pull/894/merge",
+      "sha": "da1a5b3e8d4e344e4f6166c19b4fc7aeb8aee90f",
+      "timestamp": "2026-11-19T20:19:47.238Z",
+      "commits": [
+        {
+          "sha": "da1a5b3e8d4e344e4f6166c19b4fc7aeb8aee90f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T20:18:43Z",
+          "message": "Merge 811c93c884e77b9a549b1450967647accade8461 into 98df29e0562517e9beb1e1386c47a4f552e80236\n"
+        },
+        {
+          "sha": "811c93c884e77b9a549b1450967647accade8461",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:04:44-07:00",
+          "message": "test(renderer): supply current config delivery in click rig\n"
+        },
+        {
+          "sha": "03e1d11524e1cedf528ae4886ded73a587a8032c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:49:05-07:00",
+          "message": "fix(renderer): use one outcome for each config delivery\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "98df29e0562517e9beb1e1386c47a4f552e80236",
@@ -107,28 +136,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:20:46-07:00",
           "message": "fix(daemon): reobserve files after incomplete config rollback\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-894",
-      "ref": "refs/pull/894/merge",
-      "sha": "8895cd5461713b988c0b0e8ab10db44e9cea6e60",
-      "timestamp": "2026-11-19T19:34:14.880Z",
-      "commits": [
-        {
-          "sha": "8895cd5461713b988c0b0e8ab10db44e9cea6e60",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T19:33:18Z",
-          "message": "Merge 9e3ca27f075584208b0c5ce6be65bb8c739e7076 into 7df1347f46b6e135236f014e234935a7b5ffc5fc\n"
-        },
-        {
-          "sha": "9e3ca27f075584208b0c5ce6be65bb8c739e7076",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:49:05-07:00",
-          "message": "fix(renderer): use one outcome for each config delivery\n"
         }
       ]
     },
