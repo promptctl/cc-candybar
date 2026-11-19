@@ -8,7 +8,6 @@ import {
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { type CheckedRenderRequest } from "../renderer-interface/request-context.js";
-import { type RenderOrigin } from "../config-hint";
 import {
   refusedHints,
   refusedArgsError,

@@ -249,7 +249,7 @@ describe("the daemon is a value", () => {
     const refused = jest.fn();
     expect(() =>
       daemon.subscribe(VALUE_REFUSED, {
-        lane: "band",
+        lane: "statusline",
         frame: () => {},
         refused,
         drawing: () => true,
