@@ -32,6 +32,7 @@ import {
   type EffectOutcome,
   type Event,
   type EventInput,
+  type Present,
   type PushedFrame,
   type RendererOutput,
   type TimedRenderer,
@@ -43,6 +44,7 @@ import {
 } from "../renderer-interface/interface.js";
 import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
+import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
 import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
@@ -81,7 +83,7 @@ export type HostTurn = TakenTurn & {
   readonly settled: readonly EffectOutcome[];
 };
 type SettlePresentation = (
-  effect: Pick<Effect, "id" | "session">,
+  effect: Pick<Present, "id" | "session" | "displayedEvents">,
   reason: string | null,
 ) => void;
 type TakenTurn = TurnOutcome & {
@@ -132,6 +134,7 @@ export interface HostWorld {
   readonly stateDir: string;
   readonly configs: RendererConfigs;
   readonly closing: () => boolean;
+  readonly acknowledgeDisplayed: (events: readonly DisplayedEvent[]) => void;
   readonly unheard: (text: string) => void;
 }
 
@@ -808,6 +811,11 @@ export function rendererHost(
   const receiptFor =
     (issuer: number): SettlePresentation =>
     (effect, reason) => {
+      // [LAW:effects-at-boundaries] The write can acknowledge a daemon
+      // event after its renderer has gone. Only the local receipt needs
+      // the generation that issued it.
+      if (reason === null && effect.displayedEvents !== undefined)
+        world.acknowledgeDisplayed(effect.displayedEvents);
       if (issuer !== generation) return;
       const retired = "the renderer that drew the frame has ended";
       unawaited(

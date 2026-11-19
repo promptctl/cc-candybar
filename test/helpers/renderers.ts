@@ -107,6 +107,7 @@ export const NO_ACTS: HostWorld = {
   stateDir: "/nonexistent/this-rig-has-no-state-dir",
   configs: NO_CONFIGS,
   closing: () => false,
+  acknowledgeDisplayed: () => {},
   unheard: (text) => {
     throw new Error(`an act's failure no bar holds: ${text}`);
   },

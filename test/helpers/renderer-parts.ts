@@ -1,8 +1,6 @@
 import { EditTransactions } from "../../src/renderer/edit-transaction.js";
 // The main renderer's parts over a test's own render cache, session state,
-// world states and owners (src/renderer/draw-bar.ts RendererParts), with an
-// inert host (`AdapterToHost`, src/renderer-interface/adapter.ts) for what its
-// side reaches. No daemon is built.
+// world states and owners (src/renderer/draw-bar.ts RendererParts).
 
 import type { SessionState } from "../../src/renderer/session-state";
 import type {
@@ -10,7 +8,6 @@ import type {
   RendererVerbs,
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
-import type { AdapterToHost } from "../../src/renderer-interface/adapter";
 import type { EffectId } from "../../src/renderer-interface/interface";
 import { TurnTime } from "../../src/renderer/turn-time";
 import { TurnLog } from "../../src/renderer/turn-log";
@@ -45,14 +42,6 @@ export const minter = (): (() => EffectId) => {
   return () => ++minted as EffectId;
 };
 
-// The host a renderer test draws against: no update is offered, and file
-// events are heard.
-export function inertHost(): AdapterToHost {
-  return {
-    eventAnswered: () => {},
-  };
-}
-
 export function rendererParts({
   cache,
   sessionState,
@@ -66,7 +55,6 @@ export function rendererParts({
 }): MainRendererParts {
   const renderCache = cache as MainRendererParts["renderCache"];
   return {
-    ...inertHost(),
     // The rig's own time: a test drawing outside a turn runs it in one
     // (`time.during`).
     time: new TurnTime(),

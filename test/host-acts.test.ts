@@ -130,6 +130,7 @@ function hostOver(
       readText: readTextIfPresent,
     },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard: (text) => void unheard.push(text),
     ...over,
   };

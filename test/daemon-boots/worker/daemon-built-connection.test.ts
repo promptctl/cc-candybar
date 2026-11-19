@@ -21,8 +21,11 @@ import {
 } from "../../../src/daemon/foundations/protocol";
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
+import type { LinkOwner } from "../../../src/daemon/renderer-process";
 import { rendererOf } from "../../../src/renderer-interface/interface";
 import { textOf } from "../../../src/render/frame";
+import { instantAt } from "../../../src/utils/instant";
+import type { HeldEvent } from "../../../src/utils/event-hold";
 import { hookData, render, renderBody } from "../../helpers/daemon-e2e";
 import { loggedLines, renderEventsOf } from "../../helpers/daemon-log";
 import { heldClock } from "../../helpers/held-clock";
@@ -147,6 +150,102 @@ describe("a connection to a daemon built in this worker", () => {
     expect(drawn(await answered(feed))).toContain("a drawn mark");
     expect(running.daemon.stats.inFlight).toBe(0);
     feed.client.destroy();
+  });
+
+  function daemonWithWarning() {
+    let owner: LinkOwner | undefined;
+    let observed: HeldEvent | null = null;
+    const inProcess = inProcessRenderer((real) =>
+      hearingEvents(real, ({ event }) => {
+        if (event.kind === "context" && event.worldState.session === "observe")
+          observed = event.worldState.daemon.rendererEnded;
+      }),
+    );
+    const running = startDaemon(process.env, {
+      renderer: (prepared) => ({
+        start: (link) => {
+          owner = link;
+          return inProcess(prepared).start(link);
+        },
+      }),
+    });
+    started = running;
+    const link = owner;
+    if (link === undefined)
+      throw new Error("the daemon did not attach a renderer");
+    const warning = {
+      text: "the renderer stopped",
+      at: instantAt(running.daemon.clock),
+      answered: false,
+    };
+    const reply = async (session = "warning-draw") => {
+      const result = await running.daemon.reply(
+        renderRequest(session, undefined),
+        () => false,
+        running.daemon.stats.accept(),
+        () => false,
+      );
+      expect(drawn(result.resp)).not.toBe("");
+      return result;
+    };
+    const held = async () => {
+      const check = await reply("observe");
+      check.settled(false);
+      return observed;
+    };
+    return {
+      running,
+      reply,
+      held,
+      report: () => link.ended(warning),
+      replace: () => link.start(),
+    };
+  }
+
+  test("a confirmed ordinary reply answers its daemon event across replacement and only for that occurrence", async () => {
+    const { running, reply, held, report, replace } = daemonWithWarning();
+    report();
+    const first = await reply();
+    expect(drawn(first.resp)).toMatch(/⚠\s+1/);
+    await replace();
+    expect(await held()).toMatchObject({ revision: 1, answered: false });
+    first.settled(true);
+    expect(await held()).toMatchObject({ revision: 1, answered: true });
+
+    report();
+    const dropped = await reply();
+    dropped.settled(false);
+    expect(await held()).toMatchObject({ revision: 2, answered: false });
+    const older = await reply();
+    report();
+    older.settled(true);
+    expect(await held()).toMatchObject({ revision: 3, answered: false });
+
+    await rendered(running, "warning-draw");
+    expect(await held()).toMatchObject({ revision: 3, answered: true });
+  });
+
+  test("the pane connection acknowledges its own confirmed warning frame", async () => {
+    const { running, reply, held, report } = daemonWithWarning();
+    const initial = await reply("pane-warning");
+    initial.settled(true);
+    report();
+    expect(await held()).toMatchObject({ revision: 1, answered: false });
+
+    const feed = openedOn(running.connect());
+    try {
+      feed.send({
+        ...SUBSCRIBE,
+        sessionId: "pane-warning",
+        lane: "pane",
+      } as Request);
+      const pane = drawn(await answered(feed));
+      expect(pane).toContain("a drawn mark");
+      expect(pane).toMatch(/⚠\s+1/);
+      expect(await held()).toMatchObject({ revision: 1, answered: true });
+    } finally {
+      feed.client.destroy();
+    }
   });
 
   test("a shutdown request reaches the exit the daemon was built with", async () => {

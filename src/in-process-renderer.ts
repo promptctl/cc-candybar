@@ -20,11 +20,11 @@ export function inProcessRenderer(
   decorate: (renderer: Renderer) => Renderer = (renderer) => renderer,
 ): RendererPort {
   return ({ name, boot }) => ({
-    start: ({ reaches, clock, log }) =>
+    start: ({ clock, log }) =>
       localLink(
         name,
         () => {
-          const result = mainRendererOf(boot(), reaches);
+          const result = mainRendererOf(boot());
           if (result.diagnostics !== undefined)
             writeLogLines(log, result.diagnostics);
           if (result.kind === "refused")

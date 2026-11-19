@@ -51,7 +51,6 @@ import {
 } from "../../helpers/oversized-renderer-history";
 import type { Instant, Tick } from "../../../src/utils/instant";
 import { fieldsOf } from "../../../src/utils/logfmt";
-import { inertHost } from "../../helpers/renderer-parts";
 
 jest.setTimeout(30_000);
 
@@ -227,7 +226,6 @@ test("the supervisor names the unanswered input when its built worker is killed"
     heapCapMb: 256,
     node: [process.execPath],
     boot: () => COMPATIBLE_BOOT.boot,
-    reaches: inertHost(),
     log: (_level, line) => void logged.push(line),
     ended: (event) => ready.reject(new Error(event.text)),
     start: async () => {

@@ -29,7 +29,7 @@ import { fieldsOf } from "../../src/utils/logfmt";
 import type { DaemonLogger, LogLine } from "../../src/utils/logger";
 import { heldClock } from "../helpers/held-clock";
 import { NO_LAYERS } from "../helpers/history-step";
-import { inertHost, rendererParts } from "../helpers/renderer-parts";
+import { rendererParts } from "../helpers/renderer-parts";
 import { NO_ACTS } from "../helpers/renderers";
 
 const SESSION = sessionIdOf("session");
@@ -50,7 +50,6 @@ function rig(
   const clock = heldClock(new Date(0));
   const state = new SessionState();
   const history = new SettingsHistory(state, () => {});
-  const adapter = inertHost();
   const cache = new (class extends RenderCache {
     override subscriptions() {
       fault.subscriptions?.();
@@ -102,7 +101,6 @@ function rig(
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
-    host: adapter,
     fault: (message) => {
       throw new Error(message);
     },
