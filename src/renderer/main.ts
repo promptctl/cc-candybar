@@ -390,10 +390,12 @@ export function mainRenderer(
       }
       case "click": {
         const { click } = event;
-        const live = click.scope === "session"
-          ? parts.worldStates.contextOf(click.session)
-          : null;
-        const context = click.scope === "session" ? (live ?? event.context) : null;
+        const live =
+          click.scope === "session"
+            ? parts.worldStates.contextOf(click.session)
+            : null;
+        const context =
+          click.scope === "session" ? (live ?? event.context) : null;
         if (context !== null) {
           const { origin } = context.durable;
           throwConfigFailure(origin);

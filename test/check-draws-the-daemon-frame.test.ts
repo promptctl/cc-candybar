@@ -17,6 +17,8 @@ import {
   type Present,
 } from "../src/renderer-interface/interface";
 import type { RendererBuilder } from "../src/daemon/local-bar";
+import { previewSigner } from "../src/click/link-signer";
+import { publishingFrames } from "../src/daemon/foundations/frame-publication";
 import { parseFrame } from "../src/render/frame";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
@@ -69,6 +71,6 @@ test("check uses the presented frame and inspection even when turn records carry
   expect(presents).toHaveLength(passes.length);
   expect(new Set(presents.map((pr) => pr.session)).size).toBe(passes.length);
   const [fresh] = presents;
-  expect(outcome.rendered).toEqual(parseFrame(fresh!.frame));
+  expect(outcome.rendered).toEqual(publishingFrames(previewSigner())(parseFrame(fresh!.frame)));
   expect(fresh!.inspection).toMatchObject({ preset: "a" });
 });

@@ -931,7 +931,7 @@ describe("a click", () => {
     const seen: Array<SessionContext | null> = [];
     const t = renderer({
       ...NO_VERBS,
-      handler: () => (_value, facts) => void seen.push(facts.context),
+      click: (_click, facts) => void seen.push(facts.context),
     });
     const first = checked("%1", "first.json5");
     const current = checked("%2");
@@ -948,7 +948,7 @@ describe("a click", () => {
 
   test("failed config settles parked clicks and a later config does not replay them", async () => {
     const acted = jest.fn();
-    const t = renderer({ ...NO_VERBS, handler: () => acted });
+    const t = renderer({ ...NO_VERBS, click: acted });
     const context = checked();
     answered(await contextTurn(t, context));
     answered(await handIn(t.r, click("act", context)));
@@ -987,7 +987,7 @@ describe("a click", () => {
 
   test("retirement cancels a parked click and the late config runs no handler", async () => {
     const acted = jest.fn();
-    const t = renderer({ ...NO_VERBS, handler: () => acted });
+    const t = renderer({ ...NO_VERBS, click: acted });
     const context = checked();
     const waiting = answered(await contextTurn(t, context));
     answered(await handIn(t.r, click("act", context)));
