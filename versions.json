@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-868",
+      "ref": "refs/pull/868/merge",
+      "sha": "8514a677566401ec31ad93a023fd71ff93913d44",
+      "timestamp": "2026-11-19T13:17:50.549Z",
+      "commits": [
+        {
+          "sha": "8514a677566401ec31ad93a023fd71ff93913d44",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:16:46Z",
+          "message": "Merge b314644280349099472488c27881e4227587e318 into 00c851de7fe99a7e286a1d9a0b9a61e03b7b6ac3\n"
+        },
+        {
+          "sha": "b314644280349099472488c27881e4227587e318",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:29:09-07:00",
+          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "00c851de7fe99a7e286a1d9a0b9a61e03b7b6ac3",
