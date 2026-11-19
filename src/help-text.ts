@@ -100,9 +100,6 @@ ${settingsByPlace()
     ),
   ])
   .join("\n")}
-  The 🧰 tools tab holds 🩺 doctor: click it to check your setup, and click a
-  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
-
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
   in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
 
@@ -148,13 +145,6 @@ Subcommands:
                            menu's ${settingMenuPath(LANES.pane.switch.setting)}.
 
 Config tooling:
-  doctor [file]            Check your setup the way the bar's 🩺 doctor does —
-                           one line per check. Exit 0 all ok, 1 any failed,
-                           2 usage error / unreadable settings. Run it from a
-                           Claude Code shell (or inside the same tmux pane) so
-                           it sees Claude Code's own environment. [file] is
-                           the config to check, when the statusline command
-                           names one with --config.
   check [--render] [file]  Validate a config on the full render pipeline (parse
                            → merge → validate → register → render, under
                            every preset) with no daemon. With no path, checks

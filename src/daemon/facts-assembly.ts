@@ -120,9 +120,8 @@ export function assembleFacts(
     ]),
   );
 
-  const doctor = stamp(prior?.doctor, lanes.doctor);
   const diagnostics = readings.faults;
-  const parts = { builtins, sources, runs, env, doctor, daemon, diagnostics };
+  const parts = { builtins, sources, runs, env, daemon, diagnostics };
   // [LAW:single-enforcer] `restamp` is the one judge of whether a fact moved,
   // and it returns the prior fact itself when not, so the document is
   // unmoved when every fact is the prior's own. The builtins, sources and runs are
@@ -135,7 +134,6 @@ export function assembleFacts(
     sameFacts(sources, prior.sources) &&
     sameFacts(runs, prior.runs) &&
     sameFacts(env, prior.env) &&
-    doctor === prior.doctor &&
     compareStructural(
       { daemon, diagnostics },
       { daemon: prior.daemon, diagnostics: prior.diagnostics },

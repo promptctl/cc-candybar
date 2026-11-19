@@ -32,25 +32,6 @@ export const LAUNCH_CATEGORIES = [
   // click, async, each with its own timeout. Not rate-limited, so a second
   // click on a stepper runs a second move rather than being refused.
   "click.run",
-  // The doctor's tmux query — click-driven like the verbs above, and its own
-  // category so the cap never reaches the tmux SEGMENT's cache-driven spawns.
-  "doctor.tmux",
-  // The doctor's font question (src/doctor/font-edge.ts): CoreText through
-  // osascript, or fc-list — one spawn per run, on the click like the tmux one.
-  "doctor.font",
-  // Whether the tmux client the bar is drawn through came over a remote login
-  // (src/doctor/edge.ts): one `ps` per run.
-  "doctor.process",
-  // Every cc-candybar daemon this user runs (src/doctor/edge.ts): one `ps`
-  // per run, metered apart from the remote-login one.
-  "doctor.daemons",
-  // A forge CLI's own local word on whether it is installed and logged in
-  // (`gh auth token`), asked on every doctor click — so, like
-  // `doctor.daemons`, no rate limit.
-  "doctor.forge",
-  // The app Launch Services opens `cc-candybar://` with (src/doctor/edge.ts),
-  // asked by a doctor run that no link reached.
-  "doctor.launch-services",
   // Typing a slash command into a session's Claude Code pane
   // (src/claude-input/edge.ts): `read` captures the pane to decide whether it
   // is safe, `type` sends the keys.

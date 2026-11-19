@@ -13,8 +13,7 @@ import type {
   SessionId,
 } from "../daemon/foundations/session-id";
 import type { Failure } from "../daemon/foundations/verb-error";
-import type { ClickArrival } from "../doctor/sightings";
-import type { DoctorAsk } from "../doctor/gather";
+import type { ClickArrival } from "./click-arrival";
 import type { Run } from "../facts/source-identity";
 import type { SourceId, WorldState } from "../facts/world-state";
 import type { WireFrame } from "../render/frame";
@@ -299,9 +298,7 @@ export interface Present {
 // not at all, and each is settled with that one outcome.
 // [LAW:single-enforcer] A config layer is named by its origin and its role in
 // that origin's chain, never by a path: which file that is is discovery's to
-// say, so a renderer cannot name a file the origin's chain does not hold. A
-// `claude-settings` file is one the session's doctor reading handed in
-// (`writableSettingsFiles`, src/doctor/gather.ts): the host refuses any other.
+// say, so a renderer cannot name a file the origin's chain does not hold.
 export interface ConfigChange {
   readonly kind: "change";
   readonly id: EffectId;
@@ -310,13 +307,11 @@ export interface ConfigChange {
   readonly changes: readonly Change[];
 }
 
-export type ChangeTarget =
-  | {
-      readonly kind: "layer";
-      readonly origin: RenderOrigin;
-      readonly role: LayerRole;
-    }
-  | { readonly kind: "claude-settings"; readonly file: string };
+export interface ChangeTarget {
+  readonly kind: "layer";
+  readonly origin: RenderOrigin;
+  readonly role: LayerRole;
+}
 
 // A source a run makes stale: its full name, for the run's line, and the
 // storage folder its file is in.
@@ -389,8 +384,8 @@ export type TurnRecord = readonly Field[];
 
 // [LAW:types-are-the-program] A source the renderer's state needs read for
 // one session: a plugin source, at its storage folder, named by the variable
-// that reads it; a `shell` or `file` run, named by its digest; or the
-// doctor's run, by what it asks of the machine.
+// that reads it; a `shell` or `file` run, named by its digest; or an
+// environment variable.
 export type Subscription =
   | {
       readonly kind: "plugin";
@@ -400,8 +395,7 @@ export type Subscription =
   | { readonly kind: "run"; readonly run: Run }
   // A variable an `env` source reads, from the session's environment, which
   // the host holds and hands in as that one variable's value.
-  | { readonly kind: "env"; readonly name: string }
-  | { readonly kind: "doctor"; readonly ask: DoctorAsk };
+  | { readonly kind: "env"; readonly name: string };
 
 // [LAW:one-source-of-truth] Whole, replacing the last: what every session the
 // renderer holds needs read, which lanes its settings switch on, and when the

@@ -14,7 +14,6 @@
 
 import {
   JUSTIFY_MODES,
-  MISSING_DATA,
   TRUNCATE_MODES,
   type DslConfig,
   type RawSegmentDecl,
@@ -75,7 +74,15 @@ export function validateSegments(
   }
 
   const out: Record<string, RawSegmentDecl> = {};
-  for (const [name, decl] of Object.entries(raw)) {
+  for (const [name, authored] of Object.entries(raw)) {
+    // [LAW:carrying-cost] This retired Doctor option can remain in existing
+    // layouts without changing their declaration.
+    const decl =
+      isPlainObject(authored) && Object.hasOwn(authored, "missingData")
+        ? Object.fromEntries(
+            Object.entries(authored).filter(([key]) => key !== "missingData"),
+          )
+        : authored;
     // [LAW:dataflow-not-control-flow] The one branch is the domain's own
     // discriminator — is this name a delta over a base declaration? — and
     // it selects DATA (which record), not which operations run.
@@ -272,7 +279,6 @@ const SEGMENT_FIELDS: FieldSpecMap<SegmentDecl> = {
   palette: paletteSpec(),
   vars: varsSpec(),
   settings: settingsDeclSpec(),
-  missingData: optionalEnumSpec(MISSING_DATA),
   partials: partialsSpec(),
 };
 

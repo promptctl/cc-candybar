@@ -8,7 +8,6 @@ import { checkoutLocation } from "../src/utils/git-root";
 import { TEST_ENV } from "./helpers/session-environment";
 import { daemonFactsOf, FILE_EVENTS_STALLED } from "./helpers/daemon-facts";
 import { MAIN_RENDERER } from "../src/daemon/foundations/renderer-name";
-import { NO_DOCTOR } from "./helpers/payload-owners";
 import {
   eventRenderer,
   hostHeld,
@@ -230,7 +229,6 @@ function rig(): Rig {
         launcher: world.launcher,
         clock: systemTimekeeper,
       }),
-      doctor: NO_DOCTOR,
     }),
   );
   const sessionState = new SessionState();

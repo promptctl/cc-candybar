@@ -5,7 +5,7 @@
 
 import type { LinkSigner } from "../click/link-signer.js";
 import { isBarLink, parseHandlerUrl, URL_SCHEME } from "../click/wire.js";
-import type { Delivery } from "../doctor/sightings.js";
+import type { Delivery } from "../renderer-interface/click-arrival.js";
 
 interface Refused {
   readonly kind: "refused";

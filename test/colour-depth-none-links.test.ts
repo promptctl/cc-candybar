@@ -128,7 +128,7 @@ test("colour depth none keeps every link the bar draws in colour", async () => {
     expect(ansiOf(none).match(SGR)).toBeNull();
     // With no colour, the open tab is still marked: it alone leads with ▾.
     expect(textOf(none)).toContain("▾ ⚙ config");
-    expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout|🧰 tools)/)).toBeNull();
+    expect(textOf(none).match(/▾ (⚡ session|🎨 look|📐 layout)/)).toBeNull();
     // The same state drawn in colour carries exactly the same links.
     expect(linkUrls(none)).toEqual(linkUrls(render("truecolor")));
 

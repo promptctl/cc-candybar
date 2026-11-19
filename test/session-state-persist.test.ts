@@ -19,7 +19,6 @@ import {
   EPHEMERAL_HISTORY_STORAGE,
   HeldStores,
 } from "../src/daemon/held-stores";
-import { emptyStores } from "./helpers/doctor-facts";
 import { throughout, until } from "./helpers/until";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -52,7 +51,6 @@ describe("the session state's file", () => {
     const stores = new HeldStores({
       session,
       history: EPHEMERAL_HISTORY_STORAGE,
-      doctor: emptyStores(),
     });
     stores.load();
     const state = new SessionState(stores.current().sessions, maxSessions);

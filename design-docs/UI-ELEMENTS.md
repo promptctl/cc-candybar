@@ -93,7 +93,6 @@ What a click does depends on the action's kind:
 | Copy | `{ copy: template }` | copies the evaluated text |
 | Open | `{ open: template }` | opens a path in VS Code |
 | Slash | `{ slash: "/compact" }` | types the command into this session's Claude Code pane (refused unless the pane shows a bare prompt) |
-| Doctor | `{ doctor: "run" }` / `{ doctor: "fix", check }` / `{ doctor: "mark", check, mark }` | runs the checks; fixes one; marks the glyphs one shows |
 | Do | `{ do: [a, b, …] }` | fires each listed action in one click, one undo step |
 
 ### Toggle
@@ -362,7 +361,7 @@ Clicking `🍫` opens the menu above the bar. The door rises with it as `✖`, i
 
 ```
  ✖  ◁  ▦ default ▸ ↺
-    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config
  ✕  ⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config
     /compact /model /clear
  ⇄ bmf@mmu  ~/c/cc-candybar  ⎇ docs/ui-elements-inventory +1 ? ▸
@@ -407,7 +406,7 @@ The preset ring, with the layout preview under it:
  ✕  git usage dense ◀ default ▶ compact verbose zen
      menu  host  directory  gitaculous
      model  context  autocompact  block  weekly
-    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config
 ```
 
 Picking `compact` changes the whole bar, including its padding, which the preset sets to 0:
@@ -424,7 +423,7 @@ On a preset the user authored, the ring's body also holds `🚮 delete <name>`.
 ### Tabs
 
 ```
-    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config  🧰 tools
+    ▾ ⚡ session  🎨 look  📐 layout  ⚙ config
 ```
 
 One tab is open at a time; it leads with `▾`. A tab click writes `candybar.tab` and disarms the command tray's confirm; clicking the open tab closes it. The open tab's body drops below, led by `✕`.
@@ -482,31 +481,6 @@ The style ring also carries the theme preview; the variation ring carries the la
 ```
  ✕  ☑ wrap  ◀ padding 1 ▶  🧪 toggles
 ```
-
-**`🧰 tools`:**
-
-```
- ✕  🩺 doctor
-```
-
-`🩺 doctor` runs every check, and one row per check appears under it. At 200 columns:
-
-```
- ✕  🩺 doctor
-    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
-    ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
-```
-
-At 80 columns the row moves under an empty row and is still 113 cells wide:
-
-```
- ✕  🩺 doctor
-    ✓ config — /Users/me/.config/cc-candybar/config.json5 (searched)
-
- ✗ tmux truecolor — the client reported no tmux facts — re-run `cc-candybar install` to stage a current client
-```
-
-A passing check reads `✓ <label>`, then ` — <note>` when it has one: `config` names the file or chain it judged and what named it, and a failed `config` row opens with the same words. A failing check that can be fixed carries `[fix]`, which writes `~/.claude/settings.json` (`doctor-fix`). A check that found several problems names the first and counts the rest (`(+2 more — run `cc-candybar doctor`)`); the CLI lists them all. A failing check that shows glyphs to look at (`Nerd Font`) adds them after its reason, then `[✓ shapes]` and `[✗ boxes]` (`doctor-mark`). The checks are data in `src/doctor/checks.ts`: `config`, `URL handler`, `tmux truecolor`, `effect refresh` and `Nerd Font`.
 
 ## Edit mode
 
@@ -699,14 +673,12 @@ Every verb the daemon accepts, from `src/click/wire.ts`, and what emits it.
 | `undo`, `redo`, `back`, `rewind` | `↶`, `↷`, `◁`, `↩ cancel` |
 | `copy`, `open-vscode` | `⎘ id`, `⎘ resume`, `↗ proj`, `↗ log`, `↗ config`, the viewer's `⧉ copy` |
 | `slash` | `/compact`, `/model`, `/clear`, autocompact's `−` `+` `↺` |
-| `doctor-run`, `doctor-fix`, `doctor-mark` | `🩺 doctor`, `[fix]`, `[✓ shapes]` `[✗ boxes]` |
 
 ## Gaps and overlaps
 
 Found while drawing the above. Each is for Brandon to decide; none is changed here.
 
 1. **A value outside a carousel's domain counts as its first member.** A stale value steps from the first member, so `▶` skips that member, and a colour-valued domain shows the first member's swatch.
-2. **The doctor's result row does not fit 80 columns.** It is 113 cells, under an empty row; at 200 columns it sits on its own indented row with no empty row.
 3. **Configure mode draws the configured placement twice.** The row shows `✖ gitaculous 🔧` (its name label, which the settings hang from) and then `✖ ⎇ docs/… ▸ 🔧` (its live cell), so one placement has two `✖` and two `🔧`. The same happens for `block`. At 200 columns the theme control also moves under an empty row and loses the body's `|` lead.
 4. **Two `✚` side by side.** Between `model` and `context`, edit mode draws adjacent `✚` with nothing between them, because `context` and `autocompact` are nested as one unit and the row has an insertion point on each side of the unit's boundary. With `☑ live` on, a placement that renders nothing leaves its two `✚` adjacent too.
 5. **`✖` means two things on one screen.** In edit mode with the menu open, `✖` closes the menu (the door) and `✖` removes a segment, both visible at once. Bodies close with `✕`.

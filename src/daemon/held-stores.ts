@@ -9,12 +9,8 @@ import type {
   HistoryStorage,
   SessionHistory,
 } from "../renderer-interface/history-storage.js";
-import type { DoctorStores } from "../doctor/ports.js";
-import type { StoresRead } from "./foundations/stats-snapshot.js";
-import { readStores } from "../doctor/gather.js";
 import { runEach } from "../utils/run-each.js";
 import {
-  EMPTY_STORED_STATE,
   type StoredState,
   type StoreWrite,
 } from "../renderer-interface/stored-state.js";
@@ -23,7 +19,6 @@ import {
 export interface ProfileStorage {
   readonly session: SessionFileStorage<SessionPicks>;
   readonly history: HistoryStorage;
-  readonly doctor: DoctorStores;
 }
 
 // [LAW:dataflow-not-control-flow] A history kept nowhere, as a session file
@@ -38,7 +33,6 @@ export class HeldStores {
   // order, as the renderer's own: a write moves its entry to the end.
   private sessions = new Map<SessionId, SessionPicks>();
   private history = new Map<SessionId, SessionHistory>();
-  private doctor: StoresRead = EMPTY_STORED_STATE.doctor;
   private closed = false;
 
   constructor(private readonly storage: ProfileStorage) {}
@@ -49,7 +43,6 @@ export class HeldStores {
   load(): void {
     this.sessions = new Map(this.storage.session.load());
     this.history = new Map(this.storage.history.load());
-    this.doctor = readStores(this.storage.doctor);
   }
 
   // What a renderer built now is built from.
@@ -64,7 +57,6 @@ export class HeldStores {
     return {
       sessions: Object.fromEntries(this.sessions),
       history: Object.fromEntries(this.history),
-      doctor: this.doctor,
     };
   }
 
@@ -88,34 +80,12 @@ export class HeldStores {
           moved(this.history, write.key, write.value);
           history = true;
           break;
-        case "marks":
-        case "clicked":
-        case "postMortemsRead":
-          steps.push(() => this.file(write));
-          break;
       }
     if (sessions && !this.closed)
       steps.push(() => this.storage.session.save(this.sessions));
     if (history && !this.closed)
       steps.push(() => this.storage.history.save(this.history));
     runEach(steps);
-  }
-
-  private file(write: DocumentWrite): void {
-    // [LAW:no-silent-failure] A renderer files only a document that read, so
-    // one filed over a failure is a renderer's bug, refused.
-    if (this.doctor[write.store].kind !== "ok")
-      throw new Error(
-        `the renderer filed ${write.store}, which did not read; nothing was written`,
-      );
-    this.doctor = {
-      ...this.doctor,
-      [write.store]: { kind: "ok", value: write.value },
-    };
-    if (this.closed) return;
-    const filed = fileDocument(this.storage.doctor, write);
-    if (filed.kind === "failed")
-      throw new Error(`${write.store} not filed: ${filed.reason}`);
   }
 
   // [LAW:no-ambient-temporal-coupling] The daemon's close: what is pending
@@ -128,24 +98,8 @@ export class HeldStores {
   }
 }
 
-type DocumentWrite = Extract<StoreWrite, { store: keyof StoresRead }>;
-
 // A store's entry as a write leaves it: moved to the end, or gone.
 function moved<V>(store: Map<SessionId, V>, key: SessionId, value: V | null) {
   store.delete(key);
   if (value !== null) store.set(key, value);
-}
-
-// [LAW:types-are-the-program] exception: each document's write and its file
-// are of one name, which the switch cannot carry to the file's type.
-function fileDocument(
-  doctor: DoctorStores,
-  write: DocumentWrite,
-): StoresRead[keyof StoresRead] {
-  const file = doctor[write.store] as {
-    update: (
-      next: (current: unknown) => unknown,
-    ) => StoresRead[keyof StoresRead];
-  };
-  return file.update(() => write.value);
 }

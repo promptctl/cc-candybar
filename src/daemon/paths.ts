@@ -258,8 +258,6 @@ export function daemonPaths(host: Host): DaemonPaths {
 export interface ProfilePaths {
   readonly sessionState: string;
   readonly settingsHistory: string;
-  // Where the doctor's documents are.
-  readonly documents: string;
 }
 
 export function profilePaths(
@@ -270,13 +268,11 @@ export function profilePaths(
     return {
       sessionState: paths.sessionState,
       settingsHistory: paths.settingsHistory,
-      documents: paths.state,
     };
   const state = path.join(paths.state, "renderers", name, "state");
   return {
     sessionState: path.join(state, path.basename(paths.sessionState)),
     settingsHistory: path.join(state, path.basename(paths.settingsHistory)),
-    documents: state,
   };
 }
 

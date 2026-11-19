@@ -155,7 +155,7 @@ export function checkLanes(at: Instant) {
     // A set window with a step each way, so the when-gated `autocompact`
     // control renders all of its cells.
     autoCompact: ok<AutoCompactWindow>(400_000),
-  } satisfies Omit<Lanes, "sources" | "runs" | "env" | "doctor">;
+  } satisfies Omit<Lanes, "sources" | "runs" | "env">;
 }
 
 // [LAW:one-source-of-truth] One day's sums, which the draw projects to its own
@@ -193,13 +193,6 @@ export function checkOwners(
     tmuxService: { declare: () => settledLane(lanes.tmuxSession) },
     managedStorage: { declare: () => settledLane(ABSENT) },
     sourceRuns,
-    // [LAW:no-silent-failure] Nothing `check` draws asks the doctor; a draw
-    // that does fails its lane, naming why.
-    doctor: {
-      declare: () => {
-        throw new Error("check asks no doctor");
-      },
-    },
     autoCompact: { stored: () => lanes.autoCompact },
     cacheExpiry: { expiryOf: () => lanes.cache },
     hostService: {

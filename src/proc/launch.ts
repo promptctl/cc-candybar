@@ -96,13 +96,6 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   // for any human click cadence.
   "click.pbcopy": 1000,
   "click.open": 1000,
-  // A click's probe, run ahead of its turn for up to its 2 s timeout.
-  "doctor.tmux": 1000,
-  "doctor.font": 1000,
-  "doctor.process": 1000,
-  // `doctor.daemons` has none: it runs on EVERY doctor click (run, [fix],
-  // mark), so a cap would refuse 🩺 clicked right after [fix]; it is one
-  // `ps` over this user's processes.
   // A double-click is refused rather than typing and submitting its command
   // twice. Daemon-wide, so two sessions typing in one second collide. Only
   // the typing is limited: a click the pane refused typed
@@ -1264,7 +1257,7 @@ function landVerdict(
 // [LAW:types-are-the-program] The launch that holds its caller's loop until the
 // child's pipes close, so a detached descendant holding them holds the loop.
 // Only a process holding no loop that anyone waits on takes it: install, the
-// doctor's CLI probe, the daemon's tmux restore once serving has stopped. A
+// the daemon's tmux restore once serving has stopped. A
 // daemon's launcher has no such property at all. The process's launcher is
 // this one-shot launcher under a narrower type, so its owners are held to
 // `Launcher` by the type and the lint rule, not by the object's shape.

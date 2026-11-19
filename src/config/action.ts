@@ -32,7 +32,6 @@
 // at all. Re-exported here so ActionDecl stays self-contained to read.
 import type { OptionDomain } from "./option-domain.js";
 import type { SlashLine } from "../claude-input/slash-line.js";
-import type { GlyphMark } from "../doctor/checks.js";
 import { LAYER_ROLES, type LayerChoice, type LayerRole } from "./layer-role.js";
 export type { OptionDomain } from "./option-domain.js";
 
@@ -73,7 +72,6 @@ export const ACTION_KEYS = [
   "save",
   "preset",
   "themeDefault",
-  "doctor",
   "slash",
   "run",
   "do",
@@ -262,21 +260,6 @@ export type ActionDecl =
   // daemon reads the theme and the look at click time, as `preset: "save"`
   // reads the bar it copies, so the declaration carries nothing but the verb.
   | ({ readonly themeDefault: "save" } & Writes)
-  // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a): `run` folds
-  // every check over the session's recorded client facts and writes the
-  // report into SessionState; `fix` performs the repair the named check's
-  // fresh verdict carries. `check` is a name in `CHECKS` (src/doctor/checks.ts)
-  // — a load error otherwise — so the URL carries nothing the daemon has not
-  // already declared. No `set`, so no validator derives (like copy/open).
-  // `mark` records what the user saw of the glyphs the check's verdict showed
-  // them (its `sighting`) and re-runs.
-  | { readonly doctor: "run" }
-  | { readonly doctor: "fix"; readonly check: string }
-  | {
-      readonly doctor: "mark";
-      readonly check: string;
-      readonly mark: GlyphMark;
-    }
   // [LAW:parse-dont-validate] Type a slash command into the clicked session's
   // Claude Code prompt (src/claude-input/edge.ts). The line is a `SlashLine`,
   // proved at load, and a click is honoured only as a line some declared

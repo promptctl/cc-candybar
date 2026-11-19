@@ -1,19 +1,16 @@
-// A JSON document the doctor keeps under the daemon's state directory: the
-// mark book, the terminals clicked from, the post-mortems filed read.
-//
+// A stored JSON document with a read and a guarded update.
 // [LAW:one-type-per-behavior] Every such file holds to one policy — absent is
 // the store's empty value, anything else must read, and nothing is written
 // over a file that does not — so the policy is this one store, and each file
 // differs only in its name, its empty value and its parser.
 //
 // [LAW:effects-at-boundaries] The parsers are pure; the file is read and
-// written only here, through the store the doctor edge carries
-// (src/doctor/edge.ts).
+// written only here.
 
 import fs from "node:fs";
 import path from "node:path";
 import { writeAtomic } from "../utils/atomic-write.js";
-import type { Asked } from "./checks.js";
+import type { Asked } from "../utils/outcome.js";
 
 export interface StateFile<T> {
   readonly read: () => Asked<T>;
@@ -42,11 +39,6 @@ const textOf = (value: unknown): string =>
 // the parsed document; its failure reason is told after the file's name
 // ("<file> is not a list of terminals"). Only cc-candybar writes these files,
 // so text that does not read is that failure, never the empty value.
-// [LAW:one-source-of-truth] The directory is always given: the host's, which
-// the daemon and `cc-candybar doctor` both name by the profile's paths, never
-// a path of their own guessing. The answers for repositories are read by every config load — the daemon's,
-// `check`'s, the doctor's — in its own state directory, as it
-// reads the link key there.
 export function stateFile<T>(
   dir: string,
   name: string,

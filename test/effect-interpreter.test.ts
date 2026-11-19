@@ -91,11 +91,10 @@ const change = (
   changes: diffChanges(before, after),
 });
 
-// A turn of layer changes, under a doctor that read no settings file.
 const perform = (
   changes: readonly ConfigChange[],
   book: Parameters<typeof performChanges>[1],
-) => performChanges(changes, book, () => [], places);
+) => performChanges(changes, book, places);
 
 const read = (file: string): string => fs.readFileSync(file, "utf8");
 
@@ -418,67 +417,5 @@ describe("a created local layer is kept out of git", () => {
       kind: "failed",
     });
     expect(fs.existsSync(local)).toBe(false);
-  });
-});
-
-describe("performChanges into Claude Code's settings", () => {
-  const SETTINGS = `{
-  "model": "opus",
-  "env": { "FORCE_COLOR": "3" }
-}
-`;
-  let settings: string;
-  beforeEach(() => {
-    settings = path.join(dir, "settings.json");
-    fs.writeFileSync(settings, SETTINGS);
-  });
-  const into = (file: string, ...changes: Change[]): ConfigChange => ({
-    kind: "change",
-    id: ++ids as EffectId,
-    session: "s" as SessionId,
-    target: { kind: "claude-settings", file },
-    changes,
-  });
-  const setColor = (was: string): Change => ({
-    op: "replace",
-    at: ["env", "FORCE_COLOR"],
-    text: `"1"`,
-    read: { kind: "value", text: was },
-  });
-
-  test("a setting as the doctor read it is written in strict JSON", () => {
-    expect(
-      performChanges(
-        [into(settings, setColor(`"3"`))],
-        null,
-        () => [settings],
-        places,
-      ),
-    ).toEqual({ kind: "ok" });
-    expect(JSON.parse(read(settings))).toEqual({
-      model: "opus",
-      env: { FORCE_COLOR: "1" },
-    });
-  });
-
-  test("a setting moved since the doctor read it is refused, and nothing is written", () => {
-    const outcome = performChanges(
-      [into(settings, setColor(`"2"`))],
-      null,
-      () => [settings],
-      places,
-    );
-    expect(outcome.kind).toBe("refused");
-    expect(read(settings)).toBe(SETTINGS);
-  });
-
-  test("a file the session's doctor did not read is refused", () => {
-    expect(
-      performChanges([into(settings, setColor(`"3"`))], null, () => [], places),
-    ).toEqual({
-      kind: "refused",
-      reason: `${settings} is not a settings file the session's doctor read — nothing was written`,
-    });
-    expect(read(settings)).toBe(SETTINGS);
   });
 });

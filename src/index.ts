@@ -32,7 +32,6 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectClientHints } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
-import { doctorCommandPlan } from "./doctor/cli";
 import { runFrames } from "./frames-cli";
 import { runBarPane } from "./bar-pane";
 import { exitWith } from "./cli-plan";
@@ -40,7 +39,7 @@ import { exitWith } from "./cli-plan";
 // [LAW:one-source-of-truth] The bundle this process runs: the file this entry
 // was loaded from, which Node's loader resolved through every link (an npm
 // global bin is a symlink, and argv[1] keeps the link). It stages on install
-// and names a Node client to the doctor.
+// and names a Node client.
 const RUNNING_BUNDLE = fileURLToPath(import.meta.url);
 
 // [LAW:effects-at-boundaries] What this process knows of its machine, read once
@@ -66,7 +65,7 @@ function showHelpText(): void {
 }
 
 // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2] names
-// a handler. A one-shot handler (stats, the debug projections, check, doctor,
+// a handler. A one-shot handler (stats, the debug projections, check,
 // schema, the render relay) folds its outcome into a plan and delivers it
 // through the one exit (src/cli-plan.ts), in one shape:
 // `exitWith(await <command>Plan(args))`. install and plugin print as they go
@@ -120,12 +119,6 @@ const SUBCOMMANDS: Readonly<Record<string, Subcommand>> = {
   },
   schema: async () => {
     await exitWith(schemaPlan());
-  },
-  // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
-  // the bar's 🩺 click runs, over this process's own environment (which IS
-  // Claude Code's when run from a Claude Code shell).
-  doctor: async (args) => {
-    await exitWith(await doctorCommandPlan(args, world));
   },
   // Runs until the pane closes.
   "bar-pane": async (args) => {

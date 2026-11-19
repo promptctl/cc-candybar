@@ -12,15 +12,8 @@ import {
 } from "../renderer-interface/request-context";
 import type { SessionId } from "../daemon/foundations/session-id";
 import type { WorldState } from "../facts/world-state";
-import type { RequestFacts } from "../daemon/foundations/request-event";
 
 export class WorldStates {
-  // [LAW:single-enforcer] Told every document taken, with the record of the
-  // turn that took it, so the doctor can take its reading from that turn.
-  constructor(
-    private readonly took: (document: WorldState, record: RequestFacts) => void,
-  ) {}
-
   private readonly contexts = new Map<SessionId, SessionContext>();
 
   // [LAW:one-source-of-truth] One document per session, the newest handed in.
@@ -35,7 +28,7 @@ export class WorldStates {
   // a second minting of one number. Both are the host's bug, said, never
   // drawn. The held document stays itself when handed in again, so nothing
   // reading it wakes.
-  take(document: WorldState, record: RequestFacts): void {
+  take(document: WorldState): void {
     const held = this.documents.get(document.session);
     if (held !== undefined && document.seq <= held.seq) {
       if (document.seq === held.seq && compareStructural(document, held))
@@ -45,7 +38,6 @@ export class WorldStates {
       );
     }
     runInAction(() => this.documents.set(document.session, document));
-    this.took(document, record);
   }
 
   // [LAW:no-defensive-null-guards] The host delivers a session's `context`,

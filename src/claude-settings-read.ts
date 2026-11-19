@@ -2,38 +2,11 @@
 // host opens them, and the paths and the parse both sides read are shared
 // (src/claude-settings.ts).
 
-import fs from "node:fs";
-import path from "node:path";
 import { JSON_DIALECT } from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
 import { readTailSync } from "./utils/transcript-fs.js";
-import {
-  projectLocalSettingsFile,
-  type SettingsScope,
-  type SettingsChainAt,
-  type SettingsSource,
-  type JsonObject,
-  isJsonObject,
-} from "./claude-settings";
+import { type JsonObject, isJsonObject } from "./claude-settings";
 import type { JsonValue } from "./var-system/types.js";
-
-// A settings file's bytes and the file they came from, or null for no file.
-// [LAW:no-silent-failure] Only a missing file is absence: one the daemon
-// cannot read (EACCES, ELOOP, a FIFO) is a file Claude Code may still run
-// with, so it throws rather than vanishing from the chain.
-function readSettingsFile(
-  settingsPath: string,
-): { text: string; file: string } | null {
-  const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read.kind) {
-    case "absent":
-      return null;
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
-    case "ok":
-      return { text: read.value.buf.toString("utf8"), file: read.value.file };
-  }
-}
 
 const cannotRead = (settingsPath: string, e: unknown): Error =>
   new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
@@ -42,12 +15,19 @@ const cannotRead = (settingsPath: string, e: unknown): Error =>
 // the one absence with a meaning — Claude Code has written nothing yet — so it
 // reads as the empty document.
 export function readClaudeSettingsText(settingsPath: string): string {
-  return readSettingsFile(settingsPath)?.text ?? "";
+  const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
+  switch (read.kind) {
+    case "absent":
+      return "";
+    case "failed":
+      throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
+    case "ok":
+      return read.value.buf.toString("utf8");
+  }
 }
 
 // [LAW:one-source-of-truth] The ONE reading of Claude Code's settings as a
-// document, shared by every reader of its fields (the doctor's `env`, the
-// auto-compact window), so no two of them disagree about what a file means.
+// document, shared by install and the auto-compact window.
 // Empty text — a missing file or a blank one — is the empty document; text
 // that does not parse, or parses to anything but an object, throws naming the
 // file ([LAW:no-silent-failure]: Claude Code is not running with whatever a
@@ -92,78 +72,6 @@ function parseSettings(settingsPath: string, text: string): JsonObject {
     throw new Error(`cannot read ${settingsPath}: not a JSON object`);
   }
   return parsed;
-}
-
-// [LAW:one-source-of-truth] THE order Claude Code reads its settings files
-// in, as one list every key's reading folds over — highest precedence first,
-// so "the highest level that sets it" is the first source that does. Within
-// the managed scope, `managed-settings.json` merges first and then every
-// visible `*.json` in `managed-settings.d/` in alphabetical order, each
-// later file over the earlier: highest-first is that order reversed. A file
-// that does not exist is not a source; one that does not read throws naming
-// it, as `readClaudeSettings` does, and so does an `env` that is not an object
-// (Claude Code merges `env` key by key, so a non-object `env` is no env it
-// can run with).
-export function readSettingsChain(
-  at: SettingsChainAt,
-): readonly SettingsSource[] {
-  const dropIns = path.join(at.managedDir, "managed-settings.d");
-  const located: ReadonlyArray<{ scope: SettingsScope; path: string }> = [
-    ...visibleJsonFiles(dropIns)
-      .reverse()
-      .map((name) => ({
-        scope: "managed" as const,
-        path: path.join(dropIns, name),
-      })),
-    {
-      scope: "managed",
-      path: path.join(at.managedDir, "managed-settings.json"),
-    },
-    {
-      scope: "project-local",
-      path: projectLocalSettingsFile(at.projectDir),
-    },
-    {
-      scope: "project",
-      path: path.join(at.projectDir, ".claude", "settings.json"),
-    },
-    { scope: "user", path: at.userFile },
-  ];
-  const read = located.flatMap((l) => {
-    const file = readSettingsFile(l.path);
-    if (file === null) return [];
-    const settings = parseSettings(l.path, file.text);
-    const { env = {} } = settings;
-    if (!isJsonObject(env)) {
-      throw new Error(`cannot read ${l.path}: \`env\` is not an object`);
-    }
-    return [{ source: { ...l, settings, env }, file: file.file }];
-  });
-  // [LAW:one-source-of-truth] A file has one scope. A project whose
-  // `.claude` is the user's config directory (a session in the home
-  // directory, or a CLAUDE_CONFIG_DIR naming the project's `.claude`) names
-  // the user file as its project file too. The doctor keeps it once, as the
-  // user's own, the scope it may write; its position is the same either way,
-  // since no scope ranks between project and user. The file is the one the
-  // read opened, so a symlinked spelling of one path is the same file.
-  const user = read.find((r) => r.source.scope === "user");
-  return read
-    .filter((r) => r.source.scope !== "project" || r.file !== user?.file)
-    .map((r) => r.source);
-}
-
-// A directory's `*.json` entries that are not hidden, in alphabetical order;
-// a directory that does not exist has none.
-function visibleJsonFiles(dir: string): string[] {
-  try {
-    return fs
-      .readdirSync(dir)
-      .filter((name) => !name.startsWith(".") && name.endsWith(".json"))
-      .sort();
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw cannotRead(dir, e);
-  }
 }
 
 const messageOf = (e: unknown): string =>

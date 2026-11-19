@@ -598,7 +598,7 @@ describe("the command tray: /compact, /model, /clear from the bar", () => {
     // A tab click hides or shows the tray: arming /clear on ⚡ session, then
     // leaving it, must not come back to an armed confirm. `⟲` sits on the
     // door's first line, in view whichever tab is open, so a tab leaves it armed.
-    for (const tab of ["session", "look", "layout", "config", "tools"]) {
+    for (const tab of ["session", "look", "layout", "config"]) {
       expect(rt.config.actions[`candybar.tab.${tab}`]).toEqual({
         do: [`candybar.tab.${tab}.toggle`, "candybar.commands.clear.disarm"],
       });

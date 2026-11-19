@@ -16,9 +16,6 @@ import {
   VERB_COPY_DIAGNOSTIC,
   VERB_DELETE_PRESET,
   VERB_DISPATCH,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
-  VERB_DOCTOR_RUN,
   VERB_OPEN_VSCODE,
   VERB_REDO,
   VERB_REPO_CONFIG,
@@ -212,12 +209,6 @@ describe("a link says in words what its click does", () => {
     [{ verb: VERB_REDO, args: [SID] }, "redo"],
     [{ verb: VERB_BACK, args: [SID] }, "go back"],
     [{ verb: VERB_REWIND, args: [SID] }, "cancel edits"],
-    [{ verb: VERB_DOCTOR_RUN, args: [SID] }, "run doctor"],
-    [{ verb: VERB_DOCTOR_FIX, args: [SID, "hooks"] }, "fix hooks"],
-    [
-      { verb: VERB_DOCTOR_MARK, args: [SID, "glyphs", "yes"] },
-      "mark glyphs yes",
-    ],
     [{ verb: VERB_SLASH, args: [SID, "/clear"] }, "type /clear"],
     [{ verb: VERB_RUN, args: [SID, "deploy", "{}", MAC] }, "run deploy"],
     [
@@ -404,15 +395,6 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(effectsOf("cc-candybar://set-state/s1/theme/nord")).toEqual([
       { verb: "set-state", args: ["s1", "theme", "nord"] },
     ]);
-    // The doctor verbs: doctor-run takes the session alone (whole decode),
-    // doctor-fix the session and the check (segmented) — the classification a
-    // prior round caught drifting.
-    expect(effectsOf(`cc-candybar://${VERB_DOCTOR_RUN}/a/b`)).toEqual([
-      { verb: VERB_DOCTOR_RUN, args: ["a/b"] },
-    ]);
-    expect(
-      effectsOf(`cc-candybar://${VERB_DOCTOR_FIX}/s1/tmuxTruecolor`),
-    ).toEqual([{ verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] }]);
     // The preset verbs segment like set-state (their handlers split).
     expect(effectsOf("cc-candybar://delete-preset/s1/user/custom-1")).toEqual([
       { verb: "delete-preset", args: ["s1", "user", "custom-1"] },

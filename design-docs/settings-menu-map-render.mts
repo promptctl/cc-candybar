@@ -43,7 +43,6 @@ const STATES: Record<string, Record<string, string>> = {
   look,
   layout: tab("layout"),
   config,
-  tools: tab("tools"),
   presetRing: ring("preset", door),
   themeRing: ring("theme", look),
   styleRing: ring("style", look),
@@ -106,17 +105,16 @@ const PROPOSED: Record<string, readonly string[]> = {
   "door line 1": ["✕", "▦ default ▸"],
   "door line 1 + save cell": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲"],
   "door line 1 + reset confirm": ["✕", "▦ default ▸", "💾 save 3 ↶ ↷ ⟲ reset all?"],
-  "door line 2: tabs": ["✕", "▾ ⚡ session", "🎨 look", "📐 layout", "⚙ config", "🧰 tools"],
-  "door line 2: tabs, two marked": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config", "🧰 tools"],
+  "door line 2: tabs": ["✕", "▾ ⚡ session", "🎨 look", "📐 layout", "⚙ config"],
+  "door line 2: tabs, two marked": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config"],
   // checkPayload marks every setting resettable, so every tab holding a control is marked.
-  "today tabs, all marked (validates model)": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config •", "🧰 tools"],
+  "today tabs, all marked (validates model)": ["✕", "▾ ⚡ session", "🎨 look •", "📐 layout •", "⚙ config •"],
   "session links": ["✕", "⎘ id ⎘ resume ↗ proj ↗ log ↗ repo ↗ config"],
   "session commands": ["✕", "/compact", "/clear", "/model", "⏲ autocompact ▸"],
   "look": ["✕", "◀ tokyo-night ▶", "◀ none ▶", "◀ accent ▶", "◀ powerline ▶"],
   "look, long names": ["✕", "◀ catppuccin-frappe ▶", "◀ inverted ▶", "◀ accent ▶", "◀ powerline ▶"],
   "look, drifted": ["✕", "◀ catppuccin-frappe ▶ ↺", "◀ inverted ▶ ↺", "◀ mono ▶ ↺", "◀ capsule ▶ ↺"],
   "layout": ["✕", "+ preset", "✎ arrange", "wrap: on", "◀ padding 1 ▶"],
-  "tools": ["✕", "🩺 doctor"],
   "edit row": ["✓ save", "↩ cancel", "↺ reset layout", "☐ live"],
 };
 console.log("\n# Part 2 — proposed, modelled at padding 1");
@@ -130,7 +128,6 @@ for (const [name, cells] of Object.entries(PROPOSED)) {
 const VALIDATES: Record<string, [state: string, marker: string]> = {
   "door line 2: tabs": ["default fresh door @200", "⚡ session"],
   "today tabs, all marked (validates model)": ["default door @200", "⚡ session"],
-  "tools": ["default tools @200", "🩺 doctor"],
   "today look tab (validates model)": ["default look @200", "◐ none"],
   "today layout tab (validates model)": ["default layout @200", "✎ arrange"],
 };

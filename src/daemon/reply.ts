@@ -40,7 +40,7 @@ import {
 import type { HostTurn } from "./renderer-host.js";
 import { elapsedMs, spanMs } from "../time.js";
 import { transcriptReads } from "../utils/transcript-fs.js";
-import type { ClickArrival } from "../doctor/sightings";
+import type { ClickArrival } from "../renderer-interface/click-arrival";
 import { transcriptSaid } from "./render-sightings";
 import { type FrameSeen } from "./foundations/sightings";
 import { claudeConfigDir } from "../claude-settings";

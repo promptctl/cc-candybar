@@ -101,14 +101,6 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     }`,
   ],
   [
-    "doctor actions (run, and fix naming its check)",
-    `{
-      segments: { t: { template: '{{ action "run" "🩺" }} {{ action "fix" "[fix]" }}' } },
-      actions: { run: { doctor: 'run' }, fix: { doctor: 'fix', check: 'tmuxTruecolor' } },
-      root: { h: ['t'] },
-    }`,
-  ],
-  [
     "cycle action (2de.4 toggle form)",
     `{
       segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
@@ -203,7 +195,7 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     "a new segment without a template",
     `{ segments: { mine: { palette: 'x' } } }`,
   ],
-  ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
+  ["retired doctor action", `{ actions: { d: { doctor: 'bogus' } } }`],
   [
     "doctor run carrying a check",
     `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`,

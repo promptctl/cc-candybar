@@ -207,10 +207,8 @@ const REMOVED_GLOBALS: Readonly<Record<string, string>> = {
   look: 'it was renamed "style" — write the same name as style: "<name>"',
   progression:
     'it was renamed "variation", and its values with it: accent (was secondary-accent), duo (was primary-secondary), mono (was primary)',
-  // Brandon cut ascii mode: the bar draws Nerd Font glyphs, and the doctor's
-  // nerdFont check names the font that lacks them.
   charset:
-    "the bar always draws Nerd Font glyphs. Delete the key; `cc-candybar doctor` names what your terminal's font is missing.",
+    "the bar always draws Nerd Font glyphs. Delete the key and use a Nerd Font in your terminal.",
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {

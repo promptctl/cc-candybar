@@ -109,7 +109,6 @@ function worldStateOf(session: SessionId): WorldState {
     sources: {},
     runs: {},
     env: {},
-    doctor: pendingOf("unread"),
     daemon: daemonFactsOf(),
     diagnostics: [],
   };

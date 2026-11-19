@@ -71,8 +71,7 @@ const ok = (stdout: string): ProgramRun => ({ code: 0, stdout });
 // that started it, which here is the page.
 programs.set("awk", () => RESIDENT);
 
-// The process table the doctor's daemon row reads (src/doctor/edge.ts): the
-// page's daemon is no process, and none other runs on the demo machine.
+// No OS process runs the simulated daemon.
 programs.set("ps", () => ok(""));
 
 // The four commands the git segment runs (src/segments/git.ts); anything else
@@ -98,9 +97,7 @@ programs.set("git", (args) => {
 });
 
 /**
- * Undo what the visitor's clicks wrote to the machine: the config the settings
- * menu saved, and the doctor's fix to Claude Code's settings. The next render
- * is the bundled default on a machine as it was laid out.
+ * Clear the config the settings menu saved. The next render uses the bundled default.
  */
 export function forgetWrites(): void {
   if (vol.existsSync(CONFIG_FILE)) vol.unlinkSync(CONFIG_FILE);

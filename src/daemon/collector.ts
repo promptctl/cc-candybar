@@ -60,7 +60,6 @@ import {
 import type { SessionId } from "./foundations/session-id.js";
 import { judgeRun } from "./foundations/judge-run.js";
 import type { SessionEnvironment } from "./foundations/session-env.js";
-import { writableSettingsFiles } from "../doctor/gather.js";
 import { valueOf } from "../utils/logfmt.js";
 import type { CollectorStats } from "./foundations/stats-snapshot";
 import { awaitsReading } from "../facts/awaited.js";
@@ -109,25 +108,11 @@ interface DeclaredFor {
   readonly subscriptions: Subscribed;
 }
 
-// The session's latest document, which its stamps replace and its `context`
-// carries, the read it was stamped from, and the settings files its latest
-// doctor reading named, which outlast the reading's subscription: a renderer
-// keeps a reading it took and stops asking for it.
+// The session's latest document and the read it was stamped from.
 interface Stamped {
   document: WorldState;
   from: StampInputs;
-  writable: readonly string[];
 }
-
-// [LAW:dataflow-not-control-flow] The files a document's doctor reading names,
-// or those kept from an earlier one while it carries none.
-const writableOf = (
-  { doctor }: WorldState,
-  kept: readonly string[],
-): readonly string[] =>
-  doctor.kind === "ok" && doctor.value.kind === "read"
-    ? writableSettingsFiles(doctor.value)
-    : kept;
 
 // What a session reads: the holds its declaration took, and what the owners
 // hold at them.
@@ -209,22 +194,17 @@ const sourcesOf = (
       subscriptions.flatMap((s) => (s.kind === "env" ? [s.name] : [])),
     ),
   ].sort(),
-  // A renderer runs one doctor run per session at a time.
-  doctor:
-    subscriptions.flatMap((s) => (s.kind === "doctor" ? [s.ask] : []))[0] ??
-    null,
 });
 
 // [LAW:one-source-of-truth] A run is its digest, so two sets naming the same
-// digests are the same set; a doctor ask is its run's whole content.
+// digests are the same set.
 const sameSources = (a: Subscribed, b: Subscribed): boolean =>
   a.plugins.size === b.plugins.size &&
   [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) &&
   a.runs.size === b.runs.size &&
   [...a.runs.keys()].every((digest) => b.runs.has(digest)) &&
   a.env.length === b.env.length &&
-  a.env.every((name, i) => b.env[i] === name) &&
-  compareStructural(a.doctor, b.doctor);
+  a.env.every((name, i) => b.env[i] === name);
 
 // A live session's reads stop and its holds close.
 function release({ stop, holds }: Live): void {
@@ -385,13 +365,6 @@ export class Collector {
     };
   }
 
-  // [LAW:single-enforcer] The settings files the session's latest doctor
-  // reading handed in: the only ones a `claude-settings` change of the
-  // session may write.
-  writableSettings(session: SessionId): readonly string[] {
-    return this.records.get(session)?.stamped.writable ?? [];
-  }
-
   // Each session the collector reads now, with its latest stamp: what a
   // renderer's complete start configures again. Unlike a request, it marks no
   // session active, so a restart keeps none past a sweep that would retire it.
@@ -434,7 +407,6 @@ export class Collector {
       plugins: new Map(),
       runs: new Map(),
       env: [],
-      doctor: null,
     };
     const reader = this.reader({ session, locator, subscriptions });
     const first = reader.inputs.get();
@@ -455,8 +427,8 @@ export class Collector {
       throw e;
     }
     const stamped: Stamped = observable(
-      { document, from: first, writable: writableOf(document, []) },
-      { document: observableRef, from: false, writable: false },
+      { document, from: first },
+      { document: observableRef, from: false },
     );
     return observable(
       {
@@ -621,7 +593,6 @@ export class Collector {
       );
     stamped.document = next;
     stamped.from = moved;
-    stamped.writable = writableOf(next, stamped.writable);
     return next !== prior;
   }
 

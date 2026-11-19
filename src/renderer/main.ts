@@ -42,7 +42,6 @@ import type {
   StoredState,
   StoreWrite,
 } from "../renderer-interface/stored-state.js";
-import { HeldDocuments } from "./doctor-documents.js";
 import type { LinkSigner } from "../click/link-signer.js";
 import type { Locations } from "../config/loader/chain-places.js";
 import type { Gates } from "../daemon/foundations/gates.js";
@@ -67,7 +66,6 @@ import { NavigationHistory } from "./navigation-history.js";
 import { RenderWarningRecords } from "./render-warnings.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
-import { DoctorRuns } from "./doctor.js";
 import { sessionSource, type SessionSource } from "./session-source.js";
 import {
   configLoadedLine,
@@ -89,7 +87,6 @@ import {
   type Event,
   type PushedFrame,
   type Renderer,
-  type Subscription,
   type Subscriptions,
 } from "../renderer-interface/interface.js";
 import { ConfigWrites } from "./config-writes.js";
@@ -220,7 +217,7 @@ export function mainRenderer(
         return;
       }
       case "world-state":
-        parts.worldStates.take(event.worldState, record);
+        parts.worldStates.take(event.worldState);
         return;
       case "retire":
         // A context the session parked opens nothing once it is retired.
@@ -229,9 +226,6 @@ export function mainRenderer(
             p.event.kind !== "context" ||
             p.event.context.hookData.session_id !== event.session,
         );
-        // The run first: a teardown that throws leaves no run asking for a
-        // session the host has discarded.
-        parts.doctorRuns.retire(event.session);
         menuIdle.retire(event.session);
         retireSession(parts, event.session);
         return;
@@ -276,16 +270,8 @@ export function mainRenderer(
     }
   };
 
-  // The open views' subscriptions as they stand now. A session's doctor run
-  // is read whether or not a view of it is open: a view evicted or failed to
-  // open is no reason a run asked for goes unread.
   const subscribed = (): Subscriptions => {
     const views = parts.renderCache.subscriptions().sources;
-    const merged = new Map(
-      Object.entries(views) as Array<[SessionId, Subscription[]]>,
-    );
-    for (const [session, run] of parts.doctorRuns.subscriptions())
-      merged.set(session, [...(merged.get(session) ?? []), run]);
     // [LAW:one-source-of-truth] Read off the same open views: a session whose
     // view closes stops being named, so its switches go.
     const lanes: Record<SessionId, LaneSwitches> = {};
@@ -311,7 +297,7 @@ export function mainRenderer(
       configs.set(originKey(origin), origin);
     for (const { origin } of parked) configs.set(originKey(origin), origin);
     return {
-      sources: Object.fromEntries(merged) as Subscriptions["sources"],
+      sources: views,
       lanes,
       configs: [...configs.values()],
       // [LAW:one-source-of-truth] The tick the renderer next wants a turn
@@ -448,13 +434,11 @@ export function mainRendererOf(
     log,
     inputs.stored.history,
   );
-  const documents = new HeldDocuments(inputs.stored.doctor);
   // [LAW:one-source-of-truth] What the turn moved of every store, in the
   // order each store's entries last moved.
   const drained = (): StoreWrite[] => [
     ...sessionState.drain(),
     ...settingsHistory.drain(),
-    ...documents.drain(),
   ];
   let minted = 0;
   const mint = (): EffectId => ++minted as EffectId;
@@ -471,18 +455,7 @@ export function mainRendererOf(
   // [LAW:single-enforcer] What each session's renderers could not honour, as
   // their frames recorded it (src/renderer/render-warnings.ts).
   const renderWarnings = new RenderWarningRecords();
-  // [LAW:single-enforcer] Each session's doctor run, whose report is
-  // written once the host's reading of it arrives in a world state.
-  const doctorRuns = new DoctorRuns({
-    sessionState,
-    stores: documents.documents,
-    log,
-    failed: actFailed,
-  });
-  // The world states the host hands the renderer, which its views read.
-  const worldStates = new WorldStates((document, record) => {
-    doctorRuns.took(document, record);
-  });
+  const worldStates = new WorldStates();
   const renderCache = new RenderCache<SessionSource, CheckedRenderRequest>(
     {
       clock: time.clock,
@@ -578,22 +551,6 @@ export function mainRendererOf(
     log,
     acts,
     now,
-    doctorRuns,
-    // The load the session's bar is drawn from: its cache entry's load
-    // outcome, and what the config that entry renders left unused, over the
-    // snapshot the host follows (`startRun`).
-    doctorLoad: (origin) => {
-      const entry = renderCache.getOrCreate(origin);
-      return {
-        layers: entry.configLayers,
-        error: entry.lastError,
-        warnings: entry.lastWarnings,
-        repo: entry.snapshot.repo,
-        unused: entry.state.unused,
-        config: entry.state.config,
-      };
-    },
-    doctorStores: documents.documents,
     history: settingsHistory,
     navigation: navigationHistory,
     // The config a session's last render resolved from — the same entry the
@@ -649,7 +606,6 @@ export function mainRendererOf(
       verbs: verbsOver(verbCtx),
       mint,
       acts,
-      doctorRuns,
     },
     pushed,
     drained,

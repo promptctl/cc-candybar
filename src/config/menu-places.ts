@@ -21,7 +21,6 @@ export const TABS = [
   // `📐`, because `▦` is the preset control's glyph.
   { member: "layout", label: "📐 layout" },
   { member: "config", label: "⚙ config" },
-  { member: "tools", label: "🧰 tools" },
 ] as const;
 export type TabName = (typeof TABS)[number]["member"];
 // [LAW:types-are-the-program] Total over TABS: the one place the totality

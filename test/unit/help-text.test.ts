@@ -15,7 +15,6 @@ describe("HELP_TEXT", () => {
       "🎨 look",
       "📐 layout",
       "⚙ config",
-      "🧰 tools",
     ]) {
       expect(HELP_TEXT).toContain(tab);
     }

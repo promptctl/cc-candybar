@@ -42,7 +42,6 @@ import { resolvedStyle } from "./rich-theme.js";
 import { CONFIG_KEY_TO_EFFECTIVE_VAR } from "../config/setting-projections.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { Decor } from "../themes/decor.js";
-import type { GlyphMark } from "../doctor/checks.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -61,9 +60,6 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
-  VERB_DOCTOR_RUN,
-  VERB_DOCTOR_FIX,
-  VERB_DOCTOR_MARK,
   VERB_SLASH,
   VERB_RUN,
   type EvaluatedRun,
@@ -252,16 +248,6 @@ export type CompiledActionDecl =
     }
   // Save the session's look as the active theme's default.
   | { readonly kind: "theme-default-save"; readonly layer: LayerRole }
-  // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
-  // the check name is compiled in from the declaration (already gated against
-  // CHECKS at load), so the click carries only what the config declared.
-  | { readonly kind: "doctor-run" }
-  | { readonly kind: "doctor-fix"; readonly check: string }
-  | {
-      readonly kind: "doctor-mark";
-      readonly check: string;
-      readonly mark: GlyphMark;
-    }
   // The declared slash command, compiled in from the declaration.
   | { readonly kind: "slash"; readonly line: string }
   // [LAW:one-source-of-truth] A `run`: its program, arguments and environment
@@ -304,7 +290,7 @@ export interface ActionRuntime {
   bound: RenderBinding | undefined;
   compiled: CompiledActions;
   // [LAW:single-enforcer] What signs every `run` link this compile draws: the
-  // daemon's from the key file, check's and the doctor's from a per-process
+  // daemon's from the key file, and check's from a per-process
   // preview key whose links are refused when clicked, a test's from a fixed
   // key. There is one render path, and it always signs.
   readonly signer: LinkSigner;
@@ -622,16 +608,6 @@ function compileAction(
   if ("reset" in action) {
     return { kind: "reset", key: action.reset, layer: action.layer ?? "user" };
   }
-  if ("doctor" in action) {
-    switch (action.doctor) {
-      case "run":
-        return { kind: "doctor-run" };
-      case "fix":
-        return { kind: "doctor-fix", check: action.check };
-      case "mark":
-        return { kind: "doctor-mark", check: action.check, mark: action.mark };
-    }
-  }
   if ("slash" in action) return { kind: "slash", line: action.slash };
   if ("run" in action) {
     return {
@@ -720,9 +696,6 @@ export function bindsTemplateValue(c: CompiledActionDecl): boolean {
     case "preset-save":
     case "preset-delete":
     case "theme-default-save":
-    case "doctor-run":
-    case "doctor-fix":
-    case "doctor-mark":
     case "slash":
     case "run":
     case "do":
@@ -1050,25 +1023,6 @@ export function realize(
             verb: VERB_DELETE_PRESET,
             args: [sessionId, c.layer, evalTemplate(c.name, buildScope(store))],
           },
-        ],
-        active: false,
-      };
-    // Never "active": running the doctor and applying a fix are one-shot
-    // triggers; the report they produce is state the ROW segments read.
-    case "doctor-run":
-      return {
-        effects: [{ verb: VERB_DOCTOR_RUN, args: [sessionId] }],
-        active: false,
-      };
-    case "doctor-fix":
-      return {
-        effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId, c.check] }],
-        active: false,
-      };
-    case "doctor-mark":
-      return {
-        effects: [
-          { verb: VERB_DOCTOR_MARK, args: [sessionId, c.check, c.mark] },
         ],
         active: false,
       };
