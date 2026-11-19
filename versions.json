@@ -4,15 +4,15 @@
     {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "4680c55df0a0905e549e817bb85a273c8c6dc221",
-      "timestamp": "2026-11-19T21:24:54.502Z",
+      "sha": "21ad3ab8defc9a580a0798d45c3295daef3e11e7",
+      "timestamp": "2026-11-19T21:31:12.138Z",
       "commits": [
         {
-          "sha": "4680c55df0a0905e549e817bb85a273c8c6dc221",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:23:52-07:00",
-          "message": "fix(renderer): keep writes and failures attached to their turn (#908)\n\n* fix(renderer): preserve each turn's failure and collected results\n\n* fix(renderer): keep pending cleanup and encode push failures"
+          "sha": "21ad3ab8defc9a580a0798d45c3295daef3e11e7",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T21:30:04Z",
+          "message": "chore(release): set `package.json` to 1.235.13\n\n## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** keep writes and failures attached to their turn ([#908](https://github.com/promptctl/cc-candybar/issues/908)) ([4680c55](https://github.com/promptctl/cc-candybar/commit/4680c55df0a0905e549e817bb85a273c8c6dc221))\n"
         }
       ]
     },
