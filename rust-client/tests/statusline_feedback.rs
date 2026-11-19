@@ -1,10 +1,10 @@
 use serde_json::{json, Value};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::UnixListener;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 const WAIT: &str = "\x1b[1mCandybar · waiting for daemon…\x1b[0m\n";
 const DEFAULT_TIMEOUT: &str =
@@ -18,14 +18,17 @@ struct Client {
 
 impl Client {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        // Keep the private socket within the Unix pathname length limit.
-        let home = PathBuf::from(format!("/tmp/ccb-feedback-{}-{nonce}", std::process::id()));
-        fs::create_dir(&home).unwrap();
-        Self { home }
+        // Reserve a short socket directory atomically, even when both tests
+        // start on the same clock tick or a previous run left a directory.
+        let mut slot = 0;
+        loop {
+            let home = PathBuf::from(format!("/tmp/ccb-feedback-{}-{slot}", std::process::id()));
+            match fs::create_dir(&home) {
+                Ok(()) => return Self { home },
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => slot += 1,
+                Err(error) => panic!("cannot create {}: {error}", home.display()),
+            }
+        }
     }
 
     fn cache(&self) -> PathBuf {
