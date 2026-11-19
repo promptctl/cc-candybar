@@ -85906,7 +85906,7 @@ var ManagedStorage = class {
   files;
   sessions;
   // [LAW:one-source-of-truth] By folder: what the owner knows of each folder
-  // a hold names.
+  // a loaded config declares.
   folders = /* @__PURE__ */ new Map();
   // By folder: the faults last logged and counted, so each is told once as it
   // starts, changes and clears.
@@ -85965,13 +85965,14 @@ var ManagedStorage = class {
         changed.add(folder);
     for (const folder of this.folders.keys()) {
       if (wanted.has(folder)) continue;
-      this.moved(folder, void 0);
+      if (this.moved(folder, void 0)) changed.add(folder);
     }
     this.refreshFolders(changed);
   }
   // A physical config observation retries only the retained plugin folders it
   // observed. A renderer redraw or another holder joining reads no directory.
   recheck(observed2) {
+    if (this.closed) return;
     const held = [...observed2].filter((folder) => this.folders.has(folder));
     this.refreshFolders(this.reconcile(held, "config"));
   }
@@ -85979,8 +85980,8 @@ var ManagedStorage = class {
   // A generation's folder is read, never made: a stat that fails keeps the
   // generation, and the registry judges its watch again, as it does for an
   // acquire joining the slot, so a deaf watch reopens on the owner's own
-  // triggers. A folder found gone or replaced is lost, except at a hold, which
-  // makes it again at once. Any other state is made and read again, and a
+  // triggers. A config observation reprovisions a missing or replaced folder
+  // immediately. Any other state is made and read again, and a
   // folder made opens its next generation's watch before any old one closes.
   asked(folder, trigger) {
     const was = this.folders.get(folder);
@@ -86005,8 +86006,8 @@ var ManagedStorage = class {
     return changed;
   }
   // A session's declaration of one session's file: held at (folder, session
-  // id) until the session's next declaration takes it no more. A folder no
-  // hold names has no standing failure: its file reads the path.
+  // id) until the session's next declaration takes it no more. If its folder
+  // demand leaves first, the remaining lane refreshes as absent.
   declare(holds2, folder, sessionId2) {
     return this.sessions.declare(holds2, { folder, sessionId: sessionId2 });
   }
@@ -86213,11 +86214,8 @@ var ManagedStorage = class {
     }
   }
   // The folder's standing failure, which every source in it reads first:
-  // every fault standing, else the stall. A folder no hold names has none:
-  // its files read the path.
-  standing(folder) {
-    const state = this.folders.get(folder);
-    if (state === void 0) return null;
+  // every fault standing, else the stall.
+  standing(folder, state) {
     const faults = faultsOf(state);
     const reasons = SOURCES.flatMap((source) => {
       const fault = faults[source];
@@ -86229,7 +86227,9 @@ var ManagedStorage = class {
     return stall === null ? null : `cannot refresh: ${folder}: ${stall}`;
   }
   async read(f, signal) {
-    const fault = this.standing(f.folder);
+    const state = this.folders.get(f.folder);
+    if (state === void 0) return ABSENT2;
+    const fault = this.standing(f.folder, state);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     const read2 = await this.files.read(file, signal);
@@ -90603,7 +90603,7 @@ var ConfigDiscovery = class {
     this.watches = deps.watchers.batch(() => {
       const keys2 = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys2, "config-watch");
+      this.heard(keys2, "config-watch", "observed");
     });
   }
   deps;
@@ -90642,6 +90642,35 @@ var ConfigDiscovery = class {
       landed: (files) => this.landed(renderer, files)
     };
   }
+  // [LAW:single-enforcer] Only discoveries held by this renderer can
+  // introduce a folder. A still-declared folder can outlive a discovery when
+  // a last-good or retired in-flight config uses it. Once let go, that prior
+  // admission gives no authority to acquire it anew.
+  admitManagedFolders(renderer, requested, previous2) {
+    if (this.closed) return /* @__PURE__ */ new Set();
+    const wanted = new Set(requested);
+    if (previous2?.size === wanted.size && [...wanted].every((f) => previous2.has(f)))
+      return previous2;
+    const admitted = /* @__PURE__ */ new Set();
+    const take = (known) => {
+      for (const folder of wanted)
+        if (known.has(folder)) {
+          wanted.delete(folder);
+          admitted.add(folder);
+        }
+    };
+    if (previous2 !== void 0) take(previous2);
+    for (const followed of this.followed.values()) {
+      if (wanted.size === 0) break;
+      if (!followed.renderers.has(renderer)) continue;
+      take(followed.managedFolders);
+      const retained = this.retainedOf(renderer, followed.origin);
+      if (retained === "current" || retained === void 0) continue;
+      const observation = this.observations.get(retained);
+      if (observation !== void 0) take(observation.managedFolders);
+    }
+    return admitted;
+  }
   // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
   // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
@@ -90651,7 +90680,7 @@ var ConfigDiscovery = class {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
-      const snapshots = [];
+      const observed2 = [];
       for (const [key, origin] of fresh) {
         const found2 = this.discovered(origin, shared, null);
         this.followed.set(key, {
@@ -90659,9 +90688,9 @@ var ConfigDiscovery = class {
           renderers: /* @__PURE__ */ new Set([renderer]),
           selected: /* @__PURE__ */ new Map()
         });
-        snapshots.push(found2.snapshot);
+        observed2.push(found2);
       }
-      this.reloaded(snapshots);
+      this.reloaded(observed2);
     }
     let released = 0;
     for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
@@ -90728,12 +90757,15 @@ var ConfigDiscovery = class {
     const touched = [...this.followed].filter(
       ([, { filePaths }]) => filePaths.some((file) => changed.has(file))
     ).map(([key]) => key);
-    return this.publish(this.rediscovered(touched, "landed"), writer);
+    return this.publish(
+      this.rediscovered(touched, "landed", "observed"),
+      writer
+    );
   }
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why) {
-    this.heard([...this.followed.keys()], why);
+    this.heard([...this.followed.keys()], why, "moved");
   }
   close() {
     if (this.closed) return;
@@ -90745,9 +90777,9 @@ var ConfigDiscovery = class {
   }
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  heard(keys2, why) {
+  heard(keys2, why, recover) {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys2, why), null);
+    this.publish(this.rediscovered(keys2, why, recover), null);
   }
   // [LAW:single-enforcer] The snapshot's current holders define recipients
   // for both a watch and a landed write. Only the writer already has a slot.
@@ -90766,10 +90798,11 @@ var ConfigDiscovery = class {
   // [LAW:single-enforcer] The one batch that discovers followed origins again:
   // one read of what they share, each origin's watch following where its
   // config can change now. Answers those whose snapshot digests anew.
-  rediscovered(keys2, why) {
+  rediscovered(keys2, why, recover) {
     if (keys2.length === 0) return [];
     const shared = this.batch();
     const moved2 = [];
+    const observed2 = [];
     for (const key of keys2) {
       const was = this.followed.get(key);
       if (was === void 0) continue;
@@ -90782,6 +90815,7 @@ var ConfigDiscovery = class {
           selected: was.selected
         };
         this.followed.set(key, now2);
+        observed2.push(now2);
         if (now2.digest !== was.digest) moved2.push(now2);
       } catch (thrown2) {
         this.deps.log(
@@ -90794,15 +90828,14 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys2.length} moved=${moved2.length}`
     );
-    if (moved2.length > 0) this.reloaded(moved2.map(({ snapshot }) => snapshot));
+    this.reloaded(recover === "observed" ? observed2 : moved2);
     return moved2;
   }
-  reloaded(snapshots) {
+  reloaded(observed2) {
     if (this.deps.reloaded === void 0) return;
     const folders = /* @__PURE__ */ new Set();
-    for (const snapshot of snapshots)
-      for (const { definition } of pluginFiles(snapshot))
-        if (definition.kind === "text") folders.add(definition.storage);
+    for (const { managedFolders } of observed2)
+      for (const folder of managedFolders) folders.add(folder);
     if (folders.size > 0) this.deps.reloaded(folders);
   }
   // [LAW:single-enforcer] The observation supplied to a poll watch comes
@@ -90857,7 +90890,17 @@ var ConfigDiscovery = class {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
     };
-    const observed2 = { origin, snapshot, digest: digestOf(snapshot) };
+    const managedFolders = new Set(
+      pluginFiles(snapshot).flatMap(
+        ({ definition }) => definition.kind === "text" ? [definition.storage] : []
+      )
+    );
+    const observed2 = {
+      origin,
+      snapshot,
+      digest: digestOf(snapshot),
+      managedFolders
+    };
     this.observations.set(snapshot, observed2);
     return {
       ...observed2,
@@ -91233,8 +91276,12 @@ function createDaemon(inputs) {
     const folders = /* @__PURE__ */ new Set();
     for (const [name, subscription2] of declared) {
       for (const folder of subscription2.managedFolders) folders.add(folder);
-      for (const [id2, values2] of Object.entries(subscription2.sources))
-        if (nameOf2(id2) === name) sources[id2] = values2;
+      for (const [id2, values2] of Object.entries(subscription2.sources)) {
+        if (nameOf2(id2) !== name) continue;
+        sources[id2] = values2.filter(
+          (source) => source.kind !== "plugin" || subscription2.managedFolders.has(source.folder)
+        );
+      }
       for (const [id2, values2] of Object.entries(subscription2.lanes))
         if (nameOf2(id2) === name) lanes[id2] = values2;
     }
@@ -91305,9 +91352,14 @@ function createDaemon(inputs) {
       log,
       {
         subscribed: (subscriptions) => {
+          const managedFolders = configDiscovery.admitManagedFolders(
+            name,
+            subscriptions.managedFolders,
+            declared.get(name)?.managedFolders
+          );
           declared.set(name, {
             sources: subscriptions.sources,
-            managedFolders: subscriptions.managedFolders,
+            managedFolders,
             lanes: subscriptions.lanes
           });
           aggregate();

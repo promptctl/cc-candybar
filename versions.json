@@ -4,15 +4,43 @@
     {
       "version": "pr-909",
       "ref": "refs/pull/909/merge",
-      "sha": "bc94a2eb3f67c68f7f6511933c7bb07b17be5283",
-      "timestamp": "2026-11-19T21:32:11.632Z",
+      "sha": "1415547675e12cc2ffe2f7af4e4c9c094dda7e5f",
+      "timestamp": "2026-11-19T21:36:47.379Z",
       "commits": [
         {
-          "sha": "bc94a2eb3f67c68f7f6511933c7bb07b17be5283",
+          "sha": "1415547675e12cc2ffe2f7af4e4c9c094dda7e5f",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T21:31:00Z",
-          "message": "Merge c99c5254a1d5f7cf7862cd0b8bade53d8f6c9161 into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+          "timestamp": "2026-11-19T21:36:01Z",
+          "message": "Merge adf00f488a833ffcab804db5cbada687da0c32ab into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+        },
+        {
+          "sha": "adf00f488a833ffcab804db5cbada687da0c32ab",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:35:46-07:00",
+          "message": "fix(protocol): distinguish worktree builds that carry selected config\n"
+        },
+        {
+          "sha": "725e10af02cffbcbdd977d72fa299d0b8d0a8b45",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:33:31-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/managed-source-declarations\n"
+        },
+        {
+          "sha": "f0401b818e6620b82f42b84fc07bec8c037df309",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:33:09-07:00",
+          "message": "fix(host): admit managed sources through renderer discoveries\n"
+        },
+        {
+          "sha": "6566dd14fe6f9a25af31f103d5ef73b5c5cf43c2",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:33:30-07:00",
+          "message": "test(renderer): replay the boundary before removing the last callbacks\n"
         },
         {
           "sha": "c99c5254a1d5f7cf7862cd0b8bade53d8f6c9161",
