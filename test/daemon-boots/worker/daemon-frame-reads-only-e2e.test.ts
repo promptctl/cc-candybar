@@ -1,142 +1,159 @@
-// brandon-unfiled-3248.8ro6, measured on a daemon: every input refreshes
-// on its own clock, and drawing a frame only reads. A feed draws a moving bar
-// many times a second between a session's statusline requests; across those
-// frames no source refreshes but the ones whose own period fell due, so a
-// `shell` variable with a 5 s `ttl` runs once per 5 s however fast the bar is
-// drawn, never once per frame.
-
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { decodeAnsi } from "@promptctl/rich-js";
 
-import { openFrameStream, type FrameStream } from "../../../src/daemon/client-frames";
-import type { SourceRecord } from "../../../src/utils/refresh-ledger";
-import { render } from "../../helpers/daemon-e2e";
-import { until } from "../../helpers/until";
-import { startDaemon, statsOf, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import {
-  prepareIsolatedDaemonEnv,
-} from "../../helpers/spawn-isolated-daemon";
+  openFrameStream,
+  type FrameStream,
+  type StreamEnd,
+} from "../../../src/daemon/client-frames";
+import { plainEnvironment } from "../../../src/daemon/foundations/session-env";
+import { exits, shell } from "../../../src/proc/spawner-fake";
+import { textOf } from "../../../src/render/frame";
+import { FEED_PERIODS } from "../../../src/renderer/feeds";
+import { frameRequest, renderBody } from "../../helpers/daemon-e2e";
+import { fakeLauncher, type FakeLauncher } from "../../helpers/fake-launcher";
+import { heldClock } from "../../helpers/held-clock";
+import {
+  startDaemon,
+  statsOf,
+  type InWorkerDaemon,
+} from "../../helpers/in-worker-daemon";
+import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
+import { until } from "../../helpers/until";
 
-jest.setTimeout(30_000);
+const TTL_MS = 5_000;
+const COMMAND = "printf sample";
+const FIRST = "source-before-ttl";
+const SECOND = "source-after-ttl";
 
-const TTL_S = 5;
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-// Each source's refreshes summed over its triggers.
-const refreshesOf = (r: SourceRecord): number =>
-  Object.values(r.refreshes).reduce((sum, n) => sum + (n ?? 0), 0);
-
-describe("drawing a frame only reads", () => {
-  let sockPath: string;
-  let removeTmpDirs: () => void;
-  let projectDir: string;
-  let runs: string;
-  let daemon: InWorkerDaemon;
-
-  beforeAll(async () => {
-    const prepared = prepareIsolatedDaemonEnv("cc-candybar-reads-only-e2e");
-    ({ sockPath, removeTmpDirs } = prepared);
-    projectDir = mkdtempSync(path.join(os.tmpdir(), "cc-candybar-reads-only-"));
-    runs = path.join(projectDir, "runs");
-    writeFileSync(runs, "");
-    // A bar that moves (sparkle), reads a shell source on a 5 s period, and
-    // reads the session lanes a request refreshes.
+// [LAW:behavior-not-structure] A moving pane can deliver many frames while
+// missing a source update. Both phases must visibly carry the source's value.
+test("a moving pane reads the same source until its host period refreshes it", async () => {
+  const isolated = prepareIsolatedDaemonEnv("ccb-reads-only");
+  const projectDir = mkdtempSync(path.join(os.tmpdir(), "ccb-reads-only-"));
+  const clock = heldClock(new Date());
+  let daemon: InWorkerDaemon | undefined;
+  let stream: FrameStream | undefined;
+  try {
+    const config = path.join(projectDir, "bar.json5");
     writeFileSync(
-      path.join(projectDir, "bar.json5"),
+      config,
       `{
-        globals: { effect: "sparkle", experimentalStatusline: true },
-        variables: {
-          counted: {
-            kind: "shell",
-            command: ${JSON.stringify(`echo run >> ${runs}; echo counted`)},
-            cache: { ttl: "${TTL_S}s" },
-          },
-        },
-        segments: {
-          shell: { template: '{{ .counted }}' },
-          lanes: { template: 'a moving mark {{ .metrics.messageCount }} {{ .session.cost }}' },
-        },
-        root: { h: ['shell', 'lanes'] },
-      }`,
+      globals: { experimentalPane: true },
+      variables: {
+        sample: { kind: "shell", command: ${JSON.stringify(COMMAND)}, cache: { ttl: "${TTL_MS / 1000}s" } },
+      },
+      segments: {
+        sample: { template: '{{ .sample }} {{ frames 0.05 "phase-a" 0.05 "phase-b" }}' },
+        lanes: { template: '{{ .metrics.messageCount }} {{ .session.cost }}' },
+      },
+      root: { h: ['sample', 'lanes'] },
+    }`,
     );
-    daemon = startDaemon(prepared.env);
-    await daemon.listen(sockPath);
-  });
 
-  afterAll(async () => {
+    let launcher: FakeLauncher | undefined;
+    const matches = shell(COMMAND);
+    daemon = startDaemon(isolated.env, {
+      clock,
+      launcher: (owner) => {
+        launcher = fakeLauncher(clock, owner);
+        launcher.spawner.program(matches, exits(0, `${FIRST}\n`));
+        return launcher.launcher;
+      },
+    });
+    if (launcher === undefined) throw new Error("the daemon built no launcher");
+    const { started, spawner } = launcher;
+    const reads = () =>
+      started().filter(({ bin, args }) => matches(bin, args)).length;
+    await daemon.listen(isolated.sockPath);
+
+    const session = "reads-only";
+    const request = renderBody(session, projectDir, {}, [
+      "cc-candybar",
+      "--config-only",
+      config,
+    ]);
+    const firstRead = async () => {
+      await until(() => reads() > 0, "the first shell read");
+      await clock.settle(0);
+    };
+    const [first] = await Promise.all([
+      frameRequest(daemon, { ...request, env: plainEnvironment({}) }),
+      firstRead(),
+    ]);
+    expect(textOf(first)).toContain(FIRST);
+
+    const received: string[] = [];
+    let ended: StreamEnd | undefined;
+    stream = openFrameStream(
+      isolated.sockPath,
+      session,
+      "pane",
+      (response) => {
+        if (!response.ok || !("output" in response))
+          throw new Error(
+            `expected a drawn pane frame: ${JSON.stringify(response)}`,
+          );
+        received.push(decodeAnsi(response.output).plain);
+      },
+      (end) => {
+        ended = end;
+      },
+    );
+    const live = (condition: () => boolean) => {
+      if (ended !== undefined)
+        throw new Error(
+          `pane subscription ended: ${ended.kind === "failed" ? ended.error.message : JSON.stringify(ended)}`,
+        );
+      return condition();
+    };
+    await until(async () => {
+      await clock.settle(0);
+      return live(() => received.length > 0);
+    }, "the pane's first frame");
+
+    const before = (await statsOf(daemon.daemon)).sources.records;
+    spawner.program(matches, exits(0, `${SECOND}\n`));
+    await clock.settle(TTL_MS - 1);
+    const shows = (text: string) =>
+      received.some((frame) => frame.includes(text));
+    await until(
+      () => live(() => shows("phase-a") && shows("phase-b")),
+      "both visible animation phases before the TTL",
+    );
+    expect(reads()).toBe(1);
+    for (const frame of received) expect(frame).toContain(FIRST);
+
+    await clock.settle(1);
+    expect(reads()).toBe(2);
+    await clock.settle(FEED_PERIODS.still);
+    await until(
+      () => live(() => shows(SECOND)),
+      () =>
+        `the refreshed shell value in the pane (last frame: ${received.at(-1)})`,
+    );
+
+    const after = (await statsOf(daemon.daemon)).sources.records;
+    for (const { name, scope, refreshes } of after) {
+      const previous = before.find(
+        (record) => record.name === name && record.scope === scope,
+      );
+      const { period: _period, ...other } = refreshes;
+      const { period: _previousPeriod, ...prior } = previous?.refreshes ?? {};
+      expect({ source: `${scope}/${name}`, other }).toEqual({
+        source: `${scope}/${name}`,
+        other: prior,
+      });
+    }
+    expect(
+      after.find(({ name }) => name === "source.shell")?.refreshes,
+    ).toMatchObject({ first: 1, period: 1 });
+  } finally {
+    stream?.close();
     await daemon?.stop();
     rmSync(projectDir, { recursive: true, force: true });
-    removeTmpDirs();
-  });
-
-  test("a feed's frames between requests refresh no source; a 5 s ttl shell runs once per 5 s", async () => {
-    const args = ["cc-candybar", "--config", path.join(projectDir, "bar.json5")];
-    const sessionId = "reads-only";
-    await render(sockPath, sessionId, projectDir, {}, args);
-    const ranAt = (): number =>
-      readFileSync(runs, "utf8").split("\n").filter(Boolean).length;
-    await until(() => ranAt() >= 1, "the shell's first run");
-
-    let frames = 0;
-    let stream: FrameStream | null = null;
-    const open = (): FrameStream =>
-      openFrameStream(
-        sockPath,
-        sessionId,
-        "statusline",
-        () => frames++,
-        (end) => {
-          // A daemon too busy to take the subscribe inside its budget answers
-          // TIMEOUT; a subscriber opens another.
-          if (end.kind === "refused" && end.resp.code === "TIMEOUT")
-            stream = open();
-        },
-      );
-    stream = open();
-    try {
-      await until(() => frames > 0, "the feed's first frame");
-      const before = await statsOf(daemon.daemon);
-      // One period of the shell, and a second beyond it: the bar is drawn many
-      // times a second throughout, and no request arrives.
-      await sleep((TTL_S + 1) * 1000);
-      const after = await statsOf(daemon.daemon);
-
-      const drawn = after.frameFeeds.drawn - before.frameFeeds.drawn;
-      // 30 a second while the bar moves; a fifth of that leaves room for a
-      // slow CI box, and is far past one frame per period.
-      expect(drawn).toBeGreaterThanOrEqual(6 * (TTL_S + 1));
-
-      // The shell ran its first read and at most one period's since: once per
-      // 5 s, however many frames read it.
-      expect(ranAt()).toBeGreaterThanOrEqual(1);
-      expect(ranAt()).toBeLessThanOrEqual(2);
-
-      // [LAW:verifiable-goals] Every refresh the window saw was a period
-      // falling due: no request, first read, change or supersede ran, so no
-      // frame refreshed anything.
-      const moved = after.sources.records.flatMap((r) => {
-        const prior = before.sources.records.find(
-          (b) => b.name === r.name && b.scope === r.scope,
-        );
-        const by = Object.entries(r.refreshes).flatMap(([trigger, n]) => {
-          const was = prior?.refreshes[trigger as keyof typeof r.refreshes] ?? 0;
-          return (n ?? 0) > was ? [`${r.scope}/${r.name}:${trigger}`] : [];
-        });
-        return by;
-      });
-      for (const m of moved) expect(m).toMatch(/:period$/u);
-      // The shell's runs are the daemon's one shell record (one per read
-      // kind), and this config declares the one shell source.
-      const shell = after.sources.records.find(
-        (r) => r.name === "source.shell",
-      );
-      expect(shell).toMatchObject({ scope: "daemon" });
-      expect(refreshesOf(shell!)).toBe(ranAt());
-    } finally {
-      (stream as FrameStream | null)?.close();
-    }
-  });
+    isolated.removeTmpDirs();
+  }
 });
