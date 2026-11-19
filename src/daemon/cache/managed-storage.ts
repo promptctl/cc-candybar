@@ -295,7 +295,7 @@ export class ManagedStorage {
         changed.add(folder);
     for (const folder of this.folders.keys()) {
       if (wanted.has(folder)) continue;
-      this.moved(folder, undefined);
+      if (this.moved(folder, undefined)) changed.add(folder);
     }
     this.refreshFolders(changed);
   }
@@ -344,8 +344,8 @@ export class ManagedStorage {
   }
 
   // A session's declaration of one session's file: held at (folder, session
-  // id) until the session's next declaration takes it no more. A folder no
-  // hold names has no standing failure: its file reads the path.
+  // id) until the session's next declaration takes it no more. If its folder
+  // demand leaves first, the remaining lane refreshes as absent.
   declare(holds: Holds, folder: string, sessionId: SessionId): Lane<JsonValue> {
     return this.sessions.declare(holds, { folder, sessionId });
   }
@@ -576,11 +576,8 @@ export class ManagedStorage {
   }
 
   // The folder's standing failure, which every source in it reads first:
-  // every fault standing, else the stall. A folder no hold names has none:
-  // its files read the path.
-  private standing(folder: string): string | null {
-    const state = this.folders.get(folder);
-    if (state === undefined) return null;
+  // every fault standing, else the stall.
+  private standing(folder: string, state: Folder): string | null {
     const faults = faultsOf(state);
     const reasons = SOURCES.flatMap((source) => {
       const fault = faults[source];
@@ -600,7 +597,11 @@ export class ManagedStorage {
     f: SessionFile,
     signal: AbortSignal,
   ): Promise<Outcome<JsonValue>> {
-    const fault = this.standing(f.folder);
+    // [LAW:single-enforcer] A remaining file lane cannot keep reading after
+    // the last config holding its folder leaves.
+    const state = this.folders.get(f.folder);
+    if (state === undefined) return ABSENT;
+    const fault = this.standing(f.folder, state);
     if (fault !== null) return failed(fault, "read");
     const file = fileOf(f);
     const read = await this.files.read(file, signal);

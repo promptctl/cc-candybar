@@ -48,6 +48,7 @@ interface ObservedConfig {
   readonly origin: RenderOrigin;
   readonly snapshot: ConfigSnapshot;
   readonly digest: string;
+  readonly managedFolders: ReadonlySet<string>;
 }
 
 // One origin followed: what discovery found there last, and the watch over
@@ -118,7 +119,7 @@ export class ConfigDiscovery {
     this.watches = deps.watchers.batch(() => {
       const keys = [...this.invalidated];
       this.invalidated.clear();
-      this.heard(keys, "config-watch");
+      this.heard(keys, "config-watch", "observed");
     });
   }
 
@@ -156,6 +157,43 @@ export class ConfigDiscovery {
     };
   }
 
+  // [LAW:single-enforcer] Only discoveries held by this renderer can
+  // introduce a folder. A still-declared folder can outlive a discovery when
+  // a last-good or retired in-flight config uses it. Once let go, that prior
+  // admission gives no authority to acquire it anew.
+  admitManagedFolders(
+    renderer: RendererName,
+    requested: readonly string[],
+    previous: ReadonlySet<string> | undefined,
+  ): ReadonlySet<string> {
+    if (this.closed) return new Set();
+    const wanted = new Set(requested);
+    if (
+      previous?.size === wanted.size &&
+      [...wanted].every((f) => previous.has(f))
+    )
+      return previous;
+    const admitted = new Set<string>();
+    const take = (known: ReadonlySet<string>): void => {
+      for (const folder of wanted)
+        if (known.has(folder)) {
+          wanted.delete(folder);
+          admitted.add(folder);
+        }
+    };
+    if (previous !== undefined) take(previous);
+    for (const followed of this.followed.values()) {
+      if (wanted.size === 0) break;
+      if (!followed.renderers.has(renderer)) continue;
+      take(followed.managedFolders);
+      const retained = this.retainedOf(renderer, followed.origin);
+      if (retained === "current" || retained === undefined) continue;
+      const observation = this.observations.get(retained);
+      if (observation !== undefined) take(observation.managedFolders);
+    }
+    return admitted;
+  }
+
   // [LAW:single-enforcer] Only this renderer's demands are replaced. Acquire
   // any new watches in one batch before releasing the final holds, so a
   // directory both name keeps its OS handle.
@@ -168,7 +206,7 @@ export class ConfigDiscovery {
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
       const shared = this.batch();
-      const snapshots: ConfigSnapshot[] = [];
+      const observed: ObservedConfig[] = [];
       for (const [key, origin] of fresh) {
         const found = this.discovered(origin, shared, null);
         this.followed.set(key, {
@@ -176,9 +214,9 @@ export class ConfigDiscovery {
           renderers: new Set([renderer]),
           selected: new Map(),
         });
-        snapshots.push(found.snapshot);
+        observed.push(found);
       }
-      this.reloaded(snapshots);
+      this.reloaded(observed);
     }
     let released = 0;
     for (const [key, { renderers, selected, watch }] of this.followed) {
@@ -276,13 +314,16 @@ export class ConfigDiscovery {
         filePaths.some((file) => changed.has(file)),
       )
       .map(([key]) => key);
-    return this.publish(this.rediscovered(touched, "landed"), writer);
+    return this.publish(
+      this.rediscovered(touched, "landed", "observed"),
+      writer,
+    );
   }
 
   // [LAW:no-silent-failure] Every origin is discovered again, for `why`: what
   // a span of file events the OS did not deliver may have changed.
   again(why: string): void {
-    this.heard([...this.followed.keys()], why);
+    this.heard([...this.followed.keys()], why, "moved");
   }
 
   close(): void {
@@ -296,9 +337,13 @@ export class ConfigDiscovery {
 
   // A watch heard `keys`' origins may have changed: those whose snapshot
   // moved go to the renderer.
-  private heard(keys: readonly string[], why: string): void {
+  private heard(
+    keys: readonly string[],
+    why: string,
+    recover: "observed" | "moved",
+  ): void {
     if (this.closed) return;
-    this.publish(this.rediscovered(keys, why), null);
+    this.publish(this.rediscovered(keys, why, recover), null);
   }
 
   // [LAW:single-enforcer] The snapshot's current holders define recipients
@@ -325,10 +370,12 @@ export class ConfigDiscovery {
   private rediscovered(
     keys: readonly string[],
     why: string,
+    recover: "observed" | "moved",
   ): readonly Followed[] {
     if (keys.length === 0) return [];
     const shared = this.batch();
     const moved: Followed[] = [];
+    const observed: ObservedConfig[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
       if (was === undefined) continue;
@@ -344,6 +391,7 @@ export class ConfigDiscovery {
           selected: was.selected,
         };
         this.followed.set(key, now);
+        observed.push(now);
         if (now.digest !== was.digest) moved.push(now);
       } catch (thrown) {
         this.deps.log(
@@ -356,16 +404,17 @@ export class ConfigDiscovery {
       "info",
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length}`,
     );
-    if (moved.length > 0) this.reloaded(moved.map(({ snapshot }) => snapshot));
+    // A targeted watch or write can retry even if the snapshot is unchanged.
+    // A broad catch-up already has its own storage recovery trigger.
+    this.reloaded(recover === "observed" ? observed : moved);
     return moved;
   }
 
-  private reloaded(snapshots: readonly ConfigSnapshot[]): void {
+  private reloaded(observed: readonly ObservedConfig[]): void {
     if (this.deps.reloaded === undefined) return;
     const folders = new Set<string>();
-    for (const snapshot of snapshots)
-      for (const { definition } of pluginFiles(snapshot))
-        if (definition.kind === "text") folders.add(definition.storage);
+    for (const { managedFolders } of observed)
+      for (const folder of managedFolders) folders.add(folder);
     if (folders.size > 0) this.deps.reloaded(folders);
   }
 
@@ -435,7 +484,17 @@ export class ConfigDiscovery {
       ...found.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch }, null),
     };
-    const observed = { origin, snapshot, digest: digestOf(snapshot) };
+    const managedFolders = new Set(
+      pluginFiles(snapshot).flatMap(({ definition }) =>
+        definition.kind === "text" ? [definition.storage] : [],
+      ),
+    );
+    const observed = {
+      origin,
+      snapshot,
+      digest: digestOf(snapshot),
+      managedFolders,
+    };
     this.observations.set(snapshot, observed);
     return {
       ...observed,

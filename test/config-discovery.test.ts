@@ -827,11 +827,13 @@ function physicalDiscovery(
     dataDirs = [],
     state = path.join(root, "state"),
     clock = heldClock(new Date()),
+    reloaded,
   }: {
     opens?: string[];
     dataDirs?: readonly string[];
     state?: string;
     clock?: ReturnType<typeof heldClock>;
+    reloaded?: (folders: ReadonlySet<string>) => void;
   } = {},
 ) {
   const watchers = new WatcherRegistry({
@@ -845,6 +847,7 @@ function physicalDiscovery(
     openText: countingText(reads, opens),
     log: () => {},
     moved: () => {},
+    reloaded,
   });
   cleanups.push(
     () => watchers.closeAll(),
@@ -852,6 +855,80 @@ function physicalDiscovery(
   );
   return service;
 }
+
+test("managed folders are admitted by each renderer's own discoveries and remain only while declared", () => {
+  const a = named("a", '{ plugins: ["widget/plugin.json5"] }');
+  const b = named("b", '{ plugins: ["widget/plugin.json5"] }');
+  const aPlugin = project("a/widget");
+  const bPlugin = project("b/widget");
+  for (const plugin of [aPlugin, bPlugin])
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), "{ name: 'widget' }");
+
+  const aFolder = path.join(aPlugin, "session");
+  const bFolder = path.join(bPlugin, "session");
+  const wanted = [aFolder, bFolder, path.join(root, "unsolicited")];
+  const reads: string[] = [];
+  const reloaded: ReadonlySet<string>[] = [];
+  const clock = heldClock(new Date());
+  const service = physicalDiscovery(project("empty-data"), reads, {
+    clock,
+    reloaded: (observed) => reloaded.push(observed),
+  });
+  const sibling = rendererNameOf("sibling");
+  const main = service.forRenderer(MAIN_RENDERER);
+  main.follow([a.origin]);
+  service.forRenderer(sibling).follow([b.origin]);
+
+  const readCount = reads.length;
+  const mainFolders = service.admitManagedFolders(
+    MAIN_RENDERER,
+    wanted,
+    undefined,
+  );
+  expect(mainFolders).toEqual(new Set([aFolder]));
+  expect(service.admitManagedFolders(sibling, wanted, undefined)).toEqual(
+    new Set([bFolder]),
+  );
+  expect(
+    service.admitManagedFolders(MAIN_RENDERER, [aFolder], mainFolders),
+  ).toBe(mainFolders);
+  expect(reads).toHaveLength(readCount);
+
+  // An unchanged config observation still reaches the fault recovery owner.
+  const observed = main.snapshotOf(a.origin);
+  reloaded.length = 0;
+  const changedAt = new Date("2021-01-01T00:00:00.000Z");
+  fs.utimesSync(a.file, changedAt, changedAt);
+  clock.advance(POLL_MS + DEBOUNCE_MS);
+  expect(main.snapshotOf(a.origin)).toBe(observed);
+  expect(reloaded).toEqual([new Set([aFolder])]);
+  expect(reads.slice(readCount)).toEqual([a.file]);
+
+  if (observed === null) throw new Error("main config was not discovered");
+  main.selected(
+    [{ origin: a.origin, digest: digestOf(observed) }],
+    () => observed,
+  );
+  fs.writeFileSync(a.file, "{ broken");
+  service.again("bad edit");
+  expect(
+    service.admitManagedFolders(MAIN_RENDERER, [aFolder], undefined),
+  ).toEqual(new Set([aFolder]));
+
+  // While an in-flight render retains its state, it can keep a legitimate
+  // folder even after the origin has gone. Its sibling cannot inherit it.
+  main.follow([]);
+  expect(
+    service.admitManagedFolders(MAIN_RENDERER, [aFolder], mainFolders),
+  ).toBe(mainFolders);
+  expect(service.admitManagedFolders(sibling, [aFolder], undefined)).toEqual(
+    new Set(),
+  );
+  const released = service.admitManagedFolders(MAIN_RENDERER, [], mainFolders);
+  expect(
+    service.admitManagedFolders(MAIN_RENDERER, [aFolder], released),
+  ).toEqual(new Set());
+});
 
 test("two renderers read the winning plugin and promote its shadowed copy when the override is removed", () => {
   const data = project("user-data");
