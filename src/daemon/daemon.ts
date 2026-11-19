@@ -89,7 +89,6 @@ import { compareStructural, observable, runInAction } from "mobx";
 import type { DaemonFacts } from "../facts/world-state.js";
 import { fileEventsWarnings } from "./foundations/file-events-warnings.js";
 import { ConfigDiscovery } from "./config-discovery/config-discovery.js";
-import { diskFiles } from "./config-discovery/discovery-files.js";
 import { checkoutObservations } from "./checkout-observations.js";
 import type { CheckoutFiles } from "../utils/git-root.js";
 
@@ -561,7 +560,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     locations: locs,
     stateDir: paths.state,
     watchers: watcherRegistry,
-    files: () => ({ ...diskFiles, ...checkouts.discovery() }),
+    files: checkouts.discovery,
     log,
     moved: (name, origins) => renderers.get(name)?.renderer.moved(origins),
   });

@@ -38,6 +38,8 @@ import {
 } from "../src/daemon/cache/watchers";
 import { locations, stateDir } from "../src/daemon/paths";
 import { systemTimekeeper } from "../src/time";
+import { withRegularTextFile } from "../src/utils/regular-text";
+import { ConfigText } from "../src/daemon/config-discovery/config-text";
 
 let root: string;
 let cleanups: Array<() => void>;
@@ -579,6 +581,152 @@ test("config and plugin discovery refuse a FIFO with no writer", () => {
       ],
     }),
   ]);
+});
+
+function countingText(reads: string[]): typeof withRegularTextFile {
+  return (file, use) =>
+    withRegularTextFile(file, (opened) =>
+      use({
+        ...opened,
+        text: () => {
+          reads.push(file);
+          return opened.text();
+        },
+      }),
+    );
+}
+
+function physicalDiscovery(dataHome: string, reads: string[] = []) {
+  const watchers = new WatcherRegistry({
+    clock: heldClock(new Date()),
+    logger: () => {},
+  });
+  const service = new ConfigDiscovery({
+    locations: { ...locations(HOST), dataHome, dataDirs: [] },
+    stateDir: stateDir(HOST),
+    watchers,
+    openText: countingText(reads),
+    log: () => {},
+    moved: () => {},
+  });
+  cleanups.push(
+    () => watchers.closeAll(),
+    () => service.close(),
+  );
+  return service;
+}
+
+// [LAW:behavior-not-structure] Distinct origins open in separate turns. Count
+// the real payload read, rather than its descriptor check or snapshot lookup.
+test("physical config and plugin text are shared across separate renderer discoveries", () => {
+  const left = project("left");
+  const right = project("right");
+  const installed = project("data/cc-candybar/plugins/shared");
+  const plugin = path.join(installed, "plugin.json5");
+  const leftPlugin = path.join(project("left/widget"), "plugin.json5");
+  const rightPlugin = path.join(project("right/widget"), "plugin.json5");
+  const relative = "widget/plugin.json5";
+  const config = path.join(left, "bar.json5");
+  const alias = path.join(right, "alias.json5");
+  const hardlink = path.join(right, "hardlink.json5");
+  const initial = JSON.stringify({ plugins: [relative] });
+  fs.writeFileSync(config, initial);
+  fs.symlinkSync(config, alias);
+  fs.linkSync(config, hardlink);
+  fs.writeFileSync(leftPlugin, "{ name: 'left' }");
+  fs.writeFileSync(rightPlugin, "{ name: 'right' }");
+  fs.writeFileSync(plugin, "{ name: 'first' }");
+
+  const reads: string[] = [];
+  const service = physicalDiscovery(path.join(root, "data"), reads);
+  const first = service.forRenderer(MAIN_RENDERER);
+  const next = service.forRenderer(rendererNameOf("other"));
+  const a = originOf(left, left, config);
+  const b = originOf(right, right, alias);
+  const c = originOf(right, right, hardlink);
+  first.follow([a]);
+  next.follow([b]);
+  next.follow([b, c]);
+  expect(reads.filter((file) => file === config || file === hardlink)).toEqual([
+    config,
+  ]);
+  expect(reads.filter((file) => file === plugin)).toHaveLength(1);
+  expect(first.snapshotOf(a)?.chain[0]?.listed[relative]?.path).toBe(
+    leftPlugin,
+  );
+  expect(next.snapshotOf(b)?.chain[0]?.listed[relative]?.path).toBe(
+    rightPlugin,
+  );
+  expect(textOfLayer(next, b, alias)).toBe(initial);
+  expect(textOfLayer(next, c, hardlink)).toBe(initial);
+
+  // Both aliases see an in-place change to the same inode. The installed
+  // plugin separately changes identity through an atomic publish.
+  const changed = '{ plugins: ["widget/plugin.json5"], globals: {} }';
+  fs.writeFileSync(config, changed);
+  const replacement = path.join(installed, "replacement");
+  fs.writeFileSync(replacement, "{ name: 'second' }");
+  fs.renameSync(replacement, plugin);
+  service.again("test write");
+  expect(reads.filter((file) => file === config || file === hardlink)).toEqual([
+    config,
+    config,
+  ]);
+  expect(reads.filter((file) => file === plugin)).toHaveLength(2);
+  expect(textOfLayer(first, a, config)).toBe(changed);
+  expect(textOfLayer(next, b, alias)).toBe(changed);
+  expect(textOfLayer(next, c, hardlink)).toBe(changed);
+  expect(next.snapshotOf(b)?.plugins[0]?.definition).toMatchObject({
+    kind: "text",
+    text: "{ name: 'second' }",
+  });
+
+  fs.unlinkSync(config);
+  fs.mkdirSync(config);
+  service.again("test replacement with directory");
+  expect(next.snapshotOf(b)?.chain[0]).toMatchObject({
+    path: alias,
+    content: { kind: "unreadable", error: "not a file" },
+  });
+  expect(textOfLayer(next, c, hardlink)).toBe(changed);
+});
+
+test("a project cannot inherit another origin's approval through the same physical config", () => {
+  const approved = project("approved");
+  const other = project("other");
+  const config = path.join(approved, ".cc-candybar.json5");
+  const same = path.join(other, ".cc-candybar.json5");
+  fs.writeFileSync(config, "{}");
+  fs.linkSync(config, same);
+  answerRepo(approved);
+  const reads: string[] = [];
+  const service = physicalDiscovery(project("empty-data"), reads);
+  const first = service.forRenderer(MAIN_RENDERER);
+  const second = service.forRenderer(rendererNameOf("other"));
+  const a = originOf(approved, approved);
+  const b = originOf(other, other);
+  first.follow([a]);
+  second.follow([b]);
+  expect(textOfLayer(first, a, config)).toBe("{}");
+  expect(second.snapshotOf(b)?.repo).toMatchObject({
+    dir: other,
+    standing: "awaiting",
+  });
+  expect(textOfLayer(second, b, same)).toBeNull();
+  expect(reads.filter((file) => file === config || file === same)).toEqual([
+    config,
+  ]);
+});
+
+test("text exceeding the retention budget still reads but does not occupy the cache", () => {
+  const file = path.join(root, "long.json5");
+  const text = " ".repeat(2 * 1024 * 1024 + 1);
+  fs.writeFileSync(file, text);
+  const reads: string[] = [];
+  const cached = new ConfigText(countingText(reads));
+  expect(cached.read(file)).toBe(text);
+  expect(cached.read(file)).toBe(text);
+  expect(reads).toEqual([file, file]);
 });
 
 test("an unchecked extension remains the unreadable layer at its actual path", () => {

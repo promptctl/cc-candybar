@@ -19,7 +19,9 @@ import {
   type DiscoveryWorld,
   type SharedFacts,
 } from "./discover.js";
-import type { DiscoveryFiles } from "./discovery-files.js";
+import { diskFiles, textFrom, type DiscoveryFiles } from "./discovery-files.js";
+import { ConfigText } from "./config-text.js";
+import type { withRegularTextFile } from "../../utils/regular-text.js";
 import { configQuery } from "../../config/loader/chain-places.js";
 import { repoConfigsPath } from "./repo-configs.js";
 import { digestOf } from "../../utils/plain.js";
@@ -60,7 +62,8 @@ export interface RendererConfigs {
 
 export interface ConfigDiscoveryDeps extends DiscoveryWorld {
   readonly watchers: Pick<WatcherRegistry, "batch">;
-  readonly files?: () => DiscoveryFiles;
+  readonly files?: () => Partial<DiscoveryFiles>;
+  readonly openText?: typeof withRegularTextFile;
   readonly log: DaemonLogger;
   // [LAW:effects-at-boundaries] Where the origins whose snapshot a watch
   // moved go: each live holder's `config` turns.
@@ -74,6 +77,7 @@ export class ConfigDiscovery {
   private readonly followed = new Map<string, Followed>();
   private readonly watches: ReturnType<WatcherRegistry["batch"]>;
   private readonly invalidated = new Set<string>();
+  private readonly texts: ConfigText;
   // [LAW:one-source-of-truth] The user's answers for repositories are one
   // fact for the whole daemon, so one watch follows them, never one per
   // origin.
@@ -81,6 +85,7 @@ export class ConfigDiscovery {
   private closed = false;
 
   constructor(private readonly deps: ConfigDiscoveryDeps) {
+    this.texts = new ConfigText(deps.openText);
     // [LAW:single-enforcer] One watch delivery window for all config origins
     // means one discovery batch for the paths an event made relevant.
     this.watches = deps.watchers.batch(() => {
@@ -136,7 +141,7 @@ export class ConfigDiscovery {
     const wanted = new Map(origins.map((o) => [originKey(o), o]));
     const fresh = [...wanted].filter(([key]) => !this.followed.has(key));
     if (fresh.length > 0) {
-      const shared = readShared(this.deps, this.deps.files?.());
+      const shared = this.shared();
       for (const [key, origin] of fresh)
         this.followed.set(key, {
           ...this.discovered(origin, shared, null),
@@ -193,6 +198,7 @@ export class ConfigDiscovery {
     this.answersWatch.release();
     for (const { watch } of this.followed.values()) watch.handle.release();
     this.followed.clear();
+    this.texts.clear();
   }
 
   // The origins an answer to the trust book can move.
@@ -235,7 +241,7 @@ export class ConfigDiscovery {
     why: string,
   ): readonly Followed[] {
     if (keys.length === 0) return [];
-    const shared = readShared(this.deps, this.deps.files?.());
+    const shared = this.shared();
     const moved: Followed[] = [];
     for (const key of keys) {
       const was = this.followed.get(key);
@@ -262,6 +268,16 @@ export class ConfigDiscovery {
       `config discovery why=${why} followed=${this.followed.size} discovered=${keys.length} moved=${moved.length}`,
     );
     return moved;
+  }
+
+  // [LAW:single-enforcer] Every batch has fresh filesystem facts and the host's
+  // one physical-text owner reuses bytes once the descriptor proves its revision.
+  private shared(): SharedFacts {
+    return readShared(this.deps, {
+      ...diskFiles,
+      text: textFrom((file) => this.texts.read(file)),
+      ...this.deps.files?.(),
+    });
   }
 
   // What discovery finds at `origin` now, with its watch following the
