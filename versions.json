@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-909",
+      "ref": "refs/pull/909/merge",
+      "sha": "6e1c2fdc0622fbca332e06bf2101fb4e01c1f507",
+      "timestamp": "2026-11-19T21:18:08.819Z",
+      "commits": [
+        {
+          "sha": "6e1c2fdc0622fbca332e06bf2101fb4e01c1f507",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:16:56-07:00",
+          "message": "Merge 08d76b81c6f79776db1666fc3ac8a44f9a67ffba into 6a830601d6a9c3e2737510757ff24dcaf67ef2c6\n"
+        },
+        {
+          "sha": "08d76b81c6f79776db1666fc3ac8a44f9a67ffba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:16:05-07:00",
+          "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
+        }
+      ]
+    },
+    {
       "version": "pr-908",
       "ref": "refs/pull/908/merge",
       "sha": "555ba77b64745c55775c7bbc1cee73a6355452a9",
