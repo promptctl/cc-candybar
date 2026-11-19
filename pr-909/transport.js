@@ -89444,14 +89444,32 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let configs = /* @__PURE__ */ new Map();
   let declared;
   let origins;
+  let followedOrigins = [];
   let selected;
   let followFailure = null;
   let startFailure = null;
-  const prepareStart = (event) => {
-    const wanted = new Map((origins ?? []).map((o) => [originKey(o), o]));
+  const endedStart = (result) => {
+    startFailure = result.kind === "threw" ? result.failure : null;
+    if (result.kind === "threw") return;
+    configs.clear();
+    for (const { origin, config } of result.event.configs)
+      configs.set(originKey(origin), { kind: "received", config });
+    declared = void 0;
+    origins = void 0;
+    selected = void 0;
+    followFailure = null;
+  };
+  const follow = (wanted) => {
+    world.configs.follow(wanted);
+    followedOrigins = wanted;
+  };
+  const prepareStart = (event, borrow) => {
+    const wanted = new Map(followedOrigins.map((o) => [originKey(o), o]));
+    for (const origin of origins ?? []) wanted.set(originKey(origin), origin);
     for (const { context } of event.sessions)
       wanted.set(originKey(context.requested), context.requested);
-    if (wanted.size > 0) world.configs.follow([...wanted.values()]);
+    if (wanted.size > followedOrigins.length || followFailure !== null)
+      borrow([...wanted.values()]);
     const configs2 = [...wanted].map(([key, origin]) => {
       const config = world.configs.snapshotOf(origin);
       if (config === null)
@@ -89511,9 +89529,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       output = await renderer.answer(input);
     } catch (thrown2) {
       recordTaken("session release", release3);
-      return unanswered(failureOf(thrown2), queuedMs);
+      const failure2 = failureOf(thrown2);
+      if (input.event.kind === "start") endedStart({ kind: "threw", failure: failure2 });
+      return unanswered(failure2, queuedMs);
     }
-    if (input.event.kind === "config") {
+    if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
       if (configs.has(key))
         configs.set(key, { kind: "received", config: input.event.config });
@@ -89528,12 +89548,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       turnMs,
       hopMs: elapsedMs(clock, sentAt) - turnMs
     };
-    if (input.event.kind === "start") {
-      startFailure = turn.kind === "threw" ? turn.failure : null;
-      if (startFailure === null)
-        for (const { origin, config } of input.event.configs)
-          configs.set(originKey(origin), { kind: "received", config });
-    }
+    if (input.event.kind === "start")
+      endedStart(
+        turn.kind === "threw" ? turn : { kind: "answered", event: input.event }
+      );
     recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled: settled3, configFailure } = await landInSlot(
       input.event,
@@ -89719,7 +89737,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     try {
       if (moved3 || requested !== null && followFailure !== null) {
-        world.configs.follow(subscriptions.configs);
+        if (subscriptions.configs.length > 0 || followedOrigins.length > 0 || followFailure !== null)
+          follow(subscriptions.configs);
         followFailure = null;
       }
       if (followFailure !== null)
@@ -89862,6 +89881,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       pendingClicks.set(held.session, held);
     }
     return inMailbox(async (queuedMs, holds2) => {
+      let restore;
       try {
         let made;
         let starting = at === "first";
@@ -89871,20 +89891,18 @@ function rendererHost(name, clock, renderer, log, collector, world) {
             const { event } = captured2;
             if (event.kind === "start") {
               starting = true;
-              made = { ...captured2, event: prepareStart(event) };
+              const ready = prepareStart(event, (wanted) => {
+                restore = followedOrigins;
+                follow(wanted);
+              });
+              made = { ...captured2, event: ready };
             } else made = { ...captured2, event };
           } else made = captured2;
         } catch (thrown2) {
           made = failureOf(thrown2);
         }
-        if (starting) {
-          configs.clear();
-          declared = void 0;
-          selected = void 0;
-          followFailure = null;
-        }
         if (made.kind !== "event") {
-          if (starting) startFailure = made;
+          if (starting) endedStart({ kind: "threw", failure: made });
           return { event: null, slotted: unanswered(made, queuedMs) };
         }
         if (!starting && startFailure !== null && made.event.kind !== "effect-done")
@@ -89895,10 +89913,13 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           queuedMs,
           made.event.kind === "click" ? made.runEvidence : void 0
         );
-        if (starting)
-          startFailure = slotted.turn.kind === "threw" ? slotted.turn.failure : null;
+        if (starting && slotted.turn.kind === "answered") restore = void 0;
         return { event: made.event, slotted };
       } finally {
+        if (restore !== void 0) {
+          const previous2 = restore;
+          recordTaken("start config demand rollback", () => follow(previous2));
+        }
         if (held !== null && --held.count === 0)
           pendingClicks.delete(held.session);
       }
