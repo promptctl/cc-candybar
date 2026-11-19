@@ -326,10 +326,11 @@ test("a url frame the daemon cannot read is refused on its click event; a doctor
         "tools",
       ),
     );
-    expect(flat(await render(daemon, SID, projectDir))).toContain(
-      squeezed(
-        "✗ URL handler — the link was delivered by a click request (`cc-candybar url-handle`), not the forwarder app",
-      ),
+    // [LAW:no-ambient-temporal-coupling] The row is drawn once the run's
+    // reading is in, which no click above waits for.
+    await reported(
+      () => render(daemon, SID, projectDir),
+      "✗ URL handler — the link was delivered by a click request (`cc-candybar url-handle`), not the forwarder app",
     );
   } finally {
     await daemon.stop();
@@ -555,16 +556,19 @@ test("a bar whose only motion is a template's fails effect refresh", async () =>
     // The config is polled, so the doctor runs once the bar draws the edit.
     writeFileSync(projectConfig, barOf("at rest"));
     await reported(draw, "at rest");
-    await click(daemon, run!);
-    await draw();
-    await click(daemon, run!);
     // Still, but drawn under the open menu the doctor is clicked from, which
     // counts down to the flash before it closes on its own: the frame says
     // when that starts (candybar-animation-wbxz.014), so the bar moves.
-    await reported(
-      draw,
-      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)",
-    );
+    const underMenu =
+      "✗ effect refresh — the bar moves (an effect, a fade, an animated segment, or an open menu counting down to its close)";
+    // [LAW:no-ambient-temporal-coupling] A click while the session's run waits
+    // for its reading starts no run, so each click waits for the run before it
+    // to report: a run's click clears its row, and the row is drawn again only
+    // once the reading is in.
+    await click(daemon, run!);
+    await reported(draw, underMenu);
+    await click(daemon, run!);
+    await reported(draw, underMenu);
 
     // The same bar with its menu closed is still, and passes.
     await click(
