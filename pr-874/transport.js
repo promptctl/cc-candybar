@@ -64953,24 +64953,19 @@ var VariableStore = class {
   getKind(name) {
     return this.requireNode(name).kind;
   }
-  // [LAW:one-source-of-truth] A string that changes exactly when the node's
-  // value does — the ONE spelling a change-driven reaction (a `depends_on`
-  // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar — or pending, while the node has no value yet.
-  // Structural for documents: every stored document has sorted keys
-  // (toDocument), so a rescan yielding the same content in another key order
-  // is not a change. A failure is a key like any other, never a failed
-  // reading: a dependant re-reads when its dependency starts or stops failing.
+  // [LAW:one-source-of-truth] A dependant sees the same change a node's own
+  // observers see, with pending blocking a first run and failures counting
+  // as changes. A document key uses the store's own structural comparison.
   changeKey(name) {
     const node = this.requireNode(name);
     if (node.kind === "document") {
       const doc = node.read();
-      return doc.kind === "pending" ? doc : ok(documentKey(doc));
+      return doc.kind === "pending" ? doc : ok(["document", documentKey(doc)]);
     }
     try {
-      return ok(String(node.read()));
+      return ok(["scalar", node.type, String(node.read())]);
     } catch (e) {
-      return readPending(e) !== void 0 ? pendingOf("unread") : ok(` failed:${e instanceof Error ? e.message : String(e)}`);
+      return readPending(e) !== void 0 ? pendingOf("unread") : ok(["failed", e instanceof Error ? e.message : String(e)]);
     }
   }
   // [LAW:types-are-the-program] Introspection (src/renderer/debug.ts) needs
@@ -65530,11 +65525,11 @@ var SourceRegistry = class _SourceRegistry {
       reaction(
         () => this.inputs.get().env(envVar),
         (fact) => {
-          if (fact.kind === "pending") return;
-          const { at: _at, ...outcome } = fact;
-          const read2 = outcome.kind === "absent" ? failed(`env var "${envVar}" is not set`, "read") : outcome;
-          this.noteOutcome(name, read2);
-          this.store.setBox(name, orElse(read2, fallback));
+          this.noteOutcome(name, fact, `env var "${envVar}" is not set`);
+          this.store.setBox(
+            name,
+            fact.kind === "pending" ? fact : orElse(fact, fallback)
+          );
         },
         { fireImmediately: true }
       )
@@ -65873,7 +65868,7 @@ var SourceRegistry = class _SourceRegistry {
       case "depends_on": {
         return this.answeredUnder(name, () => {
           const keys2 = policy.varNames.map((n) => this.store.changeKey(n));
-          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value).join(",")) : pendingOf("unread");
+          return keys2.every((key) => key.kind === "ok") ? ok(keys2.map((key) => key.value)) : pendingOf("unread");
         });
       }
     }
@@ -65901,7 +65896,7 @@ var SourceRegistry = class _SourceRegistry {
     return () => {
       const now2 = answer2.get();
       if (now2.kind === "ok") last2 = now2.value;
-      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(last2) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
+      return last2 !== void 0 ? ok({ kind: "key", hash: keyHashOf(JSON.stringify(last2)) }) : now2.kind === "failed" ? now2 : pendingOf("unread");
     };
   }
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -65944,14 +65939,15 @@ var SourceRegistry = class _SourceRegistry {
         });
     });
   }
-  // [LAW:single-enforcer] The one fold from a source outcome to the
-  // variable's error record: ok clears it, anything else records the reason.
-  noteOutcome(name, outcome) {
-    if (outcome.kind === "ok") this.lastErrors.delete(name);
+  // [LAW:single-enforcer] The one fold from a source reading to the
+  // variable's error record. A pending or successful read ends an old error.
+  noteOutcome(name, outcome, absentReason = "no value") {
+    if (outcome.kind === "ok" || outcome.kind === "pending")
+      this.lastErrors.delete(name);
     else
       this.recordError(
         name,
-        outcome.kind === "failed" ? outcome.reason : "no value"
+        outcome.kind === "failed" ? outcome.reason : absentReason
       );
   }
 };
@@ -86250,7 +86246,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.6";
+var PACKAGE_VERSION = "1.235.7";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
