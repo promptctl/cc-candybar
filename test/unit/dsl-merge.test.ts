@@ -5,7 +5,7 @@
 // used in production.
 
 import { PAYLOAD_INPUTS } from "../../src/config/payload-inputs";
-import { validateConfig } from "../helpers/parse-and-validate";
+import { parseAndPlace, validateConfig } from "../helpers/parse-and-validate";
 import {
   mergeWithDefault,
   unauthored,
@@ -252,6 +252,50 @@ describe("validateConfig", () => {
     for (const [name, seg] of Object.entries(merged.segments)) {
       expect(validated.segments[name]).toBe(seg);
     }
+  });
+
+  test("lowering a missing variable type replaces only the declarations that need it", () => {
+    const { config, placed } = parseAndPlace("<test>", `{
+      variables: {
+        count: { kind: 'input', path: 'count', type: 'number' },
+        label: { kind: 'input', path: 'label' },
+      },
+      segments: {
+        fixed: {
+          template: '{{ .fixed.count }}',
+          vars: { count: { kind: 'template', template: '2', type: 'number' } },
+        },
+        lowered: {
+          template: '{{ .lowered.word }}',
+          vars: {
+            count: { kind: 'template', template: '3', type: 'number' },
+            word: { kind: 'input', path: 'label' },
+          },
+        },
+      },
+      root: { h: ['fixed', 'lowered'] },
+    }`);
+    expect(config.variables.count).toBe(placed.variables.count);
+    expect(placed.variables.label).toEqual({ kind: "input", path: "label" });
+    expect(config.variables.label).toEqual({
+      kind: "input",
+      path: "label",
+      type: "string",
+    });
+    expect(config.segments.fixed).toBe(placed.segments.fixed);
+    expect(config.segments.lowered).not.toBe(placed.segments.lowered);
+    expect(config.segments.lowered?.vars?.count).toBe(
+      placed.segments.lowered?.vars?.count,
+    );
+    expect(placed.segments.lowered?.vars?.word).toEqual({
+      kind: "input",
+      path: "label",
+    });
+    expect(config.segments.lowered?.vars?.word).toEqual({
+      kind: "input",
+      path: "label",
+      type: "string",
+    });
   });
 
   test("throws ConfigError when a merged layout references an unknown segment", () => {

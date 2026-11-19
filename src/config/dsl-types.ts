@@ -572,7 +572,7 @@ export type ResolvedVariableDecl =
       readonly type: NonNullable<TypedVariableDecl["type"]>;
     });
 
-type ResolvedSegmentDecl = Omit<SegmentDecl, "vars"> & {
+export type ResolvedSegmentDecl = Omit<SegmentDecl, "vars"> & {
   readonly vars?: Readonly<Record<string, ResolvedVariableDecl>>;
 };
 

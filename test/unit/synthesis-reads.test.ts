@@ -17,7 +17,8 @@ const AUTHORED = `{
   actions: { applyTheme: { set: "theme", from: "themes" } },
   segments: {
     modelTag: {
-      template: '{{ if .settings.icon }}◆ {{ end }}{{ if eq .settings.length "short" }}{{ trunc .settings.chars .model.display_name }}{{ else }}{{ .model.display_name }}{{ end }}',
+      vars: { caption: { kind: "input", path: "model.display_name" } },
+      template: '{{ if .settings.icon }}◆ {{ end }}{{ if eq .settings.length "short" }}{{ trunc .settings.chars .modelTag.caption }}{{ else }}{{ .modelTag.caption }}{{ end }}',
       settings: {
         icon: { label: "Icon", domain: "bool", default: false },
         length: { label: "Length", domain: ["full", "short"], default: "full" },
@@ -74,6 +75,36 @@ describe("unresolvedReads", () => {
       segments: { ...config.segments, minted: { template: "{{ .ghost }}" } },
     };
     expect(unresolvedReads(broken, placed)).toEqual(["ghost"]);
+  });
+
+  test("a replacement contributes new reads beyond its lowered authored segment", () => {
+    const { config, placed } = parseAndPlace(
+      "<t>",
+      AUTHORED,
+      undefined,
+      DEFAULT_DSL_CONFIG,
+    );
+    const segment = config.segments.modelTag;
+    if (segment === undefined) throw new Error("missing authored modelTag");
+    expect(segment.vars?.caption).toEqual({
+      kind: "input",
+      path: "model.display_name",
+      type: "string",
+    });
+    expect(segment).not.toBe(placed.segments.modelTag);
+    expect(unresolvedReads(config, placed)).toEqual([]);
+    const replacement: DslConfig = {
+      ...config,
+      segments: {
+        ...config.segments,
+        modelTag: {
+          ...segment,
+          template: `${segment.template}{{ template "extra" . }}`,
+          partials: { ...segment.partials, extra: "{{ .replacementGhost }}" },
+        },
+      },
+    };
+    expect(unresolvedReads(replacement, placed)).toEqual(["replacementGhost"]);
   });
 
   test("a minted variable's unresolved read is named", () => {

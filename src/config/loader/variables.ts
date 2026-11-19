@@ -19,6 +19,8 @@ import {
   type TemplateVarDecl,
   type TimeVarDecl,
   type AuthoredVariableDecl,
+  type SegmentDecl,
+  type ResolvedSegmentDecl,
   type ResolvedVariableDecl,
   type ValidatedConfig,
   type VariableDecl,
@@ -138,19 +140,48 @@ function typedDefaultSpec(): FieldSpec<string | number | boolean> {
   };
 }
 
+function hasResolvedType(decl: VariableDecl): decl is ResolvedVariableDecl {
+  return (
+    (decl.kind !== "input" && decl.kind !== "template") ||
+    decl.type !== undefined
+  );
+}
+
+function hasResolvedTypes(
+  decls: Readonly<Record<string, VariableDecl>>,
+): decls is Readonly<Record<string, ResolvedVariableDecl>> {
+  return Object.values(decls).every(hasResolvedType);
+}
+
 function resolveTypes(
   decls: Readonly<Record<string, VariableDecl>>,
 ): Readonly<Record<string, ResolvedVariableDecl>> {
+  if (hasResolvedTypes(decls)) return decls;
   return Object.fromEntries(
     Object.entries(decls).map(
       ([name, decl]): [string, ResolvedVariableDecl] => [
         name,
-        decl.kind === "input" || decl.kind === "template"
-          ? { ...decl, type: decl.type ?? DEFAULT_VARIABLE_TYPE }
-          : decl,
+        hasResolvedType(decl) ? decl : { ...decl, type: DEFAULT_VARIABLE_TYPE },
       ],
     ),
   );
+}
+
+// [LAW:parse-dont-validate] A segment that already holds these resolved
+// locals needs no replacement. This includes a segment with no locals.
+function usesResolvedLocals(
+  segment: SegmentDecl,
+  locals: ResolvedSegmentDecl["vars"],
+): segment is ResolvedSegmentDecl {
+  return segment.vars === locals;
+}
+
+function resolveSegmentTypes(segment: SegmentDecl): ResolvedSegmentDecl {
+  const locals =
+    segment.vars === undefined ? undefined : resolveTypes(segment.vars);
+  return usesResolvedLocals(segment, locals)
+    ? segment
+    : { ...segment, vars: locals };
 }
 
 // [LAW:single-enforcer] Lower global and segment-local declarations at the
@@ -161,10 +192,12 @@ export function resolveVariableTypes(
   return {
     variables: resolveTypes(config.variables),
     segments: Object.fromEntries(
-      Object.entries(config.segments).map(([name, { vars, ...seg }]) => [
-        name,
-        vars === undefined ? seg : { ...seg, vars: resolveTypes(vars) },
-      ]),
+      Object.entries(config.segments).map(
+        ([name, segment]): [string, ResolvedSegmentDecl] => [
+          name,
+          resolveSegmentTypes(segment),
+        ],
+      ),
     ),
   };
 }
