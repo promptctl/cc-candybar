@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  hdr-histogram-js@3.0.1: fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490
+
 importers:
 
   .:
@@ -67,7 +70,7 @@ importers:
         version: 3.3.0
       hdr-histogram-js:
         specifier: 3.0.1
-        version: 3.0.1
+        version: 3.0.1(patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490)
       jest:
         specifier: ^30.0.5
         version: 30.3.0(@types/node@20.19.39)
@@ -5659,7 +5662,7 @@ snapshots:
 
   has-flag@4.0.0: {}
 
-  hdr-histogram-js@3.0.1:
+  hdr-histogram-js@3.0.1(patch_hash=fc38d392c971111e3fc78e0db825f753e3458727ef0346d13631085e9fa90490):
     dependencies:
       '@assemblyscript/loader': 0.19.23
       base64-js: 1.5.1

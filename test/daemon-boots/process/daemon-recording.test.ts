@@ -3,12 +3,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { decodeFromCompressedBase64 } from "hdr-histogram-js";
 
 import { linksOf } from "../../../src/click/read";
 import { parseJson5Syntax } from "../../../src/config/loader/diagnostics";
 import { daemonArgs } from "../../../src/daemon/acquire";
 import { textOf, type WireFrame } from "../../../src/render/frame";
 import type { RecordingEntry } from "../../../src/renderer-interface/recording";
+import { replayRecording } from "../../../src/renderer/replay";
 import { click, frameRequest, observePane, renderBody } from "../../helpers/daemon-e2e";
 import { TEST_ENV } from "../../helpers/session-environment";
 import { prepareIsolatedDaemonEnv, spawnDaemonWithEnv } from "../../helpers/spawn-isolated-daemon";
@@ -78,9 +80,10 @@ test("the running host records two independent renderer sessions for offline rep
           client: { kind: "node", bundle: alternate, source: null },
         }),
       });
-    const mainStarts = () => Array.from(fs.readFileSync(
-      path.join(isolated.stateDir, "daemon.log"), "utf8",
-    ).matchAll(/renderer main\[\d+\] started pid=(\d+)/g), (match) => match[1]);
+    const liveLog = () => fs.readFileSync(path.join(isolated.stateDir, "daemon.log"), "utf8");
+    const mainStarts = () => Array.from(
+      liveLog().matchAll(/renderer main\[\d+\] started pid=(\d+)/g), (match) => match[1],
+    );
 
     daemon = await spawnDaemonWithEnv(isolated.env, (env) => ({
       bin: process.execPath,
@@ -124,6 +127,7 @@ test("the running host records two independent renderer sessions for offline rep
     } finally {
       pane.close();
     }
+    await until(() => liveLog().includes(`feed sid="${namedSession}" closed`), "the closing pane's renderer diagnostic");
 
     await command("record", "stop", "--renderer", "worktree");
     await command("record", "stop");
@@ -171,6 +175,14 @@ test("the running host records two independent renderer sessions for offline rep
     ]));
 
     const records: RecordingEntry[] = captured.trimEnd().split("\n").map((line) => JSON.parse(line));
+    const histogram = records.flatMap((record) => record.kind === "turn" ? record.output.diagnostics ?? [] : [])
+      .map(({ line }) => /(?:^| )latenessHistogram=(\S+)/.exec(line)?.[1])
+      .find((value) => value !== undefined);
+    if (histogram === undefined) throw new Error("the recorded pane close emitted no histogram");
+    expect(decodeFromCompressedBase64(histogram).totalCount).toBeGreaterThan(0);
+    // The checked-in core and the shipped bundle must agree on the actual
+    // diagnostic bytes, including the closed pane's encoded distribution.
+    await expect(replayRecording(captured.trimEnd().split("\n"))).resolves.toEqual({ turns: records.length - 2 });
     const firstDraw = records.findIndex((entry) => entry.kind === "turn" && entry.output.effects.some(({ kind }) => kind === "present"));
     const entry = records[firstDraw];
     if (entry?.kind !== "turn") throw new Error("the recording contains no statusline presentation");
