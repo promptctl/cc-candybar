@@ -1,3 +1,9 @@
+## [1.232.12](https://github.com/promptctl/cc-candybar/compare/v1.232.11...v1.232.12) (2026-11-19)
+
+### Bug Fixes
+
+* **settings:** treat display checkboxes as preferences (ibyq.1sb) ([#839](https://github.com/promptctl/cc-candybar/issues/839)) ([5702b0a](https://github.com/promptctl/cc-candybar/commit/5702b0a6f481af905b25fe6469d345b86a5c5bb3))
+
 ## [1.232.11](https://github.com/promptctl/cc-candybar/compare/v1.232.10...v1.232.11) (2026-11-19)
 
 ### Bug Fixes
