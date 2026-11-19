@@ -4,8 +4,8 @@
 // code runs over a pipe in a test as over a process's stdio.
 //
 // [LAW:one-type-per-behavior] One transport over the one interface: the host
-// holds a `TimedRenderer` and the renderer holds an `AdapterToHost` whichever
-// side of a process they are on. A turn is timed in the renderer's process,
+// holds a `TimedRenderer` on either side of a process. A turn is timed in
+// the renderer's process,
 // around its answer, and its time crosses with its output.
 
 import type { Failure } from "../daemon/foundations/verb-error.js";
@@ -14,7 +14,6 @@ import { compareStructural } from "mobx";
 import { storedStateOf } from "./stored-state.js";
 import type { MemorySizes } from "../daemon/foundations/memory-limit.js";
 import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
-import type { AdapterToHost } from "./adapter.js";
 import type { Crosses } from "./crosses.js";
 import type { LogLine } from "../utils/logger.js";
 import {
@@ -34,7 +33,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 11;
+export const RENDERER_WIRE_VERSION = 12;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -124,9 +123,6 @@ type WireAnswer<T extends Answer = Answer> = T extends Answer
   ? Omit<T, "subscriptions"> & { readonly subscriptions?: Subscriptions }
   : never;
 
-// A notice names the callback it represents.
-export type ReachPath = string;
-
 export type HostLine =
   | {
       readonly kind: "boot";
@@ -164,11 +160,6 @@ export type RendererLine =
   // An input whose answer rejected: nothing of its turn is taken, so the
   // host's caller hears it as the turn's failure.
   | { readonly kind: "rejected"; readonly n: number; readonly failure: Failure }
-  | {
-      readonly kind: "notice";
-      readonly reach: ReachPath;
-      readonly args: readonly unknown[];
-    }
   | { readonly kind: "ping"; readonly n: number; readonly usage: MemorySizes }
   // [LAW:effects-at-boundaries] A heap snapshot's next piece of text, which
   // the host writes: the renderer process opens no file.
@@ -182,54 +173,9 @@ export type RendererLine =
         | { readonly kind: "failed"; readonly failure: Failure };
     };
 
-// [LAW:types-are-the-program] Every line is plain data. A reach's arguments
-// are checked where they are spelled (`REACHES_CROSS`).
+// [LAW:types-are-the-program] Every line is plain data.
 export const HOST_LINES_CROSS: Crosses<HostLine> = true;
-export const RENDERER_LINES_CROSS: Crosses<
-  Exclude<RendererLine, { kind: "notice" }>
-> = true;
-
-// [LAW:types-are-the-program] Every reach `AdapterToHost` spells, each a
-// notice (`REACHES_CROSS`): a reach added there fails the build here until it
-// is listed.
-type ReachKinds<T> = {
-  readonly [K in keyof T]: T[K] extends (...args: never[]) => unknown
-    ? "notice"
-    : ReachKinds<T[K]>;
-};
-
-export const REACH_KINDS: ReachKinds<AdapterToHost> = {
-  eventAnswered: "notice",
-};
-
-type Reach = (...args: readonly unknown[]) => unknown;
-
-// [LAW:single-enforcer] The one walk of the table: each reach's path and
-// kind, in the table's order.
-function reachesOf(table: object, prefix = ""): readonly ReachPath[] {
-  return Object.entries(table).flatMap(([key, value]) =>
-    typeof value === "string"
-      ? [`${prefix}${key}`]
-      : reachesOf(value as object, `${prefix}${key}.`),
-  );
-}
-
-const REACHES = reachesOf(REACH_KINDS);
-
-// The host's side of a reach: the function at its path in the host's parts.
-function reachAt(host: AdapterToHost, path: ReachPath): Reach {
-  const found = path
-    .split(".")
-    .reduce<unknown>(
-      (at, key) => (at as Record<string, unknown> | undefined)?.[key],
-      host,
-    );
-  // [LAW:no-silent-failure] A path the table does not hold is a renderer of
-  // another build's; it is said, never dropped.
-  if (typeof found !== "function")
-    throw new Error(`the renderer reached ${path}, which the host has not`);
-  return found as Reach;
-}
+export const RENDERER_LINES_CROSS: Crosses<RendererLine> = true;
 
 // [LAW:single-enforcer] One splitter for a stream of lines: each chunk is
 // scanned once, and a last line with no newline is heard at the end.
@@ -278,12 +224,10 @@ export interface RendererOverLines {
 
 export function rendererOverLines(deps: {
   readonly send: (line: HostLine) => void;
-  // The host's parts each reach is performed on.
-  readonly host: AdapterToHost;
-  // A notice that threw, or a line the host could not take.
+  // A line the host could not take.
   readonly fault: (message: string) => void;
 }): RendererOverLines {
-  const { send, host } = deps;
+  const { send } = deps;
   // What each line sent is owed, by its number: what was asked, and how its
   // answer settles it.
   const owed = new Map<
@@ -417,10 +361,6 @@ export function rendererOverLines(deps: {
     adapter: (input: AdapterInput) =>
       answer(input) as Promise<Timed<AdapterOutput>>,
   });
-  // [LAW:no-ambient-temporal-coupling] Each reach is performed as its line
-  // arrives, so the notices land in the order sent.
-  const reached = (path: ReachPath, args: readonly unknown[]): unknown =>
-    reachAt(host, path)(...args);
   const heard = (line: RendererLine): void => {
     // [LAW:no-silent-failure] A line a renderer said as it ended (its pipes
     // can close after its end) reaches nothing: what it would hold has no
@@ -439,15 +379,6 @@ export function rendererOverLines(deps: {
         write(line.chunk);
         return;
       }
-      case "notice":
-        try {
-          reached(line.reach, line.args);
-        } catch (thrown) {
-          deps.fault(
-            `renderer notice ${line.reach} threw: ${failureOf(thrown).detail}`,
-          );
-        }
-        return;
       case "output":
       case "rejected":
       case "ping":
@@ -518,26 +449,6 @@ export function rendererOverLines(deps: {
       return interrupted;
     },
   };
-}
-
-// The host as a renderer in another process holds it: each reach a line.
-export function hostOverLines(
-  send: (line: RendererLine) => void,
-): AdapterToHost {
-  const host: Record<string, unknown> = {};
-  for (const path of REACHES) {
-    const keys = path.split(".");
-    const leaf = keys.pop() as string;
-    const group = keys.reduce<Record<string, unknown>>(
-      (at, key) => (at[key] ??= {}) as Record<string, unknown>,
-      host,
-    );
-    group[leaf] = (...args: readonly unknown[]) =>
-      send({ kind: "notice", reach: path, args });
-  }
-  // [LAW:types-are-the-program] exception: built from `REACH_KINDS`, whose
-  // type is `AdapterToHost`'s own shape, so every reach is here.
-  return host as unknown as AdapterToHost;
 }
 
 // The renderer's side of the lines past its boot: each input answered by

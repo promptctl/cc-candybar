@@ -49,6 +49,7 @@ export function clickParts(
     stateDir: stateDir(HOST),
     configs: { ...NO_CONFIGS, ...discoveryNow(HOST) },
     closing: () => false,
+    acknowledgeDisplayed: () => {},
     unheard: () => {},
   },
   clock: Timekeeper = systemTimekeeper,

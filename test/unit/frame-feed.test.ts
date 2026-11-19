@@ -35,6 +35,7 @@ import {
 } from "../../src/daemon/foundations/renderer-name";
 import { sessionIdOf } from "../../src/daemon/foundations/session-id";
 import { newestWins } from "../../src/utils/newest-wins";
+import type { DisplayedEvent } from "../../src/utils/event-hold";
 
 const S = sessionIdOf("s");
 const T = sessionIdOf("t");
@@ -58,9 +59,11 @@ function rig(
     reject: (thrown: Error) => void;
   }> = [];
   const logged: string[] = [];
+  const acknowledged: DisplayedEvent[] = [];
   const watching = { started: 0, stopped: 0 };
   const deps: FeedDeps<Req> = {
     publishFrame,
+    acknowledgeDisplayed: (events) => void acknowledged.push(...events),
     requestChanged: () => {},
     shown: (req) => !hidden.has(req.pane),
     watching: () => {
@@ -103,6 +106,7 @@ function rig(
     handed,
     owed,
     logged,
+    acknowledged,
     watching,
     slot,
     rejected,
@@ -162,6 +166,7 @@ const frame = (
   bar = "r",
   handoff: string | null = "s",
   receipt = 1,
+  displayedEvents?: readonly DisplayedEvent[],
 ): PushedFrame => ({
   session,
   frame: {
@@ -169,6 +174,7 @@ const frame = (
     receipt: receipt as EffectId,
     bar: body(bar),
     handoff: handoff === null ? null : body(handoff),
+    displayedEvents,
   },
 });
 
@@ -219,7 +225,9 @@ function linkedFeeds() {
       draws.drawDue(
         { at: (1000 + tick) as Instant, tick: tick as Tick },
         frames,
-        () => { throw new Error("the feed fixture builds its own receipt"); },
+        () => {
+          throw new Error("the feed fixture builds its own receipt");
+        },
       );
       r.took(frames, renderer);
       return frames;
@@ -497,7 +505,10 @@ describe("feed delivery", () => {
     expect(replacement.sent).toEqual(old.sent);
     expect(r.settled).toEqual([[first, true]]);
     replacement.finish(true);
-    expect(r.settled).toEqual([[first, true], [fresh, true]]);
+    expect(r.settled).toEqual([
+      [first, true],
+      [fresh, true],
+    ]);
   });
 
   test("a declined handover asks for a frame after an unchanged viewer delivery", async () => {
@@ -519,7 +530,10 @@ describe("feed delivery", () => {
     expect(replacement.sent).toHaveLength(2);
     expect(replacement.sent[0]).toBe(replacement.sent[1]);
     replacement.finish(true);
-    expect(r.settled).toEqual([[first, true], [fresh, true]]);
+    expect(r.settled).toEqual([
+      [first, true],
+      [fresh, true],
+    ]);
   });
 
   test("visibility and count changes wake a feed while a pending handover shares its next write", async () => {
@@ -543,7 +557,10 @@ describe("feed delivery", () => {
     expect(replacement.sent).toEqual(old.sent);
     replacement.finish(true);
     expect(r.owed).toHaveLength(0);
-    expect(r.settled).toEqual([[first, true], [shown, true]]);
+    expect(r.settled).toEqual([
+      [first, true],
+      [shown, true],
+    ]);
 
     r.feeds.subscribe(S, subscriber("pane").sub);
     await r.deliver(0.2);
@@ -804,4 +821,101 @@ describe("the daemon's close", () => {
       `info feed sid="${T}" dropped lane=pane daemon-closed`,
     );
   });
+});
+
+test("equal pane bytes with a different event require a new confirmed write", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const pane = deferredSubscriber("pane");
+  feeds.subscribe(S, pane.sub);
+  const event = { text: "an act failed", at: 7 as Instant, answered: false };
+  const first: DisplayedEvent = {
+    kind: "act-failed",
+    event: { ...event, revision: 1 },
+  };
+  const second: DisplayedEvent = {
+    kind: "act-failed",
+    event: { ...event, revision: 2 },
+  };
+  const older = frame(S, "warning", null, 1, [first]);
+  const newer = frame(S, "warning", null, 2, [second]);
+  const retry = frame(S, "warning", null, 3, [second]);
+  took([older, newer]);
+  expect(pane.sent).toEqual([ansiAnswer("warning"), ansiAnswer("warning")]);
+  expect(settled).toEqual([]);
+  pane.finish(true);
+  pane.finish(false);
+  expect(acknowledged).toEqual([first]);
+  expect(settled).toEqual([
+    [older, true],
+    [newer, false],
+  ]);
+
+  took([retry]);
+  expect(acknowledged).toEqual([first]);
+  pane.finish(true);
+  expect(acknowledged).toEqual([first, second]);
+
+  const unchanged = frame(S, "warning", null, 4, [
+    { ...second, event: { ...second.event, answered: true } },
+  ]);
+  took([unchanged]);
+  expect(pane.sent).toHaveLength(3);
+  expect(settled.at(-1)).toEqual([unchanged, true]);
+  expect(acknowledged).toEqual([first, second]);
+});
+
+test("a hot pane replay can acknowledge the event in its cached frame", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const initial = deferredSubscriber("pane");
+  feeds.subscribe(S, initial.sub);
+  const shown: DisplayedEvent = {
+    kind: "renderer-ended",
+    event: { text: "the renderer ended", at: 7 as Instant, answered: false },
+  };
+  const offered = frame(S, "warning", null, 1, [shown]);
+  took([offered]);
+  initial.finish(false);
+  expect(acknowledged).toEqual([]);
+
+  const fresh = deferredSubscriber("pane");
+  feeds.subscribe(S, fresh.sub);
+  expect(fresh.sent).toEqual(initial.sent);
+  expect(acknowledged).toEqual([]);
+  fresh.finish(true);
+  expect(acknowledged).toEqual([shown]);
+  expect(settled).toEqual([[offered, false]]);
+});
+
+test("a slower pane confirmation reports its own event after another pane confirmed a later one", () => {
+  const { feeds, took, settled, acknowledged } = rig();
+  const slower = deferredSubscriber("pane");
+  const faster = deferredSubscriber("pane");
+  feeds.subscribe(S, slower.sub);
+  feeds.subscribe(S, faster.sub);
+  const event = {
+    text: "the renderer ended",
+    at: 7 as Instant,
+    answered: false,
+  };
+  const first: DisplayedEvent = {
+    kind: "renderer-ended",
+    event: { ...event, revision: 1 },
+  };
+  const second: DisplayedEvent = {
+    kind: "renderer-ended",
+    event: { ...event, revision: 2 },
+  };
+  const older = frame(S, "old", null, 1, [first]);
+  const newer = frame(S, "new", null, 2, [second]);
+  took([older, newer]);
+  faster.finish(false);
+  faster.finish(true);
+  expect(settled).toEqual([[newer, true]]);
+  expect(acknowledged).toEqual([second]);
+  slower.finish(true);
+  expect(settled).toEqual([
+    [newer, true],
+    [older, true],
+  ]);
+  expect(acknowledged).toEqual([second, first]);
 });

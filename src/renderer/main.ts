@@ -52,7 +52,6 @@ import {
 import type {
   AdapterPush,
   AdapterReply,
-  AdapterToHost,
   RendererStats,
 } from "../renderer-interface/adapter.js";
 import type {
@@ -389,7 +388,7 @@ export function mainRenderer(
           throw new Error(
             `config is pending for session ${JSON.stringify(current.hookData.session_id)}`,
           );
-        const { frame, delivery } = answerRequest(
+        const { frame, delivery, displayedEvents } = answerRequest(
           parts,
           current,
           event.context.hints,
@@ -402,6 +401,7 @@ export function mainRenderer(
           surface: "statusline",
           request: event.id,
           frame,
+          displayedEvents,
         });
         return;
       }
@@ -734,27 +734,19 @@ function closeIdleMenus(
   }
 }
 
-// [LAW:single-enforcer] The main renderer, built over the host's parts it
-// reaches and the stored state it is handed.
-export function mainRendererOf(
-  inputs: RendererBoot,
-  host: AdapterToHost,
-): RendererConstruction {
+// [LAW:single-enforcer] The main renderer is built from its supplied state.
+export function mainRendererOf(inputs: RendererBoot): RendererConstruction {
   const turnLog = new TurnLog();
   return turnLog.during<RendererConstruction>(() => {
     try {
-      return { kind: "built", renderer: build(inputs, host, turnLog) };
+      return { kind: "built", renderer: build(inputs, turnLog) };
     } catch (thrown) {
       return { kind: "refused", failure: failureOf(thrown) };
     }
   });
 }
 
-function build(
-  inputs: RendererBoot,
-  host: AdapterToHost,
-  turnLog: TurnLog,
-): Renderer {
+function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
   // Configs compiled by this renderer determine which action values it accepts.
   const gates = createGates();
   // [LAW:effects-at-boundaries] The renderer's one face of time: the readings
@@ -865,7 +857,6 @@ function build(
     periods: FEED_PERIODS,
   });
   const parts: RendererParts = {
-    ...host,
     time,
     sessionState: edits.view,
     renderCache,

@@ -55,9 +55,6 @@ const rendererOf = (): Renderer => {
       },
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
-    {
-      eventAnswered: () => {},
-    },
   );
   if (result.kind === "refused") throw new Error(result.failure.detail);
   return result.renderer;

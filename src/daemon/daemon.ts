@@ -73,7 +73,6 @@ import type {
   Viewers,
 } from "../renderer-interface/interface.js";
 import type { RendererLink, RendererPort } from "./renderer-process.js";
-import type { AdapterToHost } from "../renderer-interface/adapter.js";
 import {
   variableOf,
   type SessionEnvironment,
@@ -81,6 +80,7 @@ import {
 import {
   answeredBy,
   joinedEvent,
+  type DisplayedEvent,
   type HeldEvent,
 } from "../utils/event-hold.js";
 import { compareStructural, observable, runInAction } from "mobx";
@@ -322,6 +322,26 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
       if (phase.kind !== "building") restateFaults();
     },
   });
+  // [LAW:single-enforcer] Both client writers acknowledge events at the
+  // owner of the daemon's latest occurrences, independent of their renderer.
+  const acknowledgeDisplayed = (shown: readonly DisplayedEvent[]): void => {
+    for (const { kind, event } of shown) {
+      switch (kind) {
+        case "launch-pipes":
+          launcher.answeredPipeEvent(event);
+          break;
+        case "renderer-ended":
+          if (rendererEnded !== null && answeredBy(rendererEnded, event))
+            rendererEnded = { ...rendererEnded, answered: true };
+          break;
+        case "act-failed":
+          if (actFailed !== null && answeredBy(actFailed, event))
+            actFailed = { ...actFailed, answered: true };
+          break;
+      }
+    }
+    restateFaults();
+  };
   const linkSigner = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner);
   const sessionBook = new SessionBook(inputs.sessionBook(log));
@@ -461,6 +481,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   // was sent.
   const frameFeeds: FrameFeeds<CheckedRenderRequest> = new FrameFeeds({
     publishFrame,
+    acknowledgeDisplayed,
     requestChanged: (session, previous) =>
       declaredBarPanes.reported(session, previous?.hints.tmux ?? null),
     shown: (req) => paneVisibility.shown(req.hints.tmux),
@@ -549,21 +570,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     log,
   });
 
-  // [LAW:one-way-deps] The host's parts the main renderer reaches: the
-  // compiler checks each against its entry in `AdapterToHost` here, so no
-  // renderer file names a host type.
-  const reaches: AdapterToHost = {
-    // [LAW:effects-at-boundaries] exception: each reach below that crosses is
-    // the host's part in its crossing shape: a notice.
-    eventAnswered: (event) => {
-      launcher.answeredPipeEvent(event);
-      if (rendererEnded !== null && answeredBy(rendererEnded, event))
-        rendererEnded = { ...rendererEnded, answered: true };
-      if (actFailed !== null && answeredBy(actFailed, event))
-        actFailed = { ...actFailed, answered: true };
-      restateFaults();
-    },
-  };
   const checkouts = checkoutObservations(inputs.checkoutFiles, clock);
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
@@ -644,7 +650,6 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     prepared,
   }: ReturnType<typeof prepareRenderer>): RendererRuntime => {
     const link = prepared.start({
-      reaches,
       log,
       clock,
       // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
@@ -676,7 +681,12 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         if (renderers.size > 1) frameFeeds.announce();
       },
       ended: (event) => {
-        rendererEnded = event;
+        // [LAW:types-are-the-program] A later exit can have the same text and
+        // instant as an earlier one, even as an old reply is still writing.
+        rendererEnded = {
+          ...event,
+          revision: (rendererEnded?.revision ?? 0) + 1,
+        };
         restateFaults();
       },
     });
@@ -718,6 +728,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
         stateDir: paths.state,
         configs: configDiscovery.forRenderer(name),
         closing: cancelling,
+        acknowledgeDisplayed,
         unheard: (text) => {
           actFailed = joinedEvent(actFailed, text, instant());
           restateFaults();

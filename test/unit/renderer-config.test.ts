@@ -66,9 +66,6 @@ function renderer(recorded: ReadonlyMap<SessionId, Record<string, string>>) {
       },
       memoryLimitBytes: 1024 * 1024 * 1024,
     },
-    {
-      eventAnswered: () => {},
-    },
   );
   if (built.kind === "refused") throw new Error(built.failure.detail);
   return built.renderer;
