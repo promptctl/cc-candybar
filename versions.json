@@ -2,6 +2,42 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-884",
+      "ref": "refs/pull/884/merge",
+      "sha": "b54d89295873ff86728df27f6d0983b66bc536ec",
+      "timestamp": "2026-11-19T16:54:38.136Z",
+      "commits": [
+        {
+          "sha": "b54d89295873ff86728df27f6d0983b66bc536ec",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T16:53:30Z",
+          "message": "Merge 9b67a889bca5e0508980a38c1197068e263f883b into d5df8f6d8a5a3e24c1189a1486241b29febe8053\n"
+        },
+        {
+          "sha": "9b67a889bca5e0508980a38c1197068e263f883b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T09:42:57-07:00",
+          "message": "fix(settings): settle stale picks on save and answer who decided from the fold\n\nThe precedence fold returns the rung that decided with the value, for global\nand placement settings. The bar's stale report, the walk's \"decides here\"\ncheck and the saves' release all read that one answer, so a staged value\noutranking a stale pick and a placement the frame does not draw are no longer\nre-derived in three places. A placement's stale pick is reported by the\nrender walk, only for placements it draws.\n\nEvery save settles the picks it releases, stale ones included: a stale pick\nkept through a save overrode what was saved once its domain returned.\n\nThe preset row's parse admits the floor preset, as its menu offers it. One\ninstalled-theme map answers whether a theme is installed, which palette it\nis and which names there are; refusals list its names capped. A `set` on a\nplacement setting's key is checked against its domain at load. Steps parse\nintegers through the one session integer parse. A style name inherited from\nObject's prototype is no declared style.\n"
+        },
+        {
+          "sha": "84b2abe3116b260e937bce619764a875fa34b0c8",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:54:50-07:00",
+          "message": "fix(settings): read every setting through one table per config\n\nEach config gets one settings table, keyed by session key. It holds every\nglobal and placement setting with its owner, its one parse into\nunset/held/stale, what it can hold, and the variable the bar wears it\nthrough. These all read the table:\n\n- the fold;\n- the stepper's seed;\n- the saves' release of picks;\n- the compile's read-back;\n- the loader's key-owner check, which now also refuses a state variable on\n  a placement setting's key.\n\nA stale warning carries only its key and one composed sentence. The\nsentence names what the setting can hold: the installed themes, or a\nretired theme's successor. A placement the frame does not draw reports\nnothing.\n\nparseDslConfig takes its inherited segments as a named option, so a set of\ntheme names can no longer bind to it by position. A theme name's palette is\none registry lookup.\n"
+        },
+        {
+          "sha": "f2346be9bc0847f81597f14293af13fa9ffc16b7",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:12:10-07:00",
+          "message": "fix(settings): draw a stale setting pick's fallback under a warning (3248.fdzi)\n\nA session pick its setting's domain no longer holds (an uninstalled or\nretired theme, a style, preset or effect the config dropped, an enum or\nrange value out of bounds, a placement theme that is not one) is parsed\nonce into unset | held | stale. Every reader takes that parse: the render,\nthe picker mark, the carousel, the stepper and the step click. The bar\ndraws the next rung down, and a stale warning beside the settings door\nnames the setting, the stored spelling and what the bar wears. It is\nreported only where the pick decides, so staging above it hides the miss.\n\nThe pick stays stored: save, save-preset and save-theme-default leave it,\nso it holds again when its domain returns.\n\nOne installed-theme authority and one \"not an installed theme\" wording\nserve the loader, the session gate, the fold and the retired note, which\nremoves the allowed-palettes plumbing. A state variable may not take a\nsetting's key: the loader refuses it and names the setting.\n"
+        }
+      ]
+    },
+    {
       "version": "pr-887",
       "ref": "refs/pull/887/merge",
       "sha": "9a17369cb899e3d9a11e0830201cdca1586a4d58",
@@ -200,28 +236,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-884",
-      "ref": "refs/pull/884/merge",
-      "sha": "754b4e51a5a87854d88c1dfa409945ca613dbde8",
-      "timestamp": "2026-11-19T15:18:07.408Z",
-      "commits": [
-        {
-          "sha": "754b4e51a5a87854d88c1dfa409945ca613dbde8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:16:55-07:00",
-          "message": "Merge beda32f46b59b1778f2f3eb51c2354115212c226 into f10951d9400d761190b757a8dd55db47ac30e372\n"
-        },
-        {
-          "sha": "beda32f46b59b1778f2f3eb51c2354115212c226",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:12:10-07:00",
-          "message": "fix(settings): draw a stale setting pick's fallback under a warning (3248.fdzi)\n\nA session pick its setting's domain no longer holds (an uninstalled or\nretired theme, a style, preset or effect the config dropped, an enum or\nrange value out of bounds, a placement theme that is not one) is parsed\nonce into unset | held | stale. Every reader takes that parse: the render,\nthe picker mark, the carousel, the stepper and the step click. The bar\ndraws the next rung down, and a stale warning beside the settings door\nnames the setting, the stored spelling and what the bar wears. It is\nreported only where the pick decides, so staging above it hides the miss.\n\nThe pick stays stored: save, save-preset and save-theme-default leave it,\nso it holds again when its domain returns.\n\nOne installed-theme authority and one \"not an installed theme\" wording\nserve the loader, the session gate, the fold and the retired note, which\nremoves the allowed-palettes plumbing. A state variable may not take a\nsetting's key: the loader refuses it and names the setting.\n"
         }
       ]
     },
