@@ -2,6 +2,105 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-844",
+      "ref": "refs/pull/844/merge",
+      "sha": "9edbdc24ed3adc15ce2e7214ca42e9c13a5d6bb0",
+      "timestamp": "2026-11-19T10:37:32.477Z",
+      "commits": [
+        {
+          "sha": "9edbdc24ed3adc15ce2e7214ca42e9c13a5d6bb0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:36:26Z",
+          "message": "Merge e77fa48b2c535d758c5c11cf36f8223602e0e695 into d49ee0ce95ddef495c7948fd1526622b162b7b9b\n"
+        },
+        {
+          "sha": "e77fa48b2c535d758c5c11cf36f8223602e0e695",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:35:42-07:00",
+          "message": "test(daemon): exercise settlement after Doctor removal\n"
+        },
+        {
+          "sha": "02c00b42051126964c80c9fd281fd9890be93f31",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:23:38-07:00",
+          "message": "fix(daemon): reset config coverage for either start entry\n"
+        },
+        {
+          "sha": "7fece706d2718820eea3b988f088e852a1991dc1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:12:21-07:00",
+          "message": "test(daemon): cover failed starts and wake reporting\n"
+        },
+        {
+          "sha": "307104b1375a4df075a7e72de42db036f90ae00e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:46-07:00",
+          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
+        },
+        {
+          "sha": "b1e715d1f971866d913e1768ef8fe8d9eac86e93",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:32:27-07:00",
+          "message": "test: verify picker contrast with the retained segment catalogue\n"
+        },
+        {
+          "sha": "63c7b6b5e4931f8ce2c610cf036dc5417f3767c5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:26:04-07:00",
+          "message": "fix(integration): use the retained statusline in daemon checks\n"
+        },
+        {
+          "sha": "008fef814e980d0d3287dcd0fab7cd61dd993535",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:14:19-07:00",
+          "message": "refactor: remove the old Doctor implementation (ibyq.dzq)\n"
+        },
+        {
+          "sha": "1278cdd4adb6a488aaa01f2459bce93dbe8ade42",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:00-07:00",
+          "message": "fix(client): make native reconnect consume the passive outcome\n"
+        },
+        {
+          "sha": "96fd34f924fdb455ae2a468fbcb6b27659d9f416",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:16-07:00",
+          "message": "fix(daemon): reserve automatic activation for statusline ticks (ibyq.8ih)\n"
+        },
+        {
+          "sha": "421b0f73da68cdecd7795716b59632d85f2c53bc",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:20:10-07:00",
+          "message": "refactor: retire the band mod and tmux status renderer (ibyq.dx5)\n"
+        },
+        {
+          "sha": "0f30bea1544575ae3df59920e9f527829ecc7cb5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:09:42-07:00",
+          "message": "fix(config): exclude retired update settings from writable targets\n"
+        },
+        {
+          "sha": "1206b29d3d1583f19a1462c581b3185fc9c2c24d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T02:59:02-07:00",
+          "message": "refactor: remove in-bar update offers and workers\n"
+        }
+      ]
+    },
+    {
       "version": "pr-849",
       "ref": "refs/pull/849/merge",
       "sha": "91ba14001618e64f39fc9e400a3c59c17b5612b7",
@@ -142,42 +241,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T02:54:51-07:00",
           "message": "fix(test): each doctor click in the e2e waits for the run before it to report (boii)\n\nA doctor click while the session's run still waits for its reading starts\nno run, so two clicks one draw apart logged one or two runs depending on how\nfast the host read the machine. The effect-refresh case now draws its row\nback after each click before clicking again, and the URL-handler case waits\nfor its run's row instead of reading the first draw. Under a 1.5 s delay on\nthe host's reading, the old effect-refresh case logs three runs and fails;\nboth cases pass.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-844",
-      "ref": "refs/pull/844/merge",
-      "sha": "124eb211e66868bb68379da18e240054feb90529",
-      "timestamp": "2026-11-19T10:28:08.776Z",
-      "commits": [
-        {
-          "sha": "124eb211e66868bb68379da18e240054feb90529",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:27:09Z",
-          "message": "Merge efa1e8b1de511037d459d20027ef8f2da80ffadd into 5702b0a6f481af905b25fe6469d345b86a5c5bb3\n"
-        },
-        {
-          "sha": "efa1e8b1de511037d459d20027ef8f2da80ffadd",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:23:38-07:00",
-          "message": "fix(daemon): reset config coverage for either start entry\n"
-        },
-        {
-          "sha": "07319ca6e028b231f98b5ac5c9cf97384612f95e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:12:21-07:00",
-          "message": "test(daemon): cover failed starts and wake reporting\n"
-        },
-        {
-          "sha": "314f39286b966c88567571f45e6b9640a5d05764",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:09:46-07:00",
-          "message": "fix(daemon): settle host effects after the renderer answers (ibyq.3h0)\n"
         }
       ]
     },
