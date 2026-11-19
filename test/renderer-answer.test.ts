@@ -1105,11 +1105,6 @@ describe("the session's config, ahead of its request", () => {
 
   test("one that throws answers its request with a failure naming the renderer, and the request is not delivered", async () => {
     const t = renderer();
-    // Its origin's config is held, so the context opens the view itself.
-    await configure(t, checked());
-    t.rig.cache.holdSession = (() => {
-      throw new Error("the opening broke");
-    }) as never;
     const kinds: string[] = [];
     const host = rendererHost(
       MAIN_RENDERER,
@@ -1119,6 +1114,18 @@ describe("the session's config, ahead of its request", () => {
       unfollowedCollector(t.rig.served.collector),
       { ...NO_ACTS, configs: t.rig.cache.configs.discovery },
     );
+    cleanups.push(() => host.closeWake());
+    // Its origin's config was delivered, so the next context opens the view itself.
+    const context = checked();
+    const worldState = t.rig.served.collector.requested(context, TEST_ENVIRONMENT);
+    expect(await host.answer(() => ({
+      kind: "event",
+      event: { kind: "context", context, worldState },
+    }))).toMatchObject({ kind: "answered" });
+    expect(kinds.splice(0)).toEqual(["context", "config"]);
+    t.rig.cache.holdSession = () => {
+      throw new Error("the opening broke");
+    };
     const facts: Array<readonly [string, string]> = [];
     const answered = await answerStatusline(
       host,
@@ -1134,7 +1141,7 @@ describe("the session's config, ahead of its request", () => {
       { waitEndsAt: systemTimekeeper.monotonic() + 5000, gone: () => false },
       facts as never,
     );
-    expect(kinds).toEqual(["context", "config"]);
+    expect(kinds).toEqual(["context"]);
     expect(answered.resp).toMatchObject({
       ok: false,
       error: expect.stringMatching(

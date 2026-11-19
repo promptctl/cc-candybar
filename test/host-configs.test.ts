@@ -178,7 +178,7 @@ test("the host takes a declaration once, drops its origins on replacement, and t
     kind: "event",
     event: { kind: "start", viewers: {}, sessions: [] },
   }));
-  expect(follows).toEqual([[ORIGIN], [], []]);
+  expect(follows).toEqual([[ORIGIN], []]);
   expect(declarations).toEqual([
     opened.subscriptions,
     empty.subscriptions,
@@ -282,20 +282,36 @@ test("a write through a config symlink reloads the remaining holder after the wr
   }
 });
 
-// [LAW:one-source-of-truth] A renderer sent its start holds no config, so
-// every origin it names after gets its config turn, though the start failed.
-test("a start the renderer did not answer still leaves every origin it names after new", async () => {
-  const { host, heard } = hostOver((event) => {
-    if (event.kind === "start") throw new Error("the renderer went down");
-    return output([], [ORIGIN]);
+// [LAW:one-source-of-truth] The accepted origin survives a failed replacement.
+// Its next successful replacement receives the held observation in START.
+test("an unanswered start keeps the previous declaration until the next successful start", async () => {
+  const opened = output([], [ORIGIN]);
+  let fail = true;
+  const { host, heard, declarations } = hostOver((event) => {
+    if (event.kind === "start") {
+      expect(event.configs).toEqual([{ origin: ORIGIN, config: SNAPSHOT }]);
+      if (fail) throw new Error("the renderer went down");
+    }
+    return opened;
   });
   await host.answer(() => ({ kind: "event", event: due }));
-  await host.answer(() => ({
+  const start = () => host.answer(() => ({
     kind: "event",
     event: { kind: "start", viewers: {}, sessions: [] },
   }));
+  const refused = {
+    kind: "threw",
+    failure: { message: "the renderer went down" },
+  };
+  expect(await start()).toMatchObject(refused);
+  expect(await host.answer(() => ({ kind: "event", event: due }))).toMatchObject(refused);
+  expect(heard).toEqual(["due", "config", "start"]);
+  expect(declarations).toEqual([opened.subscriptions]);
+  fail = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
   await host.answer(() => ({ kind: "event", event: due }));
-  expect(heard).toEqual(["due", "config", "start", "due", "config"]);
+  expect(heard).toEqual(["due", "config", "start", "start", "due"]);
+  expect(declarations).toEqual([opened.subscriptions, opened.subscriptions]);
 });
 
 test("an origin a watch moved that the renderer let go by its slot is abandoned, and no config is handed in", async () => {
