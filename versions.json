@@ -2,6 +2,63 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-909",
+      "ref": "refs/pull/909/merge",
+      "sha": "bc94a2eb3f67c68f7f6511933c7bb07b17be5283",
+      "timestamp": "2026-11-19T21:32:11.632Z",
+      "commits": [
+        {
+          "sha": "bc94a2eb3f67c68f7f6511933c7bb07b17be5283",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T21:31:00Z",
+          "message": "Merge c99c5254a1d5f7cf7862cd0b8bade53d8f6c9161 into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+        },
+        {
+          "sha": "c99c5254a1d5f7cf7862cd0b8bade53d8f6c9161",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:30:44-07:00",
+          "message": "fix(host): resolve config authority before publishing resource demand\n"
+        },
+        {
+          "sha": "e1d651690d65d709eabc2a7f2087a3967eaadab4",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:27:27-07:00",
+          "message": "Merge remote-tracking branch 'origin/main' into codex/managed-source-declarations\n\n# Conflicts:\n#\tsrc/daemon/renderer-host.ts\n"
+        },
+        {
+          "sha": "4efb7d83cfc8f832f096caae2c71166e85128c89",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:26:48-07:00",
+          "message": "test(daemon): measure shared disk reads across a bad config and restart\n"
+        },
+        {
+          "sha": "8a8e63346960aef1cef97309cccfeabb5bb1ed5a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:25:02-07:00",
+          "message": "test(renderer): exercise replacement from a known host generation\n"
+        },
+        {
+          "sha": "eca6999ec7b0edc2d63fcdfb29ed413bb56a54d5",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:20:45-07:00",
+          "message": "fix(renderer): replay the last selected config observation\n"
+        },
+        {
+          "sha": "08d76b81c6f79776db1666fc3ac8a44f9a67ffba",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:16:05-07:00",
+          "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "21ad3ab8defc9a580a0798d45c3295daef3e11e7",
@@ -13,28 +70,6 @@
           "author_email": "semantic-release-bot@martynus.net",
           "timestamp": "2026-11-19T21:30:04Z",
           "message": "chore(release): set `package.json` to 1.235.13\n\n## [1.235.13](https://github.com/promptctl/cc-candybar/compare/v1.235.12...v1.235.13) (2026-11-19)\n\n### Bug Fixes\n\n* **renderer:** keep writes and failures attached to their turn ([#908](https://github.com/promptctl/cc-candybar/issues/908)) ([4680c55](https://github.com/promptctl/cc-candybar/commit/4680c55df0a0905e549e817bb85a273c8c6dc221))\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-909",
-      "ref": "refs/pull/909/merge",
-      "sha": "6e1c2fdc0622fbca332e06bf2101fb4e01c1f507",
-      "timestamp": "2026-11-19T21:18:08.819Z",
-      "commits": [
-        {
-          "sha": "6e1c2fdc0622fbca332e06bf2101fb4e01c1f507",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:16:56-07:00",
-          "message": "Merge 08d76b81c6f79776db1666fc3ac8a44f9a67ffba into 6a830601d6a9c3e2737510757ff24dcaf67ef2c6\n"
-        },
-        {
-          "sha": "08d76b81c6f79776db1666fc3ac8a44f9a67ffba",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T14:16:05-07:00",
-          "message": "fix(daemon): share managed plugin watches across renderer lifetimes\n"
         }
       ]
     },

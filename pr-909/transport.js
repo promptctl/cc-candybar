@@ -70714,11 +70714,16 @@ var RenderCache = class {
       },
       snapshot,
       digest: digest2,
+      selectedDigest: loaded.state === null ? null : digest2,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
       state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
     };
-    makeObservable(entry, { lastError: observable, state: observableRef });
+    makeObservable(entry, {
+      selectedDigest: observable,
+      lastError: observable,
+      state: observableRef
+    });
     this.serve(entry.state);
     runInAction(() => this.entries.set(key, entry));
     this.fit(entry);
@@ -71018,6 +71023,12 @@ var RenderCache = class {
       for (const folder of state.sources.values()) folders.add(folder);
     return [...folders].sort();
   }
+  configSelections() {
+    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, selectedDigest }]) => ({
+      origin,
+      digest: selectedDigest
+    }));
+  }
   subscriptions() {
     return {
       sources: Object.fromEntries(
@@ -71218,15 +71229,13 @@ var RenderCache = class {
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
+      if (loaded.state !== null) entry.selectedDigest = digest2;
+      if (loaded.kind === "built") entry.state = loaded.state;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     if (loaded.kind === "built") {
-      const state = loaded.state;
-      runInAction(() => {
-        entry.state = state;
-      });
-      this.serve(state);
+      this.serve(loaded.state);
     }
     if (loaded.kind === "built") this.retire(served, "reload", entry);
     if (loaded.state !== null)
@@ -77412,7 +77421,7 @@ function serializeSegmentCells(cells, colorCompatibility) {
 }
 
 // src/renderer/main.ts
-function mainRenderer(parts, pushed, drained) {
+function mainRenderer(parts, pushed, drains) {
   const { time, feeds, menuIdle } = parts;
   const deliveries = /* @__PURE__ */ new Map();
   const prepare = (delivery) => {
@@ -77423,6 +77432,7 @@ function mainRenderer(parts, pushed, drained) {
   let subscriptions = {
     sources: {},
     managedFolders: [],
+    configSelections: [],
     lanes: {},
     configs: []
   };
@@ -77484,24 +77494,40 @@ function mainRenderer(parts, pushed, drained) {
   const turn = (event, record2, effects, frames) => {
     switch (event.kind) {
       case "start": {
-        const configs = event.configs ?? [];
-        for (const { origin, config } of configs)
-          parts.renderCache.configure(origin, config);
-        const live = new Set(
-          event.sessions.map(({ context }) => originKey(context.requested))
+        const configs = new Map(
+          event.configs.map((offer) => [originKey(offer.origin), offer])
         );
+        const offered = (at) => {
+          const key = originKey(at);
+          const offer = configs.get(key);
+          if (offer === void 0) return;
+          configs.delete(key);
+          const { origin, config, retained } = offer;
+          if (typeof retained === "object") {
+            parts.renderCache.configure(origin, retained);
+            parts.renderCache.getOrCreate(origin);
+          }
+          parts.renderCache.configure(origin, config);
+        };
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(
-            ({ context, worldState }) => () => turn(
+          ...event.sessions.map(({ context, worldState }) => () => {
+            offered(context.requested);
+            turn(
               { kind: "context", context, worldState },
               record2,
               effects,
               frames
-            )
-          ),
-          ...configs.flatMap(
-            ({ origin, retained }) => retained && !live.has(originKey(origin)) ? [() => void parts.renderCache.getOrCreate(origin)] : []
+            );
+          }),
+          // A live session gets its cache entry before idle entries warm,
+          // so they cannot take the budget a pinned view needs.
+          () => runEach(
+            [...configs.values()].map(({ origin, retained }) => () => {
+              offered(origin);
+              if (retained !== void 0)
+                parts.renderCache.getOrCreate(origin);
+            })
           )
         ]);
         return;
@@ -77663,6 +77689,12 @@ function mainRenderer(parts, pushed, drained) {
   const managedFolders = computed(() => parts.renderCache.managedFolders(), {
     equals: compareStructural
   });
+  const configSelections = computed(
+    () => parts.renderCache.configSelections(),
+    {
+      equals: compareStructural
+    }
+  );
   const laneDeclaration = computed(
     () => {
       const lanes = {};
@@ -77719,83 +77751,106 @@ function mainRenderer(parts, pushed, drained) {
         sources: sources.get(),
         managedFolders: managedFolders.get(),
         lanes,
-        configs: configOrigins.get()
+        configs: configOrigins.get(),
+        configSelections: configSelections.get()
       },
       unprepared
     };
   });
   let observed2;
+  let pruneOwed = false;
   const declare = (configOffered) => {
+    pruneOwed ||= configOffered;
     let next2 = declaration.read();
     if (next2 !== observed2 && next2.unprepared.length > 0) {
       for (const origin of next2.unprepared)
         parts.renderCache.getOrCreate(origin);
       next2 = declaration.read();
     }
-    const before = subscriptions.configs;
+    if (pruneOwed || subscriptions.configs !== next2.plan.configs) {
+      parts.renderCache.prune(new Set(next2.plan.configs.map(originKey)));
+      pruneOwed = false;
+    }
     observed2 = next2;
     subscriptions = next2.plan;
-    if (configOffered || before !== subscriptions.configs)
-      parts.renderCache.prune(new Set(subscriptions.configs.map(originKey)));
   };
-  let stored = [];
-  const ending = (run2, configOffered = false) => {
+  const storeOrder = Object.keys(drains);
+  const ending = (input, run2) => {
+    let outcome;
     try {
-      let value;
-      try {
-        value = run2();
-      } finally {
-        stored = drained();
-        declare(configOffered);
-        wake = earliestOf([
-          time.next(),
-          menuIdle.next(
-            parked.get().length === 0 ? void 0 : parkedClickSessions()
-          ),
-          feeds.next()
-        ]);
-      }
-      return { kind: "answered", value };
+      outcome = { kind: "answered", value: run2() };
     } catch (thrown2) {
-      return { kind: "threw", failure: failureOf(thrown2) };
+      outcome = { kind: "threw", failure: failureOf(thrown2) };
     }
+    const stored = [];
+    const collect = (stage, read2) => {
+      try {
+        read2();
+      } catch (thrown2) {
+        const failure2 = failureOf(thrown2);
+        if (outcome.kind === "answered") outcome = { kind: "threw", failure: failure2 };
+        else {
+          const after = { stage, failure: failure2 };
+          outcome = {
+            ...outcome,
+            secondary: outcome.secondary === void 0 ? [after] : [...outcome.secondary, after]
+          };
+        }
+      }
+    };
+    for (const store of storeOrder)
+      collect(store, () => stored.push(...drains[store]()));
+    collect(
+      "subscriptions",
+      () => declare(input.kind === "event" && input.event.kind === "config")
+    );
+    collect("wake", () => {
+      wake = earliestOf([
+        time.next(),
+        menuIdle.next(
+          parked.get().length === 0 ? void 0 : parkedClickSessions()
+        ),
+        feeds.next()
+      ]);
+    });
+    if (input.kind === "adapter" && input.push.kind === "close-views")
+      collect(
+        "release-subscriptions",
+        () => runInAction(() => declaration.release())
+      );
+    return { outcome, subscriptions, wake, stored };
   };
   return rendererOf({
     // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
     // after it lands after its writes.
     adapter: async (input) => time.during(input, () => {
-      const ended = ending(
+      const { outcome, ...declaration2 } = ending(
+        input,
         () => pushed(input.push, {
           parked: opening.size + parked.get().length,
           presents: deliveries.size,
           deferrals: time.deferrals()
         })
       );
-      if (input.push.kind === "close-views")
-        runInAction(() => declaration.release());
       return {
-        ...ended.kind === "answered" ? { kind: "replied", reply: ended.value } : ended,
-        subscriptions,
-        wake,
-        stored
+        ...outcome.kind === "answered" ? { kind: "replied", reply: outcome.value } : outcome,
+        ...declaration2
       };
     }),
     event: async (input) => time.during(input, () => {
       const record2 = [];
       const effects = [];
       const frames = [];
-      const ended = ending(
-        () => turn(input.event, record2, effects, frames),
-        input.event.kind === "config"
+      const { outcome, ...declaration2 } = ending(
+        input,
+        () => turn(input.event, record2, effects, frames)
       );
       return {
-        ...ended.kind === "answered" ? { kind: "answered" } : ended,
+        ...outcome.kind === "answered" ? { kind: "answered" } : outcome,
         effects,
         record: record2,
-        subscriptions,
-        wake,
         frames,
-        stored
+        ...declaration2
       };
     })
   });
@@ -77832,10 +77887,6 @@ function mainRendererOf(inputs, host) {
     log,
     inputs.stored.history
   );
-  const drained = () => [
-    ...sessionState.drain(),
-    ...settingsHistory.drain()
-  ];
   let minted = 0;
   const mint = () => ++minted;
   const configWrites = new ConfigWrites(mint);
@@ -77989,7 +78040,10 @@ function mainRendererOf(inputs, host) {
       acts
     },
     pushed,
-    drained
+    {
+      "session-state": () => sessionState.drain(),
+      "settings-history": () => settingsHistory.drain()
+    }
   );
 }
 function debugOf(cache2, what) {
@@ -86400,7 +86454,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.235.12";
+var PACKAGE_VERSION = "1.235.13";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -89369,6 +89423,10 @@ var RendererWake = class {
 };
 
 // src/daemon/renderer-host.ts
+var finalizationFields = (outcome) => outcome.kind === "threw" ? outcome.secondary?.map(({ stage, failure: failure2 }) => [
+  `finalize.${stage}`,
+  `${failure2.kind}: ${failure2.detail}`
+]) : void 0;
 var THREW_AS = {
   "bad-request": "refused",
   threw: "failed",
@@ -89386,11 +89444,11 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   let configs = /* @__PURE__ */ new Map();
   let declared;
   let origins;
+  let selected;
   let followFailure = null;
   let startFailure = null;
   const prepareStart = (event) => {
-    const retained = new Map((origins ?? []).map((o) => [originKey(o), o]));
-    const wanted = new Map(retained);
+    const wanted = new Map((origins ?? []).map((o) => [originKey(o), o]));
     for (const { context } of event.sessions)
       wanted.set(originKey(context.requested), context.requested);
     if (wanted.size > 0) world.configs.follow([...wanted.values()]);
@@ -89398,7 +89456,12 @@ function rendererHost(name, clock, renderer, log, collector, world) {
       const config = world.configs.snapshotOf(origin);
       if (config === null)
         throw new Error(`no config snapshot for renderer start origin ${key}`);
-      return { origin, config, retained: retained.has(key) };
+      const retained = world.configs.retainedOf(origin);
+      return {
+        origin,
+        config,
+        ...retained === void 0 ? {} : { retained }
+      };
     });
     return { ...event, configs: configs2 };
   };
@@ -89452,11 +89515,14 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (input.event.kind === "config") {
       const key = originKey(input.event.origin);
-      if (configs.has(key)) configs.set(key, "received");
+      if (configs.has(key))
+        configs.set(key, { kind: "received", config: input.event.config });
     }
     const { subscriptions, wake: wake2, frames, stored, turnMs, ...answer3 } = output;
+    const finalization = finalizationFields(answer3);
     const turn = {
       ...answer3,
+      record: finalization === void 0 ? answer3.record : [...answer3.record, ...finalization],
       settlePresentation: receipt,
       queuedMs,
       turnMs,
@@ -89465,9 +89531,10 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     if (input.event.kind === "start") {
       startFailure = turn.kind === "threw" ? turn.failure : null;
       if (startFailure === null)
-        for (const { origin } of input.event.configs ?? [])
-          configs.set(originKey(origin), "received");
+        for (const { origin, config } of input.event.configs)
+          configs.set(originKey(origin), { kind: "received", config });
     }
+    recordTaken("turn record", () => collector.recorded(turn.record));
     const { settled: settled3, configFailure } = await landInSlot(
       input.event,
       output,
@@ -89482,7 +89549,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     };
   };
   const landInSlot = async (event, output, captures, receipt) => {
-    recordTaken("turn record", () => collector.recorded(output.record));
     const changes = output.effects.filter(
       (effect) => effect.kind === "change"
     );
@@ -89504,7 +89570,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     const waited = [];
     const unreceived = [];
     if (followed.kind === "failed") {
-      if (requestedKey !== null && configs.get(requestedKey) !== "received")
+      if (requestedKey !== null && configs.get(requestedKey)?.kind !== "received")
         configFailure = followed.failure;
     } else {
       for (const origin of followed.named) {
@@ -89612,11 +89678,6 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     if (adoptDemand)
       recordTaken("wake declaration", () => wake.declare(nextWake));
     recordTaken("stored writes", () => collector.stored(stored));
-    if (adoptDemand && (declared?.sources !== subscriptions.sources || declared?.managedFolders !== subscriptions.managedFolders || declared?.lanes !== subscriptions.lanes) && recordTaken(
-      "subscriptions",
-      () => collector.subscribed(subscriptions)
-    ) !== null)
-      declared = subscriptions;
     if (frames.length > 0) {
       const owed = new Set(
         frames.flatMap(
@@ -89643,7 +89704,7 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         const before = configs.get(key);
         if (before === void 0) {
           named2.push(origin);
-          next2.set(key, "scheduled");
+          next2.set(key, { kind: "scheduled" });
         } else next2.set(key, before);
       }
       configs = next2;
@@ -89651,9 +89712,9 @@ function rendererHost(name, clock, renderer, log, collector, world) {
     }
     if (requested !== null) {
       const key = originKey(requested);
-      if (configs.get(key) === "unreceived") {
+      if (configs.get(key)?.kind === "unreceived") {
         named2.push(requested);
-        configs.set(key, "scheduled");
+        configs.set(key, { kind: "scheduled" });
       }
     }
     try {
@@ -89661,6 +89722,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         world.configs.follow(subscriptions.configs);
         followFailure = null;
       }
+      if (followFailure !== null)
+        return { kind: "failed", failure: followFailure };
+      const entries = subscriptions.configSelections;
+      if (selected !== entries) {
+        world.configs.selected(entries, (origin) => {
+          const delivered = configs.get(originKey(origin));
+          return delivered?.kind === "received" ? delivered.config : void 0;
+        });
+        selected = entries;
+      }
+      if ((declared?.sources !== subscriptions.sources || declared?.managedFolders !== subscriptions.managedFolders || declared?.lanes !== subscriptions.lanes) && recordTaken(
+        "subscriptions",
+        () => collector.subscribed(subscriptions)
+      ) !== null)
+        declared = subscriptions;
       return { kind: "following", named: named2 };
     } catch (thrown2) {
       for (const origin of named2) markUnreceived(origin);
@@ -89672,7 +89748,8 @@ function rendererHost(name, clock, renderer, log, collector, world) {
   };
   const markUnreceived = (origin) => {
     const key = originKey(origin);
-    if (configs.get(key) === "scheduled") configs.set(key, "unreceived");
+    if (configs.get(key)?.kind === "scheduled")
+      configs.set(key, { kind: "unreceived" });
   };
   const configMade = (origin) => () => {
     const config = world.configs.snapshotOf(origin);
@@ -89789,17 +89866,21 @@ function rendererHost(name, clock, renderer, log, collector, world) {
         let made;
         let starting = at === "first";
         try {
-          made = make();
-          if (made.kind === "event" && made.event.kind === "start") {
-            starting = true;
-            made = { ...made, event: prepareStart(made.event) };
-          }
+          const captured2 = make();
+          if (captured2.kind === "event") {
+            const { event } = captured2;
+            if (event.kind === "start") {
+              starting = true;
+              made = { ...captured2, event: prepareStart(event) };
+            } else made = { ...captured2, event };
+          } else made = captured2;
         } catch (thrown2) {
           made = failureOf(thrown2);
         }
         if (starting) {
           configs.clear();
           declared = void 0;
+          selected = void 0;
           followFailure = null;
         }
         if (made.kind !== "event") {
@@ -89869,19 +89950,27 @@ function rendererHost(name, clock, renderer, log, collector, world) {
           }
         return answered;
       } catch (thrown2) {
-        return {
+        const unavailable = {
           kind: "threw",
           failure: failureOf(thrown2),
           turnMs: null
         };
+        return unavailable;
       }
     });
     if (output.kind === "threw") {
-      const took2 = output.turnMs === null ? "" : ` took=${output.turnMs}ms`;
+      const fields2 = finalizationFields(output) ?? [];
+      if (output.turnMs !== null)
+        fields2.unshift(["took", `${output.turnMs}ms`]);
+      fields2.push(["error", output.failure.detail]);
+      const detail = eventLine(
+        `renderer ${name} push ${push.kind} threw`,
+        fields2
+      );
       throw new CrossedFailure({
         ...output.failure,
         message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail: `renderer ${name} push ${push.kind} threw${took2}: ${output.failure.detail}`
+        detail
       });
     }
     if (output.reply.kind !== push.kind)
@@ -90519,6 +90608,9 @@ var ConfigDiscovery = class {
   }
   deps;
   followed = /* @__PURE__ */ new Map();
+  // [LAW:carrying-cost] Reuse discovery's digest for an immutable offered
+  // snapshot. A weak key cannot hold an old revision after its last owner.
+  observations = /* @__PURE__ */ new WeakMap();
   watches;
   invalidated = /* @__PURE__ */ new Set();
   texts;
@@ -90534,6 +90626,8 @@ var ConfigDiscovery = class {
     return {
       follow: (origins) => this.follow(renderer, origins),
       snapshotOf: (origin) => held(origin) ?? null,
+      selected: (entries, delivered) => this.select(renderer, entries, delivered),
+      retainedOf: (origin) => this.retainedOf(renderer, origin),
       path: (origin, role) => {
         const snapshot = held(origin);
         return snapshot === void 0 ? void 0 : snapshot.chain.find((layer) => layer.role === role)?.path ?? null;
@@ -90562,18 +90656,20 @@ var ConfigDiscovery = class {
         const found2 = this.discovered(origin, shared, null);
         this.followed.set(key, {
           ...found2,
-          renderers: /* @__PURE__ */ new Set([renderer])
+          renderers: /* @__PURE__ */ new Set([renderer]),
+          selected: /* @__PURE__ */ new Map()
         });
         snapshots.push(found2.snapshot);
       }
       this.reloaded(snapshots);
     }
     let released = 0;
-    for (const [key, { renderers, watch: watch2 }] of this.followed) {
+    for (const [key, { renderers, selected, watch: watch2 }] of this.followed) {
       if (wanted.has(key)) {
         renderers.add(renderer);
         continue;
       }
+      selected.delete(renderer);
       if (!renderers.delete(renderer) || renderers.size > 0) continue;
       this.followed.delete(key);
       watch2.handle.release();
@@ -90584,6 +90680,46 @@ var ConfigDiscovery = class {
       "info",
       `config discovery why=follow followed=${this.followed.size} discovered=${fresh.length} released=${released}`
     );
+  }
+  // [LAW:single-enforcer] The renderer can keep its earlier selection or
+  // select an input actually delivered to it. Resolve the whole declaration
+  // before replacing its references, including a release with no selection.
+  select(renderer, entries, delivered) {
+    if (this.closed) return;
+    const next2 = /* @__PURE__ */ new Map();
+    for (const { origin, digest: digest2 } of entries) {
+      const key = originKey(origin);
+      const followed = this.followed.get(key);
+      if (!followed?.renderers.has(renderer))
+        throw new Error(`selected config origin is not followed: ${key}`);
+      if (digest2 === null) {
+        next2.set(key, null);
+        continue;
+      }
+      const previous2 = followed.selected.get(renderer);
+      const offered = delivered(origin);
+      const observation = previous2?.digest === digest2 ? previous2 : offered === void 0 ? void 0 : this.observations.get(offered);
+      if (observation?.digest !== digest2 || originKey(observation.origin) !== key)
+        throw new Error(`selected config revision was not delivered: ${key}`);
+      const shared = [...followed.selected.values()].find(
+        (held) => held?.digest === digest2
+      );
+      next2.set(key, shared ?? observation);
+    }
+    for (const [key, { selected }] of this.followed) {
+      const observation = next2.get(key);
+      if (observation === void 0) selected.delete(renderer);
+      else selected.set(renderer, observation);
+    }
+  }
+  retainedOf(renderer, origin) {
+    const followed = this.followed.get(originKey(origin));
+    const old = followed?.selected.get(renderer);
+    if (followed === void 0 || old === void 0) return void 0;
+    if (old === null || old.digest === followed.digest) return "current";
+    const earlier = old.snapshot.repo;
+    const current = followed.snapshot.repo;
+    return earlier?.standing !== "approved" || origin.target.source !== "argument-only" && current?.standing === "approved" && current.dir === earlier.dir ? old.snapshot : "current";
   }
   // Rediscover origins watching one of the files the turn actually wrote.
   // The writer reloads in this slot; the other holders get their own turns.
@@ -90638,9 +90774,12 @@ var ConfigDiscovery = class {
       const was = this.followed.get(key);
       if (was === void 0) continue;
       try {
+        const found2 = this.discovered(was.origin, shared, was.watch);
         const now2 = {
-          ...this.discovered(was.origin, shared, was.watch),
-          renderers: was.renderers
+          ...found2,
+          snapshot: found2.digest === was.digest ? was.snapshot : found2.snapshot,
+          renderers: was.renderers,
+          selected: was.selected
         };
         this.followed.set(key, now2);
         if (now2.digest !== was.digest) moved2.push(now2);
@@ -90718,10 +90857,10 @@ var ConfigDiscovery = class {
       ...found2.snapshot,
       watch: watchFault("config watch", { derived: spec, held: watch2 }, null)
     };
+    const observed2 = { origin, snapshot, digest: digestOf(snapshot) };
+    this.observations.set(snapshot, observed2);
     return {
-      origin,
-      snapshot,
-      digest: digestOf(snapshot),
+      ...observed2,
       watch: watch2,
       filePaths: paths2.targets.polled
     };
