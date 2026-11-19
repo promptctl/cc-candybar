@@ -20,8 +20,8 @@ import {
   type PayloadInputs,
 } from "../src/daemon/readings";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
-import { ContextProvider } from "../src/segments/context";
-import { MetricsProvider } from "../src/segments/metrics";
+import { ContextProvider } from "../src/daemon/cache/context-provider";
+import { MetricsProvider } from "../src/daemon/cache/metrics-provider";
 import { EMPTY_HISTORY_DEPTH } from "../src/renderer/settings-history";
 import { systemTimekeeper } from "../src/time";
 import type { CheckedHookData } from "../src/renderer-interface/request-context";

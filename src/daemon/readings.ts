@@ -27,8 +27,9 @@ import {
   type LaneDiagnostic,
   shortDigest,
 } from "../facts/world-state.js";
-import type { ContextProvider } from "../segments/context.js";
-import type { MetricsFold, MetricsProvider } from "../segments/metrics.js";
+import type { ContextProvider } from "./cache/context-provider.js";
+import type { MetricsFold } from "../segments/metrics.js";
+import type { MetricsProvider } from "./cache/metrics-provider.js";
 import type { TranscriptUsage } from "../segments/session.js";
 import type { ActivityInfo, ActivityProvider } from "../segments/activity.js";
 import type { TmuxService } from "./cache/tmux.js";

@@ -51,7 +51,31 @@ export default defineConfig([{
 	// URL handler copy can run without node_modules.
 	noExternal: [/./],
 	define,
-	plugins: [sourceDigestPlugin()],
+	plugins: [sourceDigestPlugin(), {
+		name: 'cc-candybar:renderer-filesystem',
+		// [LAW:effects-at-boundaries] The CLI and host in this same bundle need
+		// the filesystem. Follow only the renderer's runtime import graph,
+		// including shared modules, packages and dynamic imports.
+		generateBundle() {
+			const entry = path.join(SRC, 'renderer', 'main.ts');
+			if (!this.getModuleInfo(entry)) {
+				this.error('Cannot check the renderer filesystem boundary: renderer entry is missing');
+			}
+			const paths = new Map([[entry, [path.relative(ROOT, entry)]]]);
+			for (const [module, chain] of paths) {
+				const info = this.getModuleInfo(module);
+				if (!info) continue;
+				for (const id of [...info.importedIds, ...info.dynamicallyImportedIds]) {
+					if (paths.has(id)) continue;
+					const next = [...chain, path.isAbsolute(id) ? path.relative(ROOT, id) : id];
+					if (/^(?:node:)?fs(?:\/|$)/.test(id)) {
+						this.error(`Renderer imports the filesystem through ${next.join(' -> ')}`);
+					}
+					paths.set(id, next);
+				}
+			}
+		},
+	}],
 	// The attach launcher lane B restarts Claude Code under
 	// (scripts/vendor-cc-extra.mjs), beside the bundle that runs it: an
 	// install stages dist/cc-extra with dist/index.mjs.
