@@ -64228,6 +64228,9 @@ function contentOfText(text4) {
 function writable(content) {
   return content.kind !== "unreadable";
 }
+function retainsConfig(target, selected, current) {
+  return selected?.standing !== "approved" || target.source !== "argument-only" && current?.standing === "approved" && current.dir === selected.dir;
+}
 
 // src/renderer/lane-handoff.ts
 init_globals();
@@ -70686,9 +70689,7 @@ var RenderCache = class {
       if (draft !== null) key = draftKey(editing);
     }
     const existing = this.entries.get(key);
-    const priorRepo = existing?.snapshot.repo;
-    const lostApproval = draft !== null && priorRepo?.standing === "approved" && (draft.repo?.standing !== "approved" || draft.repo.dir !== priorRepo.dir);
-    if (existing !== void 0 && !lostApproval && originKey(existing.origin) === originKey(origin)) {
+    if (existing !== void 0 && originKey(existing.origin) === originKey(origin)) {
       runInAction(() => {
         this.entries.delete(key);
         this.entries.set(key, existing);
@@ -70702,9 +70703,9 @@ var RenderCache = class {
       return existing;
     }
     if (existing !== void 0) this.drop(key, existing, "evict");
-    const { snapshot, digest: digest2 } = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
+    const held = draft === null ? this.held(origin) : { snapshot: draft, digest: digestOf(draft) };
     const { projectDir, cwd: cwd2 } = origin;
-    const loaded = this.load(origin, snapshot, null);
+    const { loaded, selected } = this.selectState(origin, held, null);
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
     const entry = {
@@ -70712,17 +70713,18 @@ var RenderCache = class {
       get configLayers() {
         return configPaths(this.snapshot);
       },
-      snapshot,
-      digest: digest2,
-      selectedDigest: loaded.state === null ? null : digest2,
+      snapshot: held.snapshot,
+      digest: held.digest,
+      selected,
       lastError: loaded.error,
       lastWarnings: loaded.warnings,
-      state: loaded.state ?? fallbackState(cwd2, snapshot, this.deps)
+      get state() {
+        return this.selected.state;
+      }
     };
     makeObservable(entry, {
-      selectedDigest: observable,
-      lastError: observable,
-      state: observableRef
+      selected: observableRef,
+      lastError: observable
     });
     this.serve(entry.state);
     runInAction(() => this.entries.set(key, entry));
@@ -71024,9 +71026,9 @@ var RenderCache = class {
     return [...folders].sort();
   }
   configSelections() {
-    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, selectedDigest }]) => ({
+    return [...this.entries].filter(([key, entry]) => key === originKey(entry.origin)).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, { origin, selected }]) => ({
       origin,
-      digest: selectedDigest
+      digest: selected.digest
     }));
   }
   subscriptions() {
@@ -71054,14 +71056,29 @@ var RenderCache = class {
       `render-cache closed entries=${entries} deferred=${this.stats.retired}`
     );
   }
-  // [LAW:single-enforcer] The one place the cache loads a state, so a closed
-  // cache refuses every way one would be built — a new entry, a reload, a
-  // `config` turn after the close.
+  // [LAW:single-enforcer] Opening an entry, reloading a committed config,
+  // and rebuilding a draft all choose the served state here.
   // [LAW:no-silent-failure] A closed cache disposed every state it built; one
   // built after would hold timers and watchers nothing tears down.
-  load(origin, snapshot, served) {
+  selectState(origin, { snapshot, digest: digest2 }, previous2) {
     if (this.closed) throw new Error("render cache used after close");
-    return loadOrigin(origin.cwd, snapshot, this.deps, served);
+    const retained = previous2 !== null && retainsConfig(origin.target, previous2.repo, snapshot.repo) ? previous2 : null;
+    const { cwd: cwd2 } = origin;
+    const { repo: repo2 } = snapshot;
+    const loaded = loadOrigin(
+      cwd2,
+      snapshot,
+      this.deps,
+      retained?.state ?? null
+    );
+    if (loaded.state !== null)
+      return { loaded, selected: { state: loaded.state, digest: digest2, repo: repo2 } };
+    const selected = retained ?? {
+      state: fallbackState(cwd2, snapshot, this.deps),
+      digest: null,
+      repo: repo2
+    };
+    return { loaded, selected };
   }
   // [LAW:no-silent-failure] An entry loads, and a click writes, only from the
   // snapshot the host handed in for its origin. None is an event the renderer
@@ -71202,8 +71219,8 @@ var RenderCache = class {
   // Re-populate `entry` from `snapshot`, for `cause`.
   //
   // - Load success: swap the fresh state in, retire the prior one.
-  // - Load failure: keep the prior state (the bundled default before any
-  //   config has loaded), set lastError.
+  // - Load failure: keep the prior state if still approved, otherwise serve
+  //   the current snapshot's bundled default. Both report the load error.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
   // new DslConfig retires the old state, and `reclaim` disposes its
@@ -71214,7 +71231,7 @@ var RenderCache = class {
   // [LAW:single-enforcer] One publish point for "this reload completed":
   // straight-line, so the signal structurally cannot be skipped by whichever
   // arm the load took.
-  reloadInto(entry, { snapshot, digest: digest2 }, cause) {
+  reloadInto(entry, held, cause) {
     const retry = [...this.openFailures].filter(
       ([session, failed3]) => failed3.entry === entry && this.pins.has(session)
     );
@@ -71223,22 +71240,25 @@ var RenderCache = class {
       ...retry.map(([session]) => session)
     ];
     const served = entry.state;
-    const loaded = this.load(entry.origin, snapshot, served);
-    entry.snapshot = snapshot;
-    entry.digest = digest2;
+    const { loaded, selected } = this.selectState(
+      entry.origin,
+      held,
+      entry.selected
+    );
+    entry.snapshot = held.snapshot;
+    entry.digest = held.digest;
     entry.lastWarnings = loaded.warnings;
     runInAction(() => {
       entry.lastError = loaded.error;
-      if (loaded.state !== null) entry.selectedDigest = digest2;
-      if (loaded.kind === "built") entry.state = loaded.state;
+      entry.selected = selected;
     });
     if (loaded.state !== null)
       this.log("info", pluginLoadLine(loaded.layers, loaded.state));
-    if (loaded.kind === "built") {
-      this.serve(loaded.state);
+    if (selected.state !== served) {
+      this.serve(selected.state);
+      this.retire(served, "reload", entry);
     }
-    if (loaded.kind === "built") this.retire(served, "reload", entry);
-    if (loaded.state !== null)
+    if (selected.state !== served || loaded.state !== null)
       for (const [session, failure2] of retry)
         this.reopen(entry, session, failure2.requestOf);
     this.fit(entry);
@@ -90767,9 +90787,11 @@ var ConfigDiscovery = class {
     const old = followed?.selected.get(renderer);
     if (followed === void 0 || old === void 0) return void 0;
     if (old === null || old.digest === followed.digest) return "current";
-    const earlier = old.snapshot.repo;
-    const current = followed.snapshot.repo;
-    return earlier?.standing !== "approved" || origin.target.source !== "argument-only" && current?.standing === "approved" && current.dir === earlier.dir ? old.snapshot : "current";
+    return retainsConfig(
+      origin.target,
+      old.snapshot.repo,
+      followed.snapshot.repo
+    ) ? old.snapshot : "current";
   }
   // Rediscover origins watching one of the files the turn actually wrote.
   // The writer reloads in this slot; the other holders get their own turns.

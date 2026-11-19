@@ -4,15 +4,36 @@
     {
       "version": "pr-909",
       "ref": "refs/pull/909/merge",
-      "sha": "b4f39e4256ffb3b86611a5e25445cac9bdc84550",
-      "timestamp": "2026-11-19T21:38:11.764Z",
+      "sha": "d079f337c4bfd09b9b948e4ccd5c3d26c57f4704",
+      "timestamp": "2026-11-19T21:42:36.167Z",
       "commits": [
         {
-          "sha": "b4f39e4256ffb3b86611a5e25445cac9bdc84550",
+          "sha": "d079f337c4bfd09b9b948e4ccd5c3d26c57f4704",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T21:37:01Z",
-          "message": "Merge ff393a8c2ab4a994243a886b8bb7fba425255483 into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+          "timestamp": "2026-11-19T21:41:35Z",
+          "message": "Merge 7107fbc98638207792f42f0d741a504c49e55887 into 21ad3ab8defc9a580a0798d45c3295daef3e11e7\n"
+        },
+        {
+          "sha": "7107fbc98638207792f42f0d741a504c49e55887",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:41:21-07:00",
+          "message": "docs(renderer): describe last-good state across project decisions\n"
+        },
+        {
+          "sha": "9a65b53ebc5cfcc2964e50577e0563515880e73d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:40:42-07:00",
+          "message": "fix(renderer): retire last-good config after approval withdrawal\n"
+        },
+        {
+          "sha": "97cddc4efd65e098f70bf84fbbcfe0602cd0464d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T14:38:38-07:00",
+          "message": "docs(renderer): describe config and state delivery on replacement\n"
         },
         {
           "sha": "ff393a8c2ab4a994243a886b8bb7fba425255483",
