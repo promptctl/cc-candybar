@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-893",
+      "ref": "refs/pull/893/merge",
+      "sha": "d5d3fde241fa183772bad988eb49c5e4065eb75e",
+      "timestamp": "2026-11-19T17:44:33.285Z",
+      "commits": [
+        {
+          "sha": "d5d3fde241fa183772bad988eb49c5e4065eb75e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:43:20-07:00",
+          "message": "Merge 9050472d1450dcc91253e1794e890da4bb4f1f04 into 1b747e5500b197edd1e1a626e5634c0f35723f44\n"
+        },
+        {
+          "sha": "9050472d1450dcc91253e1794e890da4bb4f1f04",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T10:40:36-07:00",
+          "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-891",
       "ref": "refs/pull/891/merge",
       "sha": "d018c8a4d36ec883ab2f86666c26e776444c55e8",
