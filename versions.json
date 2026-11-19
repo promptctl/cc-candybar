@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "7b97b3062fa1b643825a0aae621edcce5c8a63af",
+      "timestamp": "2026-11-19T20:03:54.216Z",
+      "commits": [
+        {
+          "sha": "7b97b3062fa1b643825a0aae621edcce5c8a63af",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T20:02:45Z",
+          "message": "chore(release): set `package.json` to 1.235.11\n\n## [1.235.11](https://github.com/promptctl/cc-candybar/compare/v1.235.10...v1.235.11) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** check render workspace directories at ingress ([#895](https://github.com/promptctl/cc-candybar/issues/895)) ([c2d97e8](https://github.com/promptctl/cc-candybar/commit/c2d97e8387a54fe5bcd2ce30580d704c3d509943))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-897",
       "ref": "refs/pull/897/merge",
       "sha": "48d7feb98462170ff8ab576ea951e7ea6195c1a9",
@@ -49,21 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T11:05:04-07:00",
           "message": "fix(config): recognize equivalent saved project directories\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "c2d97e8387a54fe5bcd2ce30580d704c3d509943",
-      "timestamp": "2026-11-19T19:56:30.862Z",
-      "commits": [
-        {
-          "sha": "c2d97e8387a54fe5bcd2ce30580d704c3d509943",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:55:22-07:00",
-          "message": "fix(daemon): check render workspace directories at ingress (#895)"
         }
       ]
     },
