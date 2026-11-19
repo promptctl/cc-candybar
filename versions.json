@@ -2,116 +2,17 @@
   "schema": 2,
   "versions": [
     {
-      "version": "pr-912",
-      "ref": "refs/pull/912/merge",
-      "sha": "bd9da585a147dd1f6ad0c3d24f2fc82f3d66d831",
-      "timestamp": "2026-11-19T23:16:49.897Z",
-      "commits": [
-        {
-          "sha": "bd9da585a147dd1f6ad0c3d24f2fc82f3d66d831",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T23:15:05Z",
-          "message": "Merge 053ed1ee3b28a98abf7699cc019f6b28b2529fa1 into 5958f3e3ec33bdf9e73072353c8948838a4d6b57\n"
-        },
-        {
-          "sha": "053ed1ee3b28a98abf7699cc019f6b28b2529fa1",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:14:52-07:00",
-          "message": "style(host): format the startup turn signature\n"
-        },
-        {
-          "sha": "57332d1c3be9d43505188a9a5a8ae2a7e848df6d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:12:59-07:00",
-          "message": "fix(renderer): translate pane receipts across process generations\n"
-        },
-        {
-          "sha": "0831846cd14d535a8b61bce496c7483150b9d6df",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:13:52-07:00",
-          "message": "fix(host): validate inspection data before accepting a turn\n"
-        },
-        {
-          "sha": "809baba855cddbe53edb1d8c502765c431b1e9c9",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:09:13-07:00",
-          "message": "refactor(renderer): require each command own reply type\n"
-        },
-        {
-          "sha": "bfef7a7234c9504da699861da8e70d3a1f4e10b2",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:09:09-07:00",
-          "message": "fix(host): admit command replies before settling their work\n"
-        },
-        {
-          "sha": "74e97bb0528d3f12d137ab5aa9525f1b275a3ed8",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:08:17-07:00",
-          "message": "fix(renderer): check inspection payloads before use\n"
-        },
-        {
-          "sha": "ff48a82ad2aee747224166b951b9fe1e0e040231",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T16:08:54-07:00",
-          "message": "build(renderer): keep host observations outside the render graph\n"
-        },
-        {
-          "sha": "ed8a3be286f3756a0f32c9aefcc80ae416eb418a",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:59:06-07:00",
-          "message": "test(renderer): compare core construction in captured replay\n"
-        },
-        {
-          "sha": "9a34bf20c6c9a68128e7392d7ce3e267ef68b6cb",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:58:09-07:00",
-          "message": "refactor(renderer): deliver inspection and shutdown as events\n"
-        },
-        {
-          "sha": "976edc2c7e11ab41f4a2988638d9753487230835",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:56:44-07:00",
-          "message": "refactor(renderer): boot with only the transport clock\n"
-        },
-        {
-          "sha": "bd5c9a309bbe416a92b11d1d421d8a1e9a91a419",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:55:24-07:00",
-          "message": "test(renderer): replay captured private-wire turns\n"
-        },
-        {
-          "sha": "87cb60aed90886e80f07714445e3bcee929f5ae4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:57:43-07:00",
-          "message": "build(renderer): reject host modules across the process import graph\n"
-        }
-      ]
-    },
-    {
       "version": "main",
       "ref": "refs/heads/main",
-      "sha": "5958f3e3ec33bdf9e73072353c8948838a4d6b57",
-      "timestamp": "2026-11-19T22:55:14.948Z",
+      "sha": "5963672e13da996839cf05d223e81c4ddc63f648",
+      "timestamp": "2026-11-19T23:24:38.033Z",
       "commits": [
         {
-          "sha": "5958f3e3ec33bdf9e73072353c8948838a4d6b57",
+          "sha": "5963672e13da996839cf05d223e81c4ddc63f648",
           "author_name": "Brandon Fryslie",
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T15:54:01-07:00",
-          "message": "refactor(renderer): return diagnostics and let the host confirm delivered frames (#910)\n\n* refactor(renderer): return diagnostics with the owning answer\n\n* fix(renderer): preserve answers across diagnostic boundary faults\n\n* fix(host): settle displayed events and remove renderer callbacks\n\n* fix(host): settle displayed events only when an occurrence changes\n\n* test(daemon): prove the connection deadline is cancelled at shutdown"
+          "timestamp": "2026-11-19T16:23:39-07:00",
+          "message": "fix(renderer): settle pane deliveries and inspections in their owning turns (#912)\n\n* build(renderer): reject host modules across the process import graph\n\n* test(renderer): replay captured private-wire turns\n\n* refactor(renderer): boot with only the transport clock\n\n* refactor(renderer): deliver inspection and shutdown as events\n\n* test(renderer): compare core construction in captured replay\n\n* build(renderer): keep host observations outside the render graph\n\n* fix(renderer): check inspection payloads before use\n\n* fix(host): admit command replies before settling their work\n\n* refactor(renderer): require each command own reply type\n\n* fix(host): validate inspection data before accepting a turn\n\n* fix(renderer): translate pane receipts across process generations\n\n* style(host): format the startup turn signature"
         }
       ]
     },
