@@ -18,6 +18,7 @@ import { HeldStores } from "../src/daemon/held-stores";
 import { ephemeralSessionFile } from "../src/daemon/session-state-file";
 import { emptyStores } from "./helpers/doctor-facts";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import { placementDraftKey } from "../src/config/placement-keys";
 import { readConfigText } from "../src/utils/atomic-write";
 import { redoOf, rewindOf, undoOf, inPlace } from "./helpers/history-step";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
@@ -438,6 +439,41 @@ describe("the savepoint survives a restart", () => {
       "settings-history loaded sessions=2 dropped=0",
       `settings-history load: session "${SID}" dropped the changes to "look", "progression", no longer a setting`,
     ]);
+  });
+
+  test("a draft step naming no owner is retired at load, and undo reaches the step under it", () => {
+    // A draft is stored owned (src/config/placement-keys.ts); a step over the
+    // owner-free form names a key the store refuses, so it would stick on top.
+    const historyFile = path.join(dir, "history.json");
+    const theme = { kind: "session", key: "theme", before: null, after: "x" };
+    fs.writeFileSync(
+      historyFile,
+      JSON.stringify({
+        [SID]: {
+          past: [
+            [theme],
+            [
+              {
+                kind: "session",
+                key: placementDraftKey("default", "vcs", "detail"),
+                before: null,
+                after: "true",
+              },
+            ],
+          ],
+          future: [],
+        },
+      }),
+    );
+    const sessionState = new SessionState({ [SID]: { theme: "x" } });
+    const history = new SettingsHistory(
+      sessionState,
+      () => {},
+      heldOver(historyFile).current().history,
+    );
+    expect(history.depth(SID)).toEqual({ undo: 1, redo: 0, sinceEdit: 0 });
+    undoOf(history, SID, files);
+    expect(sessionState.get(SID, "theme")).toBeNull();
   });
 
   test("a history written before savepoints existed loads with none", () => {

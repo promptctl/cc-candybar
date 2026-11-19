@@ -659,6 +659,9 @@ function loadKey(inputs: LoadInputs): string {
             source: null,
             // Not keyed: the entry's, recomposed on every load.
             warnings: null,
+            // Not keyed: placed from the layers' own configs and inserts,
+            // keyed here.
+            placed: null,
           }) satisfies Projection<LoadedChain["layers"][number]>,
       ),
       base: loaded.base,
@@ -1657,13 +1660,13 @@ export class RenderCache<
     // load falls back to, which is built beside this.
     if (outcome.kind !== "failed") {
       const store = this.deps.sessionState;
-      releaseEnded(
+      for (const line of releaseEnded(
         store,
         store.sessions(),
         outcome.state.holds,
         "load",
-        (line) => this.log("info", line),
-      );
+      ))
+        this.log("info", line);
     }
     return outcome;
   }

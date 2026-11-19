@@ -1,10 +1,6 @@
 // [LAW:single-enforcer] The one seam where a placement's session keys gain
 // their owner (src/config/placement-keys.ts), and the one release of the keys
 // a load or a layout click ended.
-//
-// The compile names every key owner-free, since one compile serves every
-// entry whose config compiles alike. A view over the store owns them for the
-// chain its reader renders from: one per render state, and one per click.
 
 import { runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
@@ -64,15 +60,16 @@ export function ownedStore(
 // every family key in a form naming no owner. Keys of any other owner, and
 // keys no family spells, stay. `store` is read and cleared as it spells
 // keys, owned: the raw store for a load, the click's journal for a click,
-// so the click's undo restores what it released. One transaction.
+// so the click's undo restores what it released. One transaction. Returns
+// what it released, one line for each session and owner, or one line saying
+// it released nothing.
 export function releaseEnded(
   store: Pick<SessionStateReader, "get" | "keys"> &
     Pick<SessionStateRW, "clear">,
   sessions: readonly SessionId[],
   holds: Holds,
   by: "load" | "click",
-  log: (line: string) => void,
-): void {
+): readonly string[] {
   const lines: string[] = [];
   runInAction(() => {
     for (const sessionId of sessions) {
@@ -100,6 +97,8 @@ export function releaseEnded(
       }
     }
   });
-  // [LAW:nothing-unseen] Each release, once it has landed.
-  for (const line of lines) log(line);
+  // [LAW:nothing-unseen] A release that ended nothing says so.
+  return lines.length > 0
+    ? lines
+    : [`placement-state released by=${by} sessions=${sessions.length} keys=0`];
 }

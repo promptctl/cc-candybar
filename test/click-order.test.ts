@@ -468,8 +468,8 @@ describe("the click path", () => {
 test("a navigation commit that throws leaves the settings journal committed", () => {
   const { ctx, theme, undoDepth } = setup();
   const begin = ctx.navigation.begin.bind(ctx.navigation);
-  jest.spyOn(ctx.navigation, "begin").mockImplementation((store, owner) => ({
-    ...begin(store, owner),
+  jest.spyOn(ctx.navigation, "begin").mockImplementation((store) => ({
+    ...begin(store),
     commit: () => {
       throw new Error("navigation broke");
     },

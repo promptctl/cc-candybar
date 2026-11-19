@@ -4,6 +4,7 @@
 // what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
 
+import { escapeRegExp } from "../../utils/regex.js";
 import {
   entryOf,
   Json5EditError,
@@ -174,8 +175,8 @@ function elementPathLine(
 
 function findKeyOccurrence(source: string, from: number, key: string): number {
   // Match `<key>:` or `"<key>":` or `'<key>':` — any whitespace before the colon
-  // is allowed by JSON5. Escape regex specials in key.
-  const escaped = key.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  // is allowed by JSON5.
+  const escaped = escapeRegExp(key);
   const re = new RegExp(`(?:["']${escaped}["']|\\b${escaped}\\b)\\s*:`, "g");
   re.lastIndex = from;
   const m = re.exec(source);

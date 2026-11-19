@@ -488,7 +488,7 @@ function validateChain(
   };
   if (top === undefined) {
     return {
-      layers,
+      layers: [],
       base,
       installed,
       ...renderable(
@@ -502,19 +502,32 @@ function validateChain(
     };
   }
   try {
+    const chain = renderable(
+      validateRenderable(
+        top,
+        rendering,
+        top.path,
+        allowedPalettes,
+        layers.slice(0, -1).reverse(),
+      ),
+    );
     return {
-      layers,
+      // [LAW:one-source-of-truth] Each prefix's trees through the one insert
+      // pass validation places the chain's by; the top's is the chain's own.
+      layers: layers.map((layer, i) => ({
+        ...layer,
+        placed:
+          i === layers.length - 1
+            ? chain.placed
+            : insertsOf(
+                layer,
+                layers.slice(0, i).reverse(),
+                layer.plugins.rendering,
+              ).place(),
+      })),
       base,
       installed,
-      ...renderable(
-        validateRenderable(
-          top,
-          rendering,
-          top.path,
-          allowedPalettes,
-          layers.slice(0, -1).reverse(),
-        ),
-      ),
+      ...chain,
     };
   } catch (e) {
     // [LAW:single-enforcer] Blame goes to the lowest layer that fails on its
@@ -540,9 +553,15 @@ export interface ChainTrace {
 
 export interface LoadedChain {
   // Lowest first; each layer's `config` is the merge of it and every layer
-  // below — the top one's is the merged tree before synthesis.
+  // below — the top one's is the merged tree before synthesis — and `placed`
+  // is that merge with the insert cells of it and every layer below placed:
+  // the trees that prefix of the chain renders. The top one's is `placed`.
   readonly layers: ReadonlyArray<
-    LoadedFile & { readonly path: string; readonly config: DslConfig }
+    LoadedFile & {
+      readonly path: string;
+      readonly config: DslConfig;
+      readonly placed: DslConfig;
+    }
   >;
   // What the first file merges over: the bundled default and the installed
   // plugins — the config an absent file reads as.
@@ -706,12 +725,11 @@ export function validateRenderable(
   // The files it merges over, nearest first.
   beneath: readonly AuthoredLayer[] = [],
 ): Renderable {
-  const presence = presenceOf(authoredConfig.config.segments, rendering);
-  const written = layerInserts(
-    { ...authoredConfig, path: filePath },
-    beneath,
+  const {
     presence,
-  );
+    written,
+    inserted: placing,
+  } = insertsOf({ ...authoredConfig, path: filePath }, beneath, rendering);
   // [LAW:single-enforcer] Every layer's `insert` cells are placed here, once,
   // before any check or synthesis walks a tree — so each walk sees the trees
   // that render and none places a cell again.
@@ -719,11 +737,7 @@ export function validateRenderable(
     cells: readonly InsertCell[],
     refused: readonly string[],
   ): Renderable => {
-    const inserted = placeInserts(
-      authoredConfig.config,
-      cells,
-      written.authored,
-    );
+    const inserted = placing(cells);
     return judgeRenderable(
       authoredConfig,
       filePath,
@@ -872,6 +886,27 @@ function judgeRenderable(
     dropped,
     placed: merged,
     warnings: notices,
+  };
+}
+
+// [LAW:single-enforcer] A file's insert cells and those of the files it
+// merges over, and its trees with a set of them placed: what validation
+// judges, and what a prefix of a chain renders (`place`, every cell placed).
+function insertsOf(
+  top: AuthoredLayer,
+  // The files it merges over, nearest first.
+  beneath: readonly AuthoredLayer[],
+  rendering: ReadonlyMap<string, NamedDefinition>,
+) {
+  const presence = presenceOf(top.config.segments, rendering);
+  const written = layerInserts(top, beneath, presence);
+  const inserted = (cells: readonly InsertCell[]) =>
+    placeInserts(top.config, cells, written.authored);
+  return {
+    presence,
+    written,
+    inserted,
+    place: (): DslConfig => inserted(written.cells).config,
   };
 }
 

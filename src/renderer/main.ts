@@ -517,13 +517,12 @@ export function mainRendererOf(
         home: inputs.home,
         history: (sessionId) => settingsHistory.depth(sessionId),
         // Measured against the gate of the config the view draws with, over
-        // the state's own view of the store.
-        navigation: (sessionId, state) =>
+        // the store as the steps name its keys, owned.
+        navigation: (sessionId, config) =>
           navigationHistory.depth(
             sessionId,
-            state.sessionState,
-            gates.state.gateFor(state.config),
-            state.owner,
+            sessionState,
+            gates.state.gateFor(config),
           ),
       }),
     },

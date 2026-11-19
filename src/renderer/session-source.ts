@@ -23,6 +23,7 @@ import {
   type EffectiveGlobals,
   resolveEffectiveGlobals,
 } from "../config/effective-globals.js";
+import type { ValidatedConfig } from "../config/dsl-types.js";
 import type { ViewSource } from "../dsl/view-source.js";
 import {
   type WorldState,
@@ -39,7 +40,6 @@ import {
   type DrawInputs,
   type ViewPayload,
 } from "./render-payload.js";
-import type { DslRenderState } from "./render-cache.js";
 import type { HistoryDepth } from "./settings-history.js";
 import { settingCounts } from "./setting-drafts.js";
 import { layerFlags } from "../config/layer-role.js";
@@ -73,8 +73,11 @@ export interface SessionSourceDeps {
   // The session's undo/redo depth — SettingsHistory.depth in the daemon.
   readonly history: (sessionId: SessionId) => HistoryDepth;
   // The session's back depth, measured against the gate of the config its
-  // view draws with, and its owner — NavigationHistory.depth in the daemon.
-  readonly navigation: (sessionId: SessionId, state: DslRenderState) => number;
+  // view draws with — NavigationHistory.depth in the daemon.
+  readonly navigation: (
+    sessionId: SessionId,
+    config: ValidatedConfig,
+  ) => number;
 }
 
 export function sessionSource(
@@ -116,7 +119,7 @@ export function sessionSource(
           layers: layerFlags(state.writable),
         },
         history: deps.history(sessionId),
-        back: deps.navigation(sessionId, state),
+        back: deps.navigation(sessionId, state.config),
       }),
     );
     const document = (): WorldState => deps.worldStates.of(sessionId);

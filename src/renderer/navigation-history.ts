@@ -22,7 +22,7 @@ import { type SessionStateRW } from "../renderer-interface/session-state";
 import type { Gate } from "../daemon/foundations/validator-registry";
 import { BadVerbArgs } from "../daemon/foundations/verb-error";
 import type { SessionId } from "../daemon/foundations/session-id";
-import type { Owner } from "../config/placement-keys";
+import { ownerFree } from "../config/placement-keys";
 
 export interface NavigationChange {
   readonly key: string;
@@ -55,64 +55,52 @@ export interface NavigationJournal {
   commit(): void;
 }
 
-// A step, and the chain the session rendered from when it was made
-// (src/config/placement-keys.ts): its keys name that chain's placements in
-// their owner-free form, so in any other chain the view it was made over is
-// gone. Null for a session with no config.
-interface Made {
-  readonly owner: Owner | null;
-  readonly step: NavigationStep;
-}
-
 export class NavigationHistory {
   // Observable, so a view's payload over a session's depth (`◁`) is
   // recomputed in the turn a step lands.
-  private readonly past = observable.map<SessionId, readonly Made[]>(
+  private readonly past = observable.map<SessionId, readonly NavigationStep[]>(
     undefined,
     { deep: false },
   );
 
   // [LAW:one-source-of-truth] How many clicks on `◁` restore something — the
   // walk `back` itself makes, so the count cannot promise a step it discards.
-  depth(
-    sessionId: SessionId,
-    store: SessionStateRW,
-    gate: Gate,
-    owner: Owner,
-  ): number {
-    return this.restorable(sessionId, store, gate, owner).length;
+  depth(sessionId: SessionId, store: SessionStateRW, gate: Gate): number {
+    return this.restorable(sessionId, store, gate).length;
   }
 
   // The steps going back would restore, oldest first: walking down from the
   // newest over the state as each restore would leave it, a step is restored
   // while every key it changed still holds what it left there and every value
   // it would write back passes `gate` — the session's config's, as it reads
-  // now — and it was made in the chain `owner` names. Any other step is over a
-  // view that is gone — rewritten since (a layout edit releasing the placement
-  // it configured), or no longer one the config admits (that placement
-  // removed, a group renamed, another chain's ✚ that shares the id) — and is
-  // discarded rather than replayed.
+  // now. Any other step is over a view that is gone — rewritten since (a
+  // layout edit releasing the placement it configured), or no longer one the
+  // config admits (that placement removed, a group renamed) — and is
+  // discarded rather than replayed. A step names keys as the store holds them,
+  // owned (src/config/placement-keys.ts), so a step made in another config
+  // restores that config's keys alone; the gate, derived from the compile,
+  // names them owner-free.
   private restorable(
     sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
-    owner: Owner,
-  ): readonly Made[] {
+  ): readonly NavigationStep[] {
     const state = new Map<string, string | null>();
     const read = (key: string): string | null =>
       state.has(key) ? state.get(key)! : store.get(sessionId, key);
-    const kept: Made[] = [];
-    for (const made of [...(this.past.get(sessionId) ?? [])].reverse()) {
-      const { step } = made;
-      const holds =
-        made.owner === owner &&
-        step.every(
-          (c) =>
-            read(c.key) === c.after &&
-            (c.before === null || gate.validate(c.key, c.before).ok),
-        );
+    const admits = (key: string, value: string): boolean => {
+      const free = ownerFree(key, value);
+      return gate.validate(free.key, free.value).ok;
+    };
+    const kept: NavigationStep[] = [];
+    for (const step of [...(this.past.get(sessionId) ?? [])].reverse()) {
+      const holds = step.every(
+        (c) =>
+          read(c.key) === c.after &&
+          (c.before === null || admits(c.key, c.before)),
+      );
       if (!holds) continue;
-      kept.unshift(made);
+      kept.unshift(step);
       for (const c of step) state.set(c.key, c.before);
     }
     return kept;
@@ -121,7 +109,7 @@ export class NavigationHistory {
   // `store` is the click's own view of session state — the settings journal's,
   // so a navigating click that also picks a setting still records the pick
   // where undo reaches it.
-  begin(store: SessionStateRW, owner: Owner | null): NavigationJournal {
+  begin(store: SessionStateRW): NavigationJournal {
     // Keyed by session, then key: a click that writes one key twice records
     // one change from its first `before` to its last `after`.
     const pending = new Map<SessionId, Map<string, NavigationChange>>();
@@ -144,7 +132,7 @@ export class NavigationHistory {
           const step = [...changes.values()].filter(
             (c) => c.before !== c.after,
           );
-          if (step.length > 0) this.push(sessionId, { owner, step });
+          if (step.length > 0) this.push(sessionId, step);
         }
         pending.clear();
       },
@@ -159,11 +147,10 @@ export class NavigationHistory {
     sessionId: SessionId,
     store: SessionStateRW,
     gate: Gate,
-    owner: Owner,
   ): { readonly step: NavigationStep; readonly discarded: number } {
     const all = this.past.get(sessionId) ?? [];
-    const steps = this.restorable(sessionId, store, gate, owner);
-    const step = steps.at(-1)?.step;
+    const steps = this.restorable(sessionId, store, gate);
+    const step = steps.at(-1);
     const discarded = all.length - steps.length;
     if (step === undefined) {
       this.put(sessionId, steps);
@@ -186,13 +173,13 @@ export class NavigationHistory {
     return { step, discarded };
   }
 
-  private push(sessionId: SessionId, made: Made): void {
+  private push(sessionId: SessionId, step: NavigationStep): void {
     const steps = this.past.get(sessionId) ?? [];
-    this.put(sessionId, [...steps, made].slice(-MAX_STEPS));
+    this.put(sessionId, [...steps, step].slice(-MAX_STEPS));
   }
 
   // Move-to-end keeps insertion order as recency.
-  private put(sessionId: SessionId, steps: readonly Made[]): void {
+  private put(sessionId: SessionId, steps: readonly NavigationStep[]): void {
     runInAction(() => {
       this.past.delete(sessionId);
       if (steps.length > 0) this.past.set(sessionId, steps);

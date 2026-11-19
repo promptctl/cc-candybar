@@ -11,13 +11,20 @@ import {
   chainOwner,
   classify,
   freeValue,
+  insertGap,
   isOwnerFree,
+  ownerFree,
   ownedKey,
   ownedValue,
   type Family,
   type Placement,
 } from "../../src/config/placement-keys";
-import { menuPageKey } from "../../src/config/menu-keys";
+import {
+  menuPageKey,
+  menuStateKey,
+  sharedMenuStateKey,
+} from "../../src/config/menu-keys";
+import { escapedIdent } from "../../src/config/ident";
 import {
   EDIT_CONFIGURE_KEY,
   EDIT_MODE_KEY,
@@ -193,16 +200,14 @@ describe("a release", () => {
       store.set(s, "menus.vcs.apply", "open");
     }
     a.set(S1, EDIT_CONFIGURE_KEY, CONFIGURING.mint(vcs));
-    const lines: string[] = [];
     // A's chain still places git and no longer vcs; B's chain is not this load's.
-    releaseEnded(
+    const lines = releaseEnded(
       store,
       store.sessions(),
       new Map([
         [A, { paths: ["/u.json5"], placed: new Set([CONFIGURING.mint(git)]) }],
       ]),
       "load",
-      (l) => lines.push(l),
     );
     for (const s of [S1, S2]) {
       expect(a.get(s, draftOf(vcs))).toBeNull();
@@ -227,10 +232,7 @@ describe("a release", () => {
         theme: "ocean",
       },
     });
-    const lines: string[] = [];
-    releaseEnded(store, store.sessions(), new Map(), "load", (l) =>
-      lines.push(l),
-    );
+    const lines = releaseEnded(store, store.sessions(), new Map(), "load");
     expect(store.keys(S1)).toEqual(["theme"]);
     expect(lines).toEqual([
       `placement-state released by=load session=${S1} owner=none chain=- keys=${draftOf(vcs)},edit.draft.vcs.detail,${EDIT_CONFIGURE_KEY}`,
@@ -241,16 +243,58 @@ describe("a release", () => {
     const store = new SessionState();
     const d = chainOwner([]);
     ownedStore(store, () => d).set(S1, draftOf(vcs), "true");
-    const lines: string[] = [];
-    releaseEnded(
+    const lines = releaseEnded(
       store,
       [S1],
       new Map([[d, { paths: [], placed: new Set<string>() }]]),
       "load",
-      (l) => lines.push(l),
     );
     expect(lines).toEqual([
       `placement-state released by=load session=${S1} owner=${d} chain=<default> keys=${DRAFTS.own(draftOf(vcs), d)}`,
     ]);
+  });
+
+  test("a release that ends nothing says it ran", () => {
+    const store = new SessionState();
+    ownedStore(store, () => A).set(S1, draftOf(vcs), "true");
+    const holds = new Map([
+      [A, { paths: ["/u.json5"], placed: new Set([CONFIGURING.mint(vcs)]) }],
+    ]);
+    expect(releaseEnded(store, [S1], holds, "click")).toEqual([
+      "placement-state released by=click sessions=1 keys=0",
+    ]);
+  });
+});
+
+describe("the families spell what the menus derive", () => {
+  test.each(PLACEMENTS)("%o", (at) => {
+    // The `{{ menu }}` the ✚ hangs derives its key from its host and action.
+    const gap = insertGap(at.preset, at.id, "after");
+    expect(LIBRARIES.mint({ ...at, relation: "after" })).toBe(
+      menuStateKey(gap.host, gap.apply, undefined),
+    );
+    // The configure pickers accordion on a shared key.
+    expect(CONFIGURE_LISTS.mint(at)).toBe(
+      sharedMenuStateKey(
+        `edit.${escapedIdent(at.preset)}.configure.${escapedIdent(at.id)}`,
+      ),
+    );
+  });
+
+  test("a stored key and value read back as the config names them", () => {
+    const list = CONFIGURE_LISTS.mint({ preset: "default", id: "vcs" });
+    const member = CONFIGURING.mint({ preset: "default", id: "vcs" });
+    expect(ownerFree(menuPageKey(CONFIGURE_LISTS.own(list, A)!), "2")).toEqual({
+      key: menuPageKey(list),
+      value: "2",
+    });
+    expect(ownerFree(EDIT_CONFIGURE_KEY, CONFIGURING.own(member, A)!)).toEqual({
+      key: EDIT_CONFIGURE_KEY,
+      value: member,
+    });
+    expect(ownerFree("theme", "ocean")).toEqual({
+      key: "theme",
+      value: "ocean",
+    });
   });
 });

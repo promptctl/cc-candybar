@@ -146,6 +146,9 @@ function world(sessionState = new SessionState()) {
   // click reloads. One path for every session, as the daemon has one
   // navigation history.
   let ctx: VerbContext | undefined;
+  // The config text on disk at each click release line: a line written
+  // while the click is held would see the text before it.
+  const clickLogSaw: Array<string | null> = [];
   const clicker = (origin: RenderOrigin, sid: SessionId): VerbContext => {
     recordRender(sessionState, sid, origin.projectDir);
     if (ctx !== undefined) return ctx;
@@ -159,7 +162,11 @@ function world(sessionState = new SessionState()) {
       {
         configFor: (o) => cache.getOrCreate(o).state.config,
         ownerFor: (o) => cache.getOrCreate(o).state.owner,
-        log: (_level, line) => lines.push(line),
+        log: (_level, line) => {
+          lines.push(line);
+          if (line.startsWith("placement-state released by=click"))
+            clickLogSaw.push(durable.text());
+        },
       },
     );
     onLanded(ctx, () => cache.configs.again());
@@ -190,6 +197,7 @@ function world(sessionState = new SessionState()) {
     clicker,
     fire,
     released,
+    clickLogSaw,
     close,
   };
 }
@@ -221,8 +229,10 @@ describe("a placement's state ends with it", () => {
         ).toBe("true");
         expect(w.sessionState.get(sid, AUTHOR_KEY)).toBe(DISCLOSURE_OPEN);
       }
-      // [LAW:nothing-unseen] One line per session, naming its owner and chain.
-      const lines = w.released();
+      // [LAW:nothing-unseen] The first load released nothing and says so;
+      // the edit's, one line per session, naming its owner and chain.
+      const [first, ...lines] = w.released();
+      expect(first).toBe("placement-state released by=load sessions=0 keys=0");
       expect(lines).toHaveLength(2);
       for (const sid of [S1, S2])
         expect(lines).toContainEqual(
@@ -252,6 +262,8 @@ describe("a placement's state ends with it", () => {
         REMOVE_DIRECTORY,
       );
       expect(durable.text()).toBe(MODEL_ONLY.replace(/"directory", /, ""));
+      // [LAW:nothing-unseen] The click's release is logged once it landed.
+      expect(w.clickLogSaw).toEqual([durable.text()]);
       expect(w.held(w.home, S1, DIRECTORY)).toEqual(w.NONE);
       expect(w.held(w.home, S2, DIRECTORY)).toEqual(w.NONE);
       expect(w.released()).toContainEqual(
@@ -339,6 +351,32 @@ describe("a placement's state ends with it", () => {
       expect(w.held(w.home, S1, DIRECTORY)).toEqual({
         ...w.NONE,
         draft: "true",
+      });
+    } finally {
+      w.close();
+    }
+  });
+
+  test("a placement an insert cell places holds its state across a reload", () => {
+    const INSERTING = (comment: string) => `{
+  segments: { mine: { template: "M" } },
+  root: { h: ["model"] },
+  insert: [{ seg: "mine", after: "model" }],
+}
+// ${comment}
+`;
+    const MINE: Placement = { preset: "default", id: "mine" };
+    durable.write(INSERTING("one"));
+    const w = world();
+    try {
+      w.seed(w.home, S1, MINE);
+      durable.write(INSERTING("two"));
+      w.cache.configs.again();
+      expect(w.held(w.home, S1, MINE)).toEqual({
+        draft: "true",
+        list: DISCLOSURE_OPEN,
+        library: DISCLOSURE_OPEN,
+        configuring: true,
       });
     } finally {
       w.close();
@@ -454,7 +492,7 @@ describe("two chains placing one id", () => {
     }
   });
 
-  test("going back in one config never reopens the other's library", async () => {
+  test("going back restores the step's own config's keys, never the config the session renders now", async () => {
     durable.write(BOTH);
     fs.writeFileSync(durable.projectPath, PROJECT(`"directory", "model"`));
     answerRepo(durable.projectDir, "approved", durable.host.env);
@@ -472,9 +510,11 @@ describe("two chains placing one id", () => {
       // It then renders the project's config, whose ✚ beside the same id is closed.
       w.as(project).set(S1, library, DISCLOSURE_CLOSED);
       const inProject = w.clicker(project, S1);
-      await expect(w.fire(inProject, "back", S1)).rejects.toThrow(BadVerbArgs);
+      // The step names the user config's key as the store holds it, so going
+      // back reopens that library, and the project's stays closed.
+      await w.fire(inProject, "back", S1);
       expect(w.as(project).get(S1, library)).toBe(DISCLOSURE_CLOSED);
-      expect(w.as(user).get(S1, library)).toBe(DISCLOSURE_CLOSED);
+      expect(w.as(user).get(S1, library)).toBe(open);
     } finally {
       w.close();
     }

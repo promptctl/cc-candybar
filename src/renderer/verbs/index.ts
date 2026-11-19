@@ -269,6 +269,9 @@ export type Journaled<C extends DaemonContext> = C & {
   readonly context: SessionContext | null;
   readonly journal: Journal;
   readonly navigating: SessionStateRW;
+  // [LAW:nothing-unseen] A line the daemon log takes once the click's writes
+  // have landed: what it says happened has happened only then.
+  readonly landedLog: (line: string) => void;
 };
 
 // What a handler runs with: the daemon's context, with `sessionState` the
@@ -1120,9 +1123,13 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   // the chain the write's own load proved, and through the click's journal,
   // so its undo brings the placement and its drafts back. Every other session
   // is released by the load the landing makes.
-  releaseEnded(ctx.journal.sessionState, [sid], holds, "click", (line) =>
-    ctx.log("info", line),
-  );
+  for (const line of releaseEnded(
+    ctx.journal.sessionState,
+    [sid],
+    holds,
+    "click",
+  ))
+    ctx.landedLog(line);
 };
 
 // [LAW:one-source-of-truth] Step the session's settings history
@@ -1144,11 +1151,12 @@ const undo: VerbHandler = (value, ctx) => {
 const back: VerbHandler = (value, ctx) => {
   const sid = requireSessionId(oneArg(value));
   const origin = sessionOrigin(ctx, sid);
+  // The steps name keys as the store holds them, owned, so they are put
+  // back beneath the owner's view.
   const { step, discarded } = ctx.navigation.back(
     sid,
-    ctx.sessionState,
+    ctx.journal.sessionState,
     ctx.gates.state.gateFor(ctx.configFor(origin)),
-    ctx.ownerFor(origin),
   );
   const restored = step.map((c) => `${c.key}=${c.before ?? "∅"}`).join(" ");
   ctx.log("info", `back: ${restored} discarded=${discarded} (session=${sid})`);
@@ -1635,11 +1643,10 @@ function journaled<C extends DaemonContext>(
       proveLoadsAsLayer(ctx, origin, file, text, read),
   });
   // From the store up: the click's held writes, the settings history's
-  // recording (which steps the owned form, so undo is exact whatever config
-  // the session is in by then), the owner, the navigation recording (in the
-  // form `back` checks against the config's gate, under the owner it was
-  // made in), and the closing view.
-  const navigation = ctx.navigation.begin(owned(journal.sessionState), owner);
+  // recording and the navigation recording, both of the keys as the store
+  // holds them, owned, then the owner, and the closing view.
+  const navigation = ctx.navigation.begin(journal.sessionState);
+  const landedLines: string[] = [];
   const failures: unknown[] = [];
   // Both views close what a write closes, the navigating one above its
   // recording, so ◁ back restores a closed menu with what was open in it.
@@ -1656,7 +1663,8 @@ function journaled<C extends DaemonContext>(
       context,
       sessionState: closing(owned(journal.sessionState)),
       journal,
-      navigating: closing(navigation.sessionState),
+      navigating: closing(owned(navigation.sessionState)),
+      landedLog: (line) => landedLines.push(line),
     });
   } catch (e) {
     failures.push(e);
@@ -1671,6 +1679,7 @@ function journaled<C extends DaemonContext>(
         failed.push(e);
       }
     }
+    for (const line of landedLines) ctx.log("info", line);
     if (lanes !== null) {
       try {
         // [LAW:no-ambient-temporal-coupling] Only a click that wrote can have

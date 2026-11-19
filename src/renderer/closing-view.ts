@@ -1,10 +1,12 @@
 // [LAW:single-enforcer] The one place a session write closes what is open
 // inside the disclosure it closes (brandon-menus-sjhy.9p6): a view of a
 // session store whose every write also clears each disclosure inside a
-// closed one, in the same transaction. Every verb writes
-// through it (`journaled`, src/renderer/verbs/index.ts) — a click, ◁ back, a
-// layout edit's release — and anything else that closes a menu (a timer that
-// closes the door) gets the rule by writing through it too.
+// closed one, in the same transaction. A click's handler writes through it
+// (`journaled`, src/renderer/verbs/index.ts), and anything else that closes a
+// menu (a timer that closes the door) gets the rule by writing through it
+// too. ◁ back and a layout edit's release write beneath it: a navigation step
+// records the folds its click made, so it puts them back exactly, and a
+// release clears keys whose placement is gone.
 
 import { runInAction } from "mobx";
 import {

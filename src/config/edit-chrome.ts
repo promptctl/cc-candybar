@@ -351,9 +351,9 @@ function configureParts(
   // A shared `{{ menu }}` key, so it is a template path no other variable
   // owns. Entering configure folds it, so each visit starts with every list
   // closed.
-  // [LAW:single-enforcer] Closing configure folds this list too
-  // (disclosure-nest.ts); the load that drops the placement releases it, as
-  // it releases every key the placement owns (placement-keys.ts).
+  // [LAW:single-enforcer] exception: closing configure folds this list too
+  // (disclosure-nest.ts), beside the load that releases it once its
+  // placement ends (placement-keys.ts).
   const listKey = CONFIGURE_LISTS.mint({ preset: ctx.preset, id });
   const fold = `${enter}.fold`;
   ctx.artifacts.actions[fold] = { set: listKey, to: DISCLOSURE_CLOSED };
