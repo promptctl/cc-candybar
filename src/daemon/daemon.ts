@@ -51,7 +51,7 @@ import { DeclaredBarPanes } from "./declared-bar-panes.js";
 import { linkSignerOver } from "../click/link-signer.js";
 import type { Asked } from "../utils/outcome.js";
 import { instantAt, type Instant } from "../utils/instant.js";
-import { rendererHost } from "./renderer-host.js";
+import { rendererHost, type RendererHost } from "./renderer-host.js";
 import { mainRendererOf } from "../renderer/main.js";
 import { HeldStores, type ProfileStorage } from "./held-stores.js";
 import type { RendererName } from "./foundations/renderer-name.js";
@@ -575,12 +575,13 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
   // names, and the watches that say when it moved: each origin it moved gets
   // its `config` turn. Made once the renderer is, whose making can throw, so
   // a build that throws leaves no watch open.
+  const configRenderers = new Map<RendererName, RendererHost>();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths.state,
     watchers: watcherRegistry,
     log,
-    moved: (origins) => parts.renderer.moved(origins),
+    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins),
   });
   // [LAW:single-enforcer] Served once, whichever asks first.
   let served = false;
@@ -636,7 +637,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       {
         perform: (act) => acts.perform(act),
         stateDir: paths.state,
-        configs: configDiscovery,
+        configs: configDiscovery.forRenderer(inputs.rendererName),
         closing: () => closing.signal.aborted,
         // [LAW:no-silent-failure] Joined to the last while it is owed, by the
         // one rule for events that follow each other.
@@ -647,6 +648,7 @@ export function createDaemon(inputs: DaemonInputs): Daemon {
       },
     ),
   };
+  configRenderers.set(parts.renderer.name, parts.renderer);
 
   return {
     stats,
