@@ -1,3 +1,10 @@
+## [1.235.3](https://github.com/promptctl/cc-candybar/compare/v1.235.2...v1.235.3) (2026-11-19)
+
+### Bug Fixes
+
+* **actions:** centralize template value binding ([#877](https://github.com/promptctl/cc-candybar/issues/877)) ([d5df8f6](https://github.com/promptctl/cc-candybar/commit/d5df8f6d8a5a3e24c1189a1486241b29febe8053))
+* **config:** share one project decision across renderers and worktrees ([#887](https://github.com/promptctl/cc-candybar/issues/887)) ([d02a314](https://github.com/promptctl/cc-candybar/commit/d02a3142e7089783533bf3bcfb9a1f0025c1b8b7))
+
 ## [1.235.2](https://github.com/promptctl/cc-candybar/compare/v1.235.1...v1.235.2) (2026-11-19)
 
 ### Bug Fixes
