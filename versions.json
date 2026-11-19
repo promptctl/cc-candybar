@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-863",
+      "ref": "refs/pull/863/merge",
+      "sha": "7415d2c762a7ab19520c3ce50793fbef27fa675e",
+      "timestamp": "2026-11-19T12:14:08.659Z",
+      "commits": [
+        {
+          "sha": "7415d2c762a7ab19520c3ce50793fbef27fa675e",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:13:02-07:00",
+          "message": "Merge 4a7cd021d2e7d6c679d89838af0b3b91cd0757d3 into c7085504a53576be27550693c5b9d96a1afd8f94\n"
+        },
+        {
+          "sha": "4a7cd021d2e7d6c679d89838af0b3b91cd0757d3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:10:16-07:00",
+          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-862",
       "ref": "refs/pull/862/merge",
       "sha": "bfd3085f55fb6e02f2ad68715e3c310d52bd13d7",
