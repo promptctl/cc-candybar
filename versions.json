@@ -2,6 +2,70 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-851",
+      "ref": "refs/pull/851/merge",
+      "sha": "12b090398792a934cc81efbd73dad444a8bdfa0f",
+      "timestamp": "2026-11-19T10:48:36.552Z",
+      "commits": [
+        {
+          "sha": "12b090398792a934cc81efbd73dad444a8bdfa0f",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:47:12-07:00",
+          "message": "Merge 4ba8c21e86c97efb58d967ac58f447c5dfb6492c into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
+        },
+        {
+          "sha": "4ba8c21e86c97efb58d967ac58f447c5dfb6492c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:36:12-07:00",
+          "message": "test(config): assert typed layer reads at the click boundary\n"
+        },
+        {
+          "sha": "56d45de62d5fe5d8bebbaa029ea46359a213453c",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:33:41-07:00",
+          "message": "test(integration): verify pane settings activate after saving an edit draft\n"
+        },
+        {
+          "sha": "f7b8d2709ae5f79d2b58f455ffb0967c86ca7aa6",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:25:22-07:00",
+          "message": "refactor(renderer): navigate between menu views\n"
+        },
+        {
+          "sha": "584364c0a9ab7cbb337b3ee409cd675bb995c39b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:24:20-07:00",
+          "message": "fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n"
+        },
+        {
+          "sha": "05d768cfcdcc0a1aa11a2310acfd4b72265a1555",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:27:11-07:00",
+          "message": "test(edit): verify help and chrome through the active draft\n"
+        },
+        {
+          "sha": "969a86bb95b7fd86898d16f30b0482d8ea66a09b",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:11:37-07:00",
+          "message": "fix(renderer): keep live repository trust in edit previews\n"
+        },
+        {
+          "sha": "d732ee080406f309404de31da27daf731c0a74c1",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:08:06-07:00",
+          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "30d7a34587b836199bfd5c0bb320894e7119c63e",
@@ -71,70 +135,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T03:44:30-07:00",
           "message": "fix(edit): release a removed placement's session state at the session's own render\n\nA session's ✚ libraries and their pages, its configure key and its drafts\nare keyed by preset and placement id, so they outlived the placement and\nlanded on the next placement to reuse the id, whatever removed it.\n\nBefore drawing, a session now releases the keys it holds for placements\nits config no longer places in any preset, inserts included. The placed\nset is built once per loaded config, and a tick skips with one comparison\nof that set and the session's revision. A clicker's release runs inside\nits click's journal, so undo restores its drafts. A render over a failed\nload releases nothing. Each release is logged with the session and keys.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-851",
-      "ref": "refs/pull/851/merge",
-      "sha": "aa1c311939364896da3aa8161a6839dbdaba553e",
-      "timestamp": "2026-11-19T10:42:28.820Z",
-      "commits": [
-        {
-          "sha": "aa1c311939364896da3aa8161a6839dbdaba553e",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T10:41:03Z",
-          "message": "Merge a3696d6a6da5fa14e1d5d13b36f4e4c6267db088 into 4b760ab8b6060959917183e61c064a0fe897da97\n"
-        },
-        {
-          "sha": "a3696d6a6da5fa14e1d5d13b36f4e4c6267db088",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:36:12-07:00",
-          "message": "test(config): assert typed layer reads at the click boundary\n"
-        },
-        {
-          "sha": "b99c651dc857731930561bfde28a1e0dd61a2253",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:33:41-07:00",
-          "message": "test(integration): verify pane settings activate after saving an edit draft\n"
-        },
-        {
-          "sha": "5fd880a281266d07afac8ed34d56d3d1c1569e38",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:25:22-07:00",
-          "message": "refactor(renderer): navigate between menu views\n"
-        },
-        {
-          "sha": "362e7303d385d5b68a2765880d924fa2c04f3679",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:24:20-07:00",
-          "message": "fix(config): keep unreadable layers in the edit read path (ibyq.ugu)\n"
-        },
-        {
-          "sha": "fbce08f9c0941ae7dd5cabad89c1d4cf61e1efd5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:27:11-07:00",
-          "message": "test(edit): verify help and chrome through the active draft\n"
-        },
-        {
-          "sha": "20efe5b324aedfc779704e569023727f395435a4",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:11:37-07:00",
-          "message": "fix(renderer): keep live repository trust in edit previews\n"
-        },
-        {
-          "sha": "f013c3a9086779dcceebfe5ba30e0570b001adaf",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T03:08:06-07:00",
-          "message": "fix(renderer): give edit mode a draft transaction with undo and redo\n"
         }
       ]
     },
