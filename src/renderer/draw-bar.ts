@@ -211,9 +211,8 @@ export function renderFrame(
   }
 }
 
-// The lanes the session's settings switch on now, as its view draws them, or
-// null while it has no view: a pure read of the view a frame finds, which
-// opens nothing (`holdView`).
+// The committed lane settings for a session with a live view. The draft
+// can replace what the view draws while the host follows committed config.
 export function viewLanes(
   parts: RendererParts,
   sessionId: SessionId,
