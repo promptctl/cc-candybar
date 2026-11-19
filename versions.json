@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "72652bd631655794e7e9adc79fe7ffbddceb93f3",
+      "timestamp": "2026-11-19T15:41:30.452Z",
+      "commits": [
+        {
+          "sha": "72652bd631655794e7e9adc79fe7ffbddceb93f3",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T08:40:15-07:00",
+          "message": "refactor(renderer): boot from host-resolved locations (#883)\n\n* refactor(renderer): boot from host-resolved locations\n\n* refactor(renderer): construct both transports from one checked boot"
+        }
+      ]
+    },
+    {
       "version": "pr-874",
       "ref": "refs/pull/874/merge",
       "sha": "c89037bf6e5f8d23927e5e55983787ca21d00b40",
@@ -69,21 +84,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "ce2ac88bf897455ae62bb613793a5d30fd7ddf35",
-      "timestamp": "2026-11-19T15:28:54.324Z",
-      "commits": [
-        {
-          "sha": "ce2ac88bf897455ae62bb613793a5d30fd7ddf35",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T08:27:56-07:00",
-          "message": "refactor(config): resolve write layers before rendering (#880)\n\n* refactor(config): resolve write layers before rendering\n\n* fix(config): share write availability with render diagnostics"
         }
       ]
     },
