@@ -95,6 +95,7 @@ The host is one job, the bar's boundary with the world, done by parts that each 
 - **Inputs and outputs:** the origins the renderers' subscriptions name; repository trust; file watches over what each discovery read. Out: a `config` event for an origin when it is first named and whenever its snapshot changes.
 - Config watches gather changed origins in the same watcher window. Their discovery shares each physical file read, then sends changed snapshots to the renderers that hold them. A failed origin keeps its previous snapshot so it can be retried while successful observations are still delivered.
 - Checkout labels share the host's bounded filesystem observations for one second, keyed by paths after resolving directory aliases. Repository admission uses a fresh discovery batch, which can refresh the observations used for display.
+- Config and plugin definition text is reused across discovery batches when the opened file has the same identity and revision. Discovery still chooses and authorizes each origin's layers and resolves paths against the authored layer.
 
 **Effect interpreter** (host, prototype)
 - **Responsibility:** carries out the effects a renderer returns and reports each outcome to it.

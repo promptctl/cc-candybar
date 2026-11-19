@@ -59,6 +59,7 @@ function worktreeBundle(file: string): void {
 interface Read {
   readonly file: string;
   readonly pid: number;
+  readonly operation: string;
 }
 
 // The probe counts filesystem calls for the exact
@@ -76,13 +77,28 @@ function readProbe(
     const { syncBuiltinESMExports } = require("node:module");
     const wanted = ${JSON.stringify(selected)};
     const append = fs.appendFileSync;
+    const tracked = new Map();
+    const record = (file, operation) => append(${JSON.stringify(output)}, JSON.stringify({file,pid:process.pid,operation}) + "\\n");
     for (const [api, name] of [[fs,"openSync"], [fsp,"open"], [fsp,"readFile"]]) {
       const original = api[name];
       api[name] = function (file, ...rest) {
-        if (typeof file === "string" && wanted[file]?.includes(name)) append(${JSON.stringify(output)}, JSON.stringify({file,pid:process.pid}) + "\\n");
-        return original.call(this, file, ...rest);
+        const result = original.call(this, file, ...rest);
+        if (typeof file === "string" && wanted[file]?.includes(name)) record(file, name);
+        if (name === "openSync" && typeof file === "string" && wanted[file]?.includes("payload")) tracked.set(result, file);
+        return result;
       };
     }
+    const readFileSync = fs.readFileSync;
+    fs.readFileSync = function (file, ...rest) {
+      const payload = tracked.get(file);
+      if (payload !== undefined) record(payload, "payload");
+      return readFileSync.call(this, file, ...rest);
+    };
+    const closeSync = fs.closeSync;
+    fs.closeSync = function (fd) {
+      tracked.delete(fd);
+      return closeSync.call(this, fd);
+    };
     syncBuiltinESMExports();
   `,
   );
@@ -151,8 +167,8 @@ test("two named renderer processes draw separately and share config, transcript 
     worktreeBundle(alternate);
     const shared = [config, definition, source];
     readProbe(probe, reads, {
-      [config]: ["openSync"],
-      [definition]: ["openSync"],
+      [config]: ["openSync", "payload"],
+      [definition]: ["openSync", "payload"],
       [source]: ["readFile"],
       [firstTranscript]: ["open", "openSync"],
       [secondTranscript]: ["open", "openSync"],
@@ -176,9 +192,10 @@ test("two named renderer processes draw separately and share config, transcript 
       session: string,
       named?: { name: string; bundle: string },
       transcript = transcriptOf(session),
+      configArgs = args,
     ) =>
       frameRequest(isolated.sockPath, {
-        ...renderBody(session, root, {}, args),
+        ...renderBody(session, root, {}, configArgs),
         hookData: {
           ...hookData(session, root),
           transcript_path: transcript,
@@ -207,7 +224,8 @@ test("two named renderer processes draw separately and share config, transcript 
     expect(primary).not.toContain(WORKTREE_MODEL);
     const before = readsOf(reads);
     const count = (all: readonly Read[], file: string) =>
-      all.filter((read) => read.file === file).length;
+      all.filter((read) => read.file === file && read.operation !== "payload")
+        .length;
     for (const file of shared) expect(count(before, file)).toBe(1);
     expect(count(before, firstTranscript)).toBeGreaterThan(0);
     expect(count(before, secondTranscript)).toBe(0);
@@ -350,6 +368,30 @@ test("two named renderer processes draw separately and share config, transcript 
       10_000,
     );
     expect(count(readsOf(reads), source)).toBe(priorReads + 1);
+
+    // An isolated origin in a different renderer must observe the descriptors
+    // afresh while still reusing the payloads read by the layered origin.
+    const beforeIsolated = readsOf(reads);
+    const isolatedFrame = textOf(
+      await request("secondary-session", selected, secondTranscript, [
+        "cc-candybar",
+        "--config-only",
+        config,
+      ]),
+    );
+    expect(isolatedFrame).toContain(WORKTREE_MODEL);
+    expect(isolatedFrame).toContain(updatedSource);
+    const distinctOrigins = readsOf(reads);
+    for (const file of [config, definition]) {
+      expect(count(distinctOrigins, file)).toBe(
+        count(beforeIsolated, file) + 1,
+      );
+      expect(
+        distinctOrigins.filter(
+          (read) => read.file === file && read.operation === "payload",
+        ),
+      ).toEqual([{ file, operation: "payload", pid: daemon.child.pid }]);
+    }
 
     const conflict = await sendDaemonRequest(
       isolated.sockPath,
