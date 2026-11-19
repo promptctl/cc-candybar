@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-868",
+      "ref": "refs/pull/868/merge",
+      "sha": "537abb905ab29eace4deba874eb2a07c33d6759d",
+      "timestamp": "2026-11-19T13:45:47.237Z",
+      "commits": [
+        {
+          "sha": "537abb905ab29eace4deba874eb2a07c33d6759d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:44:43Z",
+          "message": "Merge bcc2c85d7abbba7e0b43460382d61d9d0ca97f8d into 99011b4404fa32d0625c7e687de5550d1012e734\n"
+        },
+        {
+          "sha": "bcc2c85d7abbba7e0b43460382d61d9d0ca97f8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:29:09-07:00",
+          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "99011b4404fa32d0625c7e687de5550d1012e734",
@@ -42,28 +64,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:23:24-07:00",
           "message": "fix(launch): withhold repository-local variables from inherited child environments\n\nA daemon spawned from a git hook, a rebase --exec or a vcsh shell\ninherits GIT_DIR, GIT_WORK_TREE and GH_REPO, which git and gh honour\nahead of the working directory. The launcher's one environment builder\nnow withholds git's repository-local set plus GH_REPO and GITLAB_REPO\nfrom every child that inherits the owner's environment, after any\noverlay. A session's own environment passes unchanged. The forge table\nmoves to a leaf module beside the list; plugin install no longer asks\ngit for the list at runtime.\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-868",
-      "ref": "refs/pull/868/merge",
-      "sha": "119f9ce1040d2da7ffdeaca1f2ee40a755d80b26",
-      "timestamp": "2026-11-19T13:39:53.401Z",
-      "commits": [
-        {
-          "sha": "119f9ce1040d2da7ffdeaca1f2ee40a755d80b26",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T13:38:44Z",
-          "message": "Merge 52b2132ca9d785eab93b4efde38cc1ec3486002d into 415c57dbe8f21640a4165b7c3e984bbff858ad50\n"
-        },
-        {
-          "sha": "52b2132ca9d785eab93b4efde38cc1ec3486002d",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:29:09-07:00",
-          "message": "refactor(click): authorize drawn runs and keep signing in the host (ibyq.vne)\n"
         }
       ]
     },
