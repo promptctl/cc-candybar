@@ -90,8 +90,6 @@ export interface LaunchOpts {
   // inherited one: a session's, for a program the host runs for a session.
   environment?: Readonly<Record<string, string>>;
   // Set over the environment the child starts from, as given; null unsets.
-  // REPOSITORY_SCOPED_ENV is withheld only from the inherited environment, so
-  // one set here reaches the child.
   envOverlay?: Readonly<Record<string, string | null>>;
   timeoutMs?: number;
   stdinInput?: string | Buffer;

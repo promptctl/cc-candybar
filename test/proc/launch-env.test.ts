@@ -97,15 +97,6 @@ describe("a child that inherits its owner's environment", () => {
       expect(scoped(env)).toEqual([]);
     }));
 
-  it("lacks the config a hook's `-c` flags carry, which can move its worktree", () =>
-    withLauncher(async (launcher, _handed, owner) => {
-      owner.GIT_CONFIG_PARAMETERS = "'core.worktree'='/other'";
-      const r = await launcher.launch({ ...printsEnv(), category: "git" });
-      const env = parsed(r.stdout);
-      expect(env.GIT_CONFIG_PARAMETERS).toBeUndefined();
-      expect(env.KEPT).toBe("kept");
-    }));
-
   it("lacks every repository-scoped name, by launch", () =>
     withLauncher(async (launcher) => {
       const r = await launcher.launch({ ...printsEnv(), category: "git" });

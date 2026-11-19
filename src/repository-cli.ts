@@ -15,8 +15,7 @@ export const FORGE_CLI = {
 } as const satisfies Record<ForgeName, { cli: string; repoEnv: string }>;
 
 // git's repository-local variables: the set `git rev-parse --local-env-vars`
-// prints, which git clears before it runs a command in another repository.
-// Config is among them because a hook's `-c` flags travel in it, and config
+// prints. Config is among them because a hook's `-c` flags travel in it, and config
 // can relocate the worktree (`core.worktree`) or alter a clone
 // (`http.sslVerify`, `url.<base>.insteadOf`).
 // [LAW:one-source-of-truth] exception: git's list is external; a test fails
@@ -43,13 +42,27 @@ const GIT_LOCAL_ENV = [
 // local ones and each forge's. A detached process's environment is whichever
 // shell spawned it, and spawned from a git hook, a `rebase --exec` or a vcsh
 // shell it carries these for that shell's repository. A child inheriting them
-// would read every session's branch, status and PR, and clone a plugin, there.
-// So a child that inherits its owner's environment never gets them, as git
-// drops them when it crosses into another repository: its repository is its
-// working directory's. A session's own environment is the session's, and
-// passes as it is. The process's own environment is never edited, because the
-// client reports it whole as its session's.
+// would read every session's branch, status and PR, and clone a plugin, there,
+// since nothing but this filter bounds them to a child's working directory.
+// git itself clears exactly its list before it runs a command in another
+// repository, such as a submodule, so the launcher does the same for every
+// child it starts with the inherited environment. A session's own
+// environment is the session's, and passes as it is. The process's own
+// environment is never edited, because the client reports it whole as its
+// session's.
 export const REPOSITORY_SCOPED_ENV: readonly string[] = [
   ...GIT_LOCAL_ENV,
   ...Object.values(FORGE_CLI).map(({ repoEnv }) => repoEnv),
 ];
+
+// [LAW:single-enforcer] The one filter: an environment less
+// REPOSITORY_SCOPED_ENV.
+export function withoutRepositoryScopedEnv(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
+    ),
+  );
+}

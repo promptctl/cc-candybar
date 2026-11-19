@@ -47,7 +47,7 @@ import { elapsedMs, type Monotonic, type Timekeeper } from "../time";
 import { publishByLink } from "../utils/atomic-write";
 import { answeredBy, type HeldEvent } from "../utils/event-hold";
 import { instantOf, type Instant } from "../utils/instant";
-import { REPOSITORY_SCOPED_ENV } from "../repository-cli";
+import { withoutRepositoryScopedEnv } from "../repository-cli";
 import type { SpawnedChild, Spawner } from "./spawner";
 
 import type { DrainEnd, LaunchStatsHandle } from "./stats-handle";
@@ -123,21 +123,10 @@ function checkRateLimit(
   return { allowed: false, minIntervalMs, sinceLastMs };
 }
 
-// [LAW:single-enforcer] What a child inherits of its owner's environment: the
-// live `LaunchScope.inherited`, read at each launch so a variable the owner
-// sets later still arrives, less REPOSITORY_SCOPED_ENV. The one place it is
-// removed, for every launch and the lifeline.
-function inheritedEnv(scope: LaunchScope): NodeJS.ProcessEnv {
-  return Object.fromEntries(
-    Object.entries(scope.inherited).filter(
-      ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
-    ),
-  );
-}
-
-// [LAW:one-source-of-truth] The environment a child gets is the launch's own
-// (a session's) or else what it inherits of its owner's (above), under the
-// launch's overlay, resolved here for every launch. Passing `undefined` lets
+// [LAW:one-source-of-truth] The environment every child gets, the lifeline's
+// included: the launch's own (a session's), or else its owner's, read live at
+// each launch, with REPOSITORY_SCOPED_ENV withheld; then the launch's overlay
+// over that. Passing `undefined` lets
 // node read the host process's environment directly, which is a second clock:
 // under a realm boundary (Jest's sandbox copies `process.env` per test file)
 // the two diverge, and a PATH the test set for a `shell` source never reached
@@ -148,10 +137,9 @@ function childEnv(
   scope: LaunchScope,
   opts: Pick<LaunchOpts, "environment" | "envOverlay">,
 ): NodeJS.ProcessEnv {
-  // [LAW:dataflow-not-control-flow] One path for both starting environments;
-  // a session's own passes as it is (REPOSITORY_SCOPED_ENV says why).
+  // [LAW:single-enforcer] The one strip; REPOSITORY_SCOPED_ENV says why.
   const env: NodeJS.ProcessEnv = {
-    ...(opts.environment ?? inheritedEnv(scope)),
+    ...(opts.environment ?? withoutRepositoryScopedEnv(scope.inherited)),
   };
   for (const [name, value] of Object.entries(opts.envOverlay ?? {}))
     env[name] = value ?? undefined;
@@ -188,8 +176,7 @@ function rateLimitedResult(
 // Who a launcher's launches belong to.
 export interface LaunchScope {
   // The owner's own environment, live: the one its root reads its own facts
-  // from. Its children inherit it as `inheritedEnv` reads it at each launch,
-  // under the launch's `envOverlay`.
+  // from, and what its children start from.
   readonly inherited: NodeJS.ProcessEnv;
   // Meters every launch into the owner's stats. Null pays no metering cost.
   readonly stats: LaunchStatsHandle | null;
@@ -436,7 +423,7 @@ function spawnLifeline(state: LaunchState): Lifeline | null {
   let line: SpawnedChild;
   try {
     line = state.spawner.spawn("awk", [LIFELINE_PROGRAM], {
-      env: inheritedEnv(state.scope),
+      env: childEnv(state.scope, {}),
       stdio: ["pipe", "ignore", "ignore"],
       detached: true,
     });

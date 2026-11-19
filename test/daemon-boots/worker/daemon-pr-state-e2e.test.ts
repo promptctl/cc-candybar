@@ -17,7 +17,10 @@ import os from "node:os";
 import path from "node:path";
 
 import { textOf } from "../../../src/render/frame";
-import { REPOSITORY_SCOPED_ENV } from "../../../src/repository-cli";
+import {
+  FORGE_CLI,
+  withoutRepositoryScopedEnv,
+} from "../../../src/repository-cli";
 import { frameRequest, hookData } from "../../helpers/daemon-e2e";
 import { startDaemon, type InWorkerDaemon } from "../../helpers/in-worker-daemon";
 import { prepareIsolatedDaemonEnv } from "../../helpers/spawn-isolated-daemon";
@@ -29,8 +32,9 @@ jest.setTimeout(30_000);
 // has a PR in it whose head is HEAD, `REUSED` a merged PR whose head is some
 // earlier commit (the branch name was used before), `none` has no PR, and
 // anything else is an auth failure, as is a GH_REPO that reached it.
+const REPO_ENV = FORGE_CLI.github.repoEnv;
 const GH = `#!/bin/sh
-[ -n "$GH_REPO" ] && { echo "HTTP 404: GH_REPO reached gh" >&2; exit 1; }
+[ -n "$${REPO_ENV}" ] && { echo "HTTP 404: ${REPO_ENV} reached gh" >&2; exit 1; }
 b=$(git branch --show-current)
 pr() { printf '{"number":7,"state":"%s","url":"https://github.com/x/y/pull/7","headRefOid":"%s"}\\n' "$1" "$2"; }
 case "$b" in
@@ -55,11 +59,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
   function checkout(branch: string): string {
     const repo = path.join(dir, `repo-${branch}`);
     fs.mkdirSync(repo);
-    const env = Object.fromEntries(
-      Object.entries(process.env).filter(
-        ([name]) => !REPOSITORY_SCOPED_ENV.includes(name),
-      ),
-    );
+    const env = withoutRepositoryScopedEnv(process.env);
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: repo, env, stdio: "pipe" });
     git("init", "-q", "-b", branch);
@@ -92,7 +92,7 @@ describe("a daemon render carries the branch's PR in every state", () => {
       PATH: `${bin}:${process.env.PATH}`,
       GIT_DIR: path.join(elsewhere, ".git"),
       GIT_WORK_TREE: elsewhere,
-      GH_REPO: "other/elsewhere",
+      [REPO_ENV]: "other/elsewhere",
     };
     daemon = startDaemon(env);
   });
