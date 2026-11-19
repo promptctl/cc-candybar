@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "59578c03d8f8e1de16a341adf4e70d2c1a550472",
+      "timestamp": "2026-11-19T14:45:04.602Z",
+      "commits": [
+        {
+          "sha": "59578c03d8f8e1de16a341adf4e70d2c1a550472",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T14:43:46Z",
+          "message": "chore(release): set `package.json` to 1.234.3\n\n## [1.234.3](https://github.com/promptctl/cc-candybar/compare/v1.234.2...v1.234.3) (2026-11-19)\n\n### Performance Improvements\n\n* **host:** share each session environment across statusline ticks ([#872](https://github.com/promptctl/cc-candybar/issues/872)) ([481101f](https://github.com/promptctl/cc-candybar/commit/481101f839d97ef1ae569bddbf9336ec8cfe52b5))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-876",
       "ref": "refs/pull/876/merge",
       "sha": "2dac759806b09a8c4c38ca92a5e0046cb65518d9",
@@ -42,21 +57,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T06:34:35-07:00",
           "message": "feat(click): route actions to their drawing renderer (x96a.m85)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "481101f839d97ef1ae569bddbf9336ec8cfe52b5",
-      "timestamp": "2026-11-19T14:37:22.837Z",
-      "commits": [
-        {
-          "sha": "481101f839d97ef1ae569bddbf9336ec8cfe52b5",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T07:35:59-07:00",
-          "message": "perf(host): share each session environment across statusline ticks (#872)\n\n* fix(host): run session-scoped desktop actions in the session environment\n\n* perf(native): send session environments on demand (ibyq.lwo)\n\n* perf(host): reuse the reported environment for each session\n\n* fix(host): admit compact renders through the shared checkpoint\n\n* test(native): exercise cold and steady statusline ticks over the socket\n\n* fix(host): launch desktop and tmux actions from their reporting session"
         }
       ]
     },
