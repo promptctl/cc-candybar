@@ -1,3 +1,10 @@
+## [1.234.2](https://github.com/promptctl/cc-candybar/compare/v1.234.1...v1.234.2) (2026-11-19)
+
+### Performance Improvements
+
+* **config:** share regular file bytes across discovery batches (ibyq.ysf) ([#873](https://github.com/promptctl/cc-candybar/issues/873)) ([3a30e23](https://github.com/promptctl/cc-candybar/commit/3a30e23db763050eca5ec970685f4d4872978e3e))
+* **host:** share checkout filesystem observations (x96a.uqq) ([#870](https://github.com/promptctl/cc-candybar/issues/870)) ([4521bf6](https://github.com/promptctl/cc-candybar/commit/4521bf6f3ff8442f1ade1eb3785e9b245dd454e6))
+
 ## [1.234.1](https://github.com/promptctl/cc-candybar/compare/v1.234.0...v1.234.1) (2026-11-19)
 
 ### Performance Improvements
