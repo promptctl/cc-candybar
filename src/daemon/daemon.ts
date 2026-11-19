@@ -1014,7 +1014,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
     ): TeardownStep[] =>
       draining.map((renderer) => [
         `${renderer.name} ${kind}`,
-        () => renderer.ask({ kind }),
+        () => renderer.command({ kind }),
       ]);
     // The stores still flush after a close failed (runTeardown).
     const teardown: readonly TeardownStep[] = [

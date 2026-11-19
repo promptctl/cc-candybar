@@ -28,6 +28,8 @@
 import {
   sessionOfEvent,
   type ConfigChange,
+  type Command,
+  type ReplyTo,
   type Effect,
   type EffectOutcome,
   type Event,
@@ -46,7 +48,6 @@ import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
-import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
 import { writeLogLines, type DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
@@ -154,12 +155,8 @@ export interface RendererHost {
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
   start(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, answered by its reply. A push that threw or rejected, or one
-  // answered by another push's reply, rejects with an Error naming the
-  // renderer and the push: the caller that awaits it owns the failure.
-  ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
-  // One push nobody awaits: its failure is logged here.
-  tell(push: AdapterPush): void;
+  // An inspection or teardown event, answered by its own reply.
+  command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
   moved(origins: readonly RenderOrigin[]): void;
@@ -183,6 +180,13 @@ const THREW_AS = {
   Failure["kind"],
   Exclude<EffectOutcome["kind"], "ok" | "skipped">
 >;
+
+const COMMAND_KINDS = {
+  stats: true,
+  debug: true,
+  "close-journal": true,
+  "close-views": true,
+} satisfies Record<Command["kind"], true>;
 
 // A turn as its slot leaves it: what the renderer answered, and its effects'
 // outcomes, which settle once its acts have, after the slot.
@@ -397,6 +401,17 @@ export function rendererHost(
       ...answer
     } = output;
     recordDiagnostics(diagnostics);
+    // [LAW:single-enforcer] An ordinary turn has no caller awaiting a
+    // command reply. Report a worker that supplied one without a command.
+    if (
+      answer.kind === "answered" &&
+      answer.reply !== undefined &&
+      !Object.hasOwn(COMMAND_KINDS, input.event.kind)
+    )
+      log(
+        "error",
+        `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
+      );
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -1012,81 +1027,39 @@ export function rendererHost(
       log("error", text);
       world.unheard(text);
     });
-  // [LAW:single-enforcer] The one place a push's output is judged: a push is
-  // answered by the reply of its own kind, or it failed.
-  const ask = async <P extends AdapterPush>(
-    push: P,
-  ): Promise<ReplyTo<P["kind"]>> => {
-    // A renderer that rejected fails the push as one whose turn threw, so
-    // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox(async (_queuedMs, holds) => {
-      holds(`push:${push.kind}`);
-      try {
-        if (startFailure !== null) throw new CrossedFailure(startFailure);
-        const { subscriptions, wake, stored, diagnostics, ...answered } =
-          await renderer.answer({
-            kind: "adapter",
-            push,
-            ...readingsAt(clock),
-          });
-        recordDiagnostics(diagnostics);
-        // [LAW:no-ambient-temporal-coupling] A push's newly named configs
-        // enter before the next queued slot, as they do for an event.
-        const followed = took(
-          subscriptions,
-          wake,
-          [],
-          stored,
-          null,
-          receiptFor(generation),
-        );
-        if (followed.kind === "following")
-          for (const origin of followed.named) {
-            const config = await configInSlot(origin, "config-subscribed");
-            if (config.kind === "unreceived") markUnreceived(origin);
-            unawaited("config", config.settled);
-          }
-        return answered;
-      } catch (thrown) {
-        const unavailable: TurnFailure & { readonly turnMs: null } = {
-          kind: "threw",
-          failure: failureOf(thrown),
-          turnMs: null,
-        };
-        return unavailable;
-      }
-    });
-    // The failure keeps its kind, so a push no renderer took reads as one.
-    if (output.kind === "threw") {
-      const fields = finalizationFields(output) ?? [];
-      if (output.turnMs !== null)
-        fields.unshift(["took", `${output.turnMs}ms`]);
-      fields.push(["error", output.failure.detail]);
-      const detail = eventLine(
-        `renderer ${name} push ${push.kind} threw`,
-        fields,
-      );
+  // [LAW:single-enforcer] A command uses the same slot and lands every
+  // part of its turn before its caller can use the result.
+  const command = async <C extends Command>(
+    event: C,
+  ): Promise<ReplyTo<C["kind"]>> => {
+    const { turn } = await taken(() => ({ kind: "event", event }));
+    const label = `renderer ${name} command ${event.kind}`;
+    if (turn.kind === "threw") {
+      const fields = finalizationFields(turn) ?? [];
+      if (turn.turnMs !== null) fields.unshift(["took", `${turn.turnMs}ms`]);
+      fields.push(["error", turn.failure.detail]);
       throw new CrossedFailure({
-        ...output.failure,
-        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail,
+        ...turn.failure,
+        message: `${label} threw: ${turn.failure.message}`,
+        detail: eventLine(`${label} threw`, fields),
       });
     }
-    if (output.reply.kind !== push.kind)
-      throw new Error(
-        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
-      );
-    // [LAW:types-are-the-program] exception: the kinds were just compared,
-    // which the compiler cannot carry from the reply's kind to its type.
-    return output.reply as ReplyTo<P["kind"]>;
+    const { reply } = turn;
+    if (reply == null) throw new Error(`${label} returned no reply`);
+    if (reply.kind !== event.kind)
+      throw new Error(`${label} returned a ${reply.kind} reply`);
+    if (
+      event.kind === "debug" &&
+      reply.kind === "debug" &&
+      reply.snapshot?.what !== event.what
+    )
+      throw new Error(`${label} returned no ${event.what} snapshot`);
+    if (reply.kind === "stats" && reply.stats == null)
+      throw new Error(`${label} returned no stats snapshot`);
+    // [LAW:types-are-the-program] exception: the compiler cannot connect the
+    // checked reply kind to the caller's generic event kind.
+    return reply as ReplyTo<C["kind"]>;
   };
-  const tell = (push: AdapterPush): void =>
-    void ask(push).catch((thrown: unknown) => {
-      const failure = failureOf(thrown);
-      // [LAW:single-enforcer] A push no renderer was live to take is the
-      // supervisor's to say.
-      if (failure.kind !== "down") log("error", failure.detail);
-    });
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
       unawaited(
@@ -1143,8 +1116,7 @@ export function rendererHost(
     answerClick,
     deliver,
     start: recorded("first"),
-    ask,
-    tell,
+    command,
     moved,
     stats,
     closeWake: () => wake.close(),

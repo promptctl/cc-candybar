@@ -10,6 +10,7 @@ import type {
   Effect,
   EffectId,
   EffectOutcome,
+  RendererStats,
 } from "../../renderer-interface/interface.js";
 import type { IdleSpan, MenuIdle } from "../menu-idle.js";
 import type { Feeds } from "../feeds.js";
@@ -18,6 +19,7 @@ import type { EditTransactions } from "../edit-transaction.js";
 import type { RenderOrigin } from "../../config-hint.js";
 import type { ActsOnTheirWay } from "../acts.js";
 import type { TurnLog } from "../turn-log.js";
+import type { ConfigWrites } from "../config-writes.js";
 import {
   changeDone,
   closeIdleMenus,
@@ -59,6 +61,8 @@ export interface RendererVerbs {
 // and the verbs its click and menu-idle turns act through.
 export type MainRendererParts = RendererParts & {
   readonly turnLog: TurnLog;
+  readonly configWrites: Pick<ConfigWrites, "close">;
+  readonly sessionStats: () => RendererStats["sessionState"];
   // The owners of a tick a `due` runs: the draw reads only part of each.
   readonly menuIdle: MenuIdle;
   readonly feeds: Feeds;

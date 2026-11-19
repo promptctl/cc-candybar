@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { inProcessRenderer } from "../src/in-process-renderer";
-import { rendererOf } from "../src/renderer-interface/interface";
 import type { RendererPort } from "../src/daemon/renderer-process";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
 import { render } from "./helpers/daemon-e2e";
@@ -23,9 +22,10 @@ test("a renderer's unmanaged claims cannot make folders or read session files", 
       const link = realRenderer(prepared).start(own);
       return {
         ...link,
-        renderer: rendererOf({
-          event: async (input) => {
+        renderer: {
+          answer: async (input) => {
             const output = await link.renderer.answer(input);
+            if (input.event.kind === "close-journal" || input.event.kind === "close-views") return output;
             return {
               ...output,
               subscriptions: {
@@ -43,8 +43,7 @@ test("a renderer's unmanaged claims cannot make folders or read session files", 
               },
             };
           },
-          adapter: (input) => link.renderer.answer(input),
-        }),
+        },
       };
     },
   });

@@ -17,12 +17,8 @@ import { CrossedFailure, failureOf } from "../daemon/foundations/verb-error.js";
 import type { Crosses } from "./crosses.js";
 import type { LogLine } from "../utils/logger.js";
 import {
-  rendererOf,
-  type AdapterInput,
-  type AdapterOutput,
   type RendererBoot,
   type RendererDiagnostics,
-  type RendererInput,
   type RendererOutput,
   type Subscriptions,
   type EventInput,
@@ -33,7 +29,7 @@ import {
 // [LAW:one-source-of-truth] Change this when the private renderer transport
 // becomes incompatible. A build digest identifies a build, and carries no
 // compatibility decision.
-export const RENDERER_WIRE_VERSION = 11;
+export const RENDERER_WIRE_VERSION = 12;
 type RendererWireVersion = typeof RENDERER_WIRE_VERSION;
 
 // [LAW:parse-dont-validate] Both boot checkpoints read the peer's raw
@@ -118,7 +114,7 @@ export function rendererDiagnosticsFrom(
   return undefined;
 }
 
-type Answer = Timed<RendererOutput | AdapterOutput>;
+type Answer = Timed<RendererOutput>;
 type WireAnswer<T extends Answer = Answer> = T extends Answer
   ? Omit<T, "subscriptions"> & { readonly subscriptions?: Subscriptions }
   : never;
@@ -132,7 +128,7 @@ export type HostLine =
   | {
       readonly kind: "input";
       readonly n: number;
-      readonly input: RendererInput;
+      readonly input: EventInput;
     }
   // [LAW:single-enforcer] The supervisor's one check that the renderer's loop turns:
   // answered outside any turn, with what the process holds of memory.
@@ -218,7 +214,7 @@ export interface RendererOverLines {
   readonly heard: (line: RendererLine) => void;
   readonly ended: (why: Error) => ReadonlyArray<{
     readonly n: number;
-    readonly input: RendererInput;
+    readonly input: EventInput;
   }>;
 }
 
@@ -234,7 +230,7 @@ export function rendererOverLines(deps: {
     number,
     {
       readonly what: string;
-      readonly input?: RendererInput;
+      readonly input?: EventInput;
       readonly settle: (line: RendererLine) => boolean;
       readonly fail: (why: Error) => void;
     }
@@ -312,7 +308,7 @@ export function rendererOverLines(deps: {
       resolve: (value: T) => void,
       reject: (why: Error) => void,
     ) => boolean,
-    input?: RendererInput,
+    input?: EventInput,
   ): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       if (gone !== null) {
@@ -328,11 +324,9 @@ export function rendererOverLines(deps: {
       });
       send(line(n));
     });
-  const answer = (input: RendererInput) =>
+  const answer = (input: EventInput) =>
     owe<Answer>(
-      input.kind === "event"
-        ? `${input.event.kind} input`
-        : `${input.push.kind} push`,
+      `${input.event.kind} input`,
       (n) => ({ kind: "input", n, input }),
       (heard, resolve, reject) => {
         if (heard.kind === "output") {
@@ -353,14 +347,7 @@ export function rendererOverLines(deps: {
       },
       input,
     );
-  const renderer = rendererOf({
-    // [LAW:types-are-the-program] exception: the renderer answers each input
-    // with the output of its kind, which the line cannot carry to its type.
-    event: (input: EventInput) =>
-      answer(input) as Promise<Timed<RendererOutput>>,
-    adapter: (input: AdapterInput) =>
-      answer(input) as Promise<Timed<AdapterOutput>>,
-  });
+
   const heard = (line: RendererLine): void => {
     // [LAW:no-silent-failure] A line a renderer said as it ended (its pipes
     // can close after its end) reaches nothing: what it would hold has no
@@ -406,7 +393,7 @@ export function rendererOverLines(deps: {
     }
   };
   return {
-    renderer,
+    renderer: { answer },
     ping: () =>
       owe<MemorySizes>(
         "a ping",
@@ -438,7 +425,7 @@ export function rendererOverLines(deps: {
       const waiting = [...owed];
       owed.clear();
       chunks.clear();
-      const interrupted: Array<{ n: number; input: RendererInput }> = [];
+      const interrupted: Array<{ n: number; input: EventInput }> = [];
       for (const [n, each] of waiting) {
         each.fail(why);
         // The same pending table that settles the reply tells the host
@@ -476,11 +463,7 @@ export function serveRenderer(deps: {
       case "input":
         // [LAW:no-silent-failure] An input whose answer rejected is answered
         // as that input's failure, never left to end the process.
-        void (
-          renderer.answer as (
-            i: RendererInput,
-          ) => Promise<Timed<RendererOutput | AdapterOutput>>
-        )(line.input).then(
+        void renderer.answer(line.input).then(
           (output) => answer(line.n, output),
           (thrown: unknown) =>
             send({ kind: "rejected", n: line.n, failure: failureOf(thrown) }),

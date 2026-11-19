@@ -4,7 +4,7 @@
 // it names, so the check cannot pass vacuously.
 
 import type { Crosses } from "../../src/renderer-interface/crosses";
-import type { AdapterPush } from "../../src/renderer-interface/adapter";
+import type { Event } from "../../src/renderer-interface/interface";
 
 // @ts-expect-error a closure does not cross
 const closure: Crosses<{ readonly done: () => void }> = true;
@@ -16,8 +16,8 @@ const holes: Crosses<readonly (string | undefined)[]> = true;
 const deep: Crosses<{ a: { b: { c: { d: () => void } } } }> = true;
 // @ts-expect-error an `any` holds whatever it was handed, read or not
 const anything: Crosses<{ readonly parsed: any }> = true;
-// @ts-expect-error a push that held a closure would not cross
-const push: Crosses<AdapterPush | { kind: "x"; run: () => void }> = true;
+// @ts-expect-error an input that held a closure would not cross
+const event: Crosses<Event | { kind: "x"; run: () => void }> = true;
 // @ts-expect-error a record's undefined is a key JSON drops
 const unset: Crosses<Readonly<Record<string, string | undefined>>> = true;
 // @ts-expect-error a number-keyed record's undefined is a key JSON drops
@@ -41,7 +41,7 @@ describe("Crosses", () => {
       holes,
       deep,
       anything,
-      push,
+      event,
       unset,
       numbered,
       templated,

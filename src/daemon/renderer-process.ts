@@ -19,10 +19,7 @@ import { eventLine, type Field } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
-  rendererOf,
   sessionOfEvent,
-  type AdapterInput,
-  type AdapterOutput,
   type EffectId,
   type EventInput,
   type RendererBoot,
@@ -455,14 +452,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         ["generation", String(link.generation)],
         ["wire", String(n)],
       ];
-      if (input.kind === "adapter") fields.push(["push", input.push.kind]);
-      else {
-        const session = sessionOfEvent(input.event);
-        fields.push(["input", input.event.kind]);
-        if (session !== null) fields.push(["sid", session]);
-        if (input.event.kind === "request")
-          fields.push(["request", String(input.event.id)]);
-      }
+      const session = sessionOfEvent(input.event);
+      fields.push(["input", input.event.kind]);
+      if (session !== null) fields.push(["sid", session]);
+      if (input.event.kind === "request")
+        fields.push(["request", String(input.event.id)]);
       fields.push(["error", how]);
       log("warn", eventLine("renderer input interrupted", fields));
     }
@@ -613,7 +607,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
+  const answer = (input: EventInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;
@@ -639,11 +633,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
-    sent((link) => link.lines.renderer.answer(input));
-
   return {
-    renderer: rendererOf({ event, adapter }),
+    renderer: { answer },
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;

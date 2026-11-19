@@ -28,8 +28,7 @@ import {
   type RendererLine,
 } from "../../src/renderer-interface/wire";
 import type {
-  AdapterInput,
-  AdapterOutput,
+  EventInput,
   EffectId,
   RendererOutput,
   Timed,
@@ -165,14 +164,17 @@ const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
-const pin: AdapterInput = {
-  kind: "adapter",
-  push: { kind: "close-journal" },
+const pin: EventInput = {
+  kind: "event",
+  event: { kind: "close-journal" },
   at: 0 as Instant,
   tick: 0 as Tick,
 };
-const PINNED: Timed<AdapterOutput> = {
-  kind: "replied",
+const PINNED: Timed<RendererOutput> = {
+  kind: "answered",
+  record: [],
+  frames: [],
+  effects: [],
   stored: [],
   reply: { kind: "close-journal" },
   subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
@@ -301,9 +303,9 @@ describe("a renderer process's start", () => {
   });
 
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
-    const unpin: AdapterInput = {
+    const unpin: EventInput = {
       ...pin,
-      push: { kind: "close-views" },
+      event: { kind: "close-views" },
     };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);

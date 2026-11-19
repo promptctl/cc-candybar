@@ -22,7 +22,6 @@ import {
 import { REQUEST_TIMEOUT_MS } from "../../../src/daemon/foundations/request-deadline";
 import { inProcessRenderer } from "../../../src/in-process-renderer";
 import type { LinkOwner } from "../../../src/daemon/renderer-process";
-import { rendererOf } from "../../../src/renderer-interface/interface";
 import { textOf } from "../../../src/render/frame";
 import { instantAt } from "../../../src/utils/instant";
 import type { HeldEvent } from "../../../src/utils/event-hold";
@@ -408,8 +407,8 @@ describe("a connection to a daemon built in this worker", () => {
       let occupyNext = false;
       let occupiedTurn: ReturnType<typeof statsOf> | undefined;
       const renderer = inProcessRenderer((real) => {
-        return rendererOf({
-          event: async (input) => {
+        return {
+          answer: async (input) => {
             const { event } = input;
             if (event.kind === "context") {
               const session = event.context.hookData.session_id;
@@ -421,16 +420,13 @@ describe("a connection to a daemon built in this worker", () => {
             }
             if (event.kind === "request")
               draws.push(event.context.hookData.session_id);
-            return real.answer(input);
-          },
-          adapter: async (input) => {
-            if (input.push.kind === "stats" && occupiedTurn !== undefined) {
+            if (event.kind === "stats" && occupiedTurn !== undefined) {
               occupied.resolve();
               await release.promise;
             }
             return real.answer(input);
           },
-        });
+        };
       });
       const running = startDaemon(process.env, { clock, renderer });
       started = running;
