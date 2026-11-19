@@ -484,13 +484,6 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   expect(textOf(animatedPane.frame)).toContain("remembered by click phase-b");
   answered(await turn({ kind: "viewers", viewers: {} }, 0));
 
-  const recordedTurns = recording.length - 1;
-  const replayed: RendererOutput[] = [];
-  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
-  expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
-  expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
-  expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
-
   const missingContext = contextOf("missing-from-capture");
   const failed = await turn(
     { kind: "request", id: 2 as RequestId, context: missingContext },
@@ -500,6 +493,7 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
     kind: "threw",
     failure: { message: expect.stringContaining("missing-from-capture") },
   });
+  const failedEntryIndex = recording.length - 1;
   const reloaded = answered(await turn(
     {
       kind: "config",
@@ -515,6 +509,32 @@ test("a fresh renderer reproduces the captured production-wire replies", async (
   ));
   expect(textOf(presentOf(last.effects).frame)).toContain(
     "after replayed reload",
+  );
+
+  const recordedTurns = recording.length - 1;
+  const replayed: RendererOutput[] = [];
+  const lines = [...recording, { kind: "end", turns: recordedTurns }].map((entry) => JSON.stringify(entry));
+  expect(await replayRecording(lines, (_input, output) => replayed.push(output))).toEqual({ turns: recordedTurns });
+  expect(replayed.flatMap((answer) => answer.frames).filter(({ frame }) => frame.kind === "drawn")).toHaveLength(2);
+  expect(replayed.flatMap((answer) => answer.effects).some((effect) => effect.kind === "change")).toBe(true);
+  expect(replayed[failedEntryIndex - 1]).toMatchObject({
+    kind: "threw",
+    failure: { message: expect.stringContaining("missing-from-capture") },
+  });
+  expect(textOf(presentOf(answered(replayed.at(-1)!).effects).frame)).toContain("after replayed reload");
+
+  const failureEntry = recording[failedEntryIndex];
+  if (failureEntry?.kind !== "turn" || failureEntry.output.kind !== "threw")
+    throw new Error("the recorded failure turn is missing");
+  const altered = lines.with(failedEntryIndex, JSON.stringify({
+    ...failureEntry,
+    output: {
+      ...failureEntry.output,
+      failure: { ...failureEntry.output.failure, detail: "altered failure detail" },
+    },
+  }));
+  await expect(replayRecording(altered)).rejects.toThrow(
+    `recording turn ${failedEntryIndex} differs at output.failure.detail`,
   );
 
   expect(await replayLines(live.inputs)).toEqual({
