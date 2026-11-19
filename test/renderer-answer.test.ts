@@ -523,6 +523,54 @@ describe("a statusline request", () => {
     expect(entry().lastError).toBeNull();
   });
 
+  test("the bundled fallback follows project discovery while the authored config is invalid", async () => {
+    const context = checked(undefined, "config.json5", {}, dir);
+    const file = path.join(dir, "config.json5");
+    fs.writeFileSync(file, "{ invalid syntax");
+    const plugin = path.join(dir, ".cc-candybar", "plugins", "p");
+    const definition = path.join(plugin, "plugin.json5");
+    const folder = path.join(plugin, STORAGE_FOLDER);
+    fs.mkdirSync(plugin, { recursive: true });
+    fs.writeFileSync(definition, `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } }
+    }`);
+    const { discovery, published, draw, reload, replace, entry } =
+      await restartableRendererHost(context);
+    const folders = () => published.at(-1)?.managedFolders;
+    const fallback = entry().state;
+    const error = entry().lastError;
+    expect(error).not.toBeNull();
+    expect(folders()).not.toContain(folder);
+
+    fs.writeFileSync(file, "\n\n{ another invalid edit");
+    await reload(file);
+    expect(entry().lastError).not.toBe(error);
+    expect(entry().state).toBe(fallback);
+
+    const state = stateDir({ env: {}, home: dir, tmp: dir });
+    const book = repoConfigs(state);
+    expect(writeStatePlan(book.plan(() => ({ [dir]: "approved" })))).toMatchObject({ kind: "ok" });
+    const recorded = book.read();
+    await reload(repoConfigsPath(state));
+    expect(discovery.snapshotOf(context.requested)?.repo).toMatchObject({ dir, standing: "approved" });
+    const liveFolders = folders();
+    const latestError = entry().lastError;
+    await draw();
+    await replace();
+    expect(folders()).toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(liveFolders).toEqual(folders());
+
+    fs.rmSync(plugin, { recursive: true });
+    await reload(definition);
+    expect(folders()).not.toContain(folder);
+    expect(entry().lastError).toBe(latestError);
+    expect(book.read()).toEqual(recorded);
+    const remaining = folders();
+    await replace();
+    expect(folders()).toEqual(remaining);
+  });
+
   test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {
     const t = renderer();
     const context = checked();
