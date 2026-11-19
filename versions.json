@@ -2,6 +2,21 @@
   "schema": 2,
   "versions": [
     {
+      "version": "main",
+      "ref": "refs/heads/main",
+      "sha": "aac59c95e05357cbdee5cfbd3e1759fb98fc8686",
+      "timestamp": "2026-11-19T18:22:38.778Z",
+      "commits": [
+        {
+          "sha": "aac59c95e05357cbdee5cfbd3e1759fb98fc8686",
+          "author_name": "semantic-release-bot",
+          "author_email": "semantic-release-bot@martynus.net",
+          "timestamp": "2026-11-19T18:21:28Z",
+          "message": "chore(release): set `package.json` to 1.235.6\n\n## [1.235.6](https://github.com/promptctl/cc-candybar/compare/v1.235.5...v1.235.6) (2026-11-19)\n\n### Bug Fixes\n\n* **daemon:** preserve Git checkout read errors ([#892](https://github.com/promptctl/cc-candybar/issues/892)) ([b430a64](https://github.com/promptctl/cc-candybar/commit/b430a64a7ab7be113b28a91192cf47cb2e26835f))\n"
+        }
+      ]
+    },
+    {
       "version": "pr-893",
       "ref": "refs/pull/893/merge",
       "sha": "58cd846a37957c69e2958467a6aca4b51a87f47a",
@@ -20,21 +35,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T10:40:36-07:00",
           "message": "fix(sources): keep pending observations and distinguish dependency keys (ibyq.apy)\n"
-        }
-      ]
-    },
-    {
-      "version": "main",
-      "ref": "refs/heads/main",
-      "sha": "b430a64a7ab7be113b28a91192cf47cb2e26835f",
-      "timestamp": "2026-11-19T18:13:21.948Z",
-      "commits": [
-        {
-          "sha": "b430a64a7ab7be113b28a91192cf47cb2e26835f",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T11:12:08-07:00",
-          "message": "fix(daemon): preserve Git checkout read errors (#892)"
         }
       ]
     },
