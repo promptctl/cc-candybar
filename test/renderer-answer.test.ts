@@ -345,6 +345,19 @@ async function dueFrame(r: Renderer, elapsed = 0) {
 }
 
 describe("a statusline request", () => {
+  test("successive ordinary draws retain the active subscription declaration", async () => {
+    const t = renderer();
+    const first = answered(await request(t));
+    const shown = presentOf(first.effects);
+    expect(first.subscriptions.configs).toHaveLength(1);
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    answered(await done(t.r, shown, true));
+
+    const next = answered(await request(t));
+    expect(presentOf(next.effects).frame.rows).toEqual(shown.frame.rows);
+    expect(next.subscriptions).toBe(first.subscriptions);
+  });
+
   test("still feed draws do not read all active subscriptions again", async () => {
     const t = renderer();
     const mine = checked();
