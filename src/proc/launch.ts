@@ -126,13 +126,12 @@ function checkRateLimit(
 // [LAW:one-source-of-truth] The environment every child gets, the lifeline's
 // included: the launch's own (a session's), or else its owner's, read live at
 // each launch, with REPOSITORY_SCOPED_ENV withheld; then the launch's overlay
-// over that. Passing `undefined` lets
-// node read the host process's environment directly, which is a second clock:
-// under a realm boundary (Jest's sandbox copies `process.env` per test file)
-// the two diverge, and a PATH the test set for a `shell` source never reached
-// the shell it spawned (brandon-custom-segments-g5z.3's doc stubs ran as 127).
-// An overlay entry of null removes that variable: node's spawn skips undefined
-// values.
+// over that. Passing `undefined` lets node read the host process's environment
+// directly, which is a second clock: under a realm boundary (Jest's sandbox
+// copies `process.env` per test file) the two diverge, and a PATH the test set
+// for a `shell` source never reached the shell it spawned
+// (brandon-custom-segments-g5z.3's doc stubs ran as 127). An overlay entry of
+// null removes that variable: node's spawn skips undefined values.
 function childEnv(
   scope: LaunchScope,
   opts: Pick<LaunchOpts, "environment" | "envOverlay">,

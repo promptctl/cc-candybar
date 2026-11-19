@@ -23,7 +23,7 @@ export interface World {
 // from the rest). The eslint config keeps every other file from naming them.
 // The launcher holds the live `process.env`, not a copy, and reads it at each
 // launch, so a variable the process sets after this still reaches the
-// children it launches. This is also
+// children it launches, apart from the repository-scoped ones. This is also
 // the one file that names the real clock (src/time.ts): everything else is
 // handed the world's.
 export function processWorld(): World {
