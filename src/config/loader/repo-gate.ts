@@ -143,22 +143,6 @@ export function withAnswer(
   return { ...Object.fromEntries(rest), [dir]: answer };
 }
 
-// [LAW:parse-dont-validate] The document as a book: directory, then answer.
-export function parseRepoConfigBook(doc: unknown): RepoAnswers {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer] of Object.entries(doc)) {
-    if (!(REPO_ANSWERS as readonly unknown[]).includes(answer)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer)}, not ${REPO_ANSWERS.join(" or ")}`,
-      };
-    }
-  }
-  return { kind: "ok", value: doc as RepoConfigBook };
-}
-
 // [LAW:no-silent-failure] A book that cannot be read is said wherever the
 // gate is presented on the bar.
 export function repoUnreadNotice(gate: ProjectAccess): string | null {

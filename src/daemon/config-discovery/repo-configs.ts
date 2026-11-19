@@ -7,7 +7,7 @@ import type { SessionId } from "../foundations/session-id.js";
 import path from "node:path";
 import {
   answerDir,
-  parseRepoConfigBook,
+  REPO_ANSWERS,
   withAnswer,
   type RepoAnswer,
   type RepoConfigBook,
@@ -30,6 +30,58 @@ export function repoConfigsDir(dir: string): string {
 
 export function repoConfigsPath(dir: string): string {
   return path.join(repoConfigsDir(dir), REPO_CONFIGS_FILE);
+}
+
+// [LAW:effects-at-boundaries] Stored answers name already resolved host
+// directories. Separators and "." need no disk reads. A ".." would need to
+// follow the preceding directory, which may be a symlink.
+function storedDirectory(written: string): string | null {
+  const dir = path.sep === "\\" ? written.replaceAll("/", path.sep) : written;
+  if (
+    !path.isAbsolute(dir) ||
+    dir.includes("\0") ||
+    dir.split(path.sep).includes("..")
+  ) {
+    return null;
+  }
+  // Formatting a parsed path removes the trailing separator except at a root.
+  return path.format(path.parse(path.normalize(dir)));
+}
+
+// [LAW:parse-dont-validate] A project has one stored decision. An exact
+// key keeps the answer earlier versions actually used. With only aliases,
+// the entries must agree before the book can be used or edited.
+function parseRepoConfigBook(doc: unknown): Asked<RepoConfigBook> {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  const book = new Map<string, RepoAnswer>();
+  for (const [written, value] of Object.entries(doc)) {
+    const dir = storedDirectory(written);
+    if (dir === null) {
+      return {
+        kind: "failed",
+        reason: `has invalid project directory ${JSON.stringify(written)}: expected an absolute directory without ".." or NUL`,
+      };
+    }
+    const answer = REPO_ANSWERS.find((known) => known === value);
+    if (answer === undefined) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(written)} ${JSON.stringify(value)}, not ${REPO_ANSWERS.join(" or ")}`,
+      };
+    }
+    if (written !== dir && Object.hasOwn(doc, dir)) continue;
+    const prior = book.get(dir);
+    if (prior !== undefined && prior !== answer) {
+      return {
+        kind: "failed",
+        reason: `has conflicting answers for project directory ${JSON.stringify(dir)}`,
+      };
+    }
+    book.set(dir, answer);
+  }
+  return ok(Object.fromEntries(book));
 }
 
 // [LAW:one-source-of-truth] The book in its folder is the answers. One kept
