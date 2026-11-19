@@ -65,8 +65,9 @@ describe("a renderer's warning record", () => {
 
   test("a warning that starts is recorded by the frame that met it, and cleared by the first frame without it", () => {
     const records = new RenderWarningRecords();
-    expect(records.of(S_2, "request")).toEqual([]);
+    expect(records.of(S_2, "request")).toBeUndefined();
     expect(drawn(records, S_2, "request", S, [])).toBe(false);
+    expect(records.of(S_2, "request")).toEqual([]);
     expect(drawn(records, S_2, "request", S, [warning("a")])).toBe(true);
     expect(records.of(S_2, "request")).toEqual([warning("a")]);
     expect(drawn(records, S_2, "request", S, [])).toBe(true);
@@ -99,7 +100,7 @@ describe("a renderer's warning record", () => {
     drawn(records, B, "request", S, [warning("b")]);
     drawn(records, A_2, "request", S, [warning("a")]);
     drawn(records, C, "request", S, [warning("c")]);
-    expect(records.of(B, "request")).toEqual([]);
+    expect(records.of(B, "request")).toBeUndefined();
     expect(records.of(A_2, "request")).toEqual([warning("a")]);
     expect(records.of(C, "request")).toEqual([warning("c")]);
   });

@@ -73,9 +73,10 @@ export class RenderWarningRecords {
     return next;
   }
 
-  // The warnings `by` last recorded for `sessionId`; none before its first.
-  of(sessionId: SessionId, by: Drawing["by"]): readonly RenderWarning[] {
-    return this.records.get(keyOf(sessionId, by))?.warnings ?? [];
+  // An empty list is a delivered clean frame. A missing record has no
+  // baseline, including after eviction.
+  of(sessionId: SessionId, by: Drawing["by"]): readonly RenderWarning[] | undefined {
+    return this.records.get(keyOf(sessionId, by))?.warnings;
   }
 
   // The session's warnings as `by` draws them in `scope`: its own record, and
@@ -92,7 +93,7 @@ export class RenderWarningRecords {
       const held = this.records.get(keyOf(sessionId, renderer));
       const own =
         renderer === by
-          ? this.of(sessionId, by)
+          ? held?.warnings ?? []
           : held?.generation === generation
             ? held.warnings
             : [];
@@ -135,14 +136,16 @@ export class RenderWarningRecords {
     sessionId: SessionId,
     by: Drawing["by"],
     prepared: PreparedWarnings,
-  ): void {
+  ): string | null {
     const key = keyOf(sessionId, by);
+    const changed = this.records.get(key)?.faults !== prepared.record.faults;
     this.records.delete(key);
     this.records.set(key, prepared.record);
     for (const oldest of this.records.keys()) {
       if (this.records.size <= this.maxRecords) break;
       this.records.delete(oldest);
     }
+    return changed ? prepared.record.faults : null;
   }
 }
 

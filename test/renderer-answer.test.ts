@@ -562,9 +562,13 @@ describe("a feed's frame", () => {
     const frame = await dueFrame(r);
     expect(recorded).toEqual([]);
     expect(viewOf(rig)?.frames.get("feed")).toBeUndefined();
-    answered(await done(r, { session: SESSION, id: frame.receipt }, true));
+    const delivered = answered(await done(r, { session: SESSION, id: frame.receipt }, true));
+    expect(delivered.record).toContainEqual(["faults", expect.stringContaining("--bogus")]);
     expect(recorded).toEqual([[expect.stringMatching(/--bogus/)]]);
     expect(by).toEqual(["feed"]);
+    const same = await dueFrame(r, 1);
+    const confirmed = answered(await done(r, { session: SESSION, id: same.receipt }, true));
+    expect(confirmed.record).toEqual([]);
   });
 
   // [LAW:effects-at-boundaries] The record and transitions are a surface's

@@ -72,7 +72,7 @@ import {
 import { handedOffTo, laneHandoff } from "./lane-handoff.js";
 import {
   collectDiagnostics,
-  copyKeys,
+  diagnosticCopies,
   type SourcedText,
   diagnosticsProjection,
   handoffRows,
@@ -507,7 +507,7 @@ export function drawRender(
     ),
     said("click", clickShown?.text),
   ].flatMap(({ about, text, copy, ...named }) =>
-    about && text && copy ? [{ ...named, about, text, copy }] : [],
+    text != null && copy != null ? [{ ...named, about, text, copy }] : [],
   );
   // What stands before the draw: whether the daemon can vouch that a config
   // edit reloads and that what it launches dies with it, what this config's
@@ -521,14 +521,12 @@ export function drawRender(
   // instant and for whom it draws, by the same event hold as the click error.
   const { daemon } = document;
   const launched = launcherWarningsAt(daemon.launcher, at, drawing.by);
-  const pipeWarning = launched.find((w) => w.kind === "launch-pipes");
+  const launchEvents = launched.flatMap((warning) => "event" in warning ? [warning] : []);
   const held = [
     daemonEventAt("renderer-ended", daemon.rendererEnded, at, drawing.by),
     daemonEventAt("act-failed", daemon.actFailed, at, drawing.by),
   ].flatMap((w) => (w === undefined ? [] : [w]));
-  const eventsShown = [pipeWarning?.event, ...held.map((w) => w.event)].flatMap(
-    (e) => (e === undefined ? [] : [e]),
-  );
+  const eventsShown = [...launchEvents, ...held].map((warning) => warning.event);
   const standing: readonly StandingWarning[] = [
     ...daemon.fileEvents,
     ...launched,
@@ -649,8 +647,7 @@ export function drawRender(
   // renderer last delivered, never text carried in the link. Recorded when
   // the frame reaches its client, so a draw that throws, or an answer that
   // never arrives, leaves the shown frame's copies.
-  const keys = copyKeys(diagnostics);
-  const copies = new Map(diagnostics.map((m, i) => [keys[i]!, m.copy]));
+  const copies = diagnosticCopies(diagnostics);
   // [LAW:one-source-of-truth] The idle period this walk drew with.
   noteFacts(facts, {
     menuIdle:
@@ -767,7 +764,7 @@ export function drawRender(
     err: errors.length > 0 ? "Y" : "N",
     clickError: clickHold.kind === "none" ? "-" : clickHold.kind,
     // The launcher's pipe event as this frame showed it: `-` for not at all.
-    pipeEvent: pipeWarning?.hold ?? "-",
+    pipeEvent: launchEvents[0]?.hold ?? "-",
     // How many repositories the bar asked about.
     ask: String(questions.length),
     warn: warned,
@@ -836,7 +833,7 @@ function keepDraw(
   parts: RendererParts,
   surfaceFrames: SessionView["frames"],
   kept: DrawMemory,
-): void {
+): string | null {
   const {
     session,
     by,
@@ -849,8 +846,9 @@ function keepDraw(
   parts.effectSessions.keep(session, motion);
   // [LAW:single-enforcer] The faults are noted as their record is kept, so a
   // frame that throws notes none.
-  parts.renderWarnings.keep(session, by, warnings);
+  const changedFaults = parts.renderWarnings.keep(session, by, warnings);
   parts.menuIdle.drew(session, menu.tick, menu.shown, menu.timeoutS);
+  return changedFaults;
 }
 
 // [LAW:types-are-the-program] What each error a draw lists is, named once:
@@ -860,7 +858,7 @@ interface DrawError extends SourcedText {
   readonly subject?: string;
 }
 
-// An error as its producer hands it, before an empty text drops it.
+// An error as its producer hands it, before an absent report is removed.
 type MaybeError = Omit<DrawError, "text" | "copy"> & {
   readonly text: string | null | undefined;
   readonly copy: string | null | undefined;
@@ -1027,16 +1025,17 @@ export type PrepareDelivery = (delivery: Delivery) => EffectId;
 // [LAW:single-enforcer] The one record of a delivery. An answer carrying the
 // click error or a daemon-wide held event that reaches its client is the one
 // that delivered it (src/utils/event-hold.ts).
-export function deliver(parts: RendererParts, delivery: Delivery): void {
+export function deliver(parts: RendererParts, delivery: Delivery): string | null {
   const { kept, surfaceFrames, copies, clickShown, eventsShown } = delivery;
   const { session, by } = kept;
-  keepDraw(parts, surfaceFrames, kept);
+  const changedFaults = keepDraw(parts, surfaceFrames, kept);
   parts.renderCache.delivered(session, by, copies);
   if (clickShown !== null)
     answeredClickError(parts.sessionState, session, clickShown);
   // Daemon-wide: one session's answer having shown the event is what makes
   // it not silent.
   for (const event of eventsShown) parts.eventAnswered(event);
+  return changedFaults;
 }
 
 // What Claude Code's statusline shows of `drawn`: the bar, or — while lanes

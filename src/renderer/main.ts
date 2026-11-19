@@ -382,7 +382,11 @@ export function mainRenderer(
             `effect-done for effect ${event.of}, which is no present, change or act on its way`,
           );
         deliveries.delete(event.of);
-        if (event.outcome.kind === "ok") deliver(parts, delivery);
+        if (event.outcome.kind === "ok") {
+          const faults = deliver(parts, delivery);
+          if (delivery.kept.by === "feed" && faults !== null)
+            record.push(["surface", "feed"], ["faults", faults]);
+        }
         return;
       }
       case "click": {

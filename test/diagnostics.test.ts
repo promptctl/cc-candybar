@@ -19,7 +19,7 @@ import {
 import {
   APPROVAL_SEVERITY,
   collectDiagnostics as collectSourced,
-  copyKeys,
+  diagnosticCopies,
   diagnosticSpan,
   diagnosticsProjection,
   ERROR_SEVERITY,
@@ -334,7 +334,7 @@ describe("the viewer", () => {
     const list = collectDiagnostics([ERROR, "second"], [], []);
     const own = {
       verb: "copy-diagnostic",
-      args: [SID, "request", copyKeys(list)[0]],
+      args: [SID, "request", viewerKey(list, 0, 0)],
     };
     const out = viewer(list, at(1), SID, "request", geometry(60));
     const copies = linkUrls(out)
@@ -350,7 +350,7 @@ describe("the viewer", () => {
       expect(effectsOf(l.url)).toEqual([own]);
     }
     // The key is the one the viewer opens the message at.
-    expect(copyKeys(list)[0]).toBe(viewerKey(list, 0, 0));
+    expect(diagnosticCopies(list).get(viewerKey(list, 0, 0))).toBe(ERROR);
   });
 
   test("a copy link names its message, never the text it copies, so a long prompt costs a frame nothing", () => {

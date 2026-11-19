@@ -6,7 +6,7 @@
 import { clickLaunchVia } from "../src/daemon/foundations/click-launch";
 import { type LaunchOpts } from "../src/proc/launcher";
 import { unscriptedLauncher } from "./helpers/fake-launcher";
-import { collectDiagnostics, copyKeys } from "../src/render/diagnostics";
+import { collectDiagnostics, diagnosticCopies } from "../src/render/diagnostics";
 import { SessionState } from "../src/renderer/session-state";
 import { hrefOfDrawnLink } from "../src/render/drawn-link";
 import { DroppedFileError } from "../src/config/loader/diagnostics";
@@ -41,8 +41,7 @@ const drawn = () => {
     [],
     [],
   );
-  const keys = copyKeys(list);
-  const copies = new Map(list.map((m, i) => [keys[i]!, m.copy]));
+  const copies = diagnosticCopies(list);
   return { list, copies };
 };
 
