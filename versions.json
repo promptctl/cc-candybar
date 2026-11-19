@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-863",
+      "ref": "refs/pull/863/merge",
+      "sha": "1f9f4c33eb07468bebbecbc3db1ad1a4fe11353a",
+      "timestamp": "2026-11-19T13:10:44.662Z",
+      "commits": [
+        {
+          "sha": "1f9f4c33eb07468bebbecbc3db1ad1a4fe11353a",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:09:27Z",
+          "message": "Merge 35d261b18c5403fc91de1ce8347ee40f77412d49 into 9df2afa5338a7144c675bbd4ff228c85f32fe868\n"
+        },
+        {
+          "sha": "35d261b18c5403fc91de1ce8347ee40f77412d49",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:10:16-07:00",
+          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-866",
       "ref": "refs/pull/866/merge",
       "sha": "6800b9e96410af3d37e52734471b6b0ccf0e1563",
@@ -129,28 +151,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:58:00-07:00",
           "message": "perf(host): share checkout filesystem observations (x96a.uqq)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-863",
-      "ref": "refs/pull/863/merge",
-      "sha": "11fc07066409baa994a18a184b645ab5712ee51b",
-      "timestamp": "2026-11-19T12:40:31.198Z",
-      "commits": [
-        {
-          "sha": "11fc07066409baa994a18a184b645ab5712ee51b",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T12:39:14Z",
-          "message": "Merge bb014f47ded748d244cf629f4be4fa28b4b34ae6 into 21b8abaab0b95c9b35518fcd7a840b2d54aa052b\n"
-        },
-        {
-          "sha": "bb014f47ded748d244cf629f4be4fa28b4b34ae6",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:10:16-07:00",
-          "message": "refactor(click): publish and admit repository decisions in the host (ibyq.vne)\n"
         }
       ]
     },
