@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-859",
+      "ref": "refs/pull/859/merge",
+      "sha": "095554bc0d6f7c1231afeaf4da5c20bdd7863921",
+      "timestamp": "2026-11-19T11:49:56.587Z",
+      "commits": [
+        {
+          "sha": "095554bc0d6f7c1231afeaf4da5c20bdd7863921",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:48:54-07:00",
+          "message": "Merge 0ccdc92d1211fd858061d550a702c319b5458fc0 into 302fc64ce5feb571dec1d018b9b3b3bf45535802\n"
+        },
+        {
+          "sha": "0ccdc92d1211fd858061d550a702c319b5458fc0",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T04:48:35-07:00",
+          "message": "fix(renderer): edit chrome's open menus live and die with the edit transaction (3248.v73l)\n\nOpening and closing a transaction each drop every key in edit chrome's\nnamespaces (the configure key, chrome menus, their page cursors), and a\nlayout step that ends a placement drops that placement's chrome keys in\nthe same step as its drafts, named through the derivations that mint\nthem. Retire now ends through the one close. An authored menu whose key\nwould collapse into chrome's namespace is refused at load.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "302fc64ce5feb571dec1d018b9b3b3bf45535802",
