@@ -34,7 +34,7 @@ export type CheckedHookData = Omit<ClaudeHookData, "session_id"> & {
 declare const CHECKED: unique symbol;
 export type CheckedRenderRequest = Omit<
   ReaderRenderRequest,
-  "deadline" | "encoding" | "hookData" | "env"
+  "deadline" | "encoding" | "hookData" | "env" | "envKey"
 > & {
   readonly hookData: CheckedHookData;
   readonly deadline: ClientDeadline;

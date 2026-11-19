@@ -88,18 +88,31 @@ export async function requestOutcome<T>(
   request: (deadline: number) => UnversionedRequest,
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
+  expiresAt?: number,
 ): Promise<RoundTripOutcome<T>> {
   let sock: net.Socket;
+  const remaining =
+    expiresAt === undefined ? Infinity : expiresAt - world.clock.now();
+  if (remaining <= 0)
+    return interpretException(new ClientTimeoutError("deadline"));
   try {
     sock = await connectWithTimeout(
       socketPath(world.host),
-      budgets.connectMs,
+      Math.min(budgets.connectMs, remaining),
       world.clock,
+      remaining <= budgets.connectMs ? "deadline" : "connect",
     );
   } catch (e) {
     return interpretException(e);
   }
-  return exchangeOutcome(sock, world.clock, request, budgets, project);
+  return exchangeOutcome(
+    sock,
+    world.clock,
+    request,
+    budgets,
+    project,
+    expiresAt,
+  );
 }
 
 // [LAW:locality-or-seam] The round trip over a connection already made, which
@@ -113,11 +126,14 @@ export async function exchangeOutcome<T>(
   request: (deadline: number) => UnversionedRequest,
   budgets: RoundTripBudgets,
   project: (resp: OkResponse) => T | undefined,
+  expiresAt?: number,
 ): Promise<RoundTripOutcome<T>> {
   try {
     // [LAW:one-source-of-truth] One instant: the one the request states and
     // the one the client's own timer gives up at.
-    const deadline = clock.now() + budgets.budgetMs;
+    const now = clock.now();
+    const deadline = expiresAt ?? now + budgets.budgetMs;
+    if (deadline <= now) throw new ClientTimeoutError("deadline");
     const req = request(deadline);
     const resp: Response = await sendOne(
       sock,
@@ -292,12 +308,13 @@ function connectWithTimeout(
   path: string,
   timeoutMs: number,
   clock: Pick<Timekeeper, "after">,
+  phase: TimeoutPhase,
 ): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
     const sock = net.createConnection({ path });
     const clearTimer = clock.after(timeoutMs, () => {
       sock.destroy();
-      reject(new ClientTimeoutError("connect"));
+      reject(new ClientTimeoutError(phase));
     });
     sock.once("connect", () => {
       clearTimer();

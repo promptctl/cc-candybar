@@ -1,8 +1,8 @@
 import type { Host } from "./host-facts";
-import { explicitConfigPath } from "./utils/user-path";
+import { explicitConfigPath, type UserHome } from "./utils/user-path";
 
 // What a hint reads of the machine.
-type HostPaths = Pick<Host, "env" | "home">;
+type HostPaths = Pick<Host, "env"> & { readonly home: UserHome };
 
 // The client's explicit-config probe — the `CC_CANDYBAR_CONFIG` the shell
 // Claude Code spawned the statusline in carries, read from the client's own

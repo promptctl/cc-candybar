@@ -186,6 +186,7 @@ describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
     const stats = new RuntimeStats(systemTimekeeper);
     stats.requestsTotal = 10;
+    stats.environmentMisses = 3;
     stats.requestsErrored = 1;
     stats.requestsTimedOut = 2;
     stats.inFlight = 1;
@@ -215,6 +216,7 @@ describe("RuntimeStats.snapshot", () => {
 
     expect(snap.requests).toEqual({
       total: 10,
+      environmentMisses: 3,
       errored: 1,
       timedOut: 2,
       inFlight: 1,
@@ -394,6 +396,7 @@ describe("formatStats", () => {
       externalBytes: 1 * 1024 * 1024,
       arrayBuffersBytes: 256 * 1024,
       requests: {
+        environmentMisses: 3,
         total: 100,
         errored: 2,
         timedOut: 1,
@@ -482,6 +485,7 @@ describe("formatStats", () => {
       },
     });
     expect(out).toContain("pid           1234");
+    expect(out).toContain("env misses    3");
     // A name a client chose cannot forge a row: each is a JSON string.
     expect(out).toContain('unknownFields "fast_mode", "x\\n  inFlight      9"');
     expect(out).not.toContain("\n  inFlight      9");
@@ -563,6 +567,7 @@ describe("formatStats", () => {
       externalBytes: 0,
       arrayBuffersBytes: 0,
       requests: {
+        environmentMisses: 0,
         total: 0,
         errored: 0,
         timedOut: 0,

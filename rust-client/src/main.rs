@@ -27,6 +27,8 @@ mod error_glyph;
 mod follow;
 mod launch;
 
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
@@ -44,6 +46,9 @@ use std::time::{Duration, Instant};
 // (src/daemon/foundations/protocol.ts, src/daemon/client.ts); scripts/check-protocol.mjs
 // diffs each one, so a drift fails prepublishOnly instead of shipping.
 pub(crate) const PROTOCOL_VERSION: u32 = 3;
+const SESSION_RENDER_KIND: &str = "render-session";
+const ENVIRONMENT_NEEDED: &str = "environment";
+const UNKNOWN_REQUEST_KIND: &str = "unknown kind";
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
@@ -286,19 +291,10 @@ enum BadInput {
     Msg(String),
 }
 
-// The client hints, set on the request (mirrors ClientHints in
-// src/daemon/foundations/protocol.ts). [LAW:single-enforcer] Client hints are captured
-// here, in the client's live shell context, then trusted by the daemon. The
-// daemon's own env reflects whichever shell launched it — not the active
-// terminal, and not whether THIS session arrived over SSH.
-// [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set this
-// function sets against that interface — add a hint in both runtimes at once.
-//
-// termCols / termRows are CONDITIONAL: absence is the honest "could not
-// determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
-// always state it, which reserves absence to mean "client too old to
-// report" and keeps that distinguishable from a genuine local session.
-fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
+// [LAW:one-source-of-truth] The compact request carries observations that
+// cannot be derived from the host's saved environment, including the native
+// client's live TTY geometry and the bundle it is running with.
+fn client_hints(request: &mut serde_json::Value) {
     let (term_cols, term_rows) = detect_term_extents();
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
@@ -306,6 +302,14 @@ fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     if let Some(rows) = term_rows {
         request["termRows"] = serde_json::Value::from(rows);
     }
+    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
+        request["client"] = client;
+    }
+}
+
+// The full render request remains readable by daemons that only accept
+// the legacy environment hints.
+fn legacy_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     request["ssh"] = serde_json::Value::from(detect_ssh());
     // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
     // object is the tmux facts — absence stays "client too old to report".
@@ -324,11 +328,39 @@ fn client_hints(request: &mut serde_json::Value, cwd: &std::path::Path) {
     // environment does not set left out of it — absence stays "client too old
     // to report".
     request["terminalEnv"] = detect_terminal_env();
-    // client is CONDITIONAL only on the binary naming its own path: one that
-    // cannot (current_exe failed) can spawn no daemon either, and its absence
-    // reads as the doctor's "unreported" — never a guessed bundle.
-    if let Some(client) = client_hint(dist_index_path(), RUST_SOURCE) {
-        request["client"] = client;
+}
+
+type SessionEnvironment = BTreeMap<String, String>;
+
+// [LAW:one-source-of-truth] The daemon hashes this same compact JSON array
+// of pairs sorted by UTF-8 key bytes. An ordered map also ensures the digest
+// represents exactly the keys that the full render will send.
+fn environment_key(environment: &SessionEnvironment) -> serde_json::Result<String> {
+    let pairs: Vec<_> = environment.iter().collect();
+    let encoded = serde_json::to_vec(&pairs)?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
+}
+
+// The current host derives its hints from the snapshot. Only an older host
+// needs the separate environmental hints as well.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EnvironmentReport {
+    Snapshot,
+    WithLegacyHints,
+}
+
+fn requested_report(response: &serde_json::Value) -> Option<EnvironmentReport> {
+    match response.get("ok")?.as_bool()? {
+        true if response.get("need")?.as_str()? == ENVIRONMENT_NEEDED => {
+            Some(EnvironmentReport::Snapshot)
+        }
+        false
+            if response.get("code")?.as_str()? == "BAD_REQUEST"
+                && response.get("error")?.as_str()? == UNKNOWN_REQUEST_KIND =>
+        {
+            Some(EnvironmentReport::WithLegacyHints)
+        }
+        _ => None,
     }
 }
 
@@ -346,75 +378,87 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     };
+    // JSON carries only UTF-8, so a byte that is not UTF-8 reads as U+FFFD,
+    // as it does in the Node client. One snapshot supplies the key and any
+    // later transmission of the environment on this request.
+    let environment: SessionEnvironment = env::vars_os()
+        .map(|(name, value)| {
+            (
+                name.to_string_lossy().into_owned(),
+                value.to_string_lossy().into_owned(),
+            )
+        })
+        .collect();
+    let env_key = match environment_key(&environment) {
+        Ok(key) => key,
+        Err(e) => {
+            return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+                "encode environment key: {e}"
+            )))
+        }
+    };
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
-        "kind": "render",
+        "kind": SESSION_RENDER_KIND,
         "hookData": hook_data,
         "args": argv,
         "cwd": cwd,
+        "envKey": env_key,
     });
     if let Some(ms) = deadline_epoch_ms {
         request["deadline"] = serde_json::Value::from(ms);
     }
-    // The environment Claude Code gave this client, which the daemon runs the
-    // session's programs in (src/daemon/foundations/session-env.ts). JSON
-    // carries only UTF-8, so a byte that is not reads as U+FFFD, as it does in
-    // the Node client: one bad entry of a PATH costs that entry, where
-    // dropping the variable would cost the whole PATH.
+    client_hints(&mut request);
+    let socket = socket_path();
+    let response = match exchange_render(&request, &socket, deadline) {
+        Ok(response) => response,
+        Err(outcome) => return outcome,
+    };
+    let Some(report) = requested_report(&response) else {
+        return interpret_response(response);
+    };
+
+    request["kind"] = serde_json::Value::from("render");
     request["env"] = serde_json::Value::Object(
-        env::vars_os()
-            .map(|(name, value)| {
-                (
-                    name.to_string_lossy().into_owned(),
-                    serde_json::Value::String(value.to_string_lossy().into_owned()),
-                )
-            })
+        environment
+            .into_iter()
+            .map(|(name, value)| (name, serde_json::Value::String(value)))
             .collect(),
     );
-    client_hints(&mut request, std::path::Path::new(&cwd));
-    let body = match serde_json::to_vec(&request) {
-        Ok(b) => b,
-        // Encoding our own request failed — this is a programming error
-        // (non-serializable hook_data), not a daemon problem. Treat as
-        // Permanent so we don't loop on it.
-        Err(e) => {
-            return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
-                "encode request: {e}"
-            )));
-        }
-    };
-
-    let socket = socket_path();
-    let mut sock = match connect_with_timeout(&socket, CONNECT_TIMEOUT) {
-        Ok(s) => s,
-        Err(e) => return classify_io_error(e),
-    };
-
-    if let Err(e) = remaining_or_io(deadline).and_then(|d| sock.set_write_timeout(Some(d))) {
-        return classify_io_error(e);
+    if report == EnvironmentReport::WithLegacyHints {
+        legacy_hints(&mut request, Path::new(&cwd));
     }
-    if let Err(e) = write_frame(&mut sock, &body) {
-        return classify_io_error(e);
-    }
+    // [LAW:no-ambient-temporal-coupling] The reply grants one retry under
+    // the original deadline, including its second connection.
+    exchange_render(&request, &socket, deadline).map_or_else(|outcome| outcome, interpret_response)
+}
 
-    if let Err(e) = remaining_or_io(deadline).and_then(|d| sock.set_read_timeout(Some(d))) {
-        return classify_io_error(e);
-    }
-    let resp_body = match read_frame(&mut sock) {
-        Ok(b) => b,
-        Err(e) => return classify_io_error(e),
-    };
-
-    let resp: serde_json::Value = match serde_json::from_slice(&resp_body) {
-        Ok(v) => v,
-        Err(e) => {
-            return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
-                "decode response: {e}"
-            )));
-        }
-    };
-
-    interpret_response(resp)
+fn exchange_render(
+    request: &serde_json::Value,
+    socket: &Path,
+    deadline: Instant,
+) -> Result<serde_json::Value, RenderOutcome> {
+    let body = serde_json::to_vec(request).map_err(|e| {
+        RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+            "encode request: {e}"
+        )))
+    })?;
+    let budget = remaining_or_io(deadline).map_err(classify_io_error)?;
+    let mut sock =
+        connect_with_timeout(socket, CONNECT_TIMEOUT.min(budget)).map_err(classify_io_error)?;
+    remaining_or_io(deadline)
+        .and_then(|d| sock.set_write_timeout(Some(d)))
+        .map_err(classify_io_error)?;
+    write_frame(&mut sock, &body).map_err(classify_io_error)?;
+    remaining_or_io(deadline)
+        .and_then(|d| sock.set_read_timeout(Some(d)))
+        .map_err(classify_io_error)?;
+    let resp_body = read_frame(&mut sock).map_err(classify_io_error)?;
+    serde_json::from_slice(&resp_body).map_err(|e| {
+        RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+            "decode response: {e}"
+        )))
+    })
 }
 
 // [LAW:types-are-the-program] One place that turns a wire-level response
@@ -505,6 +549,7 @@ fn classify_io_error(e: io::Error) -> RenderOutcome {
 fn remaining_or_io(deadline: Instant) -> io::Result<Duration> {
     deadline
         .checked_duration_since(Instant::now())
+        .filter(|duration| !duration.is_zero())
         .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "deadline exceeded"))
 }
 
@@ -701,7 +746,11 @@ fn terminal_env_hint(raw: impl Fn(&str) -> Option<String>) -> serde_json::Value 
 
 fn detect_tmux() -> serde_json::Value {
     let raw = |name: &str| env::var(name).ok();
-    tmux_hint(raw(TMUX_ENV.socket), raw(TMUX_ENV.pane), raw(TMUX_ENV.truecolor))
+    tmux_hint(
+        raw(TMUX_ENV.socket),
+        raw(TMUX_ENV.pane),
+        raw(TMUX_ENV.truecolor),
+    )
 }
 
 // [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
@@ -1234,6 +1283,67 @@ mod tests {
     use super::*;
     use std::io;
 
+    #[test]
+    fn environment_digest_matches_node_for_numeric_unicode_and_control_values() {
+        #[derive(serde::Deserialize)]
+        struct Vector {
+            pairs: Vec<(String, String)>,
+            sha256: String,
+        }
+        let vector: Vector = serde_json::from_str(include_str!(
+            "../../test/fixtures/session-environment-key.json"
+        ))
+        .unwrap();
+        let environment = vector.pairs.into_iter().collect();
+        assert_eq!(environment_key(&environment).unwrap(), vector.sha256);
+    }
+
+    #[test]
+    fn only_a_challenge_or_an_exact_legacy_refusal_requests_full_environment() {
+        use serde_json::json;
+
+        for (response, report) in [
+            (
+                json!({"ok": true, "need": "environment"}),
+                Some(EnvironmentReport::Snapshot),
+            ),
+            (
+                json!({"ok": false, "code": "BAD_REQUEST", "error": "unknown kind", "daemonV": 3}),
+                Some(EnvironmentReport::WithLegacyHints),
+            ),
+            (json!({"ok": true, "output": "render"}), None),
+            (json!({"ok": true, "need": "other"}), None),
+            (
+                json!({"ok": false, "code": "BAD_REQUEST", "error": "unknown kind format"}),
+                None,
+            ),
+            (
+                json!({"ok": false, "code": "RENDER_FAILED", "error": "unknown kind"}),
+                None,
+            ),
+            (
+                json!({"code": "BAD_REQUEST", "error": "unknown kind"}),
+                None,
+            ),
+            (
+                json!({"ok": false, "code": "TIMEOUT", "need": "environment"}),
+                None,
+            ),
+        ] {
+            assert_eq!(requested_report(&response), report, "{response}");
+        }
+    }
+
+    #[test]
+    fn an_expired_retry_budget_is_busy_before_connecting() {
+        let reply = exchange_render(
+            &serde_json::json!({"kind": "render"}),
+            Path::new("/this socket is never reached"),
+            Instant::now() - Duration::from_millis(1),
+        );
+        assert!(matches!(reply, Err(RenderOutcome::Busy)));
+    }
+
     // The same table as test/term-extent.test.ts: both runtimes must read
     // the same COLUMNS/LINES value from the same shell, or neither.
     #[test]
@@ -1243,9 +1353,15 @@ mod tests {
         assert_eq!(hint(None), None);
         assert_eq!(hint(Some("")), None);
         assert_eq!(hint(Some(" ,/b")), None);
-        assert_eq!(hint(Some("/home/u/.claude-work")), Some("/home/u/.claude-work".into()));
+        assert_eq!(
+            hint(Some("/home/u/.claude-work")),
+            Some("/home/u/.claude-work".into())
+        );
         assert_eq!(hint(Some(" /a , /b")), Some("/a".into()));
-        assert_eq!(hint(Some(".claude-work")), Some("/work/proj/.claude-work".into()));
+        assert_eq!(
+            hint(Some(".claude-work")),
+            Some("/work/proj/.claude-work".into())
+        );
         assert_eq!(hint(Some("../x/./y/")), Some("/work/x/y".into()));
         assert_eq!(hint(Some("../cfg//x/.")), Some("/work/cfg/x".into()));
         assert_eq!(hint(Some("/m/../../..")), Some("/".into()));
@@ -1255,17 +1371,22 @@ mod tests {
     #[test]
     fn config_env_hint_resolves_against_cwd_and_home() {
         let cwd = std::path::Path::new("/work/proj");
-        let hint = |raw: Option<&str>| {
-            config_env_hint(raw.map(String::from), cwd, Some("/home/u".into()))
-        };
+        let hint =
+            |raw: Option<&str>| config_env_hint(raw.map(String::from), cwd, Some("/home/u".into()));
         assert_eq!(hint(None), None);
         assert_eq!(hint(Some("")), None);
         assert_eq!(hint(Some("/etc/bar.json5")), Some("/etc/bar.json5".into()));
-        assert_eq!(hint(Some("examples/demo.json5")), Some("/work/proj/examples/demo.json5".into()));
+        assert_eq!(
+            hint(Some("examples/demo.json5")),
+            Some("/work/proj/examples/demo.json5".into())
+        );
         assert_eq!(hint(Some("../x/./y.json5")), Some("/work/x/y.json5".into()));
         assert_eq!(hint(Some("~/bar.json5")), Some("/home/u/bar.json5".into()));
         assert_eq!(hint(Some("~")), Some("/home/u".into()));
-        assert_eq!(hint(Some("~alice/c.json5")), Some("/work/proj/~alice/c.json5".into()));
+        assert_eq!(
+            hint(Some("~alice/c.json5")),
+            Some("/work/proj/~alice/c.json5".into())
+        );
     }
 
     #[test]
@@ -1323,7 +1444,17 @@ mod tests {
         assert_eq!(env("+80"), Some(80));
         assert_eq!(env("080"), Some(80));
         assert_eq!(env("4294967295"), Some(4294967295));
-        for rejected in ["", "0", " 80", "80 ", "80.5", "80\n", "80abc", "-80", "4294967296"] {
+        for rejected in [
+            "",
+            "0",
+            " 80",
+            "80 ",
+            "80.5",
+            "80\n",
+            "80abc",
+            "-80",
+            "4294967296",
+        ] {
             assert_eq!(env(rejected), None, "{rejected:?}");
         }
         assert_eq!(detect_term_extent(Some("x".to_string()), 24), Some(24));

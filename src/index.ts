@@ -29,7 +29,7 @@ import fs from "node:fs";
 import { LANES } from "./config/lanes";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
-import { detectClientHints } from "./client-hints";
+import { terminalObservation } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { runFrames } from "./frames-cli";
 import { runBarPane } from "./bar-pane";
@@ -194,13 +194,8 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // caches). On daemon miss we spawn detached and emit empty output; the
     // next status-line refresh hits the warm daemon and renders for real.
     //
-    // [LAW:single-enforcer] Client hints are captured here, in the user's
-    // shell environment, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it minutes/hours ago, so it can
-    // measure neither the active terminal nor whether THIS session came in
-    // over SSH — only the live client can. One daemon serves a local session
-    // and an SSH session at the same time, so the answer genuinely differs per
-    // request.
+    // Terminal dimensions and client identity belong to this tick. The host
+    // can derive the other hints from the environment it holds for the session.
     const outcome = await tryRenderViaDaemon(
       world,
       hookData,
@@ -209,7 +204,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.argv.slice(1),
       process.cwd(),
       {
-        ...detectClientHints(host, process.cwd(), process.stderr),
+        ...terminalObservation(host.env, process.stderr),
         client: nodeClientHint("node", RUNNING_BUNDLE),
       },
     );

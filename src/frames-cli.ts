@@ -33,7 +33,7 @@ import { tryRenderViaDaemon } from "./daemon/client";
 import { followFrames, type FrameFollower } from "./daemon/frame-follow";
 import { describeFailure } from "./daemon/client-transport";
 import { socketPath } from "./daemon/paths";
-import { detectClientHints } from "./client-hints";
+import { terminalObservation } from "./client-hints";
 import { nodeClientHint } from "./client-hint";
 import { newestWins } from "./utils/newest-wins";
 import { LANE_NAMES, parseLane } from "./config/lanes";
@@ -152,7 +152,7 @@ export async function runFrames(
     // The terminal as it is now: a resize between two statusline ticks is in
     // the next one.
     const hints = {
-      ...detectClientHints(world.host, cwd, process.stderr),
+      ...terminalObservation(world.host.env, process.stderr),
       client: nodeClientHint("frames", bundle),
     };
     const outcome = await tryRenderViaDaemon(

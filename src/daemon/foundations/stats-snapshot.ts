@@ -75,6 +75,8 @@ export interface StatsSnapshot {
   arrayBuffersBytes: number;
   requests: {
     total: number;
+    /** Valid compact requests that asked the client for its environment before drawing. */
+    environmentMisses: number;
     errored: number;
     timedOut: number;
     inFlight: number;

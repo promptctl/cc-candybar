@@ -2,9 +2,8 @@
 // context (src/renderer-interface/request-context.ts), from its newest
 // request, kept in the host's state directory, so a click after a restart,
 // before the session's next request, still has the config it acts on. What
-// its client reports now (pane, terminal) is the newest request's, held in
-// memory by the frame feeds, and never kept here. The session's environment
-// is held here in memory alone, never written: it carries keys and tokens,
+// its client reports now (pane, terminal) comes from the newest request and
+// its environment. The session's environment is held here in memory alone: it carries keys and tokens,
 // and a click finds it here after the collector has retired the session.
 
 import { isAbsolute } from "node:path";
@@ -18,6 +17,8 @@ import {
 import type { SessionId } from "./foundations/session-id.js";
 import {
   NOT_HEARD,
+  type Environment,
+  type RegisteredEnvironment,
   type SessionEnvironment,
 } from "./foundations/session-env.js";
 import { originOfRecord, originRecord } from "./foundations/render-origin.js";
@@ -76,7 +77,10 @@ export class SessionBook {
   // was last heard in, which the bound drops the oldest of.
   private book = new Map<SessionId, DurableContext>();
   // The environment of each session heard since the daemon started.
-  private readonly environments = new Map<SessionId, SessionEnvironment>();
+  private readonly environments = new Map<
+    SessionId,
+    SessionEnvironment | RegisteredEnvironment
+  >();
   // [LAW:no-ambient-temporal-coupling] The file is saved to only while open,
   // and the close flushes what the open phase saved: before the load, a save
   // would land over the book the daemon before it flushed, unread; after the
@@ -101,7 +105,10 @@ export class SessionBook {
 
   // The session's newest request: what it says the session is, saved when
   // it moved.
-  heard(req: CheckedRenderRequest, environment: SessionEnvironment): void {
+  heard(
+    req: CheckedRenderRequest,
+    environment: SessionEnvironment | RegisteredEnvironment,
+  ): void {
     const session = req.hookData.session_id;
     this.environments.set(session, environment);
     const durable = durableOf(req);
@@ -128,7 +135,25 @@ export class SessionBook {
   // [LAW:one-source-of-truth] The environment a program the host runs for
   // the session starts from: its newest request's, or why the host has none.
   environmentOf(session: SessionId): SessionEnvironment {
-    return this.environments.get(session) ?? NOT_HEARD;
+    const held = this.environments.get(session) ?? NOT_HEARD;
+    return "execution" in held ? { kind: "ok", value: held.execution } : held;
+  }
+
+  // A desktop tool or tmux command inherits the working directory and
+  // environment of the same reported session. Only the directory is durable.
+  programContextOf(
+    session: SessionId,
+  ): { readonly cwd: string; readonly environment: Environment } | null {
+    const durable = this.book.get(session);
+    const environment = this.environmentOf(session);
+    return durable !== undefined && environment.kind === "ok"
+      ? { cwd: durable.origin.cwd, environment: environment.value }
+      : null;
+  }
+
+  reportedFor(session: SessionId, key: string): RegisteredEnvironment | null {
+    const held = this.environments.get(session);
+    return held && "key" in held && held.key === key ? held : null;
   }
 
   close(): Promise<void> {

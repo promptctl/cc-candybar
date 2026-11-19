@@ -172,6 +172,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(``);
   lines.push(`requests`);
   lines.push(`  total         ${s.requests.total}`);
+  // Older daemons do not count the compact client's environment challenges.
+  if (s.requests.environmentMisses !== undefined)
+    lines.push(`  env misses    ${s.requests.environmentMisses}`);
   lines.push(`  errored       ${s.requests.errored}`);
   lines.push(`  timedOut      ${s.requests.timedOut}`);
   lines.push(`  inFlight      ${s.requests.inFlight}`);

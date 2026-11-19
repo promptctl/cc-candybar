@@ -299,8 +299,15 @@ export async function startWorld(
   };
 
   // What a client reports of the terminal it runs at.
+  const clientEnv = (columns: number): NodeJS.ProcessEnv => ({
+    PATH: env.PATH,
+    HOME: dirs.home,
+    CC_CANDYBAR_SOCKET: socket,
+    ...terminal,
+    COLUMNS: String(columns),
+  });
   const hintsOf = (session: Session, columns: number): ClientHints => ({
-    ...detectClientHints({ env: terminal, home: dirs.home }, session.cwd, {
+    ...detectClientHints({ env: clientEnv(columns), home: dirs.home }, session.cwd, {
       columns,
       rows: 48,
     }),
@@ -326,22 +333,15 @@ export async function startWorld(
       return { id, cwd: of.cwd, transcript };
     },
     hookData: hookDataOf,
-    clientEnv: (columns) => ({
-      PATH: env.PATH,
-      HOME: dirs.home,
-      CC_CANDYBAR_SOCKET: socket,
-      ...terminal,
-      COLUMNS: String(columns),
-    }),
+    clientEnv,
     async tick(session, columns, n) {
       const started = performance.now();
       const outcome = await tryRenderViaDaemon(
-        client,
-
+        { ...client, host: { ...host, env: clientEnv(columns) } },
         hookDataOf(session, n),
         [BUNDLE],
         session.cwd,
-        hintsOf(session, columns),
+        { termCols: columns, termRows: 48, client: CLIENT },
       );
       const ms = performance.now() - started;
       return outcome.kind === "ok"
@@ -354,7 +354,7 @@ export async function startWorld(
         (deadline) => ({
           kind: "render",
           encoding: "frame",
-          env: plainEnvironment(client.host.env),
+          env: plainEnvironment(clientEnv(columns)),
           hookData: hookDataOf(session, n),
           args: [BUNDLE],
           cwd: session.cwd,

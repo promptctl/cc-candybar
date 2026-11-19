@@ -269,11 +269,8 @@ export function contextFacts(
 // observed and the daemon cannot. Raw `req.*` hint fields are not read past
 // this line; `hints` is the stamped type the render path consumes.
 //
-// [LAW:single-enforcer] Every hint is captured client-side because the daemon
-// is detached and shared: its env answers for whichever shell spawned it. We
-// do NOT read the daemon's env or stderr for width, and we do NOT consult
-// SSH_* for remoteness — both would describe a different session than the one
-// being rendered.
+// The host combined the live terminal observations with facts from the
+// session's environment. The renderer sees the resulting hints.
 const hintsErrorOf = (req: CheckedRenderRequest): string | null =>
   refusedHintsError(refusedHints(req, req.hints));
 

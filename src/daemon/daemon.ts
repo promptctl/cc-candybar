@@ -112,6 +112,7 @@ export interface RunningBundle {
 // ones. An adapter that needs what `createDaemon` builds, as the launcher needs
 // its stats and its closing signal, is a factory over those.
 export interface DaemonAdapters {
+  readonly accountHome: () => string;
   // The file the daemon's work logs to.
   readonly daemonLog: DaemonLog;
   // What every launch of the daemon's work goes through.
@@ -127,7 +128,7 @@ export interface DaemonAdapters {
   readonly sessionBook: (
     log: DaemonLogger,
   ) => SessionFileStorage<DurableContext>;
-  readonly claudeInput: (launcher: Launcher) => ClaudeInputEdge;
+  readonly claudeInput: (launcher: Pick<Launcher, "launch">) => ClaudeInputEdge;
   readonly barPaneEdge: (launcher: Launcher) => BarPaneEdge;
   // [LAW:one-source-of-truth] The host uses one key to publish and admit
   // terminal clicks.
@@ -408,9 +409,23 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   });
   // [LAW:single-enforcer] The host's one performer of the acts the renderer's
   // turns return (src/daemon/acts.ts).
+  const programs = (edge: Pick<Launcher, "launch">) => ({
+    launch: clickLaunchVia(edge),
+    claudeInput: inputs.claudeInput(edge),
+  });
+  const desktopPrograms = programs(launcher);
   const acts = new Acts({
-    launch: clickLaunchVia(launcher),
-    claudeInput: inputs.claudeInput(launcher),
+    programsFor: (session) => {
+      // Fixed desktop tools also serve sessionless links, old clients and
+      // links opened before a restarted host hears from the session again.
+      // Runs and SourceRuns require a report for user-configured programs.
+      const context =
+        session === null ? null : sessionBook.programContextOf(session);
+      if (context === null) return desktopPrograms;
+      return programs({
+        launch: (options) => launcher.launch({ ...options, ...context }),
+      });
+    },
     run: (run) => runs.start(run),
     barPane: {
       edge: inputs.barPaneEdge(launcher),
@@ -803,6 +818,7 @@ export function createDaemon(inputs: DaemonInputs): PreparedDaemon {
   };
 
   const parts: DaemonParts = {
+    accountHome: inputs.accountHome,
     closing: cancelWork.signal,
     home: host.home,
     launcher,

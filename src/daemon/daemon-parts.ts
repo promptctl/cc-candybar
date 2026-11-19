@@ -26,6 +26,7 @@ import type { CheckoutLocation } from "../utils/git-root.js";
 // (src/daemon/daemon.ts) and read by the request handling, which keeps none of
 // its own.
 export interface DaemonParts {
+  readonly accountHome: () => string;
   // The user's home: the default Claude Code directory is under it.
   readonly home: string;
   // The temporary directory a click's handoff writes under.

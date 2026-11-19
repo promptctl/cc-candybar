@@ -1,11 +1,9 @@
-// What a statusline client observes about its own session and reports to the
-// daemon, which is detached and cannot observe any of it.
-//
-// [LAW:single-enforcer] One collection for every Node process that renders a
-// session — the statusline relay (src/index.ts), `frames` and the doctor — so
-// none can report a session differently from another. The Rust client mirrors it.
+// [LAW:single-enforcer] The host and the older daemon's Node relay use the
+// same derivation of hints from a session environment. Terminal dimensions
+// are observed on the client because the host has no access to its tty.
 
 import type { Host } from "./host";
+import type { UserHome } from "./utils/user-path";
 import type { ClientHints } from "./daemon/foundations/protocol";
 import { detectClaudeConfigDir } from "./claude-settings";
 import { detectConfigEnv } from "./config-hint";
@@ -29,20 +27,28 @@ import { detectTmuxHint } from "./tmux-hint";
 // widen recall of a fact that is otherwise reported as a plain `false`.
 const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
+export function terminalObservation(
+  env: Readonly<NodeJS.ProcessEnv>,
+  tty: { readonly columns?: number; readonly rows?: number },
+): Pick<ClientHints, "termCols" | "termRows"> {
+  return {
+    termCols: detectTermExtent(env.COLUMNS, tty.columns),
+    termRows: detectTermExtent(env.LINES, tty.rows),
+  };
+}
+
 // `tty` is the stream still attached to the session's terminal: stderr for a
 // statusline client, whose stdin is the hook JSON and stdout the captured line.
 // Every hint but `client`: what the calling program IS is no fact of its
 // environment, and only a statusline client has one to report.
 export function detectClientHints(
-  host: Pick<Host, "env" | "home">,
+  host: Pick<Host, "env"> & { readonly home: UserHome },
   cwd: string,
   tty: { readonly columns?: number; readonly rows?: number },
 ): Omit<ClientHints, "client"> {
   const { env } = host;
   return {
-    termCols: detectTermExtent(env.COLUMNS, tty.columns),
-    // The terminal's height, as the render event reports it.
-    termRows: detectTermExtent(env.LINES, tty.rows),
+    ...terminalObservation(env, tty),
     // [LAW:dataflow-not-control-flow] A fold over the vocabulary — adding a
     // name is a data edit. TOTAL, unlike the extents: "no SSH var set" is the
     // affirmative answer "local", so an ABSENT `ssh` hint on the daemon side

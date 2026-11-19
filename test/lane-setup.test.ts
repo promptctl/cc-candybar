@@ -145,12 +145,14 @@ describe("tmux pane effects", () => {
       throw new Error("not in this test");
     };
     const acts = new Acts({
-      launch: missing,
-      claudeInput: {
-        read: async () => ({ inMode: false, screen: READY_SCREEN }),
-        type: async () => ({ kind: "typed" }),
-        ...input,
-      },
+      programsFor: () => ({
+        launch: missing,
+        claudeInput: {
+          read: async () => ({ inMode: false, screen: READY_SCREEN }),
+          type: async () => ({ kind: "typed" }),
+          ...input,
+        },
+      }),
       run: missing,
       barPane: { edge, host },
       closing,

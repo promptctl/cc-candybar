@@ -219,6 +219,34 @@ describe("the book", () => {
     expect(book.environmentOf(S2)).toEqual(NOT_HEARD);
   });
 
+  test("registration belongs to the reporting session and its lifetime in the book", () => {
+    const { storage: kept, saves } = storage();
+    const book = loaded(kept);
+    const reported = { TOKEN: "synthetic-private-value" };
+    const registration = {
+      key: "a".repeat(64),
+      reported,
+      projectDir: "/p",
+      claudeConfigDir: undefined,
+      execution: reported,
+    };
+    book.heard(request("s1"), registration);
+    expect(book.reportedFor(S1, registration.key)).toBe(registration);
+    expect(book.reportedFor(S2, registration.key)).toBeNull();
+    expect(book.reportedFor(S1, "b".repeat(64))).toBeNull();
+    const saved = JSON.stringify(saves.map((entry) => [...entry]));
+    expect(saved).not.toContain(reported.TOKEN);
+    expect(saved).not.toContain(registration.key);
+    const restarted = loaded(storage(new Map([[S1, durable("/p")]])).storage);
+    expect(restarted.reportedFor(S1, registration.key)).toBeNull();
+    book.heard(request("s1"), TEST_ENVIRONMENT);
+    expect(book.reportedFor(S1, registration.key)).toBeNull();
+    book.heard(request("s1"), registration);
+    for (let i = 0; i < 256; i++)
+      book.heard(request(`other-${i}`), TEST_ENVIRONMENT);
+    expect(book.reportedFor(S1, registration.key)).toBeNull();
+  });
+
   test("a session heard before the load keeps what it said over what the file holds", () => {
     const book = new SessionBook(
       storage(

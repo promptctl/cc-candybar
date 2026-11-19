@@ -1,6 +1,6 @@
 // One tmux invocation against a session's recorded server.
 //
-// [LAW:one-source-of-truth] The doctor's probe, the slash edge and the tmux
+// [LAW:one-source-of-truth] The slash edge, pane renderer and tmux
 // segment's session lookup all address the pane a client reported
 // (src/tmux-hint.ts); this is the one place that spells `tmux -S <socket>`,
 // its timeout, and how a failure reads.
@@ -49,7 +49,7 @@ function tmuxRun(result: LaunchResult, args: readonly string[]): TmuxRun {
 
 // One tmux invocation, off the loop.
 export async function runTmuxAsync(
-  launcher: Launcher,
+  launcher: Pick<Launcher, "launch">,
   hint: Pick<TmuxHint, "socket">,
   category: LaunchCategory,
   args: readonly string[],

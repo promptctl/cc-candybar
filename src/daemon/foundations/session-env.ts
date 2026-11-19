@@ -7,10 +7,32 @@
 import type { SessionId } from "./session-id";
 import { ABSENT, ok, type Asked, type Outcome } from "../../utils/outcome";
 import { CLAUDE_CONFIG_DIR_ENV } from "../../claude-settings";
-import { ownValue } from "../../utils/plain";
+import { digestOf, ownValue } from "../../utils/plain";
 
 // A process environment as plain data: its set variables.
 export type Environment = Readonly<Record<string, string>>;
+
+// The native and Node relays identify the same snapshot even for numeric and
+// non-ASCII variable names. JSON object and JavaScript string order both differ
+// from UTF-8 byte order, so hash an explicitly ordered array of pairs.
+export function environmentKey(env: Environment): string {
+  const entries = Object.entries(env).map((pair) => ({
+    name: Buffer.from(pair[0]),
+    pair,
+  }));
+  entries.sort((a, b) => a.name.compare(b.name));
+  return digestOf(entries.map(({ pair }) => pair));
+}
+
+// A full report that the host has verified for this session. The projection
+// can be reused while the session's project and Claude Code directories agree.
+export interface RegisteredEnvironment {
+  readonly key: string;
+  readonly reported: Environment;
+  readonly projectDir: string;
+  readonly claudeConfigDir: string | undefined;
+  readonly execution: Environment;
+}
 
 // [LAW:one-source-of-truth] A process's environment as it crosses a process:
 // its set variables, since JSON drops an unset one's `undefined`.
