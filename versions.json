@@ -2,6 +2,28 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-853",
+      "ref": "refs/pull/853/merge",
+      "sha": "cd908d972901fdbd670c4f35410ad58a88528b8d",
+      "timestamp": "2026-11-19T10:52:20.020Z",
+      "commits": [
+        {
+          "sha": "cd908d972901fdbd670c4f35410ad58a88528b8d",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:51:20-07:00",
+          "message": "Merge 6facef33f8daaf204f8747cc43d15a8533084c14 into 30d7a34587b836199bfd5c0bb320894e7119c63e\n"
+        },
+        {
+          "sha": "6facef33f8daaf204f8747cc43d15a8533084c14",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T03:45:50-07:00",
+          "message": "refactor(daemon): serve through a typed lifecycle (ibyq.fqw)\n"
+        }
+      ]
+    },
+    {
       "version": "pr-851",
       "ref": "refs/pull/851/merge",
       "sha": "12b090398792a934cc81efbd73dad444a8bdfa0f",
