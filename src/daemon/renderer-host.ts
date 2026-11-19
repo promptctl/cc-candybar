@@ -26,12 +26,17 @@
 // landing left.
 
 import {
+  isCommand,
   sessionOfEvent,
   type ConfigChange,
+  type Command,
+  type CommandReply,
+  type ReplyTo,
   type Effect,
   type EffectOutcome,
   type Event,
   type EventInput,
+  type Notification,
   type Present,
   type PushedFrame,
   type RendererOutput,
@@ -46,13 +51,13 @@ import { eventLine } from "../utils/logfmt.js";
 import { readingsAt } from "../utils/instant.js";
 import type { DisplayedEvent } from "../utils/event-hold.js";
 import type { StoreWrite } from "../renderer-interface/stored-state.js";
-import type { AdapterPush, ReplyTo } from "../renderer-interface/adapter.js";
 import { elapsedMs, type Monotonic, type Timekeeper } from "../time.js";
-import { writeLogLines, type DaemonLogger } from "../utils/logger";
+import type { DaemonLogger } from "../utils/logger";
 import { KeyedSerialQueue, type Place } from "../utils/keyed-serial-queue.js";
 import type { SessionId } from "./foundations/session-id.js";
 import { LEVEL } from "./foundations/request-event.js";
 import type { MailboxStats } from "./foundations/stats-snapshot.js";
+import { inspectionPayloadProblem } from "./foundations/inspection-reply.js";
 import {
   CrossedFailure,
   failureOf,
@@ -111,7 +116,8 @@ const finalizationFields = (
 // is none to send, which is the turn's failure. The host stamps it with the
 // slot's readings.
 type StartEvent = Extract<Event, { kind: "start" }>;
-type BeforeDiscovery = Exclude<Event, StartEvent> | Omit<StartEvent, "configs">;
+type StartRequest = Omit<StartEvent, "configs">;
+type BeforeDiscovery = Exclude<Notification, StartEvent> | StartRequest;
 
 interface MadeEvent<E = Event> {
   readonly kind: "event";
@@ -153,13 +159,12 @@ export interface RendererHost {
   // A fresh renderer's start, recorded on its own line: it heads the
   // mailbox, behind only the slot in progress, since every input after it is
   // about the sessions it hands in.
-  start(make: () => Made, about: TurnRecord): Promise<TurnOutcome>;
-  // One push, answered by its reply. A push that threw or rejected, or one
-  // answered by another push's reply, rejects with an Error naming the
-  // renderer and the push: the caller that awaits it owns the failure.
-  ask<P extends AdapterPush>(push: P): Promise<ReplyTo<P["kind"]>>;
-  // One push nobody awaits: its failure is logged here.
-  tell(push: AdapterPush): void;
+  start(
+    make: () => Made<StartRequest>,
+    about: TurnRecord,
+  ): Promise<TurnOutcome>;
+  // An inspection or teardown event, answered by its own reply.
+  command<C extends Command>(event: C): Promise<ReplyTo<C["kind"]>>;
   // What discovery found at each of `origins` moved: each gets its `config`
   // turn, made from what discovery holds as its slot comes up.
   moved(origins: readonly RenderOrigin[]): void;
@@ -359,6 +364,31 @@ export function rendererHost(
     settled: Promise.resolve([]),
   });
 
+  const commandLabel = (event: Command): string =>
+    `renderer ${name} command ${event.kind}`;
+
+  // [LAW:parse-dont-validate] Check correlation before the host can accept
+  // a successful command's stores or declarations.
+  const requireReply = (
+    event: Command,
+    reply: CommandReply | undefined,
+  ): void => {
+    const label = commandLabel(event);
+    if (reply == null) throw new Error(`${label} returned no reply`);
+    if (reply.kind !== event.kind)
+      throw new Error(`${label} returned a ${reply.kind} reply`);
+    if (
+      event.kind === "debug" &&
+      reply.kind === "debug" &&
+      reply.snapshot?.what !== event.what
+    )
+      throw new Error(`${label} returned no ${event.what} snapshot`);
+    if (reply.kind === "stats" && reply.stats == null)
+      throw new Error(`${label} returned no stats snapshot`);
+    const problem = inspectionPayloadProblem(reply);
+    if (problem !== null) throw new Error(`${label} returned ${problem}`);
+  };
+
   // [LAW:single-enforcer] The transport owns whether the renderer
   // answered. Host failures during landing cannot replace that answer.
   const inSlot = async (
@@ -382,6 +412,25 @@ export function rendererHost(
       if (input.event.kind === "start") endedStart({ kind: "threw", failure });
       return unanswered(failure, queuedMs);
     }
+    recordDiagnostics(output.diagnostics);
+    if (isCommand(input.event)) {
+      if (output.kind === "answered") requireReply(input.event, output.reply);
+      if (output.frames.length > 0 || output.effects.length > 0) {
+        // [LAW:effects-at-boundaries] Commands can finalize stores and
+        // declarations. Their replies cannot publish a frame or act.
+        const problem = `${commandLabel(input.event)} returned a frame or effect`;
+        if (output.kind === "answered") throw new Error(problem);
+        recordDiagnostics([{ level: "error", line: problem }]);
+        output = { ...output, frames: [], effects: [] };
+      }
+    } else if (output.kind === "answered" && output.reply !== undefined) {
+      recordDiagnostics([
+        {
+          level: "error",
+          line: `renderer ${name} returned an unasked command reply to ${input.event.kind}`,
+        },
+      ]);
+    }
     if (input.event.kind === "config" && startFailure === null) {
       const key = originKey(input.event.origin);
       if (configs.has(key))
@@ -392,11 +441,10 @@ export function rendererHost(
       wake,
       frames,
       stored,
-      diagnostics,
+      diagnostics: _diagnostics,
       turnMs,
       ...answer
     } = output;
-    recordDiagnostics(diagnostics);
     const finalization = finalizationFields(answer);
     const turn: TakenTurn = {
       ...answer,
@@ -609,8 +657,17 @@ export function rendererHost(
   const recordDiagnostics = (
     diagnostics: RendererOutput["diagnostics"],
   ): void => {
-    if (diagnostics === undefined) return;
-    recordTaken("turn diagnostics", () => writeLogLines(log, diagnostics));
+    for (const { level, line } of diagnostics ?? []) {
+      try {
+        log(level, line);
+      } catch (thrown) {
+        // A failed log sink cannot report its own failure. The daemon can
+        // still show the diagnostic and the reason it could not be written.
+        world.unheard(
+          `renderer ${name} could not log ${line}: ${failureOf(thrown).detail}`,
+        );
+      }
+    }
   };
 
   // [LAW:single-enforcer] Every output is taken here, the wake first, so a
@@ -734,7 +791,7 @@ export function rendererHost(
   // holds as its slot comes up. One discovery no longer follows (the
   // renderer let it go before the slot) has nothing to hand in: its reason
   // left first.
-  const configMade = (origin: RenderOrigin) => (): Made<Event> => {
+  const configMade = (origin: RenderOrigin) => (): Made<Notification> => {
     const config = world.configs.snapshotOf(origin);
     return config === null
       ? {
@@ -797,7 +854,7 @@ export function rendererHost(
   const doneOf = (
     effect: Pick<Effect, "id" | "session">,
     outcome: EffectOutcome,
-  ): MadeEvent => ({
+  ): MadeEvent<Notification> => ({
     kind: "event",
     event: {
       kind: "effect-done",
@@ -908,7 +965,7 @@ export function rendererHost(
   // One input through its slot: made there, and answered, its acts still
   // settling. `event` is null when its make failed, so no input was made.
   const throughSlot = (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place,
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly slotted: Slotted }> => {
@@ -978,7 +1035,7 @@ export function rendererHost(
   // One input from its arrival to its settling: its acts settled after its
   // slot.
   const taken = async (
-    make: () => Made,
+    make: () => Made<BeforeDiscovery | Command>,
     at: Place = "last",
     click: SessionId | null = null,
   ): Promise<{ readonly event: Event | null; readonly turn: HostTurn }> => {
@@ -1012,81 +1069,27 @@ export function rendererHost(
       log("error", text);
       world.unheard(text);
     });
-  // [LAW:single-enforcer] The one place a push's output is judged: a push is
-  // answered by the reply of its own kind, or it failed.
-  const ask = async <P extends AdapterPush>(
-    push: P,
-  ): Promise<ReplyTo<P["kind"]>> => {
-    // A renderer that rejected fails the push as one whose turn threw, so
-    // every failure is said with the renderer and the push it failed.
-    const output = await inMailbox(async (_queuedMs, holds) => {
-      holds(`push:${push.kind}`);
-      try {
-        if (startFailure !== null) throw new CrossedFailure(startFailure);
-        const { subscriptions, wake, stored, diagnostics, ...answered } =
-          await renderer.answer({
-            kind: "adapter",
-            push,
-            ...readingsAt(clock),
-          });
-        recordDiagnostics(diagnostics);
-        // [LAW:no-ambient-temporal-coupling] A push's newly named configs
-        // enter before the next queued slot, as they do for an event.
-        const followed = took(
-          subscriptions,
-          wake,
-          [],
-          stored,
-          null,
-          receiptFor(generation),
-        );
-        if (followed.kind === "following")
-          for (const origin of followed.named) {
-            const config = await configInSlot(origin, "config-subscribed");
-            if (config.kind === "unreceived") markUnreceived(origin);
-            unawaited("config", config.settled);
-          }
-        return answered;
-      } catch (thrown) {
-        const unavailable: TurnFailure & { readonly turnMs: null } = {
-          kind: "threw",
-          failure: failureOf(thrown),
-          turnMs: null,
-        };
-        return unavailable;
-      }
-    });
-    // The failure keeps its kind, so a push no renderer took reads as one.
-    if (output.kind === "threw") {
-      const fields = finalizationFields(output) ?? [];
-      if (output.turnMs !== null)
-        fields.unshift(["took", `${output.turnMs}ms`]);
-      fields.push(["error", output.failure.detail]);
-      const detail = eventLine(
-        `renderer ${name} push ${push.kind} threw`,
-        fields,
-      );
+  // [LAW:single-enforcer] A command uses the same slot and lands every
+  // part of its turn before its caller can use the result.
+  const command = async <C extends Command>(
+    event: C,
+  ): Promise<ReplyTo<C["kind"]>> => {
+    const { turn } = await taken(() => ({ kind: "event", event }));
+    if (turn.kind === "threw") {
+      const label = commandLabel(event);
+      const fields = finalizationFields(turn) ?? [];
+      if (turn.turnMs !== null) fields.unshift(["took", `${turn.turnMs}ms`]);
+      fields.push(["error", turn.failure.detail]);
       throw new CrossedFailure({
-        ...output.failure,
-        message: `renderer ${name} push ${push.kind} threw: ${output.failure.message}`,
-        detail,
+        ...turn.failure,
+        message: `${label} threw: ${turn.failure.message}`,
+        detail: eventLine(`${label} threw`, fields),
       });
     }
-    if (output.reply.kind !== push.kind)
-      throw new Error(
-        `renderer ${name} answered push ${push.kind} with a ${output.reply.kind} reply`,
-      );
-    // [LAW:types-are-the-program] exception: the kinds were just compared,
-    // which the compiler cannot carry from the reply's kind to its type.
-    return output.reply as ReplyTo<P["kind"]>;
+    // [LAW:types-are-the-program] exception: inSlot admits the corresponding
+    // reply before landing. The shared turn type cannot carry that correlation.
+    return turn.reply as ReplyTo<C["kind"]>;
   };
-  const tell = (push: AdapterPush): void =>
-    void ask(push).catch((thrown: unknown) => {
-      const failure = failureOf(thrown);
-      // [LAW:single-enforcer] A push no renderer was live to take is the
-      // supervisor's to say.
-      if (failure.kind !== "down") log("error", failure.detail);
-    });
   const moved = (origins: readonly RenderOrigin[]): void => {
     for (const origin of origins)
       unawaited(
@@ -1143,8 +1146,7 @@ export function rendererHost(
     answerClick,
     deliver,
     start: recorded("first"),
-    ask,
-    tell,
+    command,
     moved,
     stats,
     closeWake: () => wake.close(),

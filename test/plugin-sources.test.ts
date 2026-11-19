@@ -12,7 +12,6 @@ import {
   eventRenderer,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -830,8 +829,7 @@ function statusline(r: Rig, configFile: string) {
       sessionState: r.sessionState,
       worldStates: r.worldStates,
     }),
-    NO_PUSHES,
-    NOTHING_STORED,
+      NOTHING_STORED,
   );
   const host = rendererHost(
     MAIN_RENDERER,

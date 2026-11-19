@@ -5,7 +5,7 @@
 // these in.
 
 import type { SessionId } from "../../src/daemon/foundations/session-id";
-import { holdable, hostHeld, NO_PUSHES, NOTHING_STORED } from "./renderers";
+import { holdable, hostHeld, NOTHING_STORED } from "./renderers";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
 import { minter, noFeeds } from "./renderer-parts";
 import { TEST_SIGNER } from "./link-signer";
@@ -111,6 +111,7 @@ export function clickParts(
     sessionState: verbCtx.sessionState,
     edits: verbCtx.edits,
     turnLog,
+    configWrites: verbCtx.configWrites,
     // No view is open, so no lane is read.
     // The readings each input carries, and the idle periods a `due` closes.
     time,
@@ -120,19 +121,7 @@ export function clickParts(
     // The acts the test's verb context asks, settled by this rig's host.
     acts: verbCtx.acts as ActsOnTheirWay,
   } as unknown as MainRendererParts;
-  // The teardown's journal step, answered as the main renderer answers it, in
-  // its place in the mailbox: no other push is a click's.
-  const held = holdable(
-    mainRenderer(
-      parts,
-      (push) => {
-        if (push.kind !== "close-journal") return NO_PUSHES();
-        verbCtx.configWrites.close();
-        return { kind: "close-journal" };
-      },
-      NOTHING_STORED,
-    ),
-  );
+  const held = holdable(mainRenderer(parts, NOTHING_STORED));
   const renderer = rendererHost(
     MAIN_RENDERER,
     clock,

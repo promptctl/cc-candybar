@@ -28,12 +28,12 @@ import {
   type RendererLine,
 } from "../../src/renderer-interface/wire";
 import type {
-  AdapterInput,
-  AdapterOutput,
+  EventInput,
   EffectId,
   RendererOutput,
   Timed,
 } from "../../src/renderer-interface/interface";
+import type { WireFrame } from "../../src/render/frame";
 import type { HeldEvent } from "../../src/utils/event-hold";
 import type { Instant, Tick } from "../../src/utils/instant";
 import type { SessionId } from "../../src/daemon/foundations/session-id";
@@ -165,14 +165,17 @@ const settled = async (): Promise<void> => {
   for (let i = 0; i < 50; i++) await Promise.resolve();
 };
 
-const pin: AdapterInput = {
-  kind: "adapter",
-  push: { kind: "close-journal" },
+const pin: EventInput = {
+  kind: "event",
+  event: { kind: "close-journal" },
   at: 0 as Instant,
   tick: 0 as Tick,
 };
-const PINNED: Timed<AdapterOutput> = {
-  kind: "replied",
+const PINNED: Timed<RendererOutput> = {
+  kind: "answered",
+  record: [],
+  frames: [],
+  effects: [],
   stored: [],
   reply: { kind: "close-journal" },
   subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
@@ -301,9 +304,9 @@ describe("a renderer process's start", () => {
   });
 
   test("the complete start heads what waits for the boot, so an input during the boot follows it as a change", async () => {
-    const unpin: AdapterInput = {
+    const unpin: EventInput = {
       ...pin,
-      push: { kind: "close-views" },
+      event: { kind: "close-views" },
     };
     const r = rig(async () => {
       await r.link.renderer.answer(pin);
@@ -582,6 +585,124 @@ test("a failed restoration ends that generation and starts its successor after b
 });
 
 describe("ids a renderer mints", () => {
+  const due: EventInput = { ...pin, event: { kind: "due" } };
+  const { reply: _reply, ...NOTIFIED } = PINNED;
+  const bar: WireFrame = {
+    depth: "truecolor",
+    rows: [],
+    motion: "still",
+    nextChange: null,
+    pending: [],
+  };
+  const drawn = (receipt: number) => ({
+    session: SESSION,
+    frame: {
+      kind: "drawn" as const,
+      receipt: receipt as EffectId,
+      bar,
+      handoff: null,
+    },
+  });
+  const dropped = {
+    session: SESSION,
+    frame: { kind: "failed" as const, message: "no frame drawn" },
+  };
+  const done = (of: EffectId): EventInput => ({
+    ...due,
+    event: { kind: "effect-done", session: SESSION, of, outcome: { kind: "ok" } },
+  });
+  const reply = async (
+    { inputs, link }: ReturnType<typeof rig>,
+    child: Child,
+    input: EventInput,
+    output: Timed<RendererOutput>,
+  ) => {
+    const outstanding = link.renderer.answer(input);
+    await settled();
+    child.say({ kind: "output", n: inputs(child).at(-1)!.n, output });
+    return outstanding;
+  };
+  const effect = {
+    kind: "copy" as const,
+    id: 2 as EffectId,
+    session: SESSION,
+    text: "copy",
+  };
+
+  test("an effect and a drawn frame each settle by their own id despite colliding numbers", async () => {
+    const host = rig();
+    host.link.arm();
+    const child = host.children[0]!;
+    child.say(startedLine(9001));
+    const output = await reply(host, child, due, {
+      ...NOTIFIED,
+      effects: [effect],
+      frames: [dropped, drawn(1)],
+    });
+    expect(output.frames[0]).toEqual(dropped);
+    const hostEffect = output.effects[0]!.id;
+    const hostFrame = output.frames[1]!.frame;
+    if (hostFrame.kind !== "drawn") throw new Error("output lost its frame");
+    expect(hostFrame.receipt).not.toBe(hostEffect);
+    await reply(host, child, done(hostFrame.receipt), NOTIFIED);
+    await reply(host, child, done(hostEffect), NOTIFIED);
+    expect(host.inputs(child).slice(1).map(({ input }) => input.event)).toEqual([
+      { kind: "effect-done", session: SESSION, of: 1, outcome: { kind: "ok" } },
+      { kind: "effect-done", session: SESSION, of: 2, outcome: { kind: "ok" } },
+    ]);
+    await expect(
+      host.link.renderer.answer(done(hostFrame.receipt)),
+    ).rejects.toBeInstanceOf(RendererDown);
+    expect(host.inputs(child)).toHaveLength(3);
+  });
+
+  test("a malformed command allocates no host effect or frame receipt", async () => {
+    const host = rig();
+    host.link.arm();
+    const child = host.children[0]!;
+    child.say(startedLine(9001));
+    await reply(host, child, pin, {
+      ...PINNED,
+      effects: [effect],
+      frames: [drawn(7)],
+    });
+    const valid = await reply(host, child, due, {
+      ...NOTIFIED,
+      frames: [drawn(7)],
+    });
+    const frame = valid.frames[0]!.frame;
+    if (frame.kind !== "drawn") throw new Error("output lost its frame");
+    expect(frame.receipt).toBe(1);
+  });
+
+  test("a late pane receipt cannot settle a restarted renderer's frame", async () => {
+    const host = rig();
+    host.link.arm();
+    const first = host.children[0]!;
+    first.say(startedLine(9001));
+    const draw = (child: Child) =>
+      reply(host, child, due, { ...NOTIFIED, frames: [drawn(7)] });
+    const previous = (await draw(first)).frames[0]!.frame;
+    if (previous.kind !== "drawn") throw new Error("the first frame was lost");
+    first.exit(CRASHED);
+    await settled();
+    host.clock.advance(BACKOFF_FIRST_MS);
+    const second = host.children[1]!;
+    second.say(startedLine(9002));
+    const next = (await draw(second)).frames[0]!.frame;
+    if (next.kind !== "drawn") throw new Error("the next frame was lost");
+    expect(next.receipt).not.toBe(previous.receipt);
+    await expect(
+      host.link.renderer.answer(done(previous.receipt)),
+    ).rejects.toBeInstanceOf(RendererDown);
+    expect(host.inputs(second)).toHaveLength(1);
+    await reply(host, second, done(next.receipt), NOTIFIED);
+    expect(host.inputs(second)[1]!.input.event).toMatchObject({
+      kind: "effect-done",
+      of: 7,
+    });
+  });
+
   test("an effect's id is the host's, and its done goes back by the renderer's", async () => {
     const { link, children, inputs } = rig();
     link.arm();

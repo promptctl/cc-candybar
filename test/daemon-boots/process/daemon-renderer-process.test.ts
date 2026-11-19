@@ -15,7 +15,12 @@ import {
   VERB_RUN,
   VERB_SET_STATE,
 } from "../../../src/click/wire";
-import { RENDERER_WIRE_VERSION, type HostLine } from "../../../src/renderer-interface/wire";
+import {
+  RENDERER_WIRE_VERSION,
+  type HostLine,
+  type RendererLine,
+} from "../../../src/renderer-interface/wire";
+import type { Event } from "../../../src/renderer-interface/interface";
 import { EMPTY_STORED_STATE } from "../../../src/renderer-interface/stored-state";
 import { MAIN_RENDERER } from "../../../src/daemon/foundations/renderer-name";
 import { processRenderer, type RendererLink } from "../../../src/daemon/renderer-process";
@@ -129,6 +134,40 @@ describe("the renderer wire handshake", () => {
     );
   });
 
+  test("the packaged renderer boots without discovering the process's home or temp directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-renderer-boot-"));
+    try {
+      const probe = path.join(dir, "refuse-host.cjs");
+      fs.writeFileSync(
+        probe,
+        `const os = require("node:os");
+for (const name of ["homedir", "tmpdir"]) {
+  os[name] = () => { throw new Error("renderer bootstrap read os." + name); };
+}
+require("node:module").syncBuiltinESMExports();`,
+      );
+      // [LAW:behavior-not-structure] The real CLI entry can start from its
+      // boot message alone while process-level location reads are refused.
+      const child = spawnSync(
+        process.execPath,
+        ["--require", probe, path.resolve("dist/index.mjs"), "renderer"],
+        {
+          encoding: "utf8",
+          timeout: 10_000,
+          input: `${JSON.stringify({ kind: "boot", ...COMPATIBLE_BOOT })}\n`,
+        },
+      );
+      expect(child.stderr).toBe("");
+      expect(child.status).toBe(0);
+      expect(JSON.parse(child.stdout)).toMatchObject({
+        kind: "started",
+        wireVersion: RENDERER_WIRE_VERSION,
+      });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a matching version with no resolved locations refuses before readiness", () => {
     const child = bootChild({
       ...COMPATIBLE_BOOT,
@@ -186,6 +225,56 @@ describe("the renderer wire handshake", () => {
     ]);
     expect(lines[1]?.output).not.toHaveProperty("diagnostics");
   });
+});
+
+test("a built renderer answers command and draw events on the same numbered stream", () => {
+  const events: readonly Event[] = [
+    { kind: "start", viewers: {}, sessions: [], configs: [] },
+    { kind: "stats" },
+    { kind: "due" },
+    { kind: "debug", what: "config" },
+    { kind: "close-journal" },
+    { kind: "close-views" },
+  ];
+  const lines: HostLine[] = events.map((event, index) => ({
+    kind: "input",
+    n: index + 1,
+    input: { kind: "event", at: 0 as Instant, tick: 0 as Tick, event },
+  }));
+  const child = bootChild(COMPATIBLE_BOOT, ...lines);
+  expect(child.status).toBe(0);
+  const output = child.stdout
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as RendererLine);
+  expect(output.map((line) => line.kind)).toEqual([
+    "started",
+    ...events.map(() => "output"),
+  ]);
+  const answers = output.flatMap((line) =>
+    line.kind === "output" ? [line] : [],
+  );
+  expect(answers.map(({ n, output }) => [n, output.kind])).toEqual(
+    events.map((_, index) => [index + 1, "answered"]),
+  );
+  expect(
+    answers.map(({ output }) =>
+      output.kind === "answered" ? output.reply : undefined,
+    ),
+  ).toEqual([
+    undefined,
+    {
+      kind: "stats",
+      stats: expect.objectContaining({
+        framesDrawn: 0,
+        rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
+      }),
+    },
+    undefined,
+    { kind: "debug", snapshot: { what: "config", config: null } },
+    { kind: "close-journal" },
+    { kind: "close-views" },
+  ]);
 });
 
 test("the supervisor names the unanswered input when its built worker is killed", async () => {

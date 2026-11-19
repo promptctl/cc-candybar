@@ -7,7 +7,6 @@ import { renderFailedFrame } from "../src/render/frame";
 import type { RendererPort } from "../src/daemon/renderer-process";
 import { PROTOCOL_VERSION } from "../src/daemon/foundations/protocol";
 import {
-  rendererOf,
   type EffectId,
   type SessionConfig,
   type Subscriptions,
@@ -36,8 +35,8 @@ test("a renderer restart restores live sessions beyond the feed's request histor
       restart = own.start;
       return {
         renderer: hostHeld(
-          rendererOf({
-            event: async ({ event }) => {
+          {
+            answer: async ({ event }) => {
               if (event.kind === "start") startTurn = event.sessions;
               return {
                 kind: "answered",
@@ -46,6 +45,9 @@ test("a renderer restart restores live sessions beyond the feed's request histor
                 stored: [],
                 subscriptions,
                 wake: null,
+                ...(event.kind === "close-journal" || event.kind === "close-views"
+                  ? { reply: { kind: event.kind } }
+                  : {}),
                 effects:
                   event.kind === "request"
                     ? [
@@ -61,18 +63,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
                     : [],
               };
             },
-            adapter: async ({ push }) => {
-              if (push.kind !== "close-journal" && push.kind !== "close-views")
-                throw new Error(`unexpected push ${push.kind}`);
-              return {
-                kind: "replied",
-                reply: { kind: push.kind },
-                subscriptions,
-                wake: null,
-                stored: [],
-              };
-            },
-          }),
+          },
         ),
         serve: () => {},
         arm: () => {},

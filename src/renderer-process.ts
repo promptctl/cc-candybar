@@ -11,7 +11,7 @@ import { once } from "node:events";
 import v8 from "node:v8";
 import process from "node:process";
 import { inspect } from "node:util";
-import type { World } from "./host.js";
+import type { Monotonic } from "./time.js";
 import { failureOf } from "./daemon/foundations/verb-error.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
@@ -27,7 +27,10 @@ import {
   type RendererLine,
 } from "./renderer-interface/wire.js";
 
-export function runRenderer(world: World): void {
+// [LAW:effects-at-boundaries] The transport measures turns with the clock
+// the entry point gives it. The renderer reads its world from the boot and
+// input messages on the pipe.
+export function runRenderer(monotonic: () => Monotonic): void {
   const send = (line: RendererLine): void => {
     process.stdout.write(`${JSON.stringify(line)}\n`);
   };
@@ -78,7 +81,7 @@ export function runRenderer(world: World): void {
     const { renderer, diagnostics } = result;
     served = serveRenderer({
       // [LAW:single-enforcer] Each turn is timed in its own process.
-      renderer: timed(renderer, () => world.clock.monotonic()),
+      renderer: timed(renderer, monotonic),
       send,
       memory: () => {
         const { rss, heapTotal } = process.memoryUsage();

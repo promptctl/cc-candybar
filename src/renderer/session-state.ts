@@ -16,6 +16,7 @@
 
 import { createAtom, type IAtom, runInAction } from "mobx";
 import type { SessionId } from "../daemon/foundations/session-id";
+import type { RendererStats } from "../renderer-interface/interface";
 import type {
   SessionStateReader,
   SessionStateRW,
@@ -154,6 +155,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // How many sessions the store holds.
   size(): number {
     return this.sessions.size;
+  }
+
+  stats(): RendererStats["sessionState"] {
+    return {
+      sessions: this.size(),
+      observers: this.observers(),
+      revision: this.latestRevision(),
+    };
   }
 
   // [LAW:one-source-of-truth] set is the degenerate single-pair form of

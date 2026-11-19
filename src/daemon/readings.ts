@@ -33,7 +33,7 @@ import type { MetricsProvider } from "./cache/metrics-provider.js";
 import type { TranscriptUsage } from "../segments/session.js";
 import type { ActivityInfo, ActivityProvider } from "../segments/activity.js";
 import type { TmuxService } from "./cache/tmux.js";
-import type { HostService } from "../segments/host.js";
+import type { HostService } from "./cache/host-identity.js";
 import type { AutoCompactProvider } from "./cache/autocompact.js";
 import type { AutoCompactWindow } from "../segments/autocompact.js";
 import { claudeConfigDir, claudeSettingsPath } from "../claude-settings.js";

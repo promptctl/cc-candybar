@@ -20,7 +20,15 @@ import type { Field } from "../utils/logfmt";
 import type { LogLine } from "../utils/logger";
 import type { DisplayedEvent } from "../utils/event-hold";
 import type { CheckedRenderRequest, SessionContext } from "./request-context";
-import type { AdapterPush, AdapterReply } from "./adapter";
+import type {
+  MenuIdleStats,
+  RenderCacheStats,
+  StatsSnapshot,
+} from "../daemon/foundations/stats-snapshot";
+import type {
+  DebugSnapshot,
+  DebugWhat,
+} from "../daemon/foundations/debug-types";
 import type { Crosses } from "./crosses";
 import type { Lane, LaneSwitches } from "../config/lanes";
 import type { Change } from "../config/config-changes";
@@ -57,78 +65,46 @@ export type RequestId = number & { readonly [REQUEST_ID]: true };
 declare const EFFECT_ID: unique symbol;
 export type EffectId = number & { readonly [EFFECT_ID]: true };
 
-// [LAW:one-type-per-behavior] One interface over every transport: in process,
-// or lines to the renderer's own process. Each kind of input answers with its
-// own output, so an input pays only for what it is.
-export interface Answering<E, A> {
-  answer(input: EventInput): Promise<E>;
-  answer(input: AdapterInput): Promise<A>;
+// [LAW:one-type-per-behavior] The in-process and child-process transports
+// both take the same ordinary input and answer with the same data.
+export interface Renderer {
+  answer(input: EventInput): Promise<RendererOutput>;
 }
 
-// What a renderer implements: every input answered by its output.
-export type Renderer = Answering<RendererOutput, AdapterOutput>;
-
-// An output as its transport hands it to the host, with how long the turn
-// took, measured around `answer` on the clock of the process it ran in: the
-// renderer reads none, and the host tells the hop's cost from the turn's.
-// A completed answer whose timing read failed carries no duration.
+// A completed answer whose transport timing failed has no duration.
 export type Timed<O> = O & { readonly turnMs: number | null };
 
-// What the host holds of a renderer: its answers, each timed by its transport.
-export type TimedRenderer = Answering<
-  Timed<RendererOutput>,
-  Timed<AdapterOutput>
->;
-
-export type RendererInput = EventInput | AdapterInput;
-
-// [LAW:single-enforcer] The one dispatch from an input to the answer of its
-// kind, which every renderer and every transport is built by. Each arm is
-// typed by its own input and output, so an arm answering the other kind's
-// output fails the build, which an overload's body does not.
-export function rendererOf<E, A>(arms: {
-  readonly event: (input: EventInput) => Promise<E>;
-  readonly adapter: (input: AdapterInput) => Promise<A>;
-}): Answering<E, A> {
-  function answer(input: EventInput): Promise<E>;
-  function answer(input: AdapterInput): Promise<A>;
-  function answer(input: RendererInput): Promise<E | A> {
-    return input.kind === "event" ? arms.event(input) : arms.adapter(input);
-  }
-  return { answer };
+export interface TimedRenderer {
+  answer(input: EventInput): Promise<Timed<RendererOutput>>;
 }
 
 // [LAW:single-enforcer] The one measure of a turn, around the renderer's
-// `answer`, on the monotonic clock of the process it runs in.
+// answer, on the monotonic clock of the process it runs in.
 export function timed(
   renderer: Renderer,
   monotonic: () => number,
 ): TimedRenderer {
-  const time = async <O extends RendererDiagnostics>(
-    answer: () => Promise<O>,
-  ): Promise<Timed<O>> => {
-    const from = monotonic();
-    const output = await answer();
-    try {
-      return { ...output, turnMs: Math.round(monotonic() - from) };
-    } catch (thrown) {
-      // [LAW:no-silent-failure] Measuring a completed turn must not discard
-      // its effects, writes or diagnostics.
-      const missed: LogLine = {
-        level: "warn",
-        line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
-      };
-      const diagnostics: [LogLine, ...LogLine[]] =
-        output.diagnostics === undefined
-          ? [missed]
-          : [...output.diagnostics, missed];
-      return { ...output, turnMs: null, diagnostics };
-    }
+  return {
+    answer: async (input) => {
+      const from = monotonic();
+      const output = await renderer.answer(input);
+      try {
+        return { ...output, turnMs: Math.round(monotonic() - from) };
+      } catch (thrown) {
+        // [LAW:no-silent-failure] Measuring a completed turn must not discard
+        // its effects, writes or diagnostics.
+        const missed: LogLine = {
+          level: "warn",
+          line: `renderer turn timing failed: ${failureOf(thrown).detail}`,
+        };
+        const diagnostics: [LogLine, ...LogLine[]] =
+          output.diagnostics === undefined
+            ? [missed]
+            : [...output.diagnostics, missed];
+        return { ...output, turnMs: null, diagnostics };
+      }
+    },
   };
-  return rendererOf({
-    event: (input) => time(() => renderer.answer(input)),
-    adapter: (input) => time(() => renderer.answer(input)),
-  });
 }
 
 // [LAW:effects-at-boundaries] Every input carries the host's two readings,
@@ -153,6 +129,10 @@ export function sessionOfEvent(event: Event): SessionId | null {
     case "retire":
     case "effect-done":
       return event.session;
+    case "stats":
+    case "debug":
+    case "close-journal":
+    case "close-views":
     case "start":
     case "config":
     case "viewers":
@@ -168,31 +148,54 @@ export interface SessionConfig {
   readonly worldState: WorldState;
 }
 
-// [LAW:effects-at-boundaries] exception: a reach of the host's into the
-// renderer that is not yet an event, listed in the adapter
-// (src/renderer-interface/adapter.ts). Its reply includes the subscriptions
-// and stored writes resulting from the push.
-export interface AdapterInput extends Readings {
-  readonly kind: "adapter";
-  readonly push: AdapterPush;
+// [LAW:types-are-the-program] A command expects a reply of its own kind.
+// A notification carries no command reply.
+export type Command =
+  | { readonly kind: "stats" }
+  | { readonly kind: "debug"; readonly what: DebugWhat }
+  | { readonly kind: "close-journal" }
+  | { readonly kind: "close-views" };
+
+export type CommandReply =
+  | { readonly kind: "stats"; readonly stats: RendererStats }
+  | { readonly kind: "debug"; readonly snapshot: DebugSnapshot }
+  | { readonly kind: "close-journal" }
+  | { readonly kind: "close-views" };
+
+export type ReplyTo<K extends Command["kind"]> = Extract<
+  CommandReply,
+  { readonly kind: K }
+>;
+
+// [LAW:single-enforcer] Both ends classify commands from this exhaustive
+// set. A new command kind must be recognized on both sides of the transport.
+const COMMAND_KINDS = {
+  stats: true,
+  debug: true,
+  "close-journal": true,
+  "close-views": true,
+} satisfies Record<Command["kind"], true>;
+
+export function isCommand(event: Event): event is Command {
+  return Object.hasOwn(COMMAND_KINDS, event.kind);
 }
 
-// [LAW:no-silent-failure] A push's turn answers its reply, of its push's own
-// kind, or how it threw, as data; and either way what the renderer needs read
-// and when it next wants a turn, as they stand after it: a push moves state
-// too (a close ends the views).
-export type AdapterOutput = (
-  | { readonly kind: "replied"; readonly reply: AdapterReply }
-  | TurnFailure
-) &
-  RendererDeclaration;
+export interface RendererStats {
+  readonly renderCache: RenderCacheStats;
+  readonly effectCache: StatsSnapshot["effectCache"];
+  readonly sessionState: StatsSnapshot["sessionState"];
+  readonly menuIdle: MenuIdleStats;
+  readonly rendererTurns: StatsSnapshot["rendererTurns"];
+  readonly framesDrawn: number;
+}
 
-// [LAW:types-are-the-program] Every input and output of a turn is plain data:
-// the build fails on one a process could not carry.
-export const INPUTS_CROSS: Crosses<RendererInput> = true;
-export const OUTPUTS_CROSS: Crosses<RendererOutput | AdapterOutput> = true;
+// [LAW:types-are-the-program] Every input and output of a turn is plain data.
+export const INPUTS_CROSS: Crosses<EventInput> = true;
+export const OUTPUTS_CROSS: Crosses<RendererOutput> = true;
 
-export type Event =
+export type Event = Command | Notification;
+
+export type Notification =
   | {
       // A renderer's start: every live session's context, as `context` hands
       // one in, in one turn, so the start's output names everything the
@@ -547,7 +550,10 @@ export interface TurnFailure {
 export type TurnOutcome = {
   readonly record: TurnRecord;
   readonly effects: readonly Effect[];
-} & ({ readonly kind: "answered" } | TurnFailure);
+} & (
+  | { readonly kind: "answered"; readonly reply?: CommandReply }
+  | TurnFailure
+);
 
 // [LAW:no-silent-failure] Every turn answers, so `answer` never rejects. Its
 // output names the open views' subscriptions as they stand after it, however

@@ -8,7 +8,6 @@ import {
 import type { RendererName } from "./daemon/foundations/renderer-name.js";
 import { mainRendererOf } from "./renderer/main.js";
 import {
-  rendererOf,
   timed,
   type Renderer,
   type TimedRenderer,
@@ -55,16 +54,12 @@ function localLink(
   // runs both: a turn begun there would leave its views' reactions to run as
   // the host's action ends, after the turn, with no time to read.
   const crossed = async (): Promise<void> => {};
-  const renderer: TimedRenderer = rendererOf({
-    event: async (input) => {
+  const renderer: TimedRenderer = {
+    answer: async (input) => {
       await crossed();
       return live().answer(input);
     },
-    adapter: async (input) => {
-      await crossed();
-      return live().answer(input);
-    },
-  });
+  };
   return {
     renderer,
     // [LAW:single-enforcer] Each turn timed around its answer, on the host's

@@ -19,10 +19,8 @@ import { eventLine, type Field } from "../utils/logfmt.js";
 import { instantAt } from "../utils/instant.js";
 import type { HeldEvent } from "../utils/event-hold.js";
 import {
-  rendererOf,
+  isCommand,
   sessionOfEvent,
-  type AdapterInput,
-  type AdapterOutput,
   type EffectId,
   type EventInput,
   type RendererBoot,
@@ -186,8 +184,8 @@ interface Link {
   compatible: boolean;
   // A failed boot or restoration ends this generation with its original reason.
   failure: string | null;
-  // Each host receipt is meaningful only to the renderer that produced the effect.
-  readonly effects: Map<EffectId, EffectId>;
+  // Each host receipt is meaningful only to the worker that issued it.
+  readonly receipts: Map<EffectId, EffectId>;
   usage: MemorySizes | null;
   // When the ping owed an answer went out.
   pingSentAt: number | null;
@@ -229,8 +227,8 @@ export function processRenderer(own: ProcessOwner): RendererLink {
   // Inputs refused while none was live, said once the next one is.
   let refused = 0;
   // Host receipts stay distinct across generations, even if a renderer starts
-  // numbering effects at one again.
-  let lastEffectId = 0;
+  // numbering its effects and feed presentations at one again.
+  let lastReceipt = 0;
 
   const current = (): Link | null =>
     phase.kind === "starting" ||
@@ -307,7 +305,7 @@ export function processRenderer(own: ProcessOwner): RendererLink {
       hung: false,
       compatible: false,
       failure: null,
-      effects: new Map(),
+      receipts: new Map(),
       usage: null,
       pingSentAt: null,
       lines: rendererOverLines({
@@ -455,14 +453,11 @@ export function processRenderer(own: ProcessOwner): RendererLink {
         ["generation", String(link.generation)],
         ["wire", String(n)],
       ];
-      if (input.kind === "adapter") fields.push(["push", input.push.kind]);
-      else {
-        const session = sessionOfEvent(input.event);
-        fields.push(["input", input.event.kind]);
-        if (session !== null) fields.push(["sid", session]);
-        if (input.event.kind === "request")
-          fields.push(["request", String(input.event.id)]);
-      }
+      const session = sessionOfEvent(input.event);
+      fields.push(["input", input.event.kind]);
+      if (session !== null) fields.push(["sid", session]);
+      if (input.event.kind === "request")
+        fields.push(["request", String(input.event.id)]);
       fields.push(["error", how]);
       log("warn", eventLine("renderer input interrupted", fields));
     }
@@ -613,37 +608,58 @@ export function processRenderer(own: ProcessOwner): RendererLink {
 
   // The ids an input names are the renderer's own again; the ids its output
   // names are the host's.
-  const event = (input: EventInput): Promise<Timed<RendererOutput>> =>
+  const answer = (input: EventInput): Promise<Timed<RendererOutput>> =>
     sent(async (link) => {
       const { event: e } = input;
       let toSend: EventInput = input;
       if (e.kind === "effect-done") {
-        const effect = link.effects.get(e.of);
+        const effect = link.receipts.get(e.of);
         // [LAW:no-silent-failure] The renderer that owed this one is gone, so
         // there is no one to tell.
         if (effect === undefined)
           throw new RendererDown(
             `renderer ${name}: effect ${e.of} was returned by a renderer that has ended`,
           );
-        link.effects.delete(e.of);
+        link.receipts.delete(e.of);
         toSend = { ...input, event: { ...e, of: effect } };
       }
       const output = await link.lines.renderer.answer(toSend);
-      // A turn that threw carries the effects its acts made too.
+      // Inspection and teardown have no presentation or action to settle.
+      // Leave any malformed fields for the host to report.
+      if (
+        isCommand(e) ||
+        (output.effects.length === 0 && output.frames.length === 0)
+      )
+        return output;
+      // [LAW:single-enforcer] Effects and feed frames share one receipt
+      // namespace. Either can be returned by a turn that subsequently threw.
+      const receiptFor = (local: EffectId): EffectId => {
+        const host = ++lastReceipt as EffectId;
+        link.receipts.set(host, local);
+        return host;
+      };
       return {
         ...output,
-        effects: output.effects.map((effect) => {
-          const host = ++lastEffectId as EffectId;
-          link.effects.set(host, effect.id);
-          return { ...effect, id: host };
-        }),
+        effects: output.effects.map((effect) => ({
+          ...effect,
+          id: receiptFor(effect.id),
+        })),
+        frames:
+          output.frames.length === 0
+            ? output.frames
+            : output.frames.map((pushed) => {
+                const { frame } = pushed;
+                return frame.kind === "drawn"
+                  ? {
+                      ...pushed,
+                      frame: { ...frame, receipt: receiptFor(frame.receipt) },
+                    }
+                  : pushed;
+              }),
       };
     });
-  const adapter = (input: AdapterInput): Promise<Timed<AdapterOutput>> =>
-    sent((link) => link.lines.renderer.answer(input));
-
   return {
-    renderer: rendererOf({ event, adapter }),
+    renderer: { answer },
     serve: () => {},
     arm: () => {
       if (phase.kind !== "idle") return;

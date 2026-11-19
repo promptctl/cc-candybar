@@ -59,6 +59,8 @@ export function rendererParts({
     // (`time.during`).
     time: new TurnTime(),
     turnLog: new TurnLog(),
+    configWrites: { close: () => {} },
+    sessionStats: () => sessionState.stats(),
     // No feed follows a session, and nothing is idle.
     menuIdle: renderCache.presentations.menuIdle,
     feeds: noFeeds(),

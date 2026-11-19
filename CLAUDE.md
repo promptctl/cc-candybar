@@ -15,7 +15,7 @@ As you work a ticket, record its phase at each move: `lit phase <id> --to impl` 
 
 ## What this is
 
-cc-candybar renders Claude Code's statusline. A small client runs on every statusline tick. It relays the hook JSON over a unix socket to one long-lived daemon per user, which owns every cache and is the only renderer. The bar is defined by a JSON5 config (variables, segments, actions and a layout tree) merged over a bundled default.
+cc-candybar renders Claude Code's statusline. A small client runs on every statusline tick and relays the hook JSON over a unix socket to one long-lived host per user. The host shares filesystem observations and watches across renderer processes. Each renderer draws from the data it receives and returns its frames and requested effects. The bar is defined by a JSON5 config (variables, segments, actions and a layout tree) merged over a bundled default.
 
 ## Rules for every task
 

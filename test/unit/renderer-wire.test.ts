@@ -11,10 +11,8 @@ import {
   type RendererLine,
 } from "../../src/renderer-interface/wire";
 import {
-  rendererOf,
   timed,
-  type AdapterInput,
-  type AdapterOutput,
+  type EventInput,
   type EffectId,
   type RendererOutput,
   type RequestId,
@@ -33,14 +31,14 @@ import {
 // take no time, so both ends time them alike.
 function talkingRenderer(): TimedRenderer {
   return timed(
-    rendererOf({
-      event: async () => {
-        throw new Error("no events here");
-      },
-      adapter: async (input) => {
-        if (input.push.kind === "close-views") throw new Error("close refused");
+    {
+      answer: async (input) => {
+        if (input.event.kind === "close-views") throw new Error("close refused");
         return {
-          kind: "replied",
+          kind: "answered",
+          record: [],
+          effects: [],
+          frames: [],
           diagnostics: [{ level: "info", line: "closed" }],
           stored: [],
           reply: { kind: "close-journal" },
@@ -54,7 +52,7 @@ function talkingRenderer(): TimedRenderer {
           wake: null,
         };
       },
-    }),
+    },
     () => 0,
   );
 }
@@ -89,9 +87,9 @@ function linesOver(
   return lines;
 }
 
-const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
-  kind: "adapter",
-  push: { kind },
+const command = (kind: "close-journal" | "close-views"): EventInput => ({
+  kind: "event",
+  event: { kind },
   at: 0 as Instant,
   tick: 0 as Tick,
 });
@@ -155,12 +153,7 @@ test("both presentation paths carry the displayed event in their turn's answer",
     stored: [],
   };
   const renderer = timed(
-    rendererOf({
-      event: async () => output,
-      adapter: async () => {
-        throw new Error("only ordinary events expected");
-      },
-    }),
+    { answer: async () => output },
     () => 0,
   );
   const heard: RendererLine[] = [];
@@ -178,22 +171,22 @@ test("both presentation paths carry the displayed event in their turn's answer",
 function declaring(subscriptions: readonly Subscriptions[]): TimedRenderer {
   let step = 0;
   return timed(
-    rendererOf({
-      event: async () => {
-        throw new Error("no event expected");
-      },
-      adapter: async (): Promise<AdapterOutput> => {
+    {
+      answer: async (): Promise<RendererOutput> => {
         const next = subscriptions[step];
         if (next === undefined) throw new Error("no declaration scripted");
         return {
-          kind: "replied",
+          kind: "answered",
+          record: [],
+          effects: [],
+          frames: [],
           reply: { kind: "close-journal" },
           subscriptions: next,
           wake: ++step as Tick,
           stored: [],
         };
       },
-    }),
+    },
     () => 0,
   );
 }
@@ -206,7 +199,7 @@ test("a renderer pipe carries changes to the declaration independently of wakes"
   });
   const answers = [];
   for (let step = 0; step < 5; step++)
-    answers.push(await wire.renderer.answer(push("close-journal")));
+    answers.push(await wire.renderer.answer(command("close-journal")));
   expect(answers.map(({ subscriptions }) => subscriptions)).toEqual([
     empty,
     empty,
@@ -240,9 +233,9 @@ test("a selection change crosses the wire without republishing unchanged resourc
   const { renderer } = linesOver(undefined, {
     renderer: declaring([opened, selected, selected]),
   });
-  const before = (await renderer.answer(push("close-journal"))).subscriptions;
-  const after = (await renderer.answer(push("close-journal"))).subscriptions;
-  const repeated = (await renderer.answer(push("close-journal"))).subscriptions;
+  const before = (await renderer.answer(command("close-journal"))).subscriptions;
+  const after = (await renderer.answer(command("close-journal"))).subscriptions;
+  const repeated = (await renderer.answer(command("close-journal"))).subscriptions;
   expect(after.configSelections).toEqual(selected.configSelections);
   expect(after.managedFolders).toBe(before.managedFolders);
   expect(after.configs).toBe(before.configs);
@@ -256,7 +249,7 @@ test("a replacement process sends the same nonempty declaration on its first ans
       heard,
       renderer: declaring([opened]),
     });
-    await expect(renderer.answer(push("close-journal"))).resolves.toMatchObject(
+    await expect(renderer.answer(command("close-journal"))).resolves.toMatchObject(
       {
         subscriptions: opened,
       },
@@ -275,13 +268,16 @@ test("reusing a declaration before the first replacement rejects the turn", asyn
       throw new Error(message);
     },
   });
-  const answer = wire.renderer.answer(push("close-journal"));
+  const answer = wire.renderer.answer(command("close-journal"));
   if (asked?.kind !== "input") throw new Error("expected an input line");
   wire.heard({
     kind: "output",
     n: asked.n,
     output: {
-      kind: "replied",
+      kind: "answered",
+          record: [],
+          effects: [],
+          frames: [],
       reply: { kind: "close-journal" },
       wake: null,
       turnMs: 0,
@@ -360,8 +356,8 @@ describe("a renderer's boot line", () => {
 
 describe("the renderer over lines", () => {
   test("answers as it does in this process", async () => {
-    const inProcess = await talkingRenderer().answer(push("close-journal"));
-    const crossed = await linesOver().renderer.answer(push("close-journal"));
+    const inProcess = await talkingRenderer().answer(command("close-journal"));
+    const crossed = await linesOver().renderer.answer(command("close-journal"));
     expect(crossed).toEqual(inProcess);
     expect(crossed.diagnostics).toEqual([{ level: "info", line: "closed" }]);
   });
@@ -402,9 +398,9 @@ describe("the renderer over lines", () => {
     ]);
   });
 
-  test("a push that threw fails as it does in this process, its failure kept", async () => {
-    const here = talkingRenderer().answer(push("close-views"));
-    const there = linesOver().renderer.answer(push("close-views"));
+  test("a command that rejected fails as it does in this process, its failure kept", async () => {
+    const here = talkingRenderer().answer(command("close-views"));
+    const there = linesOver().renderer.answer(command("close-views"));
     const thrownHere = failureOf(await here.catch((e: unknown) => e));
     const thrownThere = await there.catch((e: unknown) => e);
     expect(thrownThere).toBeInstanceOf(CrossedFailure);

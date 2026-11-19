@@ -9,6 +9,55 @@ import type { RenderSighting } from "./sightings";
 import type { ServingDaemon } from "./memory-limit";
 
 import type { KeyedSourceStats } from "../../utils/keyed-source";
+import { isPlainObject } from "../../config/loader/validate-core.js";
+import type { RendererStats } from "../../renderer-interface/interface.js";
+
+// [LAW:one-source-of-truth] The renderer portion of the public stats
+// reference also describes what the host must receive before using it.
+export const RENDERER_STATS_REFERENCE: RendererStats = {
+  renderCache: {
+    size: 0,
+    held: 0,
+    retired: 0,
+    compiles: 0,
+    views: 0,
+    pinned: 0,
+    retiredViews: 0,
+    passages: 0,
+    accountedBytes: 0,
+    budgetBytes: 0,
+  },
+  effectCache: { sessions: 0, effects: 0 },
+  menuIdle: { sessions: 0, armed: 0 },
+  rendererTurns: { parked: 0, presents: 0, deferrals: 0 },
+  sessionState: { sessions: 0, observers: 0, revision: 0 },
+  framesDrawn: 0,
+};
+
+// Paths whose fields are missing or unusable, in reference order. A
+// reference array describes a list, and a tagged union's reference arm
+// says nothing about fields of its other arms.
+export function missingFields(
+  reference: unknown,
+  value: unknown,
+  at = "",
+): string[] {
+  const label = at || "<snapshot>";
+  if (typeof reference === "number") {
+    return typeof value === "number" && Number.isFinite(value) ? [] : [label];
+  }
+  if (Array.isArray(reference)) return Array.isArray(value) ? [] : [label];
+  if (!isPlainObject(reference)) return [];
+  if (!isPlainObject(value)) return [label];
+  if ("kind" in reference) return [];
+  const missing: string[] = [];
+  for (const key of Object.keys(reference)) {
+    const path = at === "" ? key : `${at}.${key}`;
+    if (!(key in value)) missing.push(path);
+    else missing.push(...missingFields(reference[key], value[key], path));
+  }
+  return missing;
+}
 
 // The keyed sources whose entries a view holds, so a period visits only
 // those held: a repo's, a pane's, the host's name and user, a directory

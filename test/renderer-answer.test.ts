@@ -31,13 +31,13 @@ import type {
   Effect,
   Present,
   Event,
+  Notification,
   Renderer,
   RendererOutput,
   RequestId,
   Subscription,
   Subscriptions,
 } from "../src/renderer-interface/interface";
-import { rendererOf } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import {
   drawRender,
@@ -89,7 +89,6 @@ import {
   hearingEvents,
   hostHeld,
   NO_ACTS,
-  NO_PUSHES,
   NOTHING_STORED,
   unfollowedCollector,
 } from "./helpers/renderers";
@@ -153,7 +152,7 @@ function renderer(
     return result;
   };
   return {
-    r: mainRenderer(parts, NO_PUSHES, NOTHING_STORED),
+    r: mainRenderer(parts, NOTHING_STORED),
     parts,
     recorded,
     changed,
@@ -369,10 +368,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     MAIN_RENDERER,
     systemTimekeeper,
     hostHeld(
-      rendererOf({
-        event: (input) => current.r.answer(input),
-        adapter: (input) => current.r.answer(input),
-      }),
+      { answer: (input) => current.r.answer(input) },
       systemTimekeeper.monotonic,
     ),
     () => {},
@@ -386,7 +382,7 @@ async function restartableRendererHost(context: CheckedRenderRequest) {
     { ...NO_ACTS, configs: discovery },
   );
   cleanups.push(() => host.closeWake());
-  const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
+  const submit = (event: Notification) => host.answer(() => ({ kind: "event", event }));
   const draw = async () => {
     const { effects } = await submit({ kind: "request", id: REQUEST, context });
     return textOf(parseFrame(presentOf(effects).frame));

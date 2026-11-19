@@ -1,10 +1,8 @@
-// The host's one path to a renderer (src/daemon/renderer-host.ts): `ask` hands
-// back the reply of the push's own kind or rejects, and `tell` says a failure
-// on the log, since nothing awaits it; a start heads the mailbox; every input
-// carries the slot's readings; and an output is taken whole, a taker's throw
-// failing no turn that answered.
+// The host takes every renderer turn in its mailbox. Commands receive their
+// own replies, and a taker's failure cannot undo a completed turn.
 
 import { rendererHost } from "../../src/daemon/renderer-host";
+import type { HostAct } from "../../src/daemon/acts";
 import type { ConfigSnapshot } from "../../src/config/config-snapshot";
 import { FACTS_VERSION } from "../../src/daemon/facts-assembly";
 import { MAIN_RENDERER } from "../../src/daemon/foundations/renderer-name";
@@ -15,20 +13,19 @@ import {
   type Failure,
 } from "../../src/daemon/foundations/verb-error";
 import {
-  rendererOf,
-  type AdapterOutput,
+  type CommandReply,
+  type Effect,
   type EffectId,
   type Event,
   type PushedFrame,
   type RendererOutput,
   type Subscriptions,
 } from "../../src/renderer-interface/interface";
-import type { AdapterReply } from "../../src/renderer-interface/adapter";
 import type { StoreWrite } from "../../src/renderer-interface/stored-state";
 import type { Monotonic } from "../../src/time";
 import { instantOf, type Tick } from "../../src/utils/instant";
 import { fieldsOf } from "../../src/utils/logfmt";
-import { hostHeld, NO_ACTS, pushRenderer } from "../helpers/renderers";
+import { hostHeld, NO_ACTS } from "../helpers/renderers";
 import type { Renderer } from "../../src/renderer-interface/interface";
 import { ABSENT } from "../../src/utils/outcome";
 import { digestOf } from "../../src/utils/plain";
@@ -50,92 +47,197 @@ const clockAt = (read: { wall: number; mono: number }) => ({
   },
 });
 
-// A host over a renderer that answers every push with `output`; `said`
-// settles with the first line it logs.
-// A push's end, without the subscriptions and stored writes every push
-// answers with.
 type Ended =
-  | { readonly kind: "replied"; readonly reply: AdapterReply }
+  | { readonly kind: "answered"; readonly reply?: CommandReply }
   | { readonly kind: "threw"; readonly failure: Failure };
 
-function hostOver(output: Ended) {
-  let say: (line: string) => void = () => {};
-  const said = new Promise<string>((resolve) => (say = resolve));
+function hostOver(
+  output: Ended &
+    Partial<
+      Pick<RendererOutput, "diagnostics" | "effects" | "frames" | "stored">
+    >,
+  log?: (line: string) => void,
+) {
   const taken: Subscriptions[] = [];
+  const logged: string[] = [];
+  const unheard: string[] = [];
+  const framed: PushedFrame[] = [];
+  const stored: StoreWrite[] = [];
+  const acted: HostAct[] = [];
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
-    held(
-      pushRenderer(
-        async (): Promise<AdapterOutput> => ({
-          ...output,
-          subscriptions: NONE,
-          wake: null,
-          stored: [],
-        }),
-      ),
-    ),
-    (level, line) => say(`${level} ${line}`),
+    held({
+      answer: async ({ event }) =>
+        event.kind === "effect-done" ? answered() : { ...answered(), ...output },
+    }),
+    (_level, line) => {
+      log?.(line);
+      logged.push(line);
+    },
     {
       subscribed: (subscriptions) => void taken.push(subscriptions),
-      frames: () => {},
-      stored: () => {},
+      frames: (frames) => void framed.push(...frames),
+      stored: (writes) => void stored.push(...writes),
       recorded: () => {},
       holding: () => {
-        throw new Error("a push holds no session");
+        throw new Error("a command holds no session");
       },
     },
-    NO_ACTS,
+    {
+      ...NO_ACTS,
+      unheard: (line) => void unheard.push(line),
+      perform: async (effect) => {
+        acted.push(effect);
+        return { kind: "ok" };
+      },
+    },
   );
-  return { host, said, taken };
+  return { host, taken, logged, unheard, framed, stored, acted };
 }
 
-test("an ask is handed the reply of its push's own kind, and its subscriptions are taken", async () => {
-  const { host, taken } = hostOver({
-    kind: "replied",
+const commandSession = sessionIdOf("command-session");
+const offeredFrame: PushedFrame = {
+  session: commandSession,
+  frame: { kind: "failed", message: "an unrelated frame" },
+};
+const offeredEffect: Effect = {
+  kind: "copy",
+  session: null,
+  id: 1 as EffectId,
+  text: "an unrelated effect",
+};
+const offeredWrite: StoreWrite = {
+  store: "session-state",
+  key: commandSession,
+  value: { menu: "closed" },
+};
+
+test("a command takes its own reply, writes and subscriptions", async () => {
+  const { host, taken, stored } = hostOver({
+    kind: "answered",
     reply: { kind: "close-journal" },
+    stored: [offeredWrite],
   });
-  expect(await host.ask({ kind: "close-journal" })).toEqual({
+  expect(await host.command({ kind: "close-journal" })).toEqual({
     kind: "close-journal",
   });
   expect(taken).toEqual([NONE]);
+  expect(stored).toEqual([offeredWrite]);
 });
 
-test("an ask answered with another push's reply rejects, naming both", async () => {
-  const { host } = hostOver({
-    kind: "replied",
+test("a command with another command's reply rejects, naming both", async () => {
+  const { host, taken, framed, stored, acted, logged } = hostOver({
+    kind: "answered",
     reply: { kind: "close-views" },
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+    stored: [offeredWrite],
+    diagnostics: [{ level: "warn", line: "the command returned the wrong reply" }],
   });
-  await expect(host.ask({ kind: "close-journal" })).rejects.toThrow(
-    "renderer main answered push close-journal with a close-views reply",
+  await expect(host.command({ kind: "close-journal" })).rejects.toThrow(
+    "renderer main command close-journal returned a close-views reply",
+  );
+  expect({ taken, framed, stored, acted }).toEqual({
+    taken: [], framed: [], stored: [], acted: [],
+  });
+  expect(logged).toContain("the command returned the wrong reply");
+});
+
+test("a matching inspection cannot publish a frame or perform an effect", async () => {
+  const { host, taken, framed, acted } = hostOver({
+    kind: "answered",
+    reply: { kind: "debug", snapshot: { what: "config", config: null } },
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+  });
+  await expect(host.command({ kind: "debug", what: "config" })).rejects.toThrow(
+    "renderer main command debug returned a frame or effect",
+  );
+  expect({ taken, framed, acted }).toEqual({ taken: [], framed: [], acted: [] });
+});
+
+test("truncated inspection results are refused before their stores or subscriptions land", async () => {
+  const vars = hostOver({
+    kind: "answered",
+    // @ts-expect-error A same-version renderer sent a truncated JSON result.
+    reply: { kind: "debug", snapshot: { what: "vars" } },
+    stored: [offeredWrite],
+  });
+  await expect(vars.host.command({ kind: "debug", what: "vars" })).rejects.toThrow(
+    "returned invalid vars snapshot",
+  );
+  expect([vars.stored, vars.taken]).toEqual([[], []]);
+
+  const stats = hostOver({
+    kind: "answered",
+    // @ts-expect-error A same-version renderer omitted the snapshot fields.
+    reply: { kind: "stats", stats: {} },
+    stored: [offeredWrite],
+  });
+  await expect(stats.host.command({ kind: "stats" })).rejects.toThrow(
+    "returned invalid stats snapshot",
+  );
+  expect([stats.stored, stats.taken]).toEqual([[], []]);
+});
+
+test("an answered command with no reply rejects", async () => {
+  const { host } = hostOver({ kind: "answered" });
+  await expect(host.command({ kind: "close-journal" })).rejects.toThrow(
+    "renderer main command close-journal returned no reply",
   );
 });
 
-test("an ask whose push threw rejects with the renderer's failure and the turn's time", async () => {
+test("a reply on an ordinary turn is reported and its declaration still lands", async () => {
+  const { host, logged, taken } = hostOver({
+    kind: "answered",
+    reply: { kind: "close-journal" },
+  });
+  expect(await host.answer(() => ({ kind: "event", event: { kind: "due" } }))).toMatchObject({
+    kind: "answered",
+  });
+  expect(taken).toEqual([NONE]);
+  expect(logged).toEqual([
+    "renderer main returned an unasked command reply to due",
+  ]);
+});
+
+test("a failed diagnostic sink cannot discard a completed notification's writes", async () => {
+  const { host, taken, stored, unheard } = hostOver({
+    kind: "answered",
+    reply: { kind: "close-journal" },
+    stored: [offeredWrite],
+  }, () => { throw new Error("log unavailable"); });
+  const turn = await host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  expect(turn.kind).toBe("answered");
+  expect(taken).toEqual([NONE]);
+  expect(stored).toEqual([offeredWrite]);
+  expect(unheard).toEqual([
+    expect.stringMatching(/unasked command reply to due: .*log unavailable/),
+  ]);
+});
+
+test("a failed command preserves the renderer's failure and turn time", async () => {
   const failure = failureOf(new Error("the view broke"));
-  const { host } = hostOver({
+  const { host, taken, logged, framed, stored, acted } = hostOver({
     kind: "threw",
     failure,
+    diagnostics: [{ level: "warn", line: "first write completed" }],
+    frames: [offeredFrame],
+    effects: [offeredEffect],
+    stored: [offeredWrite],
   });
-  const reported = await host.ask({ kind: "stats" }).then(() => {
-    throw new Error("expected this push to fail");
+  const reported = await host.command({ kind: "stats" }).then(() => {
+    throw new Error("expected this command to fail");
   }, failureOf);
-  expect(reported.message).toBe("renderer main push stats threw: the view broke");
+  expect(reported.message).toBe("renderer main command stats threw: the view broke");
   expect(fieldsOf(reported.detail)).toEqual(
     new Map([["took", "0ms"], ["error", failure.detail]]),
   );
-});
-
-test("a tell that fails is said on the log, and nothing rejects", async () => {
-  const failure = failureOf(new Error("no such session"));
-  const { host, said } = hostOver({
-    kind: "threw",
-    failure,
+  expect(logged).toContain("first write completed");
+  expect({ taken, framed, stored, acted }).toEqual({
+    taken: [NONE], framed: [], stored: [offeredWrite], acted: [],
   });
-  expect(host.tell({ kind: "close-views" })).toBe(undefined);
-  const line = await said;
-  expect(line).toMatch(/^error renderer main push close-views threw /);
-  expect(fieldsOf(line).get("error")).toBe(failure.detail);
 });
 
 // Every promise chain a turn starts settles on microtasks alone: these
@@ -163,23 +265,14 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async (input) => {
-          heard.push(input.event.kind);
-          return answered();
-        },
-        adapter: async (input) => {
-          heard.push(`push:${input.push.kind}`);
+      {
+        answer: async ({ event }) => {
+          heard.push(event.kind);
+          if (event.kind !== "close-journal") return answered();
           await opened;
-          return {
-            kind: "replied",
-            stored: [],
-            reply: { kind: "close-journal" },
-            subscriptions: NONE,
-            wake: null,
-          };
+          return { ...answered(), reply: { kind: "close-journal" } };
         },
-      }),
+      },
     ),
     () => {},
     {
@@ -191,7 +284,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
     },
     { ...NO_ACTS, configs: { ...NO_ACTS.configs, follow: followed } },
   );
-  const asked = host.ask({ kind: "close-journal" });
+  const asked = host.command({ kind: "close-journal" });
   const waiting = host.deliver(
     () => ({ kind: "event", event: { kind: "retire", session: "s" as never } }),
     [],
@@ -205,7 +298,7 @@ test("a start heads the mailbox, behind only the slot in progress", async () => 
   );
   open();
   await Promise.all([asked, waiting, started]);
-  expect(heard).toEqual(["push:close-journal", "start", "retire"]);
+  expect(heard).toEqual(["close-journal", "start", "retire"]);
   expect(followed).not.toHaveBeenCalled();
 });
 
@@ -215,15 +308,12 @@ test("every turn's record reaches `recorded`, whatever input it took and however
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async (input) => ({
+      {
+        answer: async (input) => ({
           ...answered(),
           record: [["took", input.event.kind]],
         }),
-        adapter: async () => {
-          throw new Error("this rig sends no push");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -263,16 +353,13 @@ test("an input carries the clock's two readings as its slot comes, never as it w
     MAIN_RENDERER,
     clockAt(read),
     held(
-      rendererOf({
-        event: async (input) => {
+      {
+        answer: async (input) => {
           readings.push({ at: input.at, tick: input.tick });
           if (input.event.kind === "due") await opened;
           return answered();
         },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -326,15 +413,12 @@ test("a taker that throws fails no turn that answered: it is said on every bar, 
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async () => ({
+      {
+        answer: async () => ({
           ...answered(),
           frames: [pushed],
         }),
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -376,8 +460,8 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
   const confirmed: number[] = [];
   let worker = 0;
   const host = rendererHost(MAIN_RENDERER, clockAt({ wall: 0, mono: 0 }),
-    held(rendererOf({
-      event: async ({ event }) => {
+    held({
+      answer: async ({ event }) => {
         if (event.kind === "start") worker++;
         if (event.kind === "due") return { ...answered(), frames: [pushed] };
         if (event.kind === "effect-done") {
@@ -386,8 +470,7 @@ test("a delayed presentation receipt belongs to the worker that drew the frame",
         }
         return answered();
       },
-      adapter: async () => { throw new Error("no push here"); },
-    })),
+    }),
     () => {},
     {
       subscribed: () => {}, stored: () => {}, recorded: () => {},
@@ -417,8 +500,8 @@ test("a failed record and a rejected act leave the answer and both effect acknow
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async ({ event }) => {
+      {
+        answer: async ({ event }) => {
           if (event.kind === "effect-done") heard.push(event.of);
           return {
             ...answered(),
@@ -441,10 +524,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
                 : [],
           };
         },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -481,7 +561,7 @@ test("a failed record and a rejected act leave the answer and both effect acknow
   expect(unheard).toContainEqual(expect.stringContaining("record sink failed"));
 });
 
-test("a config named by a push reaches the renderer before the next queued event", async () => {
+test("a config named by a command reaches the renderer before the next queued event", async () => {
   const origin = {
     projectDir: "/p",
     cwd: "/p",
@@ -489,26 +569,30 @@ test("a config named by a push reaches the renderer before the next queued event
   };
   const subscriptions = { ...NONE, configs: [origin] };
   const seen: string[] = [];
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let named = false;
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async ({ event }) => {
+      {
+        answer: async ({ event }) => {
           seen.push(event.kind);
-          return { ...answered(), subscriptions };
-        },
-        adapter: async () => {
-          seen.push("push");
+          if (event.kind === "due" && !named) {
+            entered.resolve();
+            await release.promise;
+          }
+          if (event.kind === "close-journal") named = true;
           return {
-            kind: "replied",
-            reply: { kind: "close-journal" },
-            subscriptions,
-            wake: null,
-            stored: [],
+            ...answered(),
+            subscriptions: named ? subscriptions : NONE,
+            ...(event.kind === "close-journal"
+              ? { reply: { kind: "close-journal" as const } }
+              : {}),
           };
         },
-      }),
+      },
     ),
     () => {},
     {
@@ -535,10 +619,15 @@ test("a config named by a push reaches the renderer before the next queued event
       },
     },
   );
-  const push = host.ask({ kind: "close-journal" });
-  const next = host.answer(() => ({ kind: "event", event: { kind: "due" } }));
-  await Promise.all([push, next]);
-  expect(seen).toEqual(["push", "config", "due"]);
+  const due = () => host.answer(() => ({ kind: "event", event: { kind: "due" } }));
+  const first = due();
+  await entered.promise;
+  const command = host.command({ kind: "close-journal" });
+  const next = due();
+  expect(seen).toEqual(["due"]);
+  release.resolve();
+  await Promise.all([first, command, next]);
+  expect(seen).toEqual(["due", "close-journal", "config", "due"]);
 });
 
 test("failed replacement starts leave the accepted declaration until a complete successor responds", async () => {
@@ -620,8 +709,8 @@ test("failed replacement starts leave the accepted declaration until a complete 
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
-      rendererOf({
-        event: async ({ event }) => {
+      {
+        answer: async ({ event }) => {
           heard.push(event);
           if (event.kind === "start") {
             if (attempted === "transport") throw new Error("lost transport");
@@ -653,10 +742,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
               event.kind === "config" || selected ? selectedPlan : previous,
           };
         },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -735,7 +821,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
     expect(heldPaths).toEqual(new Set([origin.cwd]));
     expect(selected).toBe(true);
     expect(await host.answer(due)).toMatchObject({ kind: "threw" });
-    await expect(host.ask({ kind: "stats" })).rejects.toThrow(reason);
+    await expect(host.command({ kind: "stats" })).rejects.toThrow(reason);
   }
   expect(taken).toEqual([previous]);
 
@@ -798,18 +884,15 @@ test("a declared wake is handed in as a `due`, and none is made after the wake c
       },
     },
     held(
-      rendererOf({
-        event: async (input) => {
+      {
+        answer: async (input) => {
           heard.push(input.event.kind);
           return {
             ...answered(),
             wake: input.event.kind === "due" ? null : (1 as Tick),
           };
         },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -856,8 +939,8 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
       },
     },
     held(
-      rendererOf({
-        event: async (input) => ({
+      {
+        answer: async (input) => ({
           ...answered(),
           effects:
             input.event.kind === "due"
@@ -865,10 +948,7 @@ test("the wake arms its next `due` once the renderer answered, while an act its 
               : [],
           wake: (read.mono / 1000 + 1) as Tick,
         }),
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -917,8 +997,8 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
       },
     },
     held(
-      rendererOf({
-        event: async (input) => {
+      {
+        answer: async (input) => {
           heard.push(named(input.event));
           // The long turn the `due` waits behind.
           if (named(input.event) === "retire:long") await opened;
@@ -927,10 +1007,7 @@ test("a scheduled turn gives a short burst of queued input its turn first", asyn
             wake: input.event.kind === "due" ? null : (1 as Tick),
           };
         },
-        adapter: async () => {
-          throw new Error("no push here");
-        },
-      }),
+      },
     ),
     () => {},
     {
@@ -982,26 +1059,29 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
         return () => {};
       },
     },
-    held(rendererOf({
-      event: async ({ event }) => {
-        if (event.kind === "due") return {
-          ...answered(),
-          frames: [{
-            session,
-            frame: {
-              kind: "drawn",
-              receipt: 1 as EffectId,
-              bar: {
-                depth: "none",
-                rows: [{ kind: "bar", runs: [{ text: "frame" }] }],
-                nextChange: null,
-                motion: "still",
-                pending: [],
+    held({
+      answer: async ({ event }) => {
+        if (event.kind === "due")
+          return {
+            ...answered(),
+            frames: [
+              {
+                session,
+                frame: {
+                  kind: "drawn",
+                  receipt: 1 as EffectId,
+                  bar: {
+                    depth: "none",
+                    rows: [{ kind: "bar", runs: [{ text: "frame" }] }],
+                    nextChange: null,
+                    motion: "still",
+                    pending: [],
+                  },
+                  handoff: null,
+                },
               },
-              handoff: null,
-            },
-          }],
-        };
+            ],
+          };
         if (event.kind === "retire") await heldTurn;
         if (event.kind === "viewers") {
           traffic++;
@@ -1013,8 +1093,7 @@ test("a scheduled frame is published while ordinary renderer turns replenish the
           wake: traffic === 0 ? (1 as Tick) : null,
         };
       },
-      adapter: async () => { throw new Error("no push here"); },
-    })),
+    }),
     () => {},
     {
       subscribed: () => {},

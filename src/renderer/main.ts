@@ -50,11 +50,6 @@ import {
   type SessionContext,
 } from "../renderer-interface/request-context.js";
 import type {
-  AdapterPush,
-  AdapterReply,
-  RendererStats,
-} from "../renderer-interface/adapter.js";
-import type {
   DebugSnapshot,
   DebugWhat,
 } from "../daemon/foundations/debug-types.js";
@@ -87,14 +82,16 @@ import {
   type Failure,
 } from "../daemon/foundations/verb-error.js";
 import {
-  rendererOf,
+  isCommand,
+  type Command,
   type Effect,
-  type RendererInput,
   type TurnFailure,
   type TurnFinalizer,
   type EffectId,
   type Event,
+  type Notification,
   type PushedFrame,
+  type ReplyTo,
   type Renderer,
   type RendererBoot,
   type RendererConstruction,
@@ -123,18 +120,18 @@ type ParkedClick = {
 // How a turn ended, apart from what it returned.
 type Ended<T> = { readonly kind: "answered"; readonly value: T } | TurnFailure;
 
+type CommandKind = Command["kind"];
+type CommandByKind = {
+  [K in CommandKind]: Extract<Command, { readonly kind: K }>;
+};
+type ReplyByKind = { [K in CommandKind]: ReplyTo<K> };
+
 type StoreDrains = Readonly<
   Record<StoreWrite["store"], () => readonly StoreWrite[]>
 >;
 
 export function mainRenderer(
   parts: MainRendererParts,
-  // [LAW:effects-at-boundaries] exception: the host's pushes, each answered
-  // in its own turn, synchronously.
-  pushed: (
-    push: AdapterPush,
-    turns: RendererStats["rendererTurns"],
-  ) => AdapterReply,
   // What each store moved since its last successful drain.
   drains: StoreDrains,
 ): Renderer {
@@ -236,14 +233,55 @@ export function mainRenderer(
   const parkedClickSessions = (): Set<SessionId> =>
     new Set(parked.get().map((click) => click.session));
 
+  // [LAW:types-are-the-program] Every command has a handler with its own
+  // input and required reply. Notification handlers cannot answer a command.
+  const commands: {
+    readonly [K in CommandKind]: (event: CommandByKind[K]) => ReplyByKind[K];
+  } = {
+    stats: () => ({
+      kind: "stats",
+      stats: {
+        renderCache: parts.renderCache.stats,
+        effectCache: parts.renderCache.presentations.stats().effects,
+        sessionState: parts.sessionStats(),
+        menuIdle: menuIdle.stats(),
+        rendererTurns: {
+          parked: opening.size + parked.get().length,
+          presents: deliveries.size,
+          deferrals: time.deferrals(),
+        },
+        framesDrawn: feeds.drawn(),
+      },
+    }),
+    debug: ({ what }) => ({
+      kind: "debug",
+      snapshot: debugOf(parts.renderCache, what),
+    }),
+    // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
+    // runs whole, so none is in flight.
+    "close-journal": () => {
+      parts.configWrites.close();
+      return { kind: "close-journal" };
+    },
+    "close-views": () => {
+      // The feeds release their pins before the corresponding views close.
+      feeds.closeAll(time.tick);
+      parts.renderCache.close();
+      return { kind: "close-views" };
+    },
+  };
+  const command = <K extends CommandKind>(
+    event: CommandByKind[K] & { readonly kind: K },
+  ): ReplyByKind[K] => commands[event.kind](event);
+
   // [LAW:single-enforcer] A turn's effects go to the sink its input holds,
   // so a turn that throws still hands on what it did before the throw: a
   // click's changes are owed their `effect-done` however its handler ended.
   // [LAW:no-ambient-temporal-coupling] A turn runs whole: it awaits nothing,
   // so the host's mailbox, which sends the next input only once this one has
   // answered, is the one order of the renderer's turns.
-  const turn = (
-    event: Event,
+  const notify = (
+    event: Notification,
     record: RequestFacts,
     effects: Effect[],
     frames: PushedFrame[],
@@ -276,7 +314,7 @@ export function mainRenderer(
           () => feeds.view(event.viewers, time.tick),
           ...event.sessions.map(({ context, worldState }) => () => {
             offered(context.requested);
-            turn(
+            notify(
               { kind: "context", context, worldState },
               record,
               effects,
@@ -603,10 +641,10 @@ export function mainRenderer(
   // the store order and the name of each drain's diagnostic.
   const storeOrder = Object.keys(drains) as Array<keyof StoreDrains>;
 
-  // [LAW:single-enforcer] Every turn, an event's or a push's, ends here:
+  // [LAW:single-enforcer] Every turn ends here:
   // each successful store drain belongs to this answer even if another
   // finalizer throws. Standing declarations advance only after collection.
-  const ending = <T>(input: RendererInput, run: () => T) => {
+  const ending = <T>(event: Event, run: () => T) => {
     let outcome: Ended<T>;
     try {
       outcome = { kind: "answered", value: run() };
@@ -637,9 +675,7 @@ export function mainRenderer(
 
     for (const store of storeOrder)
       collect(store, () => stored.push(...drains[store]()));
-    collect("subscriptions", () =>
-      declare(input.kind === "event" && input.event.kind === "config"),
-    );
+    collect("subscriptions", () => declare(event.kind === "config"));
     // [LAW:one-source-of-truth] The wake has its own collector. A failed
     // subscription declaration leaves the last one standing and the next
     // due turn still receives the current tick.
@@ -653,8 +689,8 @@ export function mainRenderer(
       ]);
     });
     // [LAW:no-ambient-temporal-coupling] The declaration's lifetime ends in
-    // the close-views push even if an earlier finalizer failed.
-    if (input.kind === "adapter" && input.push.kind === "close-views")
+    // the close-views turn even if an earlier finalizer failed.
+    if (event.kind === "close-views")
       collect("release-subscriptions", () =>
         runInAction(() => declaration.release()),
       );
@@ -662,47 +698,36 @@ export function mainRenderer(
     return { outcome, subscriptions, wake, stored };
   };
 
-  const during = <T extends object>(input: RendererInput, answer: () => T) =>
-    turnLog.during(() => time.during(input, answer));
-
-  return rendererOf({
-    // [LAW:no-ambient-temporal-coupling] A push awaits nothing, so the input
-    // after it lands after its writes.
-    adapter: async (input) =>
-      during(input, () => {
-        const { outcome, ...declaration } = ending(input, () =>
-          pushed(input.push, {
-            parked: opening.size + parked.get().length,
-            presents: deliveries.size,
-            deferrals: time.deferrals(),
-          }),
-        );
-        return {
-          ...(outcome.kind === "answered"
-            ? { kind: "replied" as const, reply: outcome.value }
-            : outcome),
-          ...declaration,
-        };
-      }),
-    event: async (input) =>
-      during(input, () => {
-        const record: RequestFacts = [];
-        const effects: Effect[] = [];
-        const frames: PushedFrame[] = [];
-        const { outcome, ...declaration } = ending(input, () =>
-          turn(input.event, record, effects, frames),
-        );
-        return {
-          ...(outcome.kind === "answered"
-            ? { kind: "answered" as const }
-            : outcome),
-          effects,
-          record,
-          frames,
-          ...declaration,
-        };
-      }),
-  });
+  return {
+    answer: async (input) =>
+      turnLog.during(() =>
+        time.during(input, () => {
+          const record: RequestFacts = [];
+          const effects: Effect[] = [];
+          const frames: PushedFrame[] = [];
+          const { event } = input;
+          const { outcome, ...declaration } = ending(event, () =>
+            isCommand(event)
+              ? command(event)
+              : notify(event, record, effects, frames),
+          );
+          return {
+            ...(outcome.kind === "answered"
+              ? {
+                  kind: "answered" as const,
+                  ...(outcome.value === undefined
+                    ? {}
+                    : { reply: outcome.value }),
+                }
+              : outcome),
+            effects,
+            record,
+            frames,
+            ...declaration,
+          };
+        }),
+      ),
+  };
 }
 
 // The sessions whose idle period has run out by the turn's tick, their menus
@@ -886,46 +911,6 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
     diagnosticCopy: (sessionId, by, key) =>
       renderCache.drawnCopy(sessionId, by, key),
   };
-  // [LAW:types-are-the-program] Exhaustive over the pushes: a new arm is a
-  // compile error here until the renderer answers it.
-  const pushed = (
-    push: AdapterPush,
-    rendererTurns: RendererStats["rendererTurns"],
-  ): AdapterReply => {
-    switch (push.kind) {
-      case "stats":
-        return {
-          kind: "stats",
-          stats: {
-            renderCache: renderCache.stats,
-            effectCache: renderCache.presentations.stats().effects,
-            sessionState: {
-              sessions: sessionState.size(),
-              observers: sessionState.observers(),
-              revision: sessionState.latestRevision(),
-            },
-            menuIdle: menuIdle.stats(),
-            rendererTurns,
-            framesDrawn: feeds.drawn(),
-          },
-        };
-      case "debug":
-        return {
-          kind: "debug",
-          snapshot: debugOf(renderCache, push.what),
-        };
-      // [LAW:no-ambient-temporal-coupling] No journal opens after this: a turn
-      // runs whole, so none is in flight.
-      case "close-journal":
-        configWrites.close();
-        return { kind: "close-journal" };
-      case "close-views":
-        // The feeds first: each releases its pin on a view the close ends.
-        feeds.closeAll(time.tick);
-        renderCache.close();
-        return { kind: "close-views" };
-    }
-  };
   return mainRenderer(
     {
       ...parts,
@@ -936,8 +921,9 @@ function build(inputs: RendererBoot, turnLog: TurnLog): Renderer {
       edits,
       mint,
       acts,
+      configWrites,
+      sessionStats: () => sessionState.stats(),
     },
-    pushed,
     {
       "session-state": () => sessionState.drain(),
       "settings-history": () => settingsHistory.drain(),

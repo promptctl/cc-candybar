@@ -43,7 +43,7 @@ function rig(
     readonly history?: (say: DaemonLogger) => void;
     readonly subscriptions?: () => void;
     readonly prune?: () => void;
-    readonly push?: (say: DaemonLogger) => void;
+    readonly closeJournal?: (say: DaemonLogger) => void;
     readonly rendererClock?: () => number;
   } = {},
 ) {
@@ -81,10 +81,9 @@ function rig(
   });
   const say = parts.turnLog.add;
   const renderer = mainRenderer(
-    parts,
-    () => {
-      fault.push?.(say);
-      return { kind: "close-journal" };
+    {
+      ...parts,
+      configWrites: { close: () => fault.closeJournal?.(say) },
     },
     {
       "session-state": () => {
@@ -97,7 +96,7 @@ function rig(
       },
     },
   );
-  // Both normal events and pushes go through the actual negotiated JSON
+  // Events and commands go through the actual negotiated JSON
   // transport before the same mailbox that lands production output.
   const pipe = rendererOverLines({
     send: (input) => receive(JSON.parse(JSON.stringify(input))),
@@ -265,7 +264,7 @@ test("turn diagnostics cross only with their answer and land once in order", asy
     history: (say) => {
       if (badClick) say(drained.level, drained.line);
     },
-    push: (say) => {
+    closeJournal: (say) => {
       say(closing.level, closing.line);
       throw new Error("close failed");
     },
@@ -280,7 +279,7 @@ test("turn diagnostics cross only with their answer and land once in order", asy
   ).toMatchObject({ kind: "threw", failure: { kind: "bad-request" } });
   badClick = false;
   await fixture.due();
-  await expect(fixture.host.ask({ kind: "close-journal" })).rejects.toThrow(
+  await expect(fixture.host.command({ kind: "close-journal" })).rejects.toThrow(
     "close failed",
   );
 
@@ -349,9 +348,9 @@ test("the first failure in collection still lands history, holds subscriptions, 
   runInAction(() => blocked.set(false));
   fixture.clock.advance(2_000);
   await woke;
-  // A push settles after the scheduled turn. It sees nothing left to write
+  // A command settles after the scheduled turn. It sees nothing left to write
   // from the successful part of the failed turn.
-  await fixture.host.ask({ kind: "close-journal" });
+  await fixture.host.command({ kind: "close-journal" });
   expect(fixture.stored.slice(2)).toEqual([
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
     [],
@@ -359,55 +358,55 @@ test("the first failure in collection still lands history, holds subscriptions, 
   fixture.host.closeWake();
 });
 
-test("a failed push still lands current writes and carries the second failure to its caller", async () => {
+test("a failed command still lands current writes and carries the second failure to its caller", async () => {
   const primary = new BadVerbArgs(
-    "invalid push\ntook=999ms finalize.settings-history=spoofed",
+    "invalid command\ntook=999ms finalize.settings-history=spoofed",
   );
   const fixture = rig({
-    push: () => {
+    closeJournal: () => {
       throw primary;
     },
     history: () => {
-      throw new Error("push history drain failed");
+      throw new Error("command history drain failed");
     },
   });
   fixture.setTheme("nord");
-  const failure = await fixture.host.ask({ kind: "close-journal" }).then(() => {
-    throw new Error("expected this push to fail");
+  const failure = await fixture.host.command({ kind: "close-journal" }).then(() => {
+    throw new Error("expected this command to fail");
   }, failureOf);
   expect(failure).toMatchObject({
     kind: "bad-request",
-    message: expect.stringContaining("invalid push"),
+    message: expect.stringContaining("invalid command"),
   });
   const fields = fieldsOf(failure.detail);
   expect(fields.get("took")).toBe("0ms");
   expect(fields.get("error")).toBe(failureOf(primary).detail);
   expect(fields.get("finalize.settings-history")).toContain(
-    "push history drain failed",
+    "command history drain failed",
   );
   expect(fixture.stored).toEqual([
     [{ store: "session-state", key: SESSION, value: { theme: "nord" } }],
   ]);
 });
 
-test("a successful push reports its first finalizer failure and lands its successful drain", async () => {
+test("a successful command reports its first finalizer failure and lands its successful drain", async () => {
   let blocked = true;
   const fixture = rig({
     history: () => {
-      if (blocked) throw new Error("push history drain failed");
+      if (blocked) throw new Error("command history drain failed");
     },
   });
   fixture.setTheme("nord");
   await expect(
-    fixture.host.ask({ kind: "close-journal" }),
+    fixture.host.command({ kind: "close-journal" }),
   ).rejects.toMatchObject({
     failure: {
       kind: "threw",
-      message: expect.stringContaining("push history drain failed"),
+      message: expect.stringContaining("command history drain failed"),
     },
   });
   blocked = false;
-  expect(await fixture.host.ask({ kind: "close-journal" })).toEqual({
+  expect(await fixture.host.command({ kind: "close-journal" })).toEqual({
     kind: "close-journal",
   });
   expect(fixture.stored).toEqual([

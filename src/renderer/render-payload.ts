@@ -161,7 +161,7 @@ export interface RenderPayloadOf<P> extends ClaudeHookData, ValuedInputs {
   readonly tmux?: { readonly pane: string; readonly session?: string | P };
   // [LAW:types-are-the-program] REQUIRED: every payload carries the object,
   // and the fields INSIDE it carry the real optionality — the name and the
-  // user each a source of their own (src/segments/host.ts), `ssh` the
+  // user each a source of their own (src/daemon/cache/host-identity.ts), `ssh` the
   // session's hint. See HostPayloadOf.
   readonly host: HostPayloadOf<P>;
   // `theme.effective`, `style.effective` and `effect.effective` are
