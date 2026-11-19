@@ -42,6 +42,7 @@ import { buildRig } from "./helpers/rig";
 import { VERB_SET_STATE } from "../src/click/wire";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { arrange } from "./helpers/configure";
 
 const SID = sessionIdOf("s1");
 
@@ -115,7 +116,7 @@ function menuBar(root: string) {
     if (!link) throw new Error(`no clickable region labelled "${label}"`);
     await click(link.url);
   };
-  return { config, sessionState, render, click, clickLabel };
+  return { config, sessionState, render, click, clickLabel, ctx: rig.ctx };
 }
 
 // [LAW:single-enforcer] "Hosts a menu" is decided by the same authority the
@@ -191,7 +192,7 @@ describe("every {{ menu }} the bundled default renders", () => {
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
       const rig = menuBar(`{ h: ['directory', 'model'] }`);
-      rig.sessionState.set(SID, EDIT_MODE_KEY, "arrange");
+      arrange(rig.ctx, SID);
       return rig;
     };
 

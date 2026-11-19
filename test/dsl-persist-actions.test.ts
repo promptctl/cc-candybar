@@ -425,7 +425,7 @@ function buildPersistRuntime(
     ).frame;
   const ctx: VerbContext = testVerbContext(
     sessionState,
-    durable.historyFor(sessionState),
+    durable.historyFor,
     config,
     durable.host,
   );
@@ -568,7 +568,7 @@ describe("persist action click → the config file", () => {
       ).frame;
     const ctx: VerbContext = testVerbContext(
       sessionState,
-      durable.historyFor(sessionState),
+      durable.historyFor,
       config,
       durable.host,
     );
@@ -793,7 +793,7 @@ describe("persist action click → the config file", () => {
     durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
-      durable.historyFor(sessionState),
+      durable.historyFor,
       config,
       durable.host,
     );
@@ -870,7 +870,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     durable.write(`{ globals: { palette: "textual-dark" } }`);
     const ctx: VerbContext = testVerbContext(
       sessionState,
-      durable.historyFor(sessionState),
+      durable.historyFor,
       config,
       durable.host,
     );
@@ -907,7 +907,7 @@ describe("a durable click lands in the file the next reload reads", () => {
     durable.seedOrigin(sessionState, S1);
     const ctx: VerbContext = testVerbContext(
       sessionState,
-      durable.historyFor(sessionState),
+      durable.historyFor,
       config,
       durable.host,
     );
@@ -963,7 +963,7 @@ describe("RenderCache: the config file is the durable store", () => {
       durable.seedOrigin(sessionState, S1);
       const ctx: VerbContext = testVerbContext(
         sessionState,
-        durable.historyFor(sessionState),
+        durable.historyFor,
         entry.state.config,
         durable.host,
       );

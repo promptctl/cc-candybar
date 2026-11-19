@@ -387,62 +387,89 @@ describe("insertSegmentRef", () => {
       insertSegmentRef(
         CONFIG,
         ["root"],
-        { seg: "gitPr" },
+        { seg: "gitPr", id: "gitPr-1" },
         "gitaculous",
         "after",
       ),
     ).toBe(
       CONFIG.replace(
         `["directory", "gitaculous", "toolbar"]`,
-        `["directory", "gitaculous", "gitPr", "toolbar"]`,
+        `["directory", "gitaculous", { seg: "gitPr", id: "gitPr-1" }, "toolbar"]`,
       ),
     );
     expect(
       insertSegmentRef(
         CONFIG,
         ["root"],
-        { seg: "gitPr" },
+        { seg: "gitPr", id: "gitPr-1" },
         "directory",
         "before",
       ),
     ).toBe(
       CONFIG.replace(
         `["directory", "gitaculous", "toolbar"]`,
-        `["gitPr", "directory", "gitaculous", "toolbar"]`,
+        `[{ seg: "gitPr", id: "gitPr-1" }, "directory", "gitaculous", "toolbar"]`,
       ),
     );
   });
 
   test("after an own-line anchor: a new line at the same indent, after the anchor's comment", () => {
     expect(
-      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "model", "after"),
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "speed", id: "speed-1" },
+        "model",
+        "after",
+      ),
     ).toBe(
       CONFIG.replace(
         `      "model", // the model\n`,
-        `      "model", // the model\n      "speed",\n`,
+        `      "model", // the model\n      { seg: "speed", id: "speed-1" },\n`,
       ),
     );
     expect(
-      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "weekly", "after"),
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "speed", id: "speed-1" },
+        "weekly",
+        "after",
+      ),
     ).toBe(
-      CONFIG.replace(`      "weekly"\n`, `      "weekly",\n      "speed"\n`),
+      CONFIG.replace(
+        `      "weekly"\n`,
+        `      "weekly",\n      { seg: "speed", id: "speed-1" }\n`,
+      ),
     );
   });
 
   test("before an own-line anchor", () => {
     expect(
-      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "context", "before"),
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "speed", id: "speed-1" },
+        "context",
+        "before",
+      ),
     ).toBe(
       CONFIG.replace(
         `      "context",\n`,
-        `      "speed",\n      "context",\n`,
+        `      { seg: "speed", id: "speed-1" },\n      "context",\n`,
       ),
     );
   });
 
   test("an absent anchor → null", () => {
     expect(
-      insertSegmentRef(CONFIG, ["root"], { seg: "speed" }, "nope", "after"),
+      insertSegmentRef(
+        CONFIG,
+        ["root"],
+        { seg: "speed", id: "speed-1" },
+        "nope",
+        "after",
+      ),
     ).toBeNull();
   });
 });
@@ -468,19 +495,39 @@ describe("a bare-segment root is the one-child container it abbreviates", () => 
 
   test("insert beside the sole segment keeps the original ref verbatim, its when included", () => {
     expect(
-      insertSegmentRef(bare, path, { seg: "clock" }, "sidebar", "after"),
-    ).toBe(`{ presets: { compact: { root: { h: ["sidebar", "clock"] } } } }`);
-    expect(
-      insertSegmentRef(gated, path, { seg: "clock" }, "sidebar", "before"),
+      insertSegmentRef(
+        bare,
+        path,
+        { seg: "clock", id: "clock-1" },
+        "sidebar",
+        "after",
+      ),
     ).toBe(
-      `{ presets: { compact: { root: { h: ["clock", { seg: "sidebar", when: "{{ .x }}" }] } } } }`,
+      `{ presets: { compact: { root: { h: ["sidebar", { seg: "clock", id: "clock-1" }] } } } }`,
+    );
+    expect(
+      insertSegmentRef(
+        gated,
+        path,
+        { seg: "clock", id: "clock-1" },
+        "sidebar",
+        "before",
+      ),
+    ).toBe(
+      `{ presets: { compact: { root: { h: [{ seg: "clock", id: "clock-1" }, { seg: "sidebar", when: "{{ .x }}" }] } } } }`,
     );
   });
 
   test("a miss on a bare root is still null — the normalization is never committed alone", () => {
     expect(removeSegmentRef(bare, path, "zzz")).toBeNull();
     expect(
-      insertSegmentRef(bare, path, { seg: "clock" }, "zzz", "after"),
+      insertSegmentRef(
+        bare,
+        path,
+        { seg: "clock", id: "clock-1" },
+        "zzz",
+        "after",
+      ),
     ).toBeNull();
   });
 });
@@ -500,9 +547,9 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
     expect(removeSegmentRef(rows, ["root"], "y")).toBe(
       rows.replace(`["x", "y"]`, `["x"]`),
     );
-    expect(insertSegmentRef(rows, ["root"], { seg: "w" }, "z", "before")).toBe(
-      rows.replace(`["z"]`, `["w", "z"]`),
-    );
+    expect(
+      insertSegmentRef(rows, ["root"], { seg: "w", id: "w-1" }, "z", "before"),
+    ).toBe(rows.replace(`["z"]`, `[{ seg: "w", id: "w-1" }, "z"]`));
   });
 
   test("a bare-string row is normalized to the container it abbreviates, alone", () => {
@@ -510,8 +557,19 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
       rows.replace(`sys: "demo"`, `sys: { h: [] }`),
     );
     expect(
-      insertSegmentRef(rows, ["root"], { seg: "clock" }, "demo", "after"),
-    ).toBe(rows.replace(`sys: "demo"`, `sys: { h: ["demo", "clock"] }`));
+      insertSegmentRef(
+        rows,
+        ["root"],
+        { seg: "clock", id: "clock-1" },
+        "demo",
+        "after",
+      ),
+    ).toBe(
+      rows.replace(
+        `sys: "demo"`,
+        `sys: { h: ["demo", { seg: "clock", id: "clock-1" }] }`,
+      ),
+    );
     expect(removeSegmentRef(rows, ["root"], "zzz")).toBeNull();
   });
 
@@ -601,28 +659,28 @@ describe("a CRLF document keeps its own line terminator", () => {
     const after = insertSegmentRef(
       CRLF,
       ["root"],
-      { seg: "speed" },
+      { seg: "speed", id: "speed-1" },
       "model",
       "after",
     )!;
     expect(after).toBe(
       CRLF.replace(
         `      "model", // the model\r\n`,
-        `      "model", // the model\r\n      "speed",\r\n`,
+        `      "model", // the model\r\n      { seg: "speed", id: "speed-1" },\r\n`,
       ),
     );
     noBareLf(after);
     const before = insertSegmentRef(
       CRLF,
       ["root"],
-      { seg: "speed" },
+      { seg: "speed", id: "speed-1" },
       "context",
       "before",
     )!;
     expect(before).toBe(
       CRLF.replace(
         `      "context",\r\n`,
-        `      "speed",\r\n      "context",\r\n`,
+        `      { seg: "speed", id: "speed-1" },\r\n      "context",\r\n`,
       ),
     );
     noBareLf(before);

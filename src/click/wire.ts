@@ -35,6 +35,7 @@ import { DIAGNOSTICS_CLOSED, DIAGNOSTICS_VIEWING } from "../config/door.js";
 import { REPO_ANSWERS, type RepoAnswer } from "../config/loader/repo-gate.js";
 import type { LayerRole } from "../config/layer-role.js";
 import {
+  EDIT_NS,
   isReservedName,
   MENU_NS,
   MENU_PAGE_NS,
@@ -267,12 +268,18 @@ function sayWrite(key: string, value: string): string {
     return `${value === DIAGNOSTICS_CLOSED ? "close" : "open"} diagnostics`;
   const set = `set ${key} to ${value}`;
   if (!isReservedName(key)) return set;
-  const menu = withoutNs(withoutNs(key, MENU_PAGE_NS), MENU_NS);
-  if (key.startsWith(MENU_PAGE_NS))
+  // A menu edit mode hosts carries edit's scope before the menu spelling.
+  const scoped = withoutNs(key, EDIT_NS);
+  const inner =
+    scoped.startsWith(MENU_PAGE_NS) || scoped.startsWith(MENU_NS)
+      ? scoped
+      : key;
+  const menu = withoutNs(withoutNs(inner, MENU_PAGE_NS), MENU_NS);
+  if (inner.startsWith(MENU_PAGE_NS))
     return `turn ${menu} to page ${Number(value) + 1}`;
   if (value === DISCLOSURE_CLOSED) return `close ${menu}`;
   if (value === DISCLOSURE_OPEN) return `open ${menu}`;
-  return key.startsWith(MENU_NS) ? `open ${value}` : set;
+  return inner.startsWith(MENU_NS) ? `open ${value}` : set;
 }
 
 // How much of a copied text a link says, and the mark where it was cut. Only a

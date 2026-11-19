@@ -35,6 +35,7 @@ import {
 import type { SessionId } from "../../src/daemon/foundations/session-id";
 import type { VerbContext } from "../../src/renderer/verbs";
 import type { SettingsHistory } from "../../src/renderer/settings-history";
+import type { SessionStateRW } from "../../src/renderer-interface/session-state";
 import type { Host } from "../../src/host";
 import type { BuildLineOptions } from "../../src/render/strip";
 import { listResolvablePaletteNames } from "../../src/themes/policy";
@@ -93,7 +94,7 @@ export interface RigInit {
   readonly sessionId?: SessionId;
   readonly sessionState?: SessionState;
   /** What the click path is built with beyond the config: the history and host a durable-config test owns. */
-  readonly history?: SettingsHistory;
+  readonly history?: (sessionState: SessionStateRW) => SettingsHistory;
   readonly host?: Host;
 }
 

@@ -1,5 +1,9 @@
 // A renderer-local edit transaction over the host's last committed snapshot.
 // Closing the transaction releases the draft; only Save sends changes to the host.
+// [LAW:one-source-of-truth] The open edit holds every session write made
+// inside it, as it holds file changes: save commits what persists, and cancel
+// drops it all, so the menus a user opened or closed while editing return to
+// how they were. Edit mode's own keys live only here.
 
 import { observable, runInAction } from "mobx";
 import {
@@ -24,6 +28,8 @@ import { originKey, type RenderOrigin } from "../config-hint.js";
 import type { SessionId } from "../daemon/foundations/session-id.js";
 import { BadVerbArgs } from "../daemon/foundations/verb-error.js";
 import { isSettingKey } from "../renderer-interface/history-storage.js";
+import { isEditModeKey } from "../config/reserved-names.js";
+import type { StateWrite } from "../config/disclosure-nest.js";
 import type { SessionStateRW } from "../renderer-interface/session-state.js";
 import type { DaemonLogger } from "../utils/logger.js";
 import {
@@ -42,11 +48,14 @@ export interface EditTurn {
   readonly journal: Journal;
   commit(): boolean;
   save(committed: Journal, files: ConfigFiles, latest: ConfigSnapshot): void;
+  // The click that leaves the edit without saving: its own writes outside
+  // edit mode (the door it closed) land; everything the edit held drops.
+  leave(): void;
 }
 
 class EditDraft {
-  readonly navigationScope = Symbol();
-  private readonly picks = new Map<string, string | null>();
+  // Every write this session made inside the edit, as the edit reads it.
+  private readonly writes = new Map<string, string | null>();
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
   private latest: ConfigSnapshot;
@@ -61,8 +70,8 @@ class EditDraft {
   ) {
     this.latest = this.snapshot = base;
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
-    // draft. Only the journal's destination changes. Chrome still uses the
-    // normal session store, so opening menus never adds an edit step.
+    // draft. Only the journal's destination changes. A menu's state is no
+    // setting, so opening one never adds an edit step.
     this.history = new SettingsHistory(
       {
         get: (sid, key) =>
@@ -108,27 +117,23 @@ class EditDraft {
   depth(): HistoryDepth {
     return {
       ...this.history.depth(this.session),
-      sinceEdit: this.picks.size + this.files.size,
+      sinceEdit:
+        [...this.writes.keys()].filter(isSettingKey).length + this.files.size,
     };
   }
 
   read(key: string): string | null {
     if (key === EDIT_MODE_KEY) return EDIT_MODE_ARRANGE;
-    if (this.picks.has(key)) return this.picks.get(key)!;
+    if (this.writes.has(key)) return this.writes.get(key)!;
     return this.committed.get(this.session, key);
   }
 
-  private put(sid: SessionId, key: string, value: string | null): void {
-    if (sid === this.session) {
-      if (key === EDIT_MODE_KEY) return;
-      if (isSettingKey(key)) {
-        if (this.committed.get(sid, key) === value) this.picks.delete(key);
-        else this.picks.set(key, value);
-        return;
-      }
-    }
-    if (value === null) this.committed.clear(sid, key);
-    else this.committed.set(sid, key, value);
+  put(sid: SessionId, key: string, value: string | null): void {
+    if (sid !== this.session) {
+      if (value === null) this.committed.clear(sid, key);
+      else this.committed.set(sid, key, value);
+    } else if (this.committed.get(sid, key) === value) this.writes.delete(key);
+    else this.writes.set(key, value);
   }
 
   begin(prove: ConfigFiles["prove"]): EditTurn {
@@ -154,15 +159,18 @@ class EditDraft {
       prove,
     };
     const journal = this.history.begin(files);
+    // The click's own writes, as it landed them in the edit.
+    let landed: ReadonlyMap<string, string | null> = new Map();
     return {
       files,
       journal,
       commit: () => {
-        const picksMoved = [...journal.writes(this.session)].some(
-          ([key, value]) => isSettingKey(key) && this.read(key) !== value,
+        landed = new Map(journal.writes(this.session));
+        const stateMoved = [...landed].some(
+          ([key, value]) => this.read(key) !== value,
         );
         journal.commit();
-        if (sameFiles(working, this.files)) return picksMoved;
+        if (sameFiles(working, this.files)) return stateMoved;
         this.files = working;
         this.refreshSnapshot();
         return true;
@@ -204,17 +212,25 @@ class EditDraft {
           );
         // The save click's own writes take precedence over the current draft,
         // including releasing picks it moved into durable layers.
-        for (const [key, value] of new Map([
-          ...this.picks,
-          ...journal.writes(this.session),
-        ])) {
-          if (key === EDIT_MODE_KEY) continue;
-          if (value === null)
-            committedJournal.sessionState.clear(this.session, key);
-          else committedJournal.sessionState.set(this.session, key, value);
-        }
+        this.land(
+          committedJournal.sessionState,
+          new Map([...this.writes, ...journal.writes(this.session)]),
+        );
       },
+      leave: () => this.land(this.committed, landed),
     };
+  }
+
+  // The edit's writes, landed past it. Edit mode's own keys among them end
+  // with the edit, at the store's one guard.
+  private land(
+    into: SessionStateRW,
+    writes: ReadonlyMap<string, string | null>,
+  ): void {
+    for (const [key, value] of writes) {
+      if (value === null) into.clear(this.session, key);
+      else into.set(this.session, key, value);
+    }
   }
 }
 
@@ -240,17 +256,63 @@ export class EditTransactions {
     deep: false,
   });
 
+  // [LAW:single-enforcer] The session store as every writer reaches it: a
+  // write to one of edit mode's own keys goes to the session's open edit, and
+  // with none open it has no meaning, so it is dropped and said. No route
+  // stores such a key, so a restart finds none.
+  readonly committed: SessionStateRW;
+
   constructor(
-    readonly committed: SessionStateRW,
+    store: SessionStateRW,
     private readonly log: DaemonLogger,
-  ) {}
+  ) {
+    const setBatch = (sid: SessionId, pairs: readonly StateWrite[]): void =>
+      runInAction(() => {
+        store.setBatch(
+          sid,
+          pairs.filter(({ key }) => !isEditModeKey(key)),
+        );
+        this.hold(
+          sid,
+          pairs.filter(({ key }) => isEditModeKey(key)),
+        );
+      });
+    this.committed = {
+      get: (sid, key) => store.get(sid, key),
+      revision: (sid) => store.revision(sid),
+      set: (sid, key, value) => setBatch(sid, [{ key, value }]),
+      setBatch,
+      clear: (sid, key) =>
+        isEditModeKey(key)
+          ? this.hold(sid, [{ key, value: null }])
+          : store.clear(sid, key),
+    };
+  }
+
+  private hold(
+    sid: SessionId,
+    writes: ReadonlyArray<{
+      readonly key: string;
+      readonly value: string | null;
+    }>,
+  ): void {
+    if (writes.length === 0) return;
+    const draft = this.draft(sid);
+    if (draft === null) {
+      this.log(
+        "info",
+        `edit: dropped ${writes.map(({ key }) => key).join(",")} — no edit is open (session=${sid})`,
+      );
+      return;
+    }
+    for (const { key, value } of writes) draft.put(sid, key, value);
+    this.changed(sid);
+  }
 
   readonly view: SessionStateRW = {
     get: (sid, key) => {
       const draft = this.draft(sid);
-      if (draft !== null) return draft.read(key);
-      // Ignore the edit-mode flag saved by versions with committed savepoints.
-      return key === EDIT_MODE_KEY ? null : this.committed.get(sid, key);
+      return draft === null ? this.committed.get(sid, key) : draft.read(key);
     },
     revision: (sid) =>
       this.committed.revision(sid) + (this.entries.get(sid)?.revision ?? 0),

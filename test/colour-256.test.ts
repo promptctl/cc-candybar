@@ -47,6 +47,7 @@ import {
   seamInks,
   type Chars,
 } from "./helpers/colour-depth";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 
 // The closed bar on the sample session, for a theme at a depth. Every render
 // is drawn at one instant, so two depths of one theme are the same bar in the
@@ -155,10 +156,14 @@ async function forEachStage(
     closed: () => null,
     door: (r) => opener(r, SETTINGS_ANCHOR, () => true),
     "preset picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("preset")),
+      opener(r, sharedMenuStateKey("candybar.pickers"), (v) =>
+        v.endsWith("preset"),
+      ),
     "look tab": (r) => opener(r, "candybar.tab", (v) => v === "look"),
     "theme picker": (r) =>
-      opener(r, "menus.candybar_pickers", (v) => v.endsWith("theme")),
+      opener(r, sharedMenuStateKey("candybar.pickers"), (v) =>
+        v.endsWith("theme"),
+      ),
     "layout tab": (r) => opener(r, "candybar.tab", (v) => v === "layout"),
     "config tab": (r) => opener(r, "candybar.tab", (v) => v === "config"),
   };

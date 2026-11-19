@@ -82,12 +82,12 @@ export interface Clicked {
   readonly refused: string | null;
 }
 
-export interface Bar {
-  /** The config file the daemon reads and every durable click writes. */
-  readonly configPath: string;
+/** The stored session state: each session's keys and values. */
+export type StoredSessions = Record<string, Record<string, string>>;
+
+/** One Claude Code session's view of the bar: what it renders and clicks. */
+export interface BarSession {
   render(): Promise<Frame>;
-  /** Report a new terminal size; every render after it is drawn at that size. */
-  resize(size: TerminalSize): void;
   /**
    * Click the `nth` (from 1) link of the last render whose visible text is
    * `text`, then render again.
@@ -95,6 +95,28 @@ export interface Bar {
   click(text: string, nth?: number): Promise<Clicked>;
   /** Click the link of the last render that carries `url`, then render again. */
   follow(url: string): Promise<Clicked>;
+  /**
+   * Click a link an older render drew, as a terminal still showing that render
+   * would, then render again.
+   */
+  stale(link: DrawnLink): Promise<Clicked>;
+}
+
+export interface Bar extends BarSession {
+  /** The config file the daemon reads and every durable click writes. */
+  readonly configPath: string;
+  /** Report a new terminal size; every render after it is drawn at that size. */
+  resize(size: TerminalSize): void;
+  /** Another session on the same daemon and config, under its own id. */
+  session(id: string): BarSession;
+  /**
+   * Stop the daemon and start another over the same state and config, the
+   * stored session state first rewritten by `rewrite`, as an older build may
+   * have left it.
+   */
+  restart(rewrite?: (stored: StoredSessions) => StoredSessions): Promise<void>;
+  /** The session store as the daemon last kept it: what a restart loads. */
+  stored(): StoredSessions;
   stop(): Promise<void>;
 }
 
@@ -143,6 +165,12 @@ export async function startBar(
   };
   const configPath = path.join(scratch, "config.json5");
   const claudeConfigDir = path.join(scratch, "claude");
+  const env = {
+    ...daemonEnv.env,
+    // An empty Claude Code config dir, so the daemon reads none of the host's
+    // Claude Code settings or transcripts.
+    CLAUDE_CONFIG_DIR: claudeConfigDir,
+  };
   let daemon: BarDaemon;
   try {
     fs.writeFileSync(
@@ -150,93 +178,104 @@ export async function startBar(
       opts.config === null ? "{}\n" : fs.readFileSync(opts.config, "utf8"),
     );
     fs.mkdirSync(claudeConfigDir);
-    daemon = await startDaemon({
-      ...daemonEnv.env,
-      // An empty Claude Code config dir, so the daemon reads none of the host's
-      // Claude Code settings or transcripts.
-      CLAUDE_CONFIG_DIR: claudeConfigDir,
-    });
+    daemon = await startDaemon(env);
   } catch (e) {
     removeDirs();
     throw e;
   }
-  let last: Pick<Frame, "rows"> = { rows: [] };
   let size: TerminalSize = { width: opts.width, rows: opts.rows };
+  const storedPath = path.join(daemonEnv.stateDir, "session-state.json");
+  const stored = (): StoredSessions =>
+    fs.existsSync(storedPath)
+      ? (JSON.parse(fs.readFileSync(storedPath, "utf8")) as StoredSessions)
+      : {};
 
-  const render = async (): Promise<Frame> => {
-    const frame = await frameRequest(
-      daemon.target,
-      {
-        hookData: hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
-        args: ["cc-candybar", "--config", configPath],
-        cwd: opts.cwd,
-        termCols: size.width,
-        termRows: size.rows,
-        ssh: opts.ssh,
-        tmux: {
-          socket: path.join(scratch, "tmux.sock"),
-          pane: "%0",
-          truecolor: null,
+  const sessionOf = (sessionId: string): BarSession => {
+    let last: Pick<Frame, "rows"> = { rows: [] };
+    const render = async (): Promise<Frame> => {
+      const frame = await frameRequest(
+        daemon.target,
+        {
+          hookData: {
+            ...hookData(opts.cwd, path.join(scratch, "transcript.jsonl")),
+            session_id: sessionId,
+          },
+          args: ["cc-candybar", "--config", configPath],
+          cwd: opts.cwd,
+          termCols: size.width,
+          termRows: size.rows,
+          ssh: opts.ssh,
+          tmux: {
+            socket: path.join(scratch, "tmux.sock"),
+            pane: "%0",
+            truecolor: null,
+          },
+          claudeConfigDir,
         },
-        claudeConfigDir,
-      },
-      REPLY_BUDGET_MS,
-    );
-    last = frame;
-    return frame;
-  };
-
-  const click = async (text: string, nth = 1): Promise<Clicked> => {
-    const drawn = linksOf(last);
-    const hit = drawn.filter((l) => l.text === text)[nth - 1];
-    if (hit === undefined) {
-      throw new Error(
-        `the bar drew no link "${text}" #${nth}; it drew: ` +
-          drawn.map((l) => JSON.stringify(l.text)).join(" "),
+        REPLY_BUDGET_MS,
       );
-    }
-    return send(hit);
-  };
+      last = frame;
+      return frame;
+    };
 
-  // A URL is followed only if the last render drew it: a page showing an older
-  // render would otherwise click what the bar no longer offers.
-  const follow = async (url: string): Promise<Clicked> => {
-    const hit = linksOf(last).find((l) => l.url === url);
-    if (hit === undefined) {
-      throw new NotDrawnError(
-        `the last render drew no link to ${url}; render again and click what it drew`,
-      );
-    }
-    return send(hit);
-  };
+    const click = async (text: string, nth = 1): Promise<Clicked> => {
+      const drawn = linksOf(last);
+      const hit = drawn.filter((l) => l.text === text)[nth - 1];
+      if (hit === undefined) {
+        throw new Error(
+          `the bar drew no link "${text}" #${nth}; it drew: ` +
+            drawn.map((l) => JSON.stringify(l.text)).join(" "),
+        );
+      }
+      return send(hit);
+    };
 
-  const send = async (hit: DrawnLink): Promise<Clicked> => {
-    if (!isBarLink(hit.url)) {
-      throw new Error(
-        `"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`,
-      );
-    }
-    if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
+    // A URL is followed only if the last render drew it: a page showing an older
+    // render would otherwise click what the bar no longer offers.
+    const follow = async (url: string): Promise<Clicked> => {
+      const hit = linksOf(last).find((l) => l.url === url);
+      if (hit === undefined) {
+        throw new NotDrawnError(
+          `the last render drew no link to ${url}; render again and click what it drew`,
+        );
+      }
+      return send(hit);
+    };
+
+    const send = async (hit: DrawnLink): Promise<Clicked> => {
+      if (!isBarLink(hit.url)) {
+        throw new Error(
+          `"${hit.text}" opens ${hit.url}: the terminal's click, not the daemon's`,
+        );
+      }
+      if (effectsOf(hit.url).some(({ verb }) => HOST_VERBS.has(verb))) {
+        return {
+          refused: `not sent: ${describeWith(hit, sessionId)}`,
+          rendered: await render(),
+        };
+      }
+      const answer = await clickAnswer(daemon.target, hit.url, REPLY_BUDGET_MS);
       return {
-        refused: `not sent: ${describeLink(hit)}`,
+        refused: toldOf(answer) === "ok" ? null : saidOf(answer),
         rendered: await render(),
       };
-    }
-    const answer = await clickAnswer(daemon.target, hit.url, REPLY_BUDGET_MS);
-    return {
-      refused: toldOf(answer) === "ok" ? null : saidOf(answer),
-      rendered: await render(),
     };
+    return { render, click, follow, stale: send };
   };
 
   return {
     configPath,
-    render,
+    ...sessionOf(SESSION_ID),
     resize: (next) => {
       size = next;
     },
-    click,
-    follow,
+    session: sessionOf,
+    restart: async (rewrite = (stored) => stored) => {
+      await daemon.stop();
+      fs.writeFileSync(storedPath, JSON.stringify(rewrite(stored())));
+      daemon = await startDaemon(env);
+    },
+    stored,
     stop: async () => {
       await daemon.stop();
       removeDirs();

@@ -46,6 +46,7 @@ import {
 import { undoOf, NO_LAYERS } from "./helpers/history-step";
 import { lastClickError } from "../src/daemon/foundations/click-error";
 import { onLanded } from "./helpers/click";
+import { menuStateKey } from "../src/config/menu-keys";
 
 const S1 = sessionIdOf("s1");
 const SID_A = sessionIdOf("a");
@@ -152,7 +153,9 @@ function undoBar(
 ) {
   if (durable.text() === null) durable.write(src);
   const sessionState = shared?.sessionState ?? new SessionState();
-  const history = shared?.history ?? durable.historyFor(sessionState);
+  // Two sessions share one history, as the daemon's do.
+  const history =
+    shared === undefined ? durable.historyFor : () => shared.history;
   durable.seedOrigin(sessionState, sessionId);
   const rig = buildRig({
     source: src,
@@ -178,7 +181,7 @@ function undoBar(
   // does — one click, one journal, one step.
   const click = (url: string): Promise<void> => clickUrl(url, ctx);
   const render = (): Frame => rig.draw().frame;
-  return { ...rig, ctx, click, render, history };
+  return { ...rig, ctx, click, render, history: rig.ctx.history };
 }
 
 const ACTION_ORDER = [
@@ -347,12 +350,14 @@ describe("undo/redo click → the session's settings history", () => {
 
   test("opening a menu or paging is not a settings change — it never becomes a step", async () => {
     const src = SRC.replace(
-      "back: { undo: true },",
-      "back: { undo: true }, openMenu: { set: 'menus.x', to: 'open' },",
-    ).replace('"pickTheme"', '"openMenu"');
+      '{{ action "pickTheme" "pickTheme" }}',
+      '{{ menu "pickTheme" "pickTheme" "▾" }}',
+    );
     const runtime = undoBar(src);
-    await press(runtime, "pickTheme"); // the slot now renders openMenu
-    expect(runtime.sessionState.get(S1, "menus.x")).toBe("open");
+    await press(runtime, "pickTheme"); // the slot now renders the menu's trigger
+    expect(
+      runtime.sessionState.get(S1, menuStateKey("bar", "pickTheme", undefined)),
+    ).toBe("pickTheme");
     expect(runtime.history.depth(S1)).toEqual({
       undo: 0,
       redo: 0,

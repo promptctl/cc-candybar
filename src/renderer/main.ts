@@ -61,11 +61,10 @@ import type {
 import { holdClickError } from "../daemon/foundations/click-error.js";
 import { floorOf } from "../config/globals-fields.js";
 import { EditTransactions } from "./edit-transaction.js";
-import { EDIT_MODE_KEY } from "../config/loader/edit-mode.js";
+import { isEditModeKey } from "../config/reserved-names.js";
 import { sessionIdOf } from "../daemon/foundations/session-id.js";
 import { SessionState } from "./session-state.js";
 import { SettingsHistory } from "./settings-history.js";
-import { disclosureNest } from "../config/disclosure-nest.js";
 import { NavigationHistory } from "./navigation-history.js";
 import { ActsOnTheirWay } from "./acts.js";
 import { WorldStates } from "./world-states.js";
@@ -598,11 +597,15 @@ export function mainRendererOf(
   const now = () => time.at;
   // [LAW:single-enforcer] The renderer's lines go to the host's one log.
   const { log } = host;
-  const sessionState = new SessionState(inputs.stored.sessions);
-  // A legacy edit-mode flag has no draft after a restart.
-  for (const sid of Object.keys(inputs.stored.sessions))
-    sessionState.clear(sessionIdOf(sid), EDIT_MODE_KEY);
-  const edits = new EditTransactions(sessionState, log);
+  const store = new SessionState(inputs.stored.sessions);
+  // Edit mode's keys belong to an open edit, and no edit outlives the
+  // renderer, so a profile that held one from an older build loses it.
+  for (const [sid, values] of Object.entries(inputs.stored.sessions))
+    for (const key of Object.keys(values).filter(isEditModeKey))
+      store.clear(sessionIdOf(sid), key);
+  const edits = new EditTransactions(store, log);
+  // [LAW:single-enforcer] Every writer reaches the store through the edits.
+  const sessionState = edits.committed;
   const settingsHistory = new SettingsHistory(
     sessionState,
     log,
@@ -611,7 +614,7 @@ export function mainRendererOf(
   // [LAW:one-source-of-truth] What the turn moved of every store, in the
   // order each store's entries last moved.
   const drained = (): StoreWrite[] => [
-    ...sessionState.drain(),
+    ...store.drain(),
     ...settingsHistory.drain(),
   ];
   let minted = 0;
@@ -646,8 +649,6 @@ export function mainRendererOf(
         navigation: (sessionId, config) =>
           navigationHistory.depth(sessionId, sessionState, {
             gate: gates.state.gateFor(config),
-            nest: () => disclosureNest(config),
-            edit: edits.draft(sessionId)?.navigationScope ?? null,
           }),
       }),
     },
@@ -752,9 +753,9 @@ export function mainRendererOf(
             renderCache: renderCache.stats,
             effectCache: renderCache.presentations.stats().effects,
             sessionState: {
-              sessions: sessionState.size(),
-              observers: sessionState.observers(),
-              revision: sessionState.latestRevision(),
+              sessions: store.size(),
+              observers: store.observers(),
+              revision: store.latestRevision(),
             },
             menuIdle: menuIdle.stats(),
             rendererTurns,

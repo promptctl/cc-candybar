@@ -30,11 +30,24 @@ export const RESERVED_NAMESPACES = [
   SETTINGS_NS,
 ] as const;
 
-// A name a user can never author: every synthesized artifact lives under one
-// of the prefixes above, so membership alone proves "synthesized, not
-// declared" — the fact edit chrome (structural, not removable content), the
-// delta-able segment set (a delta targets an authorable name), and the test
-// helpers all read from here rather than re-spelling the prefix list.
+// The namespace a name sits in, spelled as written: every synthesized
+// artifact and every key the bar mints lives under one of the prefixes above,
+// so membership alone proves "synthesized, not declared" — the fact edit
+// chrome (structural, not removable content), the delta-able segment set (a
+// delta targets an authorable name), the load's refusal of authored keys and
+// the test helpers all read from here rather than re-spelling the prefix list.
+export function reservedNamespaceOf(name: string): string | undefined {
+  return RESERVED_NAMESPACES.find((ns) => name.startsWith(ns));
+}
+
 export function isReservedName(name: string): boolean {
-  return RESERVED_NAMESPACES.some((ns) => name.startsWith(ns));
+  return reservedNamespaceOf(name) !== undefined;
+}
+
+// [LAW:single-enforcer] THE classifier of edit mode's own session state: its
+// toggles, panes, lists, libraries, page cursors and placement drafts are all
+// minted under `edit.`, so whether a key is edit mode's is a fact of the key
+// alone. Such a key lives only in an open edit and never in the session store.
+export function isEditModeKey(key: string): boolean {
+  return key.startsWith(EDIT_NS);
 }

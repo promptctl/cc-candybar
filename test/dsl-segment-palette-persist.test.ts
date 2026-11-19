@@ -275,7 +275,7 @@ function persistBar(
     base: dflt,
     sessionId,
     sessionState,
-    history: durable.historyFor(sessionState),
+    history: durable.historyFor,
     host: durable.host,
   });
   const render = (width = Number.POSITIVE_INFINITY): Frame =>

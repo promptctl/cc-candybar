@@ -843,25 +843,21 @@ export function removeSegmentRef(
 
 /**
  * Insert `placement` immediately before or after the placement `anchor` (an
- * id) — a bare-string ref when it keeps its segment's name as its id, else
- * `{ seg, id }`. A ref alone on its line gets its own line at the same
+ * id), as `{ seg, id }`. A ref alone on its line gets its own line at the same
  * indentation; an inline ref gets an inline sibling. Returns null when the
  * anchor is absent.
  */
 export function insertSegmentRef(
   text: string,
   rootPath: readonly string[],
-  placement: { readonly seg: string; readonly id?: string },
+  placement: { readonly seg: string; readonly id: string },
   anchor: string,
   relation: "before" | "after",
 ): string | null {
   const hit = refAt(text, rootPath, anchor);
   if (hit === null) return null;
   const { text: src, ref } = hit;
-  const newText =
-    placement.id === undefined
-      ? JSON.stringify(placement.seg)
-      : `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
+  const newText = `{ seg: ${JSON.stringify(placement.seg)}, id: ${JSON.stringify(placement.id)} }`;
   const { commaEnd, line } = trailerAfter(src, ref.span.end);
   if (startsLine(src, ref.span.start) && line !== null) {
     const indent = src.slice(lineStartOf(src, ref.span.start), ref.span.start);

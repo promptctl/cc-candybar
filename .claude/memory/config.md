@@ -62,14 +62,18 @@ Reset deletes the setting at every layer: the globals, every bundled preset's gl
 
 Undo and redo work one step per click. A journal around every verb handler records each step, storing the whole file before and after for every file written. A step goes back as the changes between those two texts, so another session's write to a different setting of the same file doesn't stop it. A step whose setting no longer reads as it left it is refused loudly at the click, and that file drops off the session's stacks, since the step would be refused at every click that takes it. The text a step writes was loaded by nobody, so it passes the same loader gate as every other write. A write that fails for I/O keeps the step, to land once it can.
 
-Edit mode holds a session draft with its own undo and redo. Preview uses the config the draft edits, and write availability follows the current host observation. Save merges the draft through the guarded writer, which can accept disjoint changes and leaves a conflicting draft open. Cancel drops the draft and its history.
+Edit mode holds a session draft with its own undo and redo. Preview uses the config the draft edits, and write availability follows the current host observation. Save merges the draft through the guarded writer, which can accept disjoint changes and leaves a conflicting draft open.
+
+An open edit holds every session write made inside it, as it holds its file changes: menus opened or closed, drafts, and edit mode's own keys. Save commits what persists in the save's one undo step, and cancel drops it all, so the menus a user touched while editing return as they were. The edit opens and closes at the one place every click's writes pass, so any control that enters or leaves edit mode needs no bookkeeping of its own.
+
+Edit mode's own keys sit in a namespace of their own and never persist, because no edit outlives the renderer: one stored would reopen a panel or a library on a bar that has no edit. With no edit open a write to one has no meaning, so a stale click's is dropped and logged rather than stored.
 
 ## Placements
 
 A segment declaration is a definition. Each node in a layout is a placement, identified by its id or, failing that, the segment name. Per-instance state is keyed on that id.
 
 - A removal target or an anchor is a placement id, and it's checked only at click time. A load-time check would reject the config its own click wrote.
-- An insertion mints its id at click time, over the rendered tree.
+- An insertion gives the placement a fresh explicit id, its segment's name and a random suffix, because everything a session keyed on an id (a menu left open, a draft, a configure panel) would otherwise come back on a new placement that took an old one's id, in every session sharing the config. So a removal releases nothing, and an authored id keeps its state.
 - Edit chrome is named by the placement and preset it serves, each spelled injectively, because a name keyed on walk position hands an open menu or list to a neighbour on every add, and the identifier collapse would merge names that differ only in punctuation.
 - Configuring is a level inside arranging and is held in its own key, so configuring two placements at once can't be represented, and leaving edit mode by any control clears it.
 - No variable may live under `settings`, because that name holds the placement's settings.

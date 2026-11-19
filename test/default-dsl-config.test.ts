@@ -65,6 +65,7 @@ import { REMOVE_GLYPH } from "../src/config/edit-glyphs";
 import { type Instant, instantOf } from "../src/utils/instant";
 import { systemTimekeeper } from "../src/time";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { sharedMenuStateKey } from "../src/config/menu-keys";
 
 // The powerline cap glyphs, which visible segment text is read without.
 const CAPS = /[\u{E0B0}-\u{E0BC}]/gu;
@@ -550,7 +551,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           { verb: VERB_SET_STATE, args: [SID, "candybar.menu", "open"] },
           {
             verb: VERB_SET_STATE,
-            args: [SID, "menus.candybar_pickers", "candybar.apply.theme"],
+            args: [SID, sharedMenuStateKey("candybar.pickers"), "candybar.apply.theme"],
           },
         ]),
         ctx,
@@ -595,7 +596,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       await clickUrl(
         effectsUrl([
           { verb: VERB_SET_STATE, args: [SID, "style", targetStyle] },
-          { verb: VERB_SET_STATE, args: [SID, "menus.candybar_pickers", "gear"] },
+          { verb: VERB_SET_STATE, args: [SID, sharedMenuStateKey("candybar.pickers"), "gear"] },
         ]),
         ctx,
       );
