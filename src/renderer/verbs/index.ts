@@ -121,13 +121,11 @@ import {
   VERB_UNDO,
   VERB_SLASH,
   VERB_RUN,
-  VERB_REPO_CONFIG,
   VERB_COPY_DIAGNOSTIC,
   type EvaluatedRun,
   type AdmittedClick,
   type ClickStep,
   type GlobalStep,
-  type SessionVerb,
 } from "../../click/wire";
 import type { LinkSigner } from "../../click/link-signer";
 import {
@@ -142,8 +140,6 @@ import type {
   EffectId,
   EffectOutcome,
 } from "../../renderer-interface/interface";
-import { repoAnswerFields } from "../../config/repo-question";
-import { REPO_ANSWERS } from "../../config/loader/repo-gate";
 import type {
   DeclaredSources,
   SessionContext,
@@ -1227,33 +1223,11 @@ function runOf(
 
 const run: VerbHandler = (args, ctx) => ask(ctx, runOf(args, ctx));
 
-// ─── Repository configs (brandon-unfiled-3248.kezw) ─────────────────────────
-
-// [LAW:parse-dont-validate] An answer is recorded only when its mac verifies:
-// the question drew it, for this session, for this directory and this answer.
-// The link's own signature proves only that the bar drew the link, and a
-// config can draw any link, so the answer keeps a mac of its own. The book
-// lives beside the link key. The host lands the answer with the click's
-// changes or not at all, and its config discovery then hands in a new config
-// for every origin with a repository to ask about, the clicking session's
-// before the click answers.
-const repoConfig: VerbHandler = (args, ctx) => {
-  const [dir = "", answer = "", mac = ""] = args;
-  const sid = ctx.session;
-  const answered = REPO_ANSWERS.find((known) => known === answer);
-  if (
-    answered === undefined ||
-    !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)
-  ) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon",
-    );
-  }
-  ctx.configWrites.answer(dir, answered);
-};
-
 // The decoded session verbs index this complete table.
-const SESSION_HANDLERS: Record<SessionVerb, VerbHandler> = {
+const SESSION_HANDLERS: Record<
+  Extract<ClickStep, { kind: "session" }>["verb"],
+  VerbHandler
+> = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
   [VERB_SET_CONFIG]: setConfig,
@@ -1270,7 +1244,6 @@ const SESSION_HANDLERS: Record<SessionVerb, VerbHandler> = {
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
   [VERB_RUN]: run,
-  [VERB_REPO_CONFIG]: repoConfig,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic,
 };
 
@@ -1487,8 +1460,17 @@ export function runClick(click: AdmittedClick, ctx: VerbContext): void {
         click.steps,
         c.log,
         (step) => {
-          if (step.kind === "global") globalAct(step, c, sid);
-          else SESSION_HANDLERS[step.verb](step.args, c);
+          switch (step.kind) {
+            case "global":
+              globalAct(step, c, sid);
+              break;
+            case "session":
+              SESSION_HANDLERS[step.verb](step.args, c);
+              break;
+            case "repo-answer":
+              c.configWrites.answer(step.dir, step.answer);
+              break;
+          }
         },
         (message) => holdClickError(c.sessionState, sid, message, c.now()),
       );

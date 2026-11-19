@@ -19,7 +19,7 @@ class LinkProof {
               args: Object.freeze([...target.effect.args] as const),
             }),
           })
-        : Object.freeze({ kind: "href", url: target.url });
+        : Object.freeze({ ...target });
     // [LAW:one-source-of-truth] Style.equals compares links and ignores meta.
     // The marker is the equality projection of the target kept with the span.
     this.marker = `${MARKER}${Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;

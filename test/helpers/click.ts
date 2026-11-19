@@ -325,7 +325,7 @@ export const CLICK_VERBS: ReadonlyMap<string, (value: string, ctx: VerbContext) 
 
 // Enter through the same admission and dispatch as the daemon.
 export function clickVerb(verb: string, value: string, ctx: VerbContext): void {
-  const click = admitClick(verb, value);
+  const click = admitClick(verb, value, ctx.links);
   runClick(click, {
     ...ctx,
     context: click.scope === "session" ? bookedContext(ctx.sessionState, click.session) : null,

@@ -43,7 +43,7 @@ export function parseClick(
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value),
+      click: admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery,
     };

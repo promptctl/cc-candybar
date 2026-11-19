@@ -10,7 +10,11 @@ import { decodeAnsi, Style } from "@promptctl/rich-js";
 
 import { textOf } from "../../../src/render/frame";
 import { effectsOf, linksOf } from "../../../src/click/read";
-import { VERB_OPEN_VSCODE } from "../../../src/click/wire";
+import {
+  VERB_OPEN_VSCODE,
+  VERB_REPO_CONFIG,
+  VERB_RUN,
+} from "../../../src/click/wire";
 import {
   openFrameStream,
   type StreamEnd,
@@ -23,6 +27,9 @@ import { DISCLOSURE_GLYPH_CLOSE } from "../../../src/config/disclosure";
 import {
   click,
   drawnLink,
+  findUrl,
+  frameRequest,
+  hookData,
   render,
   renderBody,
   renderRequest,
@@ -34,6 +41,7 @@ import {
   type IsolatedDaemonHandle,
 } from "../../helpers/spawn-isolated-daemon";
 import { until } from "../../helpers/until";
+import { readDiagnostics } from "../../helpers/diagnostics-viewer";
 
 jest.setTimeout(30_000);
 
@@ -269,6 +277,92 @@ describe("the daemon's renderer process", () => {
     } finally {
       stream.close();
     }
+  });
+
+  test("admits the repository decision from an earlier frame", async () => {
+    const init = spawnSync("git", ["-C", projectDir, "init", "-q"], {
+      encoding: "utf8",
+    });
+    if (init.status !== 0) throw new Error(`git init: ${init.stderr}`);
+    fs.writeFileSync(
+      path.join(projectDir, ".cc-candybar.json5"),
+      JSON.stringify({
+        segments: { agreed: { template: "REPOSITORY-APPROVED" } },
+        root: { h: ["agreed"] },
+      }),
+    );
+    const session = "rproc-repo";
+    const draw = () => render(handle.sockPath, session, projectDir);
+    const before = await draw();
+    expect(textOf(before)).not.toContain("REPOSITORY-APPROVED");
+    const pages = await readDiagnostics(
+      handle.sockPath,
+      session,
+      projectDir,
+      before,
+    );
+    const approve = findUrl(
+      pages.flatMap(({ rendered }) => linksOf(rendered).map(({ url }) => url)),
+      (effects) =>
+        effects.some(
+          ({ verb, args }) => verb === VERB_REPO_CONFIG && args[2] === "approved",
+        ),
+    );
+    if (approve === undefined) throw new Error("missing repository approval");
+    const later = await draw();
+    expect(textOf(later)).not.toContain("REPOSITORY-APPROVED");
+    await click(handle.sockPath, approve, 20_000);
+    expect(textOf(await draw())).toContain("REPOSITORY-APPROVED");
+  });
+
+  test("a run from an earlier frame keeps its drawn arguments and environment", async () => {
+    const config = path.join(projectDir, "run.json5");
+    const record = path.join(projectDir, "observed.json");
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        variables: {
+          shown: { kind: "input", path: "model.display_name", type: "string" },
+        },
+        actions: {
+          remember: {
+            run: [
+              process.execPath,
+              "-e",
+              'require("node:fs").writeFileSync(process.argv[1], JSON.stringify([process.argv[2], process.env.DRAWN]))',
+              record,
+              "{{ .shown }}",
+            ],
+            env: { DRAWN: "{{ .shown }}" },
+          },
+        },
+        segments: { saved: { template: '{{ action "remember" .shown }}' } },
+        root: { h: ["saved"] },
+      }),
+    );
+    const session = "rproc-run";
+    const args = ["cc-candybar", "--config", config];
+    const draw = (value: string) =>
+      frameRequest(handle.sockPath, {
+        ...renderBody(session, projectDir, {}, args),
+        hookData: {
+          ...hookData(session, projectDir),
+          model: { id: "fixture", display_name: value },
+        },
+      });
+    const before = await draw("first value");
+    const old = linksOf(before).find(
+      ({ text, url }) =>
+        text === "first value" && effectsOf(url).some(({ verb }) => verb === VERB_RUN),
+    )?.url;
+    if (old === undefined) throw new Error("missing run from the first frame");
+    expect(textOf(await draw("second value"))).toContain("second value");
+    await click(handle.sockPath, old);
+    const wanted = JSON.stringify(["first value", "first value"]);
+    await until(
+      () => fs.existsSync(record) && fs.readFileSync(record, "utf8") === wanted,
+      "the run's captured argv and env",
+    );
   });
 
   test("a renderer outlives no daemon, even one killed with no cleanup", async () => {

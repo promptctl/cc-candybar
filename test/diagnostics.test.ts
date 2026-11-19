@@ -368,8 +368,9 @@ describe("the viewer", () => {
       [],
     );
     expect(list[0]!.copy).toBe(prompt);
-    expect(list[0]!.lines[0]![0].link).not.toBeNull();
-    expect(list[0]!.lines[0]![0].link!.length).toBeLessThan(200);
+    const copy = list[0]!.lines[0]![0].link;
+    if (typeof copy !== "string") throw new Error("missing copy link");
+    expect(copy.length).toBeLessThan(200);
     expect(list[0]!.lines[1]![0].link).toBeNull();
     for (const url of linkUrls(viewer(list, at(1), SID, "request", geometry(80))))
       expect(url).not.toContain("FIX");

@@ -728,7 +728,6 @@ export function mainRendererOf(
   const parts: RendererParts = {
     ...host,
     time,
-    linkSigner,
     sessionState: edits.view,
     renderCache,
     worldStates,

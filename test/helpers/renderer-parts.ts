@@ -13,7 +13,6 @@ import type {
 } from "../../src/renderer/verbs/port";
 import type { WorldStates } from "../../src/renderer/world-states";
 import type { AdapterToHost } from "../../src/renderer-interface/adapter";
-import { TEST_SIGNER } from "./link-signer";
 import type { EffectId } from "../../src/renderer-interface/interface";
 import { TurnTime } from "../../src/renderer/turn-time";
 import { MenuIdle } from "../../src/renderer/menu-idle";
@@ -83,7 +82,6 @@ export function rendererParts({
     // No feed follows a session, and nothing is idle.
     menuIdle: new MenuIdle(),
     feeds: noFeeds(),
-    linkSigner: TEST_SIGNER,
     sessionState,
     renderCache: cache as never,
     worldStates,

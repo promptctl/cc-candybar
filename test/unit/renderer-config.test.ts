@@ -247,7 +247,7 @@ test("a click on a session with no live context waits for the config of the orig
   const parked = answered(
     await handIn(r, {
       kind: "click",
-      click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette])),
+      click: admitClick(VERB_SET_CONFIG, encodeSegments([session, "user", "palette", palette]), TEST_SIGNER),
       arrival: { via: "link", delivery: { kind: "cli" } },
       // Read back from the book after a restart: no live part.
       context: { session, durable: { origin }, live: null },

@@ -19,6 +19,7 @@ import {
 import { EMPTY_DEFAULT } from "./helpers/parse-and-validate";
 import type { DslConfig } from "../src/config/dsl-types";
 import { sessionIdOf } from "../src/daemon/foundations/session-id";
+import { TEST_SIGNER } from "./helpers/link-signer";
 
 const ABC_123 = sessionIdOf("abc-123");
 const SESSION_A = sessionIdOf("session-a");
@@ -104,7 +105,7 @@ describe("click protocol", () => {
       "toString",
       "hasOwnProperty",
     ]) {
-      expect(() => admitClick(poison, "a")).toThrow(BadVerbArgs);
+      expect(() => admitClick(poison, "a", TEST_SIGNER)).toThrow(BadVerbArgs);
     }
   });
 
