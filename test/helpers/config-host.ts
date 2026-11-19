@@ -172,7 +172,8 @@ export class DiscoveringCache<
   }
 
   override getOrCreate(origin: RenderOrigin): CacheEntry {
-    if (!this.shut) this.configs.follow(origin);
+    // A test driving the actual renderer turn has already chosen its input.
+    if (!this.shut && !this.holdsConfig(origin)) this.configs.follow(origin);
     return super.getOrCreate(origin);
   }
 

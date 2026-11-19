@@ -35,7 +35,9 @@ import type {
   RendererOutput,
   RequestId,
   Subscription,
+  Subscriptions,
 } from "../src/renderer-interface/interface";
+import { rendererOf } from "../src/renderer-interface/interface";
 import { mainRenderer } from "../src/renderer/main";
 import {
   drawRender,
@@ -345,6 +347,82 @@ async function dueFrame(r: Renderer, elapsed = 0) {
 }
 
 describe("a statusline request", () => {
+  test("a replacement keeps the selected plugin build and the current error until valid removal", async () => {
+    const prior = renderer();
+    let current = prior;
+    const context = checked();
+    const origin = context.requested;
+    const file = path.join(dir, "config.json5");
+    const plugin = path.join(dir, "p");
+    fs.mkdirSync(plugin);
+    fs.writeFileSync(path.join(plugin, "plugin.json5"), `{
+      sources: { marker: { scope: 'session', refresh: { watch: true }, read: { file: { json: true } } } },
+      segments: { marker: { template: 'VALID-PLUGIN' } }
+    }`);
+    fs.writeFileSync(file, '{ plugins: ["./p/plugin.json5"], root: { h: ["plugins.p.marker"] } }');
+    const worldState = prior.rig.served.collector.requested(context, TEST_ENVIRONMENT);
+    const { discovery } = prior.rig.cache.configs;
+    const published: Subscriptions[] = [];
+    const host = rendererHost(
+      MAIN_RENDERER,
+      systemTimekeeper,
+      hostHeld(rendererOf({
+        event: (input) => current.r.answer(input),
+        adapter: (input) => current.r.answer(input),
+      }), systemTimekeeper.monotonic),
+      () => {},
+      {
+        subscribed: (subscriptions) => void published.push(subscriptions),
+        frames: () => {}, stored: () => {}, recorded: () => {},
+        holding: () => () => {},
+      },
+      { ...NO_ACTS, configs: discovery },
+    );
+    cleanups.push(() => host.closeWake());
+    const submit = (event: Event) => host.answer(() => ({ kind: "event", event }));
+    const draw = async () => textOf(parseFrame(presentOf((await submit({
+      kind: "request", id: REQUEST, context,
+    })).effects).frame));
+    expect(await submit({ kind: "context", context, worldState })).toMatchObject({ kind: "answered" });
+    expect(await draw()).toContain("VALID-PLUGIN");
+    const good = discovery.snapshotOf(origin);
+    if (good === null) throw new Error("missing accepted config");
+    expect(discovery.retainedOf(origin)).toBe("current");
+    const originalSources = published.at(-1)?.sources[SESSION];
+    expect(originalSources).toEqual([
+      expect.objectContaining({ kind: "plugin", source: "plugins.p.marker" }),
+    ]);
+
+    const reload = async (text: string) => {
+      fs.writeFileSync(file, text);
+      expect(discovery.landed([file])).toEqual([origin]);
+      const config = discovery.snapshotOf(origin);
+      if (config === null) throw new Error("missing changed config");
+      expect(await submit({ kind: "config", origin, config })).toMatchObject({ kind: "answered" });
+    };
+    await reload("{ invalid syntax");
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(discovery.retainedOf(origin)).toBe(good);
+    const error = current.rig.cache.getOrCreate(origin).lastError;
+    expect(error).not.toBeNull();
+
+    current = renderer();
+    expect(await host.start(() => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [{ context, worldState }] },
+    }), [])).toMatchObject({ kind: "answered" });
+    expect(published.at(-1)?.sources[SESSION]).toEqual(originalSources);
+    expect(await draw()).toContain("VALID-PLUGIN");
+    expect(current.rig.cache.getOrCreate(origin).lastError).toBe(error);
+    expect(discovery.retainedOf(origin)).toBe(good);
+
+    await reload("{ segments: { s: { template: 'AFTER-REMOVAL' } }, root: { h: ['s'] } }");
+    expect(published.at(-1)?.sources[SESSION]).toEqual([]);
+    expect(await draw()).toContain("AFTER-REMOVAL");
+    expect(current.rig.cache.getOrCreate(origin).lastError).toBeNull();
+    expect(discovery.retainedOf(origin)).toBe("current");
+  });
+
   test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {
     const t = renderer();
     const context = checked();
@@ -353,7 +431,7 @@ describe("a statusline request", () => {
       t.rig.cache.configs.follow(origin);
       const config = t.rig.cache.configs.discovery.snapshotOf(origin);
       if (config === null) throw new Error("the host did not hold the config");
-      return { origin, config, retained: true };
+      return { origin, config, retained: "current" as const };
     });
     const first = answered(await handIn(t.r, {
       kind: "start",

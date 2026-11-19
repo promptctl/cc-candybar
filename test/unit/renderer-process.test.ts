@@ -171,7 +171,7 @@ const PINNED: Timed<AdapterOutput> = {
   kind: "replied",
   stored: [],
   reply: { kind: "close-journal" },
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
   wake: null,
   turnMs: 0,
 };
@@ -446,7 +446,7 @@ describe("ids a renderer mints", () => {
       stored: [],
       record: [],
       effects: [effect as never],
-      subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
+      subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
       wake: null,
       frames: [],
       turnMs: 0,
@@ -498,7 +498,7 @@ describe("ids a renderer mints", () => {
         effects: [
           { kind: "copy", id: 1 as EffectId, session: SESSION, text: "x" },
         ],
-        subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
+        subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
         wake: null,
         frames: [],
         turnMs: 0,

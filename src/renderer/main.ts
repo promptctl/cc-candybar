@@ -147,6 +147,7 @@ export function mainRenderer(
   let subscriptions: Subscriptions = {
     sources: {},
     managedFolders: [],
+    configSelections: [],
     lanes: {},
     configs: [],
   };
@@ -243,36 +244,52 @@ export function mainRenderer(
   ): void => {
     switch (event.kind) {
       case "start": {
-        const configs = event.configs ?? [];
-        // [LAW:no-ambient-temporal-coupling] A replacement opens its views
-        // against the offered facts in the first turn. Its first declaration
-        // can then replace the predecessor's without an intermediate gap.
-        for (const { origin, config } of configs)
-          parts.renderCache.configure(origin, config);
-        const live = new Set(
-          event.sessions.map(({ context }) => originKey(context.requested)),
+        const configs = new Map(
+          (event.configs ?? []).map((offer) => [
+            originKey(offer.origin),
+            offer,
+          ]),
         );
+        // [LAW:no-ambient-temporal-coupling] A replacement opens its views
+        // against the offered facts in the first turn. An older selected
+        // input establishes the state the ordinary latest attempt reloads.
+        const offered = (at: RenderOrigin): void => {
+          const key = originKey(at);
+          const offer = configs.get(key);
+          if (offer === undefined) return;
+          configs.delete(key);
+          const { origin, config, retained } = offer;
+          if (typeof retained === "object") {
+            parts.renderCache.configure(origin, retained);
+            parts.renderCache.getOrCreate(origin);
+          }
+          parts.renderCache.configure(origin, config);
+        };
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
         // each whatever another's opening, or a feed, threw.
         runEach([
           () => feeds.view(event.viewers, time.tick),
-          ...event.sessions.map(
-            ({ context, worldState }) =>
-              () =>
-                turn(
-                  { kind: "context", context, worldState },
-                  record,
-                  effects,
-                  frames,
-                ),
-          ),
-          ...configs.flatMap(({ origin, retained }) =>
-            retained && !live.has(originKey(origin))
-              ? [() => void parts.renderCache.getOrCreate(origin)]
-              : [],
-          ),
+          ...event.sessions.map(({ context, worldState }) => () => {
+            offered(context.requested);
+            turn(
+              { kind: "context", context, worldState },
+              record,
+              effects,
+              frames,
+            );
+          }),
+          // A live session gets its cache entry before idle entries warm,
+          // so they cannot take the budget a pinned view needs.
+          () =>
+            runEach(
+              [...configs.values()].map(({ origin, retained }) => () => {
+                offered(origin);
+                if (retained !== undefined)
+                  parts.renderCache.getOrCreate(origin);
+              }),
+            ),
         ]);
         return;
       }
@@ -473,6 +490,12 @@ export function mainRenderer(
   const managedFolders = computed(() => parts.renderCache.managedFolders(), {
     equals: compareStructural,
   });
+  const configSelections = computed(
+    () => parts.renderCache.configSelections(),
+    {
+      equals: compareStructural,
+    },
+  );
   const laneDeclaration = computed(
     () => {
       // [LAW:one-source-of-truth] Read off the same open views: a session whose
@@ -544,6 +567,7 @@ export function mainRenderer(
         managedFolders: managedFolders.get(),
         lanes,
         configs: configOrigins.get(),
+        configSelections: configSelections.get(),
       },
       unprepared,
     };

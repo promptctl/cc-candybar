@@ -56,7 +56,7 @@ const output = (effects: readonly Effect[]): RendererOutput => ({
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
   wake: null,
   record: [],
   frames: [],

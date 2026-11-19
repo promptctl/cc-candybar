@@ -80,6 +80,8 @@ export const NO_CONFIGS: HostWorld["configs"] = {
       );
   },
   snapshotOf: () => null,
+  selected: () => {},
+  retainedOf: () => undefined,
   landed: () => [],
   path: () => undefined,
   repoDir: () => undefined,

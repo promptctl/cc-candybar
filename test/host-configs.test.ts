@@ -77,7 +77,7 @@ const output = (
   kind: "answered",
   stored: [],
   effects,
-  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs },
+  subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs },
   wake: null,
   record: [],
   frames: [],
@@ -101,6 +101,7 @@ function hostOver(
   const declarations: RendererOutput["subscriptions"][] = [];
   let followed: readonly RenderOrigin[] = [];
   const configs: HostWorld["configs"] = {
+    ...NO_ACTS.configs,
     follow: (origins) => {
       follows.push(origins);
       followed = origins;

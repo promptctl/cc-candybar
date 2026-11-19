@@ -275,13 +275,20 @@ export function rendererOverLines(deps: {
     )
       ? subscriptions.managedFolders
       : next.managedFolders;
+    const configSelections = compareStructural(
+      subscriptions.configSelections,
+      next.configSelections,
+    )
+      ? subscriptions.configSelections
+      : next.configSelections;
     if (
+      configSelections !== subscriptions.configSelections ||
       sources !== subscriptions.sources ||
       lanes !== subscriptions.lanes ||
       configs !== subscriptions.configs ||
       managedFolders !== subscriptions.managedFolders
     )
-      subscriptions = { sources, lanes, configs, managedFolders };
+      subscriptions = { sources, lanes, configs, managedFolders, configSelections };
     return subscriptions;
   };
   const received = (output: WireAnswer): Answer | null => {

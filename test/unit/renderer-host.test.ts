@@ -31,7 +31,7 @@ import type { Renderer } from "../../src/renderer-interface/interface";
 // A renderer held as the host holds it, its turns taking no time.
 const held = (renderer: Renderer) => hostHeld(renderer, () => 0);
 
-const NONE: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configs: [] };
+const NONE: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] };
 
 // A clock that reads `wall` and `mono` as they stand, and sets no timer: no
 // output here declares a wake.
@@ -608,6 +608,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
       configs: {
         ...NO_ACTS.configs,
         follow: (wanted) => followed.push(wanted.map(({ cwd }) => cwd)),
+        retainedOf: () => "current",
         snapshotOf: ({ cwd }) => {
           read.push(cwd);
           return available ? config : null;
@@ -657,7 +658,7 @@ test("failed replacement starts leave the accepted declaration until a complete 
   expect(await start()).toMatchObject({ kind: "answered" });
   expect(heard.at(-1)).toMatchObject({
     kind: "start",
-    configs: [{ origin, config, retained: true }],
+    configs: [{ origin, config, retained: "current" }],
   });
   expect(heard.map(({ kind }) => kind)).toEqual([
     "due", "config", "due", "start", "effect-done", "start",

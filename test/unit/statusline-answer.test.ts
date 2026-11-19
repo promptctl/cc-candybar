@@ -79,6 +79,7 @@ const NO_SUBSCRIPTIONS: Subscriptions = {
   sources: {},
   lanes: {},
   managedFolders: [],
+  configSelections: [],
   configs: [],
 };
 // The request's deadline is a timer the case fires itself (`deadlines`).
@@ -407,6 +408,7 @@ test("a turn that throws still hands the host what its open views read", async (
     sources: { [SESSION]: [] },
     lanes: {},
     managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const subscribed: Subscriptions[] = [];
@@ -506,12 +508,14 @@ test("the session's context reaches the renderer first, with the world state rea
     sources: { [SESSION]: [] },
     lanes: {},
     managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const drawn: Subscriptions = {
     sources: {},
     lanes: {},
     managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const subscribed: Subscriptions[] = [];

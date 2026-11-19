@@ -28,6 +28,7 @@ test("a renderer restart restores live sessions beyond the feed's request histor
     sources: {},
     lanes: {},
     managedFolders: [],
+    configSelections: [],
     configs: [],
   };
   const renderer: RendererPort = () => ({

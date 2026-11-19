@@ -47,7 +47,7 @@ function talkingRenderer(host: AdapterToHost): TimedRenderer {
           kind: "replied",
           stored: [],
           reply: { kind: "close-journal" },
-          subscriptions: { sources: {}, lanes: {}, managedFolders: [], configs: [] },
+          subscriptions: { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] },
           wake: null,
         };
       },
@@ -131,7 +131,7 @@ const push = (kind: "close-journal" | "close-views"): AdapterInput => ({
   tick: 0 as Tick,
 });
 
-const empty: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configs: [] };
+const empty: Subscriptions = { sources: {}, lanes: {}, managedFolders: [], configSelections: [], configs: [] };
 const opened: Subscriptions = {
   ...empty,
   managedFolders: ["/p/plugin/session"],
@@ -188,6 +188,24 @@ test("a renderer pipe carries changes to the declaration independently of wakes"
   ]);
   expect(outputs[0]).toMatchObject({ subscriptions: empty, wake: 1 });
   expect(outputs[4]).toMatchObject({ subscriptions: empty });
+});
+
+test("a selection change crosses the wire without republishing unchanged resource demand", async () => {
+  const origin = opened.configs[0]!;
+  const selected = {
+    ...opened,
+    configSelections: [{ origin, digest: null }],
+  };
+  const { renderer } = linesOver(inertHost(), undefined, {
+    renderer: declaring([opened, selected, selected]),
+  });
+  const before = (await renderer.answer(push("close-journal"))).subscriptions;
+  const after = (await renderer.answer(push("close-journal"))).subscriptions;
+  const repeated = (await renderer.answer(push("close-journal"))).subscriptions;
+  expect(after.configSelections).toEqual(selected.configSelections);
+  expect(after.managedFolders).toBe(before.managedFolders);
+  expect(after.configs).toBe(before.configs);
+  expect(repeated).toBe(after);
 });
 
 test("a replacement process sends the same nonempty declaration on its first answer", async () => {
