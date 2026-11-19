@@ -28477,6 +28477,84 @@ var SETTINGS_REF = {
 var DIAGNOSTICS_VIEWING = `${SETTINGS_NS}diagnostics`;
 var DIAGNOSTICS_CLOSED = "0";
 
+// src/config/loader/repo-gate.ts
+init_globals();
+var REPO_ANSWERS = ["approved", "declined"];
+function answerDir(d) {
+  return d.link.kind === "linked" ? d.link.main : d.dir;
+}
+var answerOf = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
+function ruling(answers, d) {
+  const key = answerDir(d);
+  if (answers.kind === "failed") return { standing: "unread", under: key };
+  const repo2 = answerOf(answers.value, key);
+  const own2 = answerOf(answers.value, d.dir);
+  if (repo2 === null) {
+    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
+  }
+  return {
+    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
+    under: key
+  };
+}
+function gateRepos(answers, dirs, project) {
+  const reached = reachedDirs(dirs, project);
+  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
+  const standing2 = (s) => ruled.filter((r) => r.standing === s);
+  const repos = (s) => [
+    ...new Set(standing2(s).map((r) => r.under))
+  ];
+  return {
+    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
+    approved: standing2("approved").map((r) => r.dir),
+    awaiting: repos("awaiting"),
+    declined: repos("declined"),
+    unproven: reached.flatMap(
+      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
+    ),
+    unread: answers.kind === "failed" ? answers.reason : null
+  };
+}
+function reachedDirs(dirs, project) {
+  return [
+    ...new Map(
+      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
+    ).values()
+  ];
+}
+function repoQuestion(answers, dirs, project) {
+  const [reached] = reachedDirs(dirs, project);
+  if (reached === void 0) return null;
+  const { standing: standing2, under: under2 } = ruling(answers, reached);
+  return {
+    dir: under2,
+    standing: standing2,
+    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
+  };
+}
+function withAnswer(book, dir, answer2, superseded) {
+  if (book[dir] === answer2 && superseded.length === 0) return book;
+  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
+  return { ...Object.fromEntries(rest2), [dir]: answer2 };
+}
+function parseRepoConfigBook(doc) {
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
+    return { kind: "failed", reason: "is not an object" };
+  }
+  for (const [dir, answer2] of Object.entries(doc)) {
+    if (!REPO_ANSWERS.includes(answer2)) {
+      return {
+        kind: "failed",
+        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
+      };
+    }
+  }
+  return { kind: "ok", value: doc };
+}
+function repoUnreadNotice(gate2) {
+  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
+}
+
 // src/daemon/foundations/verb-error.ts
 init_globals();
 
@@ -28602,6 +28680,14 @@ var VERB_REWIND = "rewind";
 var VERB_SLASH = "slash";
 var VERB_RUN = "run";
 var VERB_REPO_CONFIG = "repo-config";
+function repoAnswerFields(sessionId2, dir, answer2) {
+  return {
+    sessionId: sessionId2,
+    action: VERB_REPO_CONFIG,
+    declaration: dir,
+    evaluated: answer2
+  };
+}
 var VERB_COPY_DIAGNOSTIC = "copy-diagnostic";
 var sayStep = (key, by) => `step ${key} ${by.startsWith("-") ? "down" : "up"} by ${by.replace("-", "")}`;
 var withoutNs = (key, ns) => key.startsWith(ns) ? key.slice(ns.length) : key;
@@ -28757,7 +28843,7 @@ var VERB_NAMES = Object.freeze([
 function isEffectVerb(verb) {
   return Object.hasOwn(SAYS, verb);
 }
-function admitClick(verb, value) {
+function admitClick(verb, value, signer) {
   if (verb !== VERB_DISPATCH && !isEffectVerb(verb))
     throw new BadVerbArgs(`unknown click verb: ${verb}`);
   const raw = verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
@@ -28804,13 +28890,24 @@ function admitClick(verb, value) {
       const args = separator === -1 ? [] : decodeWire(
         () => step4.value.slice(separator + 1).split("/").map(decodeURIComponent)
       );
-      scoped.steps.push({ kind: "session", verb: name, args });
+      scoped.steps.push(
+        name === VERB_REPO_CONFIG ? admitRepoAnswer(scoped.id, args, signer) : { kind: "session", verb: name, args }
+      );
     } catch (e) {
       if (!(e instanceof BadVerbArgs)) throw e;
       scoped.steps.push({ kind: "invalid", reason: `${name}: ${e.message}` });
     }
   }
   return scoped === void 0 ? { scope: "global", verb, steps: global2 } : { scope: "session", verb, session: scoped.id, steps: scoped.steps };
+}
+function admitRepoAnswer(session, [dir = "", value = "", mac = ""], signer) {
+  const answer2 = REPO_ANSWERS.find((known) => known === value);
+  if (answer2 === void 0 || !signer.verify(repoAnswerFields(session, dir, answer2), mac)) {
+    throw new BadVerbArgs(
+      "the answer's signature does not match what it carries: it was not drawn by this daemon"
+    );
+  }
+  return { kind: "repo-answer", verb: VERB_REPO_CONFIG, dir, answer: answer2 };
 }
 
 // src/host.ts
@@ -30014,7 +30111,13 @@ init_globals();
 function hrefOfDrawnLink(link) {
   if (typeof link === "string") return link;
   if (link.kind === "href") return link.url;
+  if (link.kind === "repo-answer") return repoAnswerUrl(link, "");
   return effectsUrl([link.effect]);
+}
+function repoAnswerUrl({ session, dir, answer: answer2 }, proof) {
+  return effectsUrl([
+    { verb: VERB_REPO_CONFIG, args: [session, dir, answer2, proof] }
+  ]);
 }
 
 // src/click/link-signer.ts
@@ -30482,6 +30585,13 @@ var import_node_path5 = __toESM(require_path_browserify(), 1);
 // src/daemon/foundations/renderer-name.ts
 init_globals();
 var MAIN_RENDERER = "main";
+function rendererNameOf(raw) {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/.test(raw))
+    throw new Error(
+      `${JSON.stringify(raw)} is no renderer name: lowercase letters, digits and inner dashes, up to 32`
+    );
+  return raw;
+}
 
 // src/daemon/paths.ts
 function xdgEnv(env2, name) {
@@ -47139,7 +47249,7 @@ var LinkProof = class {
         verb: target.effect.verb,
         args: Object.freeze([...target.effect.args])
       })
-    }) : Object.freeze({ kind: "href", url: target.url });
+    }) : Object.freeze({ ...target });
     this.marker = `${MARKER}${import_buffer.Buffer.from(JSON.stringify(this.target)).toString("base64url")}`;
   }
 };
@@ -49912,7 +50022,7 @@ function parseClick(url, delivery, links) {
   try {
     return {
       kind: "link",
-      click: admitClick(link.verb, link.value),
+      click: admitClick(link.verb, link.value, links),
       link: opened.value,
       delivery
     };
@@ -50137,44 +50247,6 @@ async function readTail(path31, maxBytes) {
     }
   });
 }
-function readTailSync(path31, maxBytes) {
-  let fd;
-  try {
-    fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code: code2 } = e;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    const stat3 = fstatSync(fd, { bigint: true });
-    if (!stat3.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat3.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = import_buffer.Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat3.dev}:${stat3.ino}`
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`
-      );
-    }
-  }
-}
 
 // src/daemon/foundations/debug-types.ts
 init_globals();
@@ -50214,7 +50286,7 @@ function perLane(value) {
   );
 }
 var UNFOLLOWED_FEEDS = perLane(() => UNFOLLOWED);
-var answerOf = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
+var answerOf2 = (answers, lane) => LANES[lane].handsOff ? answers.resp : answers.statusline;
 function parseLane(raw) {
   return typeof raw === "string" && Object.hasOwn(LANES, raw) ? raw : null;
 }
@@ -50447,6 +50519,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
       try {
         const checked = checkRenderRequest(req, stats, parts.log, parts.home);
         if (!checked.ok) return renderRecord(refusedRender(checked.problems));
+        const renderer2 = parts.rendererFor?.(checked.req, checked.environment, order2) ?? parts.renderer;
         sighted(checked.req, "drawing");
         frameFeeds.note(checked.req.hookData.session_id, checked.req, order2);
         if (frameFeeds.latest(checked.req.hookData.session_id) === checked.req)
@@ -50454,7 +50527,7 @@ async function replyTo(parts, req, timedOut, accepted, clientLeft) {
         const tmux3 = checked.req.hints.tmux;
         if (tmux3 != null) void parts.retiredTmuxStatus.observe(tmux3.socket);
         answered = await answerStatusline(
-          parts.renderer,
+          renderer2,
           parts.publishFrame,
           parts.collector,
           clock,
@@ -55275,31 +55348,44 @@ function setPlacementSetting(text4, rootPath, id2, setting, valueText) {
   return entryOf2(ref, "settings") === void 0 ? setBelow(src, ref, ["settings"], settings, JSON5_DIALECT) : setBelow(src, ref, ["settings", setting], valueText, JSON5_DIALECT);
 }
 
+// src/utils/regular-text.ts
+init_globals();
+function readRegularTextSync(path31) {
+  const fd = openSync(path31, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!fstatSync(fd).isFile()) throw new Error("not a file");
+    return readFileSync(fd, "utf8");
+  } finally {
+    try {
+      closeSync(fd);
+    } catch (error) {
+      debug(`close ${path31}: ${String(error)}`);
+    }
+  }
+}
+
 // src/claude-settings-read.ts
 var cannotRead = (settingsPath, e) => new Error(`cannot read ${settingsPath}: ${messageOf(e)}`, { cause: e });
 function readClaudeSettingsText(settingsPath) {
-  const read2 = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read2.kind) {
-    case "absent":
+  try {
+    return readRegularTextSync(settingsPath);
+  } catch (e) {
+    if (types.isNativeError(e) && "code" in e && (e.code === "ENOENT" || e.code === "ENOTDIR"))
       return "";
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read2.reason}`);
-    case "ok":
-      return read2.value.buf.toString("utf8");
+    throw cannotRead(settingsPath, e);
   }
 }
 function readClaudeSettingsOutcome(settingsPath) {
-  const reason = (e) => e instanceof Error ? e.message : String(e);
   let text4;
   try {
     text4 = readClaudeSettingsText(settingsPath);
   } catch (e) {
-    return failed(reason(e), "read");
+    return failed(messageOf(e), "read");
   }
   try {
     return ok(parseSettings(settingsPath, text4));
   } catch (e) {
-    return failed(reason(e), "parse");
+    return failed(messageOf(e), "parse");
   }
 }
 function parseSettings(settingsPath, text4) {
@@ -55315,7 +55401,7 @@ function parseSettings(settingsPath, text4) {
   }
   return parsed2;
 }
-var messageOf = (e) => e instanceof Error ? e.message : String(e);
+var messageOf = (e) => types.isNativeError(e) ? e.message : String(e);
 
 // src/segments/autocompact.ts
 init_globals();
@@ -56108,15 +56194,15 @@ function effectiveGlobal(staged, session, configDefault, floor3) {
     stale: staged == null && session.kind === "stale" ? session.stored : null
   };
 }
-function stalePick(setting, stored, wears) {
+function stalePick(setting, stored, wears, note) {
   return {
     kind: "stale",
     setting,
     stored,
     message: fallbackMessage(
       `the session's ${setting}`,
-      wears,
-      `its stored "${stored}" is not one this build and config offer`
+      wornName(wears),
+      `its stored "${stored}" is not one this build and config offer${note}`
     )
   };
 }
@@ -56124,17 +56210,23 @@ function fallbackMessage(where, wears, why2) {
   return `${where} rendered ${wears}: ${why2}`;
 }
 var wornName = (name) => `"${name}"`;
+function spellSetting(value) {
+  return typeof value === "boolean" ? value ? BOOLEAN_TRUE : BOOLEAN_FALSE : String(value);
+}
+var INSTALLED_LIST = listThemePalettes();
 function listResolvablePaletteNames() {
-  return listThemePalettes();
+  return INSTALLED_LIST;
+}
+var INSTALLED_THEMES = new Set(INSTALLED_LIST);
+function isInstalledTheme(name) {
+  return INSTALLED_THEMES.has(name);
+}
+function describeInstalledThemes() {
+  return [...INSTALLED_LIST].sort().join(", ");
 }
 var FOLLOW_BAR = "bar";
 function placementThemeNames() {
   return [FOLLOW_BAR, ...listResolvablePaletteNames()];
-}
-var installedThemes;
-function isInstalledTheme(name) {
-  installedThemes ??= new Set(listResolvablePaletteNames());
-  return installedThemes.has(name);
 }
 function isPlacementThemeName(name) {
   return name === FOLLOW_BAR || isInstalledTheme(name);
@@ -56163,8 +56255,7 @@ function resolveSelection(stagedName2, sessionPick, globalsValue, floor3, named2
 }
 var STYLE_FLOOR = "none";
 function namedStyle(name, declaredStyles) {
-  const value = declaredStyles[name];
-  return value === void 0 ? null : { kind: "decided", name, value };
+  return Object.hasOwn(declaredStyles, name) ? { kind: "decided", name, value: declaredStyles[name] } : null;
 }
 function decideStyleName(name, declaredStyles) {
   return namedStyle(name, declaredStyles) ?? namedStyle(STYLE_FLOOR, declaredStyles) ?? {
@@ -56396,34 +56487,19 @@ function inSettingDomain(decl, value) {
   }
   return typeof value === "string" && domain.includes(value);
 }
-function settingSpelling(value) {
-  return String(value);
+function savedSetting(node, name, decl) {
+  return node.settings?.[name] ?? decl.default;
 }
-function parseSettingSpelling(decl, raw) {
+function placementPick(decl, saved, raw) {
   const { domain } = decl;
-  return readStored(raw, (spelled) => {
+  const member = (spelled) => {
     if (typeof domain === "object" && "min" in domain) {
       return parseSessionInt(spelled, domain);
     }
     const value = domain === "bool" ? parseSessionBoolean(spelled) ?? spelled : spelled;
     return inSettingDomain(decl, value) ? value : null;
-  });
-}
-function placementPick(decl, saved, raw) {
-  return effectiveGlobal(
-    void 0,
-    parseSettingSpelling(decl, raw),
-    void 0,
-    saved
-  );
-}
-function placementSetting(node, name, decl, pick2) {
-  const draft = node.drafts?.[name];
-  return placementPick(
-    decl,
-    node.settings?.[name] ?? decl.default,
-    draft === void 0 ? null : pick2(draft)
-  );
+  };
+  return effectiveGlobal(void 0, readStored(raw, member), void 0, saved);
 }
 function describeSettingDomain(decl) {
   const { domain } = decl;
@@ -56701,10 +56777,10 @@ function optionalStringField(ctx, path31, raw, field) {
 function validatePaletteName(ctx, path31, raw) {
   const v = optionalStringField(ctx, path31, raw, "palette");
   if (v === void 0) return void 0;
-  if (!ctx.allowedPalettes.has(v)) {
+  if (!isInstalledTheme(v)) {
     ctx.issues.push({
       path: `${path31}.palette`,
-      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      message: `Unknown palette "${v}"${retiredThemeNote(v)}. Expected one of: ${describeInstalledThemes()}`,
       line: findKeyLine(ctx.source, [...path31.split("."), "palette"])
     });
     return void 0;
@@ -57530,6 +57606,11 @@ var ROWS = Object.entries(GLOBAL_FIELDS);
 var VALUED_FIELDS = ROWS.filter(
   ([, row]) => row.kind === "session" || row.kind === "config"
 ).map(([field]) => field);
+function perValuedField(value) {
+  return Object.fromEntries(
+    VALUED_FIELDS.map((field) => [field, value(field)])
+  );
+}
 var CONTROLLED_FIELDS = ROWS.filter(
   ([, row]) => row.kind === "session" || row.kind === "selection"
 ).map(([field]) => field);
@@ -57810,7 +57891,7 @@ function mergeWithDefault(raw, dflt) {
     // [LAW:one-source-of-truth] presets merge by name then by field, the
     // segments overlay — a user retunes one arrangement's root without
     // restating its globals; the bundled stdlib (incl. the "default"
-    // empty-fragment floor effectivePresetName collapses to) survives every
+    // empty-fragment floor effectivePresetName resolves to last) survives every
     // merge by construction, exactly as styles' "none" does.
     presets: overlayByName(
       dflt.presets,
@@ -64278,7 +64359,7 @@ function presetByName(presets, name) {
   const preset = { [PRESET_FLOOR]: FLOOR_FRAGMENT, ...presets }[name];
   if (preset === void 0) {
     throw new Error(
-      `Preset "${name}" is not declared in this config \u2014 effectivePresetName collapses unknown names to "${PRESET_FLOOR}", which always resolves; a miss here means a raw name reached this function without going through that resolution`
+      `Preset "${name}" is not declared in this config \u2014 effectivePresetName resolves an undeclared pick to a declared preset or "${PRESET_FLOOR}"; a miss here means a raw name reached this function without going through that resolution`
     );
   }
   return preset;
@@ -64998,7 +65079,6 @@ function fragmentOf(file, dir, id2, { source, json: json2 }, { checkout, home })
   const ctx = {
     source,
     issues,
-    allowedPalettes: new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: []
@@ -66016,7 +66096,7 @@ if (false) {
     "__PACKAGE_VERSION__ was not substituted: build via tsdown (define), or preload scripts/version-stamp.cjs when running source"
   );
 }
-var PACKAGE_VERSION = "1.233.0";
+var PACKAGE_VERSION = "1.234.0";
 
 // src/daemon/stats.ts
 var NO_RUNS = {
@@ -66958,10 +67038,13 @@ var awaitedReading = (fact) => fact.kind === "pending" && fact.why === "unread";
 
 // src/daemon/collector.ts
 var SESSION_SWEEP_MS = 15e4;
-var locatorOf = (req, environment) => ({
-  hookData: req.hookData,
-  cwd: req.cwd,
-  hints: req.hints,
+var locatorOf = ({
+  context: { hookData: hookData2, cwd: cwd2, hints },
+  environment
+}) => ({
+  hookData: hookData2,
+  cwd: cwd2,
+  hints,
   environment
 });
 var sourcesOf2 = (subscriptions, prior) => ({
@@ -66987,7 +67070,10 @@ var sourcesOf2 = (subscriptions, prior) => ({
   ].sort()
 });
 var sameSources = (a, b) => a.plugins.size === b.plugins.size && [...a.plugins].every(([name, folder]) => b.plugins.get(name) === folder) && a.runs.size === b.runs.size && [...a.runs.keys()].every((digest2) => b.runs.has(digest2)) && a.env.length === b.env.length && a.env.every((name, i2) => b.env[i2] === name);
-function release2({ stop: stop2, holds: holds2 }) {
+function release2({
+  stop: stop2,
+  holds: holds2
+}) {
   stop2();
   holds2.close();
 }
@@ -67014,21 +67100,21 @@ var Collector = class {
   // go with the session's `context`. The record's reaction runs when the action ends,
   // finds the read this stamp took, and hands in nothing alone. A request for
   // a retiring session makes it live again.
-  requested(req, environment) {
-    const locator = locatorOf(req, environment);
-    const sessionId2 = req.hookData.session_id;
+  requested(context, environment) {
+    const request2 = { context, environment };
+    const sessionId2 = context.hookData.session_id;
     const document = runInAction(() => {
       const held = this.records.get(sessionId2);
       if (held === void 0) {
-        const opened = this.open(sessionId2, locator);
+        const opened = this.open(sessionId2, request2);
         this.records.set(sessionId2, opened);
         return opened.stamped.document;
       }
       held.active = true;
       const { phase } = held;
       if (phase.kind === "live")
-        phase.declared.set(this.declared({ ...held, locator }, phase.holds));
-      const live = phase.kind === "live" ? phase : this.live(held, locator);
+        phase.declared.set(this.declared({ ...held, request: request2 }, phase.holds));
+      const live = phase.kind === "live" ? phase : this.live(held, request2);
       held.phase = live;
       this.stamp(held, live.inputs.get());
       return held.stamped.document;
@@ -67101,7 +67187,7 @@ var Collector = class {
         if (phase.kind === "live")
           phase.declared.set(
             this.declared(
-              { ...record2, locator: phase.declared.get().locator },
+              { ...record2, request: phase.declared.get() },
               phase.holds
             )
           );
@@ -67124,14 +67210,17 @@ var Collector = class {
       record2.turns--;
     };
   }
-  // Each session the collector reads now, with its latest stamp: what a
-  // renderer's complete start configures again. Unlike a request, it marks no
-  // session active, so a restart keeps none past a sweep that would retire it.
-  liveDocuments() {
-    return new Map(
-      [...this.records.values()].flatMap(
-        (r) => r.phase.kind === "live" ? [[r.session, r.stamped.document]] : []
-      )
+  // [LAW:one-source-of-truth] Every session the collector reads has its
+  // request at the keys of its latest stamp. Restarting reads that pair
+  // without reactivating a session or handing the renderer its environment.
+  liveSessions() {
+    return [...this.records.values()].flatMap(
+      ({ phase, stamped }) => phase.kind === "live" ? [
+        {
+          context: phase.declared.get().context,
+          worldState: stamped.document
+        }
+      ] : []
     );
   }
   // One sweep. Public so a test can run it at an instant it chose.
@@ -67157,13 +67246,13 @@ var Collector = class {
       if (phase.kind === "live") release2(phase);
     runInAction(() => this.records.clear());
   }
-  open(session, locator) {
+  open(session, request2) {
     const subscriptions = {
       plugins: /* @__PURE__ */ new Map(),
       runs: /* @__PURE__ */ new Map(),
       env: []
     };
-    const reader = this.reader({ session, locator, subscriptions });
+    const reader = this.reader({ session, request: request2, subscriptions });
     const first2 = reader.inputs.get();
     let document;
     try {
@@ -67204,11 +67293,11 @@ var Collector = class {
   }
   // A retiring record read again: holds at the request's keys, and its stamps
   // go on from the document it kept.
-  live(record2, locator) {
+  live(record2, request2) {
     return this.watch(
       record2.session,
       record2.stamped,
-      this.reader({ ...record2, locator })
+      this.reader({ ...record2, request: request2 })
     );
   }
   reader(keys2) {
@@ -67257,7 +67346,7 @@ var Collector = class {
   // is released (`Holds.declare`).
   // [LAW:no-silent-failure] A declaration that throws keeps the holds it had,
   // and its lanes answer its failure, naming the cause, which is logged here.
-  declared({ session, locator, subscriptions }, holds2) {
+  declared({ session, request: request2, subscriptions }, holds2) {
     const sid = JSON.stringify(session);
     try {
       const {
@@ -67265,7 +67354,12 @@ var Collector = class {
         acquired,
         released
       } = holds2.declare(
-        () => declareLanes(this.deps.owners, holds2, locator, subscriptions)
+        () => declareLanes(
+          this.deps.owners,
+          holds2,
+          locatorOf(request2),
+          subscriptions
+        )
       );
       for (const fault of faults)
         this.deps.log("error", `session declaration threw sid=${sid} ${fault}`);
@@ -67274,14 +67368,14 @@ var Collector = class {
           "info",
           `session declared sid=${sid} acquired=${acquired} released=${released} held=${holds2.size}`
         );
-      return { locator, lanes };
+      return { ...request2, lanes };
     } catch (e) {
       this.deps.log(
         "error",
         `session declaration threw sid=${sid}: ${inspect(e)}`
       );
       return {
-        locator,
+        ...request2,
         lanes: settledLanes(
           failed(`session declaration threw: ${String(e)}`, "read"),
           subscriptions
@@ -67292,9 +67386,9 @@ var Collector = class {
   inputsOf(locator) {
     return { ...locator, deps: this.deps.owners };
   }
-  read({ locator, lanes }) {
+  read(declared) {
     try {
-      return ok(readingsOf(this.inputsOf(locator), lanes));
+      return ok(readingsOf(this.inputsOf(locatorOf(declared)), declared.lanes));
     } catch (e) {
       return failed(`reading the owners: ${String(e)}`, "read");
     }
@@ -67660,7 +67754,7 @@ var FrameFeeds = class {
   send(watched, sub2) {
     const follower = watched.followers.get(sub2);
     if (watched.last === null || follower === void 0) return;
-    const json2 = answerOf(watched.last, sub2.lane);
+    const json2 = answerOf2(watched.last, sub2.lane);
     if (follower.sent === json2) return;
     follower.sent = json2;
     this.pushed++;
@@ -68418,7 +68512,12 @@ function publishingFrames(signer) {
         ...row,
         runs: row.runs.map(({ link, ...run3 }) => {
           if (link === void 0) return run3;
-          const href = hrefOfDrawnLink(link);
+          const href = typeof link !== "string" && link.kind === "repo-answer" ? repoAnswerUrl(
+            link,
+            signer.sign(
+              repoAnswerFields(link.session, link.dir, link.answer)
+            )
+          ) : hrefOfDrawnLink(link);
           return {
             ...run3,
             link: isBarLink(href) ? signer.signLink(href) : href
@@ -68611,84 +68710,6 @@ function addressText(at) {
 // src/daemon/config-discovery/repo-configs.ts
 init_globals();
 var import_node_path24 = __toESM(require_path_browserify(), 1);
-
-// src/config/loader/repo-gate.ts
-init_globals();
-var REPO_ANSWERS = ["approved", "declined"];
-function answerDir(d) {
-  return d.link.kind === "linked" ? d.link.main : d.dir;
-}
-var answerOf2 = (book, dir) => Object.hasOwn(book, dir) ? book[dir] : null;
-function ruling(answers, d) {
-  const key = answerDir(d);
-  if (answers.kind === "failed") return { standing: "unread", under: key };
-  const repo2 = answerOf2(answers.value, key);
-  const own2 = answerOf2(answers.value, d.dir);
-  if (repo2 === null) {
-    return own2 === null ? { standing: "awaiting", under: key } : { standing: own2, under: d.dir };
-  }
-  return {
-    standing: own2 === null || own2 === repo2 ? repo2 : "awaiting",
-    under: key
-  };
-}
-function gateRepos(answers, dirs, project) {
-  const reached = reachedDirs(dirs, project);
-  const ruled = reached.map((d) => ({ dir: d.dir, ...ruling(answers, d) }));
-  const standing2 = (s) => ruled.filter((r) => r.standing === s);
-  const repos = (s) => [
-    ...new Set(standing2(s).map((r) => r.under))
-  ];
-  return {
-    plugins: project !== null && ruling(answers, project).standing === "approved" ? project.path : null,
-    approved: standing2("approved").map((r) => r.dir),
-    awaiting: repos("awaiting"),
-    declined: repos("declined"),
-    unproven: reached.flatMap(
-      (d) => d.link.kind === "unproven" ? [{ dir: d.dir, reason: d.link.reason }] : []
-    ),
-    unread: answers.kind === "failed" ? answers.reason : null
-  };
-}
-function reachedDirs(dirs, project) {
-  return [
-    ...new Map(
-      [...dirs, ...project?.ships ? [project] : []].map((d) => [d.dir, d])
-    ).values()
-  ];
-}
-function repoQuestion(answers, dirs, project) {
-  const [reached] = reachedDirs(dirs, project);
-  if (reached === void 0) return null;
-  const { standing: standing2, under: under2 } = ruling(answers, reached);
-  return {
-    dir: under2,
-    standing: standing2,
-    unproven: reached.link.kind === "unproven" ? reached.link.reason : null
-  };
-}
-function withAnswer(book, dir, answer2, superseded) {
-  if (book[dir] === answer2 && superseded.length === 0) return book;
-  const rest2 = Object.entries(book).filter(([d]) => !superseded.includes(d));
-  return { ...Object.fromEntries(rest2), [dir]: answer2 };
-}
-function parseRepoConfigBook(doc) {
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) {
-    return { kind: "failed", reason: "is not an object" };
-  }
-  for (const [dir, answer2] of Object.entries(doc)) {
-    if (!REPO_ANSWERS.includes(answer2)) {
-      return {
-        kind: "failed",
-        reason: `answers ${JSON.stringify(dir)} ${JSON.stringify(answer2)}, not ${REPO_ANSWERS.join(" or ")}`
-      };
-    }
-  }
-  return { kind: "ok", value: doc };
-}
-function repoUnreadNotice(gate2) {
-  return gate2.unread === null ? null : `Repository config answers could not be read: ${gate2.unread} \u2014 no repository's config runs until they can be`;
-}
 
 // src/utils/presence.ts
 init_globals();
@@ -70243,7 +70264,7 @@ var ISSUE_INDENT = " ";
 function channelRows(message2, opts, trailing) {
   const colors = colorsOf(message2.severity);
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
-  const styled = (link) => link === null ? base : base.withLink(link);
+  const styled = (link) => link === null ? base : styleWithLink(base, link);
   const fold = asCellCol(Math.max(WIDEST_GLYPH_COLS, opts.width - 1));
   return message2.lines.flatMap((line, i2) => {
     const prefix = cell(i2 === 0 ? message2.severity.glyph : ISSUE_INDENT, base);
@@ -70256,33 +70277,17 @@ function channelRows(message2, opts, trailing) {
 }
 
 // src/config/repo-question.ts
-function repoAnswerFields(sessionId2, dir, answer2) {
-  return {
-    sessionId: sessionId2,
-    action: VERB_REPO_CONFIG,
-    declaration: dir,
-    evaluated: answer2
-  };
-}
-function repoQuestions(question, sessionId2, signer) {
+function repoQuestions(question, sessionId2) {
   const awaiting = question?.standing === "awaiting" ? [question.dir] : [];
   return awaiting.map((dir) => {
     const message2 = `a cc-candybar config for ${dir} \u2014 run it?`;
     const answers = REPO_ANSWERS.map(
-      (answer2) => diagnosticSpan(
-        `[${answer2 === "approved" ? "approve" : "decline"}]`,
-        effectsUrl([
-          {
-            verb: VERB_REPO_CONFIG,
-            args: [
-              sessionId2,
-              dir,
-              answer2,
-              signer.sign(repoAnswerFields(sessionId2, dir, answer2))
-            ]
-          }
-        ])
-      )
+      (answer2) => diagnosticSpan(`[${answer2 === "approved" ? "approve" : "decline"}]`, {
+        kind: "repo-answer",
+        session: sessionId2,
+        dir,
+        answer: answer2
+      })
     );
     const line = [diagnosticSpan(message2, null), ...answers];
     return {
@@ -71115,10 +71120,11 @@ function makeProxy(store, names, prefix) {
 }
 function placementScope(scope, settings) {
   return new Proxy(scope, {
-    has: (target, key) => key === "settings" || Reflect.has(target, key),
-    get: (target, key) => key === "settings" ? settings : Reflect.get(target, key)
+    has: (target, key) => key === SETTINGS_SCOPE || Reflect.has(target, key),
+    get: (target, key) => key === SETTINGS_SCOPE ? settings : Reflect.get(target, key)
   });
 }
+var SETTINGS_SCOPE = "settings";
 function absentDocument(store, name) {
   return store.getKind(name) === "document" && store.readDocument(name).kind === "absent";
 }
@@ -71713,17 +71719,43 @@ var SourceRegistry = class _SourceRegistry {
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
   declareState(name, opts) {
-    if (!this.sessionState) {
+    const read2 = this.stateReader(name);
+    const fallback = opts.varDefault ?? this.stringInitial(void 0);
+    this.store.defineComputed(name, "string", () => read2(opts.key) ?? fallback);
+  }
+  // A state variable whose key is read against a domain: `fold` reads the
+  // session's value at `key` into the value in force and the spelling it passed
+  // over, kept as ONE derived value of the store. The variable is that value
+  // spelled, which every template, picker mark and carousel reads, and
+  // `foldedState` hands the whole fold to the draw that reports the miss.
+  declareFoldedState(name, key, fold, spell2) {
+    const read2 = this.stateReader(name);
+    const folded2 = this.store.derive(name, "computed", () => fold(read2(key)));
+    this.folds.set(name, folded2);
+    this.store.defineComputed(name, "string", () => spell2(folded2.read().value));
+  }
+  // [LAW:no-defensive-null-guards] Asked only of a name `declareFoldedState`
+  // declared; any other is a caller's drift, named.
+  foldedState(name) {
+    const folded2 = this.folds.get(name);
+    if (folded2 === void 0) {
+      throw new Error(`"${name}" is no state variable read against a domain`);
+    }
+    return folded2.read();
+  }
+  folds = /* @__PURE__ */ new Map();
+  // [LAW:single-enforcer] How every state variable reads the session's stored
+  // value at a key: through the view's checked session, the same one the
+  // payload hands `session.id`. Asked at declaration, so a registry with no
+  // SessionState refuses the variable loudly rather than reading empty strings.
+  stateReader(name) {
+    const sessionState = this.sessionState;
+    if (sessionState === void 0) {
       throw new Error(
         `declareState("${name}"): SourceRegistry was constructed without a SessionState \u2014 state-kind variables require a SessionState (the daemon provides one; tests must supply one)`
       );
     }
-    const sessionState = this.sessionState;
-    const fallback = opts.varDefault ?? this.stringInitial(void 0);
-    this.store.defineComputed(name, "string", () => {
-      const value = sessionState.get(this.session(), opts.key);
-      return value !== null ? value : fallback;
-    });
+    return (key) => sessionState.get(this.session(), key);
   }
   // [LAW:one-source-of-truth] The revision of the session state this render's
   // `state` variables read (SessionStateReader.revision), found the way they
@@ -72161,18 +72193,13 @@ init_globals();
 
 // src/themes/palette-resolvers.ts
 init_globals();
-var baseCache = /* @__PURE__ */ new Map();
 function paletteForThemeName(name) {
-  const hit = baseCache.get(name);
-  if (hit !== void 0) return hit;
-  const palette = getThemePalette(name);
-  if (palette === null) {
+  if (!isInstalledTheme(name)) {
     throw new Error(
-      `Palette "${name}" did not resolve in the theme registry \u2014 allowed names and the registry are inconsistent`
+      `Palette "${name}" is not an installed theme: a theme name reached the palette without being read through its domain`
     );
   }
-  baseCache.set(name, palette);
-  return palette;
+  return getThemePalette(name);
 }
 function placementPalette(theme24, bar) {
   return theme24 === FOLLOW_BAR ? bar : paletteForThemeName(theme24);
@@ -72186,7 +72213,7 @@ function transposedPalette(base, key) {
 }
 var TRANSPOSED = memoPerPalette();
 function namedTheme(name) {
-  return isInstalledTheme(name) ? { kind: "decided", name, value: paletteForThemeName(name) } : null;
+  return isInstalledTheme(name) ? { kind: "decided", name, value: getThemePalette(name) } : null;
 }
 function decideThemeName(name, where, onUnresolvable) {
   const named2 = namedTheme(name);
@@ -73346,10 +73373,10 @@ function validateThemeDefaults(ctx, raw) {
   const out = {};
   for (const [theme24, value] of Object.entries(raw)) {
     const path31 = `themeDefaults.${theme24}`;
-    if (!ctx.allowedPalettes.has(theme24)) {
+    if (!isInstalledTheme(theme24)) {
       ctx.issues.push({
         path: path31,
-        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+        message: `${path31}: "${theme24}" is not an installed theme${retiredThemeNote(theme24)}. Expected one of: ${describeInstalledThemes()}`,
         line: findKeyLine(ctx.source, ["themeDefaults", theme24])
       });
       continue;
@@ -74588,7 +74615,7 @@ function configureParts(ctx, node, decls) {
     ctx.artifacts.variables[variable] = {
       kind: "state",
       key,
-      default: settingSpelling(node.settings?.[name] ?? decl.default)
+      setting: { decl, saved: savedSetting(node, name, decl) }
     };
     drafts[name] = { id: id2, key, variable };
     const segName = `${prefix}.setting.${placement}.${name}`;
@@ -77377,12 +77404,25 @@ function declareOne(registry, name, decl, cwd2, derivation) {
         varDefault: decl.default
       });
       break;
-    case "state":
-      registry.declareState(name, {
-        key: decl.key,
-        ...decl.default !== void 0 && { varDefault: decl.default }
-      });
+    // A placement setting's draft slot reads its key through the setting's own
+    // fold, kept in the store, so everything reading the slot reads its fold.
+    case "state": {
+      const { setting } = decl;
+      if (setting === void 0) {
+        registry.declareState(name, {
+          key: decl.key,
+          ...decl.default !== void 0 && { varDefault: decl.default }
+        });
+        break;
+      }
+      registry.declareFoldedState(
+        name,
+        decl.key,
+        (raw) => placementPick(setting.decl, setting.saved, raw),
+        spellSetting
+      );
       break;
+    }
   }
 }
 function compileHelpers(engine, bodies, errorPath, inherit = Defines.EMPTY) {
@@ -77575,42 +77615,62 @@ function compileDslConfig({ config, stateReads, projections }, signer) {
       );
     }
   };
+  const segmentReads = /* @__PURE__ */ new Map();
+  const settingsRead = (seg2, node, names) => {
+    let reads = segmentReads.get(seg2);
+    if (reads === void 0) {
+      reads = valueReads({
+        names: /* @__PURE__ */ new Set(),
+        helpers: { ...config.helpers, ...seg2.partials },
+        actions: config.actions
+      });
+      segmentReads.set(seg2, reads);
+    }
+    const paths2 = [...SEGMENT_TEMPLATE_FIELDS.map((f) => seg2[f]), node.when].flatMap((text4) => text4 === void 0 ? [] : reads.ofTemplate(text4)).map(({ path: path31 }) => path31);
+    const readsSetting = (name) => paths2.some(
+      (path31) => path31 === SETTINGS_SCOPE || path31 === `${SETTINGS_SCOPE}.${name}` || path31.startsWith(`${SETTINGS_SCOPE}.${name}.`)
+    );
+    return /* @__PURE__ */ new Set([
+      THEME_SETTING,
+      EFFECT_SETTING,
+      ...names.filter(readsSetting)
+    ]);
+  };
   const resolvedSettings = (node) => {
-    const decls = settingsOf(config.segments[node.name]);
-    const fold = (name, decl) => placementSetting(
-      node,
-      name,
-      decl,
-      (draft) => String(
-        renderBinding(actionRuntime, `setting ${name}`).store.read(
-          draft.variable
-        )
-      )
+    const seg2 = config.segments[node.name];
+    const decls = settingsOf(seg2);
+    const fold = (name, decl, draft) => draft === void 0 ? { value: savedSetting(node, name, decl), stale: null } : renderBinding(actionRuntime, `setting ${name}`).registry.foldedState(
+      draft.variable
     );
     const out = /* @__PURE__ */ Object.create(null);
     for (const [name, decl] of Object.entries(decls)) {
       Object.defineProperty(out, name, {
         enumerable: true,
-        get: () => fold(name, decl).value
+        get: () => fold(name, decl, node.drafts?.[name]).value
       });
     }
+    const read2 = settingsRead(seg2, node, Object.keys(decls));
     return {
       // settingsOf always declares `theme` and `effect`, over domains whose
       // values are names (an effect's, the placement effects) — the one cast
       // from the record to what it provably holds.
       settings: Object.freeze(out),
-      // Only a drafted setting has a pick to pass over. A slot is named by the
-      // placement that owns it, which a name label holding another
-      // placement's `theme` slot is not; configure mode drafts only declared
-      // settings.
-      stale: () => Object.entries(node.drafts ?? {}).flatMap(([name, slot]) => {
-        const { value, stale } = fold(name, decls[name]);
+      // Only a drafted setting the draw reads has a pick it draws past. A slot
+      // is named by the placement that owns it, which a name label holding
+      // another placement's `theme` slot is not, and by its key, which the
+      // two share.
+      stale: () => Object.entries(decls).flatMap(([name, decl]) => {
+        const draft = node.drafts?.[name];
+        if (draft === void 0 || !read2.has(name)) return [];
+        const { value, stale } = fold(name, decl, draft);
         return stale === null ? [] : [
-          stalePick(
-            `${slot.id}.${name}`,
-            stale,
-            wornName(settingSpelling(value))
-          )
+          {
+            key: draft.key,
+            setting: `${draft.id}.${name}`,
+            name,
+            stored: stale,
+            value
+          }
         ];
       })
     };
@@ -77760,12 +77820,13 @@ function segmentsUnder(node) {
     ...node.opens === void 0 ? [] : segmentsUnder(node.opens.body)
   ];
 }
+var noteOf = (setting, stored) => setting === THEME_SETTING ? retiredThemeNote(stored) : "";
 function drawDsl(config, compiled, store, registry, projected, at, opts, selection2) {
   var _stack = [];
   try {
     const warnings = [];
     const warn = (warning) => void warnings.push(warning);
-    const stale = new Map(selection2.stale.map((pick2) => [pick2.setting, pick2]));
+    const stale = /* @__PURE__ */ new Map();
     const segments = /* @__PURE__ */ new Map();
     const effects = selection2.effects ?? new SessionEffects("");
     const clock = effects.clockAt(at, ANIMATION_SPEEDS[selection2.animationSpeed]);
@@ -77834,6 +77895,31 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const theme24 = decidedTheme.kind === "decided" ? decidedTheme : decideThemeName(slotted("palette"), "", unreachable);
     const style = decidedStyle.kind === "decided" ? decidedStyle : decideStyleName(slotted("style"), config.styles);
     const effect = decidedEffect.kind === "decided" ? decidedEffect : decideEffectName(slotted("effect"));
+    const decided = { theme: theme24, style, effect };
+    const wornFor = (setting) => setting === "theme" || setting === "style" || setting === "effect" ? decided[setting].name : spellSetting(selection2[setting]);
+    for (const { setting, stored } of selection2.stale) {
+      stale.set(
+        setting,
+        stalePick(setting, stored, wornFor(setting), noteOf(setting, stored))
+      );
+    }
+    const follows = /* @__PURE__ */ new Map([
+      [THEME_SETTING, theme24.name],
+      [EFFECT_SETTING, effect.name]
+    ]);
+    const placementStale = (miss) => {
+      const own2 = spellSetting(miss.value);
+      const wears = miss.value === FOLLOW_BAR ? follows.get(miss.name) ?? own2 : own2;
+      stale.set(
+        miss.key,
+        stalePick(
+          miss.setting,
+          miss.stored,
+          wears,
+          noteOf(miss.name, miss.stored)
+        )
+      );
+    };
     const basePalette = theme24.value;
     const palette = transposedPalette(basePalette, style.value);
     parts.publishLook({ basePalette, palette, decor });
@@ -77883,7 +77969,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
           placement,
           message: `segment "${placement}": ${message2}`
         }),
-        stalePick: (pick2) => void stale.set(pick2.setting, pick2),
+        stalePick: placementStale,
         placement: (node2) => parts.placement(node2),
         evaluateOnce: (node2, scope, palette2, body) => evaluateOnce(
           compiled.activeSegment,
@@ -77920,7 +78006,7 @@ function drawDsl(config, compiled, store, registry, projected, at, opts, selecti
     const root = compiled.roots.get(preset);
     if (root === void 0) {
       throw new Error(
-        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName collapses unknown names to "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
+        `Preset "${preset}" has no compiled layout \u2014 registerDslConfig compiles one per declared preset and effectivePresetName resolves an undeclared pick to a declared preset or "${PRESET_FLOOR}"; a miss here is merge/policy drift (have: ${[...compiled.roots.keys()].join(", ")})`
       );
     }
     const rendered = rowIdentities(renderNode(root, SHOWN, barRoot(decor))).map(({ line, row }) => {
@@ -79643,10 +79729,10 @@ function validateDeclarations(ctx, cfg, templateScope, subject) {
       });
       continue;
     }
-    if (target.scope === "theme-default" && !ctx.allowedPalettes.has(target.theme)) {
+    if (target.scope === "theme-default" && !isInstalledTheme(target.theme)) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${[...ctx.allowedPalettes].sort().join(", ")})`,
+        message: `actions.${name}: "${key}" names theme "${target.theme}" which is not installed${retiredThemeNote(target.theme)} (have: ${describeInstalledThemes()})`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator])
       });
       continue;
@@ -79906,14 +79992,13 @@ function noticeLines(resolution) {
 function noFile(dflt) {
   return { ...NO_FILE, config: mergeWithDefault(NO_FILE.raw, dflt) };
 }
-function loadConfigSource(path31, source, dflt, ctx, allowedPalettes) {
-  const parsed2 = parseDslFile(path31, source, allowedPalettes, (refs, names) => {
+function loadConfigSource(path31, source, dflt, ctx) {
+  const parsed2 = parseDslFile(path31, source, (refs, names) => {
     const layer = layPlugins(
       listedPlugins(refs, path31, ctx.listed),
       ctx,
       { config: dflt, rendering: ctx.beneath.rendering },
-      path31,
-      allowedPalettes
+      path31
     );
     const owning2 = dropsOwning(layer, ctx.beneath.dropped);
     return {
@@ -79943,21 +80028,20 @@ function loadConfigSource(path31, source, dflt, ctx, allowedPalettes) {
     config: standing2.config
   };
 }
-function layPlugins(files, ctx, base, label2, allowedPalettes) {
+function layPlugins(files, ctx, base, label2) {
   return applyPlugins(
     files,
     ctx,
     base,
-    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, label2, allowedPalettes)
+    (c, plugin, replaces) => checkPlugin(c, plugin, replaces, label2)
   );
 }
-function installedLayer(files, ctx, dflt, allowedPalettes) {
+function installedLayer(files, ctx, dflt) {
   return layPlugins(
     files,
     ctx,
     { config: dflt, rendering: /* @__PURE__ */ new Map() },
-    "<installed plugins>",
-    allowedPalettes
+    "<installed plugins>"
   );
 }
 function strayDrop({ path: file, scope }) {
@@ -79969,15 +80053,14 @@ function strayDrop({ path: file, scope }) {
     reason: `a plugin is a folder holding its ${DEFINITION_FILE}: move this file to ${import_node_path28.default.join(root, "<name>", DEFINITION_FILE)}`
   };
 }
-function loadSnapshot(snapshot, home, dflt, trace, allowedPalettes) {
+function loadSnapshot(snapshot, home, dflt, trace) {
   const { ctx, plugins: plugins2, base, layers } = mergeChain(
     snapshot,
     home,
     dflt,
-    trace,
-    allowedPalettes
+    trace
   );
-  return validateChain(ctx, plugins2, base, layers, trace, allowedPalettes);
+  return validateChain(ctx, plugins2, base, layers, trace);
 }
 function inheritedConfig(snapshot, home, dflt) {
   const { base, layers } = mergeChain(snapshot, home, dflt, {
@@ -79986,9 +80069,9 @@ function inheritedConfig(snapshot, home, dflt) {
   });
   return layers.at(-1)?.config ?? base;
 }
-function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
+function mergeChain(snapshot, home, dflt, trace) {
   const ctx = { checkout: snapshot.checkout, home };
-  const merged = installedLayer(snapshot.plugins, ctx, dflt, allowedPalettes);
+  const merged = installedLayer(snapshot.plugins, ctx, dflt);
   const plugins2 = {
     ...merged,
     dropped: [...merged.dropped, ...snapshot.strays.map(strayDrop)]
@@ -80018,15 +80101,14 @@ function mergeChain(snapshot, home, dflt, trace, allowedPalettes) {
           ],
           rendering: below?.rendering ?? plugins2.rendering
         }
-      },
-      allowedPalettes
+      }
     );
     trace.warned(loaded.warnings);
     layers.push({ ...loaded, path: path31 });
   }
   return { ctx, plugins: plugins2, base, layers };
 }
-function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
+function validateChain(ctx, plugins2, base, layers, trace) {
   const reached = new Set(layers.flatMap((l) => [...l.plugins.reached]));
   const isReached = (d) => reached.has(d.path);
   const surfaced = plugins2.dropped.filter(isReached);
@@ -80054,14 +80136,7 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
       layers,
       base,
       installed,
-      ...renderable(
-        validateRenderable(
-          noFile(base),
-          rendering,
-          "<default>",
-          allowedPalettes
-        )
-      )
+      ...renderable(validateRenderable(noFile(base), rendering, "<default>"))
     };
   }
   try {
@@ -80074,7 +80149,6 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
           top,
           rendering,
           top.path,
-          allowedPalettes,
           layers.slice(0, -1).reverse()
         )
       )
@@ -80085,20 +80159,14 @@ function validateChain(ctx, plugins2, base, layers, trace, allowedPalettes) {
         layer,
         layer.plugins.rendering,
         layer.path,
-        allowedPalettes,
         layers.slice(0, i2).reverse()
       );
     throw e;
   }
 }
-function checkPlugin(config, ns, replaces, filePath2, allowedPalettes) {
+function checkPlugin(config, ns, replaces, filePath2) {
   if (replaces) {
-    validateRenderable(
-      unauthored(config),
-      /* @__PURE__ */ new Map(),
-      filePath2,
-      allowedPalettes
-    );
+    validateRenderable(unauthored(config), /* @__PURE__ */ new Map(), filePath2);
     return;
   }
   const owned = ownedBy(ns);
@@ -80106,7 +80174,6 @@ function checkPlugin(config, ns, replaces, filePath2, allowedPalettes) {
   const ctx = {
     source: "",
     issues,
-    allowedPalettes: /* @__PURE__ */ new Set(),
     groups: [],
     unplaced: [],
     inherited: []
@@ -80134,7 +80201,7 @@ var NO_FILE = {
     rendering: /* @__PURE__ */ new Map()
   }
 };
-function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", allowedPalettes = new Set(listResolvablePaletteNames()), beneath = []) {
+function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", beneath = []) {
   const presence2 = presenceOf(authoredConfig.config.segments, rendering);
   const written3 = layerInserts(
     { ...authoredConfig, path: filePath2 },
@@ -80150,7 +80217,6 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     return judgeRenderable(
       authoredConfig,
       filePath2,
-      allowedPalettes,
       beneath,
       inserted.config,
       presence2,
@@ -80191,12 +80257,11 @@ function validateRenderable(authoredConfig, rendering, filePath2 = "<config>", a
     return judge(taken2, refused2);
   }
 }
-function judgeRenderable({ raw, source }, filePath2, allowedPalettes, beneath, merged, presence2, filed, notices) {
+function judgeRenderable({ raw, source }, filePath2, beneath, merged, presence2, filed, notices) {
   const issues = [];
   const ctx = {
     source,
     issues,
-    allowedPalettes,
     groups: [],
     unplaced: [],
     inherited: []
@@ -80312,13 +80377,13 @@ function droppedByFile(filePath2, segments, ctx, presence2, beneath, filed) {
     ([file, issues]) => new DroppedFileError(file, issues)
   );
 }
-function parseDslConfig(filePath2, source, allowedPalettes = new Set(listResolvablePaletteNames()), inheritedSegments = NO_INHERITED_SEGMENTS) {
-  return parseDslFile(filePath2, source, allowedPalettes, () => ({
+function parseDslConfig(filePath2, source, inheritedSegments = NO_INHERITED_SEGMENTS) {
+  return parseDslFile(filePath2, source, () => ({
     inherited: inheritedSegments,
     layer: null
   })).raw;
 }
-function parseDslFile(filePath2, source, allowedPalettes, under2) {
+function parseDslFile(filePath2, source, under2) {
   const syntax = parseJson5Syntax(source);
   if (syntax.kind === "invalid")
     throw new ConfigError(filePath2, [syntax.issue]);
@@ -80336,7 +80401,6 @@ function parseDslFile(filePath2, source, allowedPalettes, under2) {
   const ctx = {
     source,
     issues,
-    allowedPalettes: allowedPalettes ?? new Set(listResolvablePaletteNames()),
     groups: [],
     unplaced: [],
     inherited: []
@@ -81354,8 +81418,8 @@ var RAW_DEFAULT_DSL_CONFIG = {
   // session via the `style` SessionState key (an action `{ set: "style", from:
   // "styles" }` + a `{{ menu }}`), exactly the theme/endcaps selection seam.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib — including the "none" identity floor effectiveStyleName collapses
-  // to — is present in every merged config by construction.
+  // stdlib — including the "none" identity floor a style resolves to last
+  // — is present in every merged config by construction.
   styles: {
     // [LAW:dataflow-not-control-flow] "none" is just the identity style — the
     // resolution floor as a value, not a special case (rich-js's isIdentityKey
@@ -82373,75 +82437,60 @@ function presetOf(config, sessionPick) {
 }
 function spelledSetting(e, name) {
   const value = e[name];
-  switch (typeof value) {
-    case "boolean":
-      return value ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-    case "number":
-      return String(value);
-    case "string":
-      return value;
-    default:
-      return value.kind === "decided" ? value.name : null;
-  }
+  if (typeof value !== "object") return spellSetting(value);
+  return value.kind === "decided" ? value.name : null;
 }
 function resolveEffectiveGlobals(config, sessionPick, presetCustomized) {
-  const preset = presetOf(config, sessionPick);
-  const declared = presetGlobals(config, preset.value);
+  const { stale, take } = foldTaker();
+  const preset = take("preset", presetOf(config, sessionPick));
+  const declared = presetGlobals(config, preset);
   const staged = sessionPick(EDIT_MODE_KEY) === EDIT_MODE_ARRANGE ? config.editGlobals : {};
-  const theme24 = resolveThemeSelection(
-    staged.palette,
-    sessionPick(settingNameOf("palette")),
-    declared.palette
+  const theme24 = take(
+    "theme",
+    resolveThemeSelection(
+      staged.palette,
+      sessionPick(settingNameOf("palette")),
+      declared.palette
+    )
   );
   const globals = underThemeDefault(
     declared,
-    themeDefaultsOf(theme24.value, config.themeDefaults)
+    themeDefaultsOf(theme24, config.themeDefaults)
   );
-  const folds = {
-    ...Object.fromEntries(
-      VALUED_FIELDS.map((field) => [
-        field,
-        resolveValued(field, staged, sessionPick, globals)
-      ])
-    ),
-    preset,
-    theme: theme24,
-    style: resolveStyleSelection(
-      staged.style,
-      sessionPick(settingNameOf("style")),
-      globals.style,
-      config.styles
-    ),
-    effect: resolveEffectSelection(
-      staged.effect,
-      sessionPick(settingNameOf("effect")),
-      globals.effect
-    )
-  };
-  const entries = Object.entries(folds);
-  const values2 = Object.fromEntries(
-    entries.map(([name, folded2]) => [name, folded2.value])
+  const style = resolveStyleSelection(
+    staged.style,
+    sessionPick(settingNameOf("style")),
+    globals.style,
+    config.styles
+  );
+  const effect = resolveEffectSelection(
+    staged.effect,
+    sessionPick(settingNameOf("effect")),
+    globals.effect
   );
   return {
-    ...values2,
-    presetCustomized: presetCustomized(preset.value),
-    // [LAW:one-source-of-truth] The separator has no SessionState half, so its chain is `staged ??
-    // config` — the same `??`, minus the rungs it does not have.
+    ...perValuedField(
+      (field) => take(field, resolveValued(field, staged, sessionPick, globals))
+    ),
+    preset,
+    presetCustomized: presetCustomized(preset),
+    theme: theme24,
+    style: take("style", style),
+    effect: take("effect", effect),
+    // [LAW:one-source-of-truth] The separator has no SessionState half, so
+    // its chain is `staged ?? config` — the same `??`, minus the rungs.
     separator: staged.default_separator ?? globals.default_separator,
-    // [LAW:no-silent-failure] What each fold passed over, saying what the bar
-    // wears in its place. Only a setting has a session rung to pass over, and a
-    // selection its rule decides has no name until the draw evaluates the rule.
-    stale: entries.flatMap(([name, folded2]) => {
-      if (folded2.stale === null) return [];
-      const wears = spelledSetting(values2, name);
-      return [
-        stalePick(
-          name,
-          folded2.stale,
-          wears === null ? "its rule's answer" : wornName(wears)
-        )
-      ];
-    })
+    stale
+  };
+}
+function foldTaker() {
+  const stale = [];
+  return {
+    stale,
+    take: (setting, folded2) => {
+      if (folded2.stale !== null) stale.push({ setting, stored: folded2.stale });
+      return folded2.value;
+    }
   };
 }
 
@@ -82659,7 +82708,7 @@ function setUpDraw(parts, hold2, req, hintsError, readings, facts, terminal) {
   }
 }
 function drawRender(parts, setup, drawing2, feeds, inspect2) {
-  const { sessionState, linkSigner: linkSigner2, renderWarnings, effectSessions, menuIdle } = parts;
+  const { sessionState, renderWarnings, effectSessions, menuIdle } = parts;
   const { req, readings, facts, sessionId: sessionId2, entry, state, view, hintsError } = setup;
   const { at } = readings;
   const idleSince = menuIdle.since(sessionId2, readings);
@@ -82679,7 +82728,7 @@ function drawRender(parts, setup, drawing2, feeds, inspect2) {
   noteFacts(facts, { width: String(width) });
   const clickHold = clickErrorAt(sessionState, sessionId2, at, drawing2.by);
   const clickShown = clickHold.kind === "held" || clickHold.kind === "owed" ? clickHold.error : null;
-  const questions = repoQuestions(entry.snapshot.repo, sessionId2, linkSigner2);
+  const questions = repoQuestions(entry.snapshot.repo, sessionId2);
   const sourced = (kind, about, text4) => ({ kind, about, text: text4, copy: text4 });
   const said2 = (kind, text4) => sourced(kind, text4 ?? "", text4);
   const errors2 = [
@@ -83239,7 +83288,7 @@ function sameDraw(previous2, next2, lane) {
   if (next2.kind === "failed")
     return previous2?.kind === "failed" && previous2.message === next2.message;
   if (previous2?.kind !== "drawn") return false;
-  const forLane = ({ bar, handoff }) => answerOf({ resp: bar, statusline: handoff ?? bar }, lane);
+  const forLane = ({ bar, handoff }) => answerOf2({ resp: bar, statusline: handoff ?? bar }, lane);
   const before = forLane(previous2);
   const after = forLane(next2);
   return before.depth === after.depth && before.rows.length === after.rows.length && before.rows.every(
@@ -83541,8 +83590,21 @@ function differing(rows, session, baseOf2, targetOf) {
     return value === null || value === spelledSetting(baseOf2(name), name) ? [] : [{ ...row, value, target: targetOf(row) }];
   });
 }
-function sessionSettingValue(config, sessionPick, name) {
-  return spelledSetting(sessionGlobals(config, sessionPick), name);
+function settingShows(config, sessionPick, name) {
+  const shown = resolveEffectiveGlobals(config, sessionPick, NOT_CUSTOMIZED);
+  return {
+    value: spelledSetting(shown, name),
+    stale: shown.stale.find((miss) => miss.setting === name)?.stored ?? null
+  };
+}
+function stalePickKeys(config, sessionPick) {
+  const session = sessionGlobals(config, sessionPick);
+  return /* @__PURE__ */ new Set([
+    ...session.stale.map((miss) => miss.setting),
+    ...slotsOf(config, session.preset).filter(
+      ({ decl, saved, key }) => placementPick(decl, saved, sessionPick(key)).stale !== null
+    ).map(({ key }) => key)
+  ]);
 }
 function settingDrafts(config, sessionPick) {
   const session = sessionGlobals(config, sessionPick);
@@ -83569,15 +83631,19 @@ function placementDrafts(config, sessionPick) {
   return slotsOf(config, preset).flatMap(
     ({ id: id2, setting, key, decl, saved }) => {
       const { value } = placementPick(decl, saved, sessionPick(key));
-      return settingSpelling(value) === settingSpelling(saved) ? [] : [{ preset, id: id2, setting, key, value }];
+      return spellSetting(value) === spellSetting(saved) ? [] : [{ preset, id: id2, setting, key, value }];
     }
   );
 }
-function draftSlotValue(config, sessionPick, key) {
+function draftSlotShows(config, sessionPick, key) {
   const slot = presetNames(config.presets).flatMap((preset) => slotsOf(config, preset)).find((s) => s.key === key);
-  return slot === void 0 ? null : settingSpelling(
-    placementPick(slot.decl, slot.saved, sessionPick(key)).value
+  if (slot === void 0) return null;
+  const { value, stale } = placementPick(
+    slot.decl,
+    slot.saved,
+    sessionPick(key)
   );
+  return { value: spellSetting(value), stale };
 }
 function placementPickProblems(config, sessionPick, writes) {
   const written3 = new Map(writes.map((w) => [w.key, w.value]));
@@ -83615,7 +83681,7 @@ function slotsOf(config, preset) {
         setting,
         key,
         decl,
-        saved: node.settings?.[setting] ?? decl.default
+        saved: savedSetting(node, setting, decl)
       };
     })
   );
@@ -83716,12 +83782,18 @@ function holds(doc, path31) {
 }
 
 // src/renderer/verbs/key-seeds.ts
-function stateKeyShows(config, sessionPick, key) {
+function stateKeyShows(config, sessionPick, key, range) {
   const setting = SESSION_KEY_TO_SETTING.get(key);
-  if (setting !== void 0) {
-    return sessionSettingValue(config, sessionPick, setting);
-  }
-  return draftSlotValue(config, sessionPick, key) ?? sessionPick(key) ?? stateDefault(config, key);
+  if (setting !== void 0) return settingShows(config, sessionPick, setting);
+  return draftSlotShows(config, sessionPick, key) ?? effectiveGlobal(
+    void 0,
+    readStored(
+      sessionPick(key),
+      (raw) => parseSessionInt(raw, range) === null ? null : raw
+    ),
+    stateDefault(config, key),
+    null
+  );
 }
 function stateDefault(config, key) {
   for (const [, decl] of stateVarDecls(config)) {
@@ -85242,12 +85314,19 @@ var stepState = (args, ctx) => {
       `step-state: key "${key}" is not a bounded (range) state key (have keys: ${gate2.listKeys().join(", ")})`
     );
   }
-  const current = stepFrom(
-    "step-state",
+  const shown = stateKeyShows(
+    config,
+    (k) => ctx.sessionState.get(sid, k),
     key,
-    params,
-    stateKeyShows(config, (k) => ctx.sessionState.get(sid, k), key)
+    params
   );
+  if (shown.stale !== null) {
+    ctx.log(
+      "warn",
+      `step-state: "${key}" stores ${JSON.stringify(shown.stale)}, outside its range; stepping from ${JSON.stringify(shown.value)} (session=${sid})`
+    );
+  }
+  const current = stepFrom("step-state", key, params, shown.value);
   const next2 = stepWithin(current, by, params.min, params.max);
   const result = gate2.validate(key, String(next2));
   if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
@@ -85477,10 +85556,10 @@ var save = (args, ctx) => {
     ].join(" ")} \u2192 ${into.path} (session=${sid})`
   );
 };
-var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${settingSpelling(p2.value)}`;
+var placementLog = (p2) => `${p2.preset}/${p2.id}.settings.${p2.setting}=${spellSetting(p2.value)}`;
 function gatePlacements(verb, gate2, placements) {
   for (const p2 of placements) {
-    const result = gate2.validate(p2.key, settingSpelling(p2.value));
+    const result = gate2.validate(p2.key, spellSetting(p2.value));
     if (!result.ok) throw new BadVerbArgs(`${verb}: ${result.reason}`);
   }
 }
@@ -85509,10 +85588,11 @@ var savePreset = (args, ctx) => {
     picks,
     snapshot.placements
   );
+  const stale = stalePickKeys(config, (key) => ctx.sessionState.get(sid, key));
   for (const key of [
     ...SETTING_PROJECTIONS.map((p2) => p2.sessionKey),
     ...snapshot.placements.map((p2) => p2.key)
-  ]) {
+  ].filter((key2) => !stale.has(key2))) {
     ctx.sessionState.clear(sid, key);
   }
   ctx.sessionState.set(sid, SETTINGS.preset.sessionKey, name);
@@ -85543,12 +85623,13 @@ var saveThemeDefault = (args, ctx) => {
     save2.look
   );
   const pick2 = (key) => ctx.sessionState.get(sid, key);
-  const drafted = new Set(
-    settingDrafts(written3, pick2).map((d) => d.sessionKey)
-  );
+  const kept = /* @__PURE__ */ new Set([
+    ...settingDrafts(written3, pick2).map((d) => d.sessionKey),
+    ...stalePickKeys(written3, pick2)
+  ]);
   const released = THEME_DEFAULT_FIELDS.map(
     (f) => SETTINGS[f].sessionKey
-  ).filter((key) => !drafted.has(key));
+  ).filter((key) => !kept.has(key));
   for (const key of released) ctx.sessionState.clear(sid, key);
   ctx.log(
     "info",
@@ -85758,17 +85839,6 @@ function runOf3([action2 = "", evaluated2 = "", mac = ""], ctx) {
   };
 }
 var run2 = (args, ctx) => ask(ctx, runOf3(args, ctx));
-var repoConfig = (args, ctx) => {
-  const [dir = "", answer2 = "", mac = ""] = args;
-  const sid = ctx.session;
-  const answered = REPO_ANSWERS.find((known) => known === answer2);
-  if (answered === void 0 || !ctx.links.verify(repoAnswerFields(sid, dir, answered), mac)) {
-    throw new BadVerbArgs(
-      "the answer's signature does not match what it carries: it was not drawn by this daemon"
-    );
-  }
-  ctx.configWrites.answer(dir, answered);
-};
 var SESSION_HANDLERS = {
   [VERB_SET_STATE]: setState,
   [VERB_STEP_STATE]: stepState,
@@ -85786,7 +85856,6 @@ var SESSION_HANDLERS = {
   [VERB_REWIND]: rewind,
   [VERB_SLASH]: slash,
   [VERB_RUN]: run2,
-  [VERB_REPO_CONFIG]: repoConfig,
   [VERB_COPY_DIAGNOSTIC]: copyDiagnostic
 };
 function foldEffects(steps2, log, perform, recordErrors) {
@@ -85941,8 +86010,17 @@ function runClick(click2, ctx) {
         click2.steps,
         c.log,
         (step4) => {
-          if (step4.kind === "global") globalAct(step4, c, sid);
-          else SESSION_HANDLERS[step4.verb](step4.args, c);
+          switch (step4.kind) {
+            case "global":
+              globalAct(step4, c, sid);
+              break;
+            case "session":
+              SESSION_HANDLERS[step4.verb](step4.args, c);
+              break;
+            case "repo-answer":
+              c.configWrites.answer(step4.dir, step4.answer);
+              break;
+          }
         },
         (message2) => holdClickError(c.sessionState, sid, message2, c.now())
       );
@@ -88281,7 +88359,6 @@ function mainRendererOf(inputs, host) {
   const parts = {
     ...host,
     time,
-    linkSigner: linkSigner2,
     sessionState: edits.view,
     renderCache,
     worldStates,
@@ -88520,12 +88597,11 @@ var diskFiles = {
   folders: listFolders,
   text(file) {
     try {
-      return { kind: "text", text: fs_default.readFileSync(file, "utf-8") };
+      return { kind: "text", text: readRegularTextSync(file) };
     } catch (e) {
-      const err = e;
       return {
         kind: "unreadable",
-        error: err.code === "EISDIR" ? "not a file" : err.message
+        error: types.isNativeError(e) ? e.message : String(e)
       };
     }
   },
@@ -89149,33 +89225,20 @@ function createDaemon(inputs) {
   });
   const linkSigner2 = linkSignerOver(inputs.linkKey);
   const publishFrame = publishingFrames(linkSigner2);
-  const stores = new HeldStores(inputs.profile(inputs.rendererName, log));
   const sessionBook = new SessionBook(inputs.sessionBook(log));
-  const preparedRenderer = inputs.renderer({
-    name: inputs.rendererName,
-    build: (reaches2) => mainRendererOf(
-      {
-        stored: stores.current(),
-        linkSigner: linkSigner2,
-        locations: locs,
-        home: host.home,
-        gates,
-        memoryLimitBytes: memoryLimitBytes2
-      },
-      reaches2
-    ),
-    // The key crosses in base64, so the boot crosses as a line.
-    boot: () => {
-      const key = inputs.linkKey();
-      return {
-        stored: stores.current(),
-        host: { ...host, env: plainEnvironment(host.env) },
-        memoryLimitBytes: memoryLimitBytes2,
-        linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
-      };
-    },
-    node: bundle.node
-  });
+  const primaryPrepared = prepareRenderer(
+    inputs.rendererName,
+    bundle.path,
+    inputs.rendererEntry ?? bundle.path
+  );
+  const renderers = /* @__PURE__ */ new Map();
+  const routes = /* @__PURE__ */ new Map();
+  const nameOf2 = (session) => routes.get(session)?.name ?? inputs.rendererName;
+  const viewersOf = (name, viewers) => Object.fromEntries(
+    Object.entries(viewers).filter(
+      ([session]) => nameOf2(session) === name
+    )
+  );
   const limits = makeLimits({
     ...inputs.limits({
       startedAtMs: stats.startedAt.getTime(),
@@ -89187,7 +89250,7 @@ function createDaemon(inputs) {
     // [LAW:one-source-of-truth] The limit is over the daemon's whole: the
     // renderer's process counts in it while one runs. Read only once armed,
     // by when the link below exists.
-    renderer: () => serving() ? link.process() : null
+    renderer: () => serving() ? primary.link.process() : null
   });
   const renderSightings = new RenderSightings();
   const refreshLedger = new RefreshLedger(log);
@@ -89254,10 +89317,23 @@ function createDaemon(inputs) {
     publishFrame,
     shown: (req) => paneVisibility.shown(req.hints.tmux),
     watching: () => paneVisibility.follow(),
-    deliver: (make) => parts.renderer.deliver(
-      () => ({ kind: "event", event: { kind: "viewers", viewers: make() } }),
-      []
-    ),
+    deliver: async (make) => {
+      const sent = await Promise.all(
+        [...renderers.values()].map(
+          ({ renderer }) => renderer.deliver(
+            () => ({
+              kind: "event",
+              event: {
+                kind: "viewers",
+                viewers: viewersOf(renderer.name, make())
+              }
+            }),
+            []
+          )
+        )
+      );
+      return sent.find((turn) => turn.kind === "threw") ?? { kind: "answered" };
+    },
     log
   });
   const paneVisibility = new PaneVisibility({
@@ -89297,7 +89373,15 @@ function createDaemon(inputs) {
     daemon: () => daemonFaults.get(),
     clock,
     watched: (sessionId2) => frameFeeds.isWatched(sessionId2),
-    deliver: (event) => parts.renderer.deliver(() => ({ kind: "event", event }), []),
+    deliver: (event) => {
+      const session = event.kind === "retire" ? event.session : event.worldState.session;
+      const route = routes.get(session);
+      const renderer = (renderers.get(nameOf2(session)) ?? primary).renderer;
+      return renderer.deliver(() => ({ kind: "event", event }), []).finally(() => {
+        if (event.kind === "retire" && routes.get(session) === route)
+          routes.delete(session);
+      });
+    },
     log
   });
   const reaches = {
@@ -89317,55 +89401,202 @@ function createDaemon(inputs) {
       release: (id2) => managedStorage.release(id2)
     }
   };
-  const link = preparedRenderer.start({
-    reaches,
-    log,
-    clock,
-    // [LAW:single-enforcer] A renderer that starts again is configured as a
-    // request would: every live session whose newest request the host holds
-    // gets its context with its latest stamp, all in the one `start` turn, so
-    // its output names every session it serves; and who watches each, so its
-    // feeds open. All through the host's one path to the renderer, each turn
-    // recorded there.
-    // [LAW:no-ambient-temporal-coupling] The start heads the mailbox, so
-    // every input after it finds its sessions handed in.
-    start: async () => {
-      if (!serving()) return;
-      const started2 = await parts.renderer.start(() => {
-        const viewers = frameFeeds.viewers();
-        frameFeeds.handedIn(viewers);
-        return {
-          kind: "event",
-          event: {
-            kind: "start",
-            viewers,
-            sessions: [...collector.liveDocuments()].flatMap(
-              ([sessionId2, worldState]) => {
-                const req = frameFeeds.latest(sessionId2);
-                return req === null ? [] : [{ context: located(req, checkoutLocation), worldState }];
-              }
-            )
-          }
-        };
-      }, [["why", "renderer-start"]]);
-      if (started2.kind === "threw") {
-        frameFeeds.handedIn(null);
-        throw new CrossedFailure(started2.failure);
-      }
-    },
-    ended: (event) => {
-      rendererEnded = event;
-      restateFaults();
-    }
-  });
-  const configRenderers = /* @__PURE__ */ new Map();
   const configDiscovery = new ConfigDiscovery({
     locations: locs,
     stateDir: paths2.state,
     watchers: watcherRegistry,
     log,
-    moved: (renderer, origins) => configRenderers.get(renderer)?.moved(origins)
+    moved: (name, origins) => renderers.get(name)?.renderer.moved(origins)
   });
+  const declared = /* @__PURE__ */ new Map();
+  const aggregate = () => {
+    const sources = {};
+    const lanes = {};
+    for (const [name, subscription2] of declared) {
+      for (const [id2, values2] of Object.entries(subscription2.sources))
+        if (nameOf2(id2) === name) sources[id2] = values2;
+      for (const [id2, values2] of Object.entries(subscription2.lanes))
+        if (nameOf2(id2) === name) lanes[id2] = values2;
+    }
+    collector.subscribed({ sources });
+    frameFeeds.switched(lanes);
+    declaredBarPanes.declare(lanes);
+  };
+  function prepareRenderer(name, reported, entry) {
+    const stores = new HeldStores(inputs.profile(name, log));
+    const prepared = inputs.renderer({
+      name,
+      entry,
+      build: (hostReaches) => mainRendererOf(
+        {
+          stored: stores.current(),
+          linkSigner: linkSigner2,
+          locations: locs,
+          home: host.home,
+          gates,
+          memoryLimitBytes: memoryLimitBytes2
+        },
+        hostReaches
+      ),
+      boot: () => {
+        const key = inputs.linkKey();
+        return {
+          stored: stores.current(),
+          host: { ...host, env: plainEnvironment(host.env) },
+          memoryLimitBytes: memoryLimitBytes2,
+          linkKey: key.kind === "ok" ? { kind: "ok", value: key.value.toString("base64") } : key
+        };
+      },
+      node: bundle.node
+    });
+    return { name, reported, entry, stores, prepared };
+  }
+  const connectRenderer = ({
+    name,
+    reported,
+    entry,
+    stores,
+    prepared
+  }) => {
+    const link = prepared.start({
+      reaches,
+      log,
+      clock,
+      // [LAW:no-ambient-temporal-coupling] Start heads this renderer's
+      // mailbox and only rebuilds the sessions currently routed to it.
+      start: async () => {
+        if (!serving()) return;
+        const started2 = await renderer.start(() => {
+          const viewers = frameFeeds.viewers();
+          if (renderers.size === 1) frameFeeds.handedIn(viewers);
+          return {
+            kind: "event",
+            event: {
+              kind: "start",
+              viewers: viewersOf(name, viewers),
+              sessions: collector.liveSessions().filter(
+                ({ worldState }) => nameOf2(worldState.session) === name
+              )
+            }
+          };
+        }, [["why", "renderer-start"]]);
+        if (started2.kind === "threw") {
+          frameFeeds.handedIn(null);
+          throw new CrossedFailure(started2.failure);
+        }
+        if (renderers.size > 1) frameFeeds.announce();
+      },
+      ended: (event) => {
+        rendererEnded = event;
+        restateFaults();
+      }
+    });
+    const renderer = rendererHost(
+      name,
+      clock,
+      link.renderer,
+      log,
+      {
+        subscribed: (subscriptions) => {
+          declared.set(name, {
+            sources: subscriptions.sources,
+            lanes: subscriptions.lanes
+          });
+          aggregate();
+        },
+        frames: (frames) => frameFeeds.took(
+          frames.filter(({ session }) => nameOf2(session) === name)
+        ),
+        stored: (writes) => stores.take(writes),
+        holding: (session) => collector.holding(session),
+        recorded: () => {
+        }
+      },
+      {
+        perform: (act) => acts.perform(act),
+        stateDir: paths2.state,
+        configs: configDiscovery.forRenderer(name),
+        closing: cancelling,
+        unheard: (text4) => {
+          actFailed = joinedEvent(actFailed, text4, instant());
+          restateFaults();
+        }
+      }
+    );
+    return { reported, entry, stores, link, renderer };
+  };
+  const primary = connectRenderer(primaryPrepared);
+  renderers.set(inputs.rendererName, primary);
+  const canonicalEntry = (name, bundlePath) => {
+    try {
+      if (inputs.rendererEntryOf === void 0)
+        throw new Error("this host has no process entry resolver");
+      return inputs.rendererEntryOf(bundlePath);
+    } catch (error) {
+      throw new BadVerbArgs(
+        `renderer ${name} bundle ${JSON.stringify(bundlePath)}: ${String(error)}`
+      );
+    }
+  };
+  const rendererFor = (request2, environment, order2) => {
+    const session = request2.hookData.session_id;
+    const route = routes.get(session);
+    const asked = environment.kind === "ok" ? variableOf(environment.value, "CC_CANDYBAR_NAME") : null;
+    const client = request2.hints.client;
+    let name = client?.kind === "frames" && route !== void 0 ? route.name : inputs.rendererName;
+    if (asked?.kind === "ok") {
+      try {
+        name = rendererNameOf(asked.value);
+      } catch (error) {
+        throw new BadVerbArgs(`CC_CANDYBAR_NAME: ${String(error)}`);
+      }
+    }
+    if (route !== void 0 && route.name !== name && route.order > order2)
+      throw new BadVerbArgs(
+        `session ${session} has already moved to renderer ${route.name}`
+      );
+    let target = renderers.get(name);
+    const binding = asked?.kind === "ok" ? client?.bundle : void 0;
+    if (target === void 0) {
+      if (binding === void 0)
+        throw new BadVerbArgs(
+          `renderer ${name} needs a statusline client's bundle`
+        );
+      target = connectRenderer(
+        prepareRenderer(name, binding, canonicalEntry(name, binding))
+      );
+      target.stores.load();
+      target.link.serve();
+      renderers.set(name, target);
+      if (phase.kind === "armed") target.link.arm();
+    } else if (binding !== void 0 && binding !== target.reported && binding !== target.entry && canonicalEntry(name, binding) !== canonicalEntry(name, target.entry)) {
+      throw new BadVerbArgs(
+        `renderer ${name} is bound to ${JSON.stringify(target.entry)}`
+      );
+    }
+    if (route === void 0 || order2 >= route.order) {
+      routes.set(session, { name, order: order2 });
+      if (route !== void 0 && route.name !== name) {
+        const former = renderers.get(route.name);
+        if (former !== void 0)
+          void former.renderer.deliver(
+            () => ({
+              kind: "event",
+              event: { kind: "retire", session }
+            }),
+            [["why", "renderer-moved"]]
+          ).catch((error) => {
+            log(
+              "error",
+              `renderer ${former.renderer.name} retire ${session}: ${String(error)}`
+            );
+          });
+        frameFeeds.handedIn(null);
+        frameFeeds.announce();
+      }
+    }
+    return target.renderer;
+  };
   const parts = {
     closing: cancelWork.signal,
     home: host.home,
@@ -89389,39 +89620,9 @@ function createDaemon(inputs) {
     frameFeeds,
     limits,
     collector,
-    renderer: rendererHost(
-      inputs.rendererName,
-      clock,
-      link.renderer,
-      log,
-      {
-        subscribed: (subscriptions) => {
-          collector.subscribed(subscriptions);
-          frameFeeds.switched(subscriptions.lanes);
-          declaredBarPanes.declare(subscriptions.lanes);
-        },
-        frames: (frames) => frameFeeds.took(frames),
-        stored: (writes) => stores.take(writes),
-        holding: (session) => collector.holding(session),
-        // The daemon waits on no turn's note.
-        recorded: () => {
-        }
-      },
-      {
-        perform: (act) => acts.perform(act),
-        stateDir: paths2.state,
-        configs: configDiscovery.forRenderer(inputs.rendererName),
-        closing: cancelling,
-        // [LAW:no-silent-failure] Joined to the last while it is owed, by the
-        // one rule for events that follow each other.
-        unheard: (text4) => {
-          actFailed = joinedEvent(actFailed, text4, instant());
-          restateFaults();
-        }
-      }
-    )
+    renderer: primary.renderer,
+    rendererFor
   };
-  configRenderers.set(parts.renderer.name, parts.renderer);
   fileEvents.subscribe((notice) => {
     switch (notice.kind) {
       case "period":
@@ -89479,7 +89680,7 @@ function createDaemon(inputs) {
       fileEvents.start(paths2.watchProbe);
       binaryWatch.arm();
       limits.arm();
-      link.arm();
+      for (const { link } of renderers.values()) link.arm();
     }
   };
   phase = { kind: "built" };
@@ -89489,10 +89690,10 @@ function createDaemon(inputs) {
     const starting = { kind: "starting" };
     phase = starting;
     try {
-      stores.load();
+      primary.stores.load();
       sessionBook.load();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
-      link.serve();
+      primary.link.serve();
       if (currentPhase() !== starting) throw new DaemonClosing("serve");
       phase = { kind: "serving" };
       return served;
@@ -89511,18 +89712,31 @@ function createDaemon(inputs) {
     return done;
   }
   async function tearDown(wasServing, done) {
-    const rendererStep = (kind) => () => wasServing ? parts.renderer.ask({ kind }) : void 0;
+    const rendererSteps = (kind) => wasServing ? [...renderers.values()].map(({ renderer }) => [
+      `${renderer.name} ${kind}`,
+      () => renderer.ask({ kind })
+    ]) : [];
     const teardown = [
       // [LAW:no-ambient-temporal-coupling] First: from here a renderer that
       // ends is not started again, so no step below waits on a fresh boot.
       // [LAW:no-ambient-temporal-coupling] First of all: no `due` is made
       // from here, so no turn the renderer holds for later runs into the
       // close's.
-      ["renderer wake close", () => parts.renderer.closeWake()],
-      ["renderer close begins", () => link.beginClose()],
+      [
+        "renderer wakes close",
+        () => {
+          for (const { renderer } of renderers.values()) renderer.closeWake();
+        }
+      ],
+      [
+        "renderer close begins",
+        () => {
+          for (const { link } of renderers.values()) link.beginClose();
+        }
+      ],
       // [LAW:no-ambient-temporal-coupling] In the mailbox's arrival order:
       // every click ahead of it lands whole, and none behind it begins.
-      ["renderer journal close", rendererStep("close-journal")],
+      ...rendererSteps("close-journal"),
       // [LAW:no-ambient-temporal-coupling] Nothing launches from here on, what
       // is in flight is terminated, whichever owner's work it was, and the
       // launcher's lifeline goes.
@@ -89541,7 +89755,7 @@ function createDaemon(inputs) {
       // Before the views close: a `config` made after it finds its origin
       // let go, and hands the closed cache nothing.
       ["configDiscovery close", () => configDiscovery.close()],
-      ["renderer views close", rendererStep("close-views")],
+      ...rendererSteps("close-views"),
       ...payloadProviders.closes,
       ["runs close", () => runs.close()],
       // After the collector, which holds every session's runs: its close
@@ -89551,9 +89765,19 @@ function createDaemon(inputs) {
       ["watcherRegistry close", () => watcherRegistry.closeAll()],
       // Last of the stores' writers: a run that ends in the teardown holds
       // its click error first.
-      ["stores close", () => stores.close()],
+      ...[...renderers.values()].map(
+        ({ renderer, stores }) => [
+          `${renderer.name} stores close`,
+          () => stores.close()
+        ]
+      ),
       ["sessionBook close", () => sessionBook.close()],
-      ["renderer process close", () => link.close()]
+      ...[...renderers.values()].map(
+        ({ renderer, link }) => [
+          `${renderer.name} renderer close`,
+          () => link.close()
+        ]
+      )
     ];
     await runTeardown(teardown, log);
     phase = { kind: "closed", done };
@@ -89870,7 +90094,7 @@ var validateTheme = (raw) => {
   if (!isInstalledTheme(raw)) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${listResolvablePaletteNames().join(", ")})`
+      reason: `unknown theme "${raw}" (have: ${describeInstalledThemes()})`
     };
   }
   return { ok: true, value: raw };
@@ -90755,6 +90979,11 @@ function productionAdapters(paths2, daemonLog, machine) {
     // [LAW:one-type-per-behavior] In this process: the daemon process's entry
     // (server.ts) runs it in a process of its own.
     renderer: inProcessPort,
+    rendererEntryOf: (reported) => {
+      const entry = fs_default.realpathSync.native(reported);
+      if (!fs_default.statSync(entry).isFile()) throw new Error("not a file");
+      return entry;
+    },
     stat: fs_default.statSync
   };
 }

@@ -2,6 +2,35 @@
   "schema": 2,
   "versions": [
     {
+      "version": "pr-865",
+      "ref": "refs/pull/865/merge",
+      "sha": "fe25f3016b8e586e72ef57a7cde74ce74191d4f9",
+      "timestamp": "2026-11-19T13:23:42.314Z",
+      "commits": [
+        {
+          "sha": "fe25f3016b8e586e72ef57a7cde74ce74191d4f9",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T13:22:16Z",
+          "message": "Merge c21489e48948126d255d0515db4d19e8965fbd94 into b572777cc8c9de4ce37090fcea33fb72d08cf127\n"
+        },
+        {
+          "sha": "c21489e48948126d255d0515db4d19e8965fbd94",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T06:18:16-07:00",
+          "message": "fix(config): every reader of a placement setting reads its one fold\n\nA placement setting's draft slot keeps its fold in the store, so the bar,\nthe slot's control, a picker's mark and a carousel all show the value the\nplacement draws. A click, which reads no store, folds the session's key\nthrough the same function.\n\nThe resolution and a placement carry a stale pick as data, the setting and\nthe spelling stored. The draw writes the sentence where the worn name is\nknown, so a rule-decided theme is named and a placement following the bar\nnames the bar's theme. A retired theme names the theme to write. A\nplacement setting is reported only when its draw reads it, and once per\nslot when its label is drawn beside it.\n\nA save keeps a stale pick stored. The edit-mode stepper steps from the\nvalue it shows, the staged one included. A plain state key's stored value\nis read against its range, so an out-of-range value steps from the default\ninstead of failing the click.\n\nThe loader checks theme names against the installed themes alone, the\nauthority the gate and the render use.\n"
+        },
+        {
+          "sha": "df1bdd8ab022ee411cb3ec3f924830bc091bfc76",
+          "author_name": "Brandon Fryslie",
+          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
+          "timestamp": "2026-11-19T05:18:15-07:00",
+          "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
+        }
+      ]
+    },
+    {
       "version": "main",
       "ref": "refs/heads/main",
       "sha": "b572777cc8c9de4ce37090fcea33fb72d08cf127",
@@ -151,28 +180,6 @@
           "author_email": "530235+brandon-fryslie@users.noreply.github.com",
           "timestamp": "2026-11-19T05:28:42-07:00",
           "message": "refactor(cli): retire the standalone config check (ibyq.9lr)\n"
-        }
-      ]
-    },
-    {
-      "version": "pr-865",
-      "ref": "refs/pull/865/merge",
-      "sha": "44991210d5070ae32afd4bbf7321d09481fbe4ef",
-      "timestamp": "2026-11-19T12:19:55.742Z",
-      "commits": [
-        {
-          "sha": "44991210d5070ae32afd4bbf7321d09481fbe4ef",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:18:40-07:00",
-          "message": "Merge 5b003b5d347c234d2cd9ae29b065b61885260a36 into 4a8dafb6b2f1f4ff5d884fb7d54f7a2151b21607\n"
-        },
-        {
-          "sha": "5b003b5d347c234d2cd9ae29b065b61885260a36",
-          "author_name": "Brandon Fryslie",
-          "author_email": "530235+brandon-fryslie@users.noreply.github.com",
-          "timestamp": "2026-11-19T05:18:15-07:00",
-          "message": "fix(config): a stale session pick draws the fallback under a warning\n\nA session's stored setting can name something outside its domain: a theme\nthis build doesn't install, a style or preset the config no longer\ndeclares, a dropped effect or endcaps shape, an out-of-range padding, a\nplacement theme naming nothing installed. Each used to draw the fallback\nsilently, and the stepper clamped an out-of-range int the render refused,\nso a `+` click could move the bar the wrong way.\n\nEach setting now reads its stored spelling through its own parse into one\nshape (unset, held, or stale carrying the spelling), and the one fold\nreports what it passed over only where the session's rung would have been\nin force. The draw shows one `stale` warning per key, naming the setting,\nthe stored value and what the bar wears. The stored value stays, so a\nconfig that declares the member again brings the pick back. Steppers step\nfrom the folded value the bar shows. Installed-theme membership has one\nauthority, shared by the write gate, the theme read and placements.\n"
         }
       ]
     }
