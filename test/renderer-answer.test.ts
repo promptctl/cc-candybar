@@ -345,6 +345,37 @@ async function dueFrame(r: Renderer, elapsed = 0) {
 }
 
 describe("a statusline request", () => {
+  test("the first warm start declaration keeps a pinned view and an origin retained without a session", async () => {
+    const t = renderer();
+    const context = checked();
+    const inactive = checked(undefined, "inactive-config.json5").requested;
+    const offerings = [context.requested, inactive].map((origin) => {
+      t.rig.cache.configs.follow(origin);
+      const config = t.rig.cache.configs.discovery.snapshotOf(origin);
+      if (config === null) throw new Error("the host did not hold the config");
+      return { origin, config, retained: true };
+    });
+    const first = answered(await handIn(t.r, {
+      kind: "start",
+      viewers: {
+        [SESSION]: {
+          lanes: { pane: { drawing: true, subscribers: 1 } },
+          shown: true,
+          joined: 1,
+        },
+      },
+      sessions: [{
+        context,
+        worldState: t.rig.served.collector.requested(context, TEST_ENVIRONMENT),
+      }],
+      configs: offerings,
+    }));
+
+    expect(Object.keys(first.subscriptions.sources)).toEqual([SESSION]);
+    expect(first.subscriptions.configs).toEqual(expect.arrayContaining([context.requested, inactive]));
+    expect((await dueFrame(t.r)).bar.rows.length).toBeGreaterThan(0);
+  });
+
   test("successive ordinary draws retain the active subscription declaration", async () => {
     const t = renderer();
     const first = answered(await request(t));

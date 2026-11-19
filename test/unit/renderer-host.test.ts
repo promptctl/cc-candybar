@@ -16,6 +16,7 @@ import {
   rendererOf,
   type AdapterOutput,
   type EffectId,
+  type Event,
   type PushedFrame,
   type RendererOutput,
   type Subscriptions,
@@ -527,22 +528,47 @@ test("a config named by a push reaches the renderer before the next queued event
   expect(seen).toEqual(["push", "config", "due"]);
 });
 
-test("a failed start's input does not keep the previous renderer's served config", async () => {
+test("failed replacement starts leave the accepted declaration until a complete successor responds", async () => {
   const origin = {
     projectDir: "/p",
     cwd: "/p",
     target: { source: "search" as const },
   };
+  const config = {
+    chain: [],
+    repo: null,
+    plugins: [],
+    strays: [],
+    checkout: { root: origin.cwd, git: false },
+    notices: [],
+    watch: null,
+  };
+  const previous = { ...NONE, sources: { kept: [] }, configs: [origin] };
+  const taken: Subscriptions[] = [];
+  const heard: Event[] = [];
   const read: string[] = [];
+  const followed: string[][] = [];
+  let available = true;
+  let rejectsStart = false;
+  let keepsDemand = true;
   const host = rendererHost(
     MAIN_RENDERER,
     clockAt({ wall: 0, mono: 0 }),
     held(
       rendererOf({
-        event: async () => ({
-          ...answered(),
-          subscriptions: { ...NONE, configs: [origin] },
-        }),
+        event: async ({ event }) => {
+          heard.push(event);
+          if (event.kind === "start") {
+            if (rejectsStart)
+              return {
+                ...answered(),
+                kind: "threw",
+                failure: failureOf(new Error("opening failed")),
+              };
+            return { ...answered(), subscriptions: keepsDemand ? previous : NONE };
+          }
+          return { ...answered(), subscriptions: previous };
+        },
         adapter: async () => {
           throw new Error("no push here");
         },
@@ -550,7 +576,7 @@ test("a failed start's input does not keep the previous renderer's served config
     ),
     () => {},
     {
-      subscribed: () => {},
+      subscribed: (subscriptions) => void taken.push(subscriptions),
       frames: () => {},
       stored: () => {},
       recorded: () => {},
@@ -560,10 +586,10 @@ test("a failed start's input does not keep the previous renderer's served config
       ...NO_ACTS,
       configs: {
         ...NO_ACTS.configs,
-        follow: () => {},
+        follow: (wanted) => followed.push(wanted.map(({ cwd }) => cwd)),
         snapshotOf: ({ cwd }) => {
           read.push(cwd);
-          return null;
+          return available ? config : null;
         },
       },
     },
@@ -572,12 +598,43 @@ test("a failed start's input does not keep the previous renderer's served config
   await host.answer(due);
   await host.answer(due);
   expect(read).toEqual(["/p"]);
-  const start = await host.start(() => {
-    throw new Error("start could not be made");
-  }, []);
-  expect(start.kind).toBe("threw");
-  await host.answer(due);
+  expect(taken).toEqual([previous]);
+  const start = () =>
+    host.start(() => ({
+      kind: "event",
+      event: { kind: "start", viewers: {}, sessions: [] },
+    }), []);
+
+  available = false;
+  expect(await start()).toMatchObject({
+    kind: "threw",
+    failure: { message: expect.stringContaining("no config snapshot") },
+  });
+  expect(heard.map(({ kind }) => kind)).toEqual(["due", "config", "due"]);
+  expect(await host.answer(due)).toMatchObject({ kind: "threw" });
+  await expect(host.ask({ kind: "stats" })).rejects.toThrow("no config snapshot");
   expect(read).toEqual(["/p", "/p"]);
+  expect(taken).toEqual([previous]);
+
+  available = true;
+  rejectsStart = true;
+  expect(await start()).toMatchObject({ kind: "threw" });
+  expect(taken).toEqual([previous]);
+
+  rejectsStart = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
+  expect(heard.at(-1)).toMatchObject({
+    kind: "start",
+    configs: [{ origin, config, retained: true }],
+  });
+  expect(heard.map(({ kind }) => kind)).toEqual(["due", "config", "due", "start", "start"]);
+  expect(read).toEqual(["/p", "/p", "/p", "/p"]);
+  expect(taken).toEqual([previous, previous]);
+
+  keepsDemand = false;
+  expect(await start()).toMatchObject({ kind: "answered" });
+  expect(taken).toEqual([previous, previous, NONE]);
+  expect(followed.at(-1)).toEqual([]);
 });
 
 test("a declared wake is handed in as a `due`, and none is made after the wake closes", async () => {

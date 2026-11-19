@@ -241,7 +241,16 @@ export function mainRenderer(
     frames: PushedFrame[],
   ): void => {
     switch (event.kind) {
-      case "start":
+      case "start": {
+        const configs = event.configs ?? [];
+        // [LAW:no-ambient-temporal-coupling] A replacement opens its views
+        // against the offered facts in the first turn. Its first declaration
+        // can then replace the predecessor's without an intermediate gap.
+        for (const { origin, config } of configs)
+          parts.renderCache.configure(origin, config);
+        const live = new Set(
+          event.sessions.map(({ context }) => originKey(context.requested)),
+        );
         // The feeds first: a watched session's feed pins its view before
         // the view opens. Each session opens as its `context` would, so one
         // at an origin the renderer holds no config for waits for it, and
@@ -258,8 +267,14 @@ export function mainRenderer(
                   frames,
                 ),
           ),
+          ...configs.flatMap(({ origin, retained }) =>
+            retained && !live.has(originKey(origin))
+              ? [() => void parts.renderCache.getOrCreate(origin)]
+              : [],
+          ),
         ]);
         return;
+      }
       case "context": {
         const { context, worldState } = event;
         const session = context.hookData.session_id;

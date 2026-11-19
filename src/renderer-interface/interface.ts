@@ -156,6 +156,13 @@ export type Event =
       // view before the view opens.
       readonly viewers: Viewers;
       readonly sessions: readonly SessionConfig[];
+      // The host's current shared snapshots, once per origin. Retained
+      // origins can outlive their last session and reopen their cached state.
+      readonly configs?: ReadonlyArray<{
+        readonly origin: RenderOrigin;
+        readonly config: ConfigSnapshot;
+        readonly retained: boolean;
+      }>;
     }
   | {
       // A request's opening turn, delivered ahead of it: the session's
