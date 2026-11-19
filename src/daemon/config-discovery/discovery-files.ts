@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { types } from "node:util";
 import type { Layer } from "../../config/config-snapshot.js";
 import { checkoutOf, worktreeLink } from "../../utils/git-root.js";
 import { presence, type Unchecked } from "../../utils/presence.js";
+import { readRegularTextSync } from "../../utils/regular-text.js";
 import { listFolders } from "./plugin-folders.js";
 
 export type TextRead = Exclude<Layer["content"], { kind: "absent" }>;
@@ -28,12 +30,11 @@ export const diskFiles: DiscoveryFiles = {
   folders: listFolders,
   text(file) {
     try {
-      return { kind: "text", text: fs.readFileSync(file, "utf-8") };
+      return { kind: "text", text: readRegularTextSync(file) };
     } catch (e) {
-      const err = e as NodeJS.ErrnoException;
       return {
         kind: "unreadable",
-        error: err.code === "EISDIR" ? "not a file" : err.message,
+        error: types.isNativeError(e) ? e.message : String(e),
       };
     }
   },

@@ -2,9 +2,10 @@
 // host opens them, and the paths and the parse both sides read are shared
 // (src/claude-settings.ts).
 
+import { types } from "node:util";
 import { JSON_DIALECT } from "./config/json5-edit.js";
 import { failed, ok, type Failed, type Ok } from "./utils/outcome.js";
-import { readTailSync } from "./utils/transcript-fs.js";
+import { readRegularTextSync } from "./utils/regular-text.js";
 import { type JsonObject, isJsonObject } from "./claude-settings";
 import type { JsonValue } from "./var-system/types.js";
 
@@ -15,14 +16,18 @@ const cannotRead = (settingsPath: string, e: unknown): Error =>
 // the one absence with a meaning — Claude Code has written nothing yet — so it
 // reads as the empty document.
 export function readClaudeSettingsText(settingsPath: string): string {
-  const read = readTailSync(settingsPath, Number.MAX_SAFE_INTEGER);
-  switch (read.kind) {
-    case "absent":
+  try {
+    return readRegularTextSync(settingsPath);
+  } catch (e) {
+    // [LAW:no-silent-failure] The install can create a missing settings file.
+    // A settings file it could not read is an error the user can act on.
+    if (
+      types.isNativeError(e) &&
+      "code" in e &&
+      (e.code === "ENOENT" || e.code === "ENOTDIR")
+    )
       return "";
-    case "failed":
-      throw new Error(`cannot read ${settingsPath}: ${read.reason}`);
-    case "ok":
-      return read.value.buf.toString("utf8");
+    throw cannotRead(settingsPath, e);
   }
 }
 
@@ -44,18 +49,16 @@ export function readClaudeSettings(settingsPath: string): JsonObject {
 export function readClaudeSettingsOutcome(
   settingsPath: string,
 ): Ok<JsonObject> | Failed {
-  const reason = (e: unknown): string =>
-    e instanceof Error ? e.message : String(e);
   let text: string;
   try {
     text = readClaudeSettingsText(settingsPath);
   } catch (e) {
-    return failed(reason(e), "read");
+    return failed(messageOf(e), "read");
   }
   try {
     return ok(parseSettings(settingsPath, text));
   } catch (e) {
-    return failed(reason(e), "parse");
+    return failed(messageOf(e), "parse");
   }
 }
 
@@ -75,4 +78,4 @@ function parseSettings(settingsPath: string, text: string): JsonObject {
 }
 
 const messageOf = (e: unknown): string =>
-  e instanceof Error ? e.message : String(e);
+  types.isNativeError(e) ? e.message : String(e);

@@ -6,6 +6,7 @@
 // hand edit an origin's watch hears moves that origin; and an answer to the
 // trust book moves every origin with a repository to ask about.
 
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -506,6 +507,78 @@ test("a batch reads shared layer, plugin root and definition paths once", () => 
     snapshot.chain.find(({ path: file }) => file === config)?.listed,
   ).toEqual({});
   expect(texts.filter((file) => file === config)).toHaveLength(2);
+});
+
+// [LAW:verifiable-goals] A regression would block during open, before any
+// JavaScript timer runs. The child owns the reads, and its parent bounds it.
+test("config and plugin discovery refuse a FIFO with no writer", () => {
+  const dir = project("named-pipe");
+  const pluginDir = project("named-pipe/widget");
+  const plugin = path.join(pluginDir, "plugin.json5");
+  const pipe = path.join(dir, "config-pipe.json5");
+  const alias = path.join(dir, "usable.json5");
+  const config = path.join(dir, "bar.json5");
+  execFileSync("mkfifo", [plugin], { timeout: 5_000 });
+  fs.symlinkSync(plugin, pipe);
+  fs.symlinkSync(config, alias);
+  fs.writeFileSync(config, JSON.stringify({ plugins: [plugin] }));
+  const absent = path.join(dir, "missing.json5");
+  const world = {
+    locations: { ...locations(HOST), dataDirs: [], dataHome: dir },
+    stateDir: dir,
+  };
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      `import { discover, readShared } from "./src/daemon/config-discovery/discover.ts";
+       const [world, cwd, ...files] = process.argv.slice(1);
+       const shared = readShared(JSON.parse(world));
+       const snapshots = files.map(path => discover({ kind: "file", path, cwd }, shared).snapshot);
+       process.stdout.write(JSON.stringify(snapshots));`,
+      JSON.stringify(world),
+      dir,
+      pipe,
+      alias,
+      absent,
+    ],
+    { encoding: "utf8", timeout: 10_000, killSignal: "SIGKILL" },
+  );
+  expect(JSON.parse(output)).toEqual([
+    expect.objectContaining({
+      chain: [
+        expect.objectContaining({
+          path: pipe,
+          content: { kind: "unreadable", error: "not a file" },
+        }),
+      ],
+    }),
+    expect.objectContaining({
+      chain: [
+        expect.objectContaining({
+          path: alias,
+          content: {
+            kind: "text",
+            text: JSON.stringify({ plugins: [plugin] }),
+          },
+          listed: {
+            [plugin]: expect.objectContaining({
+              path: plugin,
+              definition: { kind: "unreadable", error: "not a file" },
+            }),
+          },
+        }),
+      ],
+    }),
+    expect.objectContaining({
+      chain: [
+        expect.objectContaining({ path: absent, content: { kind: "absent" } }),
+      ],
+    }),
+  ]);
 });
 
 test("an unchecked extension remains the unreadable layer at its actual path", () => {

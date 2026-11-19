@@ -4,14 +4,7 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  openSync,
-  readSync,
-  statSync,
-} from "node:fs";
+import { statSync } from "node:fs";
 import { Limiter } from "./limiter";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
@@ -381,60 +374,4 @@ export async function readTail(
       });
     }
   });
-}
-
-// [LAW:one-source-of-truth] exception: readTail for a caller that must not yield — a
-// doctor probe, which runs synchronously on the daemon's loop. Outside the
-// gate: a synchronous read holds its one descriptor only while nothing else
-// runs. The window, the short-read loop, ENOENT as `absent` and the close that
-// never overrides the read are readTail's, copied: a core generic over sync
-// and async reads would cost more than these lines.
-export function readTailSync(
-  path: string,
-  maxBytes: number,
-): Outcome<{ buf: Buffer; fromStart: boolean; file: string }> {
-  let fd: number;
-  try {
-    // [LAW:single-enforcer] THE read of a path someone else controls (a
-    // client's transcript, a project's `.claude/` settings): non-blocking,
-    // since a synchronous open of a FIFO with no writer would hold the
-    // daemon's loop for good, and refused unless it is a regular file, which
-    // a pipe or a directory is not. No file can sit under a component that is
-    // not a directory, so ENOTDIR is absence beside ENOENT.
-    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
-  } catch (e) {
-    const { code } = e as NodeJS.ErrnoException;
-    if (code === "ENOENT" || code === "ENOTDIR") return ABSENT;
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  }
-  try {
-    // bigint: a 64-bit file id survives whole, so `file` names exactly the
-    // file these bytes came from (two spellings of one path read alike).
-    const stat = fstatSync(fd, { bigint: true });
-    if (!stat.isFile()) return failed("not a regular file", "read");
-    const size = Number(stat.size);
-    const start = Math.max(0, size - maxBytes);
-    const buf = Buffer.alloc(size - start);
-    let off = 0;
-    while (off < buf.length) {
-      const n = readSync(fd, buf, off, buf.length - off, start + off);
-      if (n === 0) break;
-      off += n;
-    }
-    return ok({
-      buf: buf.subarray(0, off),
-      fromStart: start === 0,
-      file: `${stat.dev}:${stat.ino}`,
-    });
-  } catch (e) {
-    return failed(e instanceof Error ? e.message : String(e), "read");
-  } finally {
-    try {
-      closeSync(fd);
-    } catch (e) {
-      debug(
-        `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  }
 }
