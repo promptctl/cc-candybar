@@ -57,6 +57,27 @@ describe("staging the runtime", () => {
     expect(fs.existsSync(stale)).toBe(false);
   });
 
+  test("an installed executable is replaced without changing bytes held by old readers", () => {
+    const sourceDist = pkg("// launcher\n");
+    const source = path.join(home, "pkg", "bin", "cc-candybar");
+    const old = "#!/bin/sh\necho first\n";
+    const next = "#!/bin/sh\necho second\n";
+    fs.writeFileSync(source, old);
+    const { binPath } = runStageRuntime(sourceDist, stage);
+    const installed = fs.openSync(binPath, "r");
+    try {
+      fs.writeFileSync(source, next);
+      runStageRuntime(sourceDist, stage);
+      expect(fs.readFileSync(installed, "utf8")).toBe(old);
+      expect(fs.readFileSync(binPath, "utf8")).toBe(next);
+      const info = fs.statSync(binPath);
+      expect(info.ino).not.toBe(fs.fstatSync(installed).ino);
+      expect(info.mode & 0o777).toBe(0o755);
+    } finally {
+      fs.closeSync(installed);
+    }
+  });
+
   test("a package with no launcher is refused, naming where it looked", () => {
     expect(() => runStageRuntime(pkg(null), stage)).toThrow(
       /attach launcher was not found at .*dist\/cc-extra/,
