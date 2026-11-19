@@ -28569,8 +28569,12 @@ function decodeWire(decode) {
 init_globals();
 var SESSION_ID_MAX_BYTES = 250;
 function parseSessionId(raw) {
-  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
+  const problem = typeof raw !== "string" ? `is not a string: ${JSON.stringify(raw) ?? String(raw)}` : raw === "" ? "is empty" : raw === "." || raw === ".." ? `is ${JSON.stringify(raw)}, which names a folder, not a session` : isArrayIndex(raw) ? `is ${JSON.stringify(raw)}, an array index, which is never a session id` : raw === "__proto__" ? `is "__proto__", which is never a session id` : /[/\\\0]/.test(raw) ? `contains a path separator or NUL: ${JSON.stringify(raw)}` : import_buffer.Buffer.byteLength(raw, "utf8") > SESSION_ID_MAX_BYTES ? `is longer than ${SESSION_ID_MAX_BYTES} bytes` : null;
   return problem === null ? { ok: true, id: raw } : { ok: false, problem };
+}
+function isArrayIndex(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 && n < 2 ** 32 - 1 && String(n) === raw;
 }
 function sessionKeyed(record2, refused2) {
   const keyed = /* @__PURE__ */ new Map();
@@ -30244,13 +30248,17 @@ var SESSION_BOOK_FILE = {
   // request it came from was.
   parse: (value) => {
     const origin = originOfRecord(value);
-    if (origin === null) return null;
+    if (origin === null)
+      return { kind: "failed", reason: "is not the origin of a render" };
     const { claudeConfigDir: claudeConfigDir2 } = value;
     if (!(0, import_node_path3.isAbsolute)(origin.projectDir) || !(0, import_node_path3.isAbsolute)(origin.cwd) || origin.target.path !== void 0 && !(0, import_node_path3.isAbsolute)(origin.target.path) || claudeConfigDir2 !== void 0 && (typeof claudeConfigDir2 !== "string" || !(0, import_node_path3.isAbsolute)(claudeConfigDir2)))
-      return null;
+      return { kind: "failed", reason: "holds a path that is not absolute" };
     return {
-      origin,
-      ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+      kind: "ok",
+      value: {
+        origin,
+        ...claudeConfigDir2 !== void 0 && { claudeConfigDir: claudeConfigDir2 }
+      }
     };
   }
 };
@@ -30281,7 +30289,7 @@ var SessionBook = class {
     for (const [session, durable] of heard) this.book.set(session, durable);
     this.bound();
     this.phase = "open";
-    this.storage.save(Object.fromEntries(this.book));
+    this.storage.save(this.book);
   }
   // The session's newest request: what it says the session is, saved when
   // it moved.
@@ -30294,7 +30302,7 @@ var SessionBook = class {
     this.book.set(session, durable);
     this.bound();
     if (held2 !== void 0 && sameDurable(held2, durable)) return;
-    if (this.phase === "open") this.storage.save(Object.fromEntries(this.book));
+    if (this.phase === "open") this.storage.save(this.book);
   }
   // [LAW:one-source-of-truth] The session as a click finds it: live from the
   // request heard since the daemon started, else what the book kept of it,
@@ -54848,10 +54856,10 @@ function describeControlDomain(domain, perConfigDomains) {
   if (!("min" in domain)) {
     const from = optionsOf(domain);
     const { members } = resolveOptionDomain(from, perConfigDomains);
-    const quoted = members.map((m) => JSON.stringify(m));
-    if (members.length <= LISTED_MEMBERS) return `one of ${quoted.join(", ")}`;
+    const quoted2 = members.map((m) => JSON.stringify(m));
+    if (members.length <= LISTED_MEMBERS) return `one of ${quoted2.join(", ")}`;
     const named3 = typeof from === "string" ? ` "${from}"` : "";
-    return `one of the ${members.length}${named3} names, such as ${quoted.slice(0, SAMPLED_MEMBERS).join(", ")}`;
+    return `one of the ${members.length}${named3} names, such as ${quoted2.slice(0, SAMPLED_MEMBERS).join(", ")}`;
   }
   return `an integer from ${domain.min} to ${domain.max}`;
 }
@@ -88289,6 +88297,7 @@ var SessionState = class {
 
 // src/renderer-interface/history-storage.ts
 init_globals();
+var holdsNothing = (history) => history.past.length === 0 && history.future.length === 0 && history.savepoint === void 0;
 var SETTING_SESSION_KEYS = new Set(
   SETTING_PROJECTIONS.map((s) => s.sessionKey)
 );
@@ -88564,9 +88573,7 @@ var SettingsHistory = class {
   put(sessionId2, history) {
     const next = new Map(this.state);
     next.delete(sessionId2);
-    if (history.past.length > 0 || history.future.length > 0 || history.savepoint !== void 0) {
-      next.set(sessionId2, history);
-    }
+    if (!holdsNothing(history)) next.set(sessionId2, history);
     this.moved.delete(sessionId2);
     this.moved.add(sessionId2);
     this.adopt(next);
@@ -88589,7 +88596,9 @@ var SettingsHistory = class {
       const [oldest, h] = next.entries().next().value;
       if (next.size > 1) next.delete(oldest);
       else if (h.past.length + h.future.length > 0) {
-        next.set(oldest, withoutOldestStep(h));
+        const trimmed = withoutOldestStep(h);
+        if (holdsNothing(trimmed)) next.delete(oldest);
+        else next.set(oldest, trimmed);
       } else {
         this.logger(
           "warn",
@@ -92347,6 +92356,13 @@ var HeldStores = class {
     this.doctor = readStores(this.storage.doctor);
   }
   // What a renderer built now is built from.
+  // [LAW:locality-or-seam] The boot crosses to the renderer as JSON, so each
+  // store goes as a record, and the renderer reads recency off its key order.
+  // That order holds only because the session-id parse refuses an id that a
+  // record would reorder (an array index), and `__proto__`, which the
+  // records the renderer's lanes (renderer/main.ts) and the frame feed's
+  // viewers (frame-feed.ts) are filled by assignment would take as their
+  // prototype.
   current() {
     return {
       sessions: Object.fromEntries(this.sessions),
@@ -92380,13 +92396,9 @@ var HeldStores = class {
           break;
       }
     if (sessions && !this.closed)
-      steps2.push(
-        () => this.storage.session.save(Object.fromEntries(this.sessions))
-      );
+      steps2.push(() => this.storage.session.save(this.sessions));
     if (history && !this.closed)
-      steps2.push(
-        () => this.storage.history.save(Object.fromEntries(this.history))
-      );
+      steps2.push(() => this.storage.history.save(this.history));
     runEach(steps2);
   }
   file(write) {
@@ -95386,9 +95398,64 @@ var ephemeralSessionFile = () => ({
 var SESSION_STATE_FILE = {
   name: "session-state",
   record: (kv) => kv,
-  parse: (kv) => kv !== null && typeof kv === "object" && !Array.isArray(kv) && Object.values(kv).every((leaf) => typeof leaf === "string") ? kv : null
+  parse: (kv) => {
+    if (!isPlainObject2(kv))
+      return { kind: "failed", reason: "is not an object" };
+    const bad = Object.keys(kv).find((key) => typeof kv[key] !== "string");
+    return bad === void 0 ? { kind: "ok", value: kv } : {
+      kind: "failed",
+      reason: `has a ${JSON.stringify(bad)} that is not a string`
+    };
+  }
 };
-var isRecord3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function loadSessionFile(kind, filePath2, logger) {
+  const loaded = /* @__PURE__ */ new Map();
+  let text4;
+  try {
+    text4 = fs_default.readFileSync(filePath2, "utf8");
+  } catch (e) {
+    const code2 = e.code;
+    if (code2 === "ENOENT")
+      logger("info", `${kind.name} load: no file, starting empty`);
+    else logger("warn", `${kind.name} read failed (${code2}); starting empty`);
+    return loaded;
+  }
+  let parsed2;
+  try {
+    parsed2 = JSON.parse(text4);
+  } catch {
+    logger("warn", `${kind.name} load: corrupt JSON, starting empty`);
+    return loaded;
+  }
+  if (!isPlainObject2(parsed2)) {
+    logger("warn", `${kind.name} load: unexpected shape, starting empty`);
+    return loaded;
+  }
+  let dropped = 0;
+  const keyed = sessionKeyed(parsed2, (key, problem) => {
+    dropped += 1;
+    logger(
+      "warn",
+      `${kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
+    );
+  });
+  for (const [id2, value] of keyed) {
+    const entry = kind.parse(value);
+    if (entry.kind === "ok") loaded.set(id2, entry.value);
+    else {
+      dropped += 1;
+      logger(
+        "warn",
+        `${kind.name} load: dropped session ${JSON.stringify(id2)}: its value ${entry.reason}`
+      );
+    }
+  }
+  logger(
+    "info",
+    `${kind.name} loaded sessions=${loaded.size} dropped=${dropped}`
+  );
+  return loaded;
+}
 var LANDED = { ok: true };
 var SessionFile = class {
   constructor(kind, filePath2, clock, debounceMs = 500, logger = quietLogger) {
@@ -95414,60 +95481,11 @@ var SessionFile = class {
   written = Promise.resolve();
   // The write queued behind the one in flight and not yet begun.
   waiting = null;
-  // [LAW:no-silent-failure] Corrupt/missing file → empty state is the
-  // *defined* recovery, not a hidden fallback to different data: an empty
-  // store re-rolls random picks exactly as a first-ever boot would.
   load() {
-    const loaded = /* @__PURE__ */ new Map();
-    let raw;
-    try {
-      raw = fs_default.readFileSync(this.filePath, "utf8");
-    } catch (e) {
-      const code2 = e.code;
-      if (code2 !== "ENOENT") {
-        this.logger(
-          "warn",
-          `${this.kind.name} read failed (${code2}); starting empty`
-        );
-      }
-      return loaded;
-    }
-    try {
-      const parsed2 = JSON.parse(raw);
-      if (isRecord3(parsed2)) {
-        const keyed = sessionKeyed(
-          parsed2,
-          (key, problem) => this.logger(
-            "warn",
-            `${this.kind.name} load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
-          )
-        );
-        for (const [id2, value] of keyed) {
-          const held2 = this.kind.parse(value);
-          if (held2 !== null) loaded.set(id2, held2);
-          else
-            this.logger(
-              "warn",
-              `${this.kind.name} load: dropped session ${JSON.stringify(id2)}: its value has the wrong shape`
-            );
-        }
-        return loaded;
-      }
-      this.logger(
-        "warn",
-        `${this.kind.name} load: unexpected shape, starting empty`
-      );
-      return loaded;
-    } catch {
-      this.logger(
-        "warn",
-        `${this.kind.name} load: corrupt JSON, starting empty`
-      );
-      return loaded;
-    }
+    return loadSessionFile(this.kind, this.filePath, this.logger);
   }
   save(snapshot) {
-    this.pending = snapshot;
+    this.pending = new Map(snapshot);
     this.schedule();
   }
   // One debounce window at a time: the saves inside it coalesce into the
@@ -95502,13 +95520,12 @@ var SessionFile = class {
     }
     return this.waiting;
   }
+  // [LAW:effects-at-boundaries] The file's record of the sessions, in the
+  // order the owner holds them.
   body(snapshot) {
     return JSON.stringify(
       Object.fromEntries(
-        Object.entries(snapshot).map(([id2, value]) => [
-          id2,
-          this.kind.record(value)
-        ])
+        [...snapshot].map(([id2, value]) => [id2, this.kind.record(value)])
       )
     );
   }
@@ -95554,7 +95571,7 @@ var SessionFile = class {
   saved(body, snapshot, started2, heldMs) {
     this.logger(
       "info",
-      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${Object.keys(snapshot).length} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
+      `${this.kind.name} saved bytes=${import_buffer.Buffer.byteLength(body)} sessions=${snapshot.size} took=${elapsedMs(this.clock, started2)}ms held=${heldMs}ms`
     );
   }
 };
@@ -95648,12 +95665,13 @@ function isSavepoint(v) {
   const o = v;
   return Number.isInteger(o.at) && o.at >= 0 && Array.isArray(o.net) && o.net.every(isChange) && isSteps(o.below);
 }
-function isSessionHistory(v) {
-  if (v === null || typeof v !== "object") return false;
-  const o = v;
-  return isSteps(o.past) && isSteps(o.future) && (o.savepoint === void 0 || isSavepoint(o.savepoint));
+function parseSessionHistory(v) {
+  if (!isPlainObject2(v)) return { kind: "failed", reason: "is not an object" };
+  const problem = !isSteps(v.past) ? "has a 'past' that is not a list of steps" : !isSteps(v.future) ? "has a 'future' that is not a list of steps" : v.savepoint !== void 0 && !isSavepoint(v.savepoint) ? "has a 'savepoint' that is not a savepoint" : null;
+  return problem === null ? { kind: "ok", value: v } : { kind: "failed", reason: problem };
 }
-function withoutRetiredKeys(history, retired) {
+function withoutRetiredKeys(history) {
+  const retired = /* @__PURE__ */ new Set();
   const keep2 = (change) => {
     if (change.kind === "layer" || isSettingKey(change.key)) return true;
     retired.add(change.key);
@@ -95663,64 +95681,52 @@ function withoutRetiredKeys(history, retired) {
   const { savepoint } = history;
   const past = steps2(history.past);
   const future = steps2(history.future);
-  if (savepoint === void 0) return { past, future };
+  if (savepoint === void 0) return { history: { past, future }, retired };
   return {
-    past,
-    future,
-    savepoint: {
-      at: steps2(history.past.slice(0, savepoint.at)).length,
-      net: savepoint.net.filter(keep2),
-      below: steps2(savepoint.below)
-    }
+    history: {
+      past,
+      future,
+      savepoint: {
+        at: steps2(history.past.slice(0, savepoint.at)).length,
+        net: savepoint.net.filter(keep2),
+        below: steps2(savepoint.below)
+      }
+    },
+    retired
   };
 }
+var quoted = (keys2) => [...keys2].map((k) => `"${k}"`).join(", ");
+var HISTORY_FILE = {
+  name: "settings-history",
+  parse: (value) => {
+    const parsed2 = parseSessionHistory(value);
+    if (parsed2.kind === "failed") return parsed2;
+    const stripped = withoutRetiredKeys(parsed2.value);
+    if (!holdsNothing(stripped.history)) return { kind: "ok", value: stripped };
+    return {
+      kind: "failed",
+      reason: stripped.retired.size > 0 ? `holds only changes to ${quoted(stripped.retired)}, no longer a setting` : "holds nothing to undo, redo or cancel"
+    };
+  }
+};
 function fileHistoryStorage(file, logger) {
   return {
     load: () => {
-      const loaded = /* @__PURE__ */ new Map();
-      let raw;
-      try {
-        raw = fs_default.readFileSync(file, "utf8");
-      } catch (e) {
-        const code2 = e.code;
-        if (code2 !== "ENOENT") {
+      const loaded = loadSessionFile(HISTORY_FILE, file, logger);
+      for (const [id2, { retired }] of loaded)
+        if (retired.size > 0)
           logger(
             "warn",
-            `settings-history read failed (${code2}); starting empty`
+            `settings-history load: session ${JSON.stringify(id2)} dropped the changes to ${quoted(retired)}, no longer a setting`
           );
-        }
-        return loaded;
-      }
-      try {
-        const parsed2 = JSON.parse(raw);
-        if (parsed2 !== null && typeof parsed2 === "object" && !Array.isArray(parsed2) && Object.values(parsed2).every(isSessionHistory)) {
-          const retired = /* @__PURE__ */ new Set();
-          const keyed = sessionKeyed(
-            parsed2,
-            (key, problem) => logger(
-              "warn",
-              `settings-history load: dropped session key ${JSON.stringify(key)}: session id ${problem}`
-            )
-          );
-          for (const [id2, history] of keyed)
-            loaded.set(id2, withoutRetiredKeys(history, retired));
-          if (retired.size > 0) {
-            logger(
-              "warn",
-              `settings-history load: dropped the changes to ${[...retired].map((k) => `"${k}"`).join(", ")}, no longer a setting`
-            );
-          }
-          return loaded;
-        }
-      } catch {
-      }
-      logger("warn", "settings-history load: unexpected shape, starting empty");
-      return loaded;
+      return new Map(
+        [...loaded].map(([id2, { history }]) => [id2, history])
+      );
     },
     save: (state) => {
       try {
         fs_default.mkdirSync(import_node_path48.default.dirname(file), { recursive: true });
-        writeAtomic(file, JSON.stringify(state), 384);
+        writeAtomic(file, JSON.stringify(Object.fromEntries(state)), 384);
       } catch (e) {
         const message2 = `settings-history write failed \u2014 the change landed and undoes until the daemon restarts, not after: ${e.message}`;
         logger("error", message2);
