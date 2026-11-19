@@ -49,6 +49,7 @@ class EditDraft {
   private readonly picks = new Map<string, string | null>();
   private files = new Map<string, string | null>();
   private readonly history: SettingsHistory;
+  private latest: ConfigSnapshot;
   snapshot: ConfigSnapshot;
 
   constructor(
@@ -58,7 +59,7 @@ class EditDraft {
     private readonly committed: SessionStateRW,
     log: DaemonLogger,
   ) {
-    this.snapshot = base;
+    this.latest = this.snapshot = base;
     // [LAW:one-type-per-behavior] The same undo step and journal serve a
     // draft. Only the journal's destination changes. Chrome still uses the
     // normal session store, so opening menus never adds an edit step.
@@ -76,6 +77,35 @@ class EditDraft {
       },
       log,
     );
+  }
+
+  // [LAW:effects-at-boundaries] A transaction pins the content it edits.
+  // The host's current layer identities and plugin discovery still decide
+  // what it can load, including when the user revokes repository trust.
+  updated(latest: ConfigSnapshot): void {
+    this.latest = latest;
+    this.refreshSnapshot();
+  }
+
+  private refreshSnapshot(): void {
+    this.snapshot = {
+      ...this.latest,
+      chain: this.latest.chain.flatMap((layer) => {
+        const base = this.base.chain.find(
+          (candidate) =>
+            candidate.path === layer.path && candidate.role === layer.role,
+        );
+        if (base === undefined) return [];
+        const value = this.files.get(layer.path);
+        const content =
+          value === undefined
+            ? base.content
+            : value === null
+              ? { kind: "absent" as const }
+              : { kind: "text" as const, text: value };
+        return [{ ...layer, content }];
+      }),
+    };
   }
 
   depth(): HistoryDepth {
@@ -135,20 +165,7 @@ class EditDraft {
         journal.commit();
         if (sameFiles(working, this.files)) return picksMoved;
         this.files = working;
-        this.snapshot = {
-          ...this.base,
-          chain: this.base.chain.map((layer) => {
-            const value = working.get(layer.path);
-            if (value === undefined) return layer;
-            return {
-              ...layer,
-              content:
-                value === null
-                  ? { kind: "absent" }
-                  : { kind: "text", text: value },
-            };
-          }),
-        };
+        this.refreshSnapshot();
         return true;
       },
       save: (committedJournal, destination, latest) => {
@@ -252,6 +269,17 @@ export class EditTransactions {
     return draft !== null && originKey(draft.origin) === originKey(origin)
       ? draft.snapshot
       : null;
+  }
+
+  configured(origin: RenderOrigin, snapshot: ConfigSnapshot): SessionId[] {
+    const key = originKey(origin);
+    const refreshed: SessionId[] = [];
+    for (const [sid, { draft }] of this.entries) {
+      if (draft === null || originKey(draft.origin) !== key) continue;
+      draft.updated(snapshot);
+      refreshed.push(sid);
+    }
+    return refreshed;
   }
 
   depth(sid: SessionId, committed: SettingsHistory): HistoryDepth {

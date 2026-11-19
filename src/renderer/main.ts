@@ -205,6 +205,12 @@ export function mainRenderer(
         parked = parked.filter((p) => originKey(p.origin) !== key);
         runEach([
           () => parts.renderCache.configure(event.origin, event.config),
+          () =>
+            runEach(
+              parts.edits
+                .configured(event.origin, event.config)
+                .map((sid) => () => parts.renderCache.refreshEditedView(sid)),
+            ),
           ...ready.map(({ event: waited }) => () => {
             if (waited.kind === "context") openSession(parts, waited.context);
             else turn(waited, record, effects, frames);
