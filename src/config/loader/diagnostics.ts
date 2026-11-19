@@ -4,6 +4,7 @@
 // what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
 
+import JSON5 from "json5";
 import {
   entryOf,
   Json5EditError,
@@ -22,6 +23,29 @@ export interface ConfigIssue {
   readonly line?: number;
   /** Source column (1-based). Present only for parse errors. */
   readonly col?: number;
+}
+
+export type Json5Syntax =
+  | { readonly kind: "parsed"; readonly value: unknown }
+  | { readonly kind: "invalid"; readonly issue: ConfigIssue };
+
+// [LAW:single-enforcer] Discovery examines includes and the loader
+// validates the document with the same JSON5 syntax and source positions.
+export function parseJson5Syntax(source: string): Json5Syntax {
+  try {
+    return { kind: "parsed", value: JSON5.parse(source) };
+  } catch (e) {
+    const error = e as Error & { lineNumber?: number; columnNumber?: number };
+    return {
+      kind: "invalid",
+      issue: {
+        path: "",
+        message: `JSON5 syntax error: ${error.message}`,
+        line: error.lineNumber,
+        col: error.columnNumber,
+      },
+    };
+  }
 }
 
 export class ConfigError extends Error {
